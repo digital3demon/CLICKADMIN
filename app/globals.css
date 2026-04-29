@@ -1,0 +1,452 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * «Десктопная оболочка»: двухколоночный layout (сайдбар 1/7 + контент).
+ * Ниже ~1024px колонка 1/7 слишком узкая — текст и панели наезжают; используем выезжающее меню.
+ * В альбоме телефона ширина может быть большой, а высота мала — тоже выезжающее меню (min-height).
+ */
+@custom-variant shell-desktop (@media (min-width: 1024px) and (min-height: 560px));
+
+/* Низкий экран (альбом телефона, узкое окно): компактнее сайдбар и всплывашки. */
+@custom-variant shell-short (@media (max-height: 560px));
+
+/*
+ * Локальные файлы (опционально): положите в public/fonts/ и раскомментируйте.
+ * Muller-Regular.woff2, Archangelsk-Regular.woff2
+ *
+ * @font-face {
+ *   font-family: "Muller";
+ *   src: url("/fonts/Muller-Regular.woff2") format("woff2");
+ *   font-weight: 400;
+ *   font-style: normal;
+ *   font-display: swap;
+ * }
+ * @font-face {
+ *   font-family: "Archangelsk";
+ *   src: url("/fonts/Archangelsk-Regular.woff2") format("woff2");
+ *   font-weight: 400;
+ *   font-style: normal;
+ *   font-display: swap;
+ * }
+ */
+
+:root {
+  color-scheme: light;
+  /* Акцент без изменений */
+  --sidebar-blue: #2563eb;
+  --sidebar-blue-hover: #1d4ed8;
+  /* Приглушённая светлая тема: без «кислотного» белого, мягкие серо-голубые слои */
+  --sidebar-bg: #e4e9f0;
+  --sidebar-border: #cfd8e3;
+  --sidebar-text: #5a6578;
+  --sidebar-text-strong: #1e293b;
+  --sidebar-title-shadow: 0 0 10px var(--sidebar-bg),
+    0 0 16px var(--sidebar-bg), 0 1px 1px rgba(255, 255, 255, 0.35);
+  --marker-yellow: color-mix(in srgb, var(--sidebar-blue) 24%, transparent);
+  --marker-yellow-edge: color-mix(in srgb, var(--sidebar-blue) 40%, transparent);
+  --ease-snappy: cubic-bezier(0.2, 0.85, 0.25, 1);
+  --press-duration: 0.16s;
+  --app-bg: #e8ecf2;
+  --app-text: #1e293b;
+  --text-strong: #172033;
+  --text-body: #475569;
+  --text-secondary: #5c6578;
+  --text-muted: #787f8f;
+  --card-bg: #f0f3f8;
+  --card-border: #d7dee8;
+  --border-subtle: #e2e8f0;
+  --surface-subtle: #ebeef4;
+  --surface-muted: rgba(235, 238, 244, 0.94);
+  --surface-hover: #e4e9f1;
+  --table-row-hover: rgba(220, 228, 238, 0.65);
+  --input-bg: #f3f5f9;
+  --input-border: #c4ccd8;
+  --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 14%, transparent);
+  --text-placeholder: #8b95a5;
+  --border-strong: #9aa3b2;
+}
+
+/*
+ * Тёмная тема: тёмно-серые слои (не «чёрный OLED») — канвас ~zinc-800,
+ * сайдбар чуть темнее рабочей зоны, карточки светлее для читаемого контраста.
+ * Акценты (--sidebar-blue*) не трогаем.
+ */
+html.dark {
+  color-scheme: dark;
+  --sidebar-blue: #3b82f6;
+  --sidebar-blue-hover: #2563eb;
+  --sidebar-bg: #26262c;
+  --sidebar-border: #3a3a42;
+  --sidebar-text: #a1a1aa;
+  --sidebar-text-strong: #f4f4f5;
+  --sidebar-title-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+  --marker-yellow: color-mix(in srgb, var(--sidebar-blue) 30%, transparent);
+  --marker-yellow-edge: color-mix(in srgb, var(--sidebar-blue) 48%, transparent);
+  --app-bg: #2e2e34;
+  --app-text: #eceef2;
+  --text-strong: #fafafa;
+  --text-body: #d4d4d8;
+  --text-secondary: #a8a8b0;
+  --text-muted: #84848e;
+  --card-bg: #383840;
+  --card-border: #4a4a54;
+  --border-subtle: #3e3e46;
+  --surface-subtle: #34343c;
+  --surface-muted: rgba(52, 52, 60, 0.92);
+  --surface-hover: #45454e;
+  --table-row-hover: rgba(69, 69, 78, 0.55);
+  --input-bg: #34343c;
+  --input-border: #505058;
+  --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 22%, transparent);
+  --text-placeholder: #71717a;
+  --border-strong: #63636d;
+}
+
+/* Полотно за сайдбаром — на тик темнее основной зоны */
+html.dark body {
+  background-color: #2a2a30;
+}
+
+/* Встроенный Kanban: полотно и модалка в стиле Kaiten */
+.kanban-root {
+  --kanban-workspace-bg: #f0f3f8;
+  --kanban-rail-bg: #ffffff;
+  --kanban-column-bg: #ffffff;
+  --kanban-card-bg: #ffffff;
+  --kanban-border: #e2e6ec;
+  --kanban-text: #2d3436;
+  --kanban-text-muted: #636e72;
+  --kanban-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --kanban-shadow-elevated: 0 4px 14px rgba(15, 23, 42, 0.07);
+  --kanban-accent: #6366f1;
+  --kanban-overdue: #c0392b;
+  --kanban-today: #b45309;
+  --kanban-future: #15803d;
+  --kaiten-modal-bg: #f8fafc;
+  --kaiten-modal-aside: #f1f5f9;
+  --kaiten-modal-border: #e2e8f0;
+  --kaiten-modal-text: #0f172a;
+  --kaiten-modal-muted: #64748b;
+  --kaiten-modal-input: #ffffff;
+  --kaiten-modal-control: #f1f5f9;
+  --kaiten-accent: #8b5cf6;
+  --kanban-cal-mini-bg: #eef1f6;
+}
+
+html.dark .kanban-root {
+  --kanban-workspace-bg: #323238;
+  --kanban-rail-bg: #2a2a30;
+  --kanban-column-bg: #3a3a42;
+  --kanban-card-bg: #44444c;
+  --kanban-border: #52525c;
+  --kanban-text: #f4f4f5;
+  --kanban-text-muted: #b4b4bc;
+  --kanban-shadow: 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 4px 16px rgba(0, 0, 0, 0.28);
+  --kanban-shadow-elevated: 0 8px 28px rgba(0, 0, 0, 0.35);
+  --kaiten-modal-bg: #383840;
+  --kaiten-modal-aside: #303038;
+  --kaiten-modal-border: #52525c;
+  --kaiten-modal-text: #f4f4f5;
+  --kaiten-modal-muted: #c4c9d4;
+  --kaiten-modal-input: #34343c;
+  --kaiten-modal-control: #404048;
+  --kanban-cal-mini-bg: #4a4a52;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overflow-x: clip;
+}
+
+body {
+  @apply antialiased;
+  overflow-x: clip;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  font-family: var(--font-body-loaded), "Muller", ui-sans-serif, system-ui,
+    sans-serif;
+}
+
+/* Лёгкая анимация заголовка модуля без framer-motion */
+@keyframes module-frame-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.module-frame-header {
+  animation: module-frame-enter 0.2s var(--ease-snappy) 40ms both;
+}
+
+/*
+ * Только заголовок модуля (h1): fixed-кнопка меню ~2.75rem + отступ слева.
+ * Вынесено из Tailwind: длинные calc(max(...)) в arbitrary-классах иногда не попадают в CSS или режутся.
+ */
+/* Отступ под fixed-кнопку меню: как у shell-desktop — до 1023px ИЛИ широкий, но низкий (альбом). */
+@media (max-width: 1023px), ((min-width: 1024px) and (max-height: 559px)) {
+  .module-frame-title-h1-wrap {
+    padding-inline-start: max(
+      3.5rem,
+      calc(env(safe-area-inset-left, 0px) + 2.75rem + 0.5rem)
+    );
+  }
+}
+
+/* Тактильная обратная связь вместо motion whileTap */
+.pressable-tap {
+  transition: transform var(--press-duration) var(--ease-snappy);
+}
+.pressable-tap:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* «Маркер» под текстом пункта меню — крупнее, слегка кривой овал */
+.nav-marker-layer {
+  position: absolute;
+  left: -0.65em;
+  right: -0.85em;
+  top: 54%;
+  height: 1.05em;
+  transform: translateY(-42%) rotate(-1deg) skewX(-3.5deg) skewY(0.25deg);
+  border-radius: 44% 56% 52% 48% / 46% 44% 56% 54%;
+  background: linear-gradient(
+    105deg,
+    var(--marker-yellow) 0%,
+    var(--marker-yellow-edge) 48%,
+    var(--marker-yellow) 100%
+  );
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sidebar-blue) 20%, transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark .nav-marker-layer {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sidebar-blue) 35%, transparent);
+}
+
+.nav-marker-text {
+  position: relative;
+  z-index: 1;
+}
+
+/* Погода СПб у иконки день/ночь в сайдбаре */
+@keyframes sky-cloud-drift-a {
+  0%,
+  100% {
+    transform: translate(-1px, 0) scale(1);
+    opacity: 0.42;
+  }
+  50% {
+    transform: translate(6px, -1px) scale(1.04);
+    opacity: 0.58;
+  }
+}
+@keyframes sky-cloud-drift-b {
+  0%,
+  100% {
+    transform: translate(4px, 1px) scale(1.02);
+    opacity: 0.32;
+  }
+  50% {
+    transform: translate(-5px, 0) scale(0.97);
+    opacity: 0.5;
+  }
+}
+@keyframes sky-cloud-drift-heavy {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.55;
+  }
+  33% {
+    transform: translate(4px, -2px) scale(1.06);
+    opacity: 0.72;
+  }
+  66% {
+    transform: translate(-3px, 1px) scale(0.98);
+    opacity: 0.6;
+  }
+}
+@keyframes sky-rain-streak {
+  0% {
+    transform: translateY(-140%) translateX(0);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.82;
+  }
+  100% {
+    transform: translateY(160%) translateX(3px);
+    opacity: 0;
+  }
+}
+@keyframes sky-snow-flake {
+  0% {
+    transform: translateY(-120%) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(180%) translateX(5px) rotate(200deg);
+    opacity: 0;
+  }
+}
+.sky-weather-cloud-a {
+  animation: sky-cloud-drift-a 7.5s ease-in-out infinite;
+}
+.sky-weather-cloud-b {
+  animation: sky-cloud-drift-b 9s ease-in-out infinite;
+}
+.sky-weather-cloud-heavy {
+  animation: sky-cloud-drift-heavy 11s ease-in-out infinite;
+}
+
+@keyframes sky-solar-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sky-easter-solar-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes sky-wolf-enter {
+  0% {
+    opacity: 0;
+    transform: translate(28%, 110%) rotate(-4deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-4%, -6%) rotate(1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0);
+  }
+}
+
+@media print {
+  html {
+    color-scheme: light !important;
+    --app-bg: #ffffff !important;
+    --app-text: #18181b !important;
+    --text-strong: #27272a !important;
+    --text-body: #3f3f46 !important;
+    --text-secondary: #52525b !important;
+    --text-muted: #71717a !important;
+    --card-bg: #ffffff !important;
+    --card-border: #e4e4e7 !important;
+    --border-subtle: #f4f4f5 !important;
+    --surface-subtle: #fafafa !important;
+    --surface-muted: rgba(250, 250, 250, 0.85) !important;
+    --surface-hover: #f4f4f5 !important;
+    --table-row-hover: rgba(250, 250, 250, 0.85) !important;
+    --input-bg: #ffffff !important;
+    --input-border: #d4d4d8 !important;
+    --accent-selection-bg: rgba(224, 242, 254, 0.95) !important;
+    --text-placeholder: #a1a1aa !important;
+    --border-strong: #a1a1aa !important;
+  }
+  aside[aria-label="Основное меню"] {
+    display: none !important;
+  }
+  main {
+    margin-left: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .shipments-print-area {
+    break-inside: avoid;
+    /* Иначе браузер рисует полосу прокрутки у overflow-x-auto на превью печати */
+    overflow: visible !important;
+    max-width: 100% !important;
+  }
+  .shipments-print-area a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+  .shipments-print-area table {
+    font-size: 11px;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed;
+  }
+  .shipments-print-area th,
+  .shipments-print-area td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
+/* Канбан: «фейерверк» при отметке пункта чеклиста.
+ * Угол задаётся обёрткой (.checklist-spark-arm), в keyframes только translateY —
+ * так анимация стабильна в браузерах (без var() внутри @keyframes). */
+@keyframes checklist-spark-fly {
+  0% {
+    opacity: 1;
+    transform: translateY(2px) scale(0.85);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(-10px) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-42px) scale(0.08);
+  }
+}
+
+/* Центр «фейерверка» (портал): лучи вращаются вокруг (0,0). */
+.checklist-spark-arm {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
+.checklist-spark-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  pointer-events: none;
+  /* color задаётся inline вместе с background — для свечения через currentColor */
+  box-shadow: 0 0 10px 3px color-mix(in srgb, currentColor 65%, transparent);
+  animation: checklist-spark-fly 1.05s cubic-bezier(0.18, 0.82, 0.28, 1) forwards;
+}

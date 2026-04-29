@@ -1,0 +1,14 @@
+-- AlterTable
+ALTER TABLE "Order" ADD COLUMN "urgentCoefficient" REAL;
+ALTER TABLE "Order" ADD COLUMN "labWorkStatus" TEXT NOT NULL DEFAULT 'TO_EXECUTION';
+ALTER TABLE "Order" ADD COLUMN "legalEntity" TEXT;
+ALTER TABLE "Order" ADD COLUMN "payment" TEXT;
+ALTER TABLE "Order" ADD COLUMN "shade" TEXT;
+ALTER TABLE "Order" ADD COLUMN "hasScans" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Order" ADD COLUMN "hasCt" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Order" ADD COLUMN "hasMri" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Order" ADD COLUMN "hasPhoto" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Order" ADD COLUMN "quickOrder" JSONB;
+
+-- CreateIndex
+CREATE INDEX "Order_labWorkStatus_idx" ON "Order"("labWorkStatus");

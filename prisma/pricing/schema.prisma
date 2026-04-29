@@ -1,0 +1,158 @@
+generator client {
+  provider      = "prisma-client-js"
+  engineType    = "binary"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider     = "sqlite"
+  url          = env("PRICING_DATABASE_URL")
+  relationMode = "prisma"
+}
+
+enum StockMovementKind {
+  PURCHASE_RECEIPT
+  SALE_ISSUE
+  ADJUSTMENT_PLUS
+  ADJUSTMENT_MINUS
+  DEFECT_WRITE_OFF
+  RETURN_IN
+}
+
+model ConstructionType {
+  id         String  @id @default(cuid())
+  name       String
+  code       String?
+  isArchWork Boolean @default(false)
+}
+
+model Material {
+  id   String @id @default(cuid())
+  name String
+}
+
+model PriceList {
+  id                      String                      @id @default(cuid())
+  name                    String
+  sortOrder               Int                         @default(0)
+  items                   PriceListItem[]
+  activeForWorkspace      PriceListWorkspaceSettings?
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+
+  @@index([sortOrder, name])
+}
+
+model PriceListWorkspaceSettings {
+  id                String    @id @default("default")
+  activePriceListId String    @unique
+  activePriceList   PriceList @relation(fields: [activePriceListId], references: [id], onDelete: Restrict)
+  updatedAt         DateTime  @updatedAt
+}
+
+model PriceListItem {
+  id              String               @id @default(cuid())
+  priceListId     String
+  priceList       PriceList            @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  code            String
+  name            String
+  sectionTitle    String?
+  subsectionTitle String?
+  priceRub        Int
+  leadWorkingDays Int?
+  description     String?
+  isActive        Boolean              @default(true)
+  sortOrder       Int                  @default(0)
+  clinicOverrides ClinicPriceOverride[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([priceListId, code])
+  @@index([priceListId, isActive, sortOrder])
+}
+
+model ClinicPriceOverride {
+  clinicId        String
+  priceListItemId String
+  priceListItem   PriceListItem @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
+  priceRub        Int
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@id([clinicId, priceListItemId])
+  @@index([priceListItemId])
+  @@index([clinicId])
+}
+
+model Warehouse {
+  id            String   @id @default(cuid())
+  name          String
+  warehouseType String?
+  isDefault     Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  items         InventoryItem[]
+  balances      StockBalance[]
+  movements     StockMovement[]
+}
+
+model InventoryItem {
+  id                    String    @id @default(cuid())
+  warehouseId           String
+  warehouse             Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  sku                   String?
+  name                  String
+  unit                  String    @default("шт")
+  manufacturer          String?
+  unitsPerSupply        Float?
+  referenceUnitPriceRub Float?
+  notes                 String?
+  isActive              Boolean   @default(true)
+  sortOrder             Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  balances              StockBalance[]
+  movements             StockMovement[]
+
+  @@unique([warehouseId, sku])
+  @@index([warehouseId])
+  @@index([isActive, sortOrder])
+  @@index([name])
+}
+
+model StockBalance {
+  id                 String        @id @default(cuid())
+  itemId             String
+  item               InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouseId        String
+  warehouse          Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  quantityOnHand     Float         @default(0)
+  averageUnitCostRub Float?
+  updatedAt          DateTime      @updatedAt
+
+  @@unique([itemId, warehouseId])
+}
+
+model StockMovement {
+  id                    String            @id @default(cuid())
+  createdAt             DateTime          @default(now())
+  kind                  StockMovementKind
+  quantity              Float
+  totalCostRub          Float?
+  note                  String?
+  itemId                String
+  item                  InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouseId           String
+  warehouse             Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  /// Soft reference to order in orders DB.
+  orderId               String?
+  actorLabel            String            @default("Пользователь")
+  idempotencyKey        String?           @unique
+  returnedToWarehouseAt DateTime?
+
+  @@index([itemId, createdAt])
+  @@index([warehouseId, createdAt])
+  @@index([orderId])
+}
+

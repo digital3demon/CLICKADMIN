@@ -1,0 +1,18 @@
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+.env
+*.db
+*.db-journal
+.DS_Store
+
+# Вложения нарядов (байты на диске, не в SQLite)
+data/order-attachments/
+data/user-avatars/
+data/demo-user-avatars/
+
+# Локальные выгрузки для импорта (не коммитить)
+data/imports/*.xlsx
+data/imports/*.xls
+data/imports/*.pdf

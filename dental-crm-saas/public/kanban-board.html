@@ -1,0 +1,2960 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Доска задач</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" />
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js" crossorigin="anonymous"></script>
+  <style>
+    /**
+     * Светлая тема: холодный фон рабочей области (#f5f7f9), белые колонки/карточки,
+     * текст #2d3436, границы #e0e4e8, мягкие тени (как «облачный» SaaS).
+     * Тёмная тема: сайдбар почти чёрный (#121212), канбан-полотно #1e1e1e,
+     * колонки чуть светлее полотна, карточки ещё на ступень выше — как Strata/Trello dark.
+     */
+    :root {
+      --primary: #4b5563;
+      --accent: #6366f1;
+      --workspace-bg: #f0f3f8;
+      --sidebar-bg: #ffffff;
+      --header-bg: #ffffff;
+      --toolbar-bg: #ffffff;
+      --column-bg: #ffffff;
+      --card-bg: #ffffff;
+      --text: #2d3436;
+      --text-muted: #636e72;
+      --border: #e2e6ec;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      --shadow-elevated: 0 4px 14px rgba(15, 23, 42, 0.07);
+      --shadow-drag: 0 12px 32px rgba(15, 23, 42, 0.14);
+      --radius: 10px;
+      --sidebar-width: 260px;
+      --danger: #c0392b;
+      --overdue: #c0392b;
+      --today: #b45309;
+      --future: #15803d;
+      /* Модалка карточки (Kaiten) в светлой теме */
+      --kaiten-modal-bg: #f8fafc;
+      --kaiten-modal-aside: #f1f5f9;
+      --kaiten-modal-border: #e2e8f0;
+      --kaiten-modal-text: #0f172a;
+      --kaiten-modal-muted: #64748b;
+      --kaiten-modal-input: #ffffff;
+      --kaiten-modal-control: #f1f5f9;
+      --kaiten-accent: #8b5cf6;
+      --kaiten-bubble-bg: #ffffff;
+      --kaiten-bubble-border: #e2e8f0;
+      --kaiten-chat-well: #f8fafc;
+      --kaiten-file-surface: #ffffff;
+      --kaiten-file-name: #0f172a;
+      --cal-mini-card-bg: #eef1f6;
+    }
+    [data-theme="dark"] {
+      --workspace-bg: #1e1e1e;
+      --sidebar-bg: #121212;
+      --header-bg: #1a1a1a;
+      --toolbar-bg: #1a1a1a;
+      --column-bg: #27272a;
+      --card-bg: #2f2f34;
+      --text: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --border: #3f3f46;
+      --shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 16px rgba(0, 0, 0, 0.35);
+      --shadow-elevated: 0 8px 28px rgba(0, 0, 0, 0.45);
+      --shadow-drag: 0 16px 40px rgba(0, 0, 0, 0.55);
+      --kaiten-modal-bg: #252528;
+      --kaiten-modal-aside: #1f1f23;
+      --kaiten-modal-border: #3f3f46;
+      --kaiten-modal-text: #f4f4f5;
+      --kaiten-modal-muted: #c4c9d4;
+      --kaiten-modal-input: #1e1e22;
+      --kaiten-modal-control: #2d2d32;
+      --kaiten-bubble-bg: #2f2f34;
+      --kaiten-bubble-border: #3f3f46;
+      --kaiten-chat-well: #1a1a1e;
+      --kaiten-file-surface: #252528;
+      --kaiten-file-name: #f3f4f6;
+      --cal-mini-card-bg: #36363d;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--workspace-bg); color: var(--text); transition: background 0.2s, color 0.2s; }
+    body { display: flex; flex-direction: column; min-height: 100vh; overflow: hidden; }
+    a { color: var(--accent); }
+    button { font: inherit; cursor: pointer; border: none; background: transparent; }
+    .app-shell { display: flex; flex: 1; min-height: 0; }
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      box-shadow: 2px 0 12px rgba(15, 23, 42, 0.04);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: transform 0.25s ease;
+      z-index: 50;
+    }
+    [data-theme="dark"] .sidebar {
+      box-shadow: 4px 0 28px rgba(0, 0, 0, 0.5);
+      border-right-color: rgba(255, 255, 255, 0.06);
+    }
+    .sidebar-header { padding: 16px; font-weight: 700; font-size: 1.1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .sidebar-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .sidebar-section h3 { margin: 0 0 8px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+    .board-list { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow-y: auto; }
+    .board-list li { margin-bottom: 4px; }
+    .board-list button { width: 100%; text-align: left; padding: 8px 10px; border-radius: 6px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .board-list button:hover { background: rgba(0, 0, 0, 0.06); }
+    .board-list button.active { background: rgba(0, 0, 0, 0.1); font-weight: 600; }
+    [data-theme="dark"] .board-list button:hover { background: rgba(255, 255, 255, 0.06); }
+    [data-theme="dark"] .board-list button.active { background: rgba(255, 255, 255, 0.1); }
+    .main-wrap {
+      flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      background: var(--workspace-bg);
+    }
+    .app-header {
+      background: var(--header-bg);
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .app-header h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+    .header-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .btn { padding: 8px 12px; border-radius: 6px; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s, transform 0.1s; }
+    .btn-primary { background: var(--card-bg); color: var(--text); border: 1px solid var(--border); }
+    .btn-primary:hover { filter: brightness(0.97); box-shadow: var(--shadow); }
+    [data-theme="dark"] .btn-primary:hover { filter: brightness(1.08); }
+    .btn-ghost { color: var(--text); background: var(--card-bg); border: 1px solid var(--border); }
+    .btn-ghost:hover { filter: brightness(0.97); }
+    [data-theme="dark"] .btn-ghost:hover { filter: brightness(1.12); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn.is-active { font-weight: 600; border-color: var(--text); background: rgba(0,0,0,0.05); }
+    [data-theme="dark"] .btn.is-active { background: rgba(255,255,255,0.08); }
+    .toolbar {
+      padding: 10px 16px;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .search-input {
+      flex: 1;
+      min-width: 160px;
+      max-width: 320px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--workspace-bg);
+      color: var(--text);
+    }
+    [data-theme="dark"] .search-input {
+      background: #262626;
+    }
+    .filter-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .filter-group label { font-size: 0.8rem; color: var(--text-muted); }
+    select.filter-select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); font-size: 0.85rem; }
+    .board-canvas {
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      scroll-snap-type: x proximity;
+    }
+    .columns-inner {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+      scroll-snap-type: x proximity;
+    }
+    .kanban-column {
+      flex: 0 0 280px;
+      width: 280px;
+      max-height: calc(100vh - 200px);
+      background: var(--column-bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      scroll-snap-align: start;
+      transition: box-shadow 0.2s, transform 0.15s;
+    }
+    [data-theme="dark"] .kanban-column {
+      border-color: rgba(255, 255, 255, 0.06);
+      background: linear-gradient(180deg, #2d2d32 0%, #27272a 100%);
+    }
+    .column-header {
+      padding: 12px 12px 8px;
+      border-radius: var(--radius) var(--radius) 0 0;
+      background: transparent;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .column-header-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .column-title { flex: 1; cursor: default; word-break: break-word; }
+    .column-title.editing { outline: 2px solid var(--border); border-radius: 4px; padding: 2px 4px; }
+    .column-meta { font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .column-actions { display: flex; gap: 4px; }
+    .column-actions .icon-btn { color: var(--text-muted); padding: 4px; border-radius: 4px; }
+    .column-actions .icon-btn:hover { background: rgba(0,0,0,0.08); }
+    [data-theme="dark"] .column-actions .icon-btn:hover { background: rgba(255,255,255,0.08); }
+    .cards-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      min-height: 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .cards-container.sortable-ghost { opacity: 0.45; }
+    .kanban-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      cursor: grab;
+      transition: box-shadow 0.2s, transform 0.15s, border-color 0.15s;
+      overflow: hidden;
+      position: relative;
+      border-left: 4px solid var(--card-accent, var(--border));
+    }
+    [data-theme="dark"] .kanban-card {
+      background: #323236;
+      border-color: rgba(255, 255, 255, 0.06);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+    .kanban-card.is-blocked { cursor: default; }
+    .kanban-card.is-blocked:hover {
+      box-shadow: var(--shadow);
+      border-color: var(--border);
+    }
+    [data-theme="dark"] .kanban-card.is-blocked:hover {
+      border-color: rgba(255, 255, 255, 0.06);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+    .card-block-strip {
+      width: 100%;
+      margin: 0;
+      padding: 8px 10px 9px;
+      border-radius: var(--radius) var(--radius) 0 0;
+      background: linear-gradient(180deg, #c02626 0%, #991b1b 100%);
+      border-bottom: 2px solid #7f1d1d;
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      line-height: 1.35;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      box-sizing: border-box;
+    }
+    .card-block-strip .block-ico { flex-shrink: 0; font-size: 1rem; line-height: 1.2; }
+    .card-block-strip .block-txt {
+      flex: 1;
+      min-width: 0;
+      word-break: break-word;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    [data-theme="light"] .card-block-strip {
+      background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
+      border-bottom-color: #991b1b;
+    }
+    .kaiten-block-panel {
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      background: linear-gradient(165deg, #3d1f1f 0%, #241212 100%);
+      border: 1px solid #7f1d1d;
+      color: #fecaca;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+    [data-theme="light"] .kaiten-block-panel {
+      background: linear-gradient(165deg, #fee2e2 0%, #fecaca 100%);
+      border-color: #f87171;
+      color: #450a0a;
+    }
+    .kaiten-block-panel-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 0.75rem;
+      line-height: 1.4;
+    }
+    .kaiten-block-panel-header .block-meta { flex: 1; min-width: 0; }
+    .kaiten-block-panel-header .block-meta strong { display: block; color: #fff; font-weight: 600; }
+    [data-theme="light"] .kaiten-block-panel-header .block-meta strong { color: #7f1d1d; }
+    .kaiten-block-reason-display {
+      width: 100%;
+      min-height: 52px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(0, 0, 0, 0.35);
+      color: #fff;
+      font: inherit;
+      font-size: 0.8125rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-bottom: 8px;
+    }
+    [data-theme="light"] .kaiten-block-reason-display {
+      background: rgba(255, 255, 255, 0.65);
+      border-color: rgba(127, 29, 29, 0.25);
+      color: #1c1917;
+    }
+    .kaiten-block-panel-header .avatar {
+      width: 28px !important;
+      height: 28px !important;
+      font-size: 0.65rem !important;
+    }
+    .kaiten-block-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .kaiten-block-unblock {
+      background: transparent;
+      border: none;
+      color: #c4b5fd;
+      font-weight: 600;
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 2px;
+      cursor: pointer;
+    }
+    .kaiten-block-unblock:hover { color: #e9d5ff; text-decoration: underline; }
+    [data-theme="light"] .kaiten-block-unblock { color: #6d28d9; }
+    .kaiten-block-form {
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      border: 1px dashed var(--kaiten-modal-border);
+      background: rgba(127, 29, 29, 0.06);
+    }
+    .kaiten-block-form .kaiten-field-label { color: var(--kaiten-modal-muted); }
+    .kaiten-block-draft {
+      width: 100%;
+      min-height: 52px;
+      margin-top: 6px;
+      padding: 7px 9px;
+      border-radius: 6px;
+      border: 1px solid var(--kaiten-modal-border);
+      background: var(--kaiten-modal-input);
+      color: var(--kaiten-modal-text);
+      font: inherit;
+      font-size: 0.8125rem;
+      resize: vertical;
+    }
+    .kanban-card:hover {
+      box-shadow: var(--shadow-elevated);
+      border-color: rgba(99, 102, 241, 0.35);
+    }
+    [data-theme="dark"] .kanban-card:hover {
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    }
+    .kanban-card.sortable-chosen { cursor: grabbing; box-shadow: var(--shadow-drag); transform: rotate(2deg); z-index: 10; }
+    .kanban-card.sortable-drag { opacity: 0.95; }
+    .card-type-badge { font-size: 0.7rem; color: var(--text-muted); padding: 0 8px 4px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .card-body { padding: 4px 10px 10px; }
+    .card-title { font-size: 0.9rem; font-weight: 600; line-height: 1.35; word-break: break-word; }
+    .card-title.editing { outline: 2px solid var(--primary); border-radius: 4px; padding: 2px 4px; }
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      gap: 8px;
+    }
+    .card-meta-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.75rem; color: var(--text-muted); }
+    .due-chip { padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.7rem; }
+    .due-overdue { background: rgba(192, 57, 43, 0.08); color: var(--overdue); border: 1px solid rgba(192, 57, 43, 0.25); }
+    .due-today { background: rgba(180, 83, 9, 0.1); color: var(--today); border: 1px solid rgba(180, 83, 9, 0.25); }
+    .due-future { background: rgba(21, 128, 61, 0.08); color: var(--future); border: 1px solid rgba(21, 128, 61, 0.2); }
+    [data-theme="dark"] .due-overdue { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.25); }
+    [data-theme="dark"] .due-today { background: rgba(234, 179, 8, 0.12); border-color: rgba(234, 179, 8, 0.25); }
+    [data-theme="dark"] .due-future { background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.2); }
+    .checklist-mini { display: flex; align-items: center; gap: 4px; }
+    .progress-track { width: 56px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.2s; opacity: 0.85; }
+    .card-people-row { display: flex; align-items: center; gap: 4px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+    .card-people-group { display: flex; align-items: center; }
+    .card-people-group + .card-people-group { margin-left: 4px; padding-left: 6px; border-left: 1px solid var(--border); }
+    .assignee-stack { display: flex; margin-left: 0; }
+    .avatar {
+      width: 26px; height: 26px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; font-weight: 700; color: #fff;
+      border: 2px solid var(--card-bg); margin-left: -6px;
+    }
+    .avatar:first-child { margin-left: 0; }
+    .avatar.avatar--participant {
+      border-style: dashed;
+      border-color: var(--text-muted);
+      opacity: 0.92;
+    }
+    .add-card-btn, .add-column-btn {
+      margin: 0 8px 8px;
+      padding: 8px;
+      border-radius: 6px;
+      color: var(--text-muted);
+      text-align: left;
+      font-size: 0.875rem;
+    }
+    .add-card-btn:hover, .add-column-btn:hover { background: rgba(0,0,0,0.06); color: var(--text); }
+    [data-theme="dark"] .add-card-btn:hover, [data-theme="dark"] .add-column-btn:hover { background: rgba(255,255,255,0.06); }
+    .add-column-wrap { flex: 0 0 280px; width: 280px; align-self: stretch; display: flex; align-items: flex-start; }
+    .add-column-btn { width: 100%; background: rgba(0,0,0,0.05); border: 2px dashed var(--border); }
+    [data-theme="dark"] .add-column-btn { background: rgba(255,255,255,0.04); }
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; padding: 16px;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .modal-backdrop.open { opacity: 1; pointer-events: auto; }
+    .modal {
+      background: var(--card-bg);
+      color: var(--text);
+      border-radius: 12px;
+      max-width: 640px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-drag);
+    }
+    .modal--kaiten {
+      max-width: min(1200px, 100vw - 24px);
+      width: 100%;
+      background: var(--kaiten-modal-bg);
+      color: var(--kaiten-modal-text);
+      border: 1px solid var(--kaiten-modal-border);
+      border-radius: 10px;
+      box-shadow: var(--shadow-drag);
+    }
+    .kaiten-modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 14px 10px;
+      border-bottom: 1px solid var(--kaiten-modal-border);
+    }
+    .kaiten-head-main { min-width: 0; flex: 1; }
+    .kaiten-card-title {
+      margin: 0;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      line-height: 1.35;
+      word-break: break-word;
+      color: var(--kaiten-modal-text);
+    }
+    .kaiten-card-meta { margin-top: 4px; font-size: 0.75rem; color: var(--kaiten-modal-muted); line-height: 1.45; }
+    .kaiten-card-meta span { display: block; }
+    .kaiten-head-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .kaiten-icon-btn {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.85rem;
+      color: var(--kaiten-modal-muted);
+      background: var(--kaiten-modal-control);
+      border: 1px solid var(--kaiten-modal-border);
+      transition: background 0.15s, color 0.15s;
+    }
+    .kaiten-icon-btn .fa-lg { font-size: 1em; vertical-align: 0; }
+    .kaiten-icon-btn:hover {
+      background: var(--kaiten-modal-input);
+      color: var(--kaiten-modal-text);
+    }
+    .kaiten-modal-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr);
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+      max-height: min(78vh, 680px);
+    }
+    @media (max-width: 820px) {
+      .kaiten-modal-split { grid-template-columns: 1fr; max-height: none; }
+      .kaiten-col--right { border-left: none !important; border-top: 1px solid var(--kaiten-modal-border); max-height: 50vh; }
+    }
+    .kaiten-col { overflow-y: auto; padding: 10px 12px; min-height: 0; }
+    .kaiten-col--right {
+      background: var(--kaiten-modal-aside);
+      border-left: 1px solid var(--kaiten-modal-border);
+      display: flex;
+      flex-direction: column;
+    }
+    .kaiten-field { margin-bottom: 12px; }
+    .kaiten-field-label { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.055em; color: var(--kaiten-modal-muted); margin-bottom: 4px; }
+    .kaiten-field-row { display: flex; align-items: flex-start; gap: 8px; font-size: 0.8125rem; color: var(--kaiten-modal-text); }
+    .kaiten-pill {
+      display: inline-block; padding: 2px 6px; border-radius: 4px;
+      background: var(--kaiten-modal-control);
+      border: 1px solid var(--kaiten-modal-border);
+      font-size: 0.75rem;
+      color: var(--kaiten-modal-text);
+    }
+    .kaiten-actions-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .modal--kaiten textarea,
+    .modal--kaiten input[type="text"],
+    .modal--kaiten input[type="date"],
+    .modal--kaiten select {
+      background: var(--kaiten-modal-input) !important;
+      border-color: var(--kaiten-modal-border) !important;
+      color: var(--kaiten-modal-text) !important;
+      padding: 6px 9px !important;
+      font-size: 0.8125rem !important;
+      border-radius: 6px !important;
+    }
+    .modal--kaiten textarea:not(.kaiten-block-draft) { min-height: 72px !important; }
+    .modal--kaiten select,
+    .modal--kaiten input[type="date"] { min-height: 0; }
+    .modal--kaiten .btn-ghost {
+      background: var(--kaiten-modal-control);
+      border-color: var(--kaiten-modal-border);
+      color: var(--kaiten-modal-text);
+      padding: 6px 10px;
+      font-size: 0.8125rem;
+    }
+    .modal--kaiten .btn-ghost:hover { filter: brightness(1.05); }
+    [data-theme="dark"] .modal--kaiten .btn-ghost:hover { filter: brightness(1.12); }
+    .modal--kaiten .user-pick-grid { gap: 6px; }
+    .modal--kaiten .user-pick {
+      border-color: var(--kaiten-modal-border);
+      color: var(--kaiten-modal-text);
+      padding: 4px 8px;
+      gap: 6px;
+      font-size: 0.8125rem;
+      border-width: 1px;
+      border-radius: 6px;
+    }
+    .modal--kaiten .user-pick .avatar {
+      width: 22px;
+      height: 22px;
+      font-size: 0.58rem;
+      border-width: 1px;
+      margin-left: 0;
+    }
+    .modal--kaiten .user-pick.selected {
+      border-color: var(--kaiten-accent);
+      background: rgba(139, 92, 246, 0.18);
+      color: var(--kaiten-modal-text);
+    }
+    .modal--kaiten .muted,
+    .modal--kaiten p.muted {
+      color: var(--kaiten-modal-muted) !important;
+    }
+    .modal--kaiten .kaiten-chat-inp input[type="text"] {
+      color: var(--kaiten-modal-text) !important;
+      background: var(--kaiten-modal-input) !important;
+    }
+    [data-theme="dark"] .modal--kaiten input::placeholder,
+    [data-theme="dark"] .modal--kaiten textarea::placeholder {
+      color: #a1a7b8;
+      opacity: 1;
+    }
+    .modal--kaiten .checklist-editor .check-row button {
+      color: var(--kaiten-modal-muted);
+    }
+    .modal--kaiten .checklist-editor .check-row button:hover {
+      color: var(--kaiten-modal-text);
+    }
+    .kaiten-seg { display: flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--kaiten-modal-border); margin-bottom: 8px; }
+    .kaiten-seg button {
+      flex: 1; padding: 6px 8px; font-size: 0.6875rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      background: var(--kaiten-modal-bg);
+      color: var(--kaiten-modal-muted);
+      border: none;
+    }
+    .kaiten-seg button.is-on {
+      background: var(--kaiten-modal-control);
+      color: var(--kaiten-accent);
+      box-shadow: inset 0 -2px 0 var(--kaiten-accent);
+    }
+    .kaiten-panel { display: none; flex-direction: column; flex: 1; min-height: 0; }
+    .kaiten-panel.is-on { display: flex; }
+    #cardModalColRight .kaiten-panel.is-on { flex: 1; min-height: 0; }
+    .kaiten-chat-box {
+      display: flex; flex-direction: column;
+      border: 1px solid var(--kaiten-modal-border);
+      border-radius: 8px; overflow: hidden;
+      background: var(--kaiten-chat-well);
+      flex: 1; min-height: 160px; max-height: min(380px, 42vh);
+    }
+    .kaiten-chat-msgs { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .kaiten-bubble {
+      padding: 6px 8px; border-radius: 8px;
+      background: var(--kaiten-bubble-bg);
+      border: 1px solid var(--kaiten-bubble-border);
+      font-size: 0.8125rem; line-height: 1.4; word-break: break-word;
+    }
+    .kaiten-bubble-meta { font-size: 0.65rem; color: var(--kaiten-modal-muted); margin-bottom: 3px; }
+    .kaiten-chat-inp {
+      display: flex; gap: 6px; padding: 6px 8px;
+      border-top: 1px solid var(--kaiten-modal-border);
+      background: var(--kaiten-modal-aside);
+    }
+    .kaiten-chat-inp input { flex: 1; }
+    .kaiten-act-list { font-size: 0.75rem; max-height: 260px; overflow-y: auto; }
+    .kaiten-act-item {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--kaiten-modal-border);
+      color: var(--kaiten-modal-text);
+    }
+    .kaiten-act-item .muted { color: var(--kaiten-modal-muted) !important; }
+    .kaiten-act-item:last-child { border-bottom: none; }
+    .kaiten-file-grid { display: flex; flex-direction: column; gap: 8px; }
+    .kaiten-file-card {
+      display: flex; gap: 8px; padding: 8px; border-radius: 8px;
+      background: var(--kaiten-file-surface);
+      border: 1px solid var(--kaiten-modal-border);
+      align-items: flex-start; flex-wrap: wrap;
+    }
+    .kaiten-file-thumb {
+      width: 44px; height: 44px; border-radius: 6px; object-fit: cover;
+      background: var(--kaiten-modal-control);
+      flex-shrink: 0;
+    }
+    .kaiten-file-info { flex: 1; min-width: 0; font-size: 0.75rem; }
+    .kaiten-file-name { font-weight: 600; color: var(--kaiten-file-name); word-break: break-all; }
+    .kaiten-file-sub { font-size: 0.7rem; color: var(--kaiten-modal-muted); margin-top: 4px; }
+    .kaiten-file-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .modal-header h2 { margin: 0; font-size: 1.15rem; }
+    .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+    .modal-section { margin-bottom: 20px; }
+    .modal-section h4 { margin: 0 0 8px; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.04em; }
+    textarea, input[type="text"], input[type="date"], input[type="number"] {
+      width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--sidebar-bg); color: var(--text); font: inherit;
+    }
+    textarea { min-height: 100px; resize: vertical; }
+    .card-type-select { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--sidebar-bg); color: var(--text); font: inherit; }
+    .color-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .color-row input[type="color"] { width: 48px; height: 36px; padding: 0; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; background: transparent; }
+    .settings-types-wrap { overflow-x: auto; margin-top: 8px; }
+    .settings-types-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .settings-types-table th, .settings-types-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .settings-types-table th { color: var(--text-muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .settings-types-table input[type="text"] { width: 100%; min-width: 140px; }
+    .settings-types-table input[type="color"] { width: 44px; height: 34px; padding: 0; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    .user-pick-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .user-pick { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; border: 2px solid var(--border); cursor: pointer; font-size: 0.85rem; }
+    .user-pick.selected { border-color: var(--text); background: rgba(0, 0, 0, 0.06); }
+    [data-theme="dark"] .user-pick.selected { border-color: #ccc; background: rgba(255,255,255,0.08); }
+    .checklist-editor .check-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .checklist-editor input[type="checkbox"] { width: auto; }
+    .activity-list { font-size: 0.85rem; max-height: 160px; overflow-y: auto; }
+    .activity-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .activity-item:last-child { border-bottom: none; }
+    .chat-box { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--sidebar-bg); max-height: 280px; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 0.875rem; }
+    .chat-bubble { max-width: 92%; padding: 8px 10px; border-radius: 10px; line-height: 1.4; word-break: break-word; }
+    .chat-bubble.in { align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border); }
+    .chat-bubble .chat-meta { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; }
+    .chat-input-row { display: flex; gap: 8px; padding: 8px; border-top: 1px solid var(--border); background: var(--card-bg); }
+    .chat-input-row input { flex: 1; }
+    .file-list { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; }
+    .file-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .file-list li:last-child { border-bottom: none; }
+    .calendar-wrap { flex: 1; overflow: auto; padding: 12px 16px; min-height: 0; display: flex; flex-direction: column; }
+    .cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .cal-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      min-height: 420px;
+      box-shadow: var(--shadow);
+    }
+    .cal-dow { background: var(--column-bg); padding: 8px 4px; font-size: 0.7rem; font-weight: 600; text-align: center; color: var(--text-muted); text-transform: uppercase; }
+    .cal-cell { background: var(--card-bg); min-height: 96px; padding: 4px; display: flex; flex-direction: column; align-items: stretch; gap: 4px; vertical-align: top; }
+    .cal-cell.other-month { background: var(--workspace-bg); opacity: 0.75; }
+    .cal-day-num { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); padding: 2px 4px; }
+    .cal-stack { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+    .cal-mini-card {
+      font-size: 0.7rem; padding: 4px 6px; border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      background: var(--cal-mini-card-bg);
+      line-height: 1.25; word-break: break-word;
+    }
+    .cal-mini-card:hover { filter: brightness(0.97); }
+    .view-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .view-panel.hidden { display: none; }
+    .activity-item:last-child, .comment-item:last-child { border-bottom: none; }
+    .muted { color: var(--text-muted); font-size: 0.75rem; }
+    .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 300; display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
+    .toast {
+      background: var(--text); color: #fff; padding: 12px 16px; border-radius: 8px;
+      box-shadow: var(--shadow-drag); font-size: 0.9rem; animation: slideIn 0.25s ease;
+    }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .mobile-sidebar-toggle { display: none; }
+    @media (max-width: 900px) {
+      .sidebar {
+        position: fixed; left: 0; top: 0; bottom: 0;
+        transform: translateX(-100%);
+        box-shadow: var(--shadow-drag);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .main-wrap { width: 100%; }
+      .mobile-sidebar-toggle { display: inline-flex; }
+      .kanban-column { flex-basis: min(280px, 85vw); width: min(280px, 85vw); }
+    }
+    .hidden { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Боковая панель">
+      <div class="sidebar-header">
+        <span><i class="fa-solid fa-table-columns" aria-hidden="true"></i> Меню</span>
+        <button type="button" class="btn btn-ghost mobile-sidebar-toggle" id="btnCloseSidebar" title="Закрыть"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="sidebar-section">
+        <h3>Доски</h3>
+        <ul class="board-list" id="boardList"></ul>
+        <button type="button" class="btn btn-ghost" id="btnNewBoard" style="width:100%;margin-top:8px;"><i class="fa-solid fa-plus"></i> Новая доска</button>
+      </div>
+      <div class="sidebar-section">
+        <h3>Настройки доски</h3>
+        <button type="button" class="btn btn-ghost" id="btnBoardSettings" style="width:100%;"><i class="fa-solid fa-sliders"></i> Типы карточек и цвета</button>
+      </div>
+      <div class="sidebar-section">
+        <h3>Тема</h3>
+        <button type="button" class="btn btn-ghost" id="btnTheme" style="width:100%;"><i class="fa-solid fa-circle-half-stroke"></i> <span id="themeLabel">Тёмная тема</span></button>
+      </div>
+    </aside>
+
+    <div class="main-wrap">
+      <header class="app-header">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary mobile-sidebar-toggle" id="btnOpenSidebar" title="Меню"><i class="fa-solid fa-bars"></i></button>
+          <h1 id="boardTitleDisplay">Kanban Доска</h1>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="btn btn-primary" id="btnRenameBoard" title="Переименовать доску"><i class="fa-solid fa-pen"></i> Доска</button>
+          <button type="button" class="btn btn-primary" id="btnExport" title="Экспорт JSON"><i class="fa-solid fa-download"></i> Экспорт</button>
+          <label class="btn btn-primary" style="margin:0;cursor:pointer;"><i class="fa-solid fa-upload"></i> Импорт<input type="file" id="importFile" accept="application/json" class="sr-only" /></label>
+          <button type="button" class="btn btn-primary" id="btnReset" title="Сброс к примеру"><i class="fa-solid fa-rotate-left"></i> Сброс</button>
+        </div>
+      </header>
+
+      <div class="toolbar">
+        <div class="filter-group" style="margin-right:8px;">
+          <button type="button" class="btn btn-ghost" id="btnViewBoard" title="Канбан"><i class="fa-solid fa-table-columns"></i> Доска</button>
+          <button type="button" class="btn btn-ghost" id="btnViewCalendar" title="Календарь"><i class="fa-regular fa-calendar"></i> Календарь</button>
+        </div>
+        <input type="search" class="search-input" id="searchInput" placeholder="Поиск по карточкам..." autocomplete="off" />
+        <div class="filter-group">
+          <label for="filterCardType">Тип (Kaiten)</label>
+          <select class="filter-select" id="filterCardType"><option value="">Все</option></select>
+          <label for="filterUser">Отв. / участники</label>
+          <select class="filter-select" id="filterUser"><option value="">Все</option></select>
+          <label for="filterDue">Срок</label>
+          <select class="filter-select" id="filterDue">
+            <option value="">Все</option>
+            <option value="overdue">Просрочено</option>
+            <option value="today">Сегодня</option>
+            <option value="week">На неделе</option>
+            <option value="none">Без срока</option>
+          </select>
+          <button type="button" class="btn btn-ghost" id="btnClearFilters">Сбросить фильтры</button>
+        </div>
+      </div>
+
+      <div class="view-panel" id="viewBoardPanel">
+        <main class="board-canvas" id="boardCanvas" aria-label="Колонки канбан">
+          <div class="columns-inner" id="columnsInner"></div>
+        </main>
+      </div>
+      <div class="view-panel hidden" id="viewCalendarPanel" aria-label="Календарь">
+        <div class="calendar-wrap">
+          <div class="cal-nav">
+            <button type="button" class="btn btn-ghost" id="calPrev"><i class="fa-solid fa-chevron-left"></i></button>
+            <strong id="calMonthLabel"></strong>
+            <button type="button" class="btn btn-ghost" id="calNext"><i class="fa-solid fa-chevron-right"></i></button>
+            <button type="button" class="btn btn-ghost" id="calToday">Сегодня</button>
+          </div>
+          <div class="cal-grid" id="calGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="cardModal" role="dialog" aria-modal="true" aria-labelledby="cardModalTitle">
+    <div class="modal modal--kaiten">
+      <div class="kaiten-modal-head">
+        <div class="kaiten-head-main">
+          <h2 id="cardModalTitle" class="kaiten-card-title">Карточка</h2>
+          <div id="cardModalMeta" class="kaiten-card-meta"></div>
+        </div>
+        <div class="kaiten-head-actions">
+          <button type="button" class="kaiten-icon-btn" id="cardNextStageBtn" title="Следующий этап (следующая колонка)"><i class="fa-solid fa-arrow-right"></i></button>
+          <button type="button" class="kaiten-icon-btn" id="cardBlockHeaderBtn" title="Блокировка"><i class="fa-solid fa-hand" id="cardBlockHeaderIcon"></i></button>
+          <button type="button" class="kaiten-icon-btn" id="cardModalClose" aria-label="Закрыть"><i class="fa-solid fa-xmark fa-lg"></i></button>
+        </div>
+      </div>
+      <div class="kaiten-modal-split">
+        <div class="kaiten-col kaiten-col--left" id="cardModalColLeft"></div>
+        <div class="kaiten-col kaiten-col--right" id="cardModalColRight"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="boardSettingsModal" role="dialog" aria-modal="true" aria-labelledby="boardSettingsTitle">
+    <div class="modal" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2 id="boardSettingsTitle">Типы карточек</h2>
+        <button type="button" class="btn btn-ghost" id="boardSettingsCloseX" aria-label="Закрыть"><i class="fa-solid fa-xmark fa-lg"></i></button>
+      </div>
+      <div class="modal-body" style="flex:1;min-height:0;">
+        <p class="muted" style="margin-top:0;">Название и цвет полоски на карточке и в календаре. Цвет в самой карточке менять нельзя — только здесь.</p>
+        <div class="settings-types-wrap">
+          <table class="settings-types-table" id="settingsTypesTable">
+            <thead>
+              <tr>
+                <th>Название типа</th>
+                <th style="width:72px;">Цвет</th>
+                <th style="width:48px;"></th>
+              </tr>
+            </thead>
+            <tbody id="settingsTypesBody"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-ghost" id="btnAddCardType" style="margin-top:12px;"><i class="fa-solid fa-plus"></i> Добавить тип</button>
+      </div>
+      <div style="padding:12px 20px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost" id="boardSettingsCancel">Отмена</button>
+        <button type="button" class="btn btn-primary" id="boardSettingsSave">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="confirmModal">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header">
+        <h2 id="confirmTitle">Подтверждение</h2>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage"></p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+          <button type="button" class="btn btn-ghost" id="confirmCancel">Отмена</button>
+          <button type="button" class="btn btn-danger" id="confirmOk">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <script>
+  /**
+   * Kanban Board — модульное приложение на Vanilla JS
+   * Секции: утилиты → хранилище → модель → колонки/карточки → DnD → UI → запуск
+   */
+
+  const STORAGE_KEY = 'kanban-app-state-v2';
+  const STORAGE_KEY_LEGACY = 'kanban-app-state-v1';
+
+  /** Дорожки как в CRM / Kaiten (ORTHOPEDICS / ORTHODONTICS) */
+  function trackLanes() {
+    return [
+      { id: 'ORTHOPEDICS', name: 'Ортопедия' },
+      { id: 'ORTHODONTICS', name: 'Ортодонтия' }
+    ];
+  }
+
+  /** Типы карточек Kaiten (как в kaiten-directory-bootstrap / CRM) + цвет полоски карточки / календаря */
+  function kaitenCardTypes() {
+    return [
+      { id: 'kt_vrem', name: 'Временные', sortOrder: 10, color: '#64748b' },
+      { id: 'kt_mio', name: 'МиоСплинт', sortOrder: 20, color: '#8b5cf6' },
+      { id: 'kt_mod', name: 'Модели', sortOrder: 30, color: '#3b82f6' },
+      { id: 'kt_nak', name: 'Накладки', sortOrder: 40, color: '#f59e0b' },
+      { id: 'kt_nakmrt', name: 'Накладки МРТ', sortOrder: 50, color: '#ec4899' },
+      { id: 'kt_post', name: 'Постоянные', sortOrder: 60, color: '#10b981' },
+      { id: 'kt_spl', name: 'Сплинт', sortOrder: 70, color: '#06b6d4' },
+      { id: 'kt_splmrt', name: 'Сплинт МРТ', sortOrder: 80, color: '#a855f7' },
+      { id: 'kt_hir', name: 'Хирургия', sortOrder: 90, color: '#ef4444' }
+    ];
+  }
+
+  function cloneDefaultCardTypes() {
+    return kaitenCardTypes().map((t) => Object.assign({}, t));
+  }
+
+  /** Нормализация типов: имя, sortOrder, валидный hex color */
+  function normalizeBoardCardTypes(board) {
+    const defs = kaitenCardTypes();
+    const defMap = new Map(defs.map((d) => [d.id, d]));
+    if (!board.cardTypes || board.cardTypes.length === 0) {
+      board.cardTypes = cloneDefaultCardTypes();
+      return;
+    }
+    board.cardTypes.forEach((t) => {
+      const base = defMap.get(t.id);
+      const raw = t.color != null ? String(t.color).trim() : '';
+      if (!raw || !/^#[0-9a-fA-F]{6}$/.test(raw)) {
+        t.color = (base && base.color) || '#94a3b8';
+      } else {
+        t.color = raw;
+      }
+      if (t.sortOrder == null) t.sortOrder = (base && base.sortOrder) != null ? base.sortOrder : 0;
+      if (!t.name || !String(t.name).trim()) t.name = (base && base.name) || 'Тип';
+    });
+    board.cardTypes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  }
+
+  /** Цвет акцента по типу карточки (полоска, календарь) */
+  function getCardTypeAccent(board, cardTypeId) {
+    if (!cardTypeId) return '#a1a1aa';
+    const t = (board.cardTypes || []).find((x) => x.id === cardTypeId);
+    const c = t && t.color ? String(t.color).trim() : '';
+    if (c && /^#[0-9a-fA-F]{6}$/.test(c)) return c;
+    const d = kaitenCardTypes().find((x) => x.id === cardTypeId);
+    return (d && d.color) || '#a1a1aa';
+  }
+
+  function cardInvolvesUser(card, userId) {
+    if (!userId) return false;
+    const a = card.assignees || [];
+    const p = card.participants || [];
+    return a.includes(userId) || p.includes(userId);
+  }
+
+  function isCardBlocked(card) {
+    return !!card.blocked;
+  }
+
+  function actorUserId(board) {
+    return board.users && board.users[0] ? board.users[0].id : '';
+  }
+
+  function formatBlockedAt(iso) {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function performUnblock(card, board) {
+    card.blocked = false;
+    card.blockReason = '';
+    card.blockedByUserId = '';
+    card.blockedAt = '';
+    pushActivity(card, 'Блокировка снята', actorUserId(board));
+    saveBoard(board);
+    openCardModal(card.id);
+    renderBoardColumns();
+    renderCalendar();
+  }
+
+  function tryBlockCard(card, board, reason) {
+    const r = (reason || '').trim();
+    if (!r) {
+      toast('Укажите причину остановки работы', true);
+      return false;
+    }
+    const uid = actorUserId(board);
+    card.blocked = true;
+    card.blockReason = r;
+    card.blockedByUserId = uid;
+    card.blockedAt = new Date().toISOString();
+    pushActivity(card, 'Карточка заблокирована: ' + r.slice(0, 140), uid);
+    saveBoard(board);
+    openCardModal(card.id);
+    renderBoardColumns();
+    renderCalendar();
+    return true;
+  }
+
+  /** Генерация уникальных id для сущностей */
+  function generateId(prefix) {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+  }
+
+  /** Форматирование даты для отображения */
+  function formatDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T12:00:00');
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function todayISO() {
+    const n = new Date();
+    return n.toISOString().slice(0, 10);
+  }
+
+  /** Относительное время для мета-строк («2 дня назад») */
+  function relativeTimeRu(iso) {
+    if (!iso) return '';
+    const t = new Date(iso).getTime();
+    if (Number.isNaN(t)) return '';
+    let s = Math.floor((Date.now() - t) / 1000);
+    if (s < 0) return new Date(iso).toLocaleString('ru-RU');
+    if (s < 45) return 'только что';
+    if (s < 3600) return Math.floor(s / 60) + ' мин. назад';
+    if (s < 86400) return Math.floor(s / 3600) + ' ч. назад';
+    if (s < 86400 * 7) return Math.floor(s / 86400) + ' дн. назад';
+    return new Date(iso).toLocaleDateString('ru-RU');
+  }
+
+  function userNameById(board, userId) {
+    const u = board.users.find((x) => x.id === userId);
+    return u ? u.name : 'Неизвестно';
+  }
+
+  /** Классификация дедлайна: overdue | today | future | none */
+  function dueCategory(dueDate) {
+    if (!dueDate) return 'none';
+    const t = todayISO();
+    if (dueDate < t) return 'overdue';
+    if (dueDate === t) return 'today';
+    return 'future';
+  }
+
+  /** Начальные пользователи (демо) */
+  function defaultUsers() {
+    return [
+      { id: 'user1', name: 'Иван Иванов', initials: 'ИИ', color: '#6b7280' },
+      { id: 'user2', name: 'Мария Петрова', initials: 'МП', color: '#52525b' },
+      { id: 'user3', name: 'Алексей Сидоров', initials: 'АС', color: '#78716c' },
+      { id: 'user4', name: 'Елена Козлова', initials: 'ЕК', color: '#64748b' }
+    ];
+  }
+
+  /** Создание карточки с полями по умолчанию */
+  function createCard(partial) {
+    const now = new Date().toISOString();
+    return {
+      id: partial.id || generateId('card'),
+      title: partial.title || 'Новая задача',
+      description: partial.description || '',
+      cardTypeId: partial.cardTypeId != null ? partial.cardTypeId : '',
+      assignees: partial.assignees || [],
+      participants: partial.participants || [],
+      dueDate: partial.dueDate || '',
+      checklist: partial.checklist || [],
+      files: Array.isArray(partial.files) ? partial.files : [],
+      comments: partial.comments || [],
+      activity: partial.activity || [],
+      blocked: !!partial.blocked,
+      blockReason: partial.blockReason != null ? String(partial.blockReason) : '',
+      blockedByUserId: partial.blockedByUserId != null ? partial.blockedByUserId : '',
+      blockedAt: partial.blockedAt != null ? partial.blockedAt : '',
+      createdByUserId: partial.createdByUserId != null ? partial.createdByUserId : '',
+      lastMovedAt: partial.lastMovedAt != null ? partial.lastMovedAt : null,
+      trackLane: partial.trackLane != null ? partial.trackLane : '',
+      createdAt: partial.createdAt || now,
+      updatedAt: partial.updatedAt || now
+    };
+  }
+
+  /** Приведение доски из старого формата (v1) к текущему */
+  function migrateBoard(board) {
+    if (!board || !board.columns) return board;
+    const kt = kaitenCardTypes();
+    const byName = new Map(kt.map((t) => [t.name.toLowerCase(), t.id]));
+    normalizeBoardCardTypes(board);
+    if (board.labels && board.labels.length) {
+      board.columns.forEach((col) => {
+        col.cards.forEach((c) => {
+          if (c.labels && c.labels.length && !c.cardTypeId) {
+            const raw = c.labels[0];
+            const nm = String(raw.text || raw.name || '').toLowerCase().trim();
+            c.cardTypeId = byName.get(nm) || '';
+          }
+        });
+      });
+    }
+    delete board.labels;
+    board.columns.forEach((col) => {
+      delete col.wipLimit;
+      delete col.headerColor;
+      col.cards.forEach((c) => {
+        delete c.labels;
+        if (!Array.isArray(c.files)) c.files = [];
+        delete c.attachments;
+        delete c.cardColor;
+        if (!Array.isArray(c.participants)) c.participants = [];
+        if (c.blocked == null) {
+          if (c.locked) {
+            c.blocked = true;
+            if (c.blockReason == null || c.blockReason === '') c.blockReason = '';
+            if (!c.blockedByUserId && board.users && board.users[0]) c.blockedByUserId = board.users[0].id;
+            if (!c.blockedAt) c.blockedAt = c.updatedAt || new Date().toISOString();
+          } else {
+            c.blocked = false;
+            if (c.blockReason == null) c.blockReason = '';
+            if (c.blockedByUserId == null) c.blockedByUserId = '';
+            if (c.blockedAt == null) c.blockedAt = '';
+          }
+        } else {
+          if (c.blockReason == null) c.blockReason = '';
+          if (c.blockedByUserId == null) c.blockedByUserId = '';
+          if (c.blockedAt == null) c.blockedAt = '';
+        }
+        delete c.locked;
+        if (c.blocked && !(c.blockReason || '').trim()) {
+          c.blockReason = 'Без указания причины';
+        }
+        if (!c.createdByUserId && board.users && board.users[0]) c.createdByUserId = board.users[0].id;
+        if (c.trackLane == null) c.trackLane = '';
+        if (c.lastMovedAt === undefined) c.lastMovedAt = null;
+        (c.files || []).forEach((f) => {
+          if (!f.addedAt) f.addedAt = c.updatedAt || new Date().toISOString();
+          if (!f.addedByUserId && board.users && board.users[0]) f.addedByUserId = board.users[0].id;
+        });
+      });
+    });
+    return board;
+  }
+
+  /** Начальное состояние одной доски с колонками и примерами карточек */
+  function createInitialBoard() {
+    const users = defaultUsers();
+    const cardTypes = cloneDefaultCardTypes();
+    const uid = (i) => users[i].id;
+    const T = (ix) => cardTypes[ix] && cardTypes[ix].id;
+
+    const columns = [
+      {
+        id: 'col_backlog',
+        title: 'Бэклог',
+        cards: [
+          createCard({
+            title: 'Исследование API интеграции',
+            description: 'Собрать требования и прототип запросов.',
+            cardTypeId: T(2),
+            assignees: [uid(0)],
+            participants: [uid(1)],
+            dueDate: '2026-04-20',
+            checklist: [
+              { id: 'ch1', text: 'Собрать примеры', completed: true },
+              { id: 'ch2', text: 'Согласовать с заказчиком', completed: false }
+            ],
+            files: [],
+            comments: [{ id: 'cm1', userId: uid(1), text: 'Жду черновик.', createdAt: new Date().toISOString() }],
+            activity: []
+          }),
+          createCard({
+            title: 'Рефакторинг модулей',
+            description: 'Разбить монолитный скрипт на секции.',
+            cardTypeId: T(3),
+            assignees: [uid(2), uid(3)],
+            participants: [],
+            dueDate: '2026-04-10',
+            checklist: [{ id: 'ch3', text: 'Нарезать на модули', completed: false }],
+            files: []
+          }),
+          createCard({
+            title: 'Обновить иконки',
+            cardTypeId: T(4),
+            assignees: [uid(3)],
+            participants: [uid(0), uid(1)],
+            dueDate: '',
+            checklist: [],
+            files: []
+          })
+        ]
+      },
+      {
+        id: 'col_todo',
+        title: 'To Do',
+        cards: [
+          createCard({
+            title: 'Верстка сайдбара',
+            description: 'Адаптив и отступы по макету.',
+            cardTypeId: T(5),
+            assignees: [uid(1)],
+            participants: [uid(2)],
+            dueDate: todayISO(),
+            checklist: [
+              { id: 'ch4', text: 'Desktop', completed: true },
+              { id: 'ch5', text: 'Mobile', completed: false }
+            ],
+            files: []
+          }),
+          createCard({
+            title: 'Настроить сохранение',
+            cardTypeId: T(0),
+            assignees: [uid(0), uid(2)],
+            participants: [uid(3)],
+            dueDate: '2026-05-01',
+            checklist: [],
+            files: []
+          })
+        ]
+      },
+      {
+        id: 'col_progress',
+        title: 'In Progress',
+        cards: [
+          createCard({
+            title: 'Drag-and-drop колонок',
+            description: 'Sortable.js для списков.',
+            cardTypeId: T(6),
+            assignees: [uid(2)],
+            participants: [],
+            dueDate: '2026-04-25',
+            checklist: [{ id: 'ch6', text: 'События логировать', completed: true }],
+            files: []
+          }),
+          createCard({
+            title: 'Фильтры и поиск',
+            cardTypeId: T(7),
+            assignees: [uid(1), uid(3)],
+            participants: [uid(0)],
+            dueDate: '2026-04-18',
+            checklist: [],
+            files: []
+          }),
+          createCard({
+            title: 'Уведомления тостами',
+            cardTypeId: T(8),
+            assignees: [uid(0)],
+            participants: [],
+            dueDate: '2026-03-01',
+            checklist: [],
+            blocked: true,
+            blockReason: 'ЖДЕМ БАЛКИ?????',
+            blockedByUserId: uid(0),
+            blockedAt: new Date().toISOString(),
+            files: []
+          })
+        ]
+      },
+      {
+        id: 'col_done',
+        title: 'Done',
+        cards: [
+          createCard({
+            title: 'Макет заголовка',
+            cardTypeId: T(1),
+            assignees: [uid(1)],
+            participants: [uid(2), uid(3)],
+            dueDate: '2026-04-01',
+            checklist: [{ id: 'ch7', text: 'Проверка на ПК', completed: true }],
+            files: []
+          }),
+          createCard({
+            title: 'Подбор цветовой схемы',
+            cardTypeId: T(2),
+            assignees: [uid(3)],
+            participants: [],
+            dueDate: '2026-04-12',
+            checklist: [],
+            files: []
+          })
+        ]
+      }
+    ];
+
+    columns.forEach((col, ci) => {
+      col.cards.forEach((card, i) => {
+        if (!card.createdByUserId) card.createdByUserId = uid((ci + i) % 4);
+        if (!card.trackLane) card.trackLane = (ci + i) % 2 === 0 ? 'ORTHOPEDICS' : 'ORTHODONTICS';
+        if (!card.activity || !card.activity.length) {
+          card.activity = [
+            { id: generateId('act'), type: 'create', text: 'Карточка создана', userId: card.createdByUserId, at: card.createdAt }
+          ];
+        }
+      });
+    });
+
+    return {
+      id: generateId('board'),
+      title: 'Рабочая доска',
+      columns,
+      users,
+      cardTypes
+    };
+  }
+
+  /** Полное состояние приложения */
+  function defaultAppState() {
+    const board = createInitialBoard();
+    const now = new Date();
+    return {
+      version: 2,
+      boards: [board],
+      activeBoardId: board.id,
+      theme: 'light',
+      search: '',
+      viewMode: 'board',
+      calendarMonth: { y: now.getFullYear(), m: now.getMonth() },
+      filters: { cardTypeId: '', userId: '', due: '' }
+    };
+  }
+
+  /** Загрузка и сохранение в localStorage с обработкой ошибок */
+  const Storage = {
+    load() {
+      try {
+        let raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) raw = localStorage.getItem(STORAGE_KEY_LEGACY);
+        if (!raw) return defaultAppState();
+        const data = JSON.parse(raw);
+        if (!data.boards || !Array.isArray(data.boards)) return defaultAppState();
+        const merged = Object.assign(defaultAppState(), data);
+        merged.boards = merged.boards.map((b) => migrateBoard(b));
+        if (merged.filters) {
+          if (merged.filters.labelId != null && merged.filters.cardTypeId == null) {
+            merged.filters.cardTypeId = merged.filters.labelId;
+          }
+          delete merged.filters.labelId;
+          if (merged.filters.cardTypeId == null) merged.filters.cardTypeId = '';
+        }
+        if (!merged.viewMode) merged.viewMode = 'board';
+        if (!merged.calendarMonth) {
+          const n = new Date();
+          merged.calendarMonth = { y: n.getFullYear(), m: n.getMonth() };
+        }
+        return merged;
+      } catch (e) {
+        console.error('[Kanban] Ошибка чтения localStorage:', e);
+        toast('Не удалось прочитать сохранённые данные. Загружено начальное состояние.', true);
+        return defaultAppState();
+      }
+    },
+    save(state) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.error('[Kanban] Ошибка записи localStorage:', e);
+        toast('Ошибка сохранения: ' + (e.message || 'квота или доступ'), true);
+      }
+    }
+  };
+
+  let appState = Storage.load();
+
+  function getActiveBoard() {
+    return appState.boards.find((b) => b.id === appState.activeBoardId) || appState.boards[0];
+  }
+
+  function setActiveBoard(id) {
+    appState.activeBoardId = id;
+    Storage.save(appState);
+  }
+
+  function saveBoard(board) {
+    const idx = appState.boards.findIndex((b) => b.id === board.id);
+    if (idx >= 0) appState.boards[idx] = board;
+    Storage.save(appState);
+  }
+
+  function pushActivity(card, text, userId) {
+    const entry = {
+      id: generateId('act'),
+      type: 'update',
+      text,
+      userId: userId || (getActiveBoard().users[0] && getActiveBoard().users[0].id),
+      at: new Date().toISOString()
+    };
+    card.activity = card.activity || [];
+    card.activity.unshift(entry);
+    card.updatedAt = entry.at;
+  }
+
+  /** ——— Уведомления ——— */
+  function toast(message, isError) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    if (isError) el.style.background = '#c0392b';
+    el.textContent = message;
+    document.getElementById('toastContainer').appendChild(el);
+    setTimeout(() => { el.remove(); }, 4200);
+  }
+
+  /** ——— Фильтрация карточек для отображения ——— */
+  function cardMatchesFilters(card, board) {
+    const q = (appState.search || '').trim().toLowerCase();
+    if (q) {
+      const inTitle = (card.title || '').toLowerCase().includes(q);
+      const inDesc = (card.description || '').toLowerCase().includes(q);
+      if (!inTitle && !inDesc) return false;
+    }
+    const ft = appState.filters.cardTypeId;
+    if (ft) {
+      if (String(card.cardTypeId || '') !== String(ft)) return false;
+    }
+    const fu = appState.filters.userId;
+    if (fu) {
+      if (!cardInvolvesUser(card, fu)) return false;
+    }
+    const fd = appState.filters.due;
+    if (fd) {
+      const cat = dueCategory(card.dueDate);
+      if (fd === 'none' && cat !== 'none') return false;
+      if (fd === 'overdue' && cat !== 'overdue') return false;
+      if (fd === 'today' && cat !== 'today') return false;
+      if (fd === 'week') {
+        if (!card.dueDate) return false;
+        const d = new Date(card.dueDate + 'T12:00:00');
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 7);
+        if (d < start || d > end) return false;
+      }
+    }
+    return true;
+  }
+
+  /** ——— Рендер сайдбара ——— */
+  function renderSidebar() {
+    const list = document.getElementById('boardList');
+    list.innerHTML = '';
+    appState.boards.forEach((b) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.innerHTML = '<i class="fa-solid fa-clipboard-list"></i> ' + escapeHtml(b.title);
+      if (b.id === appState.activeBoardId) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        appState.activeBoardId = b.id;
+        Storage.save(appState);
+        renderAll();
+        toast('Доска: ' + b.title);
+      });
+      li.appendChild(btn);
+      list.appendChild(li);
+    });
+
+    document.documentElement.setAttribute('data-theme', appState.theme === 'dark' ? 'dark' : 'light');
+    document.getElementById('themeLabel').textContent = appState.theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  /** ——— Заполнение селектов фильтров ——— */
+  function renderFilterSelects() {
+    const board = getActiveBoard();
+    const selT = document.getElementById('filterCardType');
+    const selU = document.getElementById('filterUser');
+    const curT = appState.filters.cardTypeId;
+    const curU = appState.filters.userId;
+    selT.innerHTML = '<option value="">Все типы</option>';
+    (board.cardTypes || kaitenCardTypes()).forEach((t) => {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = t.name;
+      selT.appendChild(o);
+    });
+    selT.value = curT || '';
+    selU.innerHTML = '<option value="">Все</option>';
+    board.users.forEach((u) => {
+      const o = document.createElement('option');
+      o.value = u.id;
+      o.textContent = u.name;
+      selU.appendChild(o);
+    });
+    selU.value = curU || '';
+    document.getElementById('filterDue').value = appState.filters.due || '';
+    document.getElementById('searchInput').value = appState.search || '';
+  }
+
+  /** ——— Рендер одной карточки ——— */
+  function renderCardElement(card, board) {
+    const wrap = document.createElement('article');
+    wrap.className = 'kanban-card' + (isCardBlocked(card) ? ' is-blocked' : '');
+    wrap.dataset.cardId = card.id;
+    wrap.setAttribute('draggable', 'false');
+    wrap.style.setProperty('--card-accent', getCardTypeAccent(board, card.cardTypeId));
+
+    if (isCardBlocked(card)) {
+      const strip = document.createElement('div');
+      strip.className = 'card-block-strip';
+      const txt = ((card.blockReason || '').trim() || 'Карточка остановлена');
+      strip.innerHTML = '<span class="block-ico" aria-hidden="true">✋</span><span class="block-txt">' + escapeHtml(txt) + '</span>';
+      strip.title = txt;
+      wrap.appendChild(strip);
+    }
+
+    const ct = (board.cardTypes || []).find((t) => t.id === card.cardTypeId);
+    if (ct) {
+      const typeBadge = document.createElement('div');
+      typeBadge.className = 'card-type-badge';
+      typeBadge.textContent = ct.name;
+      wrap.appendChild(typeBadge);
+    }
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'card-title';
+    titleEl.textContent = card.title;
+    titleEl.title = isCardBlocked(card) ? 'Карточка заблокирована — снимите блок в карточке' : 'Двойной клик для переименования';
+    body.appendChild(titleEl);
+
+    const footer = document.createElement('div');
+    footer.className = 'card-footer';
+    const metaLeft = document.createElement('div');
+    metaLeft.className = 'card-meta-left';
+
+    if (card.dueDate) {
+      const cat = dueCategory(card.dueDate);
+      const due = document.createElement('span');
+      due.className = 'due-chip ' + (cat === 'overdue' ? 'due-overdue' : cat === 'today' ? 'due-today' : 'due-future');
+      due.innerHTML = '<i class="fa-regular fa-clock"></i> ' + formatDate(card.dueDate);
+      metaLeft.appendChild(due);
+    }
+
+    const cl = card.checklist || [];
+    if (cl.length) {
+      const done = cl.filter((i) => i.completed).length;
+      const pct = Math.round((done / cl.length) * 100);
+      const mini = document.createElement('div');
+      mini.className = 'checklist-mini';
+      mini.innerHTML = '<i class="fa-solid fa-list-check"></i><span>' + done + '/' + cl.length + '</span>' +
+        '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div>';
+      metaLeft.appendChild(mini);
+    }
+
+    const fcount = (card.files || []).length;
+    if (fcount > 0) {
+      const att = document.createElement('span');
+      att.innerHTML = '<i class="fa-solid fa-paperclip"></i> ' + fcount;
+      metaLeft.appendChild(att);
+    }
+
+    footer.appendChild(metaLeft);
+
+    const peopleRow = document.createElement('div');
+    peopleRow.className = 'card-people-row';
+    const assignees = card.assignees || [];
+    const partOnly = (card.participants || []).filter((id) => !assignees.includes(id));
+    if (assignees.length) {
+      const g = document.createElement('div');
+      g.className = 'card-people-group';
+      const stack = document.createElement('div');
+      stack.className = 'assignee-stack';
+      assignees.slice(0, 5).forEach((uid) => {
+        const u = board.users.find((x) => x.id === uid);
+        if (!u) return;
+        const av = document.createElement('span');
+        av.className = 'avatar';
+        av.style.background = u.color;
+        av.textContent = u.initials;
+        av.title = u.name + ' (ответственный)';
+        stack.appendChild(av);
+      });
+      if (assignees.length > 5) {
+        const more = document.createElement('span');
+        more.className = 'muted';
+        more.style.fontSize = '0.65rem';
+        more.style.marginLeft = '4px';
+        more.textContent = '+' + (assignees.length - 5);
+        stack.appendChild(more);
+      }
+      g.appendChild(stack);
+      peopleRow.appendChild(g);
+    }
+    if (partOnly.length) {
+      const g2 = document.createElement('div');
+      g2.className = 'card-people-group';
+      const stack2 = document.createElement('div');
+      stack2.className = 'assignee-stack';
+      partOnly.slice(0, 4).forEach((uid) => {
+        const u = board.users.find((x) => x.id === uid);
+        if (!u) return;
+        const av = document.createElement('span');
+        av.className = 'avatar avatar--participant';
+        av.style.background = u.color;
+        av.textContent = u.initials;
+        av.title = u.name + ' (участник)';
+        stack2.appendChild(av);
+      });
+      if (partOnly.length > 4) {
+        const more = document.createElement('span');
+        more.className = 'muted';
+        more.style.fontSize = '0.65rem';
+        more.style.marginLeft = '4px';
+        more.textContent = '+' + (partOnly.length - 4);
+        stack2.appendChild(more);
+      }
+      g2.appendChild(stack2);
+      peopleRow.appendChild(g2);
+    }
+    footer.appendChild(peopleRow);
+
+    body.appendChild(footer);
+
+    wrap.appendChild(body);
+
+    titleEl.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      if (isCardBlocked(card)) {
+        toast('Снимите блокировку в карточке', true);
+        return;
+      }
+      startInlineTitleEdit(titleEl, card, board);
+    });
+
+    wrap.addEventListener('click', (e) => {
+      if (e.target.closest('.card-title')) return;
+      openCardModal(card.id);
+    });
+
+    return wrap;
+  }
+
+  function startInlineTitleEdit(titleEl, card, board) {
+    titleEl.contentEditable = 'true';
+    titleEl.classList.add('editing');
+    titleEl.focus();
+    const range = document.createRange();
+    range.selectNodeContents(titleEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    function finish(save) {
+      titleEl.contentEditable = 'false';
+      titleEl.classList.remove('editing');
+      titleEl.removeEventListener('blur', onBlur);
+      titleEl.removeEventListener('keydown', onKey);
+      if (save) {
+        const text = (titleEl.textContent || '').trim();
+        if (text) {
+          card.title = text;
+          pushActivity(card, 'Изменён заголовок', board.users[0] && board.users[0].id);
+          saveBoard(board);
+          renderBoardColumns();
+          renderCalendar();
+        } else titleEl.textContent = card.title;
+      } else titleEl.textContent = card.title;
+    }
+    function onBlur() { finish(true); }
+    function onKey(ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+      if (ev.key === 'Escape') finish(false);
+    }
+    titleEl.addEventListener('blur', onBlur);
+    titleEl.addEventListener('keydown', onKey);
+  }
+
+  /** ——— Рендер колонок ——— */
+  function renderBoardColumns() {
+    const canvas = document.getElementById('boardCanvas');
+    const columnsRoot = document.getElementById('columnsInner');
+    columnsRoot.innerHTML = '';
+    const board = getActiveBoard();
+    document.getElementById('boardTitleDisplay').textContent = board.title;
+
+    board.columns.forEach((col) => {
+      const colEl = document.createElement('section');
+      colEl.className = 'kanban-column';
+      colEl.dataset.columnId = col.id;
+      const visibleCards = col.cards.filter((c) => cardMatchesFilters(c, board));
+
+      const hdr = document.createElement('header');
+      hdr.className = 'column-header';
+
+      const row = document.createElement('div');
+      row.className = 'column-header-row';
+      const titleSpan = document.createElement('div');
+      titleSpan.className = 'column-title';
+      titleSpan.textContent = col.title;
+      const actions = document.createElement('div');
+      actions.className = 'column-actions';
+      actions.innerHTML =
+        '<button type="button" class="icon-btn" data-action="edit-col" title="Переименовать"><i class="fa-solid fa-pen"></i></button>' +
+        '<button type="button" class="icon-btn" data-action="del-col" title="Удалить колонку"><i class="fa-solid fa-trash"></i></button>';
+      row.appendChild(titleSpan);
+      row.appendChild(actions);
+      hdr.appendChild(row);
+
+      const meta = document.createElement('div');
+      meta.className = 'column-meta';
+      meta.innerHTML =
+        '<span>' + visibleCards.length + (visibleCards.length !== col.cards.length ? ' из ' + col.cards.length : '') + ' карточек</span>';
+      hdr.appendChild(meta);
+      colEl.appendChild(hdr);
+
+      const list = document.createElement('div');
+      list.className = 'cards-container';
+      list.dataset.columnId = col.id;
+
+      col.cards.forEach((card) => {
+        if (!cardMatchesFilters(card, board)) return;
+        list.appendChild(renderCardElement(card, board));
+      });
+
+      colEl.appendChild(list);
+
+      const addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'add-card-btn';
+      addBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Добавить карточку';
+      addBtn.addEventListener('click', () => addCardToColumn(col.id));
+      colEl.appendChild(addBtn);
+
+      titleSpan.addEventListener('dblclick', () => renameColumn(col.id));
+      actions.querySelector('[data-action="edit-col"]').addEventListener('click', () => renameColumn(col.id));
+      actions.querySelector('[data-action="del-col"]').addEventListener('click', () => deleteColumn(col.id));
+
+      columnsRoot.appendChild(colEl);
+    });
+
+    const addColWrap = document.createElement('div');
+    addColWrap.className = 'add-column-wrap';
+    const addCol = document.createElement('button');
+    addCol.type = 'button';
+    addCol.className = 'add-column-btn';
+    addCol.innerHTML = '<i class="fa-solid fa-plus"></i> Добавить колонку';
+    addCol.addEventListener('click', addColumn);
+    addColWrap.appendChild(addCol);
+    canvas.querySelector('.add-column-wrap')?.remove();
+    canvas.appendChild(addColWrap);
+
+    renderSidebar();
+    renderFilterSelects();
+    initSortable();
+    renderCalendar();
+    syncViewChrome();
+  }
+
+  function renderAll() {
+    renderBoardColumns();
+  }
+
+  function syncViewChrome() {
+    const board = appState.viewMode === 'board';
+    document.getElementById('viewBoardPanel').classList.toggle('hidden', !board);
+    document.getElementById('viewCalendarPanel').classList.toggle('hidden', board);
+    document.getElementById('btnViewBoard').classList.toggle('is-active', board);
+    document.getElementById('btnViewCalendar').classList.toggle('is-active', !board);
+  }
+
+  function setViewMode(mode) {
+    appState.viewMode = mode;
+    Storage.save(appState);
+    syncViewChrome();
+    if (mode === 'board') renderBoardColumns();
+    else renderCalendar();
+  }
+
+  /** Карточки с датой для календаря */
+  function allBoardCards(board) {
+    const out = [];
+    board.columns.forEach((col) => {
+      col.cards.forEach((c) => out.push({ card: c, column: col }));
+    });
+    return out;
+  }
+
+  function renderCalendar() {
+    const board = getActiveBoard();
+    const { y, m } = appState.calendarMonth || { y: new Date().getFullYear(), m: new Date().getMonth() };
+    const label = document.getElementById('calMonthLabel');
+    const first = new Date(y, m, 1);
+    label.textContent = first.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+
+    const grid = document.getElementById('calGrid');
+    grid.innerHTML = '';
+    const dow = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    dow.forEach((d) => {
+      const h = document.createElement('div');
+      h.className = 'cal-dow';
+      h.textContent = d;
+      grid.appendChild(h);
+    });
+
+    const startWeekday = (first.getDay() + 6) % 7;
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const prevMonthLast = new Date(y, m, 0);
+    const prevYear = prevMonthLast.getFullYear();
+    const prevMonth = prevMonthLast.getMonth();
+    const daysInPrev = prevMonthLast.getDate();
+
+    const cells = [];
+    for (let i = 0; i < startWeekday; i++) {
+      const day = daysInPrev - startWeekday + i + 1;
+      cells.push({ day, inMonth: false, cy: prevYear, cm: prevMonth });
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      cells.push({ day: d, inMonth: true, cy: y, cm: m });
+    }
+    let nextY = m === 11 ? y + 1 : y;
+    let nextM = m === 11 ? 0 : m + 1;
+    let nd = 1;
+    while (cells.length < 42) {
+      cells.push({ day: nd++, inMonth: false, cy: nextY, cm: nextM });
+    }
+
+    const byDate = {};
+    allBoardCards(board).forEach(({ card }) => {
+      if (!card.dueDate || !cardMatchesFilters(card, board)) return;
+      const key = card.dueDate;
+      if (!byDate[key]) byDate[key] = [];
+      byDate[key].push(card);
+    });
+
+    cells.forEach((cell) => {
+      const cellEl = document.createElement('div');
+      cellEl.className = 'cal-cell' + (cell.inMonth ? '' : ' other-month');
+      const iso = `${cell.cy}-${String(cell.cm + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
+      const num = document.createElement('div');
+      num.className = 'cal-day-num';
+      num.textContent = String(cell.day);
+      cellEl.appendChild(num);
+      const stack = document.createElement('div');
+      stack.className = 'cal-stack';
+      const list = byDate[iso] || [];
+      list.slice(0, 6).forEach((c) => {
+        const mini = document.createElement('button');
+        mini.type = 'button';
+        mini.className = 'cal-mini-card';
+        mini.style.borderLeft = '3px solid ' + getCardTypeAccent(board, c.cardTypeId);
+        const ct = (board.cardTypes || []).find((t) => t.id === c.cardTypeId);
+        mini.textContent = (ct ? ct.name + ': ' : '') + (c.title || 'Без названия');
+        mini.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openCardModal(c.id);
+        });
+        stack.appendChild(mini);
+      });
+      if (list.length > 6) {
+        const more = document.createElement('div');
+        more.className = 'muted';
+        more.style.fontSize = '0.65rem';
+        more.style.padding = '2px';
+        more.textContent = '+' + (list.length - 6) + '…';
+        stack.appendChild(more);
+      }
+      cellEl.appendChild(stack);
+      grid.appendChild(cellEl);
+    });
+  }
+
+  /** ——— Колонки: CRUD ——— */
+  function addColumn() {
+    const board = getActiveBoard();
+    const col = {
+      id: generateId('col'),
+      title: 'Новая колонка',
+      cards: []
+    };
+    board.columns.push(col);
+    saveBoard(board);
+    toast('Колонка добавлена');
+    renderBoardColumns();
+  }
+
+  function renameColumn(columnId) {
+    const board = getActiveBoard();
+    const col = board.columns.find((c) => c.id === columnId);
+    if (!col) return;
+    const n = prompt('Название колонки:', col.title);
+    if (n === null) return;
+    const t = n.trim();
+    if (!t) return;
+    col.title = t;
+    saveBoard(board);
+    renderBoardColumns();
+  }
+
+  function deleteColumn(columnId) {
+    const board = getActiveBoard();
+    const col = board.columns.find((c) => c.id === columnId);
+    if (!col) return;
+    confirmDialog('Удалить колонку «' + col.title + '» и все карточки?', () => {
+      board.columns = board.columns.filter((c) => c.id !== columnId);
+      saveBoard(board);
+      toast('Колонка удалена');
+      renderBoardColumns();
+    });
+  }
+
+  /** ——— Карточки ——— */
+  function findCard(board, cardId) {
+    for (const col of board.columns) {
+      const c = col.cards.find((x) => x.id === cardId);
+      if (c) return { col, card: c };
+    }
+    return null;
+  }
+
+  function addCardToColumn(columnId) {
+    const board = getActiveBoard();
+    const col = board.columns.find((c) => c.id === columnId);
+    if (!col) return;
+    const uid = board.users[0] && board.users[0].id;
+    const card = createCard({ title: 'Новая карточка', createdByUserId: uid });
+    card.activity = [{ id: generateId('act'), type: 'create', text: 'Карточка создана', userId: uid, at: card.createdAt }];
+    col.cards.push(card);
+    saveBoard(board);
+    toast('Карточка создана');
+    renderBoardColumns();
+    openCardModal(card.id);
+  }
+
+  function deleteCard(cardId) {
+    const board = getActiveBoard();
+    const found = findCard(board, cardId);
+    if (!found) return;
+    confirmDialog('Удалить карточку «' + found.card.title + '»?', () => {
+      found.col.cards = found.col.cards.filter((c) => c.id !== cardId);
+      saveBoard(board);
+      closeCardModal();
+      toast('Карточка удалена');
+      renderBoardColumns();
+      renderCalendar();
+    });
+  }
+
+  /** Перенос карточки в следующую колонку (этап) */
+  function moveCardToNextStage(cardId) {
+    const board = getActiveBoard();
+    const found = findCard(board, cardId);
+    if (!found) return;
+    if (isCardBlocked(found.card)) {
+      toast('Снимите блокировку', true);
+      return;
+    }
+    const colIdx = board.columns.findIndex((c) => c.id === found.col.id);
+    if (colIdx < 0 || colIdx >= board.columns.length - 1) {
+      toast('Это последняя колонка', true);
+      return;
+    }
+    const c = found.card;
+    found.col.cards = found.col.cards.filter((x) => x.id !== cardId);
+    const nextCol = board.columns[colIdx + 1];
+    nextCol.cards.push(c);
+    const now = new Date().toISOString();
+    c.lastMovedAt = now;
+    c.updatedAt = now;
+    pushActivity(c, 'Перемещена в «' + nextCol.title + '»', board.users[0] && board.users[0].id);
+    saveBoard(board);
+    renderBoardColumns();
+    renderCalendar();
+    openCardModal(c.id);
+    toast('Этап: «' + nextCol.title + '»');
+  }
+
+  /** ——— Модальное окно карточки ——— */
+  let editingCardId = null;
+
+  const MAX_FILE_BYTES = 2.5 * 1024 * 1024;
+
+  function openCardModal(cardId) {
+    const board = getActiveBoard();
+    const found = findCard(board, cardId);
+    if (!found) return;
+    editingCardId = cardId;
+    const card = found.card;
+    card.files = card.files || [];
+    const blocked = isCardBlocked(card);
+    const modal = document.getElementById('cardModal');
+    const titleEl = document.getElementById('cardModalTitle');
+    titleEl.textContent = card.title;
+    titleEl.contentEditable = blocked ? 'false' : 'true';
+    titleEl.style.outline = 'none';
+    const onTitleBlur = () => {
+      if (blocked) return;
+      const t = (titleEl.textContent || '').trim();
+      if (t && t !== card.title) {
+        card.title = t;
+        pushActivity(card, 'Изменён заголовок', board.users[0] && board.users[0].id);
+        saveBoard(board);
+        renderBoardColumns();
+        renderCalendar();
+      } else if (!t) titleEl.textContent = card.title;
+    };
+    titleEl.onblur = onTitleBlur;
+    titleEl.onkeydown = (e) => {
+      if (blocked) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        titleEl.blur();
+      }
+    };
+
+    const blockHeaderBtn = document.getElementById('cardBlockHeaderBtn');
+    const blockHeaderIcon = document.getElementById('cardBlockHeaderIcon');
+    if (blocked) {
+      blockHeaderIcon.className = 'fa-solid fa-unlock';
+      blockHeaderBtn.title = 'Снять блокировку';
+      blockHeaderBtn.onclick = () => performUnblock(card, board);
+    } else {
+      blockHeaderIcon.className = 'fa-solid fa-hand';
+      blockHeaderBtn.title = 'Перейти к форме блокировки';
+      blockHeaderBtn.onclick = () => {
+        const ta = document.getElementById('cardBlockReasonDraft');
+        if (ta) {
+          ta.focus();
+          ta.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+          toast('Карточка уже заблокирована', true);
+        }
+      };
+    }
+
+    const nextBtn = document.getElementById('cardNextStageBtn');
+    nextBtn.disabled = blocked;
+    nextBtn.onclick = () => moveCardToNextStage(card.id);
+
+    const metaEl = document.getElementById('cardModalMeta');
+    const creatorNm = userNameById(board, card.createdByUserId);
+    metaEl.innerHTML = '<span>Создано: ' + escapeHtml(creatorNm) + ' · ' + escapeHtml(relativeTimeRu(card.createdAt)) + '</span>';
+    if (card.lastMovedAt) {
+      metaEl.innerHTML += '<span>Перемещена · ' + escapeHtml(relativeTimeRu(card.lastMovedAt)) + '</span>';
+    }
+
+    const left = document.getElementById('cardModalColLeft');
+    const right = document.getElementById('cardModalColRight');
+    left.innerHTML = '';
+    right.innerHTML = '';
+
+    if (blocked) {
+      const bp = document.createElement('div');
+      bp.className = 'kaiten-block-panel';
+      const blocker = board.users.find((x) => x.id === card.blockedByUserId);
+      const head = document.createElement('div');
+      head.className = 'kaiten-block-panel-header';
+      const av = document.createElement('span');
+      av.className = 'avatar';
+      av.style.width = '28px';
+      av.style.height = '28px';
+      av.style.fontSize = '0.65rem';
+      av.style.flexShrink = '0';
+      if (blocker) {
+        av.style.background = blocker.color;
+        av.textContent = blocker.initials;
+      } else {
+        av.style.background = '#57534e';
+        av.textContent = '?';
+      }
+      const meta = document.createElement('div');
+      meta.className = 'block-meta';
+      const when = formatBlockedAt(card.blockedAt);
+      meta.innerHTML = '<strong>Работа остановлена</strong><span style="opacity:0.92;font-size:0.78rem;display:block;margin-top:4px;">' +
+        escapeHtml(blocker ? blocker.name : 'Неизвестно') + ' заблокировал(а) карточку' +
+        (when ? ' · ' + escapeHtml(when) : '') + '</span>';
+      head.appendChild(av);
+      head.appendChild(meta);
+      bp.appendChild(head);
+      const reasonBox = document.createElement('div');
+      reasonBox.className = 'kaiten-block-reason-display';
+      reasonBox.textContent = ((card.blockReason || '').trim() || '—');
+      bp.appendChild(reasonBox);
+      const actRow = document.createElement('div');
+      actRow.className = 'kaiten-block-actions';
+      const unBtn = document.createElement('button');
+      unBtn.type = 'button';
+      unBtn.className = 'kaiten-block-unblock';
+      unBtn.textContent = 'Снять блокировку';
+      unBtn.addEventListener('click', () => performUnblock(card, board));
+      actRow.appendChild(unBtn);
+      bp.appendChild(actRow);
+      left.appendChild(bp);
+    } else {
+      const bf = document.createElement('div');
+      bf.className = 'kaiten-block-form';
+      const lab = document.createElement('div');
+      lab.className = 'kaiten-field-label';
+      lab.textContent = 'Блокировка (как в Kaiten)';
+      const hint = document.createElement('p');
+      hint.className = 'muted';
+      hint.style.margin = '0 0 8px';
+      hint.style.fontSize = '0.75rem';
+      hint.style.lineHeight = '1.45';
+      hint.textContent = 'Укажите причину — карточку нельзя переносить и редактировать, пока блок не снят.';
+      const ta = document.createElement('textarea');
+      ta.className = 'kaiten-block-draft';
+      ta.id = 'cardBlockReasonDraft';
+      ta.placeholder = 'Например: ЖДЕМ БАЛКИ…';
+      ta.rows = 3;
+      const row = document.createElement('div');
+      row.style.marginTop = '10px';
+      row.style.display = 'flex';
+      row.style.justifyContent = 'flex-end';
+      const go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'btn btn-ghost';
+      go.style.borderColor = 'var(--kaiten-modal-border)';
+      go.innerHTML = '<i class="fa-solid fa-hand"></i> Заблокировать';
+      go.addEventListener('click', () => tryBlockCard(card, board, ta.value));
+      bf.appendChild(lab);
+      bf.appendChild(hint);
+      bf.appendChild(ta);
+      row.appendChild(go);
+      bf.appendChild(row);
+      left.appendChild(bf);
+    }
+
+    const trackSec = document.createElement('div');
+    trackSec.className = 'kaiten-field';
+    trackSec.innerHTML = '<div class="kaiten-field-label">Расположение (дорожка)</div>';
+    const trackSel = document.createElement('select');
+    trackSel.className = 'card-type-select';
+    trackSel.disabled = blocked;
+    const trOpt = document.createElement('option');
+    trOpt.value = '';
+    trOpt.textContent = '— не выбрано —';
+    trackSel.appendChild(trOpt);
+    trackLanes().forEach((lane) => {
+      const o = document.createElement('option');
+      o.value = lane.id;
+      o.textContent = lane.name;
+      trackSel.appendChild(o);
+    });
+    trackSel.value = card.trackLane || '';
+    trackSel.addEventListener('change', () => {
+      card.trackLane = trackSel.value;
+      pushActivity(card, 'Изменена дорожка', board.users[0] && board.users[0].id);
+      saveBoard(board);
+      renderBoardColumns();
+      renderCalendar();
+    });
+    trackSec.appendChild(trackSel);
+    left.appendChild(trackSec);
+
+    const typeSec = document.createElement('div');
+    typeSec.className = 'kaiten-field';
+    typeSec.innerHTML = '<div class="kaiten-field-label">Тип карточки</div>';
+    const typeSel = document.createElement('select');
+    typeSel.className = 'card-type-select';
+    typeSel.disabled = blocked;
+    const types = board.cardTypes || kaitenCardTypes();
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = '— не выбран —';
+    typeSel.appendChild(opt0);
+    types.forEach((t) => {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = t.name;
+      typeSel.appendChild(o);
+    });
+    typeSel.value = card.cardTypeId || '';
+    typeSel.addEventListener('change', () => {
+      card.cardTypeId = typeSel.value;
+      pushActivity(card, 'Изменён тип карточки', board.users[0] && board.users[0].id);
+      saveBoard(board);
+      renderBoardColumns();
+      renderCalendar();
+    });
+    typeSec.appendChild(typeSel);
+    left.appendChild(typeSec);
+
+    const usersSec = document.createElement('div');
+    usersSec.className = 'kaiten-field';
+    usersSec.innerHTML = '<div class="kaiten-field-label">Ответственные</div>';
+    const ug = document.createElement('div');
+    ug.className = 'user-pick-grid';
+    board.users.forEach((u) => {
+      const has = (card.assignees || []).includes(u.id);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'user-pick' + (has ? ' selected' : '');
+      b.disabled = blocked;
+      b.innerHTML = '<span class="avatar" style="background:' + u.color + '">' + u.initials + '</span> ' + escapeHtml(u.name);
+      b.addEventListener('click', () => {
+        if (blocked) return;
+        card.assignees = card.assignees || [];
+        const ix = card.assignees.indexOf(u.id);
+        if (ix >= 0) card.assignees.splice(ix, 1);
+        else card.assignees.push(u.id);
+        pushActivity(card, 'Изменены ответственные', board.users[0] && board.users[0].id);
+        saveBoard(board);
+        openCardModal(card.id);
+        renderBoardColumns();
+        renderCalendar();
+      });
+      ug.appendChild(b);
+    });
+    usersSec.appendChild(ug);
+    left.appendChild(usersSec);
+
+    const partSec = document.createElement('div');
+    partSec.className = 'kaiten-field';
+    partSec.innerHTML = '<div class="kaiten-field-label">Участники</div><p class="muted" style="margin:0 0 8px;font-size:0.75rem;">Без ответственности за срок — в курсе дела.</p>';
+    const pg = document.createElement('div');
+    pg.className = 'user-pick-grid';
+    board.users.forEach((u) => {
+      const has = (card.participants || []).includes(u.id);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'user-pick' + (has ? ' selected' : '');
+      b.disabled = blocked;
+      b.innerHTML = '<span class="avatar" style="background:' + u.color + '">' + u.initials + '</span> ' + escapeHtml(u.name);
+      b.addEventListener('click', () => {
+        if (blocked) return;
+        card.participants = card.participants || [];
+        const ix = card.participants.indexOf(u.id);
+        if (ix >= 0) card.participants.splice(ix, 1);
+        else card.participants.push(u.id);
+        pushActivity(card, 'Изменён состав участников', board.users[0] && board.users[0].id);
+        saveBoard(board);
+        openCardModal(card.id);
+        renderBoardColumns();
+        renderCalendar();
+      });
+      pg.appendChild(b);
+    });
+    partSec.appendChild(pg);
+    left.appendChild(partSec);
+
+    const dueSec = document.createElement('div');
+    dueSec.className = 'kaiten-field';
+    dueSec.innerHTML = '<div class="kaiten-field-label">Срок</div>';
+    const dueInput = document.createElement('input');
+    dueInput.type = 'date';
+    dueInput.value = card.dueDate || '';
+    dueInput.disabled = blocked;
+    dueInput.addEventListener('change', () => {
+      card.dueDate = dueInput.value;
+      pushActivity(card, 'Изменён срок', board.users[0] && board.users[0].id);
+      saveBoard(board);
+      renderBoardColumns();
+      renderCalendar();
+    });
+    dueSec.appendChild(dueInput);
+    left.appendChild(dueSec);
+
+    const desc = document.createElement('div');
+    desc.className = 'kaiten-field';
+    desc.innerHTML = '<div class="kaiten-field-label">Описание</div>';
+    const ta = document.createElement('textarea');
+    ta.value = card.description || '';
+    ta.disabled = blocked;
+    ta.addEventListener('change', () => {
+      card.description = ta.value;
+      pushActivity(card, 'Обновлено описание', board.users[0] && board.users[0].id);
+      saveBoard(board);
+    });
+    desc.appendChild(ta);
+    left.appendChild(desc);
+
+    const clSec = document.createElement('div');
+    clSec.className = 'kaiten-field checklist-editor';
+    clSec.innerHTML = '<div class="kaiten-field-label">Чеклист <button type="button" class="btn btn-ghost" id="addCheckItem" style="float:right;font-size:0.75rem;">+ Пункт</button></div>';
+    const clWrap = document.createElement('div');
+    card.checklist = card.checklist || [];
+
+    function renderChecklist() {
+      clWrap.innerHTML = '';
+      card.checklist.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'check-row';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = item.completed;
+        cb.disabled = blocked;
+        cb.addEventListener('change', () => {
+          item.completed = cb.checked;
+          pushActivity(card, 'Чеклист: ' + item.text, board.users[0] && board.users[0].id);
+          saveBoard(board);
+          renderBoardColumns();
+          renderCalendar();
+        });
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.value = item.text;
+        inp.disabled = blocked;
+        inp.addEventListener('change', () => {
+          item.text = inp.value;
+          saveBoard(board);
+        });
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        del.disabled = blocked;
+        del.addEventListener('click', () => {
+          card.checklist = card.checklist.filter((x) => x.id !== item.id);
+          saveBoard(board);
+          renderChecklist();
+          renderBoardColumns();
+          renderCalendar();
+        });
+        row.appendChild(cb);
+        row.appendChild(inp);
+        row.appendChild(del);
+        clWrap.appendChild(row);
+      });
+      const done = card.checklist.filter((i) => i.completed).length;
+      const total = card.checklist.length;
+      const bar = document.createElement('div');
+      bar.style.marginTop = '8px';
+      bar.innerHTML = '<div class="progress-track" style="width:100%;max-width:280px;"><div class="progress-fill" style="width:' + (total ? Math.round(done / total * 100) : 0) + '%"></div></div><span class="muted">' + done + ' из ' + total + '</span>';
+      clWrap.appendChild(bar);
+    }
+    renderChecklist();
+    clSec.appendChild(clWrap);
+    left.appendChild(clSec);
+    const addChk = clSec.querySelector('#addCheckItem');
+    addChk.disabled = blocked;
+    addChk.addEventListener('click', () => {
+      if (blocked) return;
+      card.checklist.push({ id: generateId('ch'), text: 'Новый пункт', completed: false });
+      saveBoard(board);
+      openCardModal(card.id);
+      renderBoardColumns();
+      renderCalendar();
+    });
+
+    const filesSec = document.createElement('div');
+    filesSec.className = 'kaiten-field';
+    filesSec.innerHTML = '<div class="kaiten-field-label">Файлы</div>';
+    const fileList = document.createElement('div');
+    fileList.className = 'kaiten-file-grid';
+
+    function renderFileList() {
+      fileList.innerHTML = '';
+      (card.files || []).forEach((f) => {
+        const row = document.createElement('div');
+        row.className = 'kaiten-file-card';
+        const isImg = (f.mime || '').startsWith('image/') && f.dataUrl;
+        if (isImg) {
+          const thumb = document.createElement('img');
+          thumb.className = 'kaiten-file-thumb';
+          thumb.src = f.dataUrl;
+          thumb.alt = '';
+          row.appendChild(thumb);
+        } else {
+          const ph = document.createElement('div');
+          ph.className = 'kaiten-file-thumb';
+          ph.style.display = 'flex';
+          ph.style.alignItems = 'center';
+          ph.style.justifyContent = 'center';
+          ph.innerHTML = '<i class="fa-solid fa-file fa-lg" style="opacity:0.6"></i>';
+          row.appendChild(ph);
+        }
+        const info = document.createElement('div');
+        info.className = 'kaiten-file-info';
+        const addName = userNameById(board, f.addedByUserId);
+        const addWhen = f.addedAt ? relativeTimeRu(f.addedAt) : '';
+        info.innerHTML = '<div class="kaiten-file-name">' + escapeHtml(f.name) + '</div>' +
+          '<div class="kaiten-file-sub">' + Math.round(f.size / 1024) + ' КБ' +
+          (addName ? ' · добавил ' + escapeHtml(addName) : '') +
+          (addWhen ? ' · ' + escapeHtml(addWhen) : '') + '</div>';
+        const actions = document.createElement('div');
+        actions.className = 'kaiten-file-actions';
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'btn btn-ghost';
+        openBtn.innerHTML = '<i class="fa-solid fa-download"></i>';
+        openBtn.title = 'Скачать';
+        openBtn.addEventListener('click', () => {
+          const a = document.createElement('a');
+          a.href = f.dataUrl;
+          a.download = f.name;
+          a.click();
+        });
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn btn-ghost';
+        delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+        delBtn.disabled = blocked;
+        delBtn.addEventListener('click', () => {
+          if (blocked) return;
+          card.files = card.files.filter((x) => x.id !== f.id);
+          pushActivity(card, 'Удалён файл: ' + f.name, board.users[0] && board.users[0].id);
+          saveBoard(board);
+          renderFileList();
+          renderBoardColumns();
+          renderCalendar();
+        });
+        actions.appendChild(openBtn);
+        actions.appendChild(delBtn);
+        row.appendChild(info);
+        row.appendChild(actions);
+        fileList.appendChild(row);
+      });
+    }
+    renderFileList();
+    filesSec.appendChild(fileList);
+    const fileRow = document.createElement('div');
+    fileRow.style.marginTop = '8px';
+    const fileInp = document.createElement('input');
+    fileInp.type = 'file';
+    fileInp.multiple = true;
+    fileInp.disabled = blocked;
+    fileInp.addEventListener('change', async () => {
+      if (blocked) return;
+      const files = fileInp.files;
+      if (!files || !files.length) return;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > MAX_FILE_BYTES) {
+          toast('Файл слишком большой: ' + file.name + ' (макс. 2.5 МБ)', true);
+          continue;
+        }
+        try {
+          const dataUrl = await new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(r.result);
+            r.onerror = () => rej(new Error('read'));
+            r.readAsDataURL(file);
+          });
+          const uid0 = board.users[0] && board.users[0].id;
+          card.files.push({
+            id: generateId('file'),
+            name: file.name,
+            mime: file.type || 'application/octet-stream',
+            size: file.size,
+            dataUrl: dataUrl,
+            addedAt: new Date().toISOString(),
+            addedByUserId: uid0
+          });
+          pushActivity(card, 'Добавлен файл: ' + file.name, board.users[0] && board.users[0].id);
+        } catch (e) {
+          console.error(e);
+          toast('Не удалось прочитать файл', true);
+        }
+      }
+      fileInp.value = '';
+      saveBoard(board);
+      renderFileList();
+      renderBoardColumns();
+      renderCalendar();
+    });
+    fileRow.appendChild(fileInp);
+    filesSec.appendChild(fileRow);
+    left.appendChild(filesSec);
+
+    const seg = document.createElement('div');
+    seg.className = 'kaiten-seg';
+    const tabChat = document.createElement('button');
+    tabChat.type = 'button';
+    tabChat.textContent = 'Комментарии';
+    tabChat.className = 'is-on';
+    const tabAct = document.createElement('button');
+    tabAct.type = 'button';
+    tabAct.textContent = 'Активность';
+    seg.appendChild(tabChat);
+    seg.appendChild(tabAct);
+    right.appendChild(seg);
+
+    const panelChat = document.createElement('div');
+    panelChat.className = 'kaiten-panel is-on';
+    const chatBox = document.createElement('div');
+    chatBox.className = 'kaiten-chat-box';
+    const chatMsgs = document.createElement('div');
+    chatMsgs.className = 'kaiten-chat-msgs';
+    (card.comments || []).forEach((cm) => {
+      const u = board.users.find((x) => x.id === cm.userId);
+      const bubble = document.createElement('div');
+      bubble.className = 'kaiten-bubble';
+      bubble.innerHTML = '<div class="kaiten-bubble-meta">' + escapeHtml(u ? u.name : 'Неизвестно') + ' · ' + escapeHtml(relativeTimeRu(cm.createdAt)) + '</div>' + escapeHtml(cm.text);
+      chatMsgs.appendChild(bubble);
+    });
+    chatBox.appendChild(chatMsgs);
+    const chatInpRow = document.createElement('div');
+    chatInpRow.className = 'kaiten-chat-inp';
+    const inpC = document.createElement('input');
+    inpC.type = 'text';
+    inpC.placeholder = 'Написать комментарий…';
+    inpC.disabled = blocked;
+    const btnC = document.createElement('button');
+    btnC.type = 'button';
+    btnC.className = 'btn btn-ghost';
+    btnC.innerHTML = '<i class="fa-solid fa-paper-plane"></i>';
+    btnC.disabled = blocked;
+    function sendChat() {
+      if (blocked) return;
+      const t = inpC.value.trim();
+      if (!t) return;
+      card.comments = card.comments || [];
+      card.comments.push({
+        id: generateId('cm'),
+        userId: board.users[0].id,
+        text: t,
+        createdAt: new Date().toISOString()
+      });
+      pushActivity(card, 'Комментарий', board.users[0].id);
+      inpC.value = '';
+      saveBoard(board);
+      openCardModal(card.id);
+      renderBoardColumns();
+      renderCalendar();
+    }
+    btnC.addEventListener('click', sendChat);
+    inpC.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendChat();
+    });
+    chatInpRow.appendChild(inpC);
+    chatInpRow.appendChild(btnC);
+    chatBox.appendChild(chatInpRow);
+    panelChat.appendChild(chatBox);
+
+    const panelAct = document.createElement('div');
+    panelAct.className = 'kaiten-panel';
+    panelAct.style.display = 'none';
+    const actList = document.createElement('div');
+    actList.className = 'kaiten-act-list';
+    (card.activity || []).slice(0, 40).forEach((a) => {
+      const u = board.users.find((x) => x.id === a.userId);
+      const div = document.createElement('div');
+      div.className = 'kaiten-act-item';
+      div.innerHTML = '<span class="muted">' + escapeHtml(relativeTimeRu(a.at)) + '</span> · ' +
+        escapeHtml(u ? u.name : '?') + ': ' + escapeHtml(a.text);
+      actList.appendChild(div);
+    });
+    panelAct.appendChild(actList);
+
+    right.appendChild(panelChat);
+    right.appendChild(panelAct);
+
+    function switchRightTab(which) {
+      const showChat = which === 'chat';
+      tabChat.classList.toggle('is-on', showChat);
+      tabAct.classList.toggle('is-on', !showChat);
+      panelChat.style.display = showChat ? 'flex' : 'none';
+      panelChat.classList.toggle('is-on', showChat);
+      panelAct.style.display = showChat ? 'none' : 'block';
+      if (showChat) setTimeout(() => { chatMsgs.scrollTop = chatMsgs.scrollHeight; }, 30);
+    }
+    tabChat.addEventListener('click', () => switchRightTab('chat'));
+    tabAct.addEventListener('click', () => switchRightTab('act'));
+
+    if (!blocked) {
+      const delBar = document.createElement('div');
+      delBar.style.marginTop = '16px';
+      delBar.innerHTML = '<button type="button" class="btn btn-danger" id="deleteCardBtn"><i class="fa-solid fa-trash"></i> Удалить карточку</button>';
+      left.appendChild(delBar);
+      left.querySelector('#deleteCardBtn').addEventListener('click', () => deleteCard(card.id));
+    } else {
+      const note = document.createElement('p');
+      note.className = 'muted';
+      note.style.marginTop = '12px';
+      note.style.color = 'var(--kaiten-modal-muted)';
+      note.textContent = 'Карточка заблокирована. Снимите блокировку выше, чтобы снова менять поля и переносить карточку.';
+      left.appendChild(note);
+    }
+
+    modal.classList.add('open');
+    setTimeout(() => { chatMsgs.scrollTop = chatMsgs.scrollHeight; }, 50);
+  }
+
+  function closeCardModal() {
+    const titleEl = document.getElementById('cardModalTitle');
+    titleEl.contentEditable = 'false';
+    titleEl.onblur = null;
+    titleEl.onkeydown = null;
+    document.getElementById('cardModal').classList.remove('open');
+    editingCardId = null;
+  }
+
+  let boardSettingsBackup = null;
+
+  function openBoardSettingsModal() {
+    const board = getActiveBoard();
+    boardSettingsBackup = JSON.stringify(board.cardTypes || []);
+    renderCardTypesSettingsTable();
+    document.getElementById('boardSettingsModal').classList.add('open');
+  }
+
+  function closeBoardSettingsModal(apply) {
+    const modal = document.getElementById('boardSettingsModal');
+    if (!apply && boardSettingsBackup != null) {
+      const board = getActiveBoard();
+      try {
+        board.cardTypes = JSON.parse(boardSettingsBackup);
+      } catch (e) {
+        console.error(e);
+      }
+    } else if (apply) {
+      const board = getActiveBoard();
+      normalizeBoardCardTypes(board);
+      saveBoard(board);
+      renderBoardColumns();
+      renderCalendar();
+      renderFilterSelects();
+      toast('Типы карточек сохранены');
+    }
+    boardSettingsBackup = null;
+    modal.classList.remove('open');
+  }
+
+  function renderCardTypesSettingsTable() {
+    const board = getActiveBoard();
+    const tbody = document.getElementById('settingsTypesBody');
+    tbody.innerHTML = '';
+    (board.cardTypes || []).forEach((t) => {
+      const tr = document.createElement('tr');
+      tr.dataset.typeId = t.id;
+      const tdName = document.createElement('td');
+      const inpName = document.createElement('input');
+      inpName.type = 'text';
+      inpName.value = t.name || '';
+      inpName.className = 'settings-type-name';
+      inpName.addEventListener('input', () => { t.name = inpName.value; });
+      tdName.appendChild(inpName);
+      const tdCol = document.createElement('td');
+      const inpCol = document.createElement('input');
+      inpCol.type = 'color';
+      const colVal = (t.color && /^#[0-9a-fA-F]{6}$/i.test(String(t.color).trim())) ? String(t.color).trim() : '#94a3b8';
+      inpCol.value = colVal;
+      inpCol.addEventListener('input', () => { t.color = inpCol.value; });
+      tdCol.appendChild(inpCol);
+      const tdDel = document.createElement('td');
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn btn-ghost settings-type-del';
+      delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      delBtn.title = 'Удалить тип';
+      delBtn.addEventListener('click', () => deleteCardType(t.id));
+      tdDel.appendChild(delBtn);
+      tr.appendChild(tdName);
+      tr.appendChild(tdCol);
+      tr.appendChild(tdDel);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function deleteCardType(typeId) {
+    const board = getActiveBoard();
+    let n = 0;
+    board.columns.forEach((col) => {
+      col.cards.forEach((c) => {
+        if (c.cardTypeId === typeId) n++;
+      });
+    });
+    if (n > 0) {
+      const ok = confirm('У ' + n + ' карточек выбран этот тип. Удалить тип и сбросить у них тип?');
+      if (!ok) return;
+      board.columns.forEach((col) => {
+        col.cards.forEach((c) => {
+          if (c.cardTypeId === typeId) c.cardTypeId = '';
+        });
+      });
+    }
+    board.cardTypes = (board.cardTypes || []).filter((x) => x.id !== typeId);
+    renderCardTypesSettingsTable();
+  }
+
+  function addCardTypeRow() {
+    const board = getActiveBoard();
+    board.cardTypes = board.cardTypes || [];
+    const maxO = board.cardTypes.length ? Math.max.apply(null, board.cardTypes.map((x) => x.sortOrder || 0)) : 0;
+    board.cardTypes.push({
+      id: generateId('kt'),
+      name: 'Новый тип',
+      color: '#94a3b8',
+      sortOrder: maxO + 10
+    });
+    renderCardTypesSettingsTable();
+  }
+
+  function confirmDialog(message, onOk) {
+    const m = document.getElementById('confirmModal');
+    document.getElementById('confirmMessage').textContent = message;
+    m.classList.add('open');
+    const ok = document.getElementById('confirmOk');
+    const cancel = document.getElementById('confirmCancel');
+
+    function cleanup() {
+      m.classList.remove('open');
+      ok.removeEventListener('click', onOkClick);
+      cancel.removeEventListener('click', onCancel);
+    }
+    function onOkClick() {
+      cleanup();
+      onOk();
+    }
+    function onCancel() {
+      cleanup();
+    }
+    ok.addEventListener('click', onOkClick);
+    cancel.addEventListener('click', onCancel);
+  }
+
+  /** ——— Drag and Drop (Sortable.js) ——— */
+  let sortableColumns = null;
+  let cardSortables = [];
+
+  function destroySortables() {
+    if (sortableColumns) {
+      sortableColumns.destroy();
+      sortableColumns = null;
+    }
+    cardSortables.forEach((s) => s.destroy());
+    cardSortables = [];
+  }
+
+  function initSortable() {
+    destroySortables();
+    const columnsRoot = document.getElementById('columnsInner');
+    const board = getActiveBoard();
+
+    sortableColumns = Sortable.create(columnsRoot, {
+      draggable: '.kanban-column',
+      handle: '.column-header',
+      animation: 180,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      onEnd(evt) {
+        console.log('[Kanban DnD] column reorder', { oldIndex: evt.oldIndex, newIndex: evt.newIndex });
+        if (evt.oldIndex === evt.newIndex) return;
+        const cols = [...board.columns];
+        if (evt.oldIndex < 0 || evt.oldIndex >= cols.length) return;
+        const moved = cols.splice(evt.oldIndex, 1)[0];
+        if (!moved) return;
+        cols.splice(evt.newIndex, 0, moved);
+        board.columns = cols;
+        saveBoard(board);
+        toast('Порядок колонок сохранён');
+      }
+    });
+
+    columnsRoot.querySelectorAll('.cards-container').forEach((listEl) => {
+      const s = Sortable.create(listEl, {
+        group: 'cards',
+        animation: 160,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        filter: '.is-blocked',
+        onStart(evt) {
+          console.log('[Kanban DnD] card drag start', { cardId: evt.item.dataset.cardId, fromColumn: evt.from.dataset.columnId });
+        },
+        onEnd(evt) {
+          const cardId = evt.item.dataset.cardId;
+          const fromColId = evt.from.dataset.columnId;
+          const toColId = evt.to.dataset.columnId;
+          console.log('[Kanban DnD] card drag end', { cardId, fromColId, toColId, oldIndex: evt.oldIndex, newIndex: evt.newIndex });
+          const b = getActiveBoard();
+          let card = null;
+          let fromCol = b.columns.find((c) => c.id === fromColId);
+          if (!fromCol) return;
+          const idx = fromCol.cards.findIndex((c) => c.id === cardId);
+          if (idx < 0) return;
+          card = fromCol.cards[idx];
+          fromCol.cards.splice(idx, 1);
+          const toCol = b.columns.find((c) => c.id === toColId);
+          if (!toCol) {
+            fromCol.cards.splice(idx, 0, card);
+            renderBoardColumns();
+            return;
+          }
+          const newIndex = evt.newIndex;
+          toCol.cards.splice(newIndex, 0, card);
+          if (fromColId !== toColId) {
+            card.lastMovedAt = new Date().toISOString();
+          }
+          pushActivity(card, fromColId === toColId ? 'Изменён порядок' : 'Перемещена в «' + toCol.title + '»', b.users[0] && b.users[0].id);
+          saveBoard(b);
+          renderBoardColumns();
+        }
+      });
+      cardSortables.push(s);
+    });
+  }
+
+  /** ——— Экспорт / импорт / сброс ——— */
+  function exportBoard() {
+    const board = getActiveBoard();
+    const blob = new Blob([JSON.stringify(board, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'board-' + board.id + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Доска экспортирована');
+  }
+
+  function importBoard(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data.columns || !Array.isArray(data.columns)) throw new Error('Неверный формат');
+        if (!data.id) data.id = generateId('board');
+        data.title = data.title || 'Импортированная доска';
+        migrateBoard(data);
+        appState.boards.push(data);
+        appState.activeBoardId = data.id;
+        Storage.save(appState);
+        toast('Доска импортирована');
+        renderAll();
+      } catch (e) {
+        console.error(e);
+        toast('Ошибка импорта: ' + (e.message || 'неверный JSON'), true);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function resetAll() {
+    confirmDialog('Сбросить всё к начальному примеру? Текущие данные будут потеряны.', () => {
+      localStorage.removeItem(STORAGE_KEY);
+      appState = defaultAppState();
+      Storage.save(appState);
+      toast('Состояние сброшено');
+      renderAll();
+    });
+  }
+
+  /** ——— События UI ——— */
+  function bindEvents() {
+    document.getElementById('btnTheme').addEventListener('click', () => {
+      appState.theme = appState.theme === 'dark' ? 'light' : 'dark';
+      Storage.save(appState);
+      renderSidebar();
+    });
+
+    document.getElementById('btnBoardSettings').addEventListener('click', openBoardSettingsModal);
+    document.getElementById('boardSettingsSave').addEventListener('click', () => closeBoardSettingsModal(true));
+    document.getElementById('boardSettingsCancel').addEventListener('click', () => closeBoardSettingsModal(false));
+    document.getElementById('boardSettingsCloseX').addEventListener('click', () => closeBoardSettingsModal(false));
+    document.getElementById('btnAddCardType').addEventListener('click', addCardTypeRow);
+    document.getElementById('boardSettingsModal').addEventListener('click', (e) => {
+      if (e.target.id === 'boardSettingsModal') closeBoardSettingsModal(false);
+    });
+
+    document.getElementById('btnNewBoard').addEventListener('click', () => {
+      const nb = createInitialBoard();
+      nb.id = generateId('board');
+      nb.title = 'Доска ' + (appState.boards.length + 1);
+      appState.boards.push(nb);
+      appState.activeBoardId = nb.id;
+      Storage.save(appState);
+      toast('Создана новая доска');
+      renderAll();
+    });
+
+    document.getElementById('btnRenameBoard').addEventListener('click', () => {
+      const b = getActiveBoard();
+      const t = prompt('Название доски:', b.title);
+      if (t === null) return;
+      const title = t.trim();
+      if (!title) return;
+      b.title = title;
+      saveBoard(b);
+      renderAll();
+    });
+
+    document.getElementById('btnExport').addEventListener('click', exportBoard);
+    document.getElementById('importFile').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (f) importBoard(f);
+    });
+    document.getElementById('btnReset').addEventListener('click', resetAll);
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      appState.search = e.target.value;
+      Storage.save(appState);
+      renderBoardColumns();
+      renderCalendar();
+    });
+
+    document.getElementById('filterCardType').addEventListener('change', (e) => {
+      appState.filters.cardTypeId = e.target.value;
+      Storage.save(appState);
+      renderBoardColumns();
+      renderCalendar();
+    });
+    document.getElementById('filterUser').addEventListener('change', (e) => {
+      appState.filters.userId = e.target.value;
+      Storage.save(appState);
+      renderBoardColumns();
+      renderCalendar();
+    });
+    document.getElementById('filterDue').addEventListener('change', (e) => {
+      appState.filters.due = e.target.value;
+      Storage.save(appState);
+      renderBoardColumns();
+      renderCalendar();
+    });
+    document.getElementById('btnClearFilters').addEventListener('click', () => {
+      appState.search = '';
+      appState.filters = { cardTypeId: '', userId: '', due: '' };
+      Storage.save(appState);
+      renderAll();
+    });
+
+    document.getElementById('btnViewBoard').addEventListener('click', () => setViewMode('board'));
+    document.getElementById('btnViewCalendar').addEventListener('click', () => setViewMode('calendar'));
+
+    document.getElementById('calPrev').addEventListener('click', () => {
+      const cm = appState.calendarMonth || { y: new Date().getFullYear(), m: new Date().getMonth() };
+      let m = cm.m - 1;
+      let y = cm.y;
+      if (m < 0) { m = 11; y--; }
+      appState.calendarMonth = { y, m };
+      Storage.save(appState);
+      renderCalendar();
+    });
+    document.getElementById('calNext').addEventListener('click', () => {
+      const cm = appState.calendarMonth || { y: new Date().getFullYear(), m: new Date().getMonth() };
+      let m = cm.m + 1;
+      let y = cm.y;
+      if (m > 11) { m = 0; y++; }
+      appState.calendarMonth = { y, m };
+      Storage.save(appState);
+      renderCalendar();
+    });
+    document.getElementById('calToday').addEventListener('click', () => {
+      const n = new Date();
+      appState.calendarMonth = { y: n.getFullYear(), m: n.getMonth() };
+      Storage.save(appState);
+      renderCalendar();
+    });
+
+    document.getElementById('cardModalClose').addEventListener('click', closeCardModal);
+    document.getElementById('cardModal').addEventListener('click', (e) => {
+      if (e.target.id === 'cardModal') closeCardModal();
+    });
+
+    document.getElementById('btnOpenSidebar').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.add('open');
+    });
+    document.getElementById('btnCloseSidebar').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.remove('open');
+    });
+  }
+
+  bindEvents();
+  renderAll();
+  </script>
+</body>
+</html>

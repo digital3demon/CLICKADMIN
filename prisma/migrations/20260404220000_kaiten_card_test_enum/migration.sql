@@ -1,0 +1,2 @@
+-- KaitenAssignmentType: CARD; KaitenTrackLane: TEST.
+-- В SQLite значения enum хранятся как TEXT без ограничения — схема Prisma расширена, данные не меняются.

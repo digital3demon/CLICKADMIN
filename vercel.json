@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/reconciliation-snapshots",
+      "schedule": "5 17 * * *"
+    }
+  ]
+}
