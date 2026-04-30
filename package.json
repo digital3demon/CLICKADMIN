@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "next dev --turbo",
     "dev:webpack": "next dev",
-    "build": "prisma generate && next build",
+    "build": "node scripts/prisma-migrate-deploy.cjs && next build",
     "bootstrap:saas": "node scripts/bootstrap-dental-crm-saas.cjs",
     "start": "next start",
     "db:generate": "prisma generate",
