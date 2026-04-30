@@ -17,5 +17,12 @@
     "paths": { "@/*": ["./*"] }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "dental-crm-saas", "dist", "examples"]
+  "exclude": [
+    "node_modules",
+    "dental-crm-saas",
+    "dist",
+    "examples",
+    "vitest.config.ts",
+    "**/*.test.ts"
+  ]
 }
