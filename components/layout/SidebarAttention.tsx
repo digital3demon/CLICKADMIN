@@ -16,21 +16,28 @@ export function SidebarAttention() {
 
   useEffect(() => {
     let cancelled = false;
+    const ac = new AbortController();
+    const t = window.setTimeout(() => ac.abort(), 25_000);
     (async () => {
       try {
         const res = await fetch("/api/attention-reminders", {
           cache: "no-store",
           credentials: "same-origin",
+          signal: ac.signal,
         });
         if (!res.ok) throw new Error(String(res.status));
         const data = (await res.json()) as AttentionReminder[];
         if (!cancelled) setItems(Array.isArray(data) ? data : []);
       } catch {
         if (!cancelled) setItems([]);
+      } finally {
+        clearTimeout(t);
       }
     })();
     return () => {
       cancelled = true;
+      ac.abort();
+      clearTimeout(t);
     };
   }, [pathname]);
 

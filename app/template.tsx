@@ -11,7 +11,8 @@ export default function Template({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
       key={pathname}
-      initial={{ opacity: 0, scale: 0.972 }}
+      /* Без opacity:0 при mount: иначе при сбое гидрации framer-motion контент остаётся невидимым. */
+      initial={{ opacity: 1, scale: 0.992 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.2, ease: easeSnappy }}
       className="min-h-full origin-top-left"
