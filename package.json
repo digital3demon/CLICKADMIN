@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "next dev --turbo",
     "dev:webpack": "next dev",
-    "build": "node scripts/prisma-migrate-deploy.cjs && next build && node scripts/verify-standalone-after-build.cjs",
+    "build": "node scripts/prisma-migrate-deploy.cjs && next build && node scripts/copy-standalone-assets.cjs && node scripts/verify-standalone-after-build.cjs",
     "bootstrap:saas": "node scripts/bootstrap-dental-crm-saas.cjs",
     "start": "node server.js",
     "start:next": "next start",
