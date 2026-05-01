@@ -101,7 +101,10 @@ export async function middleware(req: NextRequest) {
   if (req.nextUrl.pathname.startsWith("/api")) {
     if (process.env.RATE_LIMIT_DISABLED === "1") {
       /* skip */
-    } else if (!req.nextUrl.pathname.startsWith("/api/telegram/webhook")) {
+    } else if (
+      !req.nextUrl.pathname.startsWith("/api/telegram/webhook") &&
+      !req.nextUrl.pathname.startsWith("/api/health")
+    ) {
       const key = clientKey(req);
       if (!rateLimitAllow(key)) {
         const limited = NextResponse.json(

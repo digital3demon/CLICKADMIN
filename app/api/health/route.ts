@@ -18,8 +18,17 @@ export async function GET() {
     cache: "not_configured",
   };
 
+  const dbTimeoutMs = 4000;
   try {
-    await (await getPrisma()).$queryRaw(Prisma.sql`SELECT 1`);
+    await Promise.race([
+      (async () => {
+        const prisma = await getPrisma();
+        await prisma.$queryRaw(Prisma.sql`SELECT 1`);
+      })(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("health_db_timeout")), dbTimeoutMs),
+      ),
+    ]);
     checks.database = "ok";
   } catch (e) {
     logger.error({ err: e, msg: "health_db_failed" }, "health check");
