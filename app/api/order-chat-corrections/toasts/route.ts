@@ -23,6 +23,7 @@ export async function GET() {
     where: {
       resolvedAt: null,
       rejectedAt: null,
+      order: { archivedAt: null },
     },
     orderBy: { createdAt: "desc" },
     take: 32,
