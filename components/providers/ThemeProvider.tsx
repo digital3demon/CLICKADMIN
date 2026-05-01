@@ -85,13 +85,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((t: ThemePreference) => {
     setThemeState(t);
+    document.documentElement.classList.toggle("dark", computeDark(t));
   }, []);
 
   /** Только светлая ↔ тёмная (без режима «как в системе»). */
   const cycleTheme = useCallback(() => {
     setThemeState((prev) => {
       const darkNow = computeDark(prev);
-      return darkNow ? "light" : "dark";
+      const next: ThemePreference = darkNow ? "light" : "dark";
+      document.documentElement.classList.toggle("dark", computeDark(next));
+      return next;
     });
   }, []);
 

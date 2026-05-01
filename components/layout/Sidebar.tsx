@@ -186,7 +186,7 @@ export function Sidebar() {
             title={
               canOpen
                 ? "Новый заказ"
-                : "Открыто максимум окон нового заказа (5). Закройте или сверните одно."
+                : "Уже 5 окон нового заказа (включая свёрнутые полоски внизу экрана). Закройте лишние или разверните и очистите черновик."
             }
             className={`pressable-tap mt-5 flex w-full items-center justify-center rounded-md px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-white transition-colors shell-short:mt-2 shell-short:px-2 shell-short:py-2 shell-short:text-[9px] shell-short:tracking-[0.06em] ${
               canOpen

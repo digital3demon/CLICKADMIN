@@ -96,8 +96,13 @@ export function ProfileSettingsForm({
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const ac = new AbortController();
+    const timeoutId = window.setTimeout(() => ac.abort(), 30_000);
     try {
-      const r = await fetch("/api/me/profile", { credentials: "include" });
+      const r = await fetch("/api/me/profile", {
+        credentials: "include",
+        signal: ac.signal,
+      });
       const parsed = await parseJsonResponse<{ user?: ProfileUser; error?: string }>(r);
       if (!parsed.ok) {
         setError(parsed.message);
@@ -128,9 +133,16 @@ export function ProfileSettingsForm({
       setTelegramLinked(Boolean(j.user.telegramLinked));
       setTelegramUsername(j.user.telegramUsername ?? null);
       setTgPrefs(j.user.telegramKanbanNotifyPrefs ?? null);
-    } catch {
-      setError("Ошибка сети");
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setError(
+          "Профиль не загрузился за 30 с (сервер или БД не ответили). Обновите страницу или проверьте логи приложения.",
+        );
+      } else {
+        setError("Ошибка сети");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   }, []);
