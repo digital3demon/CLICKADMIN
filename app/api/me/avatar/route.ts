@@ -29,6 +29,15 @@ export async function GET() {
 
     const buf = await readUserAvatarFile(session.sub, demo);
     if (!buf) {
+      /** После деплоя на PaaS каталог data/ часто пустой — в БД ещё есть MIME, файл уже не на диске. */
+      try {
+        await prisma.user.update({
+          where: { id: session.sub },
+          data: { avatarCustomMime: null, avatarCustomUploadedAt: null },
+        });
+      } catch (e) {
+        console.warn("[me/avatar] GET clear stale avatar fields", e);
+      }
       return NextResponse.json(
         { error: "Файл фото на диске не найден. Загрузите снимок снова." },
         { status: 404 },

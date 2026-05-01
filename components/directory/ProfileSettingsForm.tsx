@@ -385,6 +385,10 @@ export function ProfileSettingsForm({
               src={`/api/me/avatar?t=${encodeURIComponent(avatarCustomUploadedAt ?? "")}`}
               alt=""
               className="h-full w-full object-cover"
+              onError={() => {
+                setAvatarCustomMime(null);
+                setAvatarCustomUploadedAt(null);
+              }}
             />
           ) : (
             <span>{profileAvatarEmoji(avatarPresetId)}</span>

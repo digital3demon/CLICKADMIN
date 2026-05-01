@@ -31,6 +31,14 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const buf = await readUserAvatarFile(id, demo);
   if (!buf) {
+    try {
+      await prisma.user.update({
+        where: { id },
+        data: { avatarCustomMime: null, avatarCustomUploadedAt: null },
+      });
+    } catch (e) {
+      console.warn("[users/avatar] GET clear stale avatar fields", e);
+    }
     return NextResponse.json({ error: "Нет аватара" }, { status: 404 });
   }
 

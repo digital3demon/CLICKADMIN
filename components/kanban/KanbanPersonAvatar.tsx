@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { KanbanBoard, KanbanUser } from "@/lib/kanban/types";
 import {
   initialsFromDisplayName,
@@ -36,6 +37,7 @@ export function KanbanPersonAvatar({
   className = "",
   titleSuffix,
 }: KanbanPersonAvatarProps) {
+  const [customPhotoFailed, setCustomPhotoFailed] = useState(false);
   const { byId } = useKanbanCrmUsers();
   const crm = byId.get(userId);
   const legacy = homeBoard.users.find((x) => x.id === userId);
@@ -62,12 +64,17 @@ export function KanbanPersonAvatar({
       ? `${displayName}${titleSuffix}`
       : `${displayName}${variant === "assignee" ? " (ответственный)" : " (участник)"}`;
 
-  if (crm?.avatarCustomUploadedAt) {
+  if (crm?.avatarCustomUploadedAt && !customPhotoFailed) {
     const src = `/api/users/${encodeURIComponent(userId)}/avatar?t=${encodeURIComponent(crm.avatarCustomUploadedAt)}`;
     return (
       <span title={title} className={`${base} overflow-hidden bg-zinc-700 p-0`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={displayName} className="h-full w-full object-cover" />
+        <img
+          src={src}
+          alt={displayName}
+          className="h-full w-full object-cover"
+          onError={() => setCustomPhotoFailed(true)}
+        />
       </span>
     );
   }

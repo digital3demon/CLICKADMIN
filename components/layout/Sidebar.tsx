@@ -232,6 +232,11 @@ export function Sidebar() {
                     src={`/api/me/avatar?t=${encodeURIComponent(sessionUser.avatarCustomUploadedAt)}`}
                     alt=""
                     className="h-full w-full object-cover"
+                    onError={() => {
+                      setSessionUser((prev) =>
+                        prev ? { ...prev, avatarCustomUploadedAt: null } : null,
+                      );
+                    }}
                   />
                 ) : (
                   <span>{profileAvatarEmoji(sessionUser.avatarPresetId)}</span>
