@@ -81,6 +81,26 @@ export async function readUserAvatarFile(
   }
 }
 
+export function nonEmptyAvatarCustomData(
+  raw: Uint8Array | Buffer | null | undefined,
+): boolean {
+  if (raw == null) return false;
+  return Buffer.isBuffer(raw) ? raw.length > 0 : raw.byteLength > 0;
+}
+
+/** Сначала байты из БД, иначе файл на диске (legacy). */
+export async function readUserCustomAvatarBuffer(
+  userId: string,
+  demo: boolean,
+  row: { avatarCustomData?: Uint8Array | Buffer | null },
+): Promise<Buffer | null> {
+  if (nonEmptyAvatarCustomData(row.avatarCustomData ?? null)) {
+    const d = row.avatarCustomData!;
+    return Buffer.isBuffer(d) ? d : Buffer.from(d);
+  }
+  return readUserAvatarFile(userId, demo);
+}
+
 export async function deleteUserAvatarFile(userId: string, demo: boolean): Promise<void> {
   try {
     await fs.unlink(avatarFilePath(userId, demo));

@@ -4,7 +4,10 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs/promises";
 
-/** Абсолютный корень хранилища вложений (override: `ORDER_ATTACHMENT_STORAGE_DIR`). */
+/**
+ * Новые вложения — в БД (`OrderAttachment.data`). Корень на диске нужен только для
+ * старых строк с `diskRelPath` (override: `ORDER_ATTACHMENT_STORAGE_DIR`).
+ */
 export function getOrderAttachmentStorageRoot(): string {
   const fromEnv = process.env.ORDER_ATTACHMENT_STORAGE_DIR?.trim();
   if (fromEnv) return path.resolve(fromEnv);

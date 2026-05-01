@@ -15,7 +15,6 @@ import {
   deleteOrderAttachmentFile,
   newOrderAttachmentId,
   readOrderAttachmentBytes,
-  writeOrderAttachmentToDisk,
 } from "@/lib/order-attachment-storage";
 
 export const dynamic = "force-dynamic";
@@ -258,50 +257,26 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     const attachmentId = newOrderAttachmentId();
-    let diskRelPath: string;
-    try {
-      diskRelPath = await writeOrderAttachmentToDisk(
-        orderId,
-        attachmentId,
-        Buffer.from(buf),
-      );
-    } catch (e) {
-      console.error("[attachments POST] disk write", e);
-      return NextResponse.json(
-        { error: "Не удалось сохранить файл на диск" },
-        { status: 500 },
-      );
-    }
+    const fileBuf = Buffer.from(buf);
 
-    let row: {
-      id: string;
-      fileName: string;
-      size: number;
-      uploadedToKaitenAt: Date | null;
-    };
-    try {
-      row = await prisma.orderAttachment.create({
-        data: {
-          id: attachmentId,
-          orderId,
-          fileName,
-          mimeType,
-          size: buf.byteLength,
-          data: new Uint8Array(0),
-          diskRelPath,
-        },
-        select: {
-          id: true,
-          fileName: true,
-          size: true,
-          createdAt: true,
-          uploadedToKaitenAt: true,
-        },
-      });
-    } catch (e) {
-      await deleteOrderAttachmentFile(diskRelPath).catch(() => {});
-      throw e;
-    }
+    const row = await prisma.orderAttachment.create({
+      data: {
+        id: attachmentId,
+        orderId,
+        fileName,
+        mimeType,
+        size: buf.byteLength,
+        data: fileBuf,
+        diskRelPath: null,
+      },
+      select: {
+        id: true,
+        fileName: true,
+        size: true,
+        createdAt: true,
+        uploadedToKaitenAt: true,
+      },
+    });
 
     try {
       if (asInvoice) {
@@ -323,7 +298,6 @@ export async function POST(req: Request, ctx: Ctx) {
       await prisma.orderAttachment
         .delete({ where: { id: row.id } })
         .catch(() => {});
-      await deleteOrderAttachmentFile(diskRelPath).catch(() => {});
       throw e;
     }
 

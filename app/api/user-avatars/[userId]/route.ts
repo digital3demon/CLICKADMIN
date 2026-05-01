@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/get-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
-import { readUserAvatarFile } from "@/lib/user-custom-avatar";
+import { readUserCustomAvatarBuffer } from "@/lib/user-custom-avatar";
 
 type Ctx = { params: Promise<{ userId: string }> };
 
@@ -23,14 +23,30 @@ export async function GET(_req: Request, ctx: Ctx) {
   const prisma = await getPrisma();
   const row = await prisma.user.findUnique({
     where: { id: userId },
-    select: { avatarCustomMime: true, avatarCustomUploadedAt: true },
+    select: {
+      avatarCustomMime: true,
+      avatarCustomUploadedAt: true,
+      avatarCustomData: true,
+    },
   });
   if (!row?.avatarCustomMime) {
     return NextResponse.json({ error: "Нет аватара" }, { status: 404 });
   }
 
-  const buf = await readUserAvatarFile(userId, demo);
+  const buf = await readUserCustomAvatarBuffer(userId, demo, row);
   if (!buf) {
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          avatarCustomMime: null,
+          avatarCustomUploadedAt: null,
+          avatarCustomData: null,
+        },
+      });
+    } catch (e) {
+      console.warn("[user-avatars] GET clear stale avatar fields", e);
+    }
     return NextResponse.json({ error: "Нет аватара" }, { status: 404 });
   }
 

@@ -399,6 +399,8 @@ model User {
   /// MIME загруженного фото (image/jpeg, image/png, image/webp); null — своего файла нет
   avatarCustomMime          String?
   avatarCustomUploadedAt    DateTime?
+  /// Кастомное фото (BYTEA). Раньше файл был только на диске `data/user-avatars` — для таких строк может быть null до повторной загрузки.
+  avatarCustomData          Bytes?
   /// Ник для @упоминаний (латиница, цифры, _; хранится без @), позже — уведомления в Telegram
   mentionHandle             String?   @unique
   /// Сколько нарядов на странице списка /orders (1–200); null — значение по умолчанию в приложении
@@ -759,9 +761,9 @@ model OrderAttachment {
   fileName                String
   mimeType                String
   size                    Int
-  /// Новые вложения: пустой BLOB + `diskRelPath` (байты на диске). Старые — только `data`.
+  /// Содержимое файла (BYTEA). Новые загрузки — всегда здесь; старые могли быть на диске (`diskRelPath`) с пустым `data`.
   data                    Bytes
-  /// Относительный путь под `ORDER_ATTACHMENT_STORAGE_DIR` / `data/order-attachments` (POSIX `orders/.../id`).
+  /// Устаревшее: байты только на диске (до перехода на хранение в БД).
   diskRelPath             String?
   uploadedToKaitenAt      DateTime?
   /// id файла в Kaiten после PUT /cards/{id}/files (для удаления в Kaiten при удалении из CRM)

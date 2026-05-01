@@ -4,8 +4,8 @@ import { dbRequestUserHint } from "@/lib/db-request-error-hint";
 import { getPrisma } from "@/lib/get-prisma";
 import {
   deleteUserAvatarFile,
-  readUserAvatarFile,
-  writeUserAvatarFile,
+  readUserCustomAvatarBuffer,
+  validateAvatarBuffer,
 } from "@/lib/user-custom-avatar";
 
 export const dynamic = "force-dynamic";
@@ -21,25 +21,32 @@ export async function GET() {
     const prisma = await getPrisma();
     const row = await prisma.user.findUnique({
       where: { id: session.sub },
-      select: { avatarCustomMime: true, avatarCustomUploadedAt: true },
+      select: {
+        avatarCustomMime: true,
+        avatarCustomUploadedAt: true,
+        avatarCustomData: true,
+      },
     });
     if (!row?.avatarCustomMime) {
       return NextResponse.json({ error: "Нет аватара" }, { status: 404 });
     }
 
-    const buf = await readUserAvatarFile(session.sub, demo);
+    const buf = await readUserCustomAvatarBuffer(session.sub, demo, row);
     if (!buf) {
-      /** После деплоя на PaaS каталог data/ часто пустой — в БД ещё есть MIME, файл уже не на диске. */
       try {
         await prisma.user.update({
           where: { id: session.sub },
-          data: { avatarCustomMime: null, avatarCustomUploadedAt: null },
+          data: {
+            avatarCustomMime: null,
+            avatarCustomUploadedAt: null,
+            avatarCustomData: null,
+          },
         });
       } catch (e) {
         console.warn("[me/avatar] GET clear stale avatar fields", e);
       }
       return NextResponse.json(
-        { error: "Файл фото на диске не найден. Загрузите снимок снова." },
+        { error: "Фото профиля не найдено. Загрузите снимок снова." },
         { status: 404 },
       );
     }
@@ -99,23 +106,9 @@ export async function POST(req: Request) {
   }
   const buf = Buffer.from(ab);
 
-  let written: Awaited<ReturnType<typeof writeUserAvatarFile>>;
-  try {
-    written = await writeUserAvatarFile(session.sub, demo, buf);
-  } catch (e) {
-    console.error("[me/avatar] POST disk", e);
-    return NextResponse.json(
-      {
-        error: dbRequestUserHint(
-          e,
-          "Не удалось сохранить файл на диск. Проверьте каталог data/user-avatars и права.",
-        ),
-      },
-      { status: 500 },
-    );
-  }
-  if ("error" in written) {
-    return NextResponse.json({ error: written.error }, { status: 400 });
+  const validated = validateAvatarBuffer(buf);
+  if ("error" in validated) {
+    return NextResponse.json({ error: validated.error }, { status: 400 });
   }
 
   try {
@@ -124,8 +117,9 @@ export async function POST(req: Request) {
     const user = await prisma.user.update({
       where: { id: session.sub },
       data: {
-        avatarCustomMime: written.mime,
+        avatarCustomMime: validated.mime,
         avatarCustomUploadedAt: now,
+        avatarCustomData: buf,
       },
       select: {
         id: true,
@@ -133,6 +127,10 @@ export async function POST(req: Request) {
         avatarCustomMime: true,
         avatarCustomUploadedAt: true,
       },
+    });
+
+    void deleteUserAvatarFile(session.sub, demo).catch(() => {
+      /* убрать legacy-файл с диска, если был */
     });
 
     return NextResponse.json({
@@ -146,16 +144,11 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     console.error("[me/avatar] POST prisma", e);
-    try {
-      await deleteUserAvatarFile(session.sub, demo);
-    } catch (delErr) {
-      console.error("[me/avatar] POST rollback file", delErr);
-    }
     return NextResponse.json(
       {
         error: dbRequestUserHint(
           e,
-          "Не удалось записать данные аватара в базу. Проверьте миграции Prisma.",
+          "Не удалось записать фото в базу. Проверьте миграции Prisma.",
         ),
       },
       { status: 500 },
@@ -176,7 +169,11 @@ export async function DELETE() {
     const prisma = await getPrisma();
     const user = await prisma.user.update({
       where: { id: session.sub },
-      data: { avatarCustomMime: null, avatarCustomUploadedAt: null },
+      data: {
+        avatarCustomMime: null,
+        avatarCustomUploadedAt: null,
+        avatarCustomData: null,
+      },
       select: {
         id: true,
         avatarPresetId: true,
