@@ -583,6 +583,8 @@ export function BoardCanvas({
   onLinkedOrderMovedToKaitenMirror,
 }: BoardCanvasProps) {
   const columnIds = board.columns.map((c) => c.id);
+  /** Горизонтальная полоса колонок: wheel без passive — наклон колеса / Shift+колесо (см. эффект ниже). */
+  const horizontalScrollRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -595,6 +597,28 @@ export function BoardCanvas({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+
+  useEffect(() => {
+    const el = horizontalScrollRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (e.shiftKey) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+        return;
+      }
+      const ax = Math.abs(e.deltaX);
+      const ay = Math.abs(e.deltaY);
+      if (ax > 0 && ax >= ay) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaX;
+      }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
@@ -769,7 +793,10 @@ export function BoardCanvas({
       collisionDetection={closestCorners}
       onDragEnd={onDragEnd}
     >
-      <div className="relative z-0 flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth p-2 [-webkit-overflow-scrolling:touch] sm:p-4">
+      <div
+        ref={horizontalScrollRef}
+        className="relative z-0 flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth p-2 [-webkit-overflow-scrolling:touch] sm:p-4"
+      >
         <div className="flex w-max min-w-0 shrink-0 items-start gap-2 sm:gap-3">
           <SortableContext
             items={columnIds}
