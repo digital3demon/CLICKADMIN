@@ -33,6 +33,11 @@ import {
 } from "@/lib/kanban/model";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
 import {
+  applyStandaloneRowsFromServer,
+  extractStandaloneRowsForSync,
+  type StandaloneRow,
+} from "@/lib/kanban/standalone-board-sync";
+import {
   applyAggregateCardDrag,
   type AggregateCardDragArgs,
 } from "@/lib/kanban/aggregate-card-drag";
@@ -69,6 +74,8 @@ function formatActivityActorLabel(u: SessionUserLike | null | undefined): string
 export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   /** null до монтирования: иначе SSR и первый клиентский кадр расходятся (localStorage vs default) → #418 и ломается Sortable. */
   const [appState, setAppState] = useState<KanbanAppState | null>(null);
+  const appStateRef = useRef<KanbanAppState | null>(null);
+  appStateRef.current = appState;
   const [cardModalId, setCardModalId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirm, setConfirm] = useState<{
@@ -81,25 +88,93 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const [kanbanSessionUserId, setKanbanSessionUserId] = useState<string | null>(null);
   const prevModalCardRef = useRef<string | null>(null);
   const kaitenPullOnceRef = useRef(false);
+  const standalonePushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const standalonePushInFlightRef = useRef(false);
+  /** Перед первым GET отдаём локальные карточки без наряда на сервер — иначе пустой ответ затрёт их. */
+  const standalonePrimedRef = useRef(false);
   const router = useRouter();
   const pathname = usePathname() ?? "/kanban";
 
-  const pullKaitenLinkedOrders = useCallback(async () => {
+  /** Наряды с сервера + локальные карточки без наряда (общие для тенанта). */
+  const syncKanbanMirrorFromApi = useCallback(async () => {
     try {
-      const r = await fetch("/api/kanban/linked-orders", { credentials: "include" });
-      if (!r.ok) return;
-      const j = (await r.json()) as { orders?: KaitenLinkedOrderForKanban[] };
-      const rows = j.orders ?? [];
+      if (isDemo) {
+        const r = await fetch("/api/kanban/linked-orders", { credentials: "include" });
+        if (!r.ok) return;
+        const j = (await r.json()) as { orders?: KaitenLinkedOrderForKanban[] };
+        const rows = j.orders ?? [];
+        setAppState((prev) => {
+          if (!prev) return prev;
+          const base = normalizeDemoKanbanAppState(prev);
+          const merged = mergeKaitenLinkedOrdersIntoAppState(base, rows, { demo: true });
+          return normalizeDemoKanbanAppState(merged);
+        });
+        return;
+      }
+      const cur = appStateRef.current;
+      if (cur && !standalonePrimedRef.current) {
+        standalonePrimedRef.current = true;
+        const primeRows = extractStandaloneRowsForSync(cur);
+        try {
+          await fetch("/api/kanban/standalone-cards", {
+            method: "PUT",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rows: primeRows }),
+          });
+        } catch {
+          /* сеть — продолжаем GET */
+        }
+      }
+      const [rLinked, rStandalone] = await Promise.all([
+        fetch("/api/kanban/linked-orders", { credentials: "include" }),
+        fetch("/api/kanban/standalone-cards", { credentials: "include" }),
+      ]);
+      if (!rLinked.ok) return;
+      const jL = (await rLinked.json()) as { orders?: KaitenLinkedOrderForKanban[] };
+      const linkedRows = jL.orders ?? [];
+      let standaloneRows: StandaloneRow[] = [];
+      if (rStandalone.ok) {
+        const jS = (await rStandalone.json()) as { rows?: StandaloneRow[] };
+        standaloneRows = Array.isArray(jS.rows) ? jS.rows : [];
+      }
       setAppState((prev) => {
         if (!prev) return prev;
-        const base = isDemo ? normalizeDemoKanbanAppState(prev) : prev;
-        const merged = mergeKaitenLinkedOrdersIntoAppState(base, rows, { demo: isDemo });
-        return isDemo ? normalizeDemoKanbanAppState(merged) : merged;
+        let next = mergeKaitenLinkedOrdersIntoAppState(prev, linkedRows, {
+          demo: false,
+        });
+        next = applyStandaloneRowsFromServer(next, standaloneRows);
+        return next;
       });
     } catch {
       /* offline */
     }
   }, [isDemo]);
+
+  useEffect(() => {
+    if (!appState || isDemo) return;
+    if (standalonePushTimerRef.current) clearTimeout(standalonePushTimerRef.current);
+    standalonePushTimerRef.current = setTimeout(() => {
+      standalonePushTimerRef.current = null;
+      const cur = appStateRef.current;
+      if (!cur || standalonePushInFlightRef.current) return;
+      standalonePushInFlightRef.current = true;
+      const rows = extractStandaloneRowsForSync(cur);
+      void fetch("/api/kanban/standalone-cards", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      })
+        .catch(() => {})
+        .finally(() => {
+          standalonePushInFlightRef.current = false;
+        });
+    }, 2800);
+    return () => {
+      if (standalonePushTimerRef.current) clearTimeout(standalonePushTimerRef.current);
+    };
+  }, [appState, isDemo]);
 
   useEffect(() => {
     const loaded = loadKanbanState(isDemo);
@@ -131,16 +206,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     }
     if (!kaitenPullOnceRef.current) {
       kaitenPullOnceRef.current = true;
-      void pullKaitenLinkedOrders();
+      void syncKanbanMirrorFromApi();
     }
-  }, [appState, pullKaitenLinkedOrders]);
+  }, [appState, syncKanbanMirrorFromApi]);
 
   useEffect(() => {
     const pullIfVisible = () => {
-      if (document.visibilityState === "visible") void pullKaitenLinkedOrders();
+      if (document.visibilityState === "visible") void syncKanbanMirrorFromApi();
     };
     const iv = window.setInterval(
-      () => void pullKaitenLinkedOrders(),
+      () => void syncKanbanMirrorFromApi(),
       kanbanLinkedOrdersPullIntervalMs(),
     );
     document.addEventListener("visibilitychange", pullIfVisible);
@@ -150,17 +225,17 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       document.removeEventListener("visibilitychange", pullIfVisible);
       window.removeEventListener("focus", pullIfVisible);
     };
-  }, [pullKaitenLinkedOrders]);
+  }, [syncKanbanMirrorFromApi]);
 
   useEffect(() => {
     const onOrderArchived = () => {
-      void pullKaitenLinkedOrders();
+      void syncKanbanMirrorFromApi();
     };
     window.addEventListener(CRM_ORDER_ARCHIVED_EVENT, onOrderArchived);
     return () => {
       window.removeEventListener(CRM_ORDER_ARCHIVED_EVENT, onOrderArchived);
     };
-  }, [pullKaitenLinkedOrders]);
+  }, [syncKanbanMirrorFromApi]);
 
   useEffect(() => {
     if (isDemo) return;
@@ -322,16 +397,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               "Не удалось перенести карточку в Kaiten (проверьте название колонки на доске).",
             true,
           );
-          void pullKaitenLinkedOrders();
+          void syncKanbanMirrorFromApi();
           return;
         }
-        void pullKaitenLinkedOrders();
+        void syncKanbanMirrorFromApi();
       } catch {
         showToast("Сеть: колонка в Kaiten могла не обновиться", true);
-        void pullKaitenLinkedOrders();
+        void syncKanbanMirrorFromApi();
       }
     },
-    [showToast, pullKaitenLinkedOrders],
+    [showToast, syncKanbanMirrorFromApi],
   );
 
   const handleAggregateCardDrag = useCallback(

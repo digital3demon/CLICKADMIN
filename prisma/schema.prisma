@@ -67,6 +67,24 @@ model Tenant {
   subscriptionInvoices  SubscriptionInvoice[]
   /// Переопределения доступа к модулям; если записи нет — см. `lib/role-module-defaults`
   roleModuleAccess      RoleModuleAccess[]
+  /// Локальные карточки канбана без наряда (синхронизация между пользователями тенанта)
+  kanbanStandaloneCards KanbanStandaloneCard[]
+}
+
+/// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
+model KanbanStandaloneCard {
+  id               String   @id
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  boardId          String
+  columnId         String
+  sortIndex        Int      @default(0)
+  payload          Json
+  updatedAt        DateTime @updatedAt
+  updatedByUserId  String?
+
+  @@index([tenantId, boardId])
+  @@index([tenantId, updatedAt])
 }
 
 /// Счёт на подписку (B2B выставленный вручную или оплата эквайрингом)
