@@ -24,6 +24,8 @@ export type ImportRowInput = {
   reconciliationText: string;
   paymentText: string;
   invoicedText: string;
+  /** Количества по строкам «Выставлено», через «;» в том же порядке, что фрагменты после разбора invoicedText */
+  invoicedQuantitiesText?: string;
   amountText: string;
   createKaitenCard: boolean;
 };
@@ -473,6 +475,28 @@ export function resolvePriceListItemsForText(
 ): Array<{ token: string; item: PriceListItemRef | null }> {
   const tokens = splitInvoicedText(inputRaw);
   return tokens.map((token) => ({ token, item: resolvePriceListItem(token, items) }));
+}
+
+/** Количества по позициям импорта; порядок совпадает с resolvePriceListItemsForText */
+export function splitInvoicedQuantitiesForTokens(
+  raw: string | undefined,
+  tokenCount: number,
+): number[] {
+  if (tokenCount <= 0) return [];
+  const parts = String(raw ?? "")
+    .split(";")
+    .map((s) => s.trim());
+  const out: number[] = [];
+  for (let i = 0; i < tokenCount; i++) {
+    const n = Number(parts[i]);
+    if (!Number.isFinite(n) || n < 1) {
+      out.push(1);
+    } else {
+      const q = Math.floor(n);
+      out.push(Math.min(1_000_000, Math.max(1, q)));
+    }
+  }
+  return out;
 }
 
 function toExcelColumn(index: number): string {

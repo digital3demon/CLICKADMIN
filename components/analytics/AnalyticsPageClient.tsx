@@ -64,6 +64,13 @@ export function AnalyticsPageClient() {
       reworkRevenue: number;
     };
     series: { date: string; revenue: number; orders: number }[];
+    reworkTopItems: {
+      code: string;
+      name: string;
+      reworkOrders: number;
+      lineCount: number;
+      quantity: number;
+    }[];
   } | null>(null);
 
   const [price, setPrice] = useState<{
@@ -404,6 +411,49 @@ export function AnalyticsPageClient() {
                 />
               </ComposedChart>
             </ResponsiveContainer>
+          </div>
+          <div className="rounded-lg border border-[var(--card-border)]">
+            <div className="flex items-center justify-between border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                Переделки: какие позиции переделывают
+              </h4>
+              <span className="text-xs text-[var(--text-muted)]">
+                По связке "Продолжение работы", иначе по самому наряду
+              </span>
+            </div>
+            {finance.reworkTopItems.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-[var(--text-muted)]">
+                За выбранный период переделок нет.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                      <th className="px-3 py-2">Код</th>
+                      <th className="px-3 py-2">Позиция</th>
+                      <th className="px-3 py-2">Переделок (нарядов)</th>
+                      <th className="px-3 py-2">Строк</th>
+                      <th className="px-3 py-2">Кол-во</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {finance.reworkTopItems.map((r, idx) => (
+                      <tr
+                        key={`${r.code}-${r.name}-${idx}`}
+                        className="border-b border-[var(--border-subtle)] hover:bg-[var(--table-row-hover)]"
+                      >
+                        <td className="px-3 py-2 font-mono text-xs">{r.code}</td>
+                        <td className="px-3 py-2 text-[var(--text-strong)]">{r.name}</td>
+                        <td className="px-3 py-2 tabular-nums">{r.reworkOrders}</td>
+                        <td className="px-3 py-2 tabular-nums">{r.lineCount}</td>
+                        <td className="px-3 py-2 tabular-nums">{r.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       ) : null}

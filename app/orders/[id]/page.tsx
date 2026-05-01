@@ -223,6 +223,7 @@ export default async function OrderEditPage({
     orderPriceListNote: order.orderPriceListNote,
     prostheticsOrdered: order.prostheticsOrdered,
     correctionTrack: order.correctionTrack ?? null,
+    reworkAtCustomerExpense: order.reworkAtCustomerExpense,
     registeredByLabel: order.registeredByLabel,
     courierId: order.courierId,
     courierName: courier?.name ?? null,

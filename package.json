@@ -17,8 +17,6 @@
     "db:generate:clean:force": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prisma-clean-generate.ps1 -KillAllNode",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "node scripts/prisma-migrate-deploy.cjs",
-    "db:split:copy-pricing": "node --env-file=.env scripts/split-copy-pricing-from-clients.cjs",
-    "db:split:copy-orders": "node --env-file=.env scripts/split-copy-orders-from-clients.cjs",
     "db:migrate:resolve:attachment-disk": "prisma migrate resolve --applied 20260420190000_order_attachment_disk_rel_path",
     "db:backup": "node --env-file=.env scripts/db-backup.cjs",
     "db:migrate:sqlite-to-pg:dry-run": "node --env-file=.env scripts/migrate-sqlite-to-postgres.cjs --dry-run",

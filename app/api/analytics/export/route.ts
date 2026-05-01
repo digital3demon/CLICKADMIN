@@ -59,6 +59,12 @@ export async function GET(req: Request) {
     ws.addRow(["Переделок, шт", data.totals.reworkOrders]);
     ws.addRow(["Переделки, выручка ₽", data.totals.reworkRevenue]);
     ws.addRow([]);
+    ws.addRow(["Позиции переделок"]);
+    ws.addRow(["Код", "Позиция", "Переделок (нарядов)", "Строк", "Кол-во"]);
+    for (const row of data.reworkTopItems ?? []) {
+      ws.addRow([row.code, row.name, row.reworkOrders, row.lineCount, row.quantity]);
+    }
+    ws.addRow([]);
     ws.addRow(["Дата", "Выручка, ₽", "Заказов"]);
     for (const row of data.series) {
       ws.addRow([row.date, row.revenue, row.orders]);

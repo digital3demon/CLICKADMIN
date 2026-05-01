@@ -55,6 +55,7 @@ export type OrderSnapshotV1 = {
     orderPriceListNote?: string | null;
     prostheticsOrdered?: boolean;
     correctionTrack?: string | null;
+    reworkAtCustomerExpense?: boolean;
     registeredByLabel?: string | null;
     courierId?: string | null;
     /** С v2 курьеров раздельно; в старых снимках нет — восстановление из courierId */
@@ -146,6 +147,7 @@ export function buildSnapshotFromOrder(
       orderPriceListNote: order.orderPriceListNote ?? null,
       prostheticsOrdered: order.prostheticsOrdered,
       correctionTrack: order.correctionTrack ?? null,
+      reworkAtCustomerExpense: order.reworkAtCustomerExpense,
       registeredByLabel: order.registeredByLabel ?? null,
       courierId: order.courierId ?? null,
       courierPickupId: order.courierPickupId ?? null,
@@ -330,6 +332,10 @@ export async function applyOrderSnapshot(
             "correctionTrack" in o && o.correctionTrack
               ? (o.correctionTrack as never)
               : null,
+          reworkAtCustomerExpense:
+            "reworkAtCustomerExpense" in o
+              ? Boolean(o.reworkAtCustomerExpense)
+              : false,
           registeredByLabel:
             "registeredByLabel" in o ? (o.registeredByLabel ?? null) : null,
           courier:

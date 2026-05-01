@@ -11,10 +11,33 @@ export async function loadFinanceReport(from: Date, to: Date) {
   const orders = await (await getPrisma()).order.findMany({
     where: {
       createdAt: { gte: from, lte: to },
+      archivedAt: null,
     },
     include: {
       constructions: {
-        select: { quantity: true, unitPrice: true, lineDiscountPercent: true },
+        select: {
+          id: true,
+          category: true,
+          quantity: true,
+          unitPrice: true,
+          lineDiscountPercent: true,
+          priceListItem: { select: { id: true, code: true, name: true } },
+        },
+      },
+      continuesFromOrder: {
+        select: {
+          id: true,
+          constructions: {
+            select: {
+              id: true,
+              category: true,
+              quantity: true,
+              unitPrice: true,
+              lineDiscountPercent: true,
+              priceListItem: { select: { id: true, code: true, name: true } },
+            },
+          },
+        },
       },
     },
     orderBy: { createdAt: "asc" },
@@ -31,6 +54,16 @@ export async function loadFinanceReport(from: Date, to: Date) {
   let correctionRevenue = 0;
   let reworkOrders = 0;
   let reworkRevenue = 0;
+  const reworkItems = new Map<
+    string,
+    {
+      code: string;
+      name: string;
+      reworkOrderIds: Set<string>;
+      lineCount: number;
+      quantity: number;
+    }
+  >();
 
   for (const o of orders) {
     if (o.status === "CANCELLED") {
@@ -46,6 +79,24 @@ export async function loadFinanceReport(from: Date, to: Date) {
       if (String(o.correctionTrack) === "REWORK") {
         reworkOrders += 1;
         reworkRevenue += rev;
+        const sourceOrder = o.continuesFromOrder ?? o;
+        for (const ln of sourceOrder.constructions) {
+          if (ln.category !== PRICE_LIST) continue;
+          const itemId = ln.priceListItem?.id ?? `unknown:${ln.id}`;
+          const code = ln.priceListItem?.code ?? "—";
+          const name = ln.priceListItem?.name ?? "Позиция без привязки к прайсу";
+          const cur = reworkItems.get(itemId) ?? {
+            code,
+            name,
+            reworkOrderIds: new Set<string>(),
+            lineCount: 0,
+            quantity: 0,
+          };
+          cur.reworkOrderIds.add(o.id);
+          cur.lineCount += 1;
+          cur.quantity += Number.isFinite(ln.quantity) ? ln.quantity : 0;
+          reworkItems.set(itemId, cur);
+        }
       }
     }
     const k = dayKey(o.createdAt);
@@ -82,6 +133,16 @@ export async function loadFinanceReport(from: Date, to: Date) {
       reworkRevenue: Math.round(reworkRevenue * 100) / 100,
     },
     series,
+    reworkTopItems: [...reworkItems.values()]
+      .map((x) => ({
+        code: x.code,
+        name: x.name,
+        reworkOrders: x.reworkOrderIds.size,
+        lineCount: x.lineCount,
+        quantity: x.quantity,
+      }))
+      .sort((a, b) => b.reworkOrders - a.reworkOrders || b.lineCount - a.lineCount)
+      .slice(0, 30),
   };
 }
 
@@ -93,6 +154,7 @@ export async function loadPriceItemsReport(from: Date, to: Date) {
       order: {
         createdAt: { gte: from, lte: to },
         status: { not: "CANCELLED" },
+        archivedAt: null,
       },
     },
     include: {
@@ -181,6 +243,7 @@ export async function loadContractorsReport(from: Date, to: Date) {
     where: {
       createdAt: { gte: from, lte: to },
       status: { not: "CANCELLED" },
+      archivedAt: null,
     },
     include: {
       clinic: { select: { id: true, name: true } },

@@ -25,6 +25,8 @@ type PreviewRow = {
   appointmentDateText: string;
   workReceivedAtText: string;
   invoicedText: string;
+  /** Количества по строкам «Выставлено», через «;» — порядок как у позиций после разбора */
+  invoicedQuantitiesText?: string;
   createKaitenCard: boolean;
   issues: PreviewIssue[];
 };
@@ -110,6 +112,21 @@ function joinInvoiced(items: string[]): string {
     .join("; ");
 }
 
+function splitQtyParts(text: string, len: number): string[] {
+  const parts = String(text ?? "")
+    .split(";")
+    .map((s) => s.trim());
+  return Array.from({ length: len }, (_, i) => {
+    const v = parts[i];
+    if (v === undefined || v === "") return "1";
+    return v;
+  });
+}
+
+function joinQtyParts(parts: string[]): string {
+  return parts.join(";");
+}
+
 function hasCorrectionInvoicedText(value: string): boolean {
   return /коррекц|передел/i.test(String(value ?? ""));
 }
@@ -175,7 +192,26 @@ export function OrderImportExportClient() {
         const items = splitInvoiced(r.invoicedText);
         while (items.length <= itemIndex) items.push("");
         items[itemIndex] = value;
-        return { ...r, invoicedText: joinInvoiced(items) };
+        const newText = joinInvoiced(items);
+        const qs = splitQtyParts(r.invoicedQuantitiesText ?? "", items.length);
+        return { ...r, invoicedText: newText, invoicedQuantitiesText: joinQtyParts(qs) };
+      }),
+    );
+  };
+
+  const setInvoicedQuantity = (rowIndex: number, itemIndex: number, raw: string) => {
+    const n = Number(raw);
+    const normalized =
+      raw.trim() === "" || !Number.isFinite(n)
+        ? "1"
+        : String(Math.min(1_000_000, Math.max(1, Math.floor(n))));
+    setRows((prev) =>
+      prev.map((r, idx) => {
+        if (idx !== rowIndex) return r;
+        const items = splitInvoiced(r.invoicedText);
+        const qs = splitQtyParts(r.invoicedQuantitiesText ?? "", items.length);
+        qs[itemIndex] = normalized;
+        return { ...r, invoicedQuantitiesText: joinQtyParts(qs) };
       }),
     );
   };
@@ -186,7 +222,12 @@ export function OrderImportExportClient() {
         if (idx !== rowIndex) return r;
         const items = splitInvoiced(r.invoicedText);
         items.push("");
-        return { ...r, invoicedText: joinInvoiced(items) };
+        const qs = splitQtyParts(r.invoicedQuantitiesText ?? "", items.length);
+        return {
+          ...r,
+          invoicedText: joinInvoiced(items),
+          invoicedQuantitiesText: joinQtyParts(qs),
+        };
       }),
     );
   };
@@ -308,6 +349,7 @@ export function OrderImportExportClient() {
         const clinicId = row.clinicId ?? findRefId(row.clinicName, clinicOptions);
         const invoicedItems = splitInvoiced(row.invoicedText);
         const itemsForUi = invoicedItems.length > 0 ? invoicedItems : [""];
+        const qtyParts = splitQtyParts(row.invoicedQuantitiesText ?? "", itemsForUi.length);
         const matches = itemsForUi.map((token) => ({ token, hit: findPrice(token, priceOptions) }));
         const needCorrection = hasCorrectionInvoicedText(row.invoicedText);
         const hasCorrection = /ортопед|ортодон|передел/i.test(
@@ -376,7 +418,10 @@ export function OrderImportExportClient() {
               </div>
               <div className="space-y-2 sm:col-span-2 lg:col-span-3">
                 {matches.map((m, itemIndex) => (
-                  <div key={`${row.rowNumber}-${itemIndex}`} className="grid gap-2 sm:grid-cols-[1fr_260px]">
+                  <div
+                    key={`${row.rowNumber}-${itemIndex}`}
+                    className="grid gap-2 sm:grid-cols-[1fr_minmax(160px,1fr)_5rem] sm:items-end"
+                  >
                     <input
                       value={m.token}
                       onChange={(e) => setInvoicedItem(i, itemIndex, e.target.value)}
@@ -402,6 +447,24 @@ export function OrderImportExportClient() {
                       emptyOptionLabel="выбрать из прайса"
                       className="h-8 w-full rounded border border-[var(--input-border)] bg-white px-2 text-sm text-black"
                     />
+                    <label className="flex flex-col gap-0.5">
+                      <span className="text-xs text-[var(--text-secondary)]">Кол-во</span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        value={Math.max(
+                          1,
+                          Math.min(
+                            1_000_000,
+                            Number(qtyParts[itemIndex]) || 1,
+                          ),
+                        )}
+                        onChange={(e) => setInvoicedQuantity(i, itemIndex, e.target.value)}
+                        className="h-8 w-full rounded border border-[var(--input-border)] px-2 text-sm tabular-nums"
+                      />
+                    </label>
                   </div>
                 ))}
                 <button

@@ -6,10 +6,8 @@ const g = globalThis as unknown as {
 };
 
 export function getOrdersDatabaseUrl(): string {
-  const u =
-    process.env.ORDERS_DATABASE_URL?.trim() ||
-    process.env.DATABASE_URL?.trim();
-  return augmentSqliteDatasourceUrl(u || "file:./orders.db");
+  const u = process.env.DATABASE_URL?.trim();
+  return augmentSqliteDatasourceUrl(u || "file:./dev.db");
 }
 
 export function getOrdersPrismaClient(): PrismaClient {

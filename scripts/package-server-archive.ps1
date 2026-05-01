@@ -105,8 +105,6 @@ Copy-Item -Path (Join-Path $ProjectRoot "scripts\ensure-user-telegram-phone-sqli
 Copy-Item -Path (Join-Path $ProjectRoot "scripts\ensure-doctor-extra-columns-sqlite.cjs") -Destination (Join-Path $stageScripts "ensure-doctor-extra-columns-sqlite.cjs") -Force
 Copy-Item -Path (Join-Path $ProjectRoot "scripts\ensure-clinic-price-overrides-sqlite.cjs") -Destination (Join-Path $stageScripts "ensure-clinic-price-overrides-sqlite.cjs") -Force
 Copy-Item -Path (Join-Path $ProjectRoot "scripts\ensure-role-module-access-sqlite.cjs") -Destination (Join-Path $stageScripts "ensure-role-module-access-sqlite.cjs") -Force
-Copy-Item -Path (Join-Path $ProjectRoot "scripts\split-copy-pricing-from-clients.cjs") -Destination (Join-Path $stageScripts "split-copy-pricing-from-clients.cjs") -Force
-Copy-Item -Path (Join-Path $ProjectRoot "scripts\split-copy-orders-from-clients.cjs") -Destination (Join-Path $stageScripts "split-copy-orders-from-clients.cjs") -Force
 Copy-Item -Path (Join-Path $ProjectRoot "scripts\prisma-migrate-deploy.cjs") -Destination (Join-Path $Stage "prisma-migrate-deploy.cjs") -Force
 $nvmrc = Join-Path $ProjectRoot ".nvmrc"
 if (Test-Path $nvmrc) {

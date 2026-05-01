@@ -204,6 +204,7 @@ export function NewOrderForm({
   const [nextOrderPreview, setNextOrderPreview] = useState<string | null>(null);
   const [correctionTrack, setCorrectionTrack] =
     useState<OrderCorrectionTrackValue | null>(null);
+  const [reworkAtCustomerExpense, setReworkAtCustomerExpense] = useState(false);
   const hydratedRef = useRef(false);
   const prevClinicIdForLegalRef = useRef<string | null>(null);
 
@@ -378,7 +379,16 @@ export function NewOrderForm({
     } else {
       setCorrectionTrack(null);
     }
+    const snapshotRework = (s as OrderDraftSnapshot & { reworkAtCustomerExpense?: boolean })
+      .reworkAtCustomerExpense;
+    setReworkAtCustomerExpense(Boolean(snapshotRework) && ct === "REWORK");
   }, [initialSnapshot]);
+
+  useEffect(() => {
+    if (correctionTrack !== "REWORK" && reworkAtCustomerExpense) {
+      setReworkAtCustomerExpense(false);
+    }
+  }, [correctionTrack, reworkAtCustomerExpense]);
 
   const orderDraftSnapshot = useMemo<OrderDraftSnapshot>(
     () => ({
@@ -407,6 +417,7 @@ export function NewOrderForm({
       bridgeLines: JSON.parse(JSON.stringify(bridgeLines)),
       prosthetics: JSON.parse(JSON.stringify(prosthetics)),
       correctionTrack,
+      reworkAtCustomerExpense,
     }),
     [
       clinicId,
@@ -431,6 +442,7 @@ export function NewOrderForm({
       bridgeLines,
       prosthetics,
       correctionTrack,
+      reworkAtCustomerExpense,
     ],
   );
 
@@ -725,6 +737,8 @@ export function NewOrderForm({
             ],
             prosthetics,
             correctionTrack: correctionTrack ?? null,
+            reworkAtCustomerExpense:
+              correctionTrack === "REWORK" ? reworkAtCustomerExpense : false,
             ...(continuationChoice
               ? { continuesFromOrderId: continuationChoice.id }
               : {}),
@@ -832,6 +846,7 @@ export function NewOrderForm({
       bridgeLines,
       prosthetics,
       correctionTrack,
+      reworkAtCustomerExpense,
       continuationChoice,
       pendingFiles,
       router,
@@ -1323,6 +1338,19 @@ export function NewOrderForm({
                             </button>
                           ))}
                         </div>
+                        {correctionTrack === "REWORK" ? (
+                          <label className={`${checkboxLabelClass} mt-2`}>
+                            <input
+                              type="checkbox"
+                              className={checkboxInputClass}
+                              checked={reworkAtCustomerExpense}
+                              onChange={(e) =>
+                                setReworkAtCustomerExpense(e.target.checked)
+                              }
+                            />
+                            За счет заказчика
+                          </label>
+                        ) : null}
                       </div>
                     </div>
                   </div>

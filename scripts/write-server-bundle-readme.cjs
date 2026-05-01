@@ -35,17 +35,9 @@ const text = `dental-lab-crm — архив для Linux-сервера (${stamp
 
    Обязательно:
    - AUTH_SECRET (не короче 16 символов)
-  - DATABASE_URL — SQLite. Если БД лежит ВНЕ папки приложения, укажите абсолютный путь, например:
+  - DATABASE_URL — основная единая БД (PostgreSQL или SQLite). Если SQLite лежит ВНЕ папки приложения, укажите абсолютный путь, например:
      DATABASE_URL="file:/home/c501315/click-lab.online/www/dev.db"
      (после file: для Unix — один слэш перед home; без кавычек в .env обычно тоже работает)
-  - Для split (3 БД) добавьте:
-    CLIENTS_DATABASE_URL="file:/home/.../clients.db"
-    ORDERS_DATABASE_URL="file:/home/.../clients.db"   (переходно: равен clients)
-    PRICING_DATABASE_URL="file:/home/.../pricing_inventory.db"
-    Если хотите перенести прайс+склад из текущей базы автоматически:
-    SPLIT_COPY_PRICING_FROM_CLIENTS=1
-    Если хотите перенести заказы в orders DB автоматически:
-    SPLIT_COPY_ORDERS_FROM_CLIENTS=1
 
    Рекомендуется:
    - ORDER_ATTACHMENT_STORAGE_DIR — корень для файлов вложений к заказам (иначе: <cwd>/data/order-attachments).
@@ -55,11 +47,8 @@ const text = `dental-lab-crm — архив для Linux-сервера (${stamp
 
 4) Миграции Prisma (нужен интернет один раз для npx). Запускать из корня выкладки (рядом с server.js), где лежит папка prisma/:
    Не вызывайте «npx prisma …» без версии в @ — npx подтянет Prisma 7+, будет ошибка P1012 (datasource url в schema не поддерживается).
-   Рекомендуется: node prisma-migrate-deploy.cjs (файл в корне архива; после migrate делает prisma generate;
+  Рекомендуется: node prisma-migrate-deploy.cjs (файл в корне архива; после migrate делает prisma generate;
    если в standalone не хватает файлов @prisma/client — скрипт попробует npm install prisma @prisma/client той же версии).
-   При split-режиме скрипт дополнительно делает db push для prisma/orders/schema.prisma и prisma/pricing/schema.prisma;
-   а при SPLIT_COPY_PRICING_FROM_CLIENTS=1 переносит прайс/склад в pricing DB,
-   при SPLIT_COPY_ORDERS_FROM_CLIENTS=1 переносит заказы в orders DB.
    Либо вручную: npx -y "prisma@${prismaVer}" migrate deploy --schema=prisma/schema.prisma
    Альтернатива: node scripts/prisma-migrate-deploy.cjs — тот же код, если удобнее вызывать из подкаталога scripts/.
    Версия зафиксирована в .prisma-cli-version (${prismaVer}); она совпадает с @prisma/client в этой сборке.

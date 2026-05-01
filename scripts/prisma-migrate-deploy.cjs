@@ -142,20 +142,6 @@ function runPrismaGenerate() {
   );
 }
 
-function runPrismaDbPush(schemaPath, label) {
-  console.log(`db push (${label})...`);
-  return spawnSync(
-    "npx",
-    ["-y", prismaSpec, "db", "push", `--schema=${schemaPath}`, "--skip-generate"],
-    {
-      cwd: bundleRoot,
-      stdio: "inherit",
-      env: process.env,
-      shell: isWin,
-    },
-  );
-}
-
 if (isSqlite && !prismaSqliteWasmRuntimePresent()) {
   console.warn(
     "В выкладке не найден полный runtime @prisma/client (типично для Next standalone). Устанавливаем пакеты через npm.",
@@ -221,39 +207,5 @@ if (isSqlite) {
   }
 }
 
-const pricingUrl = process.env.PRICING_DATABASE_URL?.trim() || "";
-const ordersUrl = process.env.ORDERS_DATABASE_URL?.trim() || "";
-const clientsUrl = process.env.CLIENTS_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim() || "";
-
-if (pricingUrl && pricingUrl !== clientsUrl) {
-  const rPricing = runPrismaDbPush("prisma/pricing/schema.prisma", "pricing");
-  if (rPricing.status !== 0) {
-    process.exit(rPricing.status === null ? 1 : rPricing.status);
-  }
-  if (String(process.env.SPLIT_COPY_PRICING_FROM_CLIENTS || "").trim() === "1") {
-    const copyPricing = spawnNodeScript(
-      pathToEnsure("split-copy-pricing-from-clients.cjs"),
-    );
-    if (copyPricing.status !== 0) {
-      process.exit(copyPricing.status === null ? 1 : copyPricing.status);
-    }
-  }
-}
-
-if (ordersUrl && ordersUrl !== clientsUrl) {
-  const rOrders = runPrismaDbPush("prisma/orders/schema.prisma", "orders");
-  if (rOrders.status !== 0) {
-    process.exit(rOrders.status === null ? 1 : rOrders.status);
-  }
-  if (String(process.env.SPLIT_COPY_ORDERS_FROM_CLIENTS || "").trim() === "1") {
-    const copyOrders = spawnNodeScript(
-      pathToEnsure("split-copy-orders-from-clients.cjs"),
-    );
-    if (copyOrders.status !== 0) {
-      process.exit(copyOrders.status === null ? 1 : copyOrders.status);
-    }
-  }
-}
-
-console.log("split db sync: OK.");
+console.log("single db mode: OK.");
 process.exit(0);

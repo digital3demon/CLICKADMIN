@@ -1,14 +1,7 @@
 import "server-only";
 
 import type { PrismaClient } from "@prisma/client";
-import { isDbSplitEnabled } from "@/lib/db-split";
 import { getPrisma } from "@/lib/get-prisma";
-import {
-  getClientsPrismaClient,
-  getOrdersPrismaClient,
-  getPricingPrismaClient,
-  getWarehousePrismaClient,
-} from "@/lib/prisma-clients";
 
 export type DbClients = {
   clients: PrismaClient;
@@ -18,20 +11,12 @@ export type DbClients = {
 };
 
 export async function getDbClients(): Promise<DbClients> {
-  if (!isDbSplitEnabled()) {
-    const one = await getPrisma();
-    return {
-      clients: one,
-      orders: one,
-      pricing: one,
-      warehouse: one,
-    };
-  }
+  const one = await getPrisma();
   return {
-    clients: getClientsPrismaClient(),
-    orders: getOrdersPrismaClient(),
-    pricing: getPricingPrismaClient(),
-    warehouse: getWarehousePrismaClient(),
+    clients: one,
+    orders: one,
+    pricing: one,
+    warehouse: one,
   };
 }
 

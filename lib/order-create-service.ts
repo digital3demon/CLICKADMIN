@@ -106,6 +106,7 @@ export type CreateOrderBody = {
   workReceivedAt?: string | null;
   prosthetics?: unknown;
   correctionTrack?: string | null;
+  reworkAtCustomerExpense?: boolean;
   continuesFromOrderId?: string | null;
 };
 
@@ -312,6 +313,8 @@ export async function createOrderFromBody(
     if (!isOrderCorrectionTrack(r)) return fail(400, "Некорректное направление коррекции");
     correctionTrack = r as OrderCorrectionTrack;
   }
+  const reworkAtCustomerExpense =
+    correctionTrack === "REWORK" ? Boolean(body.reworkAtCustomerExpense) : false;
 
   let constructionCreates: Prisma.OrderConstructionCreateWithoutOrderInput[] = [];
   if (body.constructions !== undefined) {
@@ -372,6 +375,7 @@ export async function createOrderFromBody(
     ...(prostheticsPrisma === Prisma.JsonNull ? {} : { prosthetics: prostheticsPrisma }),
     registeredByLabel: revisionActor.label,
     correctionTrack,
+    reworkAtCustomerExpense,
   };
 
   let order: CreatedOrder | null = null;

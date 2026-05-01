@@ -645,6 +645,8 @@ model Order {
   prostheticsOrdered             Boolean                   @default(false)
   /// Коррекция: направление (ортопедия / ортодонтия); null — не коррекция
   correctionTrack                OrderCorrectionTrack?
+  /// Для переделки: true — за счет заказчика, false — внутренняя переделка
+  reworkAtCustomerExpense        Boolean                   @default(false)
   /// Кто занёс наряд в CRM (подпись с момента создания)
   registeredByLabel              String?
   /// Устаревшее поле: синхронизируется с привозом при сохранении из CRM

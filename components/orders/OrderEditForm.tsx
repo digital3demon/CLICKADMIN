@@ -408,6 +408,7 @@ export type OrderEditInitial = {
   orderPriceListNote: string | null;
   prostheticsOrdered: boolean;
   correctionTrack: OrderCorrectionTrack | null;
+  reworkAtCustomerExpense: boolean;
   registeredByLabel: string | null;
   courierId: string | null;
   courierName: string | null;
@@ -747,6 +748,19 @@ export function OrderEditForm({
 
   const [correctionTrack, setCorrectionTrack] =
     useState<OrderCorrectionTrack | null>(initial.correctionTrack);
+  const [reworkAtCustomerExpense, setReworkAtCustomerExpense] = useState(
+    initial.reworkAtCustomerExpense === true && initial.correctionTrack === "REWORK",
+  );
+  useEffect(() => {
+    setReworkAtCustomerExpense(
+      initial.reworkAtCustomerExpense === true && initial.correctionTrack === "REWORK",
+    );
+  }, [initial.id, initial.reworkAtCustomerExpense, initial.correctionTrack]);
+  useEffect(() => {
+    if (correctionTrack !== "REWORK" && reworkAtCustomerExpense) {
+      setReworkAtCustomerExpense(false);
+    }
+  }, [correctionTrack, reworkAtCustomerExpense]);
   const [courierPickupId, setCourierPickupId] = useState(() => {
     const p = initial.courierPickupId?.trim();
     if (p) return p;
@@ -1391,6 +1405,8 @@ export function OrderEditForm({
           orderPriceListNote: initial.orderPriceListNote,
           prostheticsOrdered,
           correctionTrack,
+          reworkAtCustomerExpense:
+            correctionTrack === "REWORK" ? reworkAtCustomerExpense : false,
           courierPickupId: courierPickupId.trim() || null,
           courierDeliveryId: courierDeliveryId.trim() || null,
           courierId: courierPickupId.trim() || null,
@@ -1460,6 +1476,7 @@ export function OrderEditForm({
     initial.orderPriceListNote,
     prostheticsOrdered,
     correctionTrack,
+    reworkAtCustomerExpense,
     courierPickupId,
     courierDeliveryId,
     legalEntity,
@@ -1576,6 +1593,17 @@ export function OrderEditForm({
           {ORDER_CORRECTION_TRACK_LABELS[v]}
         </button>
       ))}
+      {correctionTrack === "REWORK" ? (
+        <label className={`${checkboxLabelClassEdit} ml-2`}>
+          <input
+            type="checkbox"
+            className={checkboxInputClassEdit}
+            checked={reworkAtCustomerExpense}
+            onChange={(e) => setReworkAtCustomerExpense(e.target.checked)}
+          />
+          За счет заказчика
+        </label>
+      ) : null}
     </div>
   );
 

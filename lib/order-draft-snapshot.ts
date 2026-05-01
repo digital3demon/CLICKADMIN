@@ -5,7 +5,7 @@ import type { BridgeLineInput } from "@/lib/detail-lines-to-constructions";
 import type { OrderProstheticsV1 } from "@/lib/order-prosthetics";
 import type { OrderCorrectionTrackValue } from "@/lib/order-correction-track";
 
-export const ORDER_DRAFT_SNAPSHOT_VERSION = 11 as const;
+export const ORDER_DRAFT_SNAPSHOT_VERSION = 12 as const;
 
 export type OrderDraftSnapshot = {
   version: typeof ORDER_DRAFT_SNAPSHOT_VERSION;
@@ -42,6 +42,8 @@ export type OrderDraftSnapshot = {
   prosthetics?: OrderProstheticsV1;
   /** v7+ — коррекция (ортопедия / ортодонтия); null — не коррекция */
   correctionTrack?: OrderCorrectionTrackValue | null;
+  /** v12+ — только для переделки: true = за счет заказчика */
+  reworkAtCustomerExpense?: boolean;
 };
 
 export function isQuickOrderTouched(q: QuickOrderState): boolean {
@@ -69,6 +71,7 @@ export function isDraftWorthy(s: OrderDraftSnapshot): boolean {
   if (s.patientAppointmentLocal?.trim()) return true;
   if (s.workReceivedLocal?.trim()) return true;
   if (s.correctionTrack) return true;
+  if (s.reworkAtCustomerExpense) return true;
   if (s.excludeFromReconciliation) return true;
   const pr = s.prosthetics;
   if (pr && (pr.clientProvided.length > 0 || pr.ourLines.length > 0)) {

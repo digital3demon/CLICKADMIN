@@ -106,6 +106,7 @@ type PatchBody = {
   compositionDiscountPercent?: number;
   prostheticsOrdered?: boolean;
   correctionTrack?: string | null;
+  reworkAtCustomerExpense?: boolean;
   courierId?: string | null;
   courierPickupId?: string | null;
   courierDeliveryId?: string | null;
@@ -354,6 +355,7 @@ export async function PATCH(
       createdAt: true,
       archivedAt: true,
       prosthetics: true,
+      correctionTrack: true,
     },
   });
   if (!existing) {
@@ -646,6 +648,23 @@ export async function PATCH(
         );
       }
       scalarData.correctionTrack = raw as OrderCorrectionTrack;
+    }
+  }
+
+  if (body.reworkAtCustomerExpense !== undefined) {
+    scalarData.reworkAtCustomerExpense = Boolean(body.reworkAtCustomerExpense);
+  }
+  if (body.reworkAtCustomerExpense !== undefined || body.correctionTrack !== undefined) {
+    const nextTrack =
+      body.correctionTrack !== undefined
+        ? body.correctionTrack === null || body.correctionTrack === ""
+          ? null
+          : String(body.correctionTrack).trim()
+        : existing.correctionTrack == null
+          ? null
+          : String(existing.correctionTrack);
+    if (nextTrack !== "REWORK") {
+      scalarData.reworkAtCustomerExpense = false;
     }
   }
 

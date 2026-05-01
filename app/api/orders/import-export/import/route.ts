@@ -19,6 +19,7 @@ import {
   resolveClinicId,
   resolveDoctorId,
   resolvePriceListItemsForText,
+  splitInvoicedQuantitiesForTokens,
   type ImportRowInput,
 } from "@/lib/order-import-export";
 
@@ -113,6 +114,19 @@ export async function POST(req: Request) {
       errors.push("клиника не найдена");
     }
     const invoicedMatches = resolvePriceListItemsForText(row.invoicedText, priceItems);
+    const invoicedQtys = splitInvoicedQuantitiesForTokens(
+      row.invoicedQuantitiesText,
+      invoicedMatches.length,
+    );
+    const priceListConstructions = invoicedMatches
+      .map((m, idx) => {
+        if (!m.item?.id) return null;
+        return {
+          priceListItemId: m.item.id,
+          quantity: invoicedQtys[idx] ?? 1,
+        };
+      })
+      .filter((x): x is { priceListItemId: string; quantity: number } => x != null);
     const invoicedAllMatched =
       invoicedMatches.length === 0 || invoicedMatches.every((m) => Boolean(m.item?.id));
     if (row.invoicedText.trim() && !invoicedAllMatched) {
@@ -164,6 +178,8 @@ export async function POST(req: Request) {
         workReceivedAt: workReceivedAt ? workReceivedAt.toISOString() : null,
         correctionTrack: correctionTrackFromText(row.correctionTrackText),
         kaitenDecideLater: true,
+        constructions:
+          priceListConstructions.length > 0 ? priceListConstructions : undefined,
       },
       { tenantId, allowPastDates: true },
     );

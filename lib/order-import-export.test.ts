@@ -3,6 +3,7 @@ import {
   correctionTrackFromText,
   resolveClinicId,
   resolveDoctorId,
+  splitInvoicedQuantitiesForTokens,
 } from "./order-import-export";
 
 describe("resolveDoctorId", () => {
@@ -60,6 +61,17 @@ describe("resolveClinicId", () => {
 
   it("находит клинику по названию+адресу, даже если в БД есть доп. префиксы", () => {
     expect(resolveClinicId("Дент Деко Дальневосточный пр., 12, корп. 2", clinics)).toBe("c4");
+  });
+});
+
+describe("splitInvoicedQuantitiesForTokens", () => {
+  it("подставляет 1 для пустых и обрезает лишнее под число токенов", () => {
+    expect(splitInvoicedQuantitiesForTokens(undefined, 3)).toEqual([1, 1, 1]);
+    expect(splitInvoicedQuantitiesForTokens("2; ;5", 3)).toEqual([2, 1, 5]);
+  });
+
+  it("некорректные сегменты считаются как 1", () => {
+    expect(splitInvoicedQuantitiesForTokens("abc;;x", 3)).toEqual([1, 1, 1]);
   });
 });
 

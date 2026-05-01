@@ -59,6 +59,6 @@ export async function getPrisma(): Promise<PrismaClient> {
     });
   }
   return prepareClient(prisma, {
-    sqliteCompat: isSqliteUrl(process.env.CLIENTS_DATABASE_URL || process.env.DATABASE_URL),
+    sqliteCompat: isSqliteUrl(process.env.DATABASE_URL),
   });
 }

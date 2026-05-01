@@ -6,10 +6,8 @@ const g = globalThis as unknown as {
 };
 
 export function getPricingDatabaseUrl(): string {
-  const u =
-    process.env.PRICING_DATABASE_URL?.trim() ||
-    process.env.DATABASE_URL?.trim();
-  return augmentSqliteDatasourceUrl(u || "file:./pricing.db");
+  const u = process.env.DATABASE_URL?.trim();
+  return augmentSqliteDatasourceUrl(u || "file:./dev.db");
 }
 
 export function getPricingPrismaClient(): PrismaClient {
