@@ -66,6 +66,8 @@ function postKanbanCrmTelegramNotify(payload: {
   lines: string[];
   targetUserIds?: string[];
   broadcastExcludeUserIds?: string[];
+  /** На сервере: достаточно любого из ключей (для @упоминаний — комментарий или упоминание). */
+  alternatePrefKeys?: KanbanTelegramPrefKey[];
 }) {
   void fetch("/api/kanban/telegram-notify", {
     method: "POST",
@@ -297,6 +299,11 @@ export function KanbanCardModal({
     const prevPart = card.participants || [];
     const kaitenId = card.kaitenCardId;
     const titleLine = (card.title || "").trim() || "Без названия";
+    const actorId = (commentAuthorUserId ?? "").trim() || board.users[0]?.id || "";
+    const actorLabel =
+      crmById.get(actorId)?.displayName ??
+      userNameById(board, actorId) ??
+      "Пользователь";
 
     if (pickerMode === "assign") {
       onApply((b) => {
@@ -306,7 +313,11 @@ export function KanbanCardModal({
         pushActivity(fc.card, "Изменены ответственные", b.users[0]?.id, b, act);
       });
       if (!shouldSkipCrmKanbanTelegram(kaitenId)) {
-        const base = ["Канбан CRM", `Карточка: ${titleLine}`];
+        const base = [
+          "Канбан CRM",
+          `Карточка: ${titleLine}`,
+          `Добавил(а): ${actorLabel}`,
+        ];
         const added = pickerIds.filter((id) => !prevAssign.includes(id));
         const removed = prevAssign.filter((id) => !pickerIds.includes(id));
         if (added.length) {
@@ -322,7 +333,12 @@ export function KanbanCardModal({
             kaitenCardId: kaitenId,
             event: "tg_person_removed_from_card",
             targetUserIds: removed,
-            lines: [...base, "Вы сняты с ответственных по карточке"],
+            lines: [
+              "Канбан CRM",
+              `Карточка: ${titleLine}`,
+              `Изменил(а): ${actorLabel}`,
+              "Вы сняты с ответственных по карточке",
+            ],
           });
         }
       }
@@ -334,7 +350,11 @@ export function KanbanCardModal({
         pushActivity(fc.card, "Изменён состав участников", b.users[0]?.id, b, act);
       });
       if (!shouldSkipCrmKanbanTelegram(kaitenId)) {
-        const base = ["Канбан CRM", `Карточка: ${titleLine}`];
+        const base = [
+          "Канбан CRM",
+          `Карточка: ${titleLine}`,
+          `Добавил(а): ${actorLabel}`,
+        ];
         const added = pickerIds.filter((id) => !prevPart.includes(id));
         const removed = prevPart.filter((id) => !pickerIds.includes(id));
         if (added.length) {
@@ -350,7 +370,12 @@ export function KanbanCardModal({
             kaitenCardId: kaitenId,
             event: "tg_person_removed_from_card",
             targetUserIds: removed,
-            lines: [...base, "Вы исключены из участников карточки"],
+            lines: [
+              "Канбан CRM",
+              `Карточка: ${titleLine}`,
+              `Изменил(а): ${actorLabel}`,
+              "Вы исключены из участников карточки",
+            ],
           });
         }
       }
@@ -435,6 +460,7 @@ export function KanbanCardModal({
       const lines = [
         "Канбан CRM",
         `Карточка: ${(card.title || "").trim() || "Без названия"}`,
+        "Вас упомянули в комментарии к карточке",
         `От: ${authorName}`,
         trimmed.slice(0, 900),
       ];
@@ -445,6 +471,7 @@ export function KanbanCardModal({
         postKanbanCrmTelegramNotify({
           kaitenCardId: card.kaitenCardId,
           event: "tg_mentioned_in_comment",
+          alternatePrefKeys: ["tg_comment_added"],
           targetUserIds: mentioned,
           lines,
         });

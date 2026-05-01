@@ -65,7 +65,8 @@ export function KanbanPersonAvatar({
       : `${displayName}${variant === "assignee" ? " (ответственный)" : " (участник)"}`;
 
   if (crm?.avatarCustomUploadedAt && !customPhotoFailed) {
-    const src = `/api/users/${encodeURIComponent(userId)}/avatar?t=${encodeURIComponent(crm.avatarCustomUploadedAt)}`;
+    const v = String(new Date(crm.avatarCustomUploadedAt).getTime() || 0);
+    const src = `/api/user-avatars/${encodeURIComponent(userId)}?v=${encodeURIComponent(v)}`;
     return (
       <span title={title} className={`${base} overflow-hidden bg-zinc-700 p-0`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -967,7 +967,10 @@ export function findCardInAppState(
 
 /**
  * Вид доски для рендера: поиск по всем дорожкам, виртуальные «Мои» / «Распределить».
- * «Мои» — только `participants`; «Распределить» — только `assignees` текущего пользователя.
+ * «Мои»: участник ИЛИ ответственный ИЛИ наряд CRM без участников/ответственных (общая очередь),
+ * либо локальная карточка без наряда, созданная текущим пользователем.
+ * «Распределить»: ответственный текущего пользователя ИЛИ наряд без ответственных (очередь раздачи).
+ * Карточки без `linkedOrderId` живут только в localStorage автора — другие пользователи их не увидят.
  * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
  */
 export function buildKanbanDisplayView(
@@ -1014,10 +1017,20 @@ export function buildKanbanDisplayView(
           if (!uid) continue;
           const assignees = card.assignees || [];
           const participants = card.participants || [];
+          const linked = Boolean(card.linkedOrderId?.trim());
           if (agg === "my") {
-            if (!participants.includes(uid)) continue;
-          } else if (!assignees.includes(uid)) {
-            continue;
+            const inParts = participants.includes(uid);
+            const inAssign = assignees.includes(uid);
+            const teamLinkedQueue =
+              linked && participants.length === 0 && assignees.length === 0;
+            const ownLocal =
+              !linked &&
+              Boolean(card.createdByUserId?.trim()) &&
+              card.createdByUserId === uid;
+            if (!inParts && !inAssign && !teamLinkedQueue && !ownLocal) continue;
+          } else {
+            const unassignedLinked = linked && assignees.length === 0;
+            if (!assignees.includes(uid) && !unassignedLinked) continue;
           }
           if (q && !textMatches(card)) continue;
           if (!passesFiltersWithoutSearchText(card, home)) continue;

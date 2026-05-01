@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
-import { parseKanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
+import {
+  parseKanbanTelegramPrefKey,
+  type KanbanTelegramPrefKey,
+} from "@/lib/kanban-telegram-prefs";
 import { getPrisma } from "@/lib/get-prisma";
 import {
   notifyKanbanTelegramSubscribers,
@@ -55,6 +58,15 @@ export async function POST(req: Request) {
       )
     : [];
 
+  const altRaw = o.alternatePrefKeys;
+  const alternatePrefKeys: KanbanTelegramPrefKey[] = [];
+  if (Array.isArray(altRaw)) {
+    for (const x of altRaw) {
+      const k = parseKanbanTelegramPrefKey(x);
+      if (k) alternatePrefKeys.push(k);
+    }
+  }
+
   const prisma = await getPrisma();
   const actorUserId = session.sub;
 
@@ -62,6 +74,8 @@ export async function POST(req: Request) {
     if (targetUserIds.length > 0) {
       await notifyKanbanTelegramTargetUsers(prisma, {
         event,
+        alternatePrefKeys:
+          alternatePrefKeys.length > 0 ? alternatePrefKeys : undefined,
         actorUserId,
         targetUserIds,
         lines: lines as string[],

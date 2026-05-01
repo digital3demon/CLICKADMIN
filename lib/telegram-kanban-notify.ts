@@ -70,14 +70,25 @@ export async function notifyKanbanTelegramSubscribers(
   }
 }
 
+function hasAnyKanbanPrefEnabled(
+  merged: ReturnType<typeof mergeKanbanTelegramPrefs>,
+  keys: readonly KanbanTelegramPrefKey[],
+): boolean {
+  return keys.some((k) => isKanbanTelegramPrefEnabled(merged, k));
+}
+
 /**
  * Уведомления только указанным user id (каждый независимо проверяет prefs и Telegram).
  * Автор действия не получает сообщение.
+ *
+ * `alternatePrefKeys` — достаточно включить любой из ключей (например упоминание ИЛИ «комментарий»).
  */
 export async function notifyKanbanTelegramTargetUsers(
   prisma: PrismaClient,
   opts: {
     event: KanbanTelegramPrefKey;
+    /** Допустимы альтернативные типы уведомлений (OR по prefs). */
+    alternatePrefKeys?: KanbanTelegramPrefKey[];
     actorUserId: string | null;
     targetUserIds: string[];
     lines: string[];
@@ -96,6 +107,11 @@ export async function notifyKanbanTelegramTargetUsers(
   const ids = [...want];
   if (!ids.length) return;
 
+  const prefKeys: KanbanTelegramPrefKey[] = [
+    opts.event,
+    ...(opts.alternatePrefKeys ?? []),
+  ];
+
   const users = await prisma.user.findMany({
     where: {
       id: { in: ids },
@@ -112,7 +128,7 @@ export async function notifyKanbanTelegramTargetUsers(
   for (const u of users) {
     if (!u.telegramId?.trim()) continue;
     const merged = mergeKanbanTelegramPrefs(u.telegramKanbanNotifyPrefs);
-    if (!isKanbanTelegramPrefEnabled(merged, opts.event)) continue;
+    if (!hasAnyKanbanPrefEnabled(merged, prefKeys)) continue;
     const r = await telegramSendMessage(token, u.telegramId.trim(), text);
     if (!r.ok) {
       console.warn(

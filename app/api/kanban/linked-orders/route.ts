@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ConstructionCategory, OrderStatus } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getClientsPrisma, getOrdersPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
 
@@ -8,8 +9,13 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const session = await getSessionFromCookies();
-  if (!session) {
+  if (!session?.sub) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+
+  const tenantId = await getTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Нет контекста организации" }, { status: 403 });
   }
 
   try {
@@ -20,6 +26,7 @@ export async function GET() {
     ]);
     const rows = await ordersPrisma.order.findMany({
       where: {
+        tenantId,
         archivedAt: null,
         status: { not: OrderStatus.CANCELLED },
       },
