@@ -11,7 +11,7 @@
     "dev:webpack": "next dev",
     "build": "node scripts/prisma-migrate-deploy.cjs && next build",
     "bootstrap:saas": "node scripts/bootstrap-dental-crm-saas.cjs",
-    "start": "node .next/standalone/server.js",
+    "start": "node server.js",
     "db:generate": "prisma generate",
     "db:generate:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prisma-clean-generate.ps1",
     "db:generate:clean:force": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prisma-clean-generate.ps1 -KillAllNode",
