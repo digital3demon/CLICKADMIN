@@ -19,4 +19,16 @@ describe("parseMentionUserIdsFromText", () => {
     const users = [{ id: "a", mentionHandle: "boss" }];
     expect(parseMentionUserIdsFromText("@boss @boss @unknown", users)).toEqual(["a"]);
   });
+
+  it("резолвит по локальной части email, если mentionHandle пустой (как подсказка в чате)", () => {
+    const users = [
+      {
+        id: "uid1",
+        mentionHandle: null,
+        email: "vsevolodsokolov@example.com",
+        displayName: "Всеволод",
+      },
+    ];
+    expect(parseMentionUserIdsFromText("Привет @vsevolodsokolov", users)).toEqual(["uid1"]);
+  });
 });

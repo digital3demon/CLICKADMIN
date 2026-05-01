@@ -16,7 +16,10 @@ import {
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
-import { parseMentionUserIdsFromText } from "@/lib/kanban-comment-mentions";
+import {
+  parseMentionUserIdsFromText,
+  sanitizeMentionToken,
+} from "@/lib/kanban-comment-mentions";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
@@ -412,7 +415,8 @@ export function KanbanCardModal({
       const fc = findCard(b, cardId);
       if (!fc) return;
       const c = fc.card;
-      const actor = b.users[0]?.id ?? "";
+      const actor =
+        (commentAuthorUserId ?? "").trim() || b.users[0]?.id || "";
       c.comments = c.comments || [];
       c.comments.push({
         id: generateId("cm"),
@@ -469,7 +473,7 @@ export function KanbanCardModal({
 
   const attachFilesFromChat = async (fileList: File[]) => {
     if (blocked || !fileList.length) return;
-    const actor = board.users[0]?.id ?? "";
+    const actor = chatActorUserId || board.users[0]?.id || "";
     const linked =
       Boolean(card.linkedOrderId) &&
       card.kaitenCardId != null &&
@@ -1532,14 +1536,6 @@ type ChatMentionOption = {
   insertText: string;
   searchText: string;
 };
-
-function sanitizeMentionToken(raw: string): string {
-  return raw
-    .replace(/^@+/, "")
-    .replace(/\s+/g, "_")
-    .replace(/[^\p{L}\p{N}._-]/gu, "")
-    .trim();
-}
 
 function detectMentionDraft(text: string, caretPos: number): ChatMentionDraft | null {
   const caret = Math.max(0, Math.min(caretPos, text.length));
