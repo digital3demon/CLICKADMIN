@@ -154,8 +154,27 @@ export function AnalyticsPageClient() {
               : `/api/analytics/warehouse?${q}`;
       try {
         const res = await fetch(path, { signal: ac.signal });
-        const j = (await res.json()) as unknown;
+        const text = await res.text();
         if (ac.signal.aborted) return;
+        let j: unknown;
+        const trimmed = text.trim();
+        if (!trimmed) {
+          if (!res.ok) {
+            throw new Error(`Ошибка ${res.status} (пустой ответ)`);
+          }
+          throw new Error(
+            "Пустой ответ сервера. Обновите страницу или проверьте логи приложения.",
+          );
+        }
+        try {
+          j = JSON.parse(trimmed) as unknown;
+        } catch {
+          throw new Error(
+            res.ok
+              ? "Неверный ответ сервера (не JSON). Обновите страницу."
+              : `Ошибка ${res.status}: ответ не JSON`,
+          );
+        }
         if (!res.ok) {
           const err =
             typeof j === "object" && j !== null && "error" in j
