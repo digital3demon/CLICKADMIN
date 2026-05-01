@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KaitenTrackLane } from "@prisma/client";
 import { kaitenBlockStateFromCard } from "@/lib/kaiten-card-block";
 import {
@@ -31,6 +31,43 @@ type CommentRow = {
   authorName?: string;
   parentId: number | null;
 };
+
+type MentionUser = {
+  id: string;
+  displayName: string;
+  email: string;
+  mentionHandle: string | null;
+};
+
+type MentionDraft = { start: number; end: number; query: string };
+
+type MentionOption = {
+  id: string;
+  label: string;
+  insertText: string;
+  searchText: string;
+};
+
+function normalizeMentionToken(raw: string): string {
+  return raw
+    .replace(/^@+/, "")
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}._-]/gu, "")
+    .trim();
+}
+
+function findMentionDraft(text: string, caretPos: number): MentionDraft | null {
+  const caret = Math.max(0, Math.min(caretPos, text.length));
+  const before = text.slice(0, caret);
+  const atPos = before.lastIndexOf("@");
+  if (atPos < 0) return null;
+  if (atPos > 0 && /[\p{L}\p{N}_]/u.test(before[atPos - 1])) {
+    return null;
+  }
+  const token = before.slice(atPos + 1);
+  if (/\s/.test(token)) return null;
+  return { start: atPos, end: caret, query: token.toLowerCase() };
+}
 
 type KaitenSnapshot = {
   configured: boolean;
@@ -86,6 +123,10 @@ export function OrderKaitenTab({
   const [replyToId, setReplyToId] = useState<number | null>(null);
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [commentCaretPos, setCommentCaretPos] = useState(0);
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   /** Только если пользователь сменил пространство — иначе PATCH не трогает доску. */
   const [spaceDirty, setSpaceDirty] = useState(false);
@@ -115,6 +156,28 @@ export function OrderKaitenTab({
   useEffect(() => {
     setCreateKaitenCardTypeId(kaitenCardTypeId ?? "");
   }, [kaitenCardTypeId, orderId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/kanban/crm-users", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          users?: MentionUser[];
+        };
+        if (!res.ok || cancelled) return;
+        setMentionUsers(Array.isArray(data.users) ? data.users : []);
+      } catch {
+        if (!cancelled) setMentionUsers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(async (opts?: { refresh?: boolean }) => {
     if (kaitenCardId == null) {
@@ -361,6 +424,61 @@ export function OrderKaitenTab({
 
   const columnOptions = boardOverride?.columns ?? snap?.columns ?? [];
   const laneOptions = boardOverride?.lanes ?? snap?.lanes ?? [];
+  const mentionOptions = useMemo<MentionOption[]>(() => {
+    return mentionUsers
+      .map((u) => {
+        const fallbackByEmail = normalizeMentionToken(
+          (u.email || "").split("@")[0] || "",
+        );
+        const fallbackByName = normalizeMentionToken(u.displayName || "");
+        const mentionToken =
+          normalizeMentionToken(u.mentionHandle || "") ||
+          fallbackByEmail ||
+          fallbackByName;
+        if (!mentionToken) return null;
+        return {
+          id: u.id,
+          label: u.displayName,
+          insertText: `@${mentionToken}`,
+          searchText: `${u.displayName} ${u.email} ${mentionToken}`.toLowerCase(),
+        };
+      })
+      .filter((x): x is MentionOption => x != null);
+  }, [mentionUsers]);
+  const mentionDraft = useMemo(
+    () => findMentionDraft(newText, commentCaretPos),
+    [newText, commentCaretPos],
+  );
+  const mentionFiltered = useMemo(() => {
+    if (!mentionDraft) return [];
+    const q = mentionDraft.query.trim();
+    const base = q
+      ? mentionOptions.filter((x) => x.searchText.includes(q))
+      : mentionOptions;
+    return base.slice(0, 8);
+  }, [mentionDraft, mentionOptions]);
+  const applyMention = useCallback(
+    (option: MentionOption) => {
+      if (!mentionDraft) return;
+      const before = newText.slice(0, mentionDraft.start);
+      const after = newText.slice(mentionDraft.end);
+      const nextText = `${before}${option.insertText} ${after}`;
+      const nextCaret = before.length + option.insertText.length + 1;
+      setNewText(nextText);
+      setCommentCaretPos(nextCaret);
+      setMentionIndex(0);
+      requestAnimationFrame(() => {
+        if (!commentTextareaRef.current) return;
+        commentTextareaRef.current.focus();
+        commentTextareaRef.current.setSelectionRange(nextCaret, nextCaret);
+      });
+    },
+    [newText, mentionDraft],
+  );
+
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionDraft?.start, mentionDraft?.query]);
 
   const sendComment = async () => {
     const t = newText.trim();
@@ -385,6 +503,8 @@ export function OrderKaitenTab({
         return;
       }
       setNewText("");
+      setCommentCaretPos(0);
+      setMentionIndex(0);
       setReplyToId(null);
       const row = data.comment ? parseKaitenListComment(data.comment) : null;
       if (row) {
@@ -945,12 +1065,72 @@ export function OrderKaitenTab({
           </p>
         ) : null}
 
-        <textarea
-          className="mt-2 min-h-[88px] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
-          placeholder="Новое сообщение…"
-          value={newText}
-          onChange={(e) => setNewText(e.target.value)}
-        />
+        <div className="relative mt-2">
+          {mentionFiltered.length > 0 ? (
+            <div className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-10 max-h-56 overflow-y-auto rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] p-1 shadow-xl">
+              {mentionFiltered.map((option, idx) => (
+                <button
+                  key={`${option.id}-${option.insertText}`}
+                  type="button"
+                  className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.78rem] ${
+                    idx === mentionIndex
+                      ? "bg-[var(--surface-subtle)] text-[var(--sidebar-blue)]"
+                      : "text-[var(--app-text)] hover:bg-[var(--surface-subtle)]"
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyMention(option);
+                  }}
+                >
+                  <span className="truncate">{option.label}</span>
+                  <span className="ml-3 shrink-0 text-[0.72rem] text-[var(--text-muted)]">
+                    {option.insertText}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <textarea
+            ref={commentTextareaRef}
+            className="min-h-[88px] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
+            placeholder="Новое сообщение…"
+            value={newText}
+            onChange={(e) => {
+              setNewText(e.target.value);
+              setCommentCaretPos(e.target.selectionStart ?? e.target.value.length);
+            }}
+            onClick={(e) => {
+              setCommentCaretPos(e.currentTarget.selectionStart ?? newText.length);
+            }}
+            onSelect={(e) => {
+              setCommentCaretPos(e.currentTarget.selectionStart ?? newText.length);
+            }}
+            onKeyDown={(e) => {
+              if (mentionFiltered.length > 0) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setMentionIndex((v) => (v + 1) % mentionFiltered.length);
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setMentionIndex((v) =>
+                    v <= 0 ? mentionFiltered.length - 1 : v - 1,
+                  );
+                  return;
+                }
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault();
+                  applyMention(
+                    mentionFiltered[
+                      Math.min(mentionIndex, mentionFiltered.length - 1)
+                    ],
+                  );
+                }
+              }
+            }}
+          />
+        </div>
         {postError ? (
           <p className="mt-1 text-sm text-red-600">{postError}</p>
         ) : null}

@@ -14,6 +14,7 @@ export type KanbanCrmUserRow = {
   id: string;
   displayName: string;
   email: string;
+  mentionHandle: string | null;
   avatarPresetId: string | null;
   avatarCustomUploadedAt: string | null;
 };

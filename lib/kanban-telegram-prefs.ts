@@ -1,7 +1,7 @@
 /**
  * Настройки уведомлений в Telegram о событиях канбана CRM (профиль пользователя).
- * Сервер рассылает только там, где есть хук (сейчас — сохранение канбана в наряд);
- * события Kaiten в CRM не дублируются.
+ * Сервер рассылает при сохранении канбана в наряд и при действиях в модалке карточки без Kaiten;
+ * если у карточки есть kaitenCardId, CRM не дублирует события в Telegram.
  */
 
 export const KANBAN_TELEGRAM_PREF_KEYS = [
@@ -80,6 +80,14 @@ export const KANBAN_TELEGRAM_PREF_LABELS: Record<KanbanTelegramPrefKey, string> 
 
 function isPrefKey(k: string): k is KanbanTelegramPrefKey {
   return (KANBAN_TELEGRAM_PREF_KEYS as readonly string[]).includes(k);
+}
+
+/** Разбор тела POST для серверных хуков канбана. */
+export function parseKanbanTelegramPrefKey(
+  raw: unknown,
+): KanbanTelegramPrefKey | null {
+  if (typeof raw !== "string" || !isPrefKey(raw)) return null;
+  return raw;
 }
 
 /** Слить сохранённые prefs с дефолтом «всё включено». */

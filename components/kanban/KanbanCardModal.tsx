@@ -16,6 +16,9 @@ import {
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
+import { parseMentionUserIdsFromText } from "@/lib/kanban-comment-mentions";
+import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
+import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 import {
   findCard,
@@ -43,6 +46,7 @@ import {
   mergeKanbanPickerUsers,
   pickerRowLabel,
 } from "./KanbanPersonAvatar";
+import type { KanbanCrmUserRow } from "./kanban-crm-users-context";
 import {
   IconArrowRight,
   IconBrick,
@@ -52,6 +56,21 @@ import {
   IconUnlock,
   IconX,
 } from "./kanban-icons";
+
+function postKanbanCrmTelegramNotify(payload: {
+  kaitenCardId?: number | null;
+  event: KanbanTelegramPrefKey;
+  lines: string[];
+  targetUserIds?: string[];
+  broadcastExcludeUserIds?: string[];
+}) {
+  void fetch("/api/kanban/telegram-notify", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
 
 /** Короткая подпись расширения для бейджа слева от имени файла. */
 function cardFileExtensionLabel(fileName: string, mime: string): string {
@@ -248,16 +267,34 @@ export function KanbanCardModal({
       const fc = findCard(b, cardId);
       if (!fc) return;
       const ok = tryBlockCard(fc.card, b, blockReasonDraft, act);
-      if (!ok) toast("Укажите причину остановки работы", true);
-      else {
-        setBlockPopupOpen(false);
-        setBlockReasonDraft("");
+      if (!ok) {
+        toast("Укажите причину остановки работы", true);
+        return;
+      }
+      const reasonForTg = (blockReasonDraft || "").trim();
+      setBlockPopupOpen(false);
+      setBlockReasonDraft("");
+      if (!shouldSkipCrmKanbanTelegram(fc.card.kaitenCardId)) {
+        postKanbanCrmTelegramNotify({
+          kaitenCardId: fc.card.kaitenCardId,
+          event: "tg_block_added",
+          lines: [
+            "Канбан CRM",
+            `Карточка: ${(fc.card.title || "").trim() || "Без названия"}`,
+            `Причина: ${reasonForTg.slice(0, 240)}`,
+          ],
+        });
       }
     });
   };
 
   const savePicker = () => {
     if (!pickerMode) return;
+    const prevAssign = card.assignees || [];
+    const prevPart = card.participants || [];
+    const kaitenId = card.kaitenCardId;
+    const titleLine = (card.title || "").trim() || "Без названия";
+
     if (pickerMode === "assign") {
       onApply((b) => {
         const fc = findCard(b, cardId);
@@ -265,6 +302,27 @@ export function KanbanCardModal({
         fc.card.assignees = [...pickerIds];
         pushActivity(fc.card, "Изменены ответственные", b.users[0]?.id, b, act);
       });
+      if (!shouldSkipCrmKanbanTelegram(kaitenId)) {
+        const base = ["Канбан CRM", `Карточка: ${titleLine}`];
+        const added = pickerIds.filter((id) => !prevAssign.includes(id));
+        const removed = prevAssign.filter((id) => !pickerIds.includes(id));
+        if (added.length) {
+          postKanbanCrmTelegramNotify({
+            kaitenCardId: kaitenId,
+            event: "tg_person_assigned_responsible",
+            targetUserIds: added,
+            lines: [...base, "Вас назначили ответственным"],
+          });
+        }
+        if (removed.length) {
+          postKanbanCrmTelegramNotify({
+            kaitenCardId: kaitenId,
+            event: "tg_person_removed_from_card",
+            targetUserIds: removed,
+            lines: [...base, "Вы сняты с ответственных по карточке"],
+          });
+        }
+      }
     } else {
       onApply((b) => {
         const fc = findCard(b, cardId);
@@ -272,6 +330,27 @@ export function KanbanCardModal({
         fc.card.participants = [...pickerIds];
         pushActivity(fc.card, "Изменён состав участников", b.users[0]?.id, b, act);
       });
+      if (!shouldSkipCrmKanbanTelegram(kaitenId)) {
+        const base = ["Канбан CRM", `Карточка: ${titleLine}`];
+        const added = pickerIds.filter((id) => !prevPart.includes(id));
+        const removed = prevPart.filter((id) => !pickerIds.includes(id));
+        if (added.length) {
+          postKanbanCrmTelegramNotify({
+            kaitenCardId: kaitenId,
+            event: "tg_person_added_to_card",
+            targetUserIds: added,
+            lines: [...base, "Вас добавили в карточку как участника"],
+          });
+        }
+        if (removed.length) {
+          postKanbanCrmTelegramNotify({
+            kaitenCardId: kaitenId,
+            event: "tg_person_removed_from_card",
+            targetUserIds: removed,
+            lines: [...base, "Вы исключены из участников карточки"],
+          });
+        }
+      }
     }
     setPickerMode(null);
   };
@@ -343,6 +422,36 @@ export function KanbanCardModal({
       });
       pushActivity(c, "Комментарий", actor, b, act);
     });
+    if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
+      const actor = chatActorUserId || board.users[0]?.id || "";
+      const authorName =
+        crmById.get(actor)?.displayName ??
+        userNameById(board, actor) ??
+        "Пользователь";
+      const lines = [
+        "Канбан CRM",
+        `Карточка: ${(card.title || "").trim() || "Без названия"}`,
+        `От: ${authorName}`,
+        trimmed.slice(0, 900),
+      ];
+      const mentioned = parseMentionUserIdsFromText(trimmed, crmList).filter(
+        (id) => id !== actor,
+      );
+      if (mentioned.length) {
+        postKanbanCrmTelegramNotify({
+          kaitenCardId: card.kaitenCardId,
+          event: "tg_mentioned_in_comment",
+          targetUserIds: mentioned,
+          lines,
+        });
+      }
+      postKanbanCrmTelegramNotify({
+        kaitenCardId: card.kaitenCardId,
+        event: "tg_comment_added",
+        lines,
+        broadcastExcludeUserIds: mentioned,
+      });
+    }
     if (
       card.linkedOrderId &&
       (isOrderChatCorrectionTrigger(trimmed) ||
@@ -691,6 +800,17 @@ export function KanbanCardModal({
                     const fc = findCard(b, cardId);
                     if (!fc) return;
                     performUnblock(fc.card, b, act);
+                    if (!shouldSkipCrmKanbanTelegram(fc.card.kaitenCardId)) {
+                      postKanbanCrmTelegramNotify({
+                        kaitenCardId: fc.card.kaitenCardId,
+                        event: "tg_card_unblocked",
+                        lines: [
+                          "Канбан CRM",
+                          `Карточка: ${(fc.card.title || "").trim() || "Без названия"}`,
+                          "Блокировка снята",
+                        ],
+                      });
+                    }
                   });
                 } else openBlockPopup();
               }}
@@ -900,6 +1020,18 @@ export function KanbanCardModal({
                         fc.card.dueDate = v;
                         pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
                       });
+                      if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
+                        const titleLine = (card.title || "").trim() || "Без названия";
+                        postKanbanCrmTelegramNotify({
+                          kaitenCardId: card.kaitenCardId,
+                          event: "tg_due_changed",
+                          lines: [
+                            "Канбан CRM",
+                            `Карточка: ${titleLine}`,
+                            v ? `Новый срок: ${v}` : "Срок сброшен",
+                          ],
+                        });
+                      }
                     }}
                   />
                   <button
@@ -969,6 +1101,17 @@ export function KanbanCardModal({
                           fc.card.description = descDraft;
                           pushActivity(fc.card, "Обновлено описание", b.users[0]?.id, b, act);
                         });
+                        if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
+                          postKanbanCrmTelegramNotify({
+                            kaitenCardId: card.kaitenCardId,
+                            event: "tg_description_changed",
+                            lines: [
+                              "Канбан CRM",
+                              `Карточка: ${(card.title || "").trim() || "Без названия"}`,
+                              "Изменено описание карточки",
+                            ],
+                          });
+                        }
                       })();
                     }}
                   />
@@ -1381,6 +1524,46 @@ function buildChatRenderBlocks(comments: CardComment[], card: KanbanCard): ChatR
   return out;
 }
 
+type ChatMentionDraft = { start: number; end: number; query: string };
+
+type ChatMentionOption = {
+  id: string;
+  label: string;
+  insertText: string;
+  searchText: string;
+};
+
+function sanitizeMentionToken(raw: string): string {
+  return raw
+    .replace(/^@+/, "")
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}._-]/gu, "")
+    .trim();
+}
+
+function detectMentionDraft(text: string, caretPos: number): ChatMentionDraft | null {
+  const caret = Math.max(0, Math.min(caretPos, text.length));
+  const before = text.slice(0, caret);
+  const at = before.lastIndexOf("@");
+  if (at < 0) return null;
+  if (at > 0 && /[\p{L}\p{N}_]/u.test(before[at - 1])) {
+    return null;
+  }
+  const token = before.slice(at + 1);
+  if (/\s/.test(token)) return null;
+  return { start: at, end: caret, query: token.toLowerCase() };
+}
+
+function fallbackMentionToken(row: KanbanCrmUserRow | { name: string }): string {
+  if ("email" in row) {
+    const local = (row.email || "").split("@")[0] || "";
+    const byEmail = sanitizeMentionToken(local);
+    if (byEmail) return byEmail;
+    return sanitizeMentionToken(row.displayName);
+  }
+  return sanitizeMentionToken(row.name);
+}
+
 function ChatPanel({
   card,
   board,
@@ -1396,10 +1579,13 @@ function ChatPanel({
   onFilesDropped: (files: File[]) => void | Promise<void>;
   onOpenAttachment: (f: CardFile) => void;
 }) {
-  const { byId: crmChatById } = useKanbanCrmUsers();
+  const { byId: crmChatById, list: crmChatList } = useKanbanCrmUsers();
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [inp, setInp] = useState("");
+  const [caretPos, setCaretPos] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const chatAuthorName = (userId: string, authorLabel?: string) => {
     const lab = (authorLabel ?? "").trim();
     if (lab) return lab;
@@ -1413,6 +1599,38 @@ function ChatPanel({
     () => buildChatRenderBlocks(card.comments || [], card),
     [card.comments, card.files, card.id],
   );
+  const mentionOptions = useMemo<ChatMentionOption[]>(() => {
+    const merged = mergeKanbanPickerUsers(crmChatList, board.users);
+    return merged
+      .map((row) => {
+        const label = pickerRowLabel(row);
+        const token =
+          "mentionHandle" in row
+            ? sanitizeMentionToken(row.mentionHandle || "") || fallbackMentionToken(row)
+            : fallbackMentionToken(row);
+        if (!token) return null;
+        const emailPart = "email" in row ? row.email || "" : "";
+        return {
+          id: row.id,
+          label,
+          insertText: `@${token}`,
+          searchText: `${label} ${emailPart} ${token}`.toLowerCase(),
+        };
+      })
+      .filter((x): x is ChatMentionOption => x != null);
+  }, [crmChatList, board.users]);
+  const mentionDraft = useMemo(
+    () => detectMentionDraft(inp, caretPos),
+    [inp, caretPos],
+  );
+  const mentionFiltered = useMemo(() => {
+    if (!mentionDraft) return [];
+    const q = mentionDraft.query.trim();
+    const base = q
+      ? mentionOptions.filter((x) => x.searchText.includes(q))
+      : mentionOptions;
+    return base.slice(0, 8);
+  }, [mentionDraft, mentionOptions]);
 
   const lastChatCardIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1435,8 +1653,34 @@ function ChatPanel({
     const v = inp.trim();
     if (!v) return;
     const ok = await Promise.resolve(onSend(v));
-    if (ok) setInp("");
+    if (ok) {
+      setInp("");
+      setCaretPos(0);
+      setMentionIndex(0);
+    }
   };
+  const applyMention = useCallback(
+    (opt: ChatMentionOption) => {
+      if (!mentionDraft) return;
+      const before = inp.slice(0, mentionDraft.start);
+      const after = inp.slice(mentionDraft.end);
+      const next = `${before}${opt.insertText} ${after}`;
+      const nextCaret = before.length + opt.insertText.length + 1;
+      setInp(next);
+      setCaretPos(nextCaret);
+      setMentionIndex(0);
+      requestAnimationFrame(() => {
+        if (!inputRef.current) return;
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(nextCaret, nextCaret);
+      });
+    },
+    [inp, mentionDraft],
+  );
+
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionDraft?.start, mentionDraft?.query]);
 
   return (
     <div
@@ -1535,14 +1779,48 @@ function ChatPanel({
           );
         })}
       </div>
-      <div className="flex gap-1 border-t border-[var(--kaiten-modal-border)] p-2">
+      <div className="relative flex gap-1 border-t border-[var(--kaiten-modal-border)] p-2">
+        {mentionFiltered.length > 0 ? (
+          <div className="absolute bottom-[calc(100%+4px)] left-2 right-2 z-20 max-h-56 overflow-y-auto rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-1 shadow-xl">
+            {mentionFiltered.map((opt, idx) => (
+              <button
+                key={`${opt.id}-${opt.insertText}`}
+                type="button"
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.78rem] ${
+                  idx === mentionIndex
+                    ? "bg-[var(--kaiten-modal-control)] text-[var(--kaiten-accent)]"
+                    : "text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-control)]"
+                }`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  applyMention(opt);
+                }}
+              >
+                <span className="truncate">{opt.label}</span>
+                <span className="ml-3 shrink-0 text-[0.72rem] text-[var(--kaiten-modal-muted)]">
+                  {opt.insertText}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <input
+          ref={inputRef}
           type="text"
           className="min-w-0 flex-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)] placeholder:text-[var(--kaiten-modal-muted)]"
           placeholder="Сообщение в чат (в т.ч. обсуждение файлов)…"
           disabled={blocked}
           value={inp}
-          onChange={(e) => setInp(e.target.value)}
+          onChange={(e) => {
+            setInp(e.target.value);
+            setCaretPos(e.target.selectionStart ?? e.target.value.length);
+          }}
+          onClick={(e) => {
+            setCaretPos(e.currentTarget.selectionStart ?? inp.length);
+          }}
+          onSelect={(e) => {
+            setCaretPos(e.currentTarget.selectionStart ?? inp.length);
+          }}
           onPaste={(e) => {
             const files = e.clipboardData?.files;
             if (files?.length) {
@@ -1551,6 +1829,27 @@ function ChatPanel({
             }
           }}
           onKeyDown={(e) => {
+            if (mentionFiltered.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setMentionIndex((v) => (v + 1) % mentionFiltered.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setMentionIndex((v) =>
+                  v <= 0 ? mentionFiltered.length - 1 : v - 1,
+                );
+                return;
+              }
+              if (e.key === "Tab" || e.key === "Enter") {
+                e.preventDefault();
+                applyMention(
+                  mentionFiltered[Math.min(mentionIndex, mentionFiltered.length - 1)],
+                );
+                return;
+              }
+            }
             if (e.key === "Enter") {
               e.preventDefault();
               void submitMessage();
