@@ -52,6 +52,7 @@ import { detailLinesAndBridgesToConstructionsJson } from "@/lib/detail-lines-to-
 import { constructionsFromQuickOrder } from "@/lib/quick-order-constructions";
 import {
   loadQuickOrderTemplate,
+  loadQuickOrderTemplateFromDb,
   quickOrderTemplateAsNewOrderDefaults,
   saveQuickOrderTemplate,
 } from "@/lib/quick-order-template-storage";
@@ -86,6 +87,7 @@ import {
   earliestDueGridLocalFromCreatedAt,
   snapDatetimeLocalToDueGrid,
 } from "@/lib/order-due-datetime";
+import { writeClientState } from "@/lib/client-state-client";
 
 type DoctorRow = {
   id: string;
@@ -187,6 +189,7 @@ export function NewOrderForm({
     }
     return mergeQuickOrderFromSnapshot();
   });
+  const quickOrderTemplateHydratedRef = useRef(false);
   const [detailLines, setDetailLines] = useState<DetailLine[]>([]);
   const [bridgeLines, setBridgeLines] = useState<BridgeLineInput[]>([]);
   const [prosthetics, setProsthetics] = useState<OrderProstheticsV1>(() =>
@@ -450,7 +453,18 @@ export function NewOrderForm({
     return registerPanelSnapshot(panelId, () => orderDraftSnapshot);
   }, [panelId, registerPanelSnapshot, orderDraftSnapshot]);
 
-  /** Шаблон плашек для следующих окон «Новый наряд» (браузер, localStorage). */
+  /** Шаблон плашек для следующих окон «Новый наряд» (серверное user-state). */
+  useEffect(() => {
+    if (initialSnapshot != null) return;
+    if (quickOrderTemplateHydratedRef.current) return;
+    quickOrderTemplateHydratedRef.current = true;
+    void (async () => {
+      const tpl = await loadQuickOrderTemplateFromDb();
+      if (!tpl) return;
+      setQuickOrder(quickOrderTemplateAsNewOrderDefaults(tpl));
+    })();
+  }, [initialSnapshot]);
+
   useEffect(() => {
     if (quickOrder.tiles.length === 0) return;
     const t = window.setTimeout(() => {
@@ -774,11 +788,7 @@ export function NewOrderForm({
               typeof kData.error === "string"
                 ? kData.error
                 : "Не удалось создать карточку Kaiten. Наряд уже сохранён в CRM.";
-            try {
-              sessionStorage.setItem(`kaiten-new-order-warn-${newId}`, msg);
-            } catch {
-              /* ignore */
-            }
+            void writeClientState("user", `kaitenNewOrderWarn:${newId}`, msg);
             setKaitenModalOpen(false);
             setContinuationChoice(null);
             router.push(`/orders/${newId}`);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { UserRole } from "@prisma/client";
 import { getPrisma } from "@/lib/get-prisma";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
-import { canManageUsers } from "@/lib/auth/permissions";
+import { canInviteUsers } from "@/lib/auth/permissions";
 import { hashSecret } from "@/lib/auth/password";
 import { generateInviteCodePlain } from "@/lib/auth/invite-code";
 import { INVITABLE_ROLES } from "@/lib/user-role-labels";
@@ -11,11 +11,11 @@ import {
   placeholderEmailFromNormalizedPhone,
 } from "@/lib/phone-normalize";
 import { sendInviteActivationEmail } from "@/lib/email/send-invite-email";
+import { PLACEHOLDER_INVITED_DISPLAY_NAME } from "@/lib/user-invite-defaults";
 
 type Body = {
   email?: string;
   phone?: string;
-  displayName?: string;
   role?: string;
 };
 
@@ -29,7 +29,7 @@ function isInvitableRole(r: string): r is UserRole {
 
 export async function POST(req: Request) {
   const { session: s, access } = await getSessionWithModuleAccess();
-  if (!s || !canManageUsers(s.role, access ?? undefined)) {
+  if (!s || !canInviteUsers(s.role, access ?? undefined)) {
     return NextResponse.json(
       { error: "Нет права на приглашение пользователей" },
       { status: 403 },
@@ -43,14 +43,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const displayName = (body.displayName ?? "").trim();
   const roleRaw = String(body.role ?? "").trim();
   const phoneRaw = String(body.phone ?? "").trim();
   const email = normEmail(body.email ?? "");
 
-  if (!displayName) {
-    return NextResponse.json({ error: "Укажите ФИО" }, { status: 400 });
-  }
   if (!isInvitableRole(roleRaw)) {
     return NextResponse.json({ error: "Выберите роль из списка" }, { status: 400 });
   }
@@ -106,7 +102,7 @@ export async function POST(req: Request) {
         tenantId: inviter1.tenantId,
         email: emailForRow,
         phone: norm,
-        displayName,
+        displayName: PLACEHOLDER_INVITED_DISPLAY_NAME,
         role: roleRaw,
         inviteCodeHash: null,
         passwordHash: null,
@@ -114,7 +110,6 @@ export async function POST(req: Request) {
       },
       update: {
         phone: norm,
-        displayName,
         role: roleRaw,
         inviteCodeHash: null,
         passwordHash: null,
@@ -169,14 +164,13 @@ export async function POST(req: Request) {
     create: {
       tenantId: inviter2.tenantId,
       email,
-      displayName,
+      displayName: PLACEHOLDER_INVITED_DISPLAY_NAME,
       role: roleRaw,
       inviteCodeHash,
       passwordHash: null,
       isActive: true,
     },
     update: {
-      displayName,
       role: roleRaw,
       inviteCodeHash,
       passwordHash: null,
@@ -186,7 +180,7 @@ export async function POST(req: Request) {
 
   const mail = await sendInviteActivationEmail({
     to: email,
-    displayName,
+    displayName: PLACEHOLDER_INVITED_DISPLAY_NAME,
     inviteCode: invitePlain,
   });
 

@@ -1,8 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  CRM_UPLOAD_MAX_BYTES,
+  CRM_UPLOAD_TOO_LARGE_MESSAGE,
+} from "@/lib/crm-upload-limits";
 
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 
 type AttachmentMeta = {
   id: string;
@@ -60,7 +64,12 @@ export function OrderFilesPanel({
 
   const addPending = useCallback(
     (files: FileList | File[]) => {
-      const arr = Array.from(files).filter((f) => f.size > 0 && f.size <= MAX_BYTES);
+      const raw = Array.from(files);
+      const arr = raw.filter((f) => f.size > 0 && f.size <= MAX_BYTES);
+      const tooLargeFound = raw.some((f) => f.size > MAX_BYTES);
+      if (tooLargeFound) {
+        setLoadError(CRM_UPLOAD_TOO_LARGE_MESSAGE);
+      }
       if (arr.length === 0) return;
       if (!onPendingChange) return;
       const cur = pendingFiles ?? [];
@@ -87,7 +96,10 @@ export function OrderFilesPanel({
       setLoadError(null);
       try {
         for (const file of arr) {
-          if (file.size <= 0 || file.size > MAX_BYTES) continue;
+          if (file.size <= 0) continue;
+          if (file.size > MAX_BYTES) {
+            throw new Error(CRM_UPLOAD_TOO_LARGE_MESSAGE);
+          }
           const safeName = encodeURIComponent(file.name || "file");
           const res = await fetch(`/api/orders/${orderId}/attachments`, {
             method: "POST",

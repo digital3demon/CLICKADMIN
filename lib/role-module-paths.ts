@@ -8,6 +8,7 @@ type Rule = { prefix: string; module: AppModule };
  */
 const RULES: Rule[] = [
   { prefix: "/directory/users", module: "CONFIG_USERS" },
+  { prefix: "/api/users/invite", module: "CONFIG_USER_INVITES" },
   { prefix: "/api/users", module: "CONFIG_USERS" },
   { prefix: "/directory/costing", module: "CONFIG_COSTING" },
   { prefix: "/api/costing", module: "CONFIG_COSTING" },

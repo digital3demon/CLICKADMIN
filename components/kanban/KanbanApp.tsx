@@ -8,6 +8,7 @@ import type {
 } from "@/lib/kanban/types";
 import { runKanbanAutomations } from "@/lib/kanban/automations";
 import {
+  canUserAccessBoard,
   applyKaitenApiCardTypesToMirrorBoards,
   buildKanbanDisplayView,
   countActiveKanbanFilters,
@@ -44,6 +45,7 @@ import {
 import { kanbanLinkedOrdersPullIntervalMs } from "@/lib/kanban-linked-pull-ms";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
+import { readClientState, writeClientState } from "@/lib/client-state-client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -90,6 +92,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const kaitenPullOnceRef = useRef(false);
   const standalonePushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const standalonePushInFlightRef = useRef(false);
+  const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Перед первым GET отдаём локальные карточки без наряда на сервер — иначе пустой ответ затрёт их. */
   const standalonePrimedRef = useRef(false);
   const router = useRouter();
@@ -195,8 +198,47 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo]);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
+      const scope = isDemo ? "user" : "tenant";
+      const remote = await readClientState<unknown>(scope, key);
+      if (cancelled || !remote || typeof remote !== "object") return;
+      setAppState((prev) => {
+        if (!prev) return prev;
+        const currentCard = cardModalId;
+        const merged = isDemo
+          ? normalizeDemoKanbanAppState(remote as KanbanAppState)
+          : (remote as KanbanAppState);
+        if (currentCard && !findCardInAppState(merged, currentCard)) {
+          setCardModalId(null);
+        }
+        saveKanbanState(merged, isDemo);
+        return merged;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemo]);
+
+  useEffect(() => {
     if (!appState) return;
     saveKanbanState(appState, isDemo);
+    if (kanbanStateSaveTimerRef.current) {
+      clearTimeout(kanbanStateSaveTimerRef.current);
+    }
+    kanbanStateSaveTimerRef.current = setTimeout(() => {
+      kanbanStateSaveTimerRef.current = null;
+      const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
+      const scope = isDemo ? "user" : "tenant";
+      void writeClientState(scope, key, appState);
+    }, 350);
+    return () => {
+      if (kanbanStateSaveTimerRef.current) {
+        clearTimeout(kanbanStateSaveTimerRef.current);
+      }
+    };
   }, [appState, isDemo]);
 
   useEffect(() => {
@@ -299,6 +341,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     () => (appState ? getActiveBoard(appState) : null),
     [appState],
   );
+  const visibleBoards = useMemo(() => {
+    if (!appState) return [];
+    return appState.boards.filter((b) => canUserAccessBoard(b, kanbanSessionUserId));
+  }, [appState, kanbanSessionUserId]);
   const searchView = useMemo(
     () =>
       appState
@@ -472,6 +518,19 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!appState) return;
+    if (isKanbanAggregateBoardId(appState.activeBoardId)) return;
+    if (canUserAccessBoard(getActiveBoard(appState), kanbanSessionUserId)) return;
+    const nextBoardId = appState.boards.find((b) =>
+      canUserAccessBoard(b, kanbanSessionUserId),
+    )?.id;
+    if (!nextBoardId) return;
+    patchApp((s) => {
+      s.activeBoardId = nextBoardId;
+    });
+  }, [appState, kanbanSessionUserId, patchApp]);
 
   const aggregateView =
     Boolean(appState) && isKanbanAggregateBoardId(appState!.activeBoardId);
@@ -733,8 +792,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               className="min-h-[2.75rem] w-full min-w-0 max-w-full rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2.5 py-2 text-[0.875rem] font-semibold text-[var(--kanban-text)] max-md:max-w-[min(100%,18rem)] sm:min-w-[10rem] sm:max-w-[min(100vw-10rem,32rem)] sm:shrink sm:grow"
               value={
                 isKanbanAggregateBoardId(appState.activeBoardId)
-                  ? (appState.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
-                      appState.boards[0]?.id ??
+                  ? (visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
+                      visibleBoards[0]?.id ??
                       "")
                   : appState.activeBoardId
               }
@@ -748,7 +807,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 if (label) showToast(`Доска: ${label}`);
               }}
             >
-              {appState.boards.map((b) => (
+              {visibleBoards.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.title}
                 </option>
@@ -777,6 +836,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               }`}
               onClick={() => {
                 patchApp((s) => {
+                  if (!visibleBoards.length) return;
                   s.activeBoardId = KANBAN_BOARD_MY_CARDS_ID;
                 });
                 showToast("Доска: Мои");
@@ -793,6 +853,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               }`}
               onClick={() => {
                 patchApp((s) => {
+                  if (!visibleBoards.length) return;
                   s.activeBoardId = KANBAN_BOARD_DISTRIBUTE_ID;
                 });
                 showToast("Доска: Распределить");
@@ -992,7 +1053,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             >
               <option value="">— Выберите доску —</option>
               {appState.boards
-                .filter((b) => b.id !== appState.activeBoardId)
+                .filter(
+                  (b) =>
+                    b.id !== appState.activeBoardId &&
+                    canUserAccessBoard(b, kanbanSessionUserId),
+                )
                 .map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.title}

@@ -5,6 +5,7 @@ export const ALL_USER_ROLES: readonly UserRole[] = [
   "OWNER",
   "ADMINISTRATOR",
   "SENIOR_ADMINISTRATOR",
+  "MANAGER",
   "ACCOUNTANT",
   "FINANCIAL_MANAGER",
   "USER",
@@ -18,6 +19,7 @@ export function parseUserRole(raw: unknown): UserRole | null {
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   ADMINISTRATOR: "Администратор",
   SENIOR_ADMINISTRATOR: "Старший администратор",
+  MANAGER: "Руководитель",
   ACCOUNTANT: "Бухгалтер",
   FINANCIAL_MANAGER: "Финансовый менеджер",
   USER: "Пользователь (только канбан)",
@@ -28,6 +30,7 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
 export const INVITABLE_ROLES: readonly UserRole[] = [
   "ADMINISTRATOR",
   "SENIOR_ADMINISTRATOR",
+  "MANAGER",
   "ACCOUNTANT",
   "FINANCIAL_MANAGER",
   "USER",

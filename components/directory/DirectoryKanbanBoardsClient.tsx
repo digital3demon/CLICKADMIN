@@ -1,5 +1,6 @@
 "use client";
 
+import type { UserRole } from "@prisma/client";
 import type { KanbanBoard } from "@/lib/kanban/types";
 import {
   clearKanbanBrowserStorage,
@@ -22,8 +23,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KanbanAutomationsForm } from "@/components/kanban/KanbanAutomationsForm";
 import { KanbanBoardSettingsForm } from "@/components/kanban/KanbanBoardSettingsForm";
 import { IconBoard, IconPlus } from "@/components/kanban/kanban-icons";
+import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 type ToastItem = { id: string; text: string; err?: boolean };
+type CrmUserPick = { id: string; displayName: string; email: string };
 
 function loadKanbanStateForDirectory(isDemo: boolean) {
   const raw = isDemo
@@ -38,7 +41,13 @@ function loadKanbanStateForDirectory(isDemo: boolean) {
   return next;
 }
 
-export function DirectoryKanbanBoardsClient({ isDemo = false }: { isDemo?: boolean }) {
+export function DirectoryKanbanBoardsClient({
+  isDemo = false,
+  sessionRole,
+}: {
+  isDemo?: boolean;
+  sessionRole: UserRole;
+}) {
   const [appState, setAppState] = useState(() => loadKanbanStateForDirectory(isDemo));
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirm, setConfirm] = useState<{
@@ -46,10 +55,68 @@ export function DirectoryKanbanBoardsClient({ isDemo = false }: { isDemo?: boole
     onOk: () => void;
   } | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const canSetPrivateBoards =
+    !isDemo && (sessionRole === "OWNER" || sessionRole === "MANAGER");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+  const [createPrivate, setCreatePrivate] = useState(false);
+  const [crmUsers, setCrmUsers] = useState<CrmUserPick[]>([]);
+  const [pickedUserIds, setPickedUserIds] = useState<string[]>([]);
 
   useEffect(() => {
     saveKanbanState(appState, isDemo);
+    const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
+    const scope = isDemo ? "user" : "tenant";
+    void writeClientState(scope, key, appState);
   }, [appState, isDemo]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
+      const scope = isDemo ? "user" : "tenant";
+      const remote = await readClientState<unknown>(scope, key);
+      if (cancelled || !remote || typeof remote !== "object") return;
+      setAppState(remote as ReturnType<typeof loadKanbanStateForDirectory>);
+      saveKanbanState(remote as ReturnType<typeof loadKanbanStateForDirectory>, isDemo);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemo]);
+
+  useEffect(() => {
+    if (!canSetPrivateBoards) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/kanban/crm-users", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const j = (await res.json().catch(() => ({}))) as {
+          users?: Array<{ id: string; displayName: string; email: string }>;
+        };
+        if (cancelled) return;
+        const rows = Array.isArray(j.users) ? j.users : [];
+        setCrmUsers(
+          rows
+            .filter((u) => typeof u.id === "string" && u.id.trim())
+            .map((u) => ({
+              id: u.id,
+              displayName: u.displayName || u.email || "Пользователь",
+              email: u.email || "",
+            })),
+        );
+      } catch {
+        if (!cancelled) setCrmUsers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canSetPrivateBoards]);
 
   const board = useMemo(() => getActiveBoard(appState), [appState]);
 
@@ -112,23 +179,39 @@ export function DirectoryKanbanBoardsClient({ isDemo = false }: { isDemo?: boole
     reader.readAsText(file);
   };
 
-  const resetAll = () => {
-    setConfirm({
-      message: isDemo
-        ? "Сбросить канбан демо? Останется одна доска «Работы» без лишних карточек."
-        : "Сбросить всё к начальному примеру? Текущие данные будут потеряны.",
-      onOk: () => {
-        clearKanbanBrowserStorage(isDemo);
-        setAppState(isDemo ? demoKanbanDefaultState() : defaultAppState());
-        showToast("Состояние сброшено");
-        setConfirm(null);
-      },
-    });
-  };
-
   const saveNormalized = () => {
     applyToBoard((b) => normalizeBoardCardTypes(b));
     showToast("Настройки доски сохранены");
+  };
+
+  const openCreateModal = () => {
+    setCreateTitle(`Доска ${appState.boards.length + 1}`);
+    setCreatePrivate(false);
+    setPickedUserIds([]);
+    setCreateOpen(true);
+  };
+
+  const createBoard = () => {
+    const title = createTitle.trim();
+    if (!title) {
+      showToast("Введите название доски", true);
+      return;
+    }
+    if (createPrivate && pickedUserIds.length < 1) {
+      showToast("Для закрытой доски выберите хотя бы одного пользователя", true);
+      return;
+    }
+    const nb = createInitialBoard();
+    nb.id = generateId("board");
+    nb.title = title;
+    nb.isPrivate = createPrivate;
+    nb.accessUserIds = createPrivate ? [...pickedUserIds] : [];
+    patchApp((s) => {
+      s.boards.push(nb);
+      s.activeBoardId = nb.id;
+    });
+    setCreateOpen(false);
+    showToast(createPrivate ? "Создана закрытая доска" : "Создана новая доска");
   };
 
   return (
@@ -184,6 +267,11 @@ export function DirectoryKanbanBoardsClient({ isDemo = false }: { isDemo?: boole
                 >
                   <IconBoard aria-hidden />
                   {b.title}
+                  {b.isPrivate ? (
+                    <span className="ml-2 rounded border border-amber-500/40 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+                      Закрытая
+                    </span>
+                  ) : null}
                 </button>
               </li>
             ))}
@@ -193,16 +281,7 @@ export function DirectoryKanbanBoardsClient({ isDemo = false }: { isDemo?: boole
               <button
                 type="button"
                 className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
-                onClick={() => {
-                  const nb = createInitialBoard();
-                  nb.id = generateId("board");
-                  nb.title = `Доска ${appState.boards.length + 1}`;
-                  patchApp((s) => {
-                    s.boards.push(nb);
-                    s.activeBoardId = nb.id;
-                  });
-                  showToast("Создана новая доска");
-                }}
+                onClick={openCreateModal}
               >
                 <IconPlus /> Новая доска
               </button>
@@ -272,7 +351,6 @@ export function DirectoryKanbanBoardsClient({ isDemo = false }: { isDemo?: boole
           </h2>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             Экспорт и импорт JSON относятся к <strong>активной</strong> доске.
-            Сброс удаляет все локальные доски канбана в этом браузере.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -304,16 +382,106 @@ export function DirectoryKanbanBoardsClient({ isDemo = false }: { isDemo?: boole
                 />
               </>
             ) : null}
-            <button
-              type="button"
-              className="rounded-md border border-red-800/40 bg-red-50 px-3 py-2 text-sm text-red-900 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-950/60"
-              onClick={resetAll}
-            >
-              Сброс данных канбана
-            </button>
           </div>
         </section>
       </div>
+
+      {createOpen ? (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/45 p-4"
+          role="dialog"
+          aria-modal
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setCreateOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-[var(--app-text)] shadow-xl"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3 className="m-0 text-base font-semibold">Новая доска</h3>
+            <label className="mt-3 block text-sm">
+              <span className="mb-1 block text-[var(--text-secondary)]">Название</span>
+              <input
+                type="text"
+                value={createTitle}
+                onChange={(e) => setCreateTitle(e.target.value)}
+                className="w-full rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--app-text)]"
+                autoFocus
+              />
+            </label>
+            {canSetPrivateBoards ? (
+              <>
+                <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={createPrivate}
+                    onChange={(e) => {
+                      setCreatePrivate(e.target.checked);
+                      if (!e.target.checked) setPickedUserIds([]);
+                    }}
+                  />
+                  Закрытая доска
+                </label>
+                {createPrivate ? (
+                  <div className="mt-3 rounded-md border border-[var(--card-border)] p-3">
+                    <p className="m-0 text-xs text-[var(--text-secondary)]">
+                      Выберите пользователей, у кого будет доступ к доске.
+                    </p>
+                    <div className="mt-2 max-h-44 space-y-1 overflow-y-auto">
+                      {crmUsers.map((u) => {
+                        const checked = pickedUserIds.includes(u.id);
+                        return (
+                          <label
+                            key={u.id}
+                            className="flex cursor-pointer items-center justify-between gap-3 rounded px-2 py-1.5 text-sm hover:bg-[var(--surface-hover)]"
+                          >
+                            <span className="truncate">
+                              {u.displayName}
+                              {u.email ? (
+                                <span className="ml-1 text-xs text-[var(--text-muted)]">
+                                  ({u.email})
+                                </span>
+                              ) : null}
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                setPickedUserIds((prev) =>
+                                  e.target.checked
+                                    ? [...prev, u.id]
+                                    : prev.filter((id) => id !== u.id),
+                                );
+                              }}
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-[var(--card-border)] px-4 py-2 text-sm hover:bg-[var(--surface-hover)]"
+                onClick={() => setCreateOpen(false)}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-95"
+                onClick={createBoard}
+              >
+                Создать
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {confirm && (
         <div

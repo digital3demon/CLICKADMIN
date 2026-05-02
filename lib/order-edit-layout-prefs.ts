@@ -1,9 +1,10 @@
 /**
  * Персональная раскладка блоков формы редактирования наряда (страница заказа).
- * Хранится в localStorage по id пользователя из /api/auth/session.
+ * Локальный runtime-кеш; постоянное хранение делает серверный client-state слой.
  */
 
 export const ORDER_EDIT_LAYOUT_STORAGE_KEY = "dental-lab.orderEditLayout.v1";
+const layoutMemory = new Map<string, OrderEditLayoutV1>();
 
 export type OrderEditBlockId =
   | "topCustomer"
@@ -269,36 +270,21 @@ export function storageKeyForUser(userId: string | null): string {
 }
 
 export function loadOrderEditLayout(userId: string | null): OrderEditLayoutV1 {
-  if (typeof window === "undefined") return defaultOrderEditLayout();
-  try {
-    const raw = localStorage.getItem(storageKeyForUser(userId));
-    if (!raw) return defaultOrderEditLayout();
-    const j = JSON.parse(raw) as unknown;
-    return normalizeLayout(j);
-  } catch {
-    return defaultOrderEditLayout();
-  }
+  const key = storageKeyForUser(userId);
+  return layoutMemory.get(key) ?? defaultOrderEditLayout();
 }
 
 export function saveOrderEditLayout(
   userId: string | null,
   layout: OrderEditLayoutV1,
 ): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(storageKeyForUser(userId), JSON.stringify(layout));
-  } catch {
-    /* ignore quota */
-  }
+  const key = storageKeyForUser(userId);
+  layoutMemory.set(key, normalizeLayout(layout));
 }
 
 export function clearOrderEditLayout(userId: string | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(storageKeyForUser(userId));
-  } catch {
-    /* ignore */
-  }
+  const key = storageKeyForUser(userId);
+  layoutMemory.delete(key);
 }
 
 export type OrderEditRowKey = "row1" | "row2" | "row3" | "row4";

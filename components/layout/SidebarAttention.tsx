@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { AttentionReminder } from "@/lib/attention-reminders";
+import { readClientState, writeClientState } from "@/lib/client-state-client";
 
-/** localStorage: «1» — список развёрнут, «0» — свёрнут. */
-const ATTENTION_LIST_OPEN_KEY = "dental-lab-attention-list-open" as const;
+const ATTENTION_LIST_OPEN_KEY = "sidebarAttentionListOpenV1" as const;
 
 export function SidebarAttention() {
   const pathname = usePathname();
@@ -42,23 +42,22 @@ export function SidebarAttention() {
   }, [pathname]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(ATTENTION_LIST_OPEN_KEY);
-      if (raw === "0") setListOpen(false);
-      else if (raw === "1") setListOpen(true);
-    } catch {
-      /* ignore */
-    }
-    setHydrated(true);
+    let cancelled = false;
+    void (async () => {
+      const raw = await readClientState<unknown>("user", ATTENTION_LIST_OPEN_KEY);
+      if (cancelled) return;
+      if (raw === "0" || raw === 0 || raw === false) setListOpen(false);
+      if (raw === "1" || raw === 1 || raw === true) setListOpen(true);
+      setHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    try {
-      localStorage.setItem(ATTENTION_LIST_OPEN_KEY, listOpen ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
+    void writeClientState("user", ATTENTION_LIST_OPEN_KEY, listOpen ? "1" : "0");
   }, [listOpen, hydrated]);
 
   const toggleList = useCallback(() => {

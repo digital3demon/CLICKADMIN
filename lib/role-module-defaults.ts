@@ -25,6 +25,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CONFIG_COURIERS",
   "CONFIG_COSTING",
   "CONFIG_USERS",
+  "CONFIG_USER_INVITES",
 ];
 
 export const APP_MODULE_LABELS: Record<AppModule, string> = {
@@ -44,12 +45,14 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CONFIG_COURIERS: "Конфиг: курьеры",
   CONFIG_COSTING: "Просчёт работ",
   CONFIG_USERS: "Пользователи",
+  CONFIG_USER_INVITES: "Приглашения пользователей",
 };
 
 /** Все роли, кроме владельца (у владельца по определению полный доступ). */
 export const ROLES_IN_ACCESS_MATRIX: UserRole[] = [
   "ADMINISTRATOR",
   "SENIOR_ADMINISTRATOR",
+  "MANAGER",
   "ACCOUNTANT",
   "FINANCIAL_MANAGER",
   "USER",
@@ -68,6 +71,9 @@ export function defaultModuleAllowed(
   }
   if (role === "USER") {
     return module === "KANBAN";
+  }
+  if (role === "MANAGER") {
+    return module !== "CONFIG_USER_INVITES";
   }
 
   const sameAsOrders = (m: AppModule) =>
@@ -94,6 +100,8 @@ export function defaultModuleAllowed(
       return true;
     case "CONFIG_COSTING":
     case "CONFIG_USERS":
+      return false;
+    case "CONFIG_USER_INVITES":
       return false;
     default:
       return true;

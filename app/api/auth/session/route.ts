@@ -3,6 +3,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { getPrisma } from "@/lib/get-prisma";
 import { getEffectiveModuleAccess, moduleAccessForResponse } from "@/lib/role-module-resolver";
+import { getSessionTenantRouting } from "@/lib/auth/tenant-for-session";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,8 @@ export async function GET() {
   let avatarPresetId: string | null = null;
   let mentionHandle: string | null = null;
   let avatarCustomUploadedAt: string | null = null;
+  let tenantDatabaseEnabled = false;
+  let tenantDatabaseReady = false;
   try {
     const db = await getPrisma();
     const row = await db.user.findUnique({
@@ -31,6 +34,11 @@ export async function GET() {
   } catch {
     /* prisma / колонки — игнорируем, сессия всё равно валидна */
   }
+  const routing = await getSessionTenantRouting(s).catch(() => null);
+  if (routing) {
+    tenantDatabaseEnabled = routing.tenantDatabaseEnabled;
+    tenantDatabaseReady = routing.tenantDatabaseReady;
+  }
 
   const mod = await getEffectiveModuleAccess(s.tid, s.role);
   return NextResponse.json({
@@ -42,6 +50,8 @@ export async function GET() {
       avatarPresetId,
       mentionHandle,
       avatarCustomUploadedAt,
+      tenantDatabaseEnabled,
+      tenantDatabaseReady,
       moduleAccess: moduleAccessForResponse(mod),
     },
     singleUser: isSingleUserPortable(),

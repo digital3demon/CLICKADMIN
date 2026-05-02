@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readClientState, writeClientState } from "@/lib/client-state-client";
 
-/** Сессия — sessionStorage; префиксы: correction:, prosthetics: */
-const STORAGE_KEY = "dental-lab-app-toast-dismissed";
-const LEGACY_CORRECTION_KEY = "dental-lab-crm-correction-toast-dismissed";
+const STORAGE_KEY = "orderToastDismissedV1";
 
 type OrderToastRow = {
   id: string;
@@ -23,32 +22,11 @@ const prostheticsCardShell =
   "flex gap-2 rounded-lg border border-sky-200/90 bg-sky-50/95 pl-3 pr-1 py-2 text-sm shadow-lg backdrop-blur-sm dark:border-sky-800/60 dark:bg-sky-950/90";
 
 function readDismissedPrefixed(): Set<string> {
-  if (typeof sessionStorage === "undefined") return new Set();
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const a = JSON.parse(raw) as unknown;
-      return new Set(
-        Array.isArray(a) ? a.filter((x): x is string => typeof x === "string") : [],
-      );
-    }
-    const legacy = sessionStorage.getItem(LEGACY_CORRECTION_KEY);
-    const arr = legacy ? (JSON.parse(legacy) as unknown) : [];
-    const ids = Array.isArray(arr)
-      ? arr.filter((x): x is string => typeof x === "string")
-      : [];
-    return new Set(ids.map((id) => `correction:${id}`));
-  } catch {
-    return new Set();
-  }
+  return new Set();
 }
 
 function writeDismissedPrefixed(ids: Set<string>) {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
-  } catch {
-    /* ignore */
-  }
+  void writeClientState("user", STORAGE_KEY, [...ids]);
 }
 
 function snippet(text: string, max = 56): string {
@@ -89,7 +67,21 @@ export function OrderCorrectionToastStack() {
   }, []);
 
   useEffect(() => {
-    setDismissed(readDismissedPrefixed());
+    let cancelled = false;
+    void (async () => {
+      const raw = await readClientState<unknown>("user", STORAGE_KEY);
+      if (cancelled) return;
+      if (Array.isArray(raw)) {
+        setDismissed(
+          new Set(raw.filter((x): x is string => typeof x === "string")),
+        );
+        return;
+      }
+      setDismissed(readDismissedPrefixed());
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

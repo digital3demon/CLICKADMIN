@@ -64,6 +64,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: BORDER,
     justifyContent: "center",
+    textAlign: "center",
     fontWeight: 700,
     fontSize: 6.5,
   },
@@ -97,7 +98,7 @@ const styles = StyleSheet.create({
   summaryTotalLabel: {
     flex: 4.7,
     fontWeight: 700,
-    textAlign: "right",
+    textAlign: "center",
   },
   summaryTotalValue: {
     flex: 1.05,
@@ -126,13 +127,13 @@ const styles = StyleSheet.create({
     fontWeight: 700,
   },
   mLegal: { flex: F.z + F.o + F.n },
-  mFrom: { flex: 0.95, textAlign: "center" },
-  mTo: { flex: 0.95, textAlign: "center" },
-  mClinic: { flex: F.p + F.v + 0.9 },
-  mBlank1: { flex: 0.85 },
-  mBlank2: { flex: 0.85 },
-  mTotal: { flex: F.total, textAlign: "right" },
-  mDiscTotal: { flex: F.disc, textAlign: "right", borderRightWidth: 0 },
+  mFrom: { flex: F.p, textAlign: "center" },
+  mTo: { flex: F.v, textAlign: "center" },
+  mClinic: { flex: F.desc, textAlign: "center" },
+  mBlank1: { flex: F.q },
+  mBlank2: { flex: F.price },
+  mTotal: { flex: F.total, textAlign: "center" },
+  mDiscTotal: { flex: F.disc, textAlign: "center", borderRightWidth: 0 },
 
   headRow: {
     flexDirection: "row",
@@ -146,20 +147,21 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: BORDER,
     justifyContent: "center",
+    textAlign: "center",
     fontWeight: 700,
     fontSize: 6.4,
     lineHeight: 1.15,
   },
-  hZ: { flex: F.z, textAlign: "right" },
-  hO: { flex: F.o, textAlign: "right" },
+  hZ: { flex: F.z },
+  hO: { flex: F.o },
   hN: { flex: F.n, textAlign: "center" },
   hP: { flex: F.p },
   hV: { flex: F.v },
   hDesc: { flex: F.desc },
-  hQ: { flex: F.q, textAlign: "right" },
-  hPrice: { flex: F.price, textAlign: "right" },
-  hTotal: { flex: F.total, textAlign: "right" },
-  hDisc: { flex: F.disc, textAlign: "right", borderRightWidth: 0 },
+  hQ: { flex: F.q },
+  hPrice: { flex: F.price },
+  hTotal: { flex: F.total },
+  hDisc: { flex: F.disc, borderRightWidth: 0 },
 
   orderGroup: {
     flexDirection: "row",
@@ -379,7 +381,7 @@ export function ClinicReconciliationPdfDocument({
 
         <View style={styles.mainWrap} wrap={false}>
           <View style={styles.metaRow}>
-            <Text style={[styles.metaCell, styles.mLegal]}>
+            <Text style={[styles.metaCell, styles.mLegal, { textAlign: "center" }]}>
               {payload.labLegalName}
             </Text>
             <Text style={[styles.metaCell, styles.mFrom]}>
@@ -400,13 +402,13 @@ export function ClinicReconciliationPdfDocument({
               {formatRubPdf(payload.yellowRow.baseTotalRub)}
             </Text>
             <Text style={[styles.metaCell, styles.mDiscTotal]}>
-              Итого со{"\n"}скидкой{"\n"}
+              Итого со скидкой{"\n"}
               {formatRubPdf(payload.yellowRow.discountedTotalRub)}
             </Text>
           </View>
           <View style={styles.headRow}>
             <Text style={[styles.hCell, styles.hZ]}>Зашла</Text>
-            <Text style={[styles.hCell, styles.hO]}>Отпр</Text>
+            <Text style={[styles.hCell, styles.hO]}>Отправлено</Text>
             <Text style={[styles.hCell, styles.hN]}>{`Номер\nнаряда`}</Text>
             <Text style={[styles.hCell, styles.hP]}>Пациент</Text>
             <Text style={[styles.hCell, styles.hV]}>Доктор</Text>

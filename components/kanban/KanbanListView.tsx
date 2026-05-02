@@ -16,11 +16,11 @@ import {
   loadListSort,
   type ListSort,
   type ListSortKey,
-  saveListSort,
 } from "@/lib/kanban/list-view-sort";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { IconBrick, IconListCheck } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
+import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 const LIST_GRID =
   "grid grid-cols-1 gap-y-1 gap-x-2 sm:grid-cols-[minmax(0,1.9fr)_minmax(6.5rem,1.05fr)_minmax(5.25rem,0.72fr)_minmax(5.25rem,0.72fr)_minmax(5.25rem,0.72fr)] sm:items-center sm:gap-y-0";
@@ -178,13 +178,33 @@ export function KanbanListView({
   const [sort, setSort] = useState<ListSort>(DEFAULT_LIST_SORT);
 
   useEffect(() => {
-    setSort(loadListSort(board.id));
+    let cancelled = false;
+    void (async () => {
+      const remote = await readClientState<unknown>(
+        "user",
+        `kanbanListSort:${board.id}`,
+      );
+      if (cancelled) return;
+      if (
+        remote &&
+        typeof remote === "object" &&
+        "key" in remote &&
+        "dir" in remote
+      ) {
+        setSort(remote as ListSort);
+        return;
+      }
+      setSort(loadListSort(board.id));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [board.id]);
 
   const onSortChange = useCallback(
     (next: ListSort) => {
       setSort(next);
-      saveListSort(board.id, next);
+      void writeClientState("user", `kanbanListSort:${board.id}`, next);
     },
     [board.id],
   );

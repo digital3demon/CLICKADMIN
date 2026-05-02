@@ -154,39 +154,12 @@ export function buildKanbanListViewRows(
 }
 
 const STORAGE_PREFIX = "kanban-list-sort:";
+const memorySort = new Map<string, ListSort>();
 
 export function loadListSort(boardId: string): ListSort {
-  if (typeof window === "undefined") return DEFAULT_LIST_SORT;
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + boardId);
-    if (!raw) return DEFAULT_LIST_SORT;
-    const j = JSON.parse(raw) as unknown;
-    if (!j || typeof j !== "object") return DEFAULT_LIST_SORT;
-    const key = (j as { key?: string }).key;
-    const dir = (j as { dir?: string }).dir;
-    const keys: ListSortKey[] = [
-      "title",
-      "created",
-      "column",
-      "due",
-      "assignee",
-      "participants",
-    ];
-    const dirs: ListSortDir[] = ["asc", "desc"];
-    if (keys.includes(key as ListSortKey) && dirs.includes(dir as ListSortDir)) {
-      return { key: key as ListSortKey, dir: dir as ListSortDir };
-    }
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_LIST_SORT;
+  return memorySort.get(STORAGE_PREFIX + boardId) ?? DEFAULT_LIST_SORT;
 }
 
 export function saveListSort(boardId: string, sort: ListSort): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_PREFIX + boardId, JSON.stringify(sort));
-  } catch {
-    /* ignore */
-  }
+  memorySort.set(STORAGE_PREFIX + boardId, sort);
 }

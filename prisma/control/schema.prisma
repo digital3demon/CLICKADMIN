@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../generated/prisma-control"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CONTROL_DATABASE_URL")
+}
+
+enum UserRole {
+  ADMINISTRATOR
+  SENIOR_ADMINISTRATOR
+  MANAGER
+  ACCOUNTANT
+  FINANCIAL_MANAGER
+  USER
+  OWNER
+}
+
+enum AppModule {
+  ORDERS
+  KANBAN
+  ORDER_HISTORY
+  ANALYTICS
+  SHIPMENTS
+  WAREHOUSE
+  CLIENTS
+  DIRECTORY
+  CONFIG_USERS
+  CONFIG_USER_INVITES
+}
+
+model Tenant {
+  id                    String   @id @default(cuid())
+  slug                  String   @unique
+  name                  String?
+  tenantDatabaseUrl     String?
+  tenantDatabaseEnabled Boolean  @default(false)
+  tenantDatabaseReadyAt DateTime?
+  createdAt             DateTime @default(now())
+}
+
+model User {
+  id          String   @id @default(cuid())
+  tenantId    String
+  email       String
+  displayName String
+  role        UserRole
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model RoleModuleAccess {
+  id        String    @id @default(cuid())
+  tenantId  String
+  role      UserRole
+  module    AppModule
+  allowed   Boolean
+  updatedAt DateTime  @updatedAt
+
+  @@unique([tenantId, role, module])
+  @@index([tenantId, role])
+}

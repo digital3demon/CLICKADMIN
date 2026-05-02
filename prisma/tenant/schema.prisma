@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../generated/prisma-tenant"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("TENANT_DATABASE_URL")
+}
+
+/**
+ * Phase 1 schema for tenant DB.
+ * Пока содержит базовые сущности для миграционного pipeline;
+ * полный перенос всех моделей из `prisma/schema.prisma` — отдельным шагом.
+ */
+
+model Clinic {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Doctor {
+  id        String   @id @default(cuid())
+  tenantId  String
+  fullName  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orderNumber String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model KanbanStandaloneCard {
+  id              String   @id
+  tenantId        String
+  boardId         String
+  columnId        String
+  sortIndex       Int      @default(0)
+  payload         Json
+  updatedAt       DateTime @updatedAt
+  updatedByUserId String?
+}

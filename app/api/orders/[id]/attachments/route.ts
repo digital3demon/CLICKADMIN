@@ -16,12 +16,16 @@ import {
   newOrderAttachmentId,
   readOrderAttachmentBytes,
 } from "@/lib/order-attachment-storage";
+import {
+  CRM_UPLOAD_MAX_BYTES,
+  CRM_UPLOAD_TOO_LARGE_MESSAGE,
+} from "@/lib/crm-upload-limits";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 export const runtime = "nodejs";
 
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 const UPLOAD_BODY_TIMEOUT_MS = 60_000;
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -416,7 +420,7 @@ export async function POST(req: Request, ctx: Ctx) {
         error: bodyReadTimeout
           ? "Загрузка файла не завершилась вовремя, попробуйте снова"
           : tooLarge
-            ? "Файл больше 10 МБ"
+            ? CRM_UPLOAD_TOO_LARGE_MESSAGE
             : emptyFile
               ? "Пустой файл"
               : emptyBody

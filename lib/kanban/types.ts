@@ -138,6 +138,10 @@ export type KanbanAutomationEvent =
 export type KanbanBoard = {
   id: string;
   title: string;
+  /** Закрытая доска: доступ только пользователям из `accessUserIds`. */
+  isPrivate?: boolean;
+  /** Список userId, у кого есть доступ к закрытой доске. */
+  accessUserIds?: string[];
   columns: KanbanColumn[];
   users: KanbanUser[];
   cardTypes: CardTypeDef[];

@@ -11,9 +11,9 @@ import {
 } from "react";
 import {
   isThemePreference,
-  THEME_STORAGE_KEY,
   type ThemePreference,
 } from "@/lib/theme-storage";
+import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 type ThemeContextValue = {
   theme: ThemePreference;
@@ -45,27 +45,27 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(THEME_STORAGE_KEY);
-      const next = isThemePreference(raw) ? raw : "system";
+    let cancelled = false;
+    void (async () => {
+      const raw = await readClientState<unknown>("user", "themePreference");
+      if (cancelled) return;
+      const next = isThemePreference(typeof raw === "string" ? raw : null)
+        ? (raw as ThemePreference)
+        : "system";
       setThemeState(next);
       const dark = computeDark(next);
       setResolvedDark(dark);
       document.documentElement.classList.toggle("dark", dark);
-    } catch {
-      applyDom("system");
-      setResolvedDark(systemPrefersDark());
-    }
-    setReady(true);
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!ready) return;
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch {
-      /* ignore */
-    }
+    void writeClientState("user", "themePreference", theme);
     const dark = computeDark(theme);
     setResolvedDark(dark);
     applyDom(theme);

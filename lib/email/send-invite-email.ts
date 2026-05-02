@@ -1,6 +1,7 @@
 import "server-only";
 import nodemailer from "nodemailer";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
+import { PLACEHOLDER_INVITED_DISPLAY_NAME } from "@/lib/user-invite-defaults";
 
 export type SendInviteEmailResult =
   | { sent: true }
@@ -22,11 +23,18 @@ function buildInviteBodies(opts: {
   const base = crmPublicBaseUrl();
   const activateUrl = `${base}/login/activate`;
   const subject = "Приглашение в CRM — код активации";
-  const name = escapeHtml(opts.displayName);
   const code = escapeHtml(opts.inviteCode);
+  const greetPlain =
+    opts.displayName.trim() === PLACEHOLDER_INVITED_DISPLAY_NAME
+      ? "Здравствуйте!"
+      : `Здравствуйте, ${opts.displayName.trim()}.`;
+  const greetHtml =
+    opts.displayName.trim() === PLACEHOLDER_INVITED_DISPLAY_NAME
+      ? "<p>Здравствуйте!</p>"
+      : `<p>Здравствуйте, ${escapeHtml(opts.displayName.trim())}.</p>`;
   const html = `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
-<p>Здравствуйте, ${name}.</p>
-<p>Вас пригласили в CRM. Код активации (10 символов):</p>
+${greetHtml}
+<p>Вас пригласили в CRM. ФИО можно указать после входа в разделе «Справочники → Профиль». Код активации (10 символов):</p>
 <p style="font-size:1.25rem;font-weight:600;letter-spacing:0.08em">${code}</p>
 <p>Откройте страницу активации, укажите свою почту и этот код, задайте пароль:<br/>
 <a href="${escapeHtml(activateUrl)}">${escapeHtml(activateUrl)}</a></p>
@@ -34,7 +42,9 @@ function buildInviteBodies(opts: {
 </body></html>`;
 
   const text = [
-    `Здравствуйте, ${opts.displayName}.`,
+    greetPlain,
+    "",
+    "ФИО можно указать в профиле после входа (Справочники → Профиль).",
     "",
     `Код активации: ${opts.inviteCode}`,
     "",

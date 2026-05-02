@@ -92,7 +92,7 @@ function npmInstallPrismaPackages() {
 }
 
 /** Node с абсолютным --env-file и shell:false — иначе путь с пробелом (кириллица) ломается при shell:true. */
-function spawnNodeScript(scriptPath) {
+function spawnNodeScript(scriptPath, extraEnv = {}) {
   const args = [];
   const ef = path.join(bundleRoot, ".env");
   if (fs.existsSync(ef)) {
@@ -102,7 +102,7 @@ function spawnNodeScript(scriptPath) {
   return spawnSync(process.execPath, args, {
     cwd: bundleRoot,
     stdio: "inherit",
-    env: process.env,
+    env: { ...process.env, ...extraEnv },
     shell: false,
   });
 }
@@ -205,6 +205,31 @@ if (isSqlite) {
       ensureRoleModuleAccess.status === null ? 1 : ensureRoleModuleAccess.status,
     );
   }
+}
+
+function shouldAutoActivateTenantDb() {
+  return String(process.env.TENANT_DB_AUTO_ACTIVATE || "").trim() === "1";
+}
+
+if (shouldAutoActivateTenantDb()) {
+  const tenantSlug =
+    String(process.env.TENANT_SLUG || "").trim() ||
+    String(process.env.CRM_DEFAULT_TENANT_SLUG || "").trim();
+  const tenantDbUrl = String(process.env.TENANT_DATABASE_URL || "").trim();
+  if (!tenantSlug || !tenantDbUrl) {
+    console.error(
+      "TENANT_DB_AUTO_ACTIVATE=1 требует TENANT_DATABASE_URL и TENANT_SLUG (или CRM_DEFAULT_TENANT_SLUG).",
+    );
+    process.exit(1);
+  }
+  const provision = spawnNodeScript(pathToEnsure("tenant-provision-db.cjs"), {
+    TENANT_SLUG: tenantSlug,
+    ACTIVATE: "1",
+  });
+  if (provision.status !== 0) {
+    process.exit(provision.status === null ? 1 : provision.status);
+  }
+  console.log(`tenant routing auto-activated for slug="${tenantSlug}"`);
 }
 
 console.log("single db mode: OK.");

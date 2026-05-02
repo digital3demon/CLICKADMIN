@@ -30,6 +30,7 @@ export function defaultHomePathForRole(
 const FINANCIAL_ANALYTICS_ROLES: readonly UserRole[] = [
   "OWNER",
   "SENIOR_ADMINISTRATOR",
+  "MANAGER",
   "ACCOUNTANT",
   "FINANCIAL_MANAGER",
 ];
@@ -58,6 +59,15 @@ export function canManageUsers(
   return false;
 }
 
+export function canInviteUsers(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (!canManageUsers(role, moduleAccess)) return false;
+  if (role === "OWNER") return true;
+  return moduleAccess?.CONFIG_USER_INVITES === true;
+}
+
 export function canChangeUserRoles(role: UserRole): boolean {
   return role === "OWNER";
 }
@@ -76,6 +86,7 @@ const ORDER_CHAT_CORRECTION_ACCEPT_ROLES: readonly UserRole[] = [
   "OWNER",
   "ADMINISTRATOR",
   "SENIOR_ADMINISTRATOR",
+  "MANAGER",
   "FINANCIAL_MANAGER",
 ];
 

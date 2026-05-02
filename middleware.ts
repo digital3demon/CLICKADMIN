@@ -208,7 +208,12 @@ export async function middleware(req: NextRequest) {
     const slug = tenantSlugFromHostHeader(host);
     const tenantRow = await prisma.tenant.findUnique({
       where: { slug },
-      select: { id: true },
+      select: {
+        id: true,
+        tenantDatabaseEnabled: true,
+        tenantDatabaseUrl: true,
+        tenantDatabaseReadyAt: true,
+      },
     });
     if (!tenantRow) {
       if (pathname.startsWith("/api/")) {
@@ -236,6 +241,23 @@ export async function middleware(req: NextRequest) {
           { status: 403 },
         ),
       );
+    }
+    if (tenantRow.tenantDatabaseEnabled) {
+      const ready =
+        Boolean(tenantRow.tenantDatabaseReadyAt) &&
+        Boolean(tenantRow.tenantDatabaseUrl?.trim());
+      if (!ready) {
+        if (pathname.startsWith("/api/")) {
+          const out = NextResponse.json(
+            { error: "База организации не готова. Обратитесь к администратору." },
+            { status: 503 },
+          );
+          return securityHeaders(out);
+        }
+        return securityHeaders(
+          new NextResponse("База организации пока не готова.", { status: 503 }),
+        );
+      }
     }
   }
 

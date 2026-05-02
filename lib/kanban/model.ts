@@ -14,28 +14,24 @@ import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-orde
 
 export const STORAGE_KEY = "kanban-app-state-v3";
 export const STORAGE_KEY_LEGACY = "kanban-app-state-v2";
-/** Старый ключ — чтение и полный сброс вместе с v2/v3. */
+/** Исторические имена ключей (оставлены для совместимости типов и миграционных комментариев). */
 export const STORAGE_KEY_V1_LEGACY = "kanban-app-state-v1";
-/** Демо: отдельный слот localStorage, чтобы не подтягивать доски/карточки из боевой сессии. */
+/** Исторический демо-ключ (до переноса в серверное хранилище). */
 export const STORAGE_KEY_DEMO = "kanban-app-state-v3-demo";
+let memoryStateRawLive: string | null = null;
+let memoryStateRawDemo: string | null = null;
 
 export function kanbanPersistenceKey(isDemo: boolean): string {
   return isDemo ? STORAGE_KEY_DEMO : STORAGE_KEY;
 }
 
-/** Сброс ключей канбана в браузере (демо и боевой наборы не пересекаются). */
+/** Сброс in-memory кеша канбана. */
 export function clearKanbanBrowserStorage(isDemo: boolean): void {
-  try {
-    if (isDemo) {
-      localStorage.removeItem(STORAGE_KEY_DEMO);
-      return;
-    }
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(STORAGE_KEY_LEGACY);
-    localStorage.removeItem(STORAGE_KEY_V1_LEGACY);
-  } catch {
-    /* quota / private mode */
+  if (isDemo) {
+    memoryStateRawDemo = null;
+    return;
   }
+  memoryStateRawLive = null;
 }
 /** Максимальный размер файла во вложениях карточки Kanban. */
 export const MAX_FILE_BYTES = 300 * 1024 * 1024;
@@ -68,6 +64,17 @@ export function kanbanAggregateMode(activeBoardId: string): KanbanAggregateMode 
 
 export function isKanbanAggregateBoardId(id: string): boolean {
   return kanbanAggregateMode(id) != null;
+}
+
+/** Открытая доска доступна всем; закрытая — только пользователям из списка. */
+export function canUserAccessBoard(
+  board: KanbanBoard,
+  userId: string | null | undefined,
+): boolean {
+  if (board.isPrivate !== true) return true;
+  const uid = String(userId || "").trim();
+  if (!uid) return false;
+  return (board.accessUserIds || []).includes(uid);
 }
 
 /** Шаблон колонок / типов для виртуальных досок и fallback активной доски. */
@@ -650,6 +657,11 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
 
 export function migrateBoard(board: KanbanBoard): KanbanBoard {
   if (!board || !board.columns) return board;
+  if (typeof board.isPrivate !== "boolean") board.isPrivate = false;
+  if (!Array.isArray(board.accessUserIds)) board.accessUserIds = [];
+  board.accessUserIds = board.accessUserIds
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
   migrateBoardColumnsToKaitenMirror(board);
   const kt = kaitenCardTypes();
   const byName = new Map(kt.map((t) => [t.name.toLowerCase(), t.id]));
@@ -748,6 +760,8 @@ export function createBoardShell(boardId: string, title: string): KanbanBoard {
   return {
     id: boardId,
     title,
+    isPrivate: false,
+    accessUserIds: [],
     columns,
     users,
     cardTypes,
@@ -817,11 +831,7 @@ export function demoKanbanDefaultState(): KanbanAppState {
 export function loadKanbanState(isDemo = false): KanbanAppState {
   if (typeof window === "undefined") return defaultAppState();
   try {
-    let raw = localStorage.getItem(kanbanPersistenceKey(isDemo));
-    if (!raw && !isDemo) {
-      raw = localStorage.getItem(STORAGE_KEY_LEGACY);
-      if (!raw) raw = localStorage.getItem(STORAGE_KEY_V1_LEGACY);
-    }
+    let raw = isDemo ? memoryStateRawDemo : memoryStateRawLive;
     if (!raw) return defaultAppState();
     const data = JSON.parse(raw) as Record<string, unknown>;
     if (!data.boards || !Array.isArray(data.boards)) return defaultAppState();
@@ -887,11 +897,12 @@ export function loadKanbanState(isDemo = false): KanbanAppState {
 }
 
 export function saveKanbanState(state: KanbanAppState, isDemo = false) {
-  try {
-    localStorage.setItem(kanbanPersistenceKey(isDemo), JSON.stringify(state));
-  } catch {
-    /* quota */
+  const raw = JSON.stringify(state);
+  if (isDemo) {
+    memoryStateRawDemo = raw;
+    return;
   }
+  memoryStateRawLive = raw;
 }
 
 export function getActiveBoard(state: KanbanAppState): KanbanBoard {
@@ -983,6 +994,10 @@ export function buildKanbanDisplayView(
   const cardHomeBoardId = new Map<string, string>();
   const q = (state.search || "").trim().toLowerCase();
   const agg = kanbanAggregateMode(state.activeBoardId);
+  const sessionUserId = (opts?.sessionUserId ?? "").trim();
+  const accessibleBoards = state.boards.filter((b) =>
+    canUserAccessBoard(b, sessionUserId || null),
+  );
 
   const textMatches = (card: KanbanCard) => {
     const inTitle = (card.title || "").toLowerCase().includes(q);
@@ -996,18 +1011,22 @@ export function buildKanbanDisplayView(
   };
 
   if (agg) {
-    const template = getKanbanLayoutTemplateBoard(state);
+    const template =
+      accessibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID) ??
+      accessibleBoards[0] ??
+      getKanbanLayoutTemplateBoard(state);
     const displayBoard = structuredClone(template);
     displayBoard.id = state.activeBoardId;
     displayBoard.title = agg === "my" ? "Мои" : "Распределить";
     displayBoard.automations = [];
-    const uid = (opts?.sessionUserId ?? "").trim();
+    const uid = sessionUserId;
 
     for (const colView of displayBoard.columns) {
       const acc: KanbanCard[] = [];
       const seen = new Set<string>();
       const titleNorm = colView.title.trim().toLowerCase();
       for (const home of listKanbanAggregateSourceBoards(state)) {
+        if (!canUserAccessBoard(home, uid || null)) continue;
         const colO = home.columns.find(
           (c) => c.title.trim().toLowerCase() === titleNorm,
         );
@@ -1045,7 +1064,11 @@ export function buildKanbanDisplayView(
   }
 
   const active =
-    state.boards.find((b) => b.id === state.activeBoardId) ?? state.boards[0]!;
+    state.boards.find(
+      (b) => b.id === state.activeBoardId && canUserAccessBoard(b, sessionUserId || null),
+    ) ??
+    accessibleBoards[0] ??
+    state.boards[0]!;
 
   active.columns.forEach((col) => {
     col.cards.forEach((c) => cardHomeBoardId.set(c.id, active.id));
@@ -1074,6 +1097,7 @@ export function buildKanbanDisplayView(
     const titleNorm = colView.title.trim().toLowerCase();
     for (const ob of state.boards) {
       if (ob.id === active.id) continue;
+      if (!canUserAccessBoard(ob, sessionUserId || null)) continue;
       const colO = ob.columns.find(
         (c) => c.title.trim().toLowerCase() === titleNorm,
       );

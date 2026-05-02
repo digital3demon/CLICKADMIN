@@ -24,3 +24,32 @@ export async function requireSessionTenantId(
   if (!id) throw new Error("tenant_context_missing");
   return id;
 }
+
+export async function getSessionTenantRouting(session: SessionClaims): Promise<{
+  tenantId: string;
+  tenantDatabaseEnabled: boolean;
+  tenantDatabaseReady: boolean;
+} | null> {
+  const tenantId = await getTenantIdForSession(session);
+  if (!tenantId) return null;
+  const row = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      id: true,
+      tenantDatabaseEnabled: true,
+      tenantDatabaseUrl: true,
+      tenantDatabaseReadyAt: true,
+    },
+  });
+  if (!row) return null;
+  const tenantDatabaseEnabled = row.tenantDatabaseEnabled === true;
+  const tenantDatabaseReady =
+    tenantDatabaseEnabled &&
+    Boolean(row.tenantDatabaseUrl?.trim()) &&
+    Boolean(row.tenantDatabaseReadyAt);
+  return {
+    tenantId: row.id,
+    tenantDatabaseEnabled,
+    tenantDatabaseReady,
+  };
+}

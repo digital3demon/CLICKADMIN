@@ -6,7 +6,7 @@ import {
 } from "@/lib/kanban-telegram-prefs";
 import { telegramSendMessage } from "@/lib/telegram-send-message";
 
-/** Две ссылки (канбан + наряд): старший администратор и администратор. */
+/** Две ссылки (канбан + наряд): администратор, старший администратор, руководитель. */
 function linesHtmlForKanbanTelegramRecipient(
   role: UserRole,
   lines: string[],
@@ -15,7 +15,9 @@ function linesHtmlForKanbanTelegramRecipient(
   const adminHtml = (linesAdmin ?? []).filter(Boolean).join("\n").trim();
   if (
     adminHtml &&
-    (role === "ADMINISTRATOR" || role === "SENIOR_ADMINISTRATOR")
+    (role === "ADMINISTRATOR" ||
+      role === "SENIOR_ADMINISTRATOR" ||
+      role === "MANAGER")
   ) {
     return (linesAdmin ?? []).filter(Boolean);
   }
@@ -43,7 +45,7 @@ export async function notifyKanbanTelegramSubscribers(
     alsoExcludeUserIds?: string[];
     /** Гиперссылки и разметка — только с экранированием через escapeTelegramHtml. */
     parseMode?: "HTML";
-    /** Для ADMINISTRATOR / SENIOR_ADMINISTRATOR: две ссылки «карточке» + «заказе» (при наряде). */
+    /** Для ADMINISTRATOR / SENIOR_ADMINISTRATOR / MANAGER: две ссылки «карточке» + «заказе» (при наряде). */
     linesAdmin?: string[];
   },
 ): Promise<void> {

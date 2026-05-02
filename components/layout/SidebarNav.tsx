@@ -9,6 +9,7 @@ import {
   isKanbanOnlyUser,
 } from "@/lib/auth/permissions";
 import { hasDirectorySidebarAccess } from "@/lib/role-module-nav";
+import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 function isNavActive(pathname: string, href: string): boolean {
   if (href === "/orders") {
@@ -44,7 +45,7 @@ const baseNavItems: readonly {
 
 const DEFAULT_HREF_ORDER = baseNavItems.map((i) => i.href);
 
-const SIDEBAR_NAV_ORDER_KEY = "dental-lab-crm.sidebarNavOrder.v1";
+const SIDEBAR_NAV_ORDER_KEY = "sidebarNavOrderV1";
 
 function coalesceOrderForVisible(
   saved: string[],
@@ -143,19 +144,19 @@ export function SidebarNav() {
 
   useEffect(() => {
     const allowed = new Set(navItems.map((i) => i.href));
-    try {
-      const raw = localStorage.getItem(SIDEBAR_NAV_ORDER_KEY);
-      if (raw) {
-        const p = JSON.parse(raw) as unknown;
-        if (Array.isArray(p) && p.every((x) => typeof x === "string")) {
-          setOrderHrefs(coalesceOrderForVisible(p as string[], allowed));
-          return;
-        }
+    let cancelled = false;
+    void (async () => {
+      const raw = await readClientState<unknown>("user", SIDEBAR_NAV_ORDER_KEY);
+      if (cancelled) return;
+      if (Array.isArray(raw) && raw.every((x) => typeof x === "string")) {
+        setOrderHrefs(coalesceOrderForVisible(raw as string[], allowed));
+        return;
       }
-    } catch {
-      /* ignore */
-    }
-    setOrderHrefs((prev) => coalesceOrderForVisible(prev, allowed));
+      setOrderHrefs((prev) => coalesceOrderForVisible(prev, allowed));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [navItems]);
 
   const orderedNav = useMemo(() => {
@@ -173,11 +174,7 @@ export function SidebarNav() {
 
   const persistOrder = useCallback((next: string[]) => {
     setOrderHrefs(next);
-    try {
-      localStorage.setItem(SIDEBAR_NAV_ORDER_KEY, JSON.stringify(next));
-    } catch {
-      /* quota / private mode */
-    }
+    void writeClientState("user", SIDEBAR_NAV_ORDER_KEY, next);
   }, []);
 
   const onDragStart = useCallback((href: string) => {

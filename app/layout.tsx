@@ -5,7 +5,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { fontBody, fontDisplay } from "@/lib/app-fonts";
-import { THEME_STORAGE_KEY } from "@/lib/theme-storage";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,7 +27,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const themeInit = `(function(){try{var k=${JSON.stringify(THEME_STORAGE_KEY)};var t=localStorage.getItem(k);var sys=window.matchMedia("(prefers-color-scheme: dark)").matches;var dark=t==="dark"||(t!=="light"&&sys);document.documentElement.classList.toggle("dark",dark);}catch(e){}})();`;
+  const themeInit = `(function(){try{var dark=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",dark);}catch(e){}})();`;
 
   return (
     <html

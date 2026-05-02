@@ -4,7 +4,11 @@ import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { UsersDirectoryClient } from "@/components/directory/UsersDirectoryClient";
 import { getPrisma } from "@/lib/get-prisma";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
-import { canChangeUserRoles, canManageUsers } from "@/lib/auth/permissions";
+import {
+  canChangeUserRoles,
+  canInviteUsers,
+  canManageUsers,
+} from "@/lib/auth/permissions";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +62,7 @@ export default async function DirectoryUsersPage() {
         initialUsers={initialUsers}
         currentUserId={s.sub}
         canChangeUserRoles={canChangeUserRoles(s.role)}
+        canInviteUsers={canInviteUsers(s.role, access ?? undefined)}
       />
       {s.role === "OWNER" ? (
         <p className="mt-6 text-sm text-[var(--text-secondary)]">

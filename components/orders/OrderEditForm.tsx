@@ -87,6 +87,11 @@ import {
   saveOrderEditLayout,
 } from "@/lib/order-edit-layout-prefs";
 import {
+  deleteClientState,
+  readClientState,
+  writeClientState,
+} from "@/lib/client-state-client";
+import {
   formatInvoiceParsedLinesAsText,
   normalizeInvoiceParsedLines,
 } from "@/lib/invoice-parsed-types";
@@ -545,16 +550,19 @@ export function OrderEditForm({
     null,
   );
   useEffect(() => {
-    try {
-      const k = `kaiten-new-order-warn-${initial.id}`;
-      const t = sessionStorage.getItem(k);
-      if (t) {
+    let cancelled = false;
+    void (async () => {
+      const k = `kaitenNewOrderWarn:${initial.id}`;
+      const t = await readClientState<unknown>("user", k);
+      if (cancelled) return;
+      if (typeof t === "string" && t.trim()) {
         setKaitenNewOrderWarn(t);
-        sessionStorage.removeItem(k);
+        await deleteClientState("user", k);
       }
-    } catch {
-      /* ignore */
-    }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [initial.id]);
 
   const [clinics, setClinics] = useState<ClinicRow[]>([]);
@@ -1544,13 +1552,34 @@ export function OrderEditForm({
 
   useEffect(() => {
     if (!orderPageFrame) return;
-    setOrderLayoutPrefs(loadOrderEditLayout(sessionUserId));
+    let cancelled = false;
+    void (async () => {
+      const local = loadOrderEditLayout(sessionUserId);
+      const key = sessionUserId ? `orderEditLayout:${sessionUserId}` : null;
+      if (!key) {
+        if (!cancelled) setOrderLayoutPrefs(local);
+        return;
+      }
+      const remote = await readClientState<unknown>("user", key);
+      if (cancelled) return;
+      if (remote && typeof remote === "object") {
+        setOrderLayoutPrefs(remote as OrderEditLayoutV1);
+        return;
+      }
+      setOrderLayoutPrefs(local);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [orderPageFrame, sessionUserId]);
 
   const persistOrderLayout = useCallback(
     (next: OrderEditLayoutV1) => {
       setOrderLayoutPrefs(next);
       saveOrderEditLayout(sessionUserId, next);
+      if (sessionUserId) {
+        void writeClientState("user", `orderEditLayout:${sessionUserId}`, next);
+      }
     },
     [sessionUserId],
   );
@@ -1560,6 +1589,9 @@ export function OrderEditForm({
     const d = defaultOrderEditLayout();
     setOrderLayoutPrefs(d);
     saveOrderEditLayout(sessionUserId, d);
+    if (sessionUserId) {
+      void writeClientState("user", `orderEditLayout:${sessionUserId}`, d);
+    }
   }, [sessionUserId]);
 
   const correctionPillStrip = (

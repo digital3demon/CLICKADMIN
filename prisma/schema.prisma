@@ -51,6 +51,12 @@ model Tenant {
   /// Поддомен: `xxx` в `xxx.click-lab.online`
   slug                  String           @unique
   name                  String?
+  /// URL отдельной БД тенанта. Если пусто — используется общая БД (режим совместимости).
+  tenantDatabaseUrl     String?
+  /// Разрешено ли использовать отдельную БД для этого тенанта.
+  tenantDatabaseEnabled Boolean          @default(false)
+  /// Когда отдельная БД была подготовлена и подключена.
+  tenantDatabaseReadyAt DateTime?
   plan                  SubscriptionPlan @default(BASIC)
   /// Опция «Канбан» (доска в CRM), отдельно от тарифа
   addonKanban           Boolean          @default(false)
@@ -70,6 +76,10 @@ model Tenant {
   roleModuleAccess      RoleModuleAccess[]
   /// Локальные карточки канбана без наряда (синхронизация между пользователями тенанта)
   kanbanStandaloneCards KanbanStandaloneCard[]
+  /// Клиентские состояния на уровне организации (общие для всех пользователей)
+  tenantClientState     TenantClientState[]
+  /// Клиентские состояния уровня пользователя (для связей UserClientState.tenant)
+  userClientState       UserClientState[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -389,12 +399,15 @@ enum AppModule {
   CONFIG_COSTING
   /// Список и приглашения (по умолчанию только владелец)
   CONFIG_USERS
+  /// Только приглашения пользователей
+  CONFIG_USER_INVITES
 }
 
 /// Роль пользователя CRM (права будут расширяться)
 enum UserRole {
   ADMINISTRATOR
   SENIOR_ADMINISTRATOR
+  MANAGER
   ACCOUNTANT
   FINANCIAL_MANAGER
   /// Только канбан-доска (без заказов, справочников и пр.)
@@ -447,11 +460,40 @@ model User {
   orderChatCorrectionsRejected     OrderChatCorrection[]     @relation("OrderChatCorrectionRejectedBy")
   orderProstheticsRequestsResolved OrderProstheticsRequest[] @relation("OrderProstheticsRequestResolvedBy")
   orderProstheticsRequestsRejected OrderProstheticsRequest[] @relation("OrderProstheticsRequestRejectedBy")
+  /// Клиентские состояния на уровне пользователя (UI prefs, флаги и т.п.)
+  clientState                   UserClientState[]
 
   @@unique([tenantId, email])
   @@index([role])
   @@index([isActive])
   @@index([tenantId])
+}
+
+/// Хранилище клиентских состояний уровня тенанта (shared между устройствами и пользователями).
+model TenantClientState {
+  tenantId  String
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, key])
+  @@index([updatedAt])
+}
+
+/// Хранилище клиентских состояний уровня пользователя (shared между устройствами одного пользователя).
+model UserClientState {
+  userId    String
+  tenantId  String
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([userId, key])
+  @@index([tenantId, key])
+  @@index([updatedAt])
 }
 
 /// Доступ к модулю для роли в тенанте. Нет записи = значение по умолчанию из `lib/role-module-defaults`.

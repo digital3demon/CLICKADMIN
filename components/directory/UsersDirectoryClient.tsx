@@ -52,12 +52,14 @@ type UsersDirectoryClientProps = {
   currentUserId: string;
   /** Смена роли в таблице: только владелец, через отдельное подтверждение в модальном окне. */
   canChangeUserRoles: boolean;
+  canInviteUsers: boolean;
 };
 
 export function UsersDirectoryClient({
   initialUsers,
   currentUserId,
   canChangeUserRoles,
+  canInviteUsers,
 }: UsersDirectoryClientProps) {
   const [users, setUsers] = useState<UserDirectoryRow[]>(initialUsers);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -75,7 +77,6 @@ export function UsersDirectoryClient({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [inviteByEmail, setInviteByEmail] = useState(false);
-  const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState<UserRole>("ADMINISTRATOR");
 
   const reload = useCallback(async () => {
@@ -188,9 +189,7 @@ export function UsersDirectoryClient({
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(
-          inviteByEmail
-            ? { email, displayName, role }
-            : { phone, displayName, role },
+          inviteByEmail ? { email, role } : { phone, role },
         ),
       });
       const j = (await res.json().catch(() => ({}))) as {
@@ -224,7 +223,6 @@ export function UsersDirectoryClient({
       }
       setEmail("");
       setPhone("");
-      setDisplayName("");
       setRole("ADMINISTRATOR");
       setInviteOpen(false);
       await reload();
@@ -233,23 +231,29 @@ export function UsersDirectoryClient({
     } finally {
       setBusy(false);
     }
-  }, [displayName, email, phone, inviteByEmail, reload, role]);
+  }, [email, phone, inviteByEmail, reload, role]);
 
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            setOkMsg(null);
-            setInviteByEmail(false);
-            setInviteOpen(true);
-          }}
-          className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
-        >
-          Пригласить
-        </button>
+        {canInviteUsers ? (
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setOkMsg(null);
+              setInviteByEmail(false);
+              setInviteOpen(true);
+            }}
+            className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
+          >
+            Пригласить
+          </button>
+        ) : (
+          <span className="text-sm text-[var(--text-muted)]">
+            Приглашения отключены для вашей роли.
+          </span>
+        )}
         {okMsg ? (
           <span className="max-w-xl text-sm text-emerald-700 dark:text-emerald-400">
             {okMsg}
@@ -468,8 +472,8 @@ export function UsersDirectoryClient({
             </h2>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
               {inviteByEmail
-                ? "После сохранения вы получите код — передайте его вместе с почтой."
-                : "Номер заносится в учётную запись. Сотрудник активирует доступ по коду владельца, задаёт почту и пароль, затем может привязать Telegram в «Справочники → Профиль»."}
+                ? "На почту уйдёт письмо с кодом. ФИО сотрудник укажет сам в «Справочники → Профиль» после входа."
+                : "Номер заносится в учётную запись. ФИО сотрудник укажет в «Справочники → Профиль». Вход через Telegram — см. инструкцию после сохранения."}
             </p>
 
             <div className="mt-4 flex flex-wrap gap-3 text-sm">
@@ -517,15 +521,6 @@ export function UsersDirectoryClient({
                 />
               </label>
             )}
-            <label className="mt-3 block text-sm font-medium text-[var(--text-body)]">
-              ФИО
-              <input
-                type="text"
-                className={inputClass}
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
-            </label>
             <label className="mt-3 block text-sm font-medium text-[var(--text-body)]">
               Роль
               <select
