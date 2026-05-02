@@ -750,11 +750,15 @@ export function ClinicCommercialTermsPanel({
               Предпросмотр текста. Форматирование Word сохраняется по шаблону при
               нажатии «Сохранить».
             </p>
-            <textarea
-              className="mt-3 h-[55vh] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)]"
-              value={editorText}
-              readOnly
-            />
+            <div className="mt-3 max-h-[55vh] overflow-auto rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] p-4">
+              <div className="mx-auto w-full max-w-[820px] rounded-sm border border-zinc-300 bg-white px-10 py-8 text-[15px] leading-7 text-zinc-900 shadow-sm">
+                {editorText.split("\n").map((line, idx) => (
+                  <p key={`${idx}-${line.slice(0, 16)}`} className="whitespace-pre-wrap">
+                    {line.length > 0 ? line : "\u00A0"}
+                  </p>
+                ))}
+              </div>
+            </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
