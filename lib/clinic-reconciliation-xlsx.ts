@@ -7,39 +7,64 @@ export async function buildClinicReconciliationXlsxBuffer(
   clinicId: string,
   _clinicName: string,
   range: DateRangeUtc,
+  selectedOrderIds?: string[] | null,
 ): Promise<{ buffer: Buffer; fromStr: string; toStr: string }> {
   const fromStr = range.from.toISOString().slice(0, 10);
   const toStr = range.to.toISOString().slice(0, 10);
 
   const { included, excluded } = await fetchReconciliationRows(clinicId, range);
+  const selected = new Set(
+    (selectedOrderIds ?? [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean),
+  );
+  const includedRows =
+    selected.size > 0
+      ? included.filter((x) => selected.has(x.orderId))
+      : included;
+  const excludedRows =
+    selected.size > 0
+      ? excluded.filter((x) => selected.has(x.orderId))
+      : excluded;
   let sum = 0;
   let sumExcluded = 0;
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Сверка");
 
+  const dateRu = (iso: Date | null) =>
+    iso
+      ? iso.toLocaleString("ru-RU", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        })
+      : "—";
+
   sheet.addRow([
-    "Врач",
-    "Дата заказа",
-    "Номер наряда",
+    "Наряд",
+    "Клиника",
+    "Доктора",
+    "Пациент",
+    "Дата когда работа зашла",
+    "Когда работу согласовали",
+    "Дата отправки",
     "Позиция",
-    "Кол-во",
-    "Цена за ед., руб.",
-    "Сумма, руб.",
+    "Количество",
+    "Цена",
+    "Сумма",
   ]);
 
-  for (const r of included) {
+  for (const r of includedRows) {
     sum += r.lineTotal;
     sheet.addRow([
-      r.doctorName,
-      r.orderCreatedAt.toLocaleString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
       r.orderNumber,
+      r.clinicName,
+      r.doctorName,
+      r.patientName ?? "",
+      dateRu(r.workReceivedAt ?? r.orderCreatedAt),
+      dateRu(r.approvedAt),
+      dateRu(r.sentAt),
       r.description,
       r.quantity,
       r.unitPrice ?? "",
@@ -55,33 +80,39 @@ export async function buildClinicReconciliationXlsxBuffer(
     "",
     "",
     "",
+    "",
+    "",
+    "",
+    "",
     Math.round(sum * 100) / 100,
   ]);
 
-  if (excluded.length > 0) {
+  if (excludedRows.length > 0) {
     const sheetEx = workbook.addWorksheet("Исключено из сверки");
     sheetEx.addRow([
-      "Врач",
-      "Дата заказа",
-      "Номер наряда",
+      "Наряд",
+      "Клиника",
+      "Доктора",
+      "Пациент",
+      "Дата когда работа зашла",
+      "Когда работу согласовали",
+      "Дата отправки",
       "Позиция",
-      "Кол-во",
-      "Цена за ед., руб.",
-      "Сумма, руб.",
+      "Количество",
+      "Цена",
+      "Сумма",
       "Примечание",
     ]);
-    for (const r of excluded) {
+    for (const r of excludedRows) {
       sumExcluded += r.lineTotal;
       sheetEx.addRow([
-        r.doctorName,
-        r.orderCreatedAt.toLocaleString("ru-RU", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
         r.orderNumber,
+        r.clinicName,
+        r.doctorName,
+        r.patientName ?? "",
+        dateRu(r.workReceivedAt ?? r.orderCreatedAt),
+        dateRu(r.approvedAt),
+        dateRu(r.sentAt),
         r.description,
         r.quantity,
         r.unitPrice ?? "",
@@ -92,6 +123,10 @@ export async function buildClinicReconciliationXlsxBuffer(
     sheetEx.addRow([]);
     sheetEx.addRow([
       "Итого исключено",
+      "",
+      "",
+      "",
+      "",
       "",
       "",
       "",

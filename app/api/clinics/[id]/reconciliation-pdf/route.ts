@@ -22,6 +22,10 @@ export async function GET(
     const url = new URL(req.url);
     const from = url.searchParams.get("from") ?? "";
     const to = url.searchParams.get("to") ?? "";
+    const selectedOrderIds = (url.searchParams.get("orderIds") ?? "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
     const range = parseDateRangeUTC(from, to);
     if (!range) {
       return NextResponse.json(
@@ -38,7 +42,11 @@ export async function GET(
       return NextResponse.json({ error: "Клиника не найдена" }, { status: 404 });
     }
 
-    const payload = await buildClinicReconciliationPdfPayload(clinic.id, range);
+    const payload = await buildClinicReconciliationPdfPayload(
+      clinic.id,
+      range,
+      selectedOrderIds,
+    );
     const buffer = await renderClinicReconciliationPdfBuffer(payload);
 
     const asciiName = `svarka_${from}_${to}.pdf`.replace(/[^\w.\-]/g, "_");

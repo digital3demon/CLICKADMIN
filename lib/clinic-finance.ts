@@ -4,19 +4,91 @@ import {
   lineAllocatedTotalRub,
   orderCompositionSubtotalAfterDiscountsRub,
 } from "@/lib/format-order-construction";
+import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
+import { parseSnapshotV1 } from "@/lib/order-revision-snapshot";
 import { orderLinesIncludedInReconciliationExport } from "@/lib/order-reconciliation-export";
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
 
 export type ReconciliationRow = {
   orderId: string;
+  clinicName: string;
   doctorName: string;
+  patientName: string | null;
   orderCreatedAt: Date;
+  workReceivedAt: Date | null;
+  approvedAt: Date | null;
+  sentAt: Date | null;
   orderNumber: string;
+  labWorkStatus: string;
+  attentionRequired: boolean;
   description: string;
   quantity: number;
   unitPrice: number | null;
   lineTotal: number;
 };
+
+type OrderTimelineDates = { approvedAt: Date | null; sentAt: Date | null };
+
+async function loadOrderTimelineDates(
+  orderIds: string[],
+): Promise<Map<string, OrderTimelineDates>> {
+  const out = new Map<string, OrderTimelineDates>();
+  if (orderIds.length === 0) return out;
+
+  const orders = await (await getPrisma()).order.findMany({
+    where: { id: { in: orderIds } },
+    select: {
+      id: true,
+      adminShippedOtpr: true,
+      updatedAt: true,
+      revisions: {
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true, snapshot: true },
+      },
+    },
+  });
+
+  for (const order of orders) {
+    let approvedAt: Date | null = null;
+    let sentAt: Date | null = null;
+    let prevLabWorkStatus: string | null = null;
+    let prevShipped: boolean | null = null;
+
+    for (const rev of order.revisions) {
+      const snap = parseSnapshotV1(rev.snapshot);
+      if (!snap) continue;
+      const currentLab = String(snap.order.labWorkStatus || "").trim();
+      const currentShipped = Boolean(snap.order.adminShippedOtpr);
+
+      if (
+        approvedAt == null &&
+        prevLabWorkStatus === "APPROVAL" &&
+        currentLab !== "" &&
+        currentLab !== "APPROVAL"
+      ) {
+        approvedAt = rev.createdAt;
+      }
+      if (
+        sentAt == null &&
+        prevShipped === false &&
+        currentShipped === true
+      ) {
+        sentAt = rev.createdAt;
+      }
+
+      prevLabWorkStatus = currentLab || prevLabWorkStatus;
+      prevShipped = currentShipped;
+    }
+
+    if (sentAt == null && order.adminShippedOtpr) {
+      sentAt = order.updatedAt;
+    }
+
+    out.set(order.id, { approvedAt, sentAt });
+  }
+
+  return out;
+}
 
 /** Границы периода по строкам YYYY-MM-DD (календарные дни в UTC). */
 export function parseDateRangeUTC(
@@ -395,6 +467,7 @@ export async function fetchReconciliationRows(
     where: {
       order: {
         clinicId,
+        archivedAt: null,
         createdAt: { gte: range.from, lte: range.to },
       },
     },
@@ -405,12 +478,22 @@ export async function fetchReconciliationRows(
           id: true,
           orderNumber: true,
           createdAt: true,
+          workReceivedAt: true,
+          patientName: true,
+          labWorkStatus: true,
+          invoiceParsedTotalRub: true,
           isUrgent: true,
           urgentCoefficient: true,
           compositionDiscountPercent: true,
           excludeFromReconciliation: true,
           excludeFromReconciliationUntil: true,
+          clinic: { select: { name: true } },
           doctor: { select: { fullName: true } },
+          chatCorrections: {
+            where: { resolvedAt: null, rejectedAt: null },
+            select: { id: true },
+            take: 1,
+          },
           constructions: {
             select: {
               quantity: true,
@@ -425,6 +508,10 @@ export async function fetchReconciliationRows(
       material: { select: { name: true } },
     },
   });
+
+  const timelineByOrderId = await loadOrderTimelineDates(
+    Array.from(new Set(rows.map((x) => x.order.id))),
+  );
 
   const included: ReconciliationRow[] = [];
   const excluded: ReconciliationRow[] = [];
@@ -450,11 +537,31 @@ export async function fetchReconciliationRows(
       unitPrice: c.unitPrice,
       lineDiscountPercent: c.lineDiscountPercent,
     }));
+    const timeline = timelineByOrderId.get(l.order.id);
     const row: ReconciliationRow = {
       orderId: l.order.id,
+      clinicName: l.order.clinic?.name?.trim() || "—",
       doctorName: l.order.doctor.fullName,
+      patientName: l.order.patientName?.trim() || null,
       orderCreatedAt: l.order.createdAt,
+      workReceivedAt: l.order.workReceivedAt,
+      approvedAt: timeline?.approvedAt ?? null,
+      sentAt: timeline?.sentAt ?? null,
       orderNumber: l.order.orderNumber,
+      labWorkStatus: l.order.labWorkStatus,
+      attentionRequired:
+        (l.order.chatCorrections?.length ?? 0) > 0 ||
+        orderInvoiceCompositionMismatch({
+          invoiceParsedTotalRub: l.order.invoiceParsedTotalRub,
+          isUrgent: l.order.isUrgent,
+          urgentCoefficient: l.order.urgentCoefficient,
+          compositionDiscountPercent: l.order.compositionDiscountPercent,
+          constructions: l.order.constructions.map((c) => ({
+            quantity: c.quantity,
+            unitPrice: c.unitPrice,
+            lineDiscountPercent: c.lineDiscountPercent,
+          })),
+        }),
       description: desc,
       quantity: q,
       unitPrice: l.unitPrice,

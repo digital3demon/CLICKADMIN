@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  LAB_WORK_STATUS_LABELS,
+  LAB_WORK_STATUS_ORDER,
+  type LabWorkStatus,
+} from "@/lib/lab-work-status";
 
 function moneyRu(n: number): string {
   return new Intl.NumberFormat("ru-RU", {
@@ -40,14 +45,36 @@ function slotLabelRu(slot: string): string {
 
 type PeriodLineRow = {
   orderId: string;
+  clinicName: string;
   doctorName: string;
+  patientName: string | null;
   orderCreatedAt: string;
+  workReceivedAt: string | null;
+  approvedAt: string | null;
+  sentAt: string | null;
   orderNumber: string;
+  labWorkStatus: string;
+  attentionRequired: boolean;
   description: string;
   quantity: number;
   unitPrice: number | null;
   lineTotal: number;
 };
+
+function formatDateOnlyRu(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function isKnownLabWorkStatus(value: string): value is LabWorkStatus {
+  return (LAB_WORK_STATUS_ORDER as readonly string[]).includes(value);
+}
 
 export function FinancePanel({
   clinicId,
@@ -97,6 +124,9 @@ export function FinancePanel({
   const [periodLinesLoading, setPeriodLinesLoading] = useState(false);
   const [periodLinesError, setPeriodLinesError] = useState<string | null>(null);
   const [bulkExcluding, setBulkExcluding] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<LabWorkStatus | "ALL">("ALL");
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
   useEffect(() => {
     const rid = searchParams.get("reconSnapshot")?.trim();
@@ -182,6 +212,50 @@ export function FinancePanel({
     void loadPeriodLines();
   }, [loadPeriodLines]);
 
+  useEffect(() => {
+    const present = new Set(periodLines.map((r) => r.orderId));
+    setSelectedOrderIds((prev) => prev.filter((id) => present.has(id)));
+  }, [periodLines]);
+
+  const visiblePeriodLines = useMemo(() => {
+    return periodLines.filter((row) => {
+      if (
+        statusFilter !== "ALL" &&
+        row.labWorkStatus !== statusFilter
+      ) {
+        return false;
+      }
+      if (attentionOnly && !row.attentionRequired) {
+        return false;
+      }
+      return true;
+    });
+  }, [periodLines, statusFilter, attentionOnly]);
+
+  const visibleOrderIds = useMemo(
+    () => Array.from(new Set(visiblePeriodLines.map((r) => r.orderId))),
+    [visiblePeriodLines],
+  );
+
+  const allVisibleSelected =
+    visibleOrderIds.length > 0 &&
+    visibleOrderIds.every((id) => selectedOrderIds.includes(id));
+  const anyVisibleSelected = visibleOrderIds.some((id) =>
+    selectedOrderIds.includes(id),
+  );
+
+  const statusCounts = useMemo(() => {
+    const m = new Map<LabWorkStatus, number>();
+    for (const st of LAB_WORK_STATUS_ORDER) m.set(st, 0);
+    for (const row of periodLines) {
+      if (isKnownLabWorkStatus(row.labWorkStatus)) {
+        const k = row.labWorkStatus;
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+    }
+    return m;
+  }, [periodLines]);
+
   const loadExclusions = useCallback(async () => {
     if (!worksWithReconciliation) {
       setExcludedOrders([]);
@@ -244,7 +318,7 @@ export function FinancePanel({
 
   const excludeAllInPeriodFromTable = useCallback(async () => {
     if (!worksWithReconciliation || !periodEndIsoForShownRange) return;
-    const ids = [...new Set(periodLines.map((r) => r.orderId))];
+    const ids = [...new Set(visiblePeriodLines.map((r) => r.orderId))];
     if (ids.length === 0) return;
     const ok = window.confirm(
       `Убрать из сверки за период ${periodFrom} — ${periodTo} все наряды из таблицы (${ids.length} шт.)? Они появятся в сверке снова в следующих периодах.`,
@@ -280,7 +354,7 @@ export function FinancePanel({
   }, [
     worksWithReconciliation,
     periodEndIsoForShownRange,
-    periodLines,
+    visiblePeriodLines,
     periodFrom,
     periodTo,
     loadExclusions,
@@ -339,15 +413,21 @@ export function FinancePanel({
     const q = new URLSearchParams();
     q.set("from", from);
     q.set("to", to);
+    if (selectedOrderIds.length > 0) {
+      q.set("orderIds", selectedOrderIds.join(","));
+    }
     return `/api/clinics/${clinicId}/reconciliation?${q.toString()}`;
-  }, [clinicId, from, to]);
+  }, [clinicId, from, to, selectedOrderIds]);
 
   const pdfHref = useMemo(() => {
     const q = new URLSearchParams();
     q.set("from", from);
     q.set("to", to);
+    if (selectedOrderIds.length > 0) {
+      q.set("orderIds", selectedOrderIds.join(","));
+    }
     return `/api/clinics/${clinicId}/reconciliation-pdf?${q.toString()}`;
-  }, [clinicId, from, to]);
+  }, [clinicId, from, to, selectedOrderIds]);
 
   return (
     <section
@@ -465,29 +545,99 @@ export function FinancePanel({
               </button>
             ) : null}
           </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setStatusFilter("ALL")}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                statusFilter === "ALL"
+                  ? "bg-[var(--sidebar-blue)] text-white"
+                  : "border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-strong)]"
+              }`}
+            >
+              Все статусы ({periodLines.length})
+            </button>
+            {LAB_WORK_STATUS_ORDER.map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setStatusFilter(st)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  statusFilter === st
+                    ? "bg-[var(--sidebar-blue)] text-white"
+                    : "border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-strong)]"
+                }`}
+              >
+                {LAB_WORK_STATUS_LABELS[st]} ({statusCounts.get(st) ?? 0})
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setAttentionOnly((v) => !v)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                attentionOnly
+                  ? "bg-amber-500 text-amber-950"
+                  : "border border-amber-300 bg-amber-50 text-amber-900"
+              }`}
+              title="Фильтр по работам с признаком внимания"
+            >
+              ▲ Внимание
+            </button>
+          </div>
           <p className="mt-1 text-xs text-[var(--text-muted)]">
             Те же строки, что в основном листе выгрузки сверки (без исключённых
             из сверки нарядов). Кнопки «Убрать из сверки» и «Перенести на
             следующий период» действуют на весь наряд: если позиций несколько,
             меняется статус наряда целиком.
           </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            Выбрано для выгрузки: {selectedOrderIds.length}{" "}
+            {selectedOrderIds.length === 1 ? "наряд" : "нарядов"}.
+          </p>
           {periodLinesError ? (
             <p className="mt-2 text-sm text-red-700">{periodLinesError}</p>
           ) : null}
           {periodLinesLoading ? (
             <p className="mt-2 text-sm text-[var(--text-muted)]">Загрузка…</p>
-          ) : periodLines.length === 0 ? (
+          ) : visiblePeriodLines.length === 0 ? (
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Нет позиций за выбранный период (или все исключены из сверки).
+              Нет строк по текущему фильтру статуса/внимания.
             </p>
           ) : (
             <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--card-border)]">
-              <table className="w-full min-w-[880px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[1340px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-                    <th className="px-3 py-2">Врач</th>
-                    <th className="px-3 py-2">Дата наряда</th>
+                    <th className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        ref={(el) => {
+                          if (!el) return;
+                          el.indeterminate = !allVisibleSelected && anyVisibleSelected;
+                        }}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedOrderIds((prev) =>
+                              Array.from(new Set([...prev, ...visibleOrderIds])),
+                            );
+                          } else {
+                            const hidden = new Set(visibleOrderIds);
+                            setSelectedOrderIds((prev) =>
+                              prev.filter((id) => !hidden.has(id)),
+                            );
+                          }
+                        }}
+                        title="Выбрать все видимые наряды"
+                      />
+                    </th>
                     <th className="px-3 py-2">Наряд</th>
+                    <th className="px-3 py-2">Клиника</th>
+                    <th className="px-3 py-2">Доктор</th>
+                    <th className="px-3 py-2">Пациент</th>
+                    <th className="px-3 py-2">Работа зашла</th>
+                    <th className="px-3 py-2">Согласовано</th>
+                    <th className="px-3 py-2">Отправка</th>
                     <th className="px-3 py-2">Позиция</th>
                     <th className="px-3 py-2 text-right">Кол-во</th>
                     <th className="px-3 py-2 text-right">Цена</th>
@@ -498,30 +648,78 @@ export function FinancePanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {periodLines.map((row, idx) => {
+                  {visiblePeriodLines.map((row, idx) => {
                     const busy = actionOrderId === row.orderId;
+                    const checked = selectedOrderIds.includes(row.orderId);
                     return (
                       <tr
                         key={`${row.orderId}-${idx}`}
                         className="border-b border-[var(--border-subtle)] last:border-0"
                       >
+                        <td className="px-3 py-2 align-top">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedOrderIds((prev) =>
+                                  prev.includes(row.orderId)
+                                    ? prev
+                                    : [...prev, row.orderId],
+                                );
+                              } else {
+                                setSelectedOrderIds((prev) =>
+                                  prev.filter((id) => id !== row.orderId),
+                                );
+                              }
+                            }}
+                            title="Добавить наряд в сверку/выгрузку"
+                          />
+                        </td>
+                        <td className="px-3 py-2 font-medium">
+                          <div className="flex items-center gap-1">
+                            {row.attentionRequired ? (
+                              <span
+                                className="text-[11px] text-amber-600"
+                                title="Требуется внимание"
+                              >
+                                ▲
+                              </span>
+                            ) : null}
+                            <Link
+                              href={`/orders/${row.orderId}`}
+                              className="text-[var(--sidebar-blue)] hover:underline"
+                            >
+                              {row.orderNumber}
+                            </Link>
+                          </div>
+                          <div className="mt-1">
+                            <span className="rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+                              {isKnownLabWorkStatus(row.labWorkStatus)
+                                ? LAB_WORK_STATUS_LABELS[row.labWorkStatus]
+                                : row.labWorkStatus}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-[var(--text-body)]">
+                          {row.clinicName}
+                        </td>
                         <td className="px-3 py-2 text-[var(--text-body)]">
                           {row.doctorName}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
-                          {new Date(row.orderCreatedAt).toLocaleString("ru-RU", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                          })}
+                        <td className="px-3 py-2 text-[var(--text-body)]">
+                          {row.patientName || "—"}
                         </td>
-                        <td className="px-3 py-2 font-medium">
-                          <Link
-                            href={`/orders/${row.orderId}`}
-                            className="text-[var(--sidebar-blue)] hover:underline"
-                          >
-                            {row.orderNumber}
-                          </Link>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
+                          {formatDateOnlyRu(
+                            row.workReceivedAt ?? row.orderCreatedAt,
+                          )}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
+                          {formatDateOnlyRu(row.approvedAt)}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
+                          {formatDateOnlyRu(row.sentAt)}
                         </td>
                         <td className="max-w-[280px] px-3 py-2 text-xs text-[var(--text-body)]">
                           {row.description}

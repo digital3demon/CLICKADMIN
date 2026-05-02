@@ -17,6 +17,10 @@ export async function GET(
     const url = new URL(req.url);
     const from = url.searchParams.get("from") ?? "";
     const to = url.searchParams.get("to") ?? "";
+    const selectedOrderIds = (url.searchParams.get("orderIds") ?? "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
     const range = parseDateRangeUTC(from, to);
     if (!range) {
       return NextResponse.json(
@@ -37,6 +41,7 @@ export async function GET(
       clinic.id,
       clinic.name,
       range,
+      selectedOrderIds,
     );
 
     const asciiName = `svarka_${from}_${to}.xlsx`.replace(/[^\w.\-]/g, "_");

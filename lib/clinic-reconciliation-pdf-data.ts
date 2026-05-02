@@ -81,6 +81,7 @@ type DateRangeUtc = { from: Date; to: Date };
 export async function buildClinicReconciliationPdfPayload(
   clinicId: string,
   range: DateRangeUtc,
+  selectedOrderIds?: string[] | null,
 ): Promise<ClinicReconciliationPdfPayload> {
   const labLegalName =
     process.env.RECONCILIATION_LAB_LEGAL_NAME?.trim() || "ООО «КЛИКЛаб»";
@@ -105,8 +106,16 @@ export async function buildClinicReconciliationPdfPayload(
   const periodFromLabel = formatDateDdMmYyMsk(range.from);
   const periodToLabel = formatDateDdMmYyMsk(range.to);
 
+  const selected = new Set(
+    (selectedOrderIds ?? [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean),
+  );
+  const selectedList = [...selected];
+
   const rows = await (await getPrisma()).orderConstruction.findMany({
     where: {
+      ...(selectedList.length > 0 ? { orderId: { in: selectedList } } : {}),
       order: {
         clinicId,
         createdAt: { gte: range.from, lte: range.to },

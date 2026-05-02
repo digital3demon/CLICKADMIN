@@ -39,9 +39,16 @@ export async function GET(
     const ser = (rows: typeof included) =>
       rows.map((r) => ({
         orderId: r.orderId,
+        clinicName: r.clinicName,
         doctorName: r.doctorName,
+        patientName: r.patientName,
         orderCreatedAt: r.orderCreatedAt.toISOString(),
+        workReceivedAt: r.workReceivedAt?.toISOString() ?? null,
+        approvedAt: r.approvedAt?.toISOString() ?? null,
+        sentAt: r.sentAt?.toISOString() ?? null,
         orderNumber: r.orderNumber,
+        labWorkStatus: r.labWorkStatus,
+        attentionRequired: r.attentionRequired,
         description: r.description,
         quantity: r.quantity,
         unitPrice: r.unitPrice,
