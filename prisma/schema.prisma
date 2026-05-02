@@ -64,6 +64,7 @@ model Tenant {
   couriers              Courier[]
   kaitenCardTypes       KaitenCardType[]
   orderNumberSettings   OrderNumberSettings?
+  contractNumberSettings ContractNumberSettings?
   subscriptionInvoices  SubscriptionInvoice[]
   /// Переопределения доступа к модулям; если записи нет — см. `lib/role-module-defaults`
   roleModuleAccess      RoleModuleAccess[]
@@ -156,6 +157,7 @@ model Clinic {
   contractSigned               Boolean                        @default(false)
   /// Номер договора (если подписан)
   contractNumber               String?
+  contractDoc                  ClinicContractDoc?
   /// Работа по ЭДО
   worksWithEdo                 Boolean                        @default(false)
   /// От какого юрлица ведётся работа: ИП или ООО
@@ -179,6 +181,16 @@ model Clinic {
   deletedAt                    DateTime?
 
   @@index([tenantId])
+}
+
+/// Храним финальный docx по клинике отдельно, чтобы не грузить байты в обычной карточке.
+model ClinicContractDoc {
+  clinicId   String   @id
+  clinic     Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  fileName   String
+  mimeType   String
+  data       Bytes
+  updatedAt  DateTime @updatedAt
 }
 
 /// Автоматически сформированная сверка (конец периода, МСК 20:00, cron).
@@ -527,6 +539,17 @@ model OrderNumberSettings {
   /// Если задано: следующий номер ≥ этому суффиксу NNN (при том же YYMM), пока не обгонит max в БД.
   nextSequenceFloor Int?
   updatedAt         DateTime @updatedAt
+}
+
+/// Один ряд на тенант: текущее окно нумерации договоров (YYMM).
+model ContractNumberSettings {
+  id               String   @id
+  tenant           Tenant   @relation(fields: [id], references: [id], onDelete: Cascade)
+  /// Префикс договора: 2 цифры года + 2 цифры месяца, напр. «2605»
+  yearMonth        String
+  /// Последний подтверждённый порядковый номер NNN в рамках yearMonth.
+  lastSequence     Int      @default(0)
+  updatedAt        DateTime @updatedAt
 }
 
 /// Основной или индивидуальный прайс по наряду (колонка «ПРАЙС» в Excel)

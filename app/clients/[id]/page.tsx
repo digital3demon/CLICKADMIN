@@ -115,6 +115,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
       where: { id },
       include: {
         _count: { select: { orders: true, doctorLinks: true } },
+        contractDoc: { select: { updatedAt: true } },
         doctorLinks: {
           orderBy: { doctor: { fullName: "asc" } },
           include: {
@@ -190,6 +191,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
       where: { id },
       include: {
         _count: { select: { orders: true, doctorLinks: true } },
+        contractDoc: { select: { updatedAt: true } },
         doctorLinks: {
           orderBy: { doctor: { fullName: "asc" } },
           include: {
@@ -341,6 +343,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
                 contractSigned: clinic.contractSigned,
                 contractNumber: clinic.contractNumber ?? "",
                 worksWithEdo: clinic.worksWithEdo,
+                hasContractDoc: clinic.contractDoc != null,
               }}
             />
           </div>

@@ -151,6 +151,7 @@ export default async function DoctorCardPage({
             reconciliationFrequency: true,
             contractSigned: true,
             contractNumber: true,
+            contractDoc: { select: { updatedAt: true } },
             worksWithEdo: true,
           },
         },
@@ -324,6 +325,7 @@ export default async function DoctorCardPage({
                       : "",
                   contractSigned: doctor.ipClinicAsSource.contractSigned,
                   contractNumber: doctor.ipClinicAsSource.contractNumber ?? "",
+                  hasContractDoc: doctor.ipClinicAsSource.contractDoc != null,
                   worksWithEdo: doctor.ipClinicAsSource.worksWithEdo,
                 }}
               />

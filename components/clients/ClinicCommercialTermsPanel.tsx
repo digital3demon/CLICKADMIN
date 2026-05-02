@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 const btnBase =
   "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm";
@@ -26,7 +26,18 @@ export type ClinicCommercialInitial = {
   contractSigned: boolean;
   /** Пустая строка в форме = null в БД */
   contractNumber: string;
+  hasContractDoc: boolean;
   worksWithEdo: boolean;
+};
+
+type ContractDraftValues = {
+  contractNumber: string;
+  contractDate: string;
+  orgShortName: string;
+  inn: string;
+  ceoName: string;
+  email: string;
+  requisitesLine: string;
 };
 
 function yesNo(v: boolean) {
@@ -51,6 +62,18 @@ function orderPriceListKindReadLabel(v: ClinicOrderPriceListKindUi) {
   return "—";
 }
 
+function emptyContractDraftValues(): ContractDraftValues {
+  return {
+    contractNumber: "",
+    contractDate: "",
+    orgShortName: "",
+    inn: "",
+    ceoName: "",
+    email: "",
+    requisitesLine: "",
+  };
+}
+
 export function ClinicCommercialTermsPanel({
   clinicId,
   initial,
@@ -63,11 +86,154 @@ export function ClinicCommercialTermsPanel({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<ClinicCommercialInitial>(initial);
+  const [hasContractDoc, setHasContractDoc] = useState(initial.hasContractDoc);
+  const [contractBusy, setContractBusy] = useState(false);
+  const [contractError, setContractError] = useState<string | null>(null);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [draftValues, setDraftValues] = useState<ContractDraftValues>(
+    emptyContractDraftValues(),
+  );
+  const [editorText, setEditorText] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const initialKey = useMemo(() => JSON.stringify(initial), [initial]);
 
   useEffect(() => {
     if (!editing) setValues(initial);
+    setHasContractDoc(initial.hasContractDoc);
   }, [initialKey, editing, initial]);
+
+  const openCreateContract = async () => {
+    setContractBusy(true);
+    setContractError(null);
+    try {
+      const res = await fetch(`/api/clinics/${clinicId}/contract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "prefill" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.values) {
+        setContractError(
+          typeof data.error === "string"
+            ? data.error
+            : "Не удалось подготовить договор",
+        );
+        return;
+      }
+      setDraftValues({
+        contractNumber: String(data.values.contractNumber ?? ""),
+        contractDate: String(data.values.contractDate ?? ""),
+        orgShortName: String(data.values.orgShortName ?? ""),
+        inn: String(data.values.inn ?? ""),
+        ceoName: String(data.values.ceoName ?? ""),
+        email: String(data.values.email ?? ""),
+        requisitesLine: String(data.values.requisitesLine ?? ""),
+      });
+      setDraftOpen(true);
+    } catch {
+      setContractError("Сеть или сервер недоступны");
+    } finally {
+      setContractBusy(false);
+    }
+  };
+
+  const openEditorWithDraft = async () => {
+    setContractBusy(true);
+    setContractError(null);
+    try {
+      const res = await fetch(`/api/clinics/${clinicId}/contract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "assemble", values: draftValues }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || typeof data.editorText !== "string") {
+        setContractError(
+          typeof data.error === "string" ? data.error : "Не удалось собрать договор",
+        );
+        return;
+      }
+      setEditorText(data.editorText);
+      setDraftOpen(false);
+      setEditorOpen(true);
+    } catch {
+      setContractError("Сеть или сервер недоступны");
+    } finally {
+      setContractBusy(false);
+    }
+  };
+
+  const saveGeneratedContract = async () => {
+    setContractBusy(true);
+    setContractError(null);
+    try {
+      const res = await fetch(`/api/clinics/${clinicId}/contract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save-generated",
+          contractNumber: draftValues.contractNumber,
+          editorText,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setContractError(
+          typeof data.error === "string" ? data.error : "Не удалось сохранить договор",
+        );
+        return;
+      }
+      setValues((p) => ({
+        ...p,
+        contractSigned: true,
+        contractNumber: String(data.contractNumber ?? draftValues.contractNumber),
+      }));
+      setHasContractDoc(true);
+      setEditorOpen(false);
+      router.refresh();
+    } catch {
+      setContractError("Сеть или сервер недоступны");
+    } finally {
+      setContractBusy(false);
+    }
+  };
+
+  const onUploadContract = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setContractBusy(true);
+    setContractError(null);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const res = await fetch(`/api/clinics/${clinicId}/contract`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setContractError(
+          typeof data.error === "string" ? data.error : "Не удалось загрузить договор",
+        );
+        return;
+      }
+      const parsedNumber =
+        typeof data.contractNumber === "string" ? data.contractNumber : "";
+      setValues((p) => ({
+        ...p,
+        contractSigned: true,
+        contractNumber: parsedNumber || p.contractNumber,
+      }));
+      setHasContractDoc(true);
+      router.refresh();
+    } catch {
+      setContractError("Сеть или сервер недоступны");
+    } finally {
+      setContractBusy(false);
+    }
+  };
 
   const onSave = async () => {
     setSaving(true);
@@ -122,6 +288,7 @@ export function ClinicCommercialTermsPanel({
         contractSigned: Boolean(data.contractSigned),
         contractNumber:
           typeof data.contractNumber === "string" ? data.contractNumber : "",
+        hasContractDoc,
         worksWithEdo: Boolean(data.worksWithEdo),
       });
       setEditing(false);
@@ -140,6 +307,14 @@ export function ClinicCommercialTermsPanel({
           Договор и документооборот
         </h2>
         <div className="flex flex-wrap gap-2">
+          {hasContractDoc ? (
+            <a
+              href={`/api/clinics/${clinicId}/contract`}
+              className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] hover:bg-[var(--table-row-hover)]`}
+            >
+              Скачать договор
+            </a>
+          ) : null}
           {!editing ? (
             <button
               type="button"
@@ -184,6 +359,11 @@ export function ClinicCommercialTermsPanel({
       {error ? (
         <p className="mt-3 text-sm text-red-600" role="alert">
           {error}
+        </p>
+      ) : null}
+      {contractError ? (
+        <p className="mt-2 text-sm text-red-600" role="alert">
+          {contractError}
         </p>
       ) : null}
       <dl className="mt-5 space-y-4 text-sm">
@@ -382,17 +562,44 @@ export function ClinicCommercialTermsPanel({
           <dt className="font-medium text-[var(--text-body)]">Номер договора</dt>
           <dd className="min-w-0 w-full sm:max-w-xl sm:text-right">
             {editing ? (
-              <input
-                type="text"
-                className="mt-1 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:mt-0"
-                placeholder="Например 15/2025-Л"
-                value={values.contractNumber}
-                onChange={(e) =>
-                  setValues((p) => ({ ...p, contractNumber: e.target.value }))
-                }
-                maxLength={500}
-                autoComplete="off"
-              />
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  className="mt-1 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:mt-0"
+                  placeholder="Например 2605-001"
+                  value={values.contractNumber}
+                  onChange={(e) =>
+                    setValues((p) => ({ ...p, contractNumber: e.target.value }))
+                  }
+                  maxLength={500}
+                  autoComplete="off"
+                />
+                <div className="flex flex-wrap gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    disabled={contractBusy}
+                    className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] hover:bg-[var(--table-row-hover)] disabled:opacity-50`}
+                    onClick={() => void openCreateContract()}
+                  >
+                    Создать договор
+                  </button>
+                  <button
+                    type="button"
+                    disabled={contractBusy}
+                    className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] hover:bg-[var(--table-row-hover)] disabled:opacity-50`}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Загрузить договор
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="hidden"
+                    onChange={(e) => void onUploadContract(e)}
+                  />
+                </div>
+              </div>
             ) : (
               <span className="text-[var(--app-text)]">
                 {values.contractNumber.trim()
@@ -423,6 +630,151 @@ export function ClinicCommercialTermsPanel({
           </dd>
         </div>
       </dl>
+
+      {draftOpen ? (
+        <div className="fixed inset-0 z-[240] flex items-center justify-center bg-black/45 p-4">
+          <div
+            className="w-full max-w-2xl rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+          >
+            <h3 className="text-base font-semibold text-[var(--text-body)]">
+              Проверка данных договора
+            </h3>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              Поля взяты из карточки контрагента. Можно поправить перед сборкой.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="text-sm">
+                <span className="mb-1 block text-[var(--text-secondary)]">Номер договора</span>
+                <input
+                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
+                  value={draftValues.contractNumber}
+                  onChange={(e) =>
+                    setDraftValues((p) => ({ ...p, contractNumber: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-[var(--text-secondary)]">Дата договора</span>
+                <input
+                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
+                  value={draftValues.contractDate}
+                  onChange={(e) =>
+                    setDraftValues((p) => ({ ...p, contractDate: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-[var(--text-secondary)]">Наименование (кратко)</span>
+                <input
+                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
+                  value={draftValues.orgShortName}
+                  onChange={(e) =>
+                    setDraftValues((p) => ({ ...p, orgShortName: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-[var(--text-secondary)]">ИНН</span>
+                <input
+                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
+                  value={draftValues.inn}
+                  onChange={(e) =>
+                    setDraftValues((p) => ({ ...p, inn: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-[var(--text-secondary)]">ФИО руководителя</span>
+                <input
+                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
+                  value={draftValues.ceoName}
+                  onChange={(e) =>
+                    setDraftValues((p) => ({ ...p, ceoName: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-[var(--text-secondary)]">Email</span>
+                <input
+                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
+                  value={draftValues.email}
+                  onChange={(e) =>
+                    setDraftValues((p) => ({ ...p, email: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-[var(--text-secondary)]">Реквизиты строкой</span>
+                <textarea
+                  className="min-h-20 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
+                  value={draftValues.requisitesLine}
+                  onChange={(e) =>
+                    setDraftValues((p) => ({ ...p, requisitesLine: e.target.value }))
+                  }
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => setDraftOpen(false)}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={contractBusy}
+                className={`${btnBase} bg-[var(--sidebar-blue)] text-white disabled:opacity-50`}
+                onClick={() => void openEditorWithDraft()}
+              >
+                Продолжить
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editorOpen ? (
+        <div className="fixed inset-0 z-[245] flex items-center justify-center bg-black/45 p-4">
+          <div
+            className="w-full max-w-4xl rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+          >
+            <h3 className="text-base font-semibold text-[var(--text-body)]">
+              Текст договора
+            </h3>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              Можно править финальный текст перед сохранением.
+            </p>
+            <textarea
+              className="mt-3 h-[55vh] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)]"
+              value={editorText}
+              onChange={(e) => setEditorText(e.target.value)}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => setEditorOpen(false)}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={contractBusy}
+                className={`${btnBase} bg-emerald-600 text-white disabled:opacity-50`}
+                onClick={() => void saveGeneratedContract()}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
