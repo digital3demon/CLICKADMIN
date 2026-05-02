@@ -111,7 +111,6 @@ async function sendViaUnisenderGo(params: {
         plaintext: params.text,
       },
       global_language: "ru",
-      skip_unsubscribe: 1,
       tags: ["crm-invite"],
     },
   };
