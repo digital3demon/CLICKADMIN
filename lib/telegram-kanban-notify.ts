@@ -1,10 +1,26 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, UserRole } from "@prisma/client";
 import {
   isKanbanTelegramPrefEnabled,
   mergeKanbanTelegramPrefs,
   type KanbanTelegramPrefKey,
 } from "@/lib/kanban-telegram-prefs";
 import { telegramSendMessage } from "@/lib/telegram-send-message";
+
+/** Две ссылки (канбан + наряд): старший администратор и администратор. */
+function linesHtmlForKanbanTelegramRecipient(
+  role: UserRole,
+  lines: string[],
+  linesAdmin?: string[],
+): string[] {
+  const adminHtml = (linesAdmin ?? []).filter(Boolean).join("\n").trim();
+  if (
+    adminHtml &&
+    (role === "ADMINISTRATOR" || role === "SENIOR_ADMINISTRATOR")
+  ) {
+    return (linesAdmin ?? []).filter(Boolean);
+  }
+  return lines.filter(Boolean);
+}
 
 function botToken(): string | null {
   const t = process.env.TELEGRAM_BOT_TOKEN?.trim();
@@ -25,14 +41,19 @@ export async function notifyKanbanTelegramSubscribers(
     skip?: boolean;
     /** Дополнительно исключить (например уже получили уведомление об @упоминании). */
     alsoExcludeUserIds?: string[];
+    /** Гиперссылки и разметка — только с экранированием через escapeTelegramHtml. */
+    parseMode?: "HTML";
+    /** Для ADMINISTRATOR / SENIOR_ADMINISTRATOR: две ссылки «карточке» + «заказе» (при наряде). */
+    linesAdmin?: string[];
   },
 ): Promise<void> {
   if (opts.skip) return;
   const token = botToken();
   if (!token) return;
 
-  const text = opts.lines.filter(Boolean).join("\n").trim();
-  if (!text) return;
+  const hasAny =
+    opts.lines.some(Boolean) || (opts.linesAdmin?.some(Boolean) ?? false);
+  if (!hasAny) return;
 
   const exclude = new Set<string>();
   if (opts.actorUserId) exclude.add(opts.actorUserId);
@@ -49,6 +70,7 @@ export async function notifyKanbanTelegramSubscribers(
     },
     select: {
       id: true,
+      role: true,
       telegramId: true,
       telegramKanbanNotifyPrefs: true,
     },
@@ -58,7 +80,16 @@ export async function notifyKanbanTelegramSubscribers(
     if (!u.telegramId?.trim()) continue;
     const merged = mergeKanbanTelegramPrefs(u.telegramKanbanNotifyPrefs);
     if (!isKanbanTelegramPrefEnabled(merged, opts.event)) continue;
-    const r = await telegramSendMessage(token, u.telegramId.trim(), text);
+    const mergedLines = linesHtmlForKanbanTelegramRecipient(
+      u.role,
+      opts.lines,
+      opts.linesAdmin,
+    );
+    const text = mergedLines.join("\n").trim();
+    if (!text) continue;
+    const r = await telegramSendMessage(token, u.telegramId.trim(), text, {
+      parseMode: opts.parseMode,
+    });
     if (!r.ok) {
       console.warn(
         "[telegram-kanban-notify] send failed",
@@ -93,14 +124,17 @@ export async function notifyKanbanTelegramTargetUsers(
     targetUserIds: string[];
     lines: string[];
     skip?: boolean;
+    parseMode?: "HTML";
+    linesAdmin?: string[];
   },
 ): Promise<void> {
   if (opts.skip) return;
   const token = botToken();
   if (!token) return;
 
-  const text = opts.lines.filter(Boolean).join("\n").trim();
-  if (!text) return;
+  const hasAny =
+    opts.lines.some(Boolean) || (opts.linesAdmin?.some(Boolean) ?? false);
+  if (!hasAny) return;
 
   const want = new Set(opts.targetUserIds.filter(Boolean));
   if (opts.actorUserId) want.delete(opts.actorUserId);
@@ -120,6 +154,7 @@ export async function notifyKanbanTelegramTargetUsers(
     },
     select: {
       id: true,
+      role: true,
       telegramId: true,
       telegramKanbanNotifyPrefs: true,
     },
@@ -129,7 +164,16 @@ export async function notifyKanbanTelegramTargetUsers(
     if (!u.telegramId?.trim()) continue;
     const merged = mergeKanbanTelegramPrefs(u.telegramKanbanNotifyPrefs);
     if (!hasAnyKanbanPrefEnabled(merged, prefKeys)) continue;
-    const r = await telegramSendMessage(token, u.telegramId.trim(), text);
+    const mergedLines = linesHtmlForKanbanTelegramRecipient(
+      u.role,
+      opts.lines,
+      opts.linesAdmin,
+    );
+    const text = mergedLines.join("\n").trim();
+    if (!text) continue;
+    const r = await telegramSendMessage(token, u.telegramId.trim(), text, {
+      parseMode: opts.parseMode,
+    });
     if (!r.ok) {
       console.warn(
         "[telegram-kanban-notify] target send failed",

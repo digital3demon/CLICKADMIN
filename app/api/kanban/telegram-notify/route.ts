@@ -48,6 +48,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "lines: массив строк" }, { status: 400 });
   }
 
+  const linesAdminRaw = o.linesAdmin;
+  const linesAdmin =
+    Array.isArray(linesAdminRaw) &&
+    linesAdminRaw.every((x) => typeof x === "string")
+      ? (linesAdminRaw as string[])
+      : undefined;
+
   const targetUserIds = Array.isArray(o.targetUserIds)
     ? o.targetUserIds.filter((x): x is string => typeof x === "string" && x.length > 0)
     : [];
@@ -67,6 +74,8 @@ export async function POST(req: Request) {
     }
   }
 
+  const parseMode = o.parseMode === "HTML" ? ("HTML" as const) : undefined;
+
   const prisma = await getPrisma();
   const actorUserId = session.sub;
 
@@ -79,6 +88,8 @@ export async function POST(req: Request) {
         actorUserId,
         targetUserIds,
         lines: lines as string[],
+        parseMode,
+        linesAdmin,
       });
     } else {
       await notifyKanbanTelegramSubscribers(prisma, {
@@ -86,6 +97,8 @@ export async function POST(req: Request) {
         actorUserId,
         lines: lines as string[],
         alsoExcludeUserIds: broadcastExcludeUserIds,
+        parseMode,
+        linesAdmin,
       });
     }
   } catch (e) {

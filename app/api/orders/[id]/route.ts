@@ -6,7 +6,10 @@ import {
   type OrderStatus as PrismaOrderStatus,
   type PrismaClient,
 } from "@prisma/client";
+import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
+import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { notifyKanbanTelegramSubscribers } from "@/lib/telegram-kanban-notify";
+import { telegramHtmlLink } from "@/lib/telegram-html";
 import { NextResponse } from "next/server";
 import {
   getClientsPrisma,
@@ -922,24 +925,36 @@ export async function PATCH(
       body.demoKanbanColumn !== undefined || body.kaitenCardTypeId !== undefined;
     if (touchedCrmKanbanFields) {
       try {
-        const lines: string[] = [
-          "Канбан CRM",
-          `Наряд №${order.orderNumber}`,
-        ];
+        const base = crmPublicBaseUrl();
+        const rel = kanbanOrderDeepLinkPath(orderId);
+        const cardUrl = `${base}${rel}`;
+        const linkLabel =
+          order.kaitenCardTitleMirror?.trim() || `Наряд №${order.orderNumber}`;
+        const linkHtml = telegramHtmlLink(cardUrl, linkLabel);
+        const details: string[] = [];
         if (body.demoKanbanColumn !== undefined) {
-          lines.push(`Колонка: ${demoKanbanColumnLine(order.demoKanbanColumn)}`);
+          details.push(`колонка — ${demoKanbanColumnLine(order.demoKanbanColumn)}`);
         }
         if (body.kaitenCardTypeId !== undefined) {
-          lines.push(
+          details.push(
             order.kaitenCardTypeId
-              ? "Тип карточки: задан"
-              : "Тип карточки: сброшен",
+              ? "тип карточки задан"
+              : "тип карточки сброшен",
           );
         }
+        const orderPageUrl = `${base}/orders/${encodeURIComponent(orderId)}`;
+        const cardWord = telegramHtmlLink(cardUrl, "карточке");
+        const orderWord = telegramHtmlLink(orderPageUrl, "заказе");
+        const lines = [`В ${linkHtml} обновлено: ${details.join("; ")}`];
+        const linesAdmin = [
+          `В ${cardWord} и ${orderWord} обновлено: ${details.join("; ")}`,
+        ];
         await notifyKanbanTelegramSubscribers(clientsPrisma, {
           event: "tg_kanban_crm_sync",
           actorUserId: session?.sub ?? null,
           lines,
+          linesAdmin,
+          parseMode: "HTML",
         });
       } catch (e) {
         console.error("[PATCH order] telegram kanban notify", e);

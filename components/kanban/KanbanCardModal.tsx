@@ -59,15 +59,57 @@ import {
   IconUnlock,
   IconX,
 } from "./kanban-icons";
+import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
+
+function kanbanCardAbsoluteUrl(cardId: string, boardId: string): string {
+  if (typeof window === "undefined") return "";
+  const basePath = window.location.pathname.split("?")[0] || "/kanban";
+  const q = new URLSearchParams({ card: cardId, board: boardId });
+  return `${window.location.origin}${basePath}?${q.toString()}`;
+}
+
+/** Ссылка с подписью «шапка карточки» для Telegram HTML. */
+function kanbanCardLinkHtml(
+  cardId: string,
+  boardId: string,
+  title: string,
+): string {
+  return telegramHtmlLink(
+    kanbanCardAbsoluteUrl(cardId, boardId),
+    (title || "").trim() || "Без названия",
+  );
+}
+
+/** Две слово-ссылки для старшего администратора / администратора (наряд привязан). */
+function cardOrderWordLinks(
+  orderId: string,
+  cardId: string,
+  boardId: string,
+): { cardWord: string; orderWord: string } {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return {
+    cardWord: telegramHtmlLink(
+      kanbanCardAbsoluteUrl(cardId, boardId),
+      "карточке",
+    ),
+    orderWord: telegramHtmlLink(
+      `${origin}/orders/${encodeURIComponent(orderId)}`,
+      "заказе",
+    ),
+  };
+}
 
 function postKanbanCrmTelegramNotify(payload: {
   kaitenCardId?: number | null;
   event: KanbanTelegramPrefKey;
   lines: string[];
+  /** Две ссылки «карточке» + «заказе» для ADMINISTRATOR / SENIOR_ADMINISTRATOR. */
+  linesAdmin?: string[];
   targetUserIds?: string[];
   broadcastExcludeUserIds?: string[];
   /** На сервере: достаточно любого из ключей (для @упоминаний — комментарий или упоминание). */
   alternatePrefKeys?: KanbanTelegramPrefKey[];
+  parseMode?: "HTML";
 }) {
   void fetch("/api/kanban/telegram-notify", {
     method: "POST",
@@ -280,14 +322,30 @@ export function KanbanCardModal({
       setBlockPopupOpen(false);
       setBlockReasonDraft("");
       if (!shouldSkipCrmKanbanTelegram(fc.card.kaitenCardId)) {
+        const titleT = (fc.card.title || "").trim() || "Без названия";
+        const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleT);
+        const who = escapeTelegramHtml((act || "Пользователь").trim());
+        const reasonEsc = escapeTelegramHtml(reasonForTg.slice(0, 240));
+        const oid = fc.card.linkedOrderId?.trim();
+        const { cardWord, orderWord } = oid
+          ? cardOrderWordLinks(oid, cardId, board.id)
+          : { cardWord: "", orderWord: "" };
         postKanbanCrmTelegramNotify({
           kaitenCardId: fc.card.kaitenCardId,
           event: "tg_block_added",
+          parseMode: "HTML",
           lines: [
-            "Канбан CRM",
-            `Карточка: ${(fc.card.title || "").trim() || "Без названия"}`,
-            `Причина: ${reasonForTg.slice(0, 240)}`,
+            `${who} заблокировал(а) ${linkHtml}`,
+            ...(reasonEsc ? [`Причина: ${reasonEsc}`] : []),
           ],
+          ...(oid
+            ? {
+                linesAdmin: [
+                  `${who} заблокировал(а) ${cardWord} и ${orderWord}`,
+                  ...(reasonEsc ? [`Причина: ${reasonEsc}`] : []),
+                ],
+              }
+            : {}),
         });
       }
     });
@@ -313,11 +371,12 @@ export function KanbanCardModal({
         pushActivity(fc.card, "Изменены ответственные", b.users[0]?.id, b, act);
       });
       if (!shouldSkipCrmKanbanTelegram(kaitenId)) {
-        const base = [
-          "Канбан CRM",
-          `Карточка: ${titleLine}`,
-          `Добавил(а): ${actorLabel}`,
-        ];
+        const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
+        const who = escapeTelegramHtml(actorLabel);
+        const oid = card.linkedOrderId?.trim();
+        const { cardWord, orderWord } = oid
+          ? cardOrderWordLinks(oid, cardId, board.id)
+          : { cardWord: "", orderWord: "" };
         const added = pickerIds.filter((id) => !prevAssign.includes(id));
         const removed = prevAssign.filter((id) => !pickerIds.includes(id));
         if (added.length) {
@@ -325,7 +384,15 @@ export function KanbanCardModal({
             kaitenCardId: kaitenId,
             event: "tg_person_assigned_responsible",
             targetUserIds: added,
-            lines: [...base, "Вас назначили ответственным"],
+            parseMode: "HTML",
+            lines: [`${who} назначил(а) вас ответственным в ${linkHtml}`],
+            ...(oid
+              ? {
+                  linesAdmin: [
+                    `${who} назначил(а) вас ответственным в ${cardWord} и ${orderWord}`,
+                  ],
+                }
+              : {}),
           });
         }
         if (removed.length) {
@@ -333,12 +400,15 @@ export function KanbanCardModal({
             kaitenCardId: kaitenId,
             event: "tg_person_removed_from_card",
             targetUserIds: removed,
-            lines: [
-              "Канбан CRM",
-              `Карточка: ${titleLine}`,
-              `Изменил(а): ${actorLabel}`,
-              "Вы сняты с ответственных по карточке",
-            ],
+            parseMode: "HTML",
+            lines: [`${who} снял(а) вас с ответственных по ${linkHtml}`],
+            ...(oid
+              ? {
+                  linesAdmin: [
+                    `${who} снял(а) вас с ответственных по ${cardWord} и ${orderWord}`,
+                  ],
+                }
+              : {}),
           });
         }
       }
@@ -350,11 +420,12 @@ export function KanbanCardModal({
         pushActivity(fc.card, "Изменён состав участников", b.users[0]?.id, b, act);
       });
       if (!shouldSkipCrmKanbanTelegram(kaitenId)) {
-        const base = [
-          "Канбан CRM",
-          `Карточка: ${titleLine}`,
-          `Добавил(а): ${actorLabel}`,
-        ];
+        const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
+        const who = escapeTelegramHtml(actorLabel);
+        const oid = card.linkedOrderId?.trim();
+        const { cardWord, orderWord } = oid
+          ? cardOrderWordLinks(oid, cardId, board.id)
+          : { cardWord: "", orderWord: "" };
         const added = pickerIds.filter((id) => !prevPart.includes(id));
         const removed = prevPart.filter((id) => !pickerIds.includes(id));
         if (added.length) {
@@ -362,7 +433,13 @@ export function KanbanCardModal({
             kaitenCardId: kaitenId,
             event: "tg_person_added_to_card",
             targetUserIds: added,
-            lines: [...base, "Вас добавили в карточку как участника"],
+            parseMode: "HTML",
+            lines: [`${who} добавил(а) вас в ${linkHtml}`],
+            ...(oid
+              ? {
+                  linesAdmin: [`${who} добавил(а) вас в ${cardWord} и ${orderWord}`],
+                }
+              : {}),
           });
         }
         if (removed.length) {
@@ -370,12 +447,15 @@ export function KanbanCardModal({
             kaitenCardId: kaitenId,
             event: "tg_person_removed_from_card",
             targetUserIds: removed,
-            lines: [
-              "Канбан CRM",
-              `Карточка: ${titleLine}`,
-              `Изменил(а): ${actorLabel}`,
-              "Вы исключены из участников карточки",
-            ],
+            parseMode: "HTML",
+            lines: [`${who} исключил(а) вас из участников ${linkHtml}`],
+            ...(oid
+              ? {
+                  linesAdmin: [
+                    `${who} исключил(а) вас из участников ${cardWord} и ${orderWord}`,
+                  ],
+                }
+              : {}),
           });
         }
       }
@@ -457,13 +537,14 @@ export function KanbanCardModal({
         crmById.get(actor)?.displayName ??
         userNameById(board, actor) ??
         "Пользователь";
-      const lines = [
-        "Канбан CRM",
-        `Карточка: ${(card.title || "").trim() || "Без названия"}`,
-        "Вас упомянули в комментарии к карточке",
-        `От: ${authorName}`,
-        trimmed.slice(0, 900),
-      ];
+      const titleT = (card.title || "").trim() || "Без названия";
+      const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleT);
+      const who = escapeTelegramHtml(authorName);
+      const snippet = escapeTelegramHtml(trimmed.slice(0, 400));
+      const oid = card.linkedOrderId?.trim();
+      const { cardWord, orderWord } = oid
+        ? cardOrderWordLinks(oid, cardId, board.id)
+        : { cardWord: "", orderWord: "" };
       const mentioned = parseMentionUserIdsFromText(trimmed, crmList).filter(
         (id) => id !== actor,
       );
@@ -473,13 +554,29 @@ export function KanbanCardModal({
           event: "tg_mentioned_in_comment",
           alternatePrefKeys: ["tg_comment_added"],
           targetUserIds: mentioned,
-          lines,
+          parseMode: "HTML",
+          lines: [`${who} упомянул вас в ${linkHtml} «${snippet}»`],
+          ...(oid
+            ? {
+                linesAdmin: [
+                  `${who} упомянул вас в ${cardWord} и ${orderWord} «${snippet}»`,
+                ],
+              }
+            : {}),
         });
       }
       postKanbanCrmTelegramNotify({
         kaitenCardId: card.kaitenCardId,
         event: "tg_comment_added",
-        lines,
+        parseMode: "HTML",
+        lines: [`${who} оставил(а) комментарий к ${linkHtml}\n«${snippet}»`],
+        ...(oid
+          ? {
+              linesAdmin: [
+                `${who} оставил(а) комментарий к ${cardWord} и ${orderWord}\n«${snippet}»`,
+              ],
+            }
+          : {}),
         broadcastExcludeUserIds: mentioned,
       });
     }
@@ -832,14 +929,25 @@ export function KanbanCardModal({
                     if (!fc) return;
                     performUnblock(fc.card, b, act);
                     if (!shouldSkipCrmKanbanTelegram(fc.card.kaitenCardId)) {
+                      const t = (fc.card.title || "").trim() || "Без названия";
+                      const linkHtml = kanbanCardLinkHtml(cardId, board.id, t);
+                      const who = escapeTelegramHtml((act || "Пользователь").trim());
+                      const oid = fc.card.linkedOrderId?.trim();
+                      const { cardWord, orderWord } = oid
+                        ? cardOrderWordLinks(oid, cardId, board.id)
+                        : { cardWord: "", orderWord: "" };
                       postKanbanCrmTelegramNotify({
                         kaitenCardId: fc.card.kaitenCardId,
                         event: "tg_card_unblocked",
-                        lines: [
-                          "Канбан CRM",
-                          `Карточка: ${(fc.card.title || "").trim() || "Без названия"}`,
-                          "Блокировка снята",
-                        ],
+                        parseMode: "HTML",
+                        lines: [`${who} снял(а) блокировку с ${linkHtml}`],
+                        ...(oid
+                          ? {
+                              linesAdmin: [
+                                `${who} снял(а) блокировку с ${cardWord} и ${orderWord}`,
+                              ],
+                            }
+                          : {}),
                       });
                     }
                   });
@@ -1053,14 +1161,26 @@ export function KanbanCardModal({
                       });
                       if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
                         const titleLine = (card.title || "").trim() || "Без названия";
+                        const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
+                        const duePart = v
+                          ? `новый срок ${escapeTelegramHtml(v)}`
+                          : "срок сброшен";
+                        const oid = card.linkedOrderId?.trim();
+                        const { cardWord, orderWord } = oid
+                          ? cardOrderWordLinks(oid, cardId, board.id)
+                          : { cardWord: "", orderWord: "" };
                         postKanbanCrmTelegramNotify({
                           kaitenCardId: card.kaitenCardId,
                           event: "tg_due_changed",
-                          lines: [
-                            "Канбан CRM",
-                            `Карточка: ${titleLine}`,
-                            v ? `Новый срок: ${v}` : "Срок сброшен",
-                          ],
+                          parseMode: "HTML",
+                          lines: [`Изменён срок в ${linkHtml}: ${duePart}`],
+                          ...(oid
+                            ? {
+                                linesAdmin: [
+                                  `Изменён срок в ${cardWord} и ${orderWord}: ${duePart}`,
+                                ],
+                              }
+                            : {}),
                         });
                       }
                     }}
@@ -1133,14 +1253,24 @@ export function KanbanCardModal({
                           pushActivity(fc.card, "Обновлено описание", b.users[0]?.id, b, act);
                         });
                         if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
+                          const titleLine = (card.title || "").trim() || "Без названия";
+                          const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
+                          const oid = card.linkedOrderId?.trim();
+                          const { cardWord, orderWord } = oid
+                            ? cardOrderWordLinks(oid, cardId, board.id)
+                            : { cardWord: "", orderWord: "" };
                           postKanbanCrmTelegramNotify({
                             kaitenCardId: card.kaitenCardId,
                             event: "tg_description_changed",
-                            lines: [
-                              "Канбан CRM",
-                              `Карточка: ${(card.title || "").trim() || "Без названия"}`,
-                              "Изменено описание карточки",
-                            ],
+                            parseMode: "HTML",
+                            lines: [`Обновлено описание в ${linkHtml}`],
+                            ...(oid
+                              ? {
+                                  linesAdmin: [
+                                    `Обновлено описание в ${cardWord} и ${orderWord}`,
+                                  ],
+                                }
+                              : {}),
                           });
                         }
                       })();

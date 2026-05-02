@@ -10,20 +10,25 @@ export async function telegramSendMessage(
   botToken: string,
   chatId: string,
   text: string,
+  opts?: { parseMode?: "HTML" },
 ): Promise<TelegramSendResult> {
   const t = text.trim();
   if (!t) return { ok: false, error: "Пустой текст" };
   try {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      text: t.slice(0, 4096),
+      disable_web_page_preview: true,
+    };
+    if (opts?.parseMode === "HTML") {
+      body.parse_mode = "HTML";
+    }
     const res = await fetch(
       `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: t.slice(0, 4096),
-          disable_web_page_preview: true,
-        }),
+        body: JSON.stringify(body),
       },
     );
     const j = (await res.json().catch(() => ({}))) as {
