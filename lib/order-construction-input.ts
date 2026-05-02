@@ -5,6 +5,7 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import { isValidPermanentFdi } from "@/lib/fdi-teeth";
+import { resolvePriceOverrideMap } from "@/lib/price-overrides";
 
 export const JAW_ARCH_SET = new Set<string>(["UPPER", "LOWER", "BOTH"]);
 
@@ -47,7 +48,7 @@ export type BuildConstructionsError = { status: number; error: string };
 export async function buildConstructionCreatesFromInput(
   prisma: PrismaClient,
   raw: unknown,
-  opts?: { clinicId?: string | null },
+  opts?: { clinicId?: string | null; doctorId?: string | null },
 ): Promise<
   | { ok: true; creates: Prisma.OrderConstructionUncheckedCreateWithoutOrderInput[] }
   | { ok: false; err: BuildConstructionsError }
@@ -128,19 +129,14 @@ export async function buildConstructionCreatesFromInput(
     foundPriceItems.map((p) => [p.id, p.priceRub]),
   );
   const clinicId = opts?.clinicId?.trim() ? opts.clinicId.trim() : null;
+  const doctorId = opts?.doctorId?.trim() ? opts.doctorId.trim() : null;
   const overridePriceByPlId =
-    clinicId && priceListIds.size > 0
-      ? new Map(
-          (
-            await prisma.clinicPriceOverride.findMany({
-              where: {
-                clinicId,
-                priceListItemId: { in: [...priceListIds] },
-              },
-              select: { priceListItemId: true, priceRub: true },
-            })
-          ).map((x) => [x.priceListItemId, x.priceRub]),
-        )
+    priceListIds.size > 0
+      ? await resolvePriceOverrideMap(prisma, {
+          priceListItemIds: [...priceListIds],
+          clinicId,
+          doctorId,
+        })
       : new Map<string, number>();
 
   if (materialIds.size > 0) {

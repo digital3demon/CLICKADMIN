@@ -1442,12 +1442,14 @@ export function NewOrderForm({
             <PodrobnoSection
               lines={detailLines}
               clinicId={effectiveClinicIdForPrice}
+              doctorId={doctorId || null}
               onLinesChange={setDetailLines}
             />
 
             <QuickOrderSection
               value={quickOrder}
               clinicId={effectiveClinicIdForPrice}
+              doctorId={doctorId || null}
               onChange={setQuickOrder}
             />
         </div>

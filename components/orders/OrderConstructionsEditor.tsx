@@ -279,9 +279,13 @@ export function draftToConstructionPayload(
 export function OrderConstructionsEditor({
   value,
   onChange,
+  clinicId,
+  doctorId,
 }: {
   value: DraftConstructionLine[];
   onChange: (next: DraftConstructionLine[]) => void;
+  clinicId?: string | null;
+  doctorId?: string | null;
 }) {
   const [types, setTypes] = useState<ConstructionTypeRow[]>([]);
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
@@ -692,6 +696,8 @@ export function OrderConstructionsEditor({
 
       <PriceListPickModal
         open={pickOpen}
+        clinicId={clinicId}
+        doctorId={doctorId}
         onClose={() => setPickOpen(false)}
         onPick={onPickPrice}
         title="Позиция из прайса"

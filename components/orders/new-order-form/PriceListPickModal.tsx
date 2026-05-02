@@ -19,6 +19,7 @@ export type PriceListPickRow = {
 type PriceListPickModalProps = {
   open: boolean;
   clinicId?: string | null;
+  doctorId?: string | null;
   title?: string;
   onClose: () => void;
   onPick: (row: PriceListPickRow) => void;
@@ -27,6 +28,7 @@ type PriceListPickModalProps = {
 export function PriceListPickModal({
   open,
   clinicId = null,
+  doctorId = null,
   title = "Позиция из прайса",
   onClose,
   onPick,
@@ -42,9 +44,14 @@ export function PriceListPickModal({
     let cancelled = false;
     (async () => {
       try {
+        const hasClinic = Boolean(clinicId && clinicId.trim());
+        const hasDoctor = Boolean(doctorId && doctorId.trim());
         const qs =
-          clinicId && clinicId.trim()
-            ? `?clinicId=${encodeURIComponent(clinicId)}`
+          hasClinic || hasDoctor
+            ? `?${new URLSearchParams({
+                ...(hasClinic ? { clinicId: clinicId!.trim() } : {}),
+                ...(hasDoctor ? { doctorId: doctorId!.trim() } : {}),
+              }).toString()}`
             : "";
         const res = await fetch(`/api/price-list-items${qs}`);
         if (!res.ok) throw new Error("fail");
@@ -57,7 +64,7 @@ export function PriceListPickModal({
     return () => {
       cancelled = true;
     };
-  }, [open, clinicId]);
+  }, [open, clinicId, doctorId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

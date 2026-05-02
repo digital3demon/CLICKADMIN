@@ -320,6 +320,7 @@ export async function createOrderFromBody(
   if (body.constructions !== undefined) {
     const built = await buildConstructionCreatesFromInput(pricingPrisma, body.constructions, {
       clinicId: resolvedClinicId,
+      doctorId,
     });
     if (!built.ok) return fail(built.err.status, built.err.error);
     constructionCreates = built.creates;

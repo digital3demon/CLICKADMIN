@@ -172,6 +172,7 @@ model Clinic {
   doctorClinicLinkSuppressions DoctorClinicLinkSuppression[]
   /// Индивидуальные цены клиники по позициям активного прайса.
   priceOverrides               ClinicPriceOverride[]
+  doctorPriceOverrides         DoctorClinicPriceOverride[]
   orders                       Order[]
   contractorRevisions          ContractorRevision[]
   reconciliationSnapshots      ClinicReconciliationSnapshot[]
@@ -277,6 +278,8 @@ model Doctor {
   ipClinicAsSource Clinic?      @relation("ClinicAsDoctorIp")
   clinicLinks                  DoctorOnClinic[]
   doctorClinicLinkSuppressions DoctorClinicLinkSuppression[]
+  priceOverrides               DoctorPriceOverride[]
+  clinicPriceOverrides         DoctorClinicPriceOverride[]
   orders                       Order[]
   contractorRevisions          ContractorRevision[]
   createdAt                    DateTime                      @default(now())
@@ -1111,6 +1114,8 @@ model PriceListItem {
   isActive        Boolean   @default(true)
   sortOrder       Int       @default(0)
   clinicOverrides ClinicPriceOverride[]
+  doctorOverrides DoctorPriceOverride[]
+  doctorClinicOverrides DoctorClinicPriceOverride[]
   constructions   OrderConstruction[]
   costingLines    CostingLine[]
   createdAt       DateTime  @default(now())
@@ -1132,6 +1137,39 @@ model ClinicPriceOverride {
   updatedAt      DateTime     @updatedAt
 
   @@id([clinicId, priceListItemId])
+  @@index([priceListItemId])
+}
+
+/// Индивидуальная цена позиции прайса для врача (независимо от клиники).
+model DoctorPriceOverride {
+  doctorId        String
+  priceListItemId String
+  doctor          Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  priceListItem   PriceListItem @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
+  /// Цена для этого врача (руб), если запись существует — переопределяет базовую цену.
+  priceRub        Int
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@id([doctorId, priceListItemId])
+  @@index([priceListItemId])
+}
+
+/// Индивидуальная цена позиции прайса для связки врач+клиника.
+model DoctorClinicPriceOverride {
+  doctorId        String
+  clinicId        String
+  priceListItemId String
+  doctor          Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic          Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  priceListItem   PriceListItem @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
+  /// Цена для пары врач+клиника (руб), самый приоритетный уровень.
+  priceRub        Int
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@id([doctorId, clinicId, priceListItemId])
+  @@index([clinicId, doctorId])
   @@index([priceListItemId])
 }
 

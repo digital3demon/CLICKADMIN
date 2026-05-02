@@ -23,6 +23,7 @@ const TABS = [
   { id: "price" as const, label: "Позиции прайса" },
   { id: "contractors" as const, label: "Клиники и врачи" },
   { id: "warehouse" as const, label: "Склад" },
+  { id: "reconciliation" as const, label: "Сверки" },
 ];
 
 function moneyRub(n: number): string {
@@ -40,6 +41,15 @@ const CHART_COLORS = {
 };
 
 type TabId = (typeof TABS)[number]["id"];
+
+function monthNameRu(month: number): string {
+  const d = new Date(Date.UTC(2026, Math.max(0, Math.min(11, month - 1)), 1));
+  return d.toLocaleString("ru-RU", { month: "long" });
+}
+
+function formatMonthTitle(year: number, month: number): string {
+  return `${monthNameRu(month)} ${year}`;
+}
 
 export function AnalyticsPageClient() {
   const initial = useMemo(() => defaultAnalyticsRange(), []);
@@ -117,11 +127,73 @@ export function AnalyticsPageClient() {
     }[];
   } | null>(null);
 
+  const now = useMemo(() => new Date(), []);
+  const [reconYear, setReconYear] = useState<number>(now.getUTCFullYear());
+  const [reconMonth, setReconMonth] = useState<number>(now.getUTCMonth() + 1);
+  const [reconCompareYear, setReconCompareYear] = useState<number>(
+    now.getUTCMonth() === 0 ? now.getUTCFullYear() - 1 : now.getUTCFullYear(),
+  );
+  const [reconCompareMonth, setReconCompareMonth] = useState<number>(
+    now.getUTCMonth() === 0 ? 12 : now.getUTCMonth(),
+  );
+  const [reconUseCompare, setReconUseCompare] = useState(true);
+  const [reconciliation, setReconciliation] = useState<{
+    month: { year: number; month: number };
+    compareMonth: { year: number; month: number } | null;
+    rows: {
+      clinicId: string;
+      contractorName: string;
+      monthTotalRub: number;
+      compareTotalRub: number | null;
+      deltaRub: number | null;
+      deltaPercent: number | null;
+      periods: {
+        snapshotId: string;
+        slot: string;
+        periodLabelRu: string;
+        periodFromStr: string;
+        periodToStr: string;
+        amountRub: number;
+      }[];
+      comparePeriods: {
+        snapshotId: string;
+        slot: string;
+        periodLabelRu: string;
+        periodFromStr: string;
+        periodToStr: string;
+        amountRub: number;
+      }[];
+    }[];
+    totals: {
+      monthTotalRub: number;
+      compareTotalRub: number | null;
+      deltaRub: number | null;
+      deltaPercent: number | null;
+    };
+  } | null>(null);
+
   const q = useMemo(
     () =>
       `from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}`,
     [fromStr, toStr],
   );
+  const reconQ = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set("year", String(reconYear));
+    p.set("month", String(reconMonth));
+    if (reconUseCompare) {
+      p.set("compareYear", String(reconCompareYear));
+      p.set("compareMonth", String(reconCompareMonth));
+    }
+    return p.toString();
+  }, [
+    reconYear,
+    reconMonth,
+    reconUseCompare,
+    reconCompareYear,
+    reconCompareMonth,
+  ]);
+  const activeQ = tab === "reconciliation" ? reconQ : q;
 
   const refetchActiveTab = useCallback(() => {
     delete loadedForQRef.current[tab];
@@ -134,11 +206,12 @@ export function AnalyticsPageClient() {
     setPrice(null);
     setContractors(null);
     setWarehouse(null);
+    setReconciliation(null);
     setError(null);
-  }, [q]);
+  }, [q, reconQ]);
 
   useEffect(() => {
-    if (loadedForQRef.current[tab] === q) return;
+    if (loadedForQRef.current[tab] === activeQ) return;
     const ac = new AbortController();
     const tabNow = tab;
     (async () => {
@@ -151,7 +224,9 @@ export function AnalyticsPageClient() {
             ? `/api/analytics/price-items?${q}`
             : tabNow === "contractors"
               ? `/api/analytics/contractors?${q}`
-              : `/api/analytics/warehouse?${q}`;
+              : tabNow === "warehouse"
+                ? `/api/analytics/warehouse?${q}`
+                : `/api/analytics/reconciliation?${reconQ}`;
       try {
         const res = await fetch(path, { signal: ac.signal });
         const text = await res.text();
@@ -187,8 +262,12 @@ export function AnalyticsPageClient() {
         else if (tabNow === "price") setPrice(j as NonNullable<typeof price>);
         else if (tabNow === "contractors")
           setContractors(j as NonNullable<typeof contractors>);
-        else setWarehouse(j as NonNullable<typeof warehouse>);
-        loadedForQRef.current[tabNow] = q;
+        else if (tabNow === "warehouse") {
+          setWarehouse(j as NonNullable<typeof warehouse>);
+        } else {
+          setReconciliation(j as NonNullable<typeof reconciliation>);
+        }
+        loadedForQRef.current[tabNow] = activeQ;
       } catch (e) {
         if (ac.signal.aborted) return;
         setError(e instanceof Error ? e.message : "Ошибка загрузки");
@@ -197,10 +276,12 @@ export function AnalyticsPageClient() {
       }
     })();
     return () => ac.abort();
-  }, [tab, q, reloadTick]);
+  }, [tab, q, reconQ, activeQ, reloadTick]);
 
   const exportHref = (type: "finance" | "price" | "contractors" | "warehouse") =>
     `/api/analytics/export?type=${type}&${q}`;
+  const reconExportHref = (format: "xlsx" | "pdf") =>
+    `/api/analytics/reconciliation/export?format=${format}&${reconQ}`;
 
   const setPreset = (days: number) => {
     const to = new Date();
@@ -220,6 +301,11 @@ export function AnalyticsPageClient() {
       orders: r.orderCount,
     }));
   }, [price]);
+
+  const yearOptions = useMemo(() => {
+    const y = new Date().getUTCFullYear();
+    return [y - 2, y - 1, y, y + 1];
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -303,7 +389,9 @@ export function AnalyticsPageClient() {
           ? !price
           : tab === "contractors"
             ? !contractors
-            : !warehouse) ? (
+            : tab === "warehouse"
+              ? !warehouse
+              : !reconciliation) ? (
         <p className="text-sm text-[var(--text-muted)]">Загрузка отчёта…</p>
       ) : null}
 
@@ -700,6 +788,209 @@ export function AnalyticsPageClient() {
                     <td className="px-3 py-2 tabular-nums">{r.movements}</td>
                     <td className="px-3 py-2 tabular-nums">{r.quantityAbs}</td>
                     <td className="px-3 py-2 tabular-nums">{moneyRub(r.costRub)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {tab === "reconciliation" && reconciliation ? (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3">
+            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">
+              Месяц
+              <select
+                value={reconMonth}
+                onChange={(e) => setReconMonth(Number(e.target.value))}
+                className="rounded-md border border-[var(--input-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm text-[var(--app-text)]"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                  <option key={m} value={m}>
+                    {monthNameRu(m)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">
+              Год
+              <select
+                value={reconYear}
+                onChange={(e) => setReconYear(Number(e.target.value))}
+                className="rounded-md border border-[var(--input-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm text-[var(--app-text)]"
+              >
+                {yearOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ml-2 inline-flex items-center gap-2 text-sm text-[var(--text-body)]">
+              <input
+                type="checkbox"
+                checked={reconUseCompare}
+                onChange={(e) => setReconUseCompare(e.target.checked)}
+              />
+              Сравнить с другим месяцем
+            </label>
+            {reconUseCompare ? (
+              <>
+                <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">
+                  Сравнение: месяц
+                  <select
+                    value={reconCompareMonth}
+                    onChange={(e) => setReconCompareMonth(Number(e.target.value))}
+                    className="rounded-md border border-[var(--input-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm text-[var(--app-text)]"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <option key={m} value={m}>
+                        {monthNameRu(m)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">
+                  Сравнение: год
+                  <select
+                    value={reconCompareYear}
+                    onChange={(e) => setReconCompareYear(Number(e.target.value))}
+                    className="rounded-md border border-[var(--input-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm text-[var(--app-text)]"
+                  >
+                    {yearOptions.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-[var(--text-secondary)]">
+              {`Сверки за ${formatMonthTitle(
+                reconciliation.month.year,
+                reconciliation.month.month,
+              )}`}
+              {reconciliation.compareMonth
+                ? ` vs ${formatMonthTitle(
+                    reconciliation.compareMonth.year,
+                    reconciliation.compareMonth.month,
+                  )}`
+                : ""}
+            </p>
+            <div className="flex items-center gap-2">
+              <a
+                href={reconExportHref("xlsx")}
+                className="rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+              >
+                Выгрузить Excel
+              </a>
+              <a
+                href={reconExportHref("pdf")}
+                className="rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+              >
+                Выгрузить PDF
+              </a>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Итого за месяц
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                {moneyRub(reconciliation.totals.monthTotalRub)}
+              </p>
+            </div>
+            {reconciliation.compareMonth ? (
+              <>
+                <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Итого сравнения
+                  </p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                    {moneyRub(reconciliation.totals.compareTotalRub ?? 0)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Разница
+                  </p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                    {moneyRub(reconciliation.totals.deltaRub ?? 0)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Разница, %
+                  </p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                    {reconciliation.totals.deltaPercent == null
+                      ? "—"
+                      : `${String(reconciliation.totals.deltaPercent).replace(".", ",")}%`}
+                  </p>
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-[var(--card-border)]">
+            <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                  <th className="px-3 py-2">Контрагент</th>
+                  <th className="px-3 py-2">Периоды в месяце</th>
+                  <th className="px-3 py-2 text-right">Сумма месяца</th>
+                  <th className="px-3 py-2">Периоды сравнения</th>
+                  <th className="px-3 py-2 text-right">Сумма сравнения</th>
+                  <th className="px-3 py-2 text-right">Разница</th>
+                  <th className="px-3 py-2 text-right">Разница, %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reconciliation.rows.map((r) => (
+                  <tr
+                    key={r.clinicId}
+                    className="border-b border-[var(--border-subtle)] hover:bg-[var(--table-row-hover)]"
+                  >
+                    <td className="px-3 py-2 text-[var(--text-strong)]">
+                      {r.contractorName}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-[var(--text-body)]">
+                      {r.periods.map((p) => (
+                        <div key={`${r.clinicId}-${p.snapshotId}`}>
+                          {p.periodLabelRu}: {moneyRub(p.amountRub)}
+                        </div>
+                      ))}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {moneyRub(r.monthTotalRub)}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-[var(--text-body)]">
+                      {r.comparePeriods.length === 0
+                        ? "—"
+                        : r.comparePeriods.map((p) => (
+                            <div key={`${r.clinicId}-cmp-${p.snapshotId}`}>
+                              {p.periodLabelRu}: {moneyRub(p.amountRub)}
+                            </div>
+                          ))}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {r.compareTotalRub == null ? "—" : moneyRub(r.compareTotalRub)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {r.deltaRub == null ? "—" : moneyRub(r.deltaRub)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {r.deltaPercent == null
+                        ? "—"
+                        : `${String(r.deltaPercent).replace(".", ",")}%`}
+                    </td>
                   </tr>
                 ))}
               </tbody>

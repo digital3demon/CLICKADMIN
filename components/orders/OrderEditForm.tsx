@@ -2083,7 +2083,12 @@ export function OrderEditForm({
         </div>
       </div>
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
-        <OrderConstructionsEditor value={draftLines} onChange={setDraftLines} />
+        <OrderConstructionsEditor
+          value={draftLines}
+          onChange={setDraftLines}
+          clinicId={clinicId || null}
+          doctorId={doctorId || null}
+        />
       </div>
     </div>
   );

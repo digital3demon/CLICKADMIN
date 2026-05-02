@@ -4,6 +4,7 @@ import {
   ensurePriceListWorkspace,
   getActivePriceListId,
 } from "@/lib/price-list-workspace";
+import { resolvePriceOverrideMap } from "@/lib/price-overrides";
 
 /** Прайс для форм заказа и раздела «Конфигурация». ?listId= — иначе активный каталог. */
 export async function GET(req: Request) {
@@ -12,6 +13,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const qList = url.searchParams.get("listId")?.trim() ?? "";
     const clinicId = url.searchParams.get("clinicId")?.trim() ?? "";
+    const doctorId = url.searchParams.get("doctorId")?.trim() ?? "";
     let priceListId: string;
     if (qList) {
       const exists = await prisma.priceList.findUnique({
@@ -39,21 +41,15 @@ export async function GET(req: Request) {
         description: true,
       },
     });
-    if (!clinicId) {
+    if (!clinicId && !doctorId) {
       return NextResponse.json(items);
     }
 
-    const overrides = await prisma.clinicPriceOverride.findMany({
-      where: {
-        clinicId,
-        priceListItemId: { in: items.map((it) => it.id) },
-      },
-      select: {
-        priceListItemId: true,
-        priceRub: true,
-      },
+    const overrideByItemId = await resolvePriceOverrideMap(prisma, {
+      priceListItemIds: items.map((it) => it.id),
+      clinicId: clinicId || null,
+      doctorId: doctorId || null,
     });
-    const overrideByItemId = new Map(overrides.map((x) => [x.priceListItemId, x.priceRub]));
     const enriched = items.map((it) => {
       const individualPriceRub = overrideByItemId.get(it.id) ?? null;
       const isIndividualPrice = individualPriceRub != null;

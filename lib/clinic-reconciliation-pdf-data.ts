@@ -27,9 +27,11 @@ export type ReconciliationPdfDetailLine = {
   quantity: number;
   /** Цена за ед. (как в наряде); null — «—» */
   unitRub: number | null;
+  /** Стоимость без скидки (цена * кол-во, с учетом срочности). */
+  baseTotalRub: number;
   lineTotalRub: number;
-  /** Нарастающий итог по наряду после этой строки */
-  jobRunningTotalRub: number;
+  /** Скидка в %; если нет — null (пустая ячейка в PDF). */
+  discountPercent: number | null;
 };
 
 export type ClinicReconciliationPdfPayload = {
@@ -40,9 +42,10 @@ export type ClinicReconciliationPdfPayload = {
   summary: ReconciliationPdfSummaryLine[];
   yellowRow: {
     totalLineCount: number;
-    grandTotalRub: number;
-    /** В образце второе поле суммы — «р.0» */
-    secondTotalRub: number;
+    /** Итого до скидок. */
+    baseTotalRub: number;
+    /** Итого с учётом скидок. */
+    discountedTotalRub: number;
   };
   detail: ReconciliationPdfDetailLine[];
 };
@@ -101,7 +104,11 @@ export async function buildClinicReconciliationPdfPayload(
   /** Жёлтая строка: как в Excel-образце — «ООО … ИНН …». */
   const legal = clinic.legalFullName?.trim() || clinic.name.trim() || "—";
   const inn = clinic.inn?.trim();
-  const clinicTitleLine = inn ? `${legal} ИНН ${inn}` : legal;
+  const clinicDisplay =
+    clinic.name.trim() && clinic.name.trim() !== legal
+      ? `${legal} (${clinic.name.trim()})`
+      : legal;
+  const clinicTitleLine = inn ? `${clinicDisplay} ИНН ${inn}` : clinicDisplay;
 
   const periodFromLabel = formatDateDdMmYyMsk(range.from);
   const periodToLabel = formatDateDdMmYyMsk(range.to);
@@ -338,7 +345,6 @@ export async function buildClinicReconciliationPdfPayload(
     const patient = ord0.patientName?.trim() || "—";
     const doctor = ord0.doctor.fullName.trim();
     const orderNumber = ord0.orderNumber;
-    let running = 0;
     let first = true;
 
     for (const l of list) {
@@ -362,7 +368,15 @@ export async function buildClinicReconciliationPdfPayload(
         l.order.compositionDiscountPercent,
         mult,
       );
-      running = Math.round((running + lineTotal) * 100) / 100;
+      const unitRub = l.unitPrice;
+      const baseTotalRub =
+        unitRub != null && Number.isFinite(unitRub)
+          ? Math.round(q * unitRub * mult * 100) / 100
+          : 0;
+      const discountPercent =
+        baseTotalRub > 0 && lineTotal < baseTotalRub
+          ? Math.round((1 - lineTotal / baseTotalRub) * 10000) / 100
+          : null;
       const desc = pdfConstructionLabel({
         category: l.category,
         constructionType: l.constructionType,
@@ -383,9 +397,10 @@ export async function buildClinicReconciliationPdfPayload(
         doctor,
         description: desc,
         quantity: q,
-        unitRub: l.unitPrice,
+        unitRub,
+        baseTotalRub,
         lineTotalRub: lineTotal,
-        jobRunningTotalRub: running,
+        discountPercent,
       });
       first = false;
     }
@@ -397,7 +412,6 @@ export async function buildClinicReconciliationPdfPayload(
       const lineTotal = Math.round(p.totalRub * 100) / 100;
       const unitRub =
         p.qty > 0 ? Math.round((lineTotal / p.qty) * 100) / 100 : 0;
-      running = Math.round((running + lineTotal) * 100) / 100;
       detail.push({
         showOrderColumns: first,
         zashla,
@@ -408,14 +422,15 @@ export async function buildClinicReconciliationPdfPayload(
         description: p.name,
         quantity: Math.round(p.qty * 100) / 100,
         unitRub,
+        baseTotalRub: lineTotal,
         lineTotalRub: lineTotal,
-        jobRunningTotalRub: running,
+        discountPercent: null,
       });
       first = false;
     }
   }
 
-  let grandTotal = 0;
+  let discountedTotal = 0;
   for (const l of includedRows) {
     const mult = orderUrgentPriceMultiplier(
       l.order.isUrgent,
@@ -426,7 +441,7 @@ export async function buildClinicReconciliationPdfPayload(
       unitPrice: c.unitPrice,
       lineDiscountPercent: c.lineDiscountPercent,
     }));
-    grandTotal += lineAllocatedTotalRub(
+    discountedTotal += lineAllocatedTotalRub(
       {
         quantity: l.quantity,
         unitPrice: l.unitPrice,
@@ -439,10 +454,14 @@ export async function buildClinicReconciliationPdfPayload(
   }
   for (const [, plist] of prostheticByOrder) {
     for (const p of plist) {
-      grandTotal += p.totalRub;
+      discountedTotal += p.totalRub;
     }
   }
-  grandTotal = Math.round(grandTotal * 100) / 100;
+  discountedTotal = Math.round(discountedTotal * 100) / 100;
+  const baseTotal =
+    Math.round(
+      detail.reduce((acc, line) => acc + line.baseTotalRub, 0) * 100,
+    ) / 100;
 
   return {
     labLegalName,
@@ -452,8 +471,8 @@ export async function buildClinicReconciliationPdfPayload(
     summary: summaryList,
     yellowRow: {
       totalLineCount: detail.length,
-      grandTotalRub: grandTotal,
-      secondTotalRub: 0,
+      baseTotalRub: baseTotal,
+      discountedTotalRub: discountedTotal,
     },
     detail,
   };

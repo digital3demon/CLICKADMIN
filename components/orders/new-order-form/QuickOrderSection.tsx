@@ -24,12 +24,14 @@ const tileShellBase =
 type QuickOrderSectionProps = {
   value: QuickOrderState;
   clinicId?: string | null;
+  doctorId?: string | null;
   onChange: (next: QuickOrderState) => void;
 };
 
 export function QuickOrderSection({
   value: q,
   clinicId = null,
+  doctorId = null,
   onChange,
 }: QuickOrderSectionProps) {
   const { resolvedDark } = useTheme();
@@ -296,6 +298,7 @@ export function QuickOrderSection({
       <QuickOrderTileEditorModal
         open={editorOpen}
         clinicId={clinicId}
+        doctorId={doctorId}
         editing={editingTile}
         onClose={() => {
           setEditorOpen(false);

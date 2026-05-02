@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import {
   buildDraftValues,
+  convertDocxToEditableHtml,
+  convertEditableHtmlToDocx,
   extractContractNumberFromDocxBuffer,
   formatContractNumber,
   formatYearMonthYYMM,
@@ -15,7 +17,11 @@ const MAX_DOCX_SIZE_BYTES = 12 * 1024 * 1024;
 type JsonBody =
   | { action: "prefill" }
   | { action: "assemble"; values: ClinicContractDraftValues }
-  | { action: "save-generated"; values: ClinicContractDraftValues };
+  | {
+      action: "save-generated";
+      values: ClinicContractDraftValues;
+      editedHtml: string;
+    };
 
 function asDraftValues(v: unknown): ClinicContractDraftValues | null {
   if (!v || typeof v !== "object") return null;
@@ -258,9 +264,11 @@ export async function POST(
       return NextResponse.json({ error: "Некорректные данные формы договора" }, { status: 400 });
     }
     const generated = await generateContractDocxFromTemplate(values);
+    const editorHtml = await convertDocxToEditableHtml(generated.docx);
     return NextResponse.json({
       ok: true,
       editorText: generated.text,
+      editorHtml,
       contractNumber: values.contractNumber,
     });
   }
@@ -270,8 +278,12 @@ export async function POST(
     if (!values) {
       return NextResponse.json({ error: "Некорректные данные договора" }, { status: 400 });
     }
-    const generated = await generateContractDocxFromTemplate(values);
+    const editedHtml = String(body.editedHtml ?? "").trim();
+    if (!editedHtml) {
+      return NextResponse.json({ error: "Пустой HTML редактора договора" }, { status: 400 });
+    }
     const contractNumber = values.contractNumber;
+    const editedDocx = await convertEditableHtmlToDocx(editedHtml);
     await prisma.clinic.update({
       where: { id },
       data: {
@@ -286,13 +298,13 @@ export async function POST(
         fileName: composeAttachmentName(contractNumber),
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(generated.docx),
+        data: toDbBytes(editedDocx),
       },
       update: {
         fileName: composeAttachmentName(contractNumber),
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(generated.docx),
+        data: toDbBytes(editedDocx),
       },
     });
     await syncContractSequenceIfNeeded(clinic.tenantId, contractNumber);

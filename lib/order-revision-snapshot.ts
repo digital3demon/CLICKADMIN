@@ -251,6 +251,10 @@ export async function applyOrderSnapshot(
       const built = await buildConstructionCreatesFromInput(
         tx as unknown as PrismaClient,
         snapshot.constructions,
+        {
+          clinicId: o.clinicId,
+          doctorId: o.doctorId,
+        },
       );
       if (!built.ok) {
         throw new Error(built.err.error);

@@ -33,6 +33,7 @@ type PickTarget =
 type QuickOrderTileEditorModalProps = {
   open: boolean;
   clinicId?: string | null;
+  doctorId?: string | null;
   /** null — создать новую плашку */
   editing: QuickOrderTile | null;
   onClose: () => void;
@@ -46,6 +47,7 @@ function cloneTile(t: QuickOrderTile): QuickOrderTile {
 export function QuickOrderTileEditorModal({
   open,
   clinicId = null,
+  doctorId = null,
   editing,
   onClose,
   onSave,
@@ -354,6 +356,7 @@ export function QuickOrderTileEditorModal({
       <PriceListPickModal
         open={pickTarget != null}
         clinicId={clinicId}
+        doctorId={doctorId}
         onClose={() => setPickTarget(null)}
         onPick={applyPricePick}
       />

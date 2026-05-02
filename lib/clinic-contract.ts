@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Document, Packer, Paragraph, TextRun } from "docx";
+import HTMLtoDOCX from "html-to-docx";
 import JSZip from "jszip";
+import mammoth from "mammoth";
 
 /**
  * Карта модуля:
@@ -252,6 +254,58 @@ export async function generateContractDocxFromPlainText(text: string): Promise<B
   });
   const doc = new Document({ sections: [{ children: paragraphs }] });
   return Buffer.from(await Packer.toBuffer(doc));
+}
+
+function wrapEditableHtml(content: string): string {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: "Calibri", "Arial", sans-serif; font-size: 12pt; line-height: 1.45; color: #222; }
+    p { margin: 0 0 10px; }
+    img { max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+${content}
+</body>
+</html>`;
+}
+
+export async function convertDocxToEditableHtml(docx: Buffer): Promise<string> {
+  const result = await mammoth.convertToHtml(
+    { buffer: docx },
+    {
+      convertImage: mammoth.images.inline(async (image: {
+        contentType: string;
+        read: (encoding: string) => Promise<string>;
+      }) => {
+        const base64 = await image.read("base64");
+        return { src: `data:${image.contentType};base64,${base64}` };
+      }),
+    },
+  );
+  return result.value.trim();
+}
+
+export async function convertEditableHtmlToDocx(html: string): Promise<Buffer> {
+  const fullHtml = wrapEditableHtml(html);
+  const out = await HTMLtoDOCX(fullHtml, null, {
+    table: { row: { cantSplit: true } },
+    pageSize: {
+      width: 11906,
+      height: 16838,
+    },
+    margins: {
+      top: 720,
+      right: 720,
+      bottom: 720,
+      left: 720,
+    },
+  });
+  if (Buffer.isBuffer(out)) return out;
+  return Buffer.from(out as ArrayBuffer);
 }
 
 /**

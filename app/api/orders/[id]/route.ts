@@ -806,6 +806,10 @@ export async function PATCH(
     const built = await buildConstructionCreatesFromInput(
       pricingPrisma,
       body.constructions,
+      {
+        clinicId: nextClinicId,
+        doctorId: nextDoctorId,
+      },
     );
     if (!built.ok) {
       return NextResponse.json(

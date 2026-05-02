@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PriceListTabbedBody } from "@/components/price-list/PriceListTabbedBody";
+import { PriceOverridesManager } from "@/components/directory/PriceOverridesManager";
 
 type Row = {
   id: string;
@@ -271,6 +272,7 @@ export function PriceListDirectoryClient() {
           >
             {settingActive ? "Сохранение…" : "Использовать в нарядах"}
           </button>
+          <PriceOverridesManager />
         </div>
 
         <form

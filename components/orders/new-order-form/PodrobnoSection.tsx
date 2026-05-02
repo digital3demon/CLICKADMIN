@@ -34,10 +34,12 @@ export function PodrobnoSection({
   lines,
   onLinesChange,
   clinicId,
+  doctorId,
 }: {
   lines: DetailLine[];
   onLinesChange: (next: DetailLine[]) => void;
   clinicId?: string | null;
+  doctorId?: string | null;
 }) {
   const [types, setTypes] = useState<ConstructionTypeRow[]>([]);
   const [pickOpen, setPickOpen] = useState(false);
@@ -299,6 +301,7 @@ export function PodrobnoSection({
       <PriceListPickModal
         open={pickOpen}
         clinicId={clinicId}
+        doctorId={doctorId}
         onClose={() => setPickOpen(false)}
         onPick={onPickPrice}
         title="Позиция из прайса"

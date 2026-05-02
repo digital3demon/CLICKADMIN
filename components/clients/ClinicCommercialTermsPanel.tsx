@@ -94,8 +94,10 @@ export function ClinicCommercialTermsPanel({
   const [draftValues, setDraftValues] = useState<ContractDraftValues>(
     emptyContractDraftValues(),
   );
-  const [editorText, setEditorText] = useState("");
+  const [editorHtml, setEditorHtml] = useState("");
+  const [fontSizeLevel, setFontSizeLevel] = useState("3");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const editorBodyRef = useRef<HTMLDivElement | null>(null);
   const initialKey = useMemo(() => JSON.stringify(initial), [initial]);
 
   useEffect(() => {
@@ -148,13 +150,13 @@ export function ClinicCommercialTermsPanel({
         body: JSON.stringify({ action: "assemble", values: draftValues }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || typeof data.editorText !== "string") {
+      if (!res.ok || typeof data.editorHtml !== "string") {
         setContractError(
           typeof data.error === "string" ? data.error : "Не удалось собрать договор",
         );
         return;
       }
-      setEditorText(data.editorText);
+      setEditorHtml(data.editorHtml);
       setDraftOpen(false);
       setEditorOpen(true);
     } catch {
@@ -174,6 +176,7 @@ export function ClinicCommercialTermsPanel({
         body: JSON.stringify({
           action: "save-generated",
           values: draftValues,
+          editedHtml: editorBodyRef.current?.innerHTML || editorHtml,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -232,6 +235,28 @@ export function ClinicCommercialTermsPanel({
     } finally {
       setContractBusy(false);
     }
+  };
+
+  useEffect(() => {
+    if (!editorOpen) return;
+    const root = editorBodyRef.current;
+    if (!root) return;
+    if (root.innerHTML !== editorHtml) {
+      root.innerHTML = editorHtml;
+    }
+  }, [editorOpen, editorHtml]);
+
+  const runEditorCommand = (command: string, value?: string) => {
+    const root = editorBodyRef.current;
+    if (!root) return;
+    root.focus();
+    document.execCommand(command, false, value);
+    setEditorHtml(root.innerHTML);
+  };
+
+  const applyFontSize = (level: string) => {
+    setFontSizeLevel(level);
+    runEditorCommand("fontSize", level);
   };
 
   const onSave = async () => {
@@ -747,16 +772,91 @@ export function ClinicCommercialTermsPanel({
               Текст договора
             </h3>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              Предпросмотр текста. Форматирование Word сохраняется по шаблону при
-              нажатии «Сохранить».
+              Редактируемое представление договора с базовым форматированием и
+              изображениями.
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <label className="inline-flex items-center gap-2 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--text-body)] sm:text-sm">
+                Размер
+                <select
+                  className="rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-1 py-0.5 text-xs sm:text-sm"
+                  value={fontSizeLevel}
+                  onChange={(e) => applyFontSize(e.target.value)}
+                >
+                  <option value="2">Мелкий</option>
+                  <option value="3">Обычный</option>
+                  <option value="4">Крупный</option>
+                  <option value="5">Очень крупный</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => runEditorCommand("bold")}
+              >
+                Жирный
+              </button>
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => runEditorCommand("italic")}
+              >
+                Курсив
+              </button>
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => runEditorCommand("underline")}
+              >
+                Подчеркнуть
+              </button>
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => runEditorCommand("justifyLeft")}
+              >
+                По левому краю
+              </button>
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => runEditorCommand("justifyCenter")}
+              >
+                По центру
+              </button>
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => runEditorCommand("justifyRight")}
+              >
+                По правому краю
+              </button>
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => runEditorCommand("insertUnorderedList")}
+              >
+                Маркированный список
+              </button>
+              <button
+                type="button"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
+                onClick={() => runEditorCommand("insertOrderedList")}
+              >
+                Нумерованный список
+              </button>
+            </div>
             <div className="mt-3 max-h-[55vh] overflow-auto rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] p-4">
-              <div className="mx-auto w-full max-w-[820px] rounded-sm border border-zinc-300 bg-white px-10 py-8 text-[15px] leading-7 text-zinc-900 shadow-sm">
-                {editorText.split("\n").map((line, idx) => (
-                  <p key={`${idx}-${line.slice(0, 16)}`} className="whitespace-pre-wrap">
-                    {line.length > 0 ? line : "\u00A0"}
-                  </p>
-                ))}
+              <div className="mx-auto w-full max-w-[820px] rounded-sm border border-zinc-300 bg-white px-10 py-8 text-zinc-900 shadow-sm">
+                <div
+                  ref={editorBodyRef}
+                  className="min-h-[46vh] outline-none [&_p]:my-2 [&_img]:h-auto [&_img]:max-w-full"
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={() =>
+                    setEditorHtml(editorBodyRef.current?.innerHTML ?? "")
+                  }
+                />
               </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">
