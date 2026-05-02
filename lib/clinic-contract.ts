@@ -181,9 +181,29 @@ function applyTemplateBody(xml: string, v: ClinicContractDraftValues): string {
   return s;
 }
 
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_m, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_m, hex) =>
+      String.fromCodePoint(parseInt(hex, 16)),
+    )
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
 function xmlToPlainText(xml: string): string {
-  const parts = [...xml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]);
-  return normalizeText(parts.join(""));
+  let s = xml;
+  s = s.replace(/<w:tab[^>]*\/>/g, "\t");
+  s = s.replace(/<w:br[^>]*\/>/g, "\n");
+  s = s.replace(/<\/w:p>/g, "\n");
+  s = s.replace(/<[^>]+>/g, "");
+  s = decodeXmlEntities(s);
+  s = s.replace(/\r\n?/g, "\n");
+  s = s.replace(/\n{3,}/g, "\n\n");
+  return normalizeText(s).trim();
 }
 
 let templateBufferPromise: Promise<Buffer> | null = null;
