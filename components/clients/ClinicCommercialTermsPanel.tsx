@@ -173,8 +173,7 @@ export function ClinicCommercialTermsPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "save-generated",
-          contractNumber: draftValues.contractNumber,
-          editorText,
+          values: draftValues,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -748,20 +747,24 @@ export function ClinicCommercialTermsPanel({
               Текст договора
             </h3>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              Можно править финальный текст перед сохранением.
+              Предпросмотр текста. Форматирование Word сохраняется по шаблону при
+              нажатии «Сохранить».
             </p>
             <textarea
               className="mt-3 h-[55vh] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)]"
               value={editorText}
-              onChange={(e) => setEditorText(e.target.value)}
+              readOnly
             />
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]`}
-                onClick={() => setEditorOpen(false)}
+                onClick={() => {
+                  setEditorOpen(false);
+                  setDraftOpen(true);
+                }}
               >
-                Отмена
+                Назад
               </button>
               <button
                 type="button"

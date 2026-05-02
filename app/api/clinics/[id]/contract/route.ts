@@ -4,7 +4,6 @@ import {
   extractContractNumberFromDocxBuffer,
   formatContractNumber,
   formatYearMonthYYMM,
-  generateContractDocxFromPlainText,
   generateContractDocxFromTemplate,
   parseGeneratedContractNumber,
   type ClinicContractDraftValues,
@@ -16,7 +15,7 @@ const MAX_DOCX_SIZE_BYTES = 12 * 1024 * 1024;
 type JsonBody =
   | { action: "prefill" }
   | { action: "assemble"; values: ClinicContractDraftValues }
-  | { action: "save-generated"; contractNumber: string; editorText: string };
+  | { action: "save-generated"; values: ClinicContractDraftValues };
 
 function asDraftValues(v: unknown): ClinicContractDraftValues | null {
   if (!v || typeof v !== "object") return null;
@@ -267,15 +266,12 @@ export async function POST(
   }
 
   if (body.action === "save-generated") {
-    const contractNumber = String(body.contractNumber ?? "").trim();
-    const editorText = String(body.editorText ?? "").trim();
-    if (!contractNumber) {
-      return NextResponse.json({ error: "Номер договора обязателен" }, { status: 400 });
+    const values = asDraftValues(body.values);
+    if (!values) {
+      return NextResponse.json({ error: "Некорректные данные договора" }, { status: 400 });
     }
-    if (!editorText) {
-      return NextResponse.json({ error: "Текст договора пустой" }, { status: 400 });
-    }
-    const docx = await generateContractDocxFromPlainText(editorText);
+    const generated = await generateContractDocxFromTemplate(values);
+    const contractNumber = values.contractNumber;
     await prisma.clinic.update({
       where: { id },
       data: {
@@ -290,13 +286,13 @@ export async function POST(
         fileName: composeAttachmentName(contractNumber),
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(docx),
+        data: toDbBytes(generated.docx),
       },
       update: {
         fileName: composeAttachmentName(contractNumber),
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(docx),
+        data: toDbBytes(generated.docx),
       },
     });
     await syncContractSequenceIfNeeded(clinic.tenantId, contractNumber);
