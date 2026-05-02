@@ -54,6 +54,120 @@ function smtpConfigured(): boolean {
   return Boolean(host && user && pass);
 }
 
+/** Разбор «Имя <email@domain>» или просто email для From. */
+function parseEmailFrom(from: string): { email: string; name?: string } {
+  const m = from.match(/^\s*(.+?)\s*<([^>]+)>\s*$/);
+  if (m) {
+    const name = m[1].replace(/^["']|["']$/g, "").trim();
+    return { name: name || undefined, email: m[2].trim().toLowerCase() };
+  }
+  return { email: from.trim().toLowerCase() };
+}
+
+function unisenderGoConfigured(): boolean {
+  return Boolean(process.env.UNISENDER_GO_API_KEY?.trim());
+}
+
+const DEFAULT_UNISENDER_GO_SEND_URL =
+  "https://goapi.unisender.ru/ru/transactional/api/v1/email/send.json";
+
+async function sendViaUnisenderGo(params: {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<SendInviteEmailResult> {
+  const apiKey = process.env.UNISENDER_GO_API_KEY?.trim();
+  if (!apiKey) {
+    return { sent: false, reason: "not_configured" };
+  }
+
+  const url =
+    process.env.UNISENDER_GO_SEND_URL?.trim() || DEFAULT_UNISENDER_GO_SEND_URL;
+
+  const { email: fromEmail, name: fromParsedName } = parseEmailFrom(params.from);
+  const fromName =
+    process.env.EMAIL_FROM_NAME?.trim() || fromParsedName || "КликАдмин";
+
+  const body = {
+    message: {
+      recipients: [{ email: params.to.toLowerCase().trim() }],
+      subject: params.subject,
+      from_email: fromEmail,
+      from_name: fromName,
+      body: {
+        html: params.html,
+        plaintext: params.text,
+      },
+      global_language: "ru",
+      skip_unsubscribe: 1,
+      tags: ["crm-invite"],
+    },
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-API-KEY": apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const raw = await res.text();
+    let json: {
+      status?: string;
+      job_id?: string;
+      failed_emails?: Record<string, string>;
+      message?: string;
+      code?: string | number;
+    } = {};
+    try {
+      json = JSON.parse(raw) as typeof json;
+    } catch {
+      if (!res.ok) {
+        return {
+          sent: false,
+          reason: "provider_error",
+          error: `HTTP ${res.status}: ${raw.slice(0, 500)}`,
+        };
+      }
+      return {
+        sent: false,
+        reason: "provider_error",
+        error: "Некорректный ответ Unisender",
+      };
+    }
+
+    if (json.status !== "success") {
+      const err =
+        typeof json.message === "string"
+          ? json.message
+          : `Unisender: ${JSON.stringify(json).slice(0, 400)}`;
+      console.error("[sendInviteActivationEmail] Unisender Go", json);
+      return { sent: false, reason: "provider_error", error: err };
+    }
+
+    const fail = json.failed_emails?.[params.to.toLowerCase().trim()];
+    if (fail) {
+      return {
+        sent: false,
+        reason: "provider_error",
+        error: `Unisender: ${fail}`,
+      };
+    }
+
+    return { sent: true };
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    console.error("[sendInviteActivationEmail] Unisender Go", e);
+    return { sent: false, reason: "provider_error", error: err };
+  }
+}
+
 async function sendViaSmtp(params: {
   from: string;
   to: string;
@@ -149,11 +263,16 @@ async function sendViaResend(params: {
 /**
  * Письмо с кодом приглашения.
  *
- * **РФ / без VPN:** задайте `EMAIL_FROM` и SMTP — например Яндекс или Mail.ru
- * (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, опционально `SMTP_PORT`, `SMTP_SECURE`),
- * либо одну строку `SMTP_URL` (как в документации nodemailer).
+ * Приоритет провайдера: **SMTP** → **Unisender Go** → **Resend**.
  *
- * **Resend** (если доступен): `RESEND_API_KEY` — используется только если SMTP не настроен.
+ * **Unisender Go:** `UNISENDER_GO_API_KEY` (заголовок `X-API-KEY`), `EMAIL_FROM`
+ * (например `noreply@ваш-домен`). Опционально `EMAIL_FROM_NAME`, полный URL вызова
+ * `UNISENDER_GO_SEND_URL` (по умолчанию `goapi.unisender.ru/.../email/send.json`).
+ * Если аккаунт на другом дата-центре — см. документацию Unisender (go1/go2).
+ *
+ * **SMTP:** `SMTP_URL` или `SMTP_HOST`+`SMTP_USER`+`SMTP_PASS` (+ порт/secure).
+ *
+ * **Resend:** `RESEND_API_KEY`, если нет SMTP и нет Unisender.
  */
 export async function sendInviteActivationEmail(opts: {
   to: string;
@@ -170,6 +289,10 @@ export async function sendInviteActivationEmail(opts: {
 
   if (smtpConfigured()) {
     return sendViaSmtp(mail);
+  }
+
+  if (unisenderGoConfigured()) {
+    return sendViaUnisenderGo(mail);
   }
 
   if (process.env.RESEND_API_KEY?.trim()) {

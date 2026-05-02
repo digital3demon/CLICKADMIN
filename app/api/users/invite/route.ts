@@ -204,7 +204,7 @@ export async function POST(req: Request) {
       emailSent: false,
       inviteCode: invitePlain,
       hint:
-        "Почта не настроена: задайте SMTP (SMTP_URL или SMTP_HOST+SMTP_USER+SMTP_PASS) и EMAIL_FROM, либо RESEND_API_KEY+EMAIL_FROM — тогда код уйдёт автоматически. Пока передайте сотруднику код вручную. Первый вход: /login/activate",
+        "Почта не настроена: задайте EMAIL_FROM и один из вариантов — SMTP (SMTP_URL или SMTP_HOST+SMTP_USER+SMTP_PASS), или Unisender Go (UNISENDER_GO_API_KEY из кабинета), или RESEND_API_KEY. Пока передайте код вручную. Первый вход: /login/activate",
     });
   }
 
