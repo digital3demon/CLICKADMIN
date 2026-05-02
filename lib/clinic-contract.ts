@@ -277,10 +277,7 @@ export async function convertDocxToEditableHtml(docx: Buffer): Promise<string> {
   const result = await mammoth.convertToHtml(
     { buffer: docx },
     {
-      convertImage: mammoth.images.inline(async (image: {
-        contentType: string;
-        read: (encoding: string) => Promise<string>;
-      }) => {
+      convertImage: mammoth.images.imgElement(async (image) => {
         const base64 = await image.read("base64");
         return { src: `data:${image.contentType};base64,${base64}` };
       }),
