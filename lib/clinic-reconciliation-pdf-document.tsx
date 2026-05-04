@@ -18,16 +18,16 @@ const BORDER = "#000000";
 const CELL_PAD = 2.5;
 
 const F = {
-  z: 0.78,
-  o: 0.62,
-  n: 0.9,
-  p: 1.2,
-  v: 1.2,
-  desc: 3.45,
-  q: 0.62,
-  price: 0.9,
-  total: 0.95,
-  disc: 0.95,
+  z: 8,
+  o: 7,
+  n: 10,
+  p: 14,
+  v: 14,
+  desc: 40,
+  q: 8,
+  price: 10,
+  total: 11,
+  disc: 11,
 } as const;
 
 const styles = StyleSheet.create({
