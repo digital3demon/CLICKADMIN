@@ -92,6 +92,24 @@ export type KanbanColumn = {
   cards: KanbanCard[];
 };
 
+export type KanbanAutoArchiveRule = {
+  id: string;
+  enabled: boolean;
+  columnId: string;
+  /** Через сколько часов без движения в колонке отправить карточку в архив. */
+  idleHours: number;
+};
+
+export type KanbanArchivedCard = {
+  id: string;
+  card: KanbanCard;
+  archivedAt: string;
+  deleteAfterAt: string;
+  sourceColumnId: string;
+  sourceColumnTitle: string;
+  reason: "auto" | "manual";
+};
+
 /** Действие правила «если условие выполнено — сделать …». */
 export type KanbanAutomationAction =
   | { type: "move_to_column"; columnId: string }
@@ -147,6 +165,12 @@ export type KanbanBoard = {
   cardTypes: CardTypeDef[];
   /** Правила автоматизации (локально в браузере). */
   automations?: KanbanAutomationRule[];
+  /** Автоархивация: выбор колонки и таймаут до архива. */
+  autoArchiveRules?: KanbanAutoArchiveRule[];
+  /** Сколько дней хранить карточки в архиве до удаления. */
+  archiveRetentionDays?: number;
+  /** Архив карточек по доске. */
+  archivedCards?: KanbanArchivedCard[];
 };
 
 export type KanbanFilters = {

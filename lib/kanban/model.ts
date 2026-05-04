@@ -1,4 +1,6 @@
 import type {
+  KanbanArchivedCard,
+  KanbanAutoArchiveRule,
   CardActivity,
   CardFile,
   KanbanAppState,
@@ -458,6 +460,150 @@ export function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function clampArchiveRetentionDays(raw: number | null | undefined): number {
+  if (!Number.isFinite(raw)) return 30;
+  const n = Math.round(Number(raw));
+  if (n < 1) return 1;
+  if (n > 365) return 365;
+  return n;
+}
+
+function normalizeIdleHours(raw: number | null | undefined): number {
+  if (!Number.isFinite(raw)) return 24;
+  const n = Math.round(Number(raw));
+  if (n < 1) return 1;
+  if (n > 24 * 180) return 24 * 180;
+  return n;
+}
+
+function cardArchiveRefAt(card: KanbanCard): Date {
+  const raw = card.lastMovedAt || card.updatedAt || card.createdAt;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return new Date();
+  return d;
+}
+
+function isLinkedOrderArchivedOnBoard(board: KanbanBoard, orderId: string): boolean {
+  const key = orderId.trim();
+  if (!key) return false;
+  return (board.archivedCards || []).some((x) => x.card.linkedOrderId === key);
+}
+
+function archiveCardIntoBoard(input: {
+  board: KanbanBoard;
+  card: KanbanCard;
+  sourceColumnId: string;
+  sourceColumnTitle: string;
+  now: Date;
+  reason: "auto" | "manual";
+}): void {
+  const retentionDays = clampArchiveRetentionDays(input.board.archiveRetentionDays);
+  const archivedAt = input.now.toISOString();
+  const deleteAfterAt = new Date(
+    input.now.getTime() + retentionDays * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  input.board.archivedCards = input.board.archivedCards || [];
+  input.board.archivedCards.unshift({
+    id: generateId("arch"),
+    card: structuredClone(input.card),
+    archivedAt,
+    deleteAfterAt,
+    sourceColumnId: input.sourceColumnId,
+    sourceColumnTitle: input.sourceColumnTitle,
+    reason: input.reason,
+  });
+}
+
+export function archiveCardByIdOnBoard(
+  board: KanbanBoard,
+  cardId: string,
+  reason: "auto" | "manual" = "manual",
+): boolean {
+  const now = new Date();
+  for (const col of board.columns) {
+    const ix = col.cards.findIndex((c) => c.id === cardId);
+    if (ix < 0) continue;
+    const card = col.cards[ix];
+    if (!card) return false;
+    col.cards.splice(ix, 1);
+    archiveCardIntoBoard({
+      board,
+      card,
+      sourceColumnId: col.id,
+      sourceColumnTitle: col.title,
+      now,
+      reason,
+    });
+    return true;
+  }
+  return false;
+}
+
+export function restoreArchivedCardOnBoard(board: KanbanBoard, archivedId: string): boolean {
+  const list = board.archivedCards || [];
+  const ix = list.findIndex((x) => x.id === archivedId);
+  if (ix < 0) return false;
+  const row = list[ix];
+  if (!row) return false;
+  list.splice(ix, 1);
+  const col =
+    board.columns.find((c) => c.id === row.sourceColumnId) ??
+    board.columns.find((c) => c.title.trim().toLowerCase() === row.sourceColumnTitle.trim().toLowerCase()) ??
+    board.columns[0];
+  if (!col) return false;
+  col.cards.unshift(structuredClone(row.card));
+  return true;
+}
+
+export function applyBoardArchivePolicies(
+  board: KanbanBoard,
+  now = new Date(),
+): { archivedCount: number; deletedCount: number } {
+  board.archivedCards = board.archivedCards || [];
+  board.archiveRetentionDays = clampArchiveRetentionDays(board.archiveRetentionDays);
+  board.autoArchiveRules = (board.autoArchiveRules || []).map((r) => ({
+    id: r.id,
+    enabled: r.enabled !== false,
+    columnId: r.columnId,
+    idleHours: normalizeIdleHours(r.idleHours),
+  }));
+
+  const beforeKeep = board.archivedCards.length;
+  board.archivedCards = board.archivedCards.filter((x) => {
+    const d = new Date(x.deleteAfterAt);
+    return !Number.isNaN(d.getTime()) && d.getTime() > now.getTime();
+  });
+  const deletedCount = beforeKeep - board.archivedCards.length;
+
+  let archivedCount = 0;
+  for (const rule of board.autoArchiveRules) {
+    if (!rule.enabled) continue;
+    const col = board.columns.find((c) => c.id === rule.columnId);
+    if (!col || col.cards.length === 0) continue;
+    const thresholdMs = rule.idleHours * 60 * 60 * 1000;
+    const keep: KanbanCard[] = [];
+    for (const card of col.cards) {
+      const ageMs = now.getTime() - cardArchiveRefAt(card).getTime();
+      if (ageMs < thresholdMs) {
+        keep.push(card);
+        continue;
+      }
+      archiveCardIntoBoard({
+        board,
+        card,
+        sourceColumnId: col.id,
+        sourceColumnTitle: col.title,
+        now,
+        reason: "auto",
+      });
+      archivedCount += 1;
+    }
+    col.cards = keep;
+  }
+
+  return { archivedCount, deletedCount };
+}
+
 export function formatDate(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso + "T12:00:00");
@@ -659,6 +805,9 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
   if (!board || !board.columns) return board;
   if (typeof board.isPrivate !== "boolean") board.isPrivate = false;
   if (!Array.isArray(board.accessUserIds)) board.accessUserIds = [];
+  if (!Array.isArray(board.autoArchiveRules)) board.autoArchiveRules = [];
+  if (!Array.isArray(board.archivedCards)) board.archivedCards = [];
+  board.archiveRetentionDays = clampArchiveRetentionDays(board.archiveRetentionDays);
   board.accessUserIds = board.accessUserIds
     .map((x) => String(x || "").trim())
     .filter(Boolean);
@@ -728,6 +877,19 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
   if (!Array.isArray(board.automations)) {
     board.automations = [];
   }
+  board.autoArchiveRules = (board.autoArchiveRules || [])
+    .filter((r) => r && typeof r.id === "string")
+    .map((r) => ({
+      id: String(r.id),
+      enabled: r.enabled !== false,
+      columnId: String(r.columnId || ""),
+      idleHours: normalizeIdleHours(r.idleHours),
+    }))
+    .filter((r) => (board.columns || []).some((c) => c.id === r.columnId));
+  board.archivedCards = (board.archivedCards || []).filter((x) => {
+    if (!x || typeof x.id !== "string" || !x.card) return false;
+    return true;
+  }) as KanbanArchivedCard[];
   return board;
 }
 
@@ -766,6 +928,9 @@ export function createBoardShell(boardId: string, title: string): KanbanBoard {
     users,
     cardTypes,
     automations: [],
+    autoArchiveRules: [],
+    archiveRetentionDays: 30,
+    archivedCards: [],
   };
 }
 
@@ -1577,6 +1742,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
     }
     normalizeBoardCardTypes(activeBoard);
     for (const row of visibleRows) {
+      if (isLinkedOrderArchivedOnBoard(activeBoard, row.id)) continue;
       const cardDbId = `kaiten-order-${row.id}`;
       const dueDateAt = parseIsoToDate(row.dueDate);
       const title = buildKaitenCardTitle({
@@ -1674,6 +1840,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
   for (const row of visibleRows) {
     const targetBoard = resolveBoardForKaitenLane(next, row.kaitenTrackLane);
     if (!targetBoard || !targetBoard.columns.length) continue;
+    if (isLinkedOrderArchivedOnBoard(targetBoard, row.id)) continue;
     for (const b of next.boards) {
       if (b.id !== targetBoard.id) {
         removeLinkedOrderCardFromBoard(b, row.id);

@@ -77,6 +77,7 @@ type BoardCanvasProps = {
   onAddCard: (columnId: string) => void;
   onCopyCardLink: (cardId: string) => void;
   onRequestMoveCard: (cardId: string) => void;
+  onRequestArchiveCard: (cardId: string) => void;
   onRequestDeleteCard: (cardId: string) => void;
   /** false — одна доска, пункт «на другую доску» скрыт */
   allowMoveToOtherBoard?: boolean;
@@ -117,6 +118,7 @@ function KanbanCardView({
   onOpen,
   onCopyLink,
   onMoveCard,
+  onArchiveCard,
   onDeleteCard,
   dragListeners,
   allowMoveToOtherBoard = true,
@@ -128,6 +130,7 @@ function KanbanCardView({
   onOpen: () => void;
   onCopyLink: () => void;
   onMoveCard: () => void;
+  onArchiveCard: () => void;
   onDeleteCard: () => void;
   /** Слушатели @dnd-kit (только для незаблокированной карточки). */
   dragListeners?: DraggableSyntheticListeners;
@@ -404,6 +407,19 @@ function KanbanCardView({
                         </button>
                       </li>
                     ) : null}
+                    <li>
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left hover:bg-black/[0.06] dark:hover:bg-white/[0.06]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onArchiveCard();
+                          setMenuOpen(false);
+                        }}
+                      >
+                        В архив
+                      </button>
+                    </li>
                     <li className="border-t border-[var(--kanban-border,var(--card-border))] dark:border-white/10">
                       <button
                         type="button"
@@ -436,6 +452,7 @@ function SortableKanbanCard({
   onOpenCard,
   onCopyCardLink,
   onRequestMoveCard,
+  onRequestArchiveCard,
   onRequestDeleteCard,
   allowMoveToOtherBoard,
 }: {
@@ -446,6 +463,7 @@ function SortableKanbanCard({
   onOpenCard: (id: string) => void;
   onCopyCardLink: (id: string) => void;
   onRequestMoveCard: (id: string) => void;
+  onRequestArchiveCard: (id: string) => void;
   onRequestDeleteCard: (id: string) => void;
   allowMoveToOtherBoard: boolean;
 }) {
@@ -471,6 +489,7 @@ function SortableKanbanCard({
         onOpen={() => onOpenCard(card.id)}
         onCopyLink={() => onCopyCardLink(card.id)}
         onMoveCard={() => onRequestMoveCard(card.id)}
+        onArchiveCard={() => onRequestArchiveCard(card.id)}
         onDeleteCard={() => onRequestDeleteCard(card.id)}
         dragListeners={blocked || dndLocked ? undefined : listeners}
         allowMoveToOtherBoard={allowMoveToOtherBoard}
@@ -578,6 +597,7 @@ export function BoardCanvas({
   onAddCard,
   onCopyCardLink,
   onRequestMoveCard,
+  onRequestArchiveCard,
   onRequestDeleteCard,
   allowMoveToOtherBoard = true,
   onLinkedOrderMovedToKaitenMirror,
@@ -843,6 +863,7 @@ export function BoardCanvas({
                               onOpenCard={onOpenCard}
                               onCopyCardLink={onCopyCardLink}
                               onRequestMoveCard={onRequestMoveCard}
+                              onRequestArchiveCard={onRequestArchiveCard}
                               onRequestDeleteCard={onRequestDeleteCard}
                               allowMoveToOtherBoard={allowMoveToOtherBoard}
                             />

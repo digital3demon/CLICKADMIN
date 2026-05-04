@@ -193,6 +193,44 @@ export async function kaitenDeleteCard(
   return { ok: true, status: r.status, error: null };
 }
 
+/**
+ * Архивировать карточку в Kaiten (без удаления).
+ * Пробуем несколько вариантов ключа, т.к. у разных версий API встречаются разные имена.
+ */
+export async function kaitenArchiveCard(
+  auth: KaitenAuth,
+  cardId: number,
+  opts?: KaitenHttpOpts,
+): Promise<{ ok: boolean; status: number; error: string | null }> {
+  const bodies: Record<string, unknown>[] = [
+    { archived: true },
+    { is_archived: true },
+    { archived_at: new Date().toISOString() },
+  ];
+  let lastStatus = 400;
+  let lastErr = "Kaiten error";
+  for (const body of bodies) {
+    const r = await kaitenFetch(
+      auth,
+      `/cards/${cardId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      opts,
+    );
+    if (r.ok) return { ok: true, status: r.status, error: null };
+    if (r.status === 404) return { ok: true, status: 404, error: null };
+    lastStatus = r.status;
+    lastErr =
+      typeof r.text === "string" && r.text.trim()
+        ? r.text.slice(0, 800)
+        : "Kaiten error";
+  }
+  return { ok: false, status: lastStatus, error: lastErr };
+}
+
 function cardBlockerRowsFromListJson(json: unknown): Record<string, unknown>[] {
   if (Array.isArray(json)) return json as Record<string, unknown>[];
   if (json != null && typeof json === "object") {

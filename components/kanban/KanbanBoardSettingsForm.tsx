@@ -15,6 +15,10 @@ export function KanbanBoardSettingsForm({
 }: KanbanBoardSettingsFormProps) {
   const types = board.cardTypes || [];
   const users = board.users || [];
+  const archiveRules = board.autoArchiveRules || [];
+  const retentionDays = Number.isFinite(board.archiveRetentionDays)
+    ? Number(board.archiveRetentionDays)
+    : 30;
 
   return (
     <div className="space-y-8">
@@ -246,6 +250,139 @@ export function KanbanBoardSettingsForm({
           }
         >
           + Добавить участника
+        </button>
+      </section>
+
+      <section>
+        <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
+          Архив карточек
+        </h3>
+        <p className="mb-3 text-[0.8125rem] leading-snug text-[var(--text-muted)]">
+          Для выбранной колонки можно включить автоархивацию: карточка попадет в архив,
+          если не двигалась указанное время. Из архива карточки удаляются по сроку хранения.
+        </p>
+        <label className="mb-4 block max-w-xs text-sm">
+          <span className="mb-1 block text-[var(--text-secondary)]">
+            Хранить в архиве (дней)
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={365}
+            value={retentionDays}
+            onChange={(e) =>
+              onPatchBoard((b) => {
+                const v = Number(e.target.value);
+                b.archiveRetentionDays = Number.isFinite(v)
+                  ? Math.max(1, Math.min(365, Math.round(v)))
+                  : 30;
+              })
+            }
+            className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
+          />
+        </label>
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-[var(--card-border)] text-left text-[var(--text-muted)]">
+              <th className="py-2 pr-2">Колонка</th>
+              <th className="w-32 py-2 pr-2">Часов до архива</th>
+              <th className="w-24 py-2 pr-2">Вкл.</th>
+              <th className="w-10 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {archiveRules.map((r) => (
+              <tr key={r.id} className="border-b border-[var(--border-subtle)]">
+                <td className="py-2 pr-2">
+                  <select
+                    value={r.columnId}
+                    onChange={(e) =>
+                      onPatchBoard((b) => {
+                        const x = (b.autoArchiveRules || []).find((y) => y.id === r.id);
+                        if (x) x.columnId = e.target.value;
+                      })
+                    }
+                    className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
+                  >
+                    {board.columns.map((col) => (
+                      <option key={col.id} value={col.id}>
+                        {col.title}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="py-2 pr-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={24 * 180}
+                    value={r.idleHours}
+                    onChange={(e) =>
+                      onPatchBoard((b) => {
+                        const x = (b.autoArchiveRules || []).find((y) => y.id === r.id);
+                        if (!x) return;
+                        const v = Number(e.target.value);
+                        x.idleHours = Number.isFinite(v)
+                          ? Math.max(1, Math.min(24 * 180, Math.round(v)))
+                          : 24;
+                      })
+                    }
+                    className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
+                  />
+                </td>
+                <td className="py-2 pr-2">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={r.enabled !== false}
+                      onChange={(e) =>
+                        onPatchBoard((b) => {
+                          const x = (b.autoArchiveRules || []).find((y) => y.id === r.id);
+                          if (x) x.enabled = e.target.checked;
+                        })
+                      }
+                    />
+                    <span>Да</span>
+                  </label>
+                </td>
+                <td className="py-2 text-right">
+                  <button
+                    type="button"
+                    title="Удалить правило"
+                    className="inline-flex rounded p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                    onClick={() =>
+                      onPatchBoard((b) => {
+                        b.autoArchiveRules = (b.autoArchiveRules || []).filter(
+                          (x) => x.id !== r.id,
+                        );
+                      })
+                    }
+                  >
+                    <IconTrash />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button
+          type="button"
+          className="mt-3 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+          onClick={() =>
+            onPatchBoard((b) => {
+              const firstColumnId = b.columns[0]?.id ?? "";
+              if (!firstColumnId) return;
+              b.autoArchiveRules = b.autoArchiveRules || [];
+              b.autoArchiveRules.push({
+                id: generateId("kar"),
+                enabled: true,
+                columnId: firstColumnId,
+                idleHours: 24,
+              });
+            })
+          }
+        >
+          + Добавить правило автоархивации
         </button>
       </section>
     </div>

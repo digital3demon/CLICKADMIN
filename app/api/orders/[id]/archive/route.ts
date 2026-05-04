@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
-import { getKaitenRestAuth, kaitenDeleteCard } from "@/lib/kaiten-rest";
+import { getKaitenRestAuth, kaitenArchiveCard } from "@/lib/kaiten-rest";
 import { archivedOrderNumberPlaceholder } from "@/lib/order-number";
 
 export const dynamic = "force-dynamic";
 
-/** Снять привязку к доске / демо-канбану (карточка в Kaiten удаляется отдельно). */
+/** Снять привязку к доске / демо-канбану (карточка в Kaiten архивируется отдельно). */
 const CLEAR_BOARD_MIRROR = {
   kaitenCardId: null,
   kaitenColumnTitle: null,
@@ -19,7 +19,7 @@ const CLEAR_BOARD_MIRROR = {
   demoKanbanColumn: null,
 } as const;
 
-/** Отправить наряд в архив: Kaiten DELETE при наличии токена и id карточки; снятие зеркала канбана. */
+/** Отправить наряд в архив: архивируем карточку Kaiten (без удаления), затем снимаем зеркало канбана. */
 export async function POST(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -55,10 +55,10 @@ export async function POST(
   if (!session.demo && row.kaitenCardId != null) {
     const auth = getKaitenRestAuth();
     if (auth) {
-      const del = await kaitenDeleteCard(auth, row.kaitenCardId);
-      if (!del.ok) {
-        kaitenSyncError = del.error ?? `Kaiten HTTP ${del.status}`;
-        console.error("[POST order archive] kaiten delete", kaitenSyncError);
+      const arch = await kaitenArchiveCard(auth, row.kaitenCardId);
+      if (!arch.ok) {
+        kaitenSyncError = arch.error ?? `Kaiten HTTP ${arch.status}`;
+        console.error("[POST order archive] kaiten archive", kaitenSyncError);
       }
     }
   }

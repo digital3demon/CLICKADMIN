@@ -3,6 +3,7 @@
 import type { KaitenTrackLane } from "@prisma/client";
 import type {
   KanbanAppState,
+  KanbanArchivedCard,
   KanbanBoard,
   KanbanCard,
 } from "@/lib/kanban/types";
@@ -10,6 +11,8 @@ import { runKanbanAutomations } from "@/lib/kanban/automations";
 import {
   canUserAccessBoard,
   applyKaitenApiCardTypesToMirrorBoards,
+  applyBoardArchivePolicies,
+  archiveCardByIdOnBoard,
   buildKanbanDisplayView,
   countActiveKanbanFilters,
   createCard,
@@ -25,6 +28,7 @@ import {
   normalizeDemoKanbanAppState,
   demoTrackLanes,
   pushActivity,
+  restoreArchivedCardOnBoard,
   saveKanbanState,
   isKanbanAggregateBoardId,
   KANBAN_BOARD_DISTRIBUTE_ID,
@@ -97,6 +101,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   } | null>(null);
   const [moveCardId, setMoveCardId] = useState<string | null>(null);
   const [moveTargetBoardId, setMoveTargetBoardId] = useState("");
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [activityActorLabel, setActivityActorLabel] = useState<string | undefined>(undefined);
   const [kanbanSessionUserId, setKanbanSessionUserId] = useState<string | null>(null);
   const [kanbanCardPerms, setKanbanCardPerms] = useState({
@@ -407,6 +412,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     if (!cardModalId) return board;
     return findCardInAppState(appState, cardModalId)?.board ?? board;
   }, [cardModalId, appState, board]);
+  const archivedCards = useMemo<KanbanArchivedCard[]>(() => {
+    if (!board) return [];
+    return [...(board.archivedCards || [])].sort((a, b) =>
+      String(b.archivedAt).localeCompare(String(a.archivedAt)),
+    );
+  }, [board]);
 
   const applyModalBoard = useCallback(
     (fn: (b: KanbanBoard) => void) => {
@@ -450,6 +461,34 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       setToasts((t) => t.filter((x) => x.id !== id));
     }, 4200);
   }, []);
+
+  useEffect(() => {
+    if (!appState) return;
+    const runSweep = () => {
+      let archivedCount = 0;
+      let deletedCount = 0;
+      setAppState((s) => {
+        if (!s) return s;
+        const next = structuredClone(s);
+        for (const b of next.boards) {
+          const out = applyBoardArchivePolicies(b);
+          archivedCount += out.archivedCount;
+          deletedCount += out.deletedCount;
+        }
+        if (archivedCount === 0 && deletedCount === 0) return s;
+        return next;
+      });
+      if (archivedCount > 0) {
+        showToast(`В архив перемещено карточек: ${archivedCount}`);
+      }
+      if (deletedCount > 0) {
+        showToast(`Из архива удалено по сроку: ${deletedCount}`);
+      }
+    };
+    runSweep();
+    const iv = window.setInterval(runSweep, 60_000);
+    return () => window.clearInterval(iv);
+  }, [appState, showToast]);
 
   const syncKaitenMirrorAfterKanbanMove = useCallback(
     async (args: {
@@ -682,6 +721,26 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         setConfirm(null);
       },
     });
+  };
+
+  const archiveCard = (cardId: string) => {
+    if (!appState) return;
+    const found = findCardInAppState(appState, cardId);
+    if (!found) return;
+    const titleSnapshot = (found.card.title || "").trim() || "карточка";
+    setAppState((s) => {
+      if (!s) return s;
+      const next = structuredClone(s);
+      const loc = findCardInAppState(next, cardId);
+      if (!loc) return s;
+      const boardRef = next.boards.find((b) => b.id === loc.board.id);
+      if (!boardRef) return s;
+      const ok = archiveCardByIdOnBoard(boardRef, cardId, "manual");
+      if (!ok) return s;
+      return next;
+    });
+    if (cardModalId === cardId) setCardModalId(null);
+    showToast(`Карточка «${titleSnapshot}» отправлена в архив`);
   };
 
   const copyCardLink = (cardId: string) => {
@@ -960,6 +1019,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               patchApp={patchApp}
               showToast={showToast}
             />
+            <button
+              type="button"
+              className="rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 py-1.5 text-[0.75rem] font-medium text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110"
+              onClick={() => setArchiveOpen(true)}
+            >
+              Архив ({archivedCards.length})
+            </button>
             {(appState.hiddenLinkedOrderIds?.length ?? 0) > 0 ? (
               <button
                 type="button"
@@ -1001,6 +1067,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 setMoveCardId(cid);
                 setMoveTargetBoardId("");
               }}
+              onRequestArchiveCard={archiveCard}
               onRequestDeleteCard={deleteCard}
               allowMoveToOtherBoard={
                 appState.boards.length > 1 && kanbanCardPerms.moveToOtherBoard
@@ -1125,6 +1192,127 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 Перенести
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {archiveOpen && (
+        <div
+          className="fixed inset-0 z-[216] flex items-center justify-center bg-black/45 p-4"
+          role="dialog"
+          aria-modal
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setArchiveOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-5xl rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-[var(--app-text)] shadow-xl"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="m-0 text-base font-semibold">Архив карточек</h3>
+              <button
+                type="button"
+                className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)]"
+                onClick={() => setArchiveOpen(false)}
+              >
+                Закрыть
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Доска: {board.title}. Хранение: {board.archiveRetentionDays ?? 30} дн.
+            </p>
+            {archivedCards.length === 0 ? (
+              <p className="mt-4 text-sm text-[var(--text-muted)]">
+                Архив пуст.
+              </p>
+            ) : (
+              <div className="mt-4 max-h-[70vh] overflow-auto rounded border border-[var(--card-border)]">
+                <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                      <th className="px-3 py-2">Карточка</th>
+                      <th className="px-3 py-2">Из колонки</th>
+                      <th className="px-3 py-2">Причина</th>
+                      <th className="px-3 py-2">В архиве с</th>
+                      <th className="px-3 py-2">Удалится</th>
+                      <th className="px-3 py-2 text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {archivedCards.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="border-b border-[var(--border-subtle)] hover:bg-[var(--table-row-hover)]"
+                      >
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-[var(--text-strong)]">
+                            {row.card.title}
+                          </div>
+                          {row.card.linkedOrderId ? (
+                            <div className="text-xs text-[var(--text-muted)]">
+                              Наряд: {row.card.linkedOrderId}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2">{row.sourceColumnTitle}</td>
+                        <td className="px-3 py-2">
+                          {row.reason === "auto" ? "Авто" : "Вручную"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {new Date(row.archivedAt).toLocaleString("ru-RU")}
+                        </td>
+                        <td className="px-3 py-2">
+                          {new Date(row.deleteAfterAt).toLocaleString("ru-RU")}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="rounded-md border border-[var(--card-border)] px-2.5 py-1 text-xs hover:bg-[var(--surface-hover)]"
+                              onClick={() => {
+                                let restoredTitle = row.card.title;
+                                setAppState((s) => {
+                                  if (!s) return s;
+                                  const next = structuredClone(s);
+                                  const b = next.boards.find((x) => x.id === board.id);
+                                  if (!b) return s;
+                                  const ok = restoreArchivedCardOnBoard(b, row.id);
+                                  if (!ok) return s;
+                                  return next;
+                                });
+                                showToast(`Карточка «${restoredTitle}» восстановлена`);
+                              }}
+                            >
+                              Восстановить
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md border border-red-400/50 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
+                              onClick={() => {
+                                setAppState((s) => {
+                                  if (!s) return s;
+                                  const next = structuredClone(s);
+                                  const b = next.boards.find((x) => x.id === board.id);
+                                  if (!b) return s;
+                                  b.archivedCards = (b.archivedCards || []).filter(
+                                    (x) => x.id !== row.id,
+                                  );
+                                  return next;
+                                });
+                                showToast("Карточка удалена из архива");
+                              }}
+                            >
+                              Удалить
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
