@@ -1113,21 +1113,21 @@ export function NewOrderForm({
         ) : null}
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
               <h2
                 id={titleId}
-                className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight text-[var(--app-text)] sm:flex-none sm:overflow-visible sm:whitespace-normal sm:text-xl"
+                className="min-w-0 flex-1 text-xs font-semibold tabular-nums leading-snug tracking-tight text-[var(--app-text)] sm:flex-none sm:text-xl sm:leading-normal sm:tracking-tight"
                 title="Ожидаемый номер (YYMM-NNN); итоговый при сохранении"
               >
                 Наряд {nextOrderPreview ?? "…"}
               </h2>
-              <div className="flex shrink-0 items-center gap-1 sm:hidden">
+              <div className="flex shrink-0 items-center gap-0.5 sm:hidden">
                 <button
                   type="button"
                   onClick={() =>
                     setMobileHeaderDetailsOpen((open) => !open)
                   }
-                  className="rounded-md p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                  className="rounded-md p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
                   aria-expanded={mobileHeaderDetailsOpen}
                   aria-label={
                     mobileHeaderDetailsOpen
@@ -1141,7 +1141,7 @@ export function NewOrderForm({
                   }
                 >
                   <ChevronDown
-                    className={`h-5 w-5 transition-transform duration-200 ${
+                    className={`h-4 w-4 transition-transform duration-200 ${
                       mobileHeaderDetailsOpen ? "rotate-180" : ""
                     }`}
                     aria-hidden
@@ -1150,26 +1150,26 @@ export function NewOrderForm({
                 <button
                   type="button"
                   onClick={onCollapse}
-                  className="rounded-md p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                  className="rounded-md p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
                   aria-label="Свернуть окно"
                   title="Свернуть"
                 >
-                  <ChevronDown className="h-5 w-5" aria-hidden />
+                  <ChevronDown className="h-4 w-4" aria-hidden />
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-md p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                  className="rounded-md p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
                   aria-label="Закрыть"
                   title="Закрыть"
                 >
-                  <CloseIcon className="h-5 w-5" aria-hidden />
+                  <CloseIcon className="h-4 w-4" aria-hidden />
                 </button>
                 <button
                   type="button"
                   onClick={() => void requestSave()}
                   disabled={saving}
-                  className="h-10 min-w-0 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-3 text-[0.7rem] font-semibold uppercase leading-tight tracking-wide text-white shadow-sm transition-colors hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-60"
+                  className="h-8 min-w-0 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-2 text-[0.62rem] font-semibold uppercase leading-none tracking-wide text-white shadow-sm transition-colors hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-60"
                 >
                   {saving ? "…" : "Сохранить"}
                 </button>
