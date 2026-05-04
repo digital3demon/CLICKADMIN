@@ -183,6 +183,22 @@ function normalizedPayment(raw: string | null | undefined): string {
   return p;
 }
 
+function paymentPillClass(paymentValue: string): string {
+  if (paymentValue === ORDER_PAYMENT_EXPECTED) {
+    return "border-violet-300 bg-violet-50 text-violet-950 dark:border-violet-700/70 dark:bg-violet-950/40 dark:text-violet-100";
+  }
+  if (paymentValue === ORDER_PAYMENT_PAID || paymentValue === ORDER_PAYMENT_RECON_PAID) {
+    return "border-emerald-800/70 bg-emerald-900 text-emerald-50 dark:border-emerald-700/80 dark:bg-emerald-950 dark:text-emerald-100";
+  }
+  if (paymentValue === ORDER_PAYMENT_PARTIAL) {
+    return "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-100";
+  }
+  if (paymentValue === ORDER_PAYMENT_RECON_UNPAID) {
+    return "border-sky-300 bg-sky-50 text-sky-950 dark:border-sky-700/70 dark:bg-sky-950/40 dark:text-sky-100";
+  }
+  return "border-rose-300 bg-rose-50 text-rose-950 dark:border-rose-700/70 dark:bg-rose-950/40 dark:text-rose-100";
+}
+
 export function OrderListTagsCell({
   orderId,
   pageSize,
@@ -441,6 +457,7 @@ export function OrderListTagsCell({
         : currentPayment === ORDER_PAYMENT_PAID
           ? LIST_TAG_PAYMENT_PAID
           : null;
+  const paymentPillToneClass = paymentPillClass(currentPayment);
 
   const tagCloudItems = useMemo(() => {
     const href = (innerKey: string) =>
@@ -608,14 +625,14 @@ export function OrderListTagsCell({
           {paymentFilterTag ? (
             <Link
               href={href(paymentFilterTag)}
-              className={`min-w-0 max-w-full shrink truncate rounded-full border border-indigo-300 bg-indigo-50 font-semibold text-indigo-950 shadow-sm outline-none focus-visible:outline-none dark:border-indigo-800/60 dark:bg-indigo-950/40 dark:text-indigo-100 ${padTable}`}
+              className={`min-w-0 max-w-full shrink truncate rounded-full border font-semibold shadow-sm outline-none focus-visible:outline-none ${paymentPillToneClass} ${padTable}`}
               title="Показать в списке заказы с этим статусом оплаты"
             >
               {paymentPill}
             </Link>
           ) : (
             <span
-              className={`min-w-0 max-w-full shrink truncate rounded-full border border-indigo-300 bg-indigo-50 font-semibold text-indigo-950 shadow-sm dark:border-indigo-800/60 dark:bg-indigo-950/40 dark:text-indigo-100 ${padTable}`}
+              className={`min-w-0 max-w-full shrink truncate rounded-full border font-semibold shadow-sm ${paymentPillToneClass} ${padTable}`}
             >
               {paymentPill}
             </span>
@@ -705,6 +722,7 @@ export function OrderListTagsCell({
     periodTo,
     paymentFilterTag,
     paymentPill,
+    paymentPillToneClass,
     paymentPartialRub,
     prostheticsOrdered,
     removeTag,
