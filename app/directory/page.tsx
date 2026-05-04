@@ -23,7 +23,8 @@ export default async function DirectoryHubPage() {
   const showKanbanBoards = a?.CONFIG_KANBAN_BOARDS === true;
   const showKaiten = a?.CONFIG_KAITEN === true;
   const showCouriers = a?.CONFIG_COURIERS === true;
-  const showOrdersImportExport = showPrice;
+  const showOrdersImportExport = a?.CONFIG_ORDERS_IMPORT_EXPORT === true;
+  const showContractTemplate = a?.CONFIG_CONTRACT_TEMPLATE === true;
 
   return (
     <ModuleFrame
@@ -129,7 +130,7 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
-        {showPrice ? (
+        {showContractTemplate ? (
           <Link
             href="/directory/contracts"
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"

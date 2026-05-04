@@ -19,6 +19,9 @@ const RULES: Rule[] = [
   { prefix: "/directory/costing", module: "CONFIG_COSTING" },
   { prefix: "/api/costing", module: "CONFIG_COSTING" },
   { prefix: "/directory/price", module: "CONFIG_PRICING" },
+  { prefix: "/directory/orders-import-export", module: "CONFIG_ORDERS_IMPORT_EXPORT" },
+  { prefix: "/api/orders/import-export", module: "CONFIG_ORDERS_IMPORT_EXPORT" },
+  { prefix: "/directory/contracts", module: "CONFIG_CONTRACT_TEMPLATE" },
   { prefix: "/directory/warehouse", module: "CONFIG_WAREHOUSE" },
   { prefix: "/directory/kanban-boards", module: "CONFIG_KANBAN_BOARDS" },
   { prefix: "/directory/kaiten", module: "CONFIG_KAITEN" },
@@ -79,6 +82,12 @@ export function getModuleForPathname(pathname: string): AppModule | null {
   }
   if (pathname.startsWith("/api/user-avatars/")) {
     return null;
+  }
+  if (
+    pathname.startsWith("/api/clinics/") &&
+    (pathname.endsWith("/contract") || pathname.includes("/contract/"))
+  ) {
+    return "CONFIG_CONTRACT_TEMPLATE";
   }
   /** Хаб /directory: видимость плиток на стороне страницы, не блокируем воротами. */
   if (pathname === "/directory") {

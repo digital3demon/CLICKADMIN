@@ -410,6 +410,10 @@ enum AppModule {
   CONFIG_KANBAN_BOARDS
   CONFIG_KAITEN
   CONFIG_COURIERS
+  /// Конфиг: экспорт / импорт работ (xlsx)
+  CONFIG_ORDERS_IMPORT_EXPORT
+  /// Конфиг: шаблон договора
+  CONFIG_CONTRACT_TEMPLATE
   /// Просчёт работ (Ультра; по умолчанию только владелец)
   CONFIG_COSTING
   /// Список и приглашения (по умолчанию только владелец)

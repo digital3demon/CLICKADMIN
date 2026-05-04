@@ -1,10 +1,20 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ContractTemplateDirectoryClient } from "@/components/directory/ContractTemplateDirectoryClient";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
+import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 
 export const dynamic = "force-dynamic";
 
-export default function DirectoryContractsPage() {
+export default async function DirectoryContractsPage() {
+  const { session, access } = await getSessionWithModuleAccess();
+  if (!session) {
+    redirect("/login?next=/directory/contracts");
+  }
+  if (access?.CONFIG_CONTRACT_TEMPLATE !== true && session.role !== "OWNER") {
+    redirect("/directory");
+  }
+
   return (
     <ModuleFrame
       title="Шаблон договора"

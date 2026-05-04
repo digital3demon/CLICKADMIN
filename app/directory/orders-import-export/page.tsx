@@ -11,7 +11,7 @@ export default async function DirectoryOrdersImportExportPage() {
   if (!session) {
     redirect("/login?next=/directory/orders-import-export");
   }
-  if (access?.CONFIG_PRICING !== true && session.role !== "OWNER") {
+  if (access?.CONFIG_ORDERS_IMPORT_EXPORT !== true && session.role !== "OWNER") {
     redirect("/directory");
   }
 

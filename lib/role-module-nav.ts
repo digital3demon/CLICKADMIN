@@ -12,6 +12,8 @@ export function hasDirectorySidebarAccess(
     a.CONFIG_KANBAN_BOARDS === true ||
     a.CONFIG_KAITEN === true ||
     a.CONFIG_COURIERS === true ||
+    a.CONFIG_ORDERS_IMPORT_EXPORT === true ||
+    a.CONFIG_CONTRACT_TEMPLATE === true ||
     a.CONFIG_COSTING === true ||
     a.CONFIG_USERS === true
   );

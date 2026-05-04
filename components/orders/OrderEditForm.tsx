@@ -946,16 +946,26 @@ export function OrderEditForm({
     [clinics, clinicId, privatePracticeDoctors, allDoctors],
   );
 
+  const prioritizedClinics = useMemo(() => {
+    if (!doctorId) return clinics;
+    return [...clinics].sort((a, b) => {
+      const aHasDoctor = a.doctors.some((d) => d.id === doctorId);
+      const bHasDoctor = b.doctors.some((d) => d.id === doctorId);
+      if (aHasDoctor !== bHasDoctor) return aHasDoctor ? -1 : 1;
+      return clinicSelectLabel(a).localeCompare(clinicSelectLabel(b), "ru");
+    });
+  }, [clinics, doctorId]);
+
   const clinicComboboxOptions = useMemo(
     () => [
-      ...clinics.map((c) => ({
+      ...prioritizedClinics.map((c) => ({
         value: c.id,
         label: clinicSelectLabel(c),
         searchPrefixes: clinicComboboxSearchPrefixes(c),
       })),
       { value: ORDER_CLINIC_PRIVATE, label: "Частная практика" },
     ],
-    [clinics],
+    [prioritizedClinics],
   );
 
   const doctorComboboxOptions = useMemo(

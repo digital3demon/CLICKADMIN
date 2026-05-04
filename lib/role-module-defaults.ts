@@ -29,6 +29,8 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CONFIG_KANBAN_BOARDS",
   "CONFIG_KAITEN",
   "CONFIG_COURIERS",
+  "CONFIG_ORDERS_IMPORT_EXPORT",
+  "CONFIG_CONTRACT_TEMPLATE",
   "CONFIG_COSTING",
   "CONFIG_USERS",
   "CONFIG_USER_INVITES",
@@ -55,6 +57,8 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CONFIG_KANBAN_BOARDS: "Конфиг: доски канбана",
   CONFIG_KAITEN: "Конфиг: Kaiten",
   CONFIG_COURIERS: "Конфиг: курьеры",
+  CONFIG_ORDERS_IMPORT_EXPORT: "Конфиг: экспорт / импорт работ",
+  CONFIG_CONTRACT_TEMPLATE: "Конфиг: шаблон договора",
   CONFIG_COSTING: "Просчёт работ",
   CONFIG_USERS: "Пользователи",
   CONFIG_USER_INVITES: "Приглашения пользователей",
@@ -120,6 +124,8 @@ export function defaultModuleAllowed(
     case "CONFIG_KANBAN_BOARDS":
     case "CONFIG_KAITEN":
     case "CONFIG_COURIERS":
+    case "CONFIG_ORDERS_IMPORT_EXPORT":
+    case "CONFIG_CONTRACT_TEMPLATE":
       return true;
     case "CONFIG_COSTING":
     case "CONFIG_USERS":
