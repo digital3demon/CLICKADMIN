@@ -18,6 +18,8 @@ const shipmentOrderSelect = {
   prostheticsOrdered: true,
   invoicePrinted: true,
   invoiceAttachmentId: true,
+  payment: true,
+  paymentPartialRub: true,
   adminShippedOtpr: true,
   kaitenBlocked: true,
   kaitenBlockReason: true,

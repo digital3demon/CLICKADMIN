@@ -640,6 +640,8 @@ export default async function OrdersPage({
                       }
                       invoicePrinted={o.invoicePrinted}
                       hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                      payment={o.payment}
+                      paymentPartialRub={o.paymentPartialRub}
                       adminShippedOtpr={o.adminShippedOtpr}
                       kaitenBlocked={o.kaitenBlocked === true}
                       kaitenBlockReason={o.kaitenBlockReason}

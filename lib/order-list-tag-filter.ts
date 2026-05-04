@@ -25,6 +25,11 @@ export const LIST_TAG_INVOICE = "invoice";
 export const LIST_TAG_INVOICE_PRINTED = "invoice-printed";
 /** Жёлтый треугольник: непринятые корректировки «!!!» или расхождение суммы счёта с составом */
 export const LIST_TAG_ORDER_ATTENTION = "order-attention";
+export const LIST_TAG_PAYMENT_EXPECTED = "payment-expected";
+export const LIST_TAG_PAYMENT_PARTIAL = "payment-partial";
+export const LIST_TAG_PAYMENT_PAID = "payment-paid";
+export const LIST_TAG_PAYMENT_RECON = "payment-reconciliation";
+export const LIST_TAG_PAYMENT_RECON_PAID = "payment-reconciliation-paid";
 
 /** @deprecated Фильтр по статусу заказа CRM отключён в UI; ключ оставлен для старых ссылок. */
 export function listTagOrderStatus(status: OrderStatus): string {
@@ -62,6 +67,11 @@ export type ParsedListTag =
   | { kind: "invoice" }
   | { kind: "invoicePrinted" }
   | { kind: "orderAttention" }
+  | { kind: "paymentExpected" }
+  | { kind: "paymentPartial" }
+  | { kind: "paymentPaid" }
+  | { kind: "paymentReconciliation" }
+  | { kind: "paymentReconciliationPaid" }
   | { kind: "custom"; label: string };
 
 const KAITEN_COLUMN_TAG_MAX_LEN = 500;
@@ -88,6 +98,11 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t === LIST_TAG_INVOICE) return { kind: "invoice" };
   if (t === LIST_TAG_INVOICE_PRINTED) return { kind: "invoicePrinted" };
   if (t === LIST_TAG_ORDER_ATTENTION) return { kind: "orderAttention" };
+  if (t === LIST_TAG_PAYMENT_EXPECTED) return { kind: "paymentExpected" };
+  if (t === LIST_TAG_PAYMENT_PARTIAL) return { kind: "paymentPartial" };
+  if (t === LIST_TAG_PAYMENT_PAID) return { kind: "paymentPaid" };
+  if (t === LIST_TAG_PAYMENT_RECON) return { kind: "paymentReconciliation" };
+  if (t === LIST_TAG_PAYMENT_RECON_PAID) return { kind: "paymentReconciliationPaid" };
 
   if (t.startsWith("k:")) {
     try {
@@ -157,6 +172,16 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
       return { invoiceAttachmentId: { not: null } };
     case "invoicePrinted":
       return { invoicePrinted: true };
+    case "paymentExpected":
+      return { payment: "Ожидает оплаты" };
+    case "paymentPartial":
+      return { payment: "Частично оплачено" };
+    case "paymentPaid":
+      return { payment: "Оплачено" };
+    case "paymentReconciliation":
+      return { payment: { in: ["СВЕРКА", "Сверка-НЕ ОПЛАЧЕНО"] } };
+    case "paymentReconciliationPaid":
+      return { payment: "Сверка-ОПЛАЧЕНО" };
     case "custom":
       return {
         listCustomTags: { some: { label: parsed.label } },
@@ -190,6 +215,16 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
       return "Счёт распечатан";
     case "orderAttention":
       return "Внимание: корректировки или расхождение сумм";
+    case "paymentExpected":
+      return "Ожидает оплаты";
+    case "paymentPartial":
+      return "Частично оплачено";
+    case "paymentPaid":
+      return "Оплачено";
+    case "paymentReconciliation":
+      return "Сверка";
+    case "paymentReconciliationPaid":
+      return "Сверка · оплачено";
     case "custom":
       return parsed.label;
   }

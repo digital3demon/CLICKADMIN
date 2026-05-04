@@ -20,6 +20,8 @@ export const ordersListPageSelect = {
   prostheticsOrdered: true,
   invoicePrinted: true,
   invoiceAttachmentId: true,
+  payment: true,
+  paymentPartialRub: true,
   adminShippedOtpr: true,
   kaitenCardId: true,
   demoKanbanColumn: true,

@@ -19,6 +19,11 @@ import {
   LIST_TAG_KAITEN_BLOCKED,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_OTPR,
+  LIST_TAG_PAYMENT_EXPECTED,
+  LIST_TAG_PAYMENT_PAID,
+  LIST_TAG_PAYMENT_PARTIAL,
+  LIST_TAG_PAYMENT_RECON,
+  LIST_TAG_PAYMENT_RECON_PAID,
   LIST_TAG_PROSTHETICS,
   LIST_TAG_PROSTHETICS_PENDING,
   LIST_TAG_URGENT,
@@ -31,6 +36,15 @@ import {
   type QuickOrderTagSuggestion,
 } from "@/lib/order-list-quick-tag-suggestions";
 import { ordersListHref } from "@/lib/orders-list-query";
+import {
+  isReconciliationPaymentStatus,
+  ORDER_PAYMENT_EXPECTED,
+  ORDER_PAYMENT_NOT_PAID,
+  ORDER_PAYMENT_PAID,
+  ORDER_PAYMENT_PARTIAL,
+  ORDER_PAYMENT_RECON_PAID,
+  ORDER_PAYMENT_RECON_UNPAID,
+} from "@/lib/order-clinic-client-fields";
 
 type CustomRow = { id: string; label: string };
 
@@ -53,6 +67,8 @@ type Props = {
   invoicePrinted?: boolean;
   /** Загружен файл счёта (вкладка «Документооборот») */
   hasInvoiceAttachment: boolean;
+  payment: string | null;
+  paymentPartialRub: number | null;
   adminShippedOtpr: boolean;
   /** Карточка Kaiten заблокирована — показываем чип в отметках и фильтр */
   kaitenBlocked: boolean;
@@ -160,6 +176,13 @@ function tagHref(
   });
 }
 
+function normalizedPayment(raw: string | null | undefined): string {
+  const p = (raw ?? "").trim();
+  if (!p) return ORDER_PAYMENT_NOT_PAID;
+  if (p === "СВЕРКА") return ORDER_PAYMENT_RECON_UNPAID;
+  return p;
+}
+
 export function OrderListTagsCell({
   orderId,
   pageSize,
@@ -173,6 +196,8 @@ export function OrderListTagsCell({
   listPendingProstheticsRequests = false,
   invoicePrinted = false,
   hasInvoiceAttachment,
+  payment,
+  paymentPartialRub,
   adminShippedOtpr,
   kaitenBlocked,
   kaitenBlockReason,
@@ -200,6 +225,11 @@ export function OrderListTagsCell({
   const [addOpen, setAddOpen] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [blockReasonDraft, setBlockReasonDraft] = useState("");
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentPartialDraft, setPaymentPartialDraft] = useState(
+    paymentPartialRub != null ? String(paymentPartialRub) : "",
+  );
+  const [paymentPartialPrompt, setPaymentPartialPrompt] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -315,6 +345,26 @@ export function OrderListTagsCell({
     [closeAdd, orderId, router],
   );
 
+  const applyPaymentPatch = useCallback(
+    async (nextPayment: string, partialText?: string) => {
+      const t = (partialText ?? "").trim();
+      const parsed =
+        t.length > 0 && Number.isFinite(Number(t)) && Number(t) >= 0
+          ? Math.round(Number(t))
+          : null;
+      if (t.length > 0 && parsed == null) {
+        setErr("Сумма частичной оплаты: укажите число или оставьте пусто");
+        return;
+      }
+      await applyQuickPatch({
+        payment: nextPayment,
+        paymentPartialRub:
+          nextPayment === ORDER_PAYMENT_PARTIAL ? parsed : null,
+      });
+    },
+    [applyQuickPatch],
+  );
+
   const removeTag = useCallback(
     async (label: string) => {
       if (!window.confirm(`Удалить тег «${label}» у этого наряда?`)) return;
@@ -368,6 +418,29 @@ export function OrderListTagsCell({
     },
     [applyQuickPatch, submitAdd],
   );
+
+  const currentPayment = normalizedPayment(payment);
+  const paymentIsRecon = isReconciliationPaymentStatus(currentPayment);
+  const paymentPill = paymentIsRecon
+    ? currentPayment === ORDER_PAYMENT_RECON_PAID
+      ? "Сверка · оплачено"
+      : "Сверка"
+    : currentPayment === ORDER_PAYMENT_PARTIAL
+      ? paymentPartialRub != null
+        ? `Частично оплачено · ${paymentPartialRub} ₽`
+        : "Частично оплачено"
+      : currentPayment;
+  const paymentFilterTag = paymentIsRecon
+    ? currentPayment === ORDER_PAYMENT_RECON_PAID
+      ? LIST_TAG_PAYMENT_RECON_PAID
+      : LIST_TAG_PAYMENT_RECON
+    : currentPayment === ORDER_PAYMENT_EXPECTED
+      ? LIST_TAG_PAYMENT_EXPECTED
+      : currentPayment === ORDER_PAYMENT_PARTIAL
+        ? LIST_TAG_PAYMENT_PARTIAL
+        : currentPayment === ORDER_PAYMENT_PAID
+          ? LIST_TAG_PAYMENT_PAID
+          : null;
 
   const tagCloudItems = useMemo(() => {
     const href = (innerKey: string) =>
@@ -527,6 +600,45 @@ export function OrderListTagsCell({
       });
     }
 
+    items.push({
+      key: "pay",
+      flex: "grow",
+      node: (
+        <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
+          {paymentFilterTag ? (
+            <Link
+              href={href(paymentFilterTag)}
+              className={`min-w-0 max-w-full shrink truncate rounded-full border border-indigo-300 bg-indigo-50 font-semibold text-indigo-950 shadow-sm outline-none focus-visible:outline-none dark:border-indigo-800/60 dark:bg-indigo-950/40 dark:text-indigo-100 ${padTable}`}
+              title="Показать в списке заказы с этим статусом оплаты"
+            >
+              {paymentPill}
+            </Link>
+          ) : (
+            <span
+              className={`min-w-0 max-w-full shrink truncate rounded-full border border-indigo-300 bg-indigo-50 font-semibold text-indigo-950 shadow-sm dark:border-indigo-800/60 dark:bg-indigo-950/40 dark:text-indigo-100 ${padTable}`}
+            >
+              {paymentPill}
+            </span>
+          )}
+          <button
+            type="button"
+            className="rounded p-1 text-xs leading-none text-indigo-700 hover:bg-indigo-100 dark:text-indigo-200 dark:hover:bg-indigo-950/50"
+            title="Изменить статус оплаты"
+            aria-label="Изменить статус оплаты"
+            onClick={() => {
+              setPaymentPartialDraft(
+                paymentPartialRub != null ? String(paymentPartialRub) : "",
+              );
+              setPaymentPartialPrompt(false);
+              setPaymentOpen(true);
+            }}
+          >
+            ✎
+          </button>
+        </span>
+      ),
+    });
+
     for (const t of customTags) {
       const inner = listTagCustomLabel(t.label);
       items.push({
@@ -591,6 +703,9 @@ export function OrderListTagsCell({
     listSearchQ,
     periodFrom,
     periodTo,
+    paymentFilterTag,
+    paymentPill,
+    paymentPartialRub,
     prostheticsOrdered,
     removeTag,
     urgentCoefficient,
@@ -807,6 +922,145 @@ export function OrderListTagsCell({
                 onClick={() => void submitAdd(undefined)}
               >
                 {busy ? "…" : "Добавить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {paymentOpen ? (
+        <div
+          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onClick={() => {
+            setPaymentOpen(false);
+            setPaymentPartialPrompt(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Статус оплаты"
+            className="w-full max-w-sm rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-base font-semibold text-[var(--app-text)]">
+              Статус оплаты
+            </p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Текущий: <strong>{paymentPill}</strong>
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {paymentIsRecon ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    onClick={() =>
+                      void applyPaymentPatch(ORDER_PAYMENT_RECON_UNPAID)
+                    }
+                  >
+                    Сверка-НЕ ОПЛАЧЕНО
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    onClick={() =>
+                      void applyPaymentPatch(ORDER_PAYMENT_RECON_PAID)
+                    }
+                  >
+                    Сверка-ОПЛАЧЕНО
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    onClick={() => void applyPaymentPatch(ORDER_PAYMENT_EXPECTED)}
+                  >
+                    Ожидает оплаты
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    onClick={() => void applyPaymentPatch(ORDER_PAYMENT_PAID)}
+                  >
+                    Оплачено
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    onClick={() => void applyPaymentPatch(ORDER_PAYMENT_NOT_PAID)}
+                  >
+                    Не оплачено
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    onClick={() => setPaymentPartialPrompt(true)}
+                  >
+                    Частично оплачено
+                  </button>
+                </>
+              )}
+            </div>
+
+            {paymentPartialPrompt ? (
+              <div className="mt-3 rounded-md border border-[var(--card-border)] p-3">
+                <p className="text-sm text-[var(--text-muted)]">
+                  Введите сумму (можно оставить пусто)
+                </p>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="mt-2 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-base text-[var(--app-text)]"
+                  value={paymentPartialDraft}
+                  onChange={(e) => setPaymentPartialDraft(e.target.value)}
+                  placeholder="Например, 15000"
+                />
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)]"
+                    onClick={() => setPaymentPartialPrompt(false)}
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-95 disabled:opacity-50"
+                    onClick={() =>
+                      void applyPaymentPatch(
+                        ORDER_PAYMENT_PARTIAL,
+                        paymentPartialDraft,
+                      )
+                    }
+                  >
+                    Сохранить
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="rounded-md border border-[var(--card-border)] px-4 py-2 text-base text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                onClick={() => {
+                  setPaymentOpen(false);
+                  setPaymentPartialPrompt(false);
+                }}
+              >
+                Закрыть
               </button>
             </div>
           </div>
