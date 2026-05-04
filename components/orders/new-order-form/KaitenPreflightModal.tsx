@@ -4,7 +4,14 @@ import type { KaitenTrackLane } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 export type KaitenSavePayload =
-  | { kaitenDecideLater: true }
+  | { kaitenDecideLater: true; createKanbanWithoutKaiten?: false }
+  | {
+      kaitenDecideLater: true;
+      createKanbanWithoutKaiten: true;
+      kaitenCardTypeId: string;
+      kaitenTrackLane: KaitenTrackLane;
+      kaitenCardTitleLabel: string;
+    }
   | {
       kaitenDecideLater: false;
       kaitenCardTypeId: string;
@@ -77,6 +84,8 @@ export function KaitenPreflightModal({
   saveError,
 }: KaitenPreflightModalProps) {
   const [decideLater, setDecideLater] = useState(false);
+  /** При «Решу позже»: только карточка CRM-канбана; нужны тип и пространство для доски. */
+  const [kanbanOnly, setKanbanOnly] = useState(false);
   const [cardTypes, setCardTypes] = useState<UiCardType[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -91,6 +100,7 @@ export function KaitenPreflightModal({
   useEffect(() => {
     if (!open) return;
     setDecideLater(false);
+    setKanbanOnly(false);
     setSpace("ORTHOPEDICS");
     setLaneAllowlist(null);
     setWorkLabel("");
@@ -137,19 +147,41 @@ export function KaitenPreflightModal({
     }
   }, [laneAllowlist, space]);
 
+  const kaitenFieldsRequired = !decideLater || kanbanOnly;
+
   const canSubmit = useMemo(() => {
-    if (decideLater) return true;
+    if (!kaitenFieldsRequired) return true;
     if (loadError || cardTypes.length === 0 || !cardTypeId) return false;
     if (laneAllowlist !== null && laneAllowlist.length === 0) return false;
     if (!space) return false;
     return true;
-  }, [decideLater, loadError, cardTypes.length, cardTypeId, laneAllowlist, space]);
+  }, [
+    kaitenFieldsRequired,
+    loadError,
+    cardTypes.length,
+    cardTypeId,
+    laneAllowlist,
+    space,
+  ]);
 
   const submit = useCallback(
     (printPdf: boolean) => {
       if (!canSubmit) return;
-      if (decideLater) {
+      if (decideLater && !kanbanOnly) {
         onConfirm({ kaitenDecideLater: true }, { printPdf });
+        return;
+      }
+      if (decideLater && kanbanOnly) {
+        onConfirm(
+          {
+            kaitenDecideLater: true,
+            createKanbanWithoutKaiten: true,
+            kaitenCardTypeId: cardTypeId,
+            kaitenTrackLane: space,
+            kaitenCardTitleLabel: workLabel.trim(),
+          },
+          { printPdf },
+        );
         return;
       }
       onConfirm(
@@ -162,7 +194,7 @@ export function KaitenPreflightModal({
         { printPdf },
       );
     },
-    [canSubmit, decideLater, onConfirm, cardTypeId, space, workLabel],
+    [canSubmit, decideLater, kanbanOnly, onConfirm, cardTypeId, space, workLabel],
   );
 
   if (!open) return null;
@@ -231,7 +263,7 @@ export function KaitenPreflightModal({
             />
           </div>
           <div
-            className={`space-y-2 ${decideLater ? "pointer-events-none opacity-45" : ""}`}
+            className={`space-y-2 ${kaitenFieldsRequired ? "" : "pointer-events-none opacity-45"}`}
           >
             <label
               htmlFor="kaiten-work-label"
@@ -256,8 +288,8 @@ export function KaitenPreflightModal({
 
           <div className="mt-5 grid gap-6 lg:grid-cols-2 lg:gap-8">
             <fieldset
-              disabled={decideLater || !!loadError}
-              className={`min-w-0 space-y-3 ${decideLater ? "opacity-45" : ""}`}
+              disabled={!kaitenFieldsRequired || !!loadError}
+              className={`min-w-0 space-y-3 ${kaitenFieldsRequired ? "" : "opacity-45"}`}
             >
               <legend className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
                 Тип карточки в Кайтен
@@ -287,12 +319,12 @@ export function KaitenPreflightModal({
             <div className="flex min-w-0 flex-col gap-6">
             <fieldset
               disabled={
-                decideLater ||
+                !kaitenFieldsRequired ||
                 !!loadError ||
                 laneAllowlist === null ||
                 laneAllowlist.length === 0
               }
-              className={`space-y-3 ${decideLater ? "opacity-45" : ""}`}
+              className={`space-y-3 ${kaitenFieldsRequired ? "" : "opacity-45"}`}
             >
               <legend className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
                 Пространство
@@ -334,12 +366,32 @@ export function KaitenPreflightModal({
               type="checkbox"
               className="mt-0.5 h-4 w-4 rounded border-[var(--input-border)] text-[var(--sidebar-blue)]"
               checked={decideLater}
-              onChange={(e) => setDecideLater(e.target.checked)}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setDecideLater(v);
+                if (!v) setKanbanOnly(false);
+              }}
             />
             <span className="text-sm font-medium text-[var(--text-strong)]">
               Решу позже
             </span>
           </label>
+          {decideLater ? (
+            <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-[var(--input-border)] text-[var(--sidebar-blue)]"
+                checked={kanbanOnly}
+                onChange={(e) => setKanbanOnly(e.target.checked)}
+              />
+              <span className="min-w-0 text-sm font-medium text-[var(--text-strong)]">
+                Создать только в канбан
+                <span className="mt-0.5 block text-xs font-normal text-[var(--text-muted)]">
+                  Карточку Kaiten не создаём; для доски CRM укажите тип и пространство ниже.
+                </span>
+              </span>
+            </label>
+          ) : null}
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
             <button
               type="button"

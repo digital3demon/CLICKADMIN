@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ConstructionCategory, OrderStatus } from "@prisma/client";
+import { ConstructionCategory, OrderStatus, Prisma } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getClientsPrisma, getOrdersPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
@@ -24,12 +24,19 @@ export async function GET() {
       getClientsPrisma(),
       getPricingPrisma(),
     ]);
+    /** Не показывать на канбане «Kaiten позже» без явного зеркала CRM — иначе ложная карточка. */
+    const linkedOrdersWhere: Prisma.OrderWhereInput = {
+      tenantId,
+      archivedAt: null,
+      status: { not: OrderStatus.CANCELLED },
+      OR: [
+        { kaitenDecideLater: false },
+        { createKanbanWithoutKaiten: true },
+        { kaitenCardId: { not: null } },
+      ],
+    };
     const rows = await ordersPrisma.order.findMany({
-      where: {
-        tenantId,
-        archivedAt: null,
-        status: { not: OrderStatus.CANCELLED },
-      },
+      where: linkedOrdersWhere,
       orderBy: { createdAt: "desc" },
       take: 200,
       select: {

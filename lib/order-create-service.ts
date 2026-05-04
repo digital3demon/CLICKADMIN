@@ -103,6 +103,8 @@ export type CreateOrderBody = {
       }
   >;
   kaitenDecideLater?: boolean;
+  /** С kaitenDecideLater: сохранить тип/пространство для доски CRM, карточку Kaiten не создавать */
+  createKanbanWithoutKaiten?: boolean;
   kaitenCardTypeId?: string | null;
   kaitenTrackLane?: string;
   kaitenAdminDueHasTime?: boolean;
@@ -244,12 +246,17 @@ export async function createOrderFromBody(
   }
 
   const kaitenDecideLater = Boolean(body.kaitenDecideLater);
+  const createKanbanWithoutKaiten =
+    kaitenDecideLater && Boolean(body.createKanbanWithoutKaiten);
+  /** Тип/пространство для Kaiten-синка или только для CRM-канбана при «канбан без Kaiten». */
+  const needKaitenPlacementFields =
+    !kaitenDecideLater || createKanbanWithoutKaiten;
   let kaitenCardTypeId: string | null = null;
   let kaitenTrackLane: KaitenTrackLane | null = null;
   let dueToAdminsAt: Date | null = null;
   let kaitenAdminDueHasTime = true;
 
-  if (!kaitenDecideLater) {
+  if (needKaitenPlacementFields) {
     await ensureKaitenDirectory(clientsPrisma, tenantId);
     const kc = body.kaitenCardTypeId?.trim() ?? "";
     const kt = body.kaitenTrackLane;
@@ -276,13 +283,15 @@ export async function createOrderFromBody(
       );
     }
 
-    const kaitenCfg = await withResolvedKaitenBoards(kaitenCfg0);
-    const laneTarget = kaitenCfg.boardByLane[kaitenTrackLane];
-    if (laneTarget?.boardId == null) {
-      return fail(
-        400,
-        "Не удалось получить id доски Kaiten для этого пространства (GET /spaces/{id}/boards). Проверьте KAITEN_*_SPACE_ID и KAITEN_API_TOKEN.",
-      );
+    if (!createKanbanWithoutKaiten) {
+      const kaitenCfg = await withResolvedKaitenBoards(kaitenCfg0);
+      const laneTarget = kaitenCfg.boardByLane[kaitenTrackLane];
+      if (laneTarget?.boardId == null) {
+        return fail(
+          400,
+          "Не удалось получить id доски Kaiten для этого пространства (GET /spaces/{id}/boards). Проверьте KAITEN_*_SPACE_ID и KAITEN_API_TOKEN.",
+        );
+      }
     }
   }
 
@@ -391,12 +400,13 @@ export async function createOrderFromBody(
         ? undefined
         : (body.quickOrder as Prisma.InputJsonValue),
     kaitenDecideLater,
-    kaitenCardTypeId: kaitenDecideLater ? null : kaitenCardTypeId,
-    kaitenTrackLane: kaitenDecideLater ? null : kaitenTrackLane,
-    kaitenAdminDueHasTime: kaitenDecideLater ? true : kaitenAdminDueHasTime,
-    kaitenCardTitleLabel: kaitenDecideLater
-      ? null
-      : (body.kaitenCardTitleLabel?.trim() || null),
+    createKanbanWithoutKaiten,
+    kaitenCardTypeId: needKaitenPlacementFields ? kaitenCardTypeId : null,
+    kaitenTrackLane: needKaitenPlacementFields ? kaitenTrackLane : null,
+    kaitenAdminDueHasTime: needKaitenPlacementFields ? kaitenAdminDueHasTime : true,
+    kaitenCardTitleLabel: needKaitenPlacementFields
+      ? body.kaitenCardTitleLabel?.trim() || null
+      : null,
     constructions:
       constructionCreates.length > 0 ? { create: constructionCreates } : undefined,
     ...(prostheticsPrisma === Prisma.JsonNull ? {} : { prosthetics: prostheticsPrisma }),

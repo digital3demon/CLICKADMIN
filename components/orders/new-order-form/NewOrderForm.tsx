@@ -809,7 +809,15 @@ export function NewOrderForm({
               ? { continuesFromOrderId: continuationChoice.id }
               : {}),
             ...(kaiten.kaitenDecideLater
-              ? { kaitenDecideLater: true }
+              ? kaiten.createKanbanWithoutKaiten === true
+                ? {
+                    kaitenDecideLater: true,
+                    createKanbanWithoutKaiten: true,
+                    kaitenCardTypeId: kaiten.kaitenCardTypeId,
+                    kaitenTrackLane: kaiten.kaitenTrackLane,
+                    kaitenCardTitleLabel: kaiten.kaitenCardTitleLabel,
+                  }
+                : { kaitenDecideLater: true }
               : {
                   kaitenDecideLater: false,
                   kaitenCardTypeId: kaiten.kaitenCardTypeId,

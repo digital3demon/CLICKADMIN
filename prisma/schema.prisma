@@ -742,6 +742,8 @@ model Order {
   prosthetics                    Json?
   /// Кайтен: если true — тип и пространство не заданы
   kaitenDecideLater              Boolean                   @default(false)
+  /// При kaitenDecideLater: зеркалировать наряд на CRM-канбан (тип/пространство), без карточки Kaiten
+  createKanbanWithoutKaiten      Boolean                   @default(false)
   kaitenCardTypeId               String?
   kaitenCardType                 KaitenCardType?           @relation(fields: [kaitenCardTypeId], references: [id], onDelete: SetNull)
   kaitenTrackLane                KaitenTrackLane?

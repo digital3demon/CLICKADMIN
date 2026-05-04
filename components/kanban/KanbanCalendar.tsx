@@ -120,14 +120,14 @@ export function KanbanCalendar({
               <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
                 {list.slice(0, 6).map((c) => {
                   const hb = resolveCardHomeBoard(c);
-                  const ct = (hb.cardTypes || []).find((t) => t.id === c.cardTypeId);
                   const accent = getCardTypeAccent(hb, c.cardTypeId);
                   const fg = textOnAccentHex(accent);
+                  const titleLine = c.title || "Без названия";
                   return (
                     <button
                       key={c.id}
                       type="button"
-                      className="max-w-full truncate rounded border border-black/15 px-1 py-0.5 text-left text-[0.65rem] font-medium leading-tight shadow-sm hover:brightness-[1.06] active:brightness-95 dark:border-black/30"
+                      className="max-w-full break-words rounded border border-black/15 px-1 py-0.5 text-left text-[0.65rem] font-medium leading-snug shadow-sm line-clamp-3 hover:brightness-[1.06] active:brightness-95 dark:border-black/30"
                       style={{
                         backgroundColor: accent,
                         color: fg,
@@ -136,12 +136,12 @@ export function KanbanCalendar({
                         (appState.search.trim() ||
                           isKanbanAggregateBoardId(appState.activeBoardId)) &&
                         hb.id !== appState.activeBoardId
-                          ? `${c.title || "Без названия"} · доска «${hb.title}»`
-                          : undefined
+                          ? `${titleLine} · доска «${hb.title}»`
+                          : titleLine
                       }
                       onClick={() => onOpenCard(c.id)}
                     >
-                      {(ct ? ct.name + ": " : "") + (c.title || "Без названия")}
+                      {titleLine}
                     </button>
                   );
                 })}

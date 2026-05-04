@@ -33,6 +33,7 @@ import {
 import {
   filterQuickOrderTagSuggestions,
   QUICK_TAG_KAITEN_BLOCK_LABEL,
+  QUICK_TAG_KAITEN_UNBLOCK_LABEL,
   type QuickOrderTagSuggestion,
 } from "@/lib/order-list-quick-tag-suggestions";
 import { ordersListHref } from "@/lib/orders-list-query";
@@ -45,6 +46,10 @@ import {
   ORDER_PAYMENT_RECON_PAID,
   ORDER_PAYMENT_RECON_UNPAID,
 } from "@/lib/order-clinic-client-fields";
+import {
+  URGENT_MENU_OPTIONS,
+  urgentSelectionFromOrder,
+} from "@/lib/order-urgency";
 
 type CustomRow = { id: string; label: string };
 
@@ -91,6 +96,8 @@ const padTable =
 /** Облако тегов: перенос по реальной ширине колонки таблицы (`min-w-0` у ячейки). */
 const TAG_CLOUD_CLASS =
   "flex min-h-min w-full min-w-0 flex-wrap content-start items-center gap-x-1 gap-y-1.5";
+const TAG_EDIT_BUTTON_CLASS =
+  "rounded p-1 text-xs leading-none hover:opacity-90";
 
 /** Жёлтый треугольник с «!» (как знак внимания), без клика. */
 /** Белый контур шестерёнки на «небесной» пилюле — как стек уведомлений по протетике. */
@@ -246,6 +253,7 @@ export function OrderListTagsCell({
     paymentPartialRub != null ? String(paymentPartialRub) : "",
   );
   const [paymentPartialPrompt, setPaymentPartialPrompt] = useState(false);
+  const [urgentOpen, setUrgentOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -458,6 +466,10 @@ export function OrderListTagsCell({
           ? LIST_TAG_PAYMENT_PAID
           : null;
   const paymentPillToneClass = paymentPillClass(currentPayment);
+  const urgentSelectionValue = urgentSelectionFromOrder(
+    isUrgent,
+    urgentCoefficient,
+  );
 
   const tagCloudItems = useMemo(() => {
     const href = (innerKey: string) =>
@@ -477,25 +489,37 @@ export function OrderListTagsCell({
         key: "blocked",
         flex: "grow",
         node: (
-          <Link
-            href={href(LIST_TAG_KAITEN_BLOCKED)}
-            title="Показать наряды, заблокированные в Kaiten"
-            className={`inline-flex min-w-0 max-w-full flex-col items-stretch gap-y-0.5 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`}
-          >
-            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap leading-tight">
-              <span aria-hidden>⛔</span>
-              <span>Заблокировано</span>
-            </span>
-            {kaitenBlockReason?.trim() ? (
-              <span className="max-w-full whitespace-pre-wrap break-words text-left text-[10px] font-normal leading-snug text-red-900/95 dark:text-red-100/90 sm:text-[11px]">
-                {kaitenBlockReason.trim()}
+          <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
+            <Link
+              href={href(LIST_TAG_KAITEN_BLOCKED)}
+              title="Показать наряды, заблокированные в Kaiten"
+              className={`inline-flex min-w-0 max-w-full flex-col items-stretch gap-y-0.5 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`}
+            >
+              <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap leading-tight">
+                <span aria-hidden>⛔</span>
+                <span>Заблокировано</span>
               </span>
-            ) : (
-              <span className="text-left text-[10px] font-normal leading-snug text-red-800/85 dark:text-red-200/80 sm:text-[11px]">
-                Причина не в CRM — вкладка «Кайтен» или Kaiten
-              </span>
-            )}
-          </Link>
+              {kaitenBlockReason?.trim() ? (
+                <span className="max-w-full whitespace-pre-wrap break-words text-left text-[10px] font-normal leading-snug text-red-900/95 dark:text-red-100/90 sm:text-[11px]">
+                  {kaitenBlockReason.trim()}
+                </span>
+              ) : (
+                <span className="text-left text-[10px] font-normal leading-snug text-red-800/85 dark:text-red-200/80 sm:text-[11px]">
+                  Причина не в CRM — вкладка «Кайтен» или Kaiten
+                </span>
+              )}
+            </Link>
+            <button
+              type="button"
+              disabled={busy}
+              className={`${TAG_EDIT_BUTTON_CLASS} text-red-700 hover:bg-red-100 disabled:opacity-40 dark:text-red-200 dark:hover:bg-red-950/50`}
+              title="Снять блокировку в Kaiten"
+              aria-label="Снять блокировку в Kaiten"
+              onClick={() => void submitAdd(QUICK_TAG_KAITEN_UNBLOCK_LABEL)}
+            >
+              ✎
+            </button>
+          </span>
         ),
       });
     }
@@ -505,25 +529,37 @@ export function OrderListTagsCell({
         key: "otpr",
         flex: "shrink",
         node: (
-          <Link
-            href={href(LIST_TAG_OTPR)}
-            title="Отправлено — показать наряды с этой отметкой"
-            aria-label="Отправлено"
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm outline-none ring-1 ring-emerald-600/25 transition-opacity hover:opacity-90 focus-visible:outline-none dark:ring-emerald-400/25 sm:h-7 sm:w-7"
-          >
-            <svg
-              className="h-3.5 w-3.5 sm:h-[1.125rem] sm:w-[1.125rem]"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
+          <span className="inline-flex items-center gap-0.5">
+            <Link
+              href={href(LIST_TAG_OTPR)}
+              title="Отправлено — показать наряды с этой отметкой"
+              aria-label="Отправлено"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm outline-none ring-1 ring-emerald-600/25 transition-opacity hover:opacity-90 focus-visible:outline-none dark:ring-emerald-400/25 sm:h-7 sm:w-7"
             >
-              <path d="M5 13l4 4L19 7" />
-            </svg>
-          </Link>
+              <svg
+                className="h-3.5 w-3.5 sm:h-[1.125rem] sm:w-[1.125rem]"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            </Link>
+            <button
+              type="button"
+              disabled={busy}
+              className={`${TAG_EDIT_BUTTON_CLASS} text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 dark:text-emerald-200 dark:hover:bg-emerald-950/50`}
+              title="Снять отметку «Отправлено»"
+              aria-label="Снять отметку отправлено"
+              onClick={() => void applyQuickPatch({ adminShippedOtpr: false })}
+            >
+              ✎
+            </button>
+          </span>
         ),
       });
     }
@@ -558,13 +594,25 @@ export function OrderListTagsCell({
         key: "urgent",
         flex: "shrink",
         node: (
-          <Link
-            href={href(LIST_TAG_URGENT)}
-            title="Показать срочные наряды"
-            className={`inline-flex items-center rounded-full border border-rose-200 bg-rose-50 font-semibold leading-tight text-rose-950 shadow-sm outline-none focus-visible:outline-none dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-100 ${padTable} sm:leading-tight md:leading-tight`}
-          >
-            {urgentCoefficient != null ? `×${urgentCoefficient}` : "Срочно"}
-          </Link>
+          <span className="inline-flex items-center gap-0.5">
+            <Link
+              href={href(LIST_TAG_URGENT)}
+              title="Показать срочные наряды"
+              className={`inline-flex items-center rounded-full border border-rose-200 bg-rose-50 font-semibold leading-tight text-rose-950 shadow-sm outline-none focus-visible:outline-none dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-100 ${padTable} sm:leading-tight md:leading-tight`}
+            >
+              {urgentCoefficient != null ? `×${urgentCoefficient}` : "Срочно"}
+            </Link>
+            <button
+              type="button"
+              disabled={busy}
+              className={`${TAG_EDIT_BUTTON_CLASS} text-rose-700 hover:bg-rose-100 disabled:opacity-40 dark:text-rose-200 dark:hover:bg-rose-950/50`}
+              title="Изменить срочность"
+              aria-label="Изменить срочность"
+              onClick={() => setUrgentOpen(true)}
+            >
+              ✎
+            </button>
+          </span>
         ),
       });
     }
@@ -574,13 +622,25 @@ export function OrderListTagsCell({
         key: "prost",
         flex: "grow",
         node: (
-          <Link
-            href={href(LIST_TAG_PROSTHETICS)}
-            title="Показать наряды с отметкой «Протетика заказана»"
-            className={`rounded-full border border-emerald-200 bg-emerald-50 font-semibold text-emerald-900 shadow-sm outline-none focus-visible:outline-none dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100 ${padTable}`}
-          >
-            Протетика заказана
-          </Link>
+          <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
+            <Link
+              href={href(LIST_TAG_PROSTHETICS)}
+              title="Показать наряды с отметкой «Протетика заказана»"
+              className={`rounded-full border border-emerald-200 bg-emerald-50 font-semibold text-emerald-900 shadow-sm outline-none focus-visible:outline-none dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100 ${padTable}`}
+            >
+              Протетика заказана
+            </Link>
+            <button
+              type="button"
+              disabled={busy}
+              className={`${TAG_EDIT_BUTTON_CLASS} text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 dark:text-emerald-200 dark:hover:bg-emerald-950/50`}
+              title="Снять отметку «Протетика заказана»"
+              aria-label="Снять отметку протетика заказана"
+              onClick={() => void applyQuickPatch({ prostheticsOrdered: false })}
+            >
+              ✎
+            </button>
+          </span>
         ),
       });
     }
@@ -606,13 +666,25 @@ export function OrderListTagsCell({
         key: "invpr",
         flex: "grow",
         node: (
-          <Link
-            href={href(LIST_TAG_INVOICE_PRINTED)}
-            title="Показать наряды с отметкой «Счёт распечатан»"
-            className={`rounded-full border border-violet-300 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-100 ${padTable}`}
-          >
-            Счёт распечатан
-          </Link>
+          <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
+            <Link
+              href={href(LIST_TAG_INVOICE_PRINTED)}
+              title="Показать наряды с отметкой «Счёт распечатан»"
+              className={`rounded-full border border-violet-300 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-100 ${padTable}`}
+            >
+              Счёт распечатан
+            </Link>
+            <button
+              type="button"
+              disabled={busy}
+              className={`${TAG_EDIT_BUTTON_CLASS} text-violet-700 hover:bg-violet-100 disabled:opacity-40 dark:text-violet-200 dark:hover:bg-violet-950/50`}
+              title="Снять отметку «Счёт распечатан»"
+              aria-label="Снять отметку счет распечатан"
+              onClick={() => void applyQuickPatch({ invoicePrinted: false })}
+            >
+              ✎
+            </button>
+          </span>
         ),
       });
     }
@@ -725,7 +797,9 @@ export function OrderListTagsCell({
     paymentPillToneClass,
     paymentPartialRub,
     prostheticsOrdered,
+    applyQuickPatch,
     removeTag,
+    submitAdd,
     urgentCoefficient,
   ]);
 
@@ -940,6 +1014,58 @@ export function OrderListTagsCell({
                 onClick={() => void submitAdd(undefined)}
               >
                 {busy ? "…" : "Добавить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {urgentOpen ? (
+        <div
+          className="fixed inset-0 z-[205] flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onClick={() => setUrgentOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Срочность"
+            className="w-full max-w-sm rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-base font-semibold text-[var(--app-text)]">
+              Срочность
+            </p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Выберите вариант срочности для этого наряда
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {URGENT_MENU_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={busy}
+                  className={`rounded-md border px-3 py-1.5 text-sm disabled:opacity-50 ${
+                    opt.value === urgentSelectionValue
+                      ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)]/10 text-[var(--sidebar-blue)]"
+                      : "border-[var(--card-border)] hover:bg-[var(--surface-hover)]"
+                  }`}
+                  onClick={() => {
+                    void applyQuickPatch({ urgentSelection: opt.value });
+                    setUrgentOpen(false);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="rounded-md border border-[var(--card-border)] px-4 py-2 text-base text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                onClick={() => setUrgentOpen(false)}
+              >
+                Закрыть
               </button>
             </div>
           </div>
