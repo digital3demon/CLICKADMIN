@@ -35,9 +35,9 @@ import {
   ORDER_CLINIC_PRIVATE,
 } from "@/lib/clients-order-ui";
 import {
+  canonicalOrderPayment,
   isReconciliationPaymentStatus,
   legalEntitySelectFromClinicBilling,
-  ORDER_PAYMENT_EXPECTED,
   ORDER_PAYMENT_NOT_PAID,
   ORDER_PAYMENT_PAID,
   ORDER_PAYMENT_PARTIAL,
@@ -122,10 +122,9 @@ const LEGAL_ENTITIES = [
   "ООО",
 ] as const;
 
+/** Без плейсхолдера: три обычных статуса + два пункта для сверочных клиник. */
 const PAYMENT_OPTIONS = [
-  "Выбрать из списка",
   ORDER_PAYMENT_NOT_PAID,
-  ORDER_PAYMENT_EXPECTED,
   ORDER_PAYMENT_PARTIAL,
   ORDER_PAYMENT_PAID,
   ORDER_PAYMENT_RECON_UNPAID,
@@ -358,7 +357,7 @@ export function NewOrderForm({
     setClinicId(s.clinicId);
     setDoctorId(s.doctorId);
     setLegalEntity(s.legalEntity);
-    setPayment(s.payment);
+    setPayment(canonicalOrderPayment(s.payment));
     setPaymentPartialRubText(
       typeof s.paymentPartialRub === "number" ? String(s.paymentPartialRub) : "",
     );
@@ -766,7 +765,7 @@ export function NewOrderForm({
             patientName: patientName.trim() || null,
             legalEntity:
               legalEntity === LEGAL_ENTITIES[0] ? null : legalEntity,
-            payment: payment === PAYMENT_OPTIONS[0] ? null : payment,
+            payment: payment.trim() || null,
             paymentPartialRub: parsedPaymentPartialRub,
             excludeFromReconciliation: false,
             clientOrderText: clientOrderText.trim() || null,
@@ -1119,8 +1118,8 @@ export function NewOrderForm({
             >
               Наряд {nextOrderPreview ?? "…"}
             </h2>
-            <div className="flex min-w-0 flex-wrap items-stretch gap-2 pb-0.5 sm:flex-nowrap sm:gap-2.5">
-              <div className="flex shrink-0 items-stretch gap-2 sm:gap-2.5">
+            <div className="flex min-w-0 flex-col gap-2 pb-0.5 sm:gap-2.5">
+              <div className="flex shrink-0 flex-wrap items-stretch gap-2 sm:gap-2.5">
                 <LabStatusPillMenu
                   compact
                   value={labWorkStatus}
@@ -1131,51 +1130,52 @@ export function NewOrderForm({
                   onChange={setUrgentSelection}
                 />
               </div>
-              <div className="flex min-h-0 min-w-0 basis-full flex-1 flex-nowrap items-stretch gap-2 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin] sm:basis-auto sm:gap-2.5 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--input-border)]">
-              <DueDatetimeComboPicker
-                id={`${titleId}-work-received`}
-                label="Поступление"
-                labelPlacement="inside"
-                fitRow
-                value={workReceivedLocal}
-                onChange={(raw) => {
-                  setWorkReceivedLocal(
-                    raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
-                  );
-                }}
-                title="Когда зашла работа; если не указать — считается момент занесения наряда"
-                className="min-w-[8.5rem] max-w-[15rem] shrink-0 flex-[0_0_8.5rem]"
-              />
-              <DueDatetimeComboPicker
-                id={`${titleId}-work-due`}
-                label="Срок лаборатории"
-                labelPlacement="inside"
-                fitRow
-                value={workDueLocal}
-                minLocal={dueDateMinLocal}
-                onChange={(raw) => {
-                  setWorkDueLocal(
-                    raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
-                  );
-                }}
-                title="Срок лаборатории (8:00–23:30, шаг 30 мин)"
-                className="min-w-[8.5rem] max-w-[15rem] shrink-0 flex-[0_0_8.5rem]"
-              />
-              <DueDatetimeComboPicker
-                id={`${titleId}-patient-appt`}
-                label="Запись"
-                labelPlacement="inside"
-                fitRow
-                value={patientAppointmentLocal}
-                minLocal={dueDateMinLocal}
-                onChange={(raw) => {
-                  setPatientAppointmentLocal(
-                    raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
-                  );
-                }}
-                title="Дата и время записи пациента (8:00–23:30, шаг 30 мин)"
-                className="min-w-[8.5rem] max-w-[15rem] shrink-0 flex-[0_0_8.5rem]"
-              />
+              {/*
+                Мобильный: три блока дат столбиком без горизонтальной прокрутки.
+                Десктоп: полноразмерные блоки (min-w как у DueDatetimeComboPicker), в ряд без overflow-x.
+              */}
+              <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch lg:flex-nowrap lg:gap-3">
+                <DueDatetimeComboPicker
+                  id={`${titleId}-work-received`}
+                  label="Поступление"
+                  labelPlacement="inside"
+                  value={workReceivedLocal}
+                  onChange={(raw) => {
+                    setWorkReceivedLocal(
+                      raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
+                    );
+                  }}
+                  title="Когда зашла работа; если не указать — считается момент занесения наряда"
+                  className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
+                />
+                <DueDatetimeComboPicker
+                  id={`${titleId}-work-due`}
+                  label="Срок лаборатории"
+                  labelPlacement="inside"
+                  value={workDueLocal}
+                  minLocal={dueDateMinLocal}
+                  onChange={(raw) => {
+                    setWorkDueLocal(
+                      raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
+                    );
+                  }}
+                  title="Срок лаборатории (8:00–23:30, шаг 30 мин)"
+                  className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
+                />
+                <DueDatetimeComboPicker
+                  id={`${titleId}-patient-appt`}
+                  label="Запись"
+                  labelPlacement="inside"
+                  value={patientAppointmentLocal}
+                  minLocal={dueDateMinLocal}
+                  onChange={(raw) => {
+                    setPatientAppointmentLocal(
+                      raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
+                    );
+                  }}
+                  title="Дата и время записи пациента (8:00–23:30, шаг 30 мин)"
+                  className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
+                />
               </div>
             </div>
           </div>
@@ -1452,7 +1452,7 @@ export function NewOrderForm({
                       value={
                         (paymentSelectOptions as string[]).includes(payment)
                           ? payment
-                          : paymentSelectOptions[0] ?? PAYMENT_OPTIONS[0]
+                          : paymentSelectOptions[0] ?? ORDER_PAYMENT_NOT_PAID
                       }
                       onChange={(e) => setPayment(e.target.value)}
                     >

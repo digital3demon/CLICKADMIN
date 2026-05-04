@@ -39,7 +39,7 @@ import {
 import { ordersListHref } from "@/lib/orders-list-query";
 import {
   isReconciliationPaymentStatus,
-  ORDER_PAYMENT_EXPECTED,
+  canonicalOrderPayment,
   ORDER_PAYMENT_NOT_PAID,
   ORDER_PAYMENT_PAID,
   ORDER_PAYMENT_PARTIAL,
@@ -185,15 +185,11 @@ function tagHref(
 
 function normalizedPayment(raw: string | null | undefined): string {
   const p = (raw ?? "").trim();
-  if (!p) return ORDER_PAYMENT_NOT_PAID;
   if (p === "СВЕРКА") return ORDER_PAYMENT_RECON_UNPAID;
-  return p;
+  return canonicalOrderPayment(p);
 }
 
 function paymentPillClass(paymentValue: string): string {
-  if (paymentValue === ORDER_PAYMENT_EXPECTED) {
-    return "border-violet-300 bg-violet-50 text-violet-950 dark:border-violet-700/70 dark:bg-violet-950/40 dark:text-violet-100";
-  }
   if (paymentValue === ORDER_PAYMENT_PAID || paymentValue === ORDER_PAYMENT_RECON_PAID) {
     return "border-emerald-800/70 bg-emerald-900 text-emerald-50 dark:border-emerald-700/80 dark:bg-emerald-950 dark:text-emerald-100";
   }
@@ -458,7 +454,7 @@ export function OrderListTagsCell({
     ? currentPayment === ORDER_PAYMENT_RECON_PAID
       ? LIST_TAG_PAYMENT_RECON_PAID
       : LIST_TAG_PAYMENT_RECON
-    : currentPayment === ORDER_PAYMENT_EXPECTED
+    : currentPayment === ORDER_PAYMENT_NOT_PAID
       ? LIST_TAG_PAYMENT_EXPECTED
       : currentPayment === ORDER_PAYMENT_PARTIAL
         ? LIST_TAG_PAYMENT_PARTIAL
@@ -1120,14 +1116,6 @@ export function OrderListTagsCell({
                 </>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
-                    onClick={() => void applyPaymentPatch(ORDER_PAYMENT_EXPECTED)}
-                  >
-                    Ожидает оплаты
-                  </button>
                   <button
                     type="button"
                     disabled={busy}

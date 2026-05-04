@@ -28,9 +28,9 @@ import {
   ORDER_CLINIC_PRIVATE,
 } from "@/lib/clients-order-ui";
 import {
+  canonicalOrderPayment,
   legalEntitySelectFromClinicBilling,
   isReconciliationPaymentStatus,
-  ORDER_PAYMENT_EXPECTED,
   ORDER_PAYMENT_NOT_PAID,
   ORDER_PAYMENT_PAID,
   ORDER_PAYMENT_PARTIAL,
@@ -301,10 +301,9 @@ const LEGAL_ENTITIES = [
   "ООО",
 ] as const;
 
+/** Без плейсхолдера: три обычных статуса + два пункта для сверочных клиник. */
 const PAYMENT_OPTIONS = [
-  "Выбрать из списка",
   ORDER_PAYMENT_NOT_PAID,
-  ORDER_PAYMENT_EXPECTED,
   ORDER_PAYMENT_PARTIAL,
   ORDER_PAYMENT_PAID,
   ORDER_PAYMENT_RECON_UNPAID,
@@ -791,8 +790,8 @@ export function OrderEditForm({
   const [legalEntity, setLegalEntity] = useState(
     initial.legalEntity?.trim() || LEGAL_ENTITIES[0],
   );
-  const [payment, setPayment] = useState(
-    initial.payment?.trim() || ORDER_PAYMENT_NOT_PAID,
+  const [payment, setPayment] = useState(() =>
+    canonicalOrderPayment(initial.payment?.trim() || ORDER_PAYMENT_NOT_PAID),
   );
   const [paymentPartialRubText, setPaymentPartialRubText] = useState(
     initial.paymentPartialRub != null ? String(initial.paymentPartialRub) : "",
@@ -1475,7 +1474,7 @@ export function OrderEditForm({
           courierId: courierPickupId.trim() || null,
           legalEntity:
             legalEntity === LEGAL_ENTITIES[0] ? null : legalEntity.trim(),
-          payment: payment === PAYMENT_OPTIONS[0] ? null : payment.trim(),
+          payment: payment.trim() || null,
           paymentPartialRub: parsedPaymentPartialRub,
           ...(isReconciliationPaymentStatus(payment)
             ? { excludeFromReconciliation }
@@ -1791,7 +1790,7 @@ export function OrderEditForm({
                 value={
                   (paymentSelectOptions as string[]).includes(payment)
                     ? payment
-                    : paymentSelectOptions[0] ?? PAYMENT_OPTIONS[0]
+                    : paymentSelectOptions[0] ?? ORDER_PAYMENT_NOT_PAID
                 }
                 onChange={(e) => setPayment(e.target.value)}
               >
@@ -2022,7 +2021,7 @@ export function OrderEditForm({
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
             Что есть
           </span>
-          <div className="flex flex-nowrap items-center gap-x-3 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pb-0.5">
             <label className={`${checkboxLabelClassEdit} shrink-0`}>
               <input
                 type="checkbox"

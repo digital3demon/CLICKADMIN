@@ -41,6 +41,7 @@ import { normalizeInvoiceParsedLines } from "@/lib/invoice-parsed-types";
 import { fetchOrderPriceListKindForOrder } from "@/lib/order-price-list-from-contractors";
 import { resolveClinicIdForDoctorIpOrder } from "@/lib/resolve-order-doctor-ip-clinic";
 import {
+  canonicalOrderPayment,
   ORDER_PAYMENT_NOT_PAID,
   ORDER_PAYMENT_PARTIAL,
   ORDER_PAYMENT_RECON_PAID,
@@ -783,7 +784,7 @@ export async function PATCH(
   let nextPayment: string | undefined;
   if (body.payment !== undefined) {
     const t = body.payment === null ? "" : String(body.payment).trim();
-    nextPayment = t || "";
+    nextPayment = t ? canonicalOrderPayment(t) : "";
   }
   if (isReconciliationClinic) {
     if (nextPayment === undefined) {

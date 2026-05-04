@@ -33,6 +33,7 @@ import { isOrderCorrectionTrack } from "@/lib/order-correction-track";
 import { validateContinuesFromOrderId } from "@/lib/order-validate-continuation";
 import { resolveClinicIdForDoctorIpOrder } from "@/lib/resolve-order-doctor-ip-clinic";
 import {
+  canonicalOrderPayment,
   ORDER_PAYMENT_NOT_PAID,
   ORDER_PAYMENT_PARTIAL,
   ORDER_PAYMENT_RECON_UNPAID,
@@ -321,7 +322,11 @@ export async function createOrderFromBody(
   const normalizedProsthetics = normalizeProstheticsInput(body.prosthetics);
   const prostheticsPrisma = prostheticsToJson(normalizedProsthetics);
 
-  const requestedPayment = body.payment?.trim() || null;
+  const requestedPaymentRaw = body.payment?.trim() || null;
+  const requestedPayment =
+    requestedPaymentRaw != null
+      ? canonicalOrderPayment(requestedPaymentRaw)
+      : null;
   const payment =
     clinicWorksWithReconciliation
       ? ORDER_PAYMENT_RECON_UNPAID

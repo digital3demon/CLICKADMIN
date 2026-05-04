@@ -9,6 +9,10 @@ import {
   isOrderStatus,
   ORDER_STATUS_LABELS,
 } from "@/lib/order-status-labels";
+import {
+  ORDER_PAYMENT_EXPECTED,
+  ORDER_PAYMENT_NOT_PAID,
+} from "@/lib/order-clinic-client-fields";
 
 /** Системные ключи в query `tag=` */
 export const LIST_TAG_PROSTHETICS = "prosthetics";
@@ -173,7 +177,12 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
     case "invoicePrinted":
       return { invoicePrinted: true };
     case "paymentExpected":
-      return { payment: "Ожидает оплаты" };
+      return {
+        OR: [
+          { payment: ORDER_PAYMENT_NOT_PAID },
+          { payment: ORDER_PAYMENT_EXPECTED },
+        ],
+      };
     case "paymentPartial":
       return { payment: "Частично оплачено" };
     case "paymentPaid":
@@ -216,7 +225,7 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
     case "orderAttention":
       return "Внимание: корректировки или расхождение сумм";
     case "paymentExpected":
-      return "Ожидает оплаты";
+      return "Не оплачено";
     case "paymentPartial":
       return "Частично оплачено";
     case "paymentPaid":

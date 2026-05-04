@@ -7,6 +7,16 @@ export const ORDER_PAYMENT_PAID = "Оплачено" as const;
 export const ORDER_PAYMENT_RECON_UNPAID = "Сверка-НЕ ОПЛАЧЕНО" as const;
 export const ORDER_PAYMENT_RECON_PAID = "Сверка-ОПЛАЧЕНО" as const;
 
+/**
+ * «Ожидает оплаты» и «Не оплачено» — один статус; в БД сохраняем «Не оплачено».
+ * Пустое значение → «Не оплачено».
+ */
+export function canonicalOrderPayment(value: string | null | undefined): string {
+  const v = (value ?? "").trim();
+  if (!v || v === ORDER_PAYMENT_EXPECTED) return ORDER_PAYMENT_NOT_PAID;
+  return v;
+}
+
 const LEGAL_PLACEHOLDER = "Выбрать из списка" as const;
 
 /**
