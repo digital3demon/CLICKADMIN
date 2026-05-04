@@ -10,7 +10,10 @@
     "dev": "next dev --turbo",
     "dev:webpack": "next dev",
     "build": "node scripts/prisma-migrate-deploy.cjs && next build && node scripts/copy-standalone-assets.cjs && node scripts/verify-standalone-after-build.cjs",
-    "bootstrap:saas": "node scripts/bootstrap-dental-crm-saas.cjs",
+    "sync:saas": "node scripts/sync-saas-from-lab.cjs",
+    "sync:saas:watch": "node scripts/watch-sync-saas.cjs",
+    "sync:saas:install-hook": "node scripts/install-saas-sync-git-hook.cjs",
+    "bootstrap:saas": "npm run sync:saas",
     "start": "node server.js",
     "start:next": "next start",
     "db:generate": "prisma generate",
@@ -100,6 +103,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "chokidar": "^4.0.3",
     "pino-pretty": "^13.1.3",
     "prisma": "^6.6.0",
     "vitest": "^3.2.4"

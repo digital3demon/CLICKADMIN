@@ -16,6 +16,10 @@ import {
 } from "@/lib/auth/session-claims-for-user";
 import { dbRequestUserHint } from "@/lib/db-request-error-hint";
 import { getPrismaCliVersion } from "@/lib/prisma-cli-version";
+import {
+  DeviceLimitReachedError,
+  issueUserDeviceSessionOrThrow,
+} from "@/lib/auth/device-session";
 
 type Body = { email?: string; password?: string };
 
@@ -80,8 +84,29 @@ export async function POST(req: Request) {
       console.warn("[auth/login-owner] skip lastLoginAt update:", e);
     }
 
+    let sid: string;
+    try {
+      const issued = await issueUserDeviceSessionOrThrow({
+        userId: user.id,
+        tenantId: user.tenantId,
+        headers: req.headers,
+      });
+      sid = issued.sid;
+    } catch (e) {
+      if (e instanceof DeviceLimitReachedError) {
+        return NextResponse.json(
+          {
+            error:
+              "Достигнут лимит устройств для одного пользователя, выйдите с другого устройства",
+          },
+          { status: 409 },
+        );
+      }
+      throw e;
+    }
+
     const claims = await sessionClaimsForUserId(user.id);
-    const token = await signSessionToken(claims);
+    const token = await signSessionToken({ ...claims, sid });
     const res = NextResponse.json({
       ok: true,
       homePath: defaultHomePathForRole(user.role),

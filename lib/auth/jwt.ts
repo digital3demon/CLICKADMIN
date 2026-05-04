@@ -13,6 +13,8 @@ export type SessionClaims = {
   email: string;
   role: UserRole;
   name: string;
+  /** Идентификатор активной сессии (для лимита устройств и принудительного logout). */
+  sid?: string;
   /** true — запросы идут в демо-БД; допустимо только в cookie `SESSION_DEMO_COOKIE_NAME`. */
   demo?: boolean;
   /** cuid `Tenant` */
@@ -44,6 +46,7 @@ export async function signSessionToken(claims: SessionClaims): Promise<string> {
     name: claims.name,
   };
   if (claims.demo) body.demo = true;
+  if (claims.sid) body.sid = claims.sid;
   if (claims.tid) body.tid = claims.tid;
   if (claims.plan) body.plan = claims.plan;
   if (claims.addonKanban === true) body.addonKanban = true;
@@ -66,6 +69,7 @@ export async function verifySessionToken(
     const role = payload.role as UserRole;
     const name = String(payload.name ?? "");
     const demo = payload.demo === true;
+    const sid = payload.sid != null ? String(payload.sid) : undefined;
     if (!sub || !email || !role) return null;
     const tid = payload.tid != null ? String(payload.tid) : undefined;
     const plan = payload.plan as SubscriptionPlan | undefined;
@@ -75,6 +79,7 @@ export async function verifySessionToken(
       email,
       role,
       name,
+      ...(sid ? { sid } : {}),
       ...(demo ? { demo: true as const } : {}),
       ...(tid ? { tid } : {}),
       ...(plan ? { plan } : {}),

@@ -1,0 +1,17 @@
+---
+description: После существенных правок в лаб-CRM синхронизировать коммерческую копию
+alwaysApply: false
+---
+
+# Зеркало SaaS
+
+Коммерческая версия — отдельная папка `dental-crm-saas` (по умолчанию соседняя с `dental-lab-crm`: `…/Курсор проекты/dental-crm-saas`).
+
+После существенных правок в **личной** CRM (`dental-lab-crm`) агент должен обновить зеркало SaaS:
+
+1. Из корня лаб-проекта: `npm run sync:saas` (PowerShell: полный `cd` к `dental-lab-crm`).
+2. Или явный путь: `node scripts/sync-saas-from-lab.cjs "C:\Users\sevas\Documents\Курсор проекты\dental-crm-saas"`
+
+В зеркало не попадают файлы БД (`*.db`); в SaaS сохраняются только `.env*` при синке.
+
+Пользователь может держать включённым `npm run sync:saas:watch` или git-hook — тогда ручной синк не обязателен после каждой мелочи.

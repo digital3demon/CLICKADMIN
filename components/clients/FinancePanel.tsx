@@ -124,8 +124,6 @@ export function FinancePanel({
   const [periodLinesLoading, setPeriodLinesLoading] = useState(false);
   const [periodLinesError, setPeriodLinesError] = useState<string | null>(null);
   const [bulkExcluding, setBulkExcluding] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<LabWorkStatus | "ALL">("ALL");
-  const [attentionOnly, setAttentionOnly] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -217,20 +215,7 @@ export function FinancePanel({
     setSelectedOrderIds((prev) => prev.filter((id) => present.has(id)));
   }, [periodLines]);
 
-  const visiblePeriodLines = useMemo(() => {
-    return periodLines.filter((row) => {
-      if (
-        statusFilter !== "ALL" &&
-        row.labWorkStatus !== statusFilter
-      ) {
-        return false;
-      }
-      if (attentionOnly && !row.attentionRequired) {
-        return false;
-      }
-      return true;
-    });
-  }, [periodLines, statusFilter, attentionOnly]);
+  const visiblePeriodLines = useMemo(() => periodLines, [periodLines]);
 
   const visibleOrderIds = useMemo(
     () => Array.from(new Set(visiblePeriodLines.map((r) => r.orderId))),
@@ -243,18 +228,6 @@ export function FinancePanel({
   const anyVisibleSelected = visibleOrderIds.some((id) =>
     selectedOrderIds.includes(id),
   );
-
-  const statusCounts = useMemo(() => {
-    const m = new Map<LabWorkStatus, number>();
-    for (const st of LAB_WORK_STATUS_ORDER) m.set(st, 0);
-    for (const row of periodLines) {
-      if (isKnownLabWorkStatus(row.labWorkStatus)) {
-        const k = row.labWorkStatus;
-        m.set(k, (m.get(k) ?? 0) + 1);
-      }
-    }
-    return m;
-  }, [periodLines]);
 
   const loadExclusions = useCallback(async () => {
     if (!worksWithReconciliation) {
@@ -544,43 +517,6 @@ export function FinancePanel({
                   : "Убрать из сверки за период"}
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={() => setStatusFilter("ALL")}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                statusFilter === "ALL"
-                  ? "bg-[var(--sidebar-blue)] text-white"
-                  : "border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-strong)]"
-              }`}
-            >
-              Все статусы ({periodLines.length})
-            </button>
-            {LAB_WORK_STATUS_ORDER.map((st) => (
-              <button
-                key={st}
-                type="button"
-                onClick={() => setStatusFilter(st)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  statusFilter === st
-                    ? "bg-[var(--sidebar-blue)] text-white"
-                    : "border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-strong)]"
-                }`}
-              >
-                {LAB_WORK_STATUS_LABELS[st]} ({statusCounts.get(st) ?? 0})
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setAttentionOnly((v) => !v)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                attentionOnly
-                  ? "bg-amber-500 text-amber-950"
-                  : "border border-amber-300 bg-amber-50 text-amber-900"
-              }`}
-              title="Фильтр по работам с признаком внимания"
-            >
-              ▲ Внимание
-            </button>
           </div>
           <p className="mt-1 text-xs text-[var(--text-muted)]">
             Те же строки, что в основном листе выгрузки сверки (без исключённых
@@ -599,7 +535,7 @@ export function FinancePanel({
             <p className="mt-2 text-sm text-[var(--text-muted)]">Загрузка…</p>
           ) : visiblePeriodLines.length === 0 ? (
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Нет строк по текущему фильтру статуса/внимания.
+              Нет строк за выбранный период.
             </p>
           ) : (
             <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--card-border)]">
@@ -676,14 +612,6 @@ export function FinancePanel({
                         </td>
                         <td className="px-3 py-2 font-medium">
                           <div className="flex items-center gap-1">
-                            {row.attentionRequired ? (
-                              <span
-                                className="text-[11px] text-amber-600"
-                                title="Требуется внимание"
-                              >
-                                ▲
-                              </span>
-                            ) : null}
                             <Link
                               href={`/orders/${row.orderId}`}
                               className="text-[var(--sidebar-blue)] hover:underline"
@@ -691,12 +619,20 @@ export function FinancePanel({
                               {row.orderNumber}
                             </Link>
                           </div>
-                          <div className="mt-1">
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
                             <span className="rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
                               {isKnownLabWorkStatus(row.labWorkStatus)
                                 ? LAB_WORK_STATUS_LABELS[row.labWorkStatus]
                                 : row.labWorkStatus}
                             </span>
+                            {row.attentionRequired ? (
+                              <span
+                                className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-900"
+                                title="Требуется внимание"
+                              >
+                                Внимание
+                              </span>
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-[var(--text-body)]">

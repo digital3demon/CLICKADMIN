@@ -20,6 +20,7 @@ import {
 
 const TABS = [
   { id: "finance" as const, label: "Финансы" },
+  { id: "rework" as const, label: "Переделки" },
   { id: "price" as const, label: "Позиции прайса" },
   { id: "contractors" as const, label: "Клиники и врачи" },
   { id: "warehouse" as const, label: "Склад" },
@@ -220,6 +221,8 @@ export function AnalyticsPageClient() {
       const path =
         tabNow === "finance"
           ? `/api/analytics/finance?${q}`
+          : tabNow === "rework"
+            ? `/api/analytics/finance?${q}`
           : tabNow === "price"
             ? `/api/analytics/price-items?${q}`
             : tabNow === "contractors"
@@ -257,7 +260,7 @@ export function AnalyticsPageClient() {
               : "";
           throw new Error(err || "Ошибка загрузки");
         }
-        if (tabNow === "finance")
+        if (tabNow === "finance" || tabNow === "rework")
           setFinance(j as NonNullable<typeof finance>);
         else if (tabNow === "price") setPrice(j as NonNullable<typeof price>);
         else if (tabNow === "contractors")
@@ -383,7 +386,7 @@ export function AnalyticsPageClient() {
       ) : null}
 
       {loading &&
-      (tab === "finance"
+      (tab === "finance" || tab === "rework"
         ? !finance
         : tab === "price"
           ? !price
@@ -526,6 +529,92 @@ export function AnalyticsPageClient() {
               </h4>
               <span className="text-xs text-[var(--text-muted)]">
                 По связке "Продолжение работы", иначе по самому наряду
+              </span>
+            </div>
+            {finance.reworkTopItems.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-[var(--text-muted)]">
+                За выбранный период переделок нет.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                      <th className="px-3 py-2">Код</th>
+                      <th className="px-3 py-2">Позиция</th>
+                      <th className="px-3 py-2">Переделок (нарядов)</th>
+                      <th className="px-3 py-2">Строк</th>
+                      <th className="px-3 py-2">Кол-во</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {finance.reworkTopItems.map((r, idx) => (
+                      <tr
+                        key={`${r.code}-${r.name}-${idx}`}
+                        className="border-b border-[var(--border-subtle)] hover:bg-[var(--table-row-hover)]"
+                      >
+                        <td className="px-3 py-2 font-mono text-xs">{r.code}</td>
+                        <td className="px-3 py-2 text-[var(--text-strong)]">{r.name}</td>
+                        <td className="px-3 py-2 tabular-nums">{r.reworkOrders}</td>
+                        <td className="px-3 py-2 tabular-nums">{r.lineCount}</td>
+                        <td className="px-3 py-2 tabular-nums">{r.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {tab === "rework" && finance ? (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-[var(--text-secondary)]">
+              Переделки считаются по нарядам с типом «Переделка». Позиции берутся из
+              «Продолжение работы», а если связи нет — из самого наряда.
+            </p>
+            <a
+              href={exportHref("finance")}
+              className="shrink-0 rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+            >
+              Выгрузить Excel
+            </a>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Переделок
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                {finance.totals.reworkOrders}
+              </p>
+            </div>
+            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Сумма переделок
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                {moneyRub(finance.totals.reworkRevenue)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Коррекций всего
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                {finance.totals.correctionOrders}
+              </p>
+            </div>
+          </div>
+          <div className="rounded-lg border border-[var(--card-border)]">
+            <div className="flex items-center justify-between border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                Какие позиции переделывают
+              </h4>
+              <span className="text-xs text-[var(--text-muted)]">
+                Топ за выбранный период
               </span>
             </div>
             {finance.reworkTopItems.length === 0 ? (

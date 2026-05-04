@@ -19,6 +19,11 @@ enum UserRole {
   OWNER
 }
 
+enum UserDeviceType {
+  DESKTOP
+  MOBILE
+}
+
 enum AppModule {
   ORDERS
   KANBAN
@@ -60,6 +65,23 @@ model User {
 
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+model UserDeviceSession {
+  id         String         @id
+  userId     String
+  tenantId   String
+  deviceType UserDeviceType
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime       @default(now())
+  lastSeenAt DateTime       @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  @@index([userId, deviceType, revokedAt, expiresAt])
+  @@index([tenantId, revokedAt, expiresAt])
+  @@index([expiresAt])
 }
 
 model RoleModuleAccess {

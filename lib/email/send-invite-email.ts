@@ -100,6 +100,17 @@ async function sendViaUnisenderGo(params: {
   const fromName =
     process.env.EMAIL_FROM_NAME?.trim() || fromParsedName || "КликАдмин";
 
+  // Unisender по умолчанию дописывает к HTML блок «отправлено … от» и «Отписаться».
+  // skip_unsubscribe=1 убирает его (документация Go API); на аккаунте должен быть разрешён
+  // allow_skip_unsubscribe — иначе ошибка API. Тогда временно: UNISENDER_GO_SKIP_UNSUBSCRIBE=0.
+  const skipFooterEnv = (
+    process.env.UNISENDER_GO_SKIP_UNSUBSCRIBE ?? ""
+  ).trim().toLowerCase();
+  const showUnisenderFooter =
+    skipFooterEnv === "0" ||
+    skipFooterEnv === "false" ||
+    skipFooterEnv === "no";
+
   const body = {
     message: {
       recipients: [{ email: params.to.toLowerCase().trim() }],
@@ -112,6 +123,7 @@ async function sendViaUnisenderGo(params: {
       },
       global_language: "ru",
       tags: ["crm-invite"],
+      ...(!showUnisenderFooter ? { skip_unsubscribe: 1 } : {}),
     },
   };
 
@@ -277,7 +289,8 @@ async function sendViaResend(params: {
  * **Unisender Go:** `UNISENDER_GO_API_KEY` (заголовок `X-API-KEY`), `EMAIL_FROM`
  * (например `noreply@ваш-домен`). Опционально `EMAIL_FROM_NAME`, полный URL вызова
  * `UNISENDER_GO_SEND_URL` (по умолчанию `goapi.unisender.ru/.../email/send.json`).
- * Если аккаунт на другом дата-центре — см. документацию Unisender (go1/go2).
+ * Футер провайдера в HTML: по умолчанию запрашивается `skip_unsubscribe` в API; при ошибке —
+ * `UNISENDER_GO_SKIP_UNSUBSCRIBE=0`. Если аккаунт на другом дата-центре — см. документацию Unisender (go1/go2).
  *
  * **SMTP:** `SMTP_URL` или `SMTP_HOST`+`SMTP_USER`+`SMTP_PASS` (+ порт/secure).
  *

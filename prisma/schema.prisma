@@ -81,6 +81,8 @@ model Tenant {
   tenantClientState     TenantClientState[]
   /// Клиентские состояния уровня пользователя (для связей UserClientState.tenant)
   userClientState       UserClientState[]
+  /// Активные пользовательские сессии для ограничения устройств
+  deviceSessions        UserDeviceSession[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -429,6 +431,11 @@ enum UserRole {
   OWNER
 }
 
+enum UserDeviceType {
+  DESKTOP
+  MOBILE
+}
+
 /// Пользователь: владелец и сотрудники — вход по паролю; до активации хранится inviteCodeHash
 model User {
   id                        String    @id @default(cuid())
@@ -476,11 +483,32 @@ model User {
   orderProstheticsRequestsRejected OrderProstheticsRequest[] @relation("OrderProstheticsRequestRejectedBy")
   /// Клиентские состояния на уровне пользователя (UI prefs, флаги и т.п.)
   clientState                   UserClientState[]
+  deviceSessions                UserDeviceSession[]
 
   @@unique([tenantId, email])
   @@index([role])
   @@index([isActive])
   @@index([tenantId])
+}
+
+model UserDeviceSession {
+  /// sid из JWT (идентификатор конкретной сессии)
+  id         String         @id
+  userId     String
+  tenantId   String
+  deviceType UserDeviceType
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime       @default(now())
+  lastSeenAt DateTime       @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, deviceType, revokedAt, expiresAt])
+  @@index([tenantId, revokedAt, expiresAt])
+  @@index([expiresAt])
 }
 
 /// Хранилище клиентских состояний уровня тенанта (shared между устройствами и пользователями).

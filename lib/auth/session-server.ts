@@ -10,6 +10,7 @@ import {
   isSingleUserPortable,
   SINGLE_USER_SESSION,
 } from "@/lib/auth/single-user";
+import { prisma } from "@/lib/prisma";
 
 export async function getSessionFromCookies(): Promise<SessionClaims | null> {
   try {
@@ -26,6 +27,13 @@ export async function getSessionFromCookies(): Promise<SessionClaims | null> {
     if (!t) return null;
     const m = await verifySessionToken(t);
     if (m?.demo) return null;
+    if (!m?.sid) return null;
+    const row = await prisma.userDeviceSession.findUnique({
+      where: { id: m.sid },
+      select: { userId: true, revokedAt: true, expiresAt: true },
+    });
+    if (!row || row.userId !== m.sub || row.revokedAt != null) return null;
+    if (row.expiresAt.getTime() <= Date.now()) return null;
     return m;
   } catch {
     return null;

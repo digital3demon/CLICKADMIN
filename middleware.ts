@@ -202,6 +202,67 @@ export async function middleware(req: NextRequest) {
     return redirectPublic(req, `/login?${qs.toString()}`);
   }
 
+  if (!session.demo) {
+    const sid = session.sid?.trim();
+    if (!sid) {
+      if (pathname.startsWith("/api/")) {
+        const out = NextResponse.json(
+          { error: "Сессия устарела. Войдите снова." },
+          { status: 401 },
+        );
+        out.cookies.set(SESSION_COOKIE_NAME, "", {
+          httpOnly: true,
+          sameSite: "lax",
+          path: "/",
+          maxAge: 0,
+        });
+        return securityHeaders(out);
+      }
+      const qs = new URLSearchParams({ next: pathname });
+      const redir = redirectPublic(req, `/login?${qs.toString()}`);
+      redir.cookies.set(SESSION_COOKIE_NAME, "", {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 0,
+      });
+      return securityHeaders(redir);
+    }
+    const active = await prisma.userDeviceSession.findUnique({
+      where: { id: sid },
+      select: { userId: true, revokedAt: true, expiresAt: true },
+    });
+    const invalid =
+      !active ||
+      active.userId !== session.sub ||
+      active.revokedAt != null ||
+      active.expiresAt.getTime() <= Date.now();
+    if (invalid) {
+      if (pathname.startsWith("/api/")) {
+        const out = NextResponse.json(
+          { error: "Сессия завершена. Войдите снова." },
+          { status: 401 },
+        );
+        out.cookies.set(SESSION_COOKIE_NAME, "", {
+          httpOnly: true,
+          sameSite: "lax",
+          path: "/",
+          maxAge: 0,
+        });
+        return securityHeaders(out);
+      }
+      const qs = new URLSearchParams({ next: pathname });
+      const redir = redirectPublic(req, `/login?${qs.toString()}`);
+      redir.cookies.set(SESSION_COOKIE_NAME, "", {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 0,
+      });
+      return securityHeaders(redir);
+    }
+  }
+
   const role = session.role as UserRole;
 
   if (!session.demo && !isSingleUserPortable()) {
