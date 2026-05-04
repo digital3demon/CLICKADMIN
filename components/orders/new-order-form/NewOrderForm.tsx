@@ -205,6 +205,8 @@ export function NewOrderForm({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Только max-md: сворачивание пилюль срочности и блоков дат в шапке. */
+  const [mobileHeaderDetailsOpen, setMobileHeaderDetailsOpen] = useState(true);
   const [kaitenModalOpen, setKaitenModalOpen] = useState(false);
   const [duplicateGate, setDuplicateGate] = useState<DuplicateGateState | null>(
     null,
@@ -1109,16 +1111,78 @@ export function NewOrderForm({
             </button>
           </div>
         ) : null}
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <h2
-              id={titleId}
-              className="shrink-0 text-lg font-semibold tracking-tight text-[var(--app-text)] sm:text-xl"
-              title="Ожидаемый номер (YYMM-NNN); итоговый при сохранении"
+            <div className="flex min-w-0 items-center gap-2">
+              <h2
+                id={titleId}
+                className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight text-[var(--app-text)] sm:flex-none sm:overflow-visible sm:whitespace-normal sm:text-xl"
+                title="Ожидаемый номер (YYMM-NNN); итоговый при сохранении"
+              >
+                Наряд {nextOrderPreview ?? "…"}
+              </h2>
+              <div className="flex shrink-0 items-center gap-1 sm:hidden">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMobileHeaderDetailsOpen((open) => !open)
+                  }
+                  className="rounded-md p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                  aria-expanded={mobileHeaderDetailsOpen}
+                  aria-label={
+                    mobileHeaderDetailsOpen
+                      ? "Скрыть статус и даты"
+                      : "Показать статус и даты"
+                  }
+                  title={
+                    mobileHeaderDetailsOpen
+                      ? "Скрыть статус и даты"
+                      : "Показать статус и даты"
+                  }
+                >
+                  <ChevronDown
+                    className={`h-5 w-5 transition-transform duration-200 ${
+                      mobileHeaderDetailsOpen ? "rotate-180" : ""
+                    }`}
+                    aria-hidden
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={onCollapse}
+                  className="rounded-md p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                  aria-label="Свернуть окно"
+                  title="Свернуть"
+                >
+                  <ChevronDown className="h-5 w-5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-md p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                  aria-label="Закрыть"
+                  title="Закрыть"
+                >
+                  <CloseIcon className="h-5 w-5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void requestSave()}
+                  disabled={saving}
+                  className="h-10 min-w-0 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-3 text-[0.7rem] font-semibold uppercase leading-tight tracking-wide text-white shadow-sm transition-colors hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-60"
+                >
+                  {saving ? "…" : "Сохранить"}
+                </button>
+              </div>
+            </div>
+            <div
+              className={[
+                "flex min-w-0 flex-col gap-2 pb-0.5 sm:gap-2.5",
+                !mobileHeaderDetailsOpen && "max-md:hidden",
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
-              Наряд {nextOrderPreview ?? "…"}
-            </h2>
-            <div className="flex min-w-0 flex-col gap-2 pb-0.5 sm:gap-2.5">
               <div className="flex shrink-0 flex-wrap items-stretch gap-2 sm:gap-2.5">
                 <LabStatusPillMenu
                   compact
@@ -1179,7 +1243,7 @@ export function NewOrderForm({
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:pl-2">
+          <div className="hidden shrink-0 flex-wrap items-center justify-end gap-1 sm:flex sm:pl-2">
             <button
               type="button"
               onClick={onCollapse}
