@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
+import { OrderCorrectionDetails } from "@/components/orders/OrderCorrectionDetails";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -421,7 +422,6 @@ export type OrderEditInitial = {
   correctionTrack: OrderCorrectionTrack | null;
   correctionReason: string | null;
   correctionPaid: boolean;
-  reworkAtCustomerExpense: boolean;
   registeredByLabel: string | null;
   courierId: string | null;
   courierName: string | null;
@@ -771,27 +771,19 @@ export function OrderEditForm({
   const [correctionPaid, setCorrectionPaid] = useState(
     initial.correctionPaid === true,
   );
-  const [reworkAtCustomerExpense, setReworkAtCustomerExpense] = useState(
-    initial.reworkAtCustomerExpense === true && initial.correctionTrack != null,
-  );
   useEffect(() => {
     setCorrectionReason(initial.correctionReason?.trim() ?? "");
     setCorrectionPaid(initial.correctionPaid === true);
-    setReworkAtCustomerExpense(
-      initial.reworkAtCustomerExpense === true && initial.correctionTrack != null,
-    );
   }, [
     initial.id,
     initial.correctionReason,
     initial.correctionPaid,
-    initial.reworkAtCustomerExpense,
     initial.correctionTrack,
   ]);
   useEffect(() => {
     if (correctionTrack == null) {
       setCorrectionReason("");
       setCorrectionPaid(false);
-      setReworkAtCustomerExpense(false);
     }
   }, [correctionTrack]);
   const [courierPickupId, setCourierPickupId] = useState(() => {
@@ -1491,8 +1483,6 @@ export function OrderEditForm({
               : null,
           correctionPaid:
             correctionTrack != null ? correctionPaid : false,
-          reworkAtCustomerExpense:
-            correctionTrack != null ? reworkAtCustomerExpense : false,
           courierPickupId: courierPickupId.trim() || null,
           courierDeliveryId: courierDeliveryId.trim() || null,
           courierId: courierPickupId.trim() || null,
@@ -1565,7 +1555,6 @@ export function OrderEditForm({
     correctionTrack,
     correctionReason,
     correctionPaid,
-    reworkAtCustomerExpense,
     courierPickupId,
     courierDeliveryId,
     legalEntity,
@@ -2093,62 +2082,14 @@ export function OrderEditForm({
           </div>
           <div className="relative z-20 mt-2 border-t border-[var(--card-border)]/80 pt-2">
             {correctionPillStrip}
-            {correctionTrack != null ? (
-              <div className="mt-2 space-y-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-2">
-                <label className={labelClass} htmlFor="oe-correction-reason">
-                  Причина коррекции
-                </label>
-                <textarea
-                  id="oe-correction-reason"
-                  className={`${inputClass} min-h-[3rem] resize-y`}
-                  rows={2}
-                  maxLength={4000}
-                  value={correctionReason}
-                  onChange={(e) => setCorrectionReason(e.target.value)}
-                  placeholder="Кратко: что не так и что переделываем…"
-                />
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <span className="text-[11px] font-medium text-[var(--text-secondary)]">
-                    Оплата
-                  </span>
-                  <label className={`${checkboxLabelClassEdit} shrink-0`}>
-                    <input
-                      type="radio"
-                      className={checkboxInputClassEdit}
-                      name={`oe-correction-paid-${initial.id}`}
-                      checked={correctionPaid}
-                      onChange={() => setCorrectionPaid(true)}
-                    />
-                    Платно
-                  </label>
-                  <label className={`${checkboxLabelClassEdit} shrink-0`}>
-                    <input
-                      type="radio"
-                      className={checkboxInputClassEdit}
-                      name={`oe-correction-paid-${initial.id}`}
-                      checked={!correctionPaid}
-                      onChange={() => setCorrectionPaid(false)}
-                    />
-                    Бесплатно
-                  </label>
-                </div>
-                <label className={checkboxLabelClassEdit}>
-                  <input
-                    type="checkbox"
-                    className={checkboxInputClassEdit}
-                    checked={reworkAtCustomerExpense}
-                    onChange={(e) =>
-                      setReworkAtCustomerExpense(e.target.checked)
-                    }
-                  />
-                  За счёт заказчика
-                </label>
-                <p className="text-[10px] leading-snug text-[var(--text-muted)]">
-                  Если «За счёт заказчика» не отмечено — расходы учитываем за счёт
-                  лаборатории.
-                </p>
-              </div>
-            ) : null}
+            <OrderCorrectionDetails
+              track={correctionTrack}
+              reason={correctionReason}
+              paid={correctionPaid}
+              reasonId="oe-correction-reason"
+              onReasonChange={setCorrectionReason}
+              onPaidChange={setCorrectionPaid}
+            />
           </div>
         </div>
         <div className="mt-2 border-t border-[var(--card-border)] pt-2">

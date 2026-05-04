@@ -48,13 +48,9 @@ import {
   ORDER_PAYMENT_RECON_UNPAID,
   isReconciliationPaymentStatus,
 } from "@/lib/order-clinic-client-fields";
-
-function parseOptionalDateTime(v: unknown): Date | null {
-  if (v == null || v === "") return null;
-  const d = new Date(String(v));
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
-}
+import { parseOptionalDateTime } from "@/lib/parse-optional-date-time";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
+import { savePatchedOrder } from "@/lib/order-patch-service";
 
 function demoKanbanColumnLine(v: DemoKanbanColumn | null): string {
   if (v == null) return "не задана";
@@ -120,7 +116,6 @@ type PatchBody = {
   correctionTrack?: string | null;
   correctionReason?: string | null;
   correctionPaid?: boolean;
-  reworkAtCustomerExpense?: boolean;
   courierId?: string | null;
   courierPickupId?: string | null;
   courierDeliveryId?: string | null;
@@ -151,8 +146,27 @@ const orderInclude = {
   },
 } as const;
 
-async function hydrateOrderResponse(
-  order: any,
+type HydrateConstructionLine = {
+  constructionTypeId: string | null;
+  materialId: string | null;
+  priceListItemId: string | null;
+};
+
+type OrderForHydration = {
+  doctorId: string;
+  clinicId: string | null;
+  courierId: string | null;
+  courierPickupId: string | null;
+  courierDeliveryId: string | null;
+  constructions: HydrateConstructionLine[];
+};
+
+function uniqueIds(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.filter((x): x is string => Boolean(x))));
+}
+
+async function hydrateOrderResponse<T extends OrderForHydration>(
+  order: T,
   clientsPrisma: PrismaClient,
   pricingPrisma: PrismaClient,
 ) {
@@ -186,15 +200,11 @@ async function hydrateOrderResponse(
         })
       : Promise.resolve(null),
   ]);
-  const typeIds = Array.from(
-    new Set(order.constructions.map((x: any) => x.constructionTypeId).filter(Boolean)),
-  ) as string[];
-  const materialIds = Array.from(
-    new Set(order.constructions.map((x: any) => x.materialId).filter(Boolean)),
-  ) as string[];
-  const priceListItemIds = Array.from(
-    new Set(order.constructions.map((x: any) => x.priceListItemId).filter(Boolean)),
-  ) as string[];
+  const typeIds = uniqueIds(order.constructions.map((x) => x.constructionTypeId));
+  const materialIds = uniqueIds(order.constructions.map((x) => x.materialId));
+  const priceListItemIds = uniqueIds(
+    order.constructions.map((x) => x.priceListItemId),
+  );
   const [types, materials, priceItems] = await Promise.all([
     typeIds.length
       ? pricingPrisma.constructionType.findMany({
@@ -225,7 +235,7 @@ async function hydrateOrderResponse(
     courier: courier,
     courierPickup: courierPickup,
     courierDelivery: courierDelivery,
-    constructions: order.constructions.map((line: any) => ({
+    constructions: order.constructions.map((line) => ({
       ...line,
       constructionType: line.constructionTypeId
         ? (typeById.get(line.constructionTypeId) ?? null)
@@ -253,8 +263,14 @@ export async function GET(
   }
 
   try {
-    const order = await ordersPrisma.order.findUnique({
-      where: { id: id.trim() },
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+
+    const order = await ordersPrisma.order.findFirst({
+      where: { id: id.trim(), tenantId },
       include: {
         ...orderInclude,
         attachments: {
@@ -346,6 +362,10 @@ export async function PATCH(
   const body = raw as PatchBody;
 
   const session = await getSessionFromCookies();
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
   const demoFieldsRequested =
     body.demoKanbanColumn !== undefined || body.kaitenCardTypeId !== undefined;
   if (demoFieldsRequested && !session?.demo) {
@@ -357,8 +377,8 @@ export async function PATCH(
 
   const orderId = id.trim();
 
-  const existing = await ordersPrisma.order.findUnique({
-    where: { id: orderId },
+  const existing = await ordersPrisma.order.findFirst({
+    where: { id: orderId, tenantId },
     select: {
       id: true,
       tenantId: true,
@@ -671,9 +691,6 @@ export async function PATCH(
   if (body.correctionPaid !== undefined) {
     scalarData.correctionPaid = Boolean(body.correctionPaid);
   }
-  if (body.reworkAtCustomerExpense !== undefined) {
-    scalarData.reworkAtCustomerExpense = Boolean(body.reworkAtCustomerExpense);
-  }
   {
     const nextTrack =
       body.correctionTrack !== undefined
@@ -685,9 +702,9 @@ export async function PATCH(
           : String(existing.correctionTrack);
     if (nextTrack == null || nextTrack === "") {
       scalarData.correctionTrack = null;
-      scalarData.reworkAtCustomerExpense = false;
       scalarData.correctionReason = null;
       scalarData.correctionPaid = false;
+      scalarData.reworkAtCustomerExpense = false;
     }
   }
 
@@ -950,30 +967,24 @@ export async function PATCH(
   }
 
   try {
-    const order = await ordersPrisma.$transaction(async (tx) => {
-      return tx.order.update({
-        where: { id: orderId },
-        data: {
-          ...scalarData,
-          ...(constructionsUpdate
-            ? { constructions: constructionsUpdate }
-            : {}),
-        },
-        include: {
-          ...orderInclude,
-          attachments: {
-            orderBy: { createdAt: "desc" },
-            select: {
-              id: true,
-              fileName: true,
-              mimeType: true,
-              size: true,
-              createdAt: true,
-              uploadedToKaitenAt: true,
-            },
+    const order = await savePatchedOrder(ordersPrisma, {
+      orderId,
+      scalarData,
+      constructionsUpdate,
+      include: {
+        ...orderInclude,
+        attachments: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            fileName: true,
+            mimeType: true,
+            size: true,
+            createdAt: true,
+            uploadedToKaitenAt: true,
           },
         },
-      });
+      },
     });
 
     if (prostheticsSync && warehouseId) {

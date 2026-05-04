@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { JawArch } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -14,6 +15,7 @@ const inp =
 
 const financeInputClass =
   "w-full rounded border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1 text-xs text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]";
+const NEW_ORDER_POSITION_PREFIX = 'НОВАЯ ПОЗИЦИЯ "';
 
 export type ConstructionTypeRow = {
   id: string;
@@ -339,6 +341,9 @@ export function OrderConstructionsEditor({
       line.priceListItemId = row.id;
       line.priceListCode = row.code;
       line.priceListName = row.name;
+      if (row.name.trim().startsWith(NEW_ORDER_POSITION_PREFIX)) {
+        line.priceListCode = "";
+      }
       line.unitPrice = String(row.priceRub);
       line.lineDiscountPercent = "0";
       onChange([...value, line]);
@@ -353,10 +358,14 @@ export function OrderConstructionsEditor({
     return row;
   }, [toothLineIdx, value]);
 
-  const priceLabel = (row: DraftConstructionLine) =>
-    row.priceListCode || row.priceListName
-      ? `${row.priceListCode} · ${row.priceListName}`
-      : "позиция";
+  const priceLabel = (row: DraftConstructionLine) => {
+    const code = row.priceListCode.trim();
+    const name = row.priceListName.trim();
+    if (code && name) return `${code} · ${name}`;
+    if (name) return name;
+    if (code) return code;
+    return "позиция";
+  };
 
   const addFromPriceTile = (
     <button
@@ -595,6 +604,15 @@ export function OrderConstructionsEditor({
                     Удалить
                   </button>
                 </div>
+                {(row.priceListName ?? "").trim().startsWith(NEW_ORDER_POSITION_PREFIX) ? (
+                  <Link
+                    href="/directory/price"
+                    className="block rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-900 hover:bg-sky-100 dark:border-sky-800/60 dark:bg-sky-950/30 dark:text-sky-100"
+                    title="Открыть Конфигурация → Прайс"
+                  >
+                    Обратите внимание: новая позиция. Открыть в Конфигурация → Прайс
+                  </Link>
+                ) : null}
 
                 <div className="grid grid-cols-3 gap-2">
                   <label className="min-w-0 flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">

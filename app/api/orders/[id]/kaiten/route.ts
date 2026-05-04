@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { KaitenTrackLane, Prisma } from "@prisma/client";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getKaitenEnvConfig, listConfiguredKaitenTrackLanes } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
@@ -41,6 +42,7 @@ import { recordOrderRevision } from "@/lib/record-order-revision";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
 import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 const TRACK_LANES: KaitenTrackLane[] = ["ORTHOPEDICS", "ORTHODONTICS", "TEST"];
 
@@ -204,6 +206,11 @@ export async function GET(
   if (!orderId?.trim()) {
     return NextResponse.json({ error: "Не указан id" }, { status: 400 });
   }
+  const session = await getSessionFromCookies();
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
 
   const auth = getKaitenRestAuth();
   const cfg0 = getKaitenEnvConfig();
@@ -216,8 +223,8 @@ export async function GET(
   const burst = { burst: true } as const;
   const cfg = await withResolvedKaitenBoards(cfg0, burst);
 
-  const order = await ordersPrisma.order.findUnique({
-    where: { id: orderId.trim() },
+  const order = await ordersPrisma.order.findFirst({
+    where: { id: orderId.trim(), tenantId },
     select: {
       id: true,
       kaitenCardId: true,
@@ -512,6 +519,11 @@ export async function POST(
   if (!orderId?.trim()) {
     return NextResponse.json({ error: "Не указан id" }, { status: 400 });
   }
+  const session = await getSessionFromCookies();
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
 
   let body: KaitenPostBody;
   try {
@@ -521,8 +533,8 @@ export async function POST(
   }
 
   const idTrim = orderId.trim();
-  const existing = await ordersPrisma.order.findUnique({
-    where: { id: idTrim },
+  const existing = await ordersPrisma.order.findFirst({
+    where: { id: idTrim, tenantId },
     select: {
       id: true,
       kaitenCardId: true,
@@ -614,8 +626,8 @@ export async function POST(
           { status: 400 },
         );
       }
-      const ord = await ordersPrisma.order.findUnique({
-        where: { id: idTrim },
+      const ord = await ordersPrisma.order.findFirst({
+        where: { id: idTrim, tenantId },
         select: { kaitenTrackLane: true },
       });
       const lane = ord?.kaitenTrackLane;
@@ -801,6 +813,11 @@ export async function PATCH(
   if (!orderId?.trim()) {
     return NextResponse.json({ error: "Не указан id" }, { status: 400 });
   }
+  const session = await getSessionFromCookies();
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
 
   const auth = getKaitenRestAuth();
   const cfg0 = getKaitenEnvConfig();
@@ -819,8 +836,8 @@ export async function PATCH(
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const order = await ordersPrisma.order.findUnique({
-    where: { id: orderId.trim() },
+  const order = await ordersPrisma.order.findFirst({
+    where: { id: orderId.trim(), tenantId },
     select: {
       id: true,
       kaitenCardId: true,

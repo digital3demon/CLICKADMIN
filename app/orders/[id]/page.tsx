@@ -20,6 +20,7 @@ import { normalizeLegacyLabWorkStatus } from "@/lib/lab-work-status";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { invoiceParsedSnapshotForOrderEdit } from "@/lib/order-invoice-initial-for-edit";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,8 @@ export default async function OrderEditPage({
           : undefined;
 
   const session = await getSessionFromCookies();
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) notFound();
   const isDemoMode = Boolean(session?.demo);
 
   const [ordersPrisma, clientsPrisma, pricingPrisma] = await Promise.all([
@@ -64,8 +67,8 @@ export default async function OrderEditPage({
   ]);
   let order;
   try {
-    order = await ordersPrisma.order.findUnique({
-      where: { id },
+    order = await ordersPrisma.order.findFirst({
+      where: { id, tenantId },
       include: {
         constructions: {
           orderBy: { sortOrder: "asc" },
@@ -225,7 +228,6 @@ export default async function OrderEditPage({
     correctionTrack: order.correctionTrack ?? null,
     correctionReason: order.correctionReason ?? null,
     correctionPaid: order.correctionPaid,
-    reworkAtCustomerExpense: order.reworkAtCustomerExpense,
     registeredByLabel: order.registeredByLabel,
     courierId: order.courierId,
     courierName: courier?.name ?? null,

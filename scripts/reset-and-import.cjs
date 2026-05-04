@@ -74,8 +74,26 @@ function loadEnvFallback() {
   }
 }
 
+function assertResetAllowed() {
+  const dbUrl = String(process.env.DATABASE_URL || "").trim();
+  if (!dbUrl.startsWith("file:")) {
+    throw new Error(
+      "reset-and-import разрешён только для SQLite DATABASE_URL=file:...; для PostgreSQL используйте миграции/бэкап.",
+    );
+  }
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.CRM_ALLOW_DESTRUCTIVE_DB_RESET !== "1"
+  ) {
+    throw new Error(
+      "NODE_ENV=production: destructive reset заблокирован. Если это точно тестовая SQLite-БД, задайте CRM_ALLOW_DESTRUCTIVE_DB_RESET=1.",
+    );
+  }
+}
+
 function main() {
   loadEnvFallback();
+  assertResetAllowed();
   const cwd = process.cwd();
   const noImport = process.argv.includes("--no-import");
   const positional = process.argv.slice(2).filter((a) => a !== "--no-import");

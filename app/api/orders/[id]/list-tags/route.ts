@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { applyKaitenBlockForOrderIfUnblocked } from "@/lib/apply-kaiten-block-from-list-tag";
 import { applyKaitenUnblockForOrderIfBlocked } from "@/lib/apply-kaiten-unblock-from-list-tag";
 import { customListTagLabelMeansKaitenBlock } from "@/lib/custom-list-tag-kaiten-block-label";
@@ -42,8 +44,13 @@ export async function POST(
 
   try {
     const prisma = await getOrdersPrisma();
-    const order = await prisma.order.findUnique({
-      where: { id: id.trim() },
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+    const order = await prisma.order.findFirst({
+      where: { id: id.trim(), tenantId },
       select: { id: true },
     });
     if (!order) {
@@ -128,8 +135,21 @@ export async function DELETE(
   }
 
   try {
-    const res = await (await getOrdersPrisma()).orderCustomTag.deleteMany({
-      where: { orderId: id.trim(), label: label.trim() },
+    const prisma = await getOrdersPrisma();
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+    const order = await prisma.order.findFirst({
+      where: { id: id.trim(), tenantId },
+      select: { id: true },
+    });
+    if (!order) {
+      return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+    }
+    const res = await prisma.orderCustomTag.deleteMany({
+      where: { orderId: order.id, label: label.trim() },
     });
     if (res.count === 0) {
       return NextResponse.json({ error: "Тег не найден" }, { status: 404 });

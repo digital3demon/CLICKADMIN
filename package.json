@@ -37,7 +37,7 @@
     "db:push": "prisma db push",
     "db:fix-user-telegram-phone": "node --env-file=.env scripts/ensure-user-telegram-phone-sqlite.cjs",
     "db:sync": "prisma db push",
-    "db:push:reset": "prisma db push --force-reset --accept-data-loss",
+    "db:push:reset": "node --env-file=.env scripts/safe-db-push-reset.cjs",
     "db:seed": "prisma db seed",
     "owner:set-password": "node --env-file=.env scripts/set-owner-password.cjs",
     "db:reset": "node --env-file=.env scripts/reset-and-import.cjs --no-import",

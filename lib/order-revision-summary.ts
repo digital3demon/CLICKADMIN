@@ -12,7 +12,7 @@ const KEY_LABELS: Record<string, string> = {
   clientOrderText: "Заказ от клиента",
   isUrgent: "Срочность",
   urgentCoefficient: "Коэф. срочности",
-  labWorkStatus: "Этап работы (архив, до Kайтен)",
+  labWorkStatus: "Этап работы (архив, до Кайтен)",
   legalEntity: "Юр. лицо",
   payment: "Оплата",
   shade: "Цвет (наряд)",
@@ -41,7 +41,7 @@ const KEY_LABELS: Record<string, string> = {
   correctionTrack: "Коррекция",
   correctionReason: "Причина коррекции",
   correctionPaid: "Коррекция платная",
-  reworkAtCustomerExpense: "За счёт заказчика (коррекция)",
+  reworkAtCustomerExpense: "Устар.: переделка за счёт заказчика",
   registeredByLabel: "Оформил",
   courierId: "Курьер",
   courierPickupId: "Курьер привоз",
@@ -55,9 +55,9 @@ const KEY_LABELS: Record<string, string> = {
   kaitenCardId: "ID карточки Кайтен",
   kaitenSyncError: "Ошибка Кайтен",
   kaitenSyncedAt: "Синхронизация Кайтен",
-  kaitenColumnTitle: "Колонка Kайтен (CRM)",
-  kaitenBlocked: "Блокировка в Kайтен",
-  kaitenBlockReason: "Причина блокировки Kайтен",
+  kaitenColumnTitle: "Колонка Кайтен (CRM)",
+  kaitenBlocked: "Блокировка в Кайтен",
+  kaitenBlockReason: "Причина блокировки Кайтен",
 };
 
 export function summarizeOrderRevision(

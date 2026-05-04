@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import {
   applyOrderSnapshot,
   parseSnapshotV1,
@@ -32,6 +34,19 @@ export async function POST(
   }
 
   try {
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+    const orderForTenant = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      select: { id: true },
+    });
+    if (!orderForTenant) {
+      return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+    }
+
     const revision = await prisma.orderRevision.findFirst({
       where: { id: revId, orderId },
       select: { id: true, snapshot: true, createdAt: true },
@@ -65,8 +80,8 @@ export async function POST(
       summary: `Восстановлена версия от ${when}`,
     });
 
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
       include: {
         ...orderInclude,
         attachments: {

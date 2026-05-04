@@ -93,10 +93,6 @@ export function AnalyticsPageClient() {
         paid: { orders: number; revenue: number };
         free: { orders: number; revenue: number };
       };
-      expense: {
-        customer: { orders: number; revenue: number };
-        lab: { orders: number; revenue: number };
-      };
     };
   } | null>(null);
 
@@ -419,7 +415,8 @@ export function AnalyticsPageClient() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-[var(--text-secondary)]">
               Выручка по строкам состава × коэффициент срочности. Период по дате
-              создания наряда. Отменённые наряды в сумму не входят.
+              создания наряда. Отменённые наряды в сумму не входят. Суммы в блоках
+              «Коррекции» и «Переделки» — только по строкам прайса «КП» в составе.
             </p>
             <a
               href={exportHref("finance")}
@@ -471,6 +468,9 @@ export function AnalyticsPageClient() {
               <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
                 {moneyRub(finance.totals.correctionRevenue)}
               </p>
+              <p className="mt-0.5 text-[9px] leading-tight text-[var(--text-muted)]">
+                по строкам «КП» в составе
+              </p>
             </div>
             <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
@@ -482,15 +482,21 @@ export function AnalyticsPageClient() {
               <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
                 {moneyRub(finance.totals.reworkRevenue)}
               </p>
+              <p className="mt-0.5 text-[9px] leading-tight text-[var(--text-muted)]">
+                по строкам «КП» в составе
+              </p>
             </div>
           </div>
           {finance.correctionDetail ? (
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
                 <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                     Коррекции по направлению
                   </h4>
+                  <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                    Суммы — по строкам прайса «КП» в составе наряда
+                  </p>
                 </div>
                 <div className="overflow-x-auto p-2">
                   <table className="w-full min-w-[240px] border-collapse text-left text-sm">
@@ -518,6 +524,9 @@ export function AnalyticsPageClient() {
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                     Платно / бесплатно
                   </h4>
+                  <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                    Те же суммы по строкам «КП»
+                  </p>
                 </div>
                 <div className="space-y-2 p-3 text-sm">
                   <div className="flex justify-between gap-2">
@@ -532,29 +541,6 @@ export function AnalyticsPageClient() {
                     <span className="tabular-nums">
                       {finance.correctionDetail.paidVsFree.free.orders} нар. ·{" "}
                       {moneyRub(finance.correctionDetail.paidVsFree.free.revenue)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
-                <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-                    За чей счёт
-                  </h4>
-                </div>
-                <div className="space-y-2 p-3 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="text-[var(--text-secondary)]">Заказчик</span>
-                    <span className="tabular-nums">
-                      {finance.correctionDetail.expense.customer.orders} нар. ·{" "}
-                      {moneyRub(finance.correctionDetail.expense.customer.revenue)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-[var(--text-secondary)]">Лаборатория</span>
-                    <span className="tabular-nums">
-                      {finance.correctionDetail.expense.lab.orders} нар. ·{" "}
-                      {moneyRub(finance.correctionDetail.expense.lab.revenue)}
                     </span>
                   </div>
                 </div>
@@ -621,12 +607,12 @@ export function AnalyticsPageClient() {
                 Переделки: какие позиции переделывают
               </h4>
               <span className="text-xs text-[var(--text-muted)]">
-                По связке "Продолжение работы", иначе по самому наряду
+                Источник состава — «Продолжение работы»; суммы считаются по «КП»
               </span>
             </div>
             {finance.reworkTopItems.length === 0 ? (
               <p className="px-3 py-3 text-sm text-[var(--text-muted)]">
-                За выбранный период переделок нет.
+                За выбранный период переделок нет или у переделок не указан исходный состав.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -665,8 +651,9 @@ export function AnalyticsPageClient() {
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-[var(--text-secondary)]">
-              Переделки считаются по нарядам с типом «Переделка». Позиции берутся из
-              «Продолжение работы», а если связи нет — из самого наряда.
+              Наряды с типом «Переделка». Суммы считаются по строкам «КП» в текущем
+              наряде, а таблица ниже показывает реальные работы из «Продолжение
+              работы».
             </p>
             <a
               href={exportHref("finance")}
@@ -702,12 +689,15 @@ export function AnalyticsPageClient() {
             </div>
           </div>
           {finance.correctionDetail ? (
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
                 <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                     Коррекции по направлению
                   </h4>
+                  <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                    Суммы — по строкам прайса «КП» в составе наряда
+                  </p>
                 </div>
                 <div className="overflow-x-auto p-2">
                   <table className="w-full min-w-[240px] border-collapse text-left text-sm">
@@ -735,6 +725,9 @@ export function AnalyticsPageClient() {
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                     Платно / бесплатно
                   </h4>
+                  <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                    Те же суммы по строкам «КП»
+                  </p>
                 </div>
                 <div className="space-y-2 p-3 text-sm">
                   <div className="flex justify-between gap-2">
@@ -753,29 +746,6 @@ export function AnalyticsPageClient() {
                   </div>
                 </div>
               </div>
-              <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
-                <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-                    За чей счёт
-                  </h4>
-                </div>
-                <div className="space-y-2 p-3 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="text-[var(--text-secondary)]">Заказчик</span>
-                    <span className="tabular-nums">
-                      {finance.correctionDetail.expense.customer.orders} нар. ·{" "}
-                      {moneyRub(finance.correctionDetail.expense.customer.revenue)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-[var(--text-secondary)]">Лаборатория</span>
-                    <span className="tabular-nums">
-                      {finance.correctionDetail.expense.lab.orders} нар. ·{" "}
-                      {moneyRub(finance.correctionDetail.expense.lab.revenue)}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           ) : null}
           <div className="rounded-lg border border-[var(--card-border)]">
@@ -784,12 +754,12 @@ export function AnalyticsPageClient() {
                 Какие позиции переделывают
               </h4>
               <span className="text-xs text-[var(--text-muted)]">
-                Топ за выбранный период
+                По исходному наряду из «Продолжение работы»
               </span>
             </div>
             {finance.reworkTopItems.length === 0 ? (
               <p className="px-3 py-3 text-sm text-[var(--text-muted)]">
-                За выбранный период переделок нет.
+                За выбранный период переделок нет или у переделок не указан исходный состав.
               </p>
             ) : (
               <div className="overflow-x-auto">

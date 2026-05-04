@@ -3,7 +3,9 @@ import {
   dedupeParsedKaitenComments,
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { getKaitenRestAuth, kaitenListComments } from "@/lib/kaiten-rest";
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
@@ -29,8 +31,13 @@ export async function GET(
   }
 
   const prisma = await getOrdersPrisma();
-  const order = await prisma.order.findUnique({
-    where: { id: orderId.trim() },
+  const session = await getSessionFromCookies();
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+  const order = await prisma.order.findFirst({
+    where: { id: orderId.trim(), tenantId },
     select: { id: true, kaitenCardId: true },
   });
   if (!order) {

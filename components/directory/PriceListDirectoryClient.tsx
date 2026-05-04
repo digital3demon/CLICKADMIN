@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PriceListTabbedBody } from "@/components/price-list/PriceListTabbedBody";
 import { PriceOverridesManager } from "@/components/directory/PriceOverridesManager";
 
@@ -38,6 +38,7 @@ export function PriceListDirectoryClient() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [listSearch, setListSearch] = useState("");
+  const positionsSectionRef = useRef<HTMLElement | null>(null);
 
   const [newListName, setNewListName] = useState("");
   const [creatingList, setCreatingList] = useState(false);
@@ -131,6 +132,13 @@ export function PriceListDirectoryClient() {
         (it.description?.toLowerCase().includes(q) ?? false),
     );
   }, [items, listSearch]);
+  const orderNewItems = useMemo(
+    () =>
+      items.filter((it) =>
+        (it.name ?? "").trim().startsWith('НОВАЯ ПОЗИЦИЯ "'),
+      ),
+    [items],
+  );
 
   async function addRow(e: React.FormEvent) {
     e.preventDefault();
@@ -304,14 +312,40 @@ export function PriceListDirectoryClient() {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-[var(--app-text)]">
-          Добавить позицию
-          {editListId ? (
-            <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">
-              в «{editListLabel}»
-            </span>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h2 className="text-lg font-semibold text-[var(--app-text)]">
+            Добавить позицию
+            {editListId ? (
+              <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">
+                в «{editListLabel}»
+              </span>
+            ) : null}
+          </h2>
+          {orderNewItems.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {orderNewItems.slice(0, 6).map((it) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  className="flex min-h-[3rem] max-w-[17rem] items-center gap-2 rounded-lg border-2 border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)]/40 px-3 py-2 text-left text-xs text-[var(--text-strong)] transition-colors hover:border-[var(--sidebar-blue)] hover:bg-[var(--card-bg)]"
+                  title="Показать позицию в списке ниже"
+                  onClick={() => {
+                    setListSearch(it.name);
+                    positionsSectionRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }}
+                >
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-current">
+                    +
+                  </span>
+                  <span className="truncate">{it.name}</span>
+                </button>
+              ))}
+            </div>
           ) : null}
-        </h2>
+        </div>
         <form
           onSubmit={addRow}
           className="mt-3 grid max-w-xl gap-3 rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-4"
@@ -388,7 +422,7 @@ export function PriceListDirectoryClient() {
         </form>
       </section>
 
-      <section>
+      <section ref={positionsSectionRef}>
         <h2 className="text-lg font-semibold text-[var(--app-text)]">
           Позиции каталога «{editListLabel}»
         </h2>

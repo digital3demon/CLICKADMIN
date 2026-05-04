@@ -3,6 +3,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
 import { syncOrderChatCorrectionsFromKaitenLive } from "@/lib/order-chat-correction-kaiten-sync";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,10 @@ export async function GET(
   if (!session) {
     return NextResponse.json({ error: "Нужна авторизация" }, { status: 401 });
   }
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Нужна авторизация" }, { status: 401 });
+  }
 
   const { id: orderId } = await ctx.params;
   if (!orderId?.trim()) {
@@ -26,8 +31,8 @@ export async function GET(
   }
 
   const prisma = await getOrdersPrisma();
-  const order = await prisma.order.findUnique({
-    where: { id: orderId.trim() },
+  const order = await prisma.order.findFirst({
+    where: { id: orderId.trim(), tenantId },
     select: { id: true, kaitenCardId: true },
   });
   if (!order) {
@@ -83,6 +88,10 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "Нужна авторизация" }, { status: 401 });
   }
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Нужна авторизация" }, { status: 401 });
+  }
 
   const { id: orderId } = await ctx.params;
   if (!orderId?.trim()) {
@@ -99,8 +108,8 @@ export async function POST(
   const raw = typeof body.text === "string" ? body.text : "";
 
   const prisma = await getOrdersPrisma();
-  const order = await prisma.order.findUnique({
-    where: { id: orderId.trim() },
+  const order = await prisma.order.findFirst({
+    where: { id: orderId.trim(), tenantId },
     select: { id: true },
   });
   if (!order) {

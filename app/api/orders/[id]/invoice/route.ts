@@ -3,6 +3,8 @@ import {
   getOrdersPrisma,
   getPricingPrisma,
 } from "@/lib/get-domain-prisma";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { escapeHtml } from "@/lib/html-escape";
 import {
   formatConstructionDescription,
@@ -28,13 +30,19 @@ export async function GET(_req: Request, ctx: Ctx) {
   }
 
   try {
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
     const [ordersPrisma, clientsPrisma, pricingPrisma] = await Promise.all([
       getOrdersPrisma(),
       getClientsPrisma(),
       getPricingPrisma(),
     ]);
-    const order = await ordersPrisma.order.findUnique({
-      where: { id: id.trim() },
+    const order = await ordersPrisma.order.findFirst({
+      where: { id: id.trim(), tenantId },
       include: { constructions: { orderBy: { sortOrder: "asc" } } },
     });
     if (!order) {

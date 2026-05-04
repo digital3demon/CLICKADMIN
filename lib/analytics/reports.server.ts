@@ -8,6 +8,12 @@ import {
   ORDER_CORRECTION_TRACK_LABELS,
   ORDER_CORRECTION_TRACK_VALUES,
 } from "@/lib/order-correction-track";
+import {
+  CORRECTION_PRICE_ITEM_CODE,
+  sumCorrectionPriceLinesAllocatedRub,
+} from "@/lib/pricing/correction-price-item";
+import { analyticsBusinessDayKey } from "@/lib/analytics/range";
+import { reworkSourceItem } from "@/lib/analytics/rework-source-item";
 
 const PRICE_LIST = "PRICE_LIST" satisfies ConstructionCategory;
 
@@ -26,6 +32,7 @@ export async function loadFinanceReport(from: Date, to: Date) {
           unitPrice: true,
           lineDiscountPercent: true,
           priceListItem: { select: { id: true, code: true, name: true } },
+          constructionType: { select: { id: true, code: true, name: true } },
         },
       },
       continuesFromOrder: {
@@ -39,6 +46,7 @@ export async function loadFinanceReport(from: Date, to: Date) {
               unitPrice: true,
               lineDiscountPercent: true,
               priceListItem: { select: { id: true, code: true, name: true } },
+              constructionType: { select: { id: true, code: true, name: true } },
             },
           },
         },
@@ -47,7 +55,7 @@ export async function loadFinanceReport(from: Date, to: Date) {
     orderBy: { createdAt: "asc" },
   });
 
-  const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+  const dayKey = analyticsBusinessDayKey;
 
   const byDay = new Map<string, { revenue: number; orders: number }>();
 
@@ -75,10 +83,6 @@ export async function loadFinanceReport(from: Date, to: Date) {
     paid: { orders: 0, revenue: 0 },
     free: { orders: 0, revenue: 0 },
   };
-  const correctionExpense = {
-    customer: { orders: 0, revenue: 0 },
-    lab: { orders: 0, revenue: 0 },
-  };
 
   for (const o of orders) {
     if (o.status === "CANCELLED") {
@@ -89,40 +93,37 @@ export async function loadFinanceReport(from: Date, to: Date) {
     revenueTotal += rev;
     ordersActive += 1;
     if (o.correctionTrack != null) {
+      const corrRev = sumCorrectionPriceLinesAllocatedRub({
+        isUrgent: o.isUrgent,
+        urgentCoefficient: o.urgentCoefficient,
+        compositionDiscountPercent: o.compositionDiscountPercent,
+        constructions: o.constructions,
+      });
       correctionOrders += 1;
-      correctionRevenue += rev;
+      correctionRevenue += corrRev;
       const tr = String(o.correctionTrack);
       if (!correctionByTrack[tr]) {
         correctionByTrack[tr] = { orders: 0, revenue: 0 };
       }
       correctionByTrack[tr].orders += 1;
-      correctionByTrack[tr].revenue += rev;
+      correctionByTrack[tr].revenue += corrRev;
       if (o.correctionPaid) {
         correctionPaidVsFree.paid.orders += 1;
-        correctionPaidVsFree.paid.revenue += rev;
+        correctionPaidVsFree.paid.revenue += corrRev;
       } else {
         correctionPaidVsFree.free.orders += 1;
-        correctionPaidVsFree.free.revenue += rev;
-      }
-      if (o.reworkAtCustomerExpense) {
-        correctionExpense.customer.orders += 1;
-        correctionExpense.customer.revenue += rev;
-      } else {
-        correctionExpense.lab.orders += 1;
-        correctionExpense.lab.revenue += rev;
+        correctionPaidVsFree.free.revenue += corrRev;
       }
       if (String(o.correctionTrack) === "REWORK") {
         reworkOrders += 1;
-        reworkRevenue += rev;
+        reworkRevenue += corrRev;
         const sourceOrder = o.continuesFromOrder ?? o;
         for (const ln of sourceOrder.constructions) {
-          if (ln.category !== PRICE_LIST) continue;
-          const itemId = ln.priceListItem?.id ?? `unknown:${ln.id}`;
-          const code = ln.priceListItem?.code ?? "—";
-          const name = ln.priceListItem?.name ?? "Позиция без привязки к прайсу";
-          const cur = reworkItems.get(itemId) ?? {
-            code,
-            name,
+          const item = reworkSourceItem(ln);
+          if (!item) continue;
+          const cur = reworkItems.get(item.id) ?? {
+            code: item.code,
+            name: item.name,
             reworkOrderIds: new Set<string>(),
             lineCount: 0,
             quantity: 0,
@@ -130,7 +131,7 @@ export async function loadFinanceReport(from: Date, to: Date) {
           cur.reworkOrderIds.add(o.id);
           cur.lineCount += 1;
           cur.quantity += Number.isFinite(ln.quantity) ? ln.quantity : 0;
-          reworkItems.set(itemId, cur);
+          reworkItems.set(item.id, cur);
         }
       }
     }
@@ -187,16 +188,6 @@ export async function loadFinanceReport(from: Date, to: Date) {
         free: {
           orders: correctionPaidVsFree.free.orders,
           revenue: round2(correctionPaidVsFree.free.revenue),
-        },
-      },
-      expense: {
-        customer: {
-          orders: correctionExpense.customer.orders,
-          revenue: round2(correctionExpense.customer.revenue),
-        },
-        lab: {
-          orders: correctionExpense.lab.orders,
-          revenue: round2(correctionExpense.lab.revenue),
         },
       },
     },

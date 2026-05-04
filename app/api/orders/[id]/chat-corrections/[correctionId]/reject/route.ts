@@ -6,6 +6,7 @@ import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { getKaitenRestAuth, kaitenCreateComment } from "@/lib/kaiten-rest";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 const REPLY_TEXT = "корректировка не принята";
 
@@ -19,6 +20,10 @@ export async function POST(
   }
   if (!canAcceptOrderChatCorrections(session.role)) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+  }
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Нужна авторизация" }, { status: 401 });
   }
 
   const { id: orderId, correctionId } = await ctx.params;
@@ -44,8 +49,8 @@ export async function POST(
     return NextResponse.json({ error: "Уже отклонено" }, { status: 409 });
   }
 
-  const order = await prisma.order.findUnique({
-    where: { id: orderId.trim() },
+  const order = await prisma.order.findFirst({
+    where: { id: orderId.trim(), tenantId },
     select: { id: true, kaitenCardId: true },
   });
   if (!order) {

@@ -10,6 +10,9 @@
 
 **Коммерция / SaaS** — соседняя папка `…\Курсор проекты\dental-crm-saas` (копия кода **без** файлов БД; своя БД в коммерции). Обновление вручную: **`npm run sync:saas`**. **Без участия:** `npm run sync:saas:watch` (отдельный терминал, синк через несколько секунд после сохранения) или один раз `npm run sync:saas:install-hook`, затем синк после каждого `git commit`. См. `dental-crm-saas/README-SAAS.txt`.
 
+Tenant в личной CRM — только технический default tenant, без UI для выбора.
+Граница lab/SaaS описана в [`docs/tenant-boundary.md`](docs/tenant-boundary.md).
+
 ## Что нужно на компьютере
 
 - **Node.js** LTS (вместе с **npm**): https://nodejs.org/

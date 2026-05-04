@@ -1,7 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { extractInvoiceNumberFromPdfBuffer } from "@/lib/extract-invoice-number-from-pdf";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { buildInvoiceCaptionRuFromFileName } from "@/lib/format-invoice-number-ru";
 import {
   extractInvoiceNumberFromFileName,
@@ -148,8 +150,14 @@ export async function GET(_req: Request, ctx: Ctx) {
   const prisma = await getOrdersPrisma();
   try {
     const { id: orderId } = await ctx.params;
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
       select: { id: true, invoiceAttachmentId: true },
     });
     if (!order) {
@@ -201,9 +209,14 @@ export async function POST(req: Request, ctx: Ctx) {
 
     const parsed = await parseRawUpload(req, UPLOAD_BODY_TIMEOUT_MS);
     const prisma = await getOrdersPrisma();
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
 
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
       select: { id: true },
     });
     if (!order) {
@@ -233,8 +246,8 @@ export async function POST(req: Request, ctx: Ctx) {
     let replacedInvoiceAttachmentId: string | null = null;
 
     if (asInvoice) {
-      const prevOrder = await prisma.order.findUnique({
-        where: { id: orderId },
+      const prevOrder = await prisma.order.findFirst({
+        where: { id: orderId, tenantId },
         select: { invoiceAttachmentId: true },
       });
       const prevId = prevOrder?.invoiceAttachmentId ?? null;
@@ -306,8 +319,8 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     const invoiceSnapshot = asInvoice
-      ? await prisma.order.findUnique({
-          where: { id: orderId },
+      ? await prisma.order.findFirst({
+          where: { id: orderId, tenantId },
           select: { invoiceNumber: true, invoiceIssued: true },
         })
       : null;

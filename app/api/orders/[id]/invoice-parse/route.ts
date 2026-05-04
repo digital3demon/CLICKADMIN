@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { applyInvoiceParseToOrder } from "@/lib/apply-invoice-parse-to-order";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -18,6 +20,18 @@ export async function POST(_req: Request, ctx: Ctx) {
     }
 
     const prisma = await getOrdersPrisma();
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      select: { id: true },
+    });
+    if (!order) {
+      return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+    }
     const applied = await applyInvoiceParseToOrder(prisma, orderId);
 
     if (!applied.ok) {

@@ -2,6 +2,7 @@ import { lineAllocatedTotalRub } from "@/lib/format-order-construction";
 import { getPrisma } from "@/lib/get-prisma";
 import { orderLinesIncludedInReconciliationExport } from "@/lib/order-reconciliation-export";
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
+import { analyticsMonthBounds, analyticsYmdRange } from "@/lib/analytics/range";
 
 type SnapshotRow = {
   id: string;
@@ -56,42 +57,19 @@ export type ReconciliationMonthReport = {
   };
 };
 
-function monthBoundsUtc(year: number, month: number): { from: Date; to: Date } {
-  const from = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
-  const to = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
-  return { from, to };
-}
-
-function parseYmdToUtcBounds(
-  fromStr: string,
-  toStr: string,
-): { from: Date; to: Date } | null {
-  const a = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fromStr.trim());
-  const b = /^(\d{4})-(\d{2})-(\d{2})$/.exec(toStr.trim());
-  if (!a || !b) return null;
-  const from = new Date(
-    Date.UTC(Number(a[1]), Number(a[2]) - 1, Number(a[3]), 0, 0, 0, 0),
-  );
-  const to = new Date(
-    Date.UTC(Number(b[1]), Number(b[2]) - 1, Number(b[3]), 23, 59, 59, 999),
-  );
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
-  if (from.getTime() > to.getTime()) return null;
-  return { from, to };
-}
-
 async function calculateSnapshotAmount(
   clinicId: string,
   periodFromStr: string,
   periodToStr: string,
 ): Promise<number> {
-  const range = parseYmdToUtcBounds(periodFromStr, periodToStr);
+  const range = analyticsYmdRange(periodFromStr, periodToStr);
   if (!range) return 0;
 
   const lines = await (await getPrisma()).orderConstruction.findMany({
     where: {
       order: {
         clinicId,
+        status: { not: "CANCELLED" },
         archivedAt: null,
         createdAt: { gte: range.from, lte: range.to },
       },
@@ -150,10 +128,10 @@ async function calculateSnapshotAmount(
 
 async function loadSnapshotsForMonth(input: MonthInput): Promise<SnapshotWithAmount[]> {
   const prisma = await getPrisma();
-  const bounds = monthBoundsUtc(input.year, input.month);
+  const bounds = analyticsMonthBounds(input.year, input.month);
   const snaps = await prisma.clinicReconciliationSnapshot.findMany({
     where: {
-      createdAt: { gte: bounds.from, lt: bounds.to },
+      createdAt: { gte: bounds.from, lt: bounds.toExclusive },
     },
     orderBy: [{ clinicId: "asc" }, { periodFromStr: "asc" }, { createdAt: "asc" }],
     select: {

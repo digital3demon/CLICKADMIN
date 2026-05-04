@@ -39,6 +39,7 @@ import {
   ORDER_PAYMENT_RECON_UNPAID,
   isReconciliationPaymentStatus,
 } from "@/lib/order-clinic-client-fields";
+import { parseOptionalDateTime } from "@/lib/parse-optional-date-time";
 
 const KAITEN_TRACK = new Set<string>([
   "ORTHOPEDICS",
@@ -118,7 +119,6 @@ export type CreateOrderBody = {
   correctionTrack?: string | null;
   correctionReason?: string | null;
   correctionPaid?: boolean;
-  reworkAtCustomerExpense?: boolean;
   continuesFromOrderId?: string | null;
 };
 
@@ -128,13 +128,6 @@ export type CreateOrderResult =
 
 function fail(status: number, error: string): CreateOrderResult {
   return { ok: false, status, error };
-}
-
-function parseOptionalDateTime(v: unknown): Date | null {
-  if (v == null || v === "") return null;
-  const d = new Date(String(v));
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
 }
 
 export type CreateOrderOptions = {
@@ -354,8 +347,7 @@ export async function createOrderFromBody(
     if (!isOrderCorrectionTrack(r)) return fail(400, "Некорректное направление коррекции");
     correctionTrack = r as OrderCorrectionTrack;
   }
-  const reworkAtCustomerExpense =
-    correctionTrack != null ? Boolean(body.reworkAtCustomerExpense) : false;
+  const reworkAtCustomerExpense = false;
   const correctionPaid =
     correctionTrack != null ? Boolean(body.correctionPaid) : false;
   const correctionReason =

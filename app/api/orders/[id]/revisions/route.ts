@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -11,8 +13,14 @@ export async function GET(
 
   try {
     const prisma = await getOrdersPrisma();
-    const order = await prisma.order.findUnique({
-      where: { id: id.trim() },
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: id.trim(), tenantId },
       select: { id: true },
     });
     if (!order) {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JawArch } from "@prisma/client";
 import {
@@ -16,6 +17,7 @@ type ConstructionTypeRow = { id: string; name: string };
 
 const financeInputClass =
   "w-full rounded border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1 text-xs text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]";
+const NEW_ORDER_POSITION_PREFIX = 'НОВАЯ ПОЗИЦИЯ "';
 
 function archLabelRu(a: JawArch): string {
   switch (a) {
@@ -79,13 +81,17 @@ export function PodrobnoSection({
 
   const onPickPrice = useCallback(
     (row: PriceListPickRow) => {
+      const rowName = row.name.trim();
+      const label = rowName.startsWith(NEW_ORDER_POSITION_PREFIX)
+        ? rowName
+        : `${row.code} · ${row.name}`;
       onLinesChange([
         ...lines,
         {
           id: newDetailLineId(),
           kind: "priceList",
           priceListItemId: row.id,
-          label: `${row.code} · ${row.name}`,
+          label,
           quantity: 1,
           unitPrice: row.priceRub,
           isIndividualPrice: row.isIndividualPrice === true,
@@ -218,6 +224,15 @@ export function PodrobnoSection({
                   Удалить
                 </button>
               </div>
+              {(line.label ?? "").trim().startsWith(NEW_ORDER_POSITION_PREFIX) ? (
+                <Link
+                  href="/directory/price"
+                  className="block rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-900 hover:bg-sky-100 dark:border-sky-800/60 dark:bg-sky-950/30 dark:text-sky-100"
+                  title="Открыть Конфигурация → Прайс"
+                >
+                  Обратите внимание: новая позиция. Открыть в Конфигурация → Прайс
+                </Link>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">

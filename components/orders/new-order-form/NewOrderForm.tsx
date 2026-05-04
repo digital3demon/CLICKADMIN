@@ -14,6 +14,7 @@ import {
   LabStatusPillMenu,
   useMenuDismiss,
 } from "@/components/orders/LabStatusPillMenu";
+import { OrderCorrectionDetails } from "@/components/orders/OrderCorrectionDetails";
 import {
   LAB_WORK_STATUS_DEFAULT,
   normalizeLegacyLabWorkStatus,
@@ -218,7 +219,6 @@ export function NewOrderForm({
     useState<OrderCorrectionTrackValue | null>(null);
   const [correctionReason, setCorrectionReason] = useState("");
   const [correctionPaid, setCorrectionPaid] = useState(false);
-  const [reworkAtCustomerExpense, setReworkAtCustomerExpense] = useState(false);
   const hydratedRef = useRef(false);
   const prevClinicIdForLegalRef = useRef<string | null>(null);
 
@@ -412,13 +412,6 @@ export function NewOrderForm({
     } else {
       setCorrectionTrack(null);
     }
-    const snapshotRework = (s as OrderDraftSnapshot & { reworkAtCustomerExpense?: boolean })
-      .reworkAtCustomerExpense;
-    setReworkAtCustomerExpense(
-      Boolean(snapshotRework) &&
-        ct != null &&
-        ORDER_CORRECTION_TRACK_VALUES.includes(ct),
-    );
     setCorrectionReason(
       typeof (s as OrderDraftSnapshot).correctionReason === "string"
         ? (s as OrderDraftSnapshot).correctionReason ?? ""
@@ -433,7 +426,6 @@ export function NewOrderForm({
     if (correctionTrack == null) {
       setCorrectionReason("");
       setCorrectionPaid(false);
-      setReworkAtCustomerExpense(false);
     }
   }, [correctionTrack]);
 
@@ -470,7 +462,6 @@ export function NewOrderForm({
       correctionTrack,
       correctionReason,
       correctionPaid,
-      reworkAtCustomerExpense,
     }),
     [
       clinicId,
@@ -498,7 +489,6 @@ export function NewOrderForm({
       correctionTrack,
       correctionReason,
       correctionPaid,
-      reworkAtCustomerExpense,
     ],
   );
 
@@ -828,8 +818,6 @@ export function NewOrderForm({
               correctionTrack != null ? correctionReason.trim() || null : null,
             correctionPaid:
               correctionTrack != null ? correctionPaid : false,
-            reworkAtCustomerExpense:
-              correctionTrack != null ? reworkAtCustomerExpense : false,
             ...(continuationChoice
               ? { continuesFromOrderId: continuationChoice.id }
               : {}),
@@ -944,7 +932,6 @@ export function NewOrderForm({
       correctionTrack,
       correctionReason,
       correctionPaid,
-      reworkAtCustomerExpense,
       continuationChoice,
       pendingFiles,
       router,
@@ -1499,66 +1486,14 @@ export function NewOrderForm({
                             </button>
                           ))}
                         </div>
-                        {correctionTrack != null ? (
-                          <div className="mt-2 space-y-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-2">
-                            <label
-                              htmlFor={`${titleId}-correction-reason`}
-                              className="mb-1 block text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-body)]"
-                            >
-                              Причина коррекции
-                            </label>
-                            <textarea
-                              id={`${titleId}-correction-reason`}
-                              className={`${inputClass} min-h-[2.75rem] max-h-[min(20vh,132px)] resize-y`}
-                              rows={2}
-                              maxLength={4000}
-                              value={correctionReason}
-                              onChange={(e) =>
-                                setCorrectionReason(e.target.value)
-                              }
-                              placeholder="Кратко: что не так и что переделываем…"
-                            />
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                              <span className="text-[11px] font-medium text-[var(--text-secondary)]">
-                                Оплата
-                              </span>
-                              <label className={`${checkboxLabelClass} shrink-0`}>
-                                <input
-                                  type="radio"
-                                  className={checkboxInputClass}
-                                  name={`${titleId}-correction-paid`}
-                                  checked={correctionPaid}
-                                  onChange={() => setCorrectionPaid(true)}
-                                />
-                                Платно
-                              </label>
-                              <label className={`${checkboxLabelClass} shrink-0`}>
-                                <input
-                                  type="radio"
-                                  className={checkboxInputClass}
-                                  name={`${titleId}-correction-paid`}
-                                  checked={!correctionPaid}
-                                  onChange={() => setCorrectionPaid(false)}
-                                />
-                                Бесплатно
-                              </label>
-                            </div>
-                            <label className={checkboxLabelClass}>
-                              <input
-                                type="checkbox"
-                                className={checkboxInputClass}
-                                checked={reworkAtCustomerExpense}
-                                onChange={(e) =>
-                                  setReworkAtCustomerExpense(e.target.checked)
-                                }
-                              />
-                              За счёт заказчика
-                            </label>
-                            <p className="text-[10px] leading-snug text-[var(--text-muted)]">
-                              Если не отмечено — за счёт лаборатории.
-                            </p>
-                          </div>
-                        ) : null}
+                        <OrderCorrectionDetails
+                          track={correctionTrack}
+                          reason={correctionReason}
+                          paid={correctionPaid}
+                          reasonId={`${titleId}-correction-reason`}
+                          onReasonChange={setCorrectionReason}
+                          onPaidChange={setCorrectionPaid}
+                        />
                       </div>
                     </div>
                   </div>

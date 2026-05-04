@@ -815,7 +815,7 @@ model Order {
   correctionReason               String?
   /// Коррекция платная (true) / бесплатная (false)
   correctionPaid                 Boolean                   @default(false)
-  /// При любой коррекции: true — за счёт заказчика; false — за счёт лаборатории
+  /// Устарело: не используется в CRM (раньше «за счёт заказчика» у переделки). Оставлено в БД для старых строк.
   reworkAtCustomerExpense        Boolean                   @default(false)
   /// Кто занёс наряд в CRM (подпись с момента создания)
   registeredByLabel              String?

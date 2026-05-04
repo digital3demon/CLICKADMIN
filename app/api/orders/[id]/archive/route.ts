@@ -3,6 +3,7 @@ import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getKaitenRestAuth, kaitenArchiveCard } from "@/lib/kaiten-rest";
 import { archivedOrderNumberPlaceholder } from "@/lib/order-number";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,10 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
 
   const { id } = await ctx.params;
   const orderId = id?.trim() ?? "";
@@ -36,8 +41,8 @@ export async function POST(
   }
 
   const prisma = await getOrdersPrisma();
-  const row = await prisma.order.findUnique({
-    where: { id: orderId },
+  const row = await prisma.order.findFirst({
+    where: { id: orderId, tenantId },
     select: {
       id: true,
       archivedAt: true,

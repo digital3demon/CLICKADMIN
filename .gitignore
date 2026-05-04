@@ -1,10 +1,16 @@
 node_modules/
 .next/
 dist/
+generated/
 *.tsbuildinfo
 .env
 *.db
 *.db-journal
+.tmp_*.json
+prisma/backups/*.sql
+prisma/backups/*.dump
+prisma/backups/*.backup
+data/backup/*.json
 .DS_Store
 
 # Вложения нарядов (байты на диске, не в SQLite)

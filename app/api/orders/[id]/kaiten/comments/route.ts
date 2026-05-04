@@ -23,6 +23,7 @@ import {
 } from "@/lib/order-prosthetics-request-db";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 type PostBody = {
   text?: string;
@@ -58,6 +59,10 @@ export async function POST(
   }
 
   const session = await getSessionFromCookies();
+  const tenantId = await orderTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
   const label = session
     ? userActivityDisplayLabel({
         mentionHandle: null,
@@ -81,8 +86,8 @@ export async function POST(
       : null;
 
   const prisma = await getOrdersPrisma();
-  const order = await prisma.order.findUnique({
-    where: { id: orderId.trim() },
+  const order = await prisma.order.findFirst({
+    where: { id: orderId.trim(), tenantId },
     select: { id: true, kaitenCardId: true, orderNumber: true },
   });
   if (!order) {

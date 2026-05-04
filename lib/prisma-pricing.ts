@@ -1,6 +1,11 @@
 import { PrismaClient } from "@prisma/client";
 import { augmentSqliteDatasourceUrl } from "@/lib/sqlite-datasource-url";
 
+/**
+ * Legacy sync-клиент для старых price/inventory handlers.
+ * Новый серверный код должен брать `pricing` через `getPricingPrisma()` /
+ * `getDbClients()`, чтобы lab CRM и SaaS tenant routing не расходились.
+ */
 const g = globalThis as unknown as {
   pricingPrisma?: PrismaClient;
 };

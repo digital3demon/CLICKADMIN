@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import {
   deleteOrderAttachmentFile,
   readOrderAttachmentBytes,
@@ -12,7 +14,13 @@ type Ctx = { params: Promise<{ id: string; attachmentId: string }> };
 export async function GET(_req: Request, ctx: Ctx) {
   try {
     const { id: orderId, attachmentId } = await ctx.params;
-    const row = await (await getOrdersPrisma()).orderAttachment.findFirst({
+    const prisma = await getOrdersPrisma();
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+    const row = await prisma.orderAttachment.findFirst({
       where: { id: attachmentId, orderId },
       select: {
         fileName: true,
@@ -22,6 +30,13 @@ export async function GET(_req: Request, ctx: Ctx) {
       },
     });
     if (!row) {
+      return NextResponse.json({ error: "Файл не найден" }, { status: 404 });
+    }
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      select: { id: true },
+    });
+    if (!order) {
       return NextResponse.json({ error: "Файл не найден" }, { status: 404 });
     }
     const buf = await readOrderAttachmentBytes(row);
@@ -47,6 +62,18 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   try {
     const { id: orderId, attachmentId } = await ctx.params;
     const prisma = await getOrdersPrisma();
+    const session = await getSessionFromCookies();
+    const tenantId = await orderTenantIdForSession(session);
+    if (!tenantId) {
+      return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      select: { id: true },
+    });
+    if (!order) {
+      return NextResponse.json({ error: "Файл не найден" }, { status: 404 });
+    }
     const row = await prisma.orderAttachment.findFirst({
       where: { id: attachmentId, orderId },
       select: {
