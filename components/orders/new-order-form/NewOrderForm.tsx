@@ -1116,7 +1116,7 @@ export function NewOrderForm({
             <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
               <h2
                 id={titleId}
-                className="min-w-0 flex-1 text-xs font-semibold tabular-nums leading-snug tracking-tight text-[var(--app-text)] sm:flex-none sm:text-xl sm:leading-normal sm:tracking-tight"
+                className="min-w-0 flex-1 text-sm font-semibold tabular-nums leading-snug tracking-tight text-[var(--app-text)] sm:flex-none sm:text-xl sm:leading-normal sm:tracking-tight"
                 title="Ожидаемый номер (YYMM-NNN); итоговый при сохранении"
               >
                 Наряд {nextOrderPreview ?? "…"}
