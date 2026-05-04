@@ -26,6 +26,7 @@ enum UserDeviceType {
 
 enum AppModule {
   ORDERS
+  ORDERS_CREATE
   KANBAN
   KANBAN_EDIT_TITLE
   KANBAN_EDIT_DUE_DATE

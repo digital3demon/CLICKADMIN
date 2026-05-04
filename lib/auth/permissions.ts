@@ -72,6 +72,16 @@ export function canChangeUserRoles(role: UserRole): boolean {
   return role === "OWNER";
 }
 
+/** Отдельный доступ на создание нового заказа. */
+export function canCreateOrders(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (role === "OWNER") return true;
+  if (moduleAccess?.ORDERS_CREATE === true) return true;
+  return false;
+}
+
 /** Модуль «Просчёт работ» / себестоимость. */
 export function canAccessCostingModule(
   role: UserRole,

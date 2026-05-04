@@ -4,11 +4,14 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import type { AppModule, UserRole } from "@prisma/client";
+import { canCreateOrders } from "@/lib/auth/permissions";
 import type { OrderDraftSnapshot } from "@/lib/order-draft-snapshot";
 import { isDraftWorthy } from "@/lib/order-draft-snapshot";
 import {
@@ -41,6 +44,8 @@ type NewOrderPanelContextValue = {
   ) => () => void;
   panels: readonly NewOrderPanelItem[];
   canOpen: boolean;
+  canCreate: boolean;
+  createAccessReady: boolean;
 };
 
 const NewOrderPanelContext = createContext<NewOrderPanelContextValue | null>(
@@ -56,7 +61,37 @@ function newId() {
 
 export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
   const [panels, setPanels] = useState<NewOrderPanelItem[]>([]);
+  const [canCreate, setCanCreate] = useState(false);
+  const [createAccessReady, setCreateAccessReady] = useState(false);
   const gettersRef = useRef(new Map<string, PanelSnapshotGetter>());
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" });
+        const j = (await res.json()) as {
+          user?: {
+            role?: UserRole;
+            moduleAccess?: Record<string, boolean> | null;
+          } | null;
+        };
+        if (cancelled) return;
+        const role = j.user?.role ?? null;
+        const moduleAccess =
+          (j.user?.moduleAccess as Partial<Record<AppModule, boolean>> | null | undefined) ??
+          null;
+        setCanCreate(role ? canCreateOrders(role, moduleAccess) : false);
+      } catch {
+        if (!cancelled) setCanCreate(false);
+      } finally {
+        if (!cancelled) setCreateAccessReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const registerPanelSnapshot = useCallback(
     (panelId: string, getter: PanelSnapshotGetter) => {
@@ -69,6 +104,7 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
   );
 
   const open = useCallback(() => {
+    if (!canCreate) return false;
     let added = false;
     setPanels((prev) => {
       if (prev.length >= NEW_ORDER_PANEL_MAX) {
@@ -78,7 +114,7 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
       return [...prev, { id: newId(), collapsed: false }];
     });
     return added;
-  }, []);
+  }, [canCreate]);
 
   const close = useCallback((id: string, options?: { skipDraft?: boolean }) => {
     setPanels((prev) => {
@@ -138,6 +174,7 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
   );
 
   const openFromDraft = useCallback((draft: StoredOrderDraft): boolean => {
+    if (!canCreate) return false;
     let added = false;
     setPanels((prev) => {
       if (prev.length >= NEW_ORDER_PANEL_MAX) {
@@ -157,9 +194,9 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
       removeDraft(draft.id);
     }
     return added;
-  }, []);
+  }, [canCreate]);
 
-  const canOpen = panels.length < NEW_ORDER_PANEL_MAX;
+  const canOpen = canCreate && panels.length < NEW_ORDER_PANEL_MAX;
 
   const value = useMemo(
     () => ({
@@ -172,6 +209,8 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
       registerPanelSnapshot,
       panels,
       canOpen,
+      canCreate,
+      createAccessReady,
     }),
     [
       open,
@@ -183,6 +222,8 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
       registerPanelSnapshot,
       panels,
       canOpen,
+      canCreate,
+      createAccessReady,
     ],
   );
 

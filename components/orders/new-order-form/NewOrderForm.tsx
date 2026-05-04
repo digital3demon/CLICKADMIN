@@ -1068,7 +1068,7 @@ export function NewOrderForm({
             >
               Наряд {nextOrderPreview ?? "…"}
             </h2>
-            <div className="flex min-w-0 flex-nowrap items-stretch gap-2 pb-0.5 sm:gap-2.5">
+            <div className="flex min-w-0 flex-wrap items-stretch gap-2 pb-0.5 sm:flex-nowrap sm:gap-2.5">
               <div className="flex shrink-0 items-stretch gap-2 sm:gap-2.5">
                 <LabStatusPillMenu
                   compact
@@ -1080,7 +1080,7 @@ export function NewOrderForm({
                   onChange={setUrgentSelection}
                 />
               </div>
-              <div className="flex min-h-0 min-w-0 flex-1 flex-nowrap items-stretch gap-2 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin] sm:gap-2.5 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--input-border)]">
+              <div className="flex min-h-0 min-w-0 basis-full flex-1 flex-nowrap items-stretch gap-2 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin] sm:basis-auto sm:gap-2.5 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--input-border)]">
               <DueDatetimeComboPicker
                 id={`${titleId}-work-received`}
                 label="Поступление"
@@ -1093,7 +1093,7 @@ export function NewOrderForm({
                   );
                 }}
                 title="Когда зашла работа; если не указать — считается момент занесения наряда"
-                className="min-w-0 max-w-[15rem] shrink flex-[1_1_8.5rem]"
+                className="min-w-[8.5rem] max-w-[15rem] shrink-0 flex-[0_0_8.5rem]"
               />
               <DueDatetimeComboPicker
                 id={`${titleId}-work-due`}
@@ -1108,7 +1108,7 @@ export function NewOrderForm({
                   );
                 }}
                 title="Срок лаборатории (8:00–23:30, шаг 30 мин)"
-                className="min-w-0 max-w-[15rem] shrink flex-[1_1_8.5rem]"
+                className="min-w-[8.5rem] max-w-[15rem] shrink-0 flex-[0_0_8.5rem]"
               />
               <DueDatetimeComboPicker
                 id={`${titleId}-patient-appt`}
@@ -1123,7 +1123,7 @@ export function NewOrderForm({
                   );
                 }}
                 title="Дата и время записи пациента (8:00–23:30, шаг 30 мин)"
-                className="min-w-0 max-w-[15rem] shrink flex-[1_1_8.5rem]"
+                className="min-w-[8.5rem] max-w-[15rem] shrink-0 flex-[0_0_8.5rem]"
               />
               </div>
             </div>

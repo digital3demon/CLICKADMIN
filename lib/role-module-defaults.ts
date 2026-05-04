@@ -10,6 +10,7 @@ const DEFAULT_ANALYTICS_ROLES: readonly UserRole[] = [
 /** Все модули в одном списке (для UI и сидов). */
 export const ALL_APP_MODULES: AppModule[] = [
   "ORDERS",
+  "ORDERS_CREATE",
   "KANBAN",
   "KANBAN_EDIT_TITLE",
   "KANBAN_EDIT_DUE_DATE",
@@ -38,6 +39,7 @@ export const ALL_APP_MODULES: AppModule[] = [
 
 export const APP_MODULE_LABELS: Record<AppModule, string> = {
   ORDERS: "Заказы",
+  ORDERS_CREATE: "Создание заказа",
   KANBAN: "Канбан",
   KANBAN_EDIT_TITLE: "Канбан: менять заголовок карточки",
   KANBAN_EDIT_DUE_DATE: "Канбан: менять срок",
@@ -97,7 +99,10 @@ export function defaultModuleAllowed(
   }
 
   const sameAsOrders = (m: AppModule) =>
-    m === "ORDERS" || m === "ORDER_HISTORY" || m === "ATTENTION";
+    m === "ORDERS" ||
+    m === "ORDERS_CREATE" ||
+    m === "ORDER_HISTORY" ||
+    m === "ATTENTION";
 
   if (sameAsOrders(module)) {
     return true;

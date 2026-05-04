@@ -377,6 +377,8 @@ enum OrderChatCorrectionSource {
 enum AppModule {
   /// Заказы, наряды, новый заказ
   ORDERS
+  /// Создание нового заказа
+  ORDERS_CREATE
   KANBAN
   /// Канбан: можно менять заголовок карточки
   KANBAN_EDIT_TITLE

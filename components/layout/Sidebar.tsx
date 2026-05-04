@@ -36,7 +36,7 @@ const WorkdaySunMoon = dynamic(
 
 export function Sidebar() {
   const router = useRouter();
-  const { open: openNewOrder, canOpen } = useNewOrderPanel();
+  const { open: openNewOrder, canOpen, canCreate } = useNewOrderPanel();
   const [sessionUser, setSessionUser] = useState<{
     email: string;
     displayName: string;
@@ -184,7 +184,9 @@ export function Sidebar() {
             type="button"
             disabled={!canOpen}
             title={
-              canOpen
+              !canCreate
+                ? "Нет доступа к созданию нового заказа"
+                : canOpen
                 ? "Новый заказ"
                 : "Уже 5 окон нового заказа (включая свёрнутые полоски внизу экрана). Закройте лишние или разверните и очистите черновик."
             }

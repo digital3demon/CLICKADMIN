@@ -8,6 +8,7 @@ type Rule = { prefix: string; module: AppModule };
  */
 const RULES: Rule[] = [
   { prefix: "/directory/users", module: "CONFIG_USERS" },
+  { prefix: "/orders/new", module: "ORDERS_CREATE" },
   { prefix: "/api/orders/reorder-lines", module: "KANBAN_MOVE_TO_OTHER_BOARD" },
   { prefix: "/api/orders/kaiten-due", module: "KANBAN_EDIT_DUE_DATE" },
   { prefix: "/api/orders/kaiten-track", module: "KANBAN_EDIT_TRACK" },

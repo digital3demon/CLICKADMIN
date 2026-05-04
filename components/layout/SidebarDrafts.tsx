@@ -15,7 +15,7 @@ export function SidebarDrafts() {
     getDraftsSnapshot,
     getDraftsServerSnapshot,
   );
-  const { openFromDraft, canOpen } = useNewOrderPanel();
+  const { openFromDraft, canOpen, canCreate } = useNewOrderPanel();
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   const hasDrafts = drafts.length > 0;
@@ -63,7 +63,9 @@ export function SidebarDrafts() {
                 type="button"
                 disabled={!canOpen}
                 title={
-                  !canOpen
+                  !canCreate
+                    ? "Нет доступа к созданию нового заказа"
+                    : !canOpen
                     ? "Закройте или сверните одно из окон (макс. 5)"
                     : "Продолжить черновик"
                 }

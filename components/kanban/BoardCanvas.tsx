@@ -622,15 +622,53 @@ export function BoardCanvas({
     const el = horizontalScrollRef.current;
     if (!el) return;
 
+    const canScrollVerticallyFromTarget = (
+      target: EventTarget | null,
+      deltaY: number,
+    ): boolean => {
+      if (!(target instanceof Node)) return false;
+      let node: Node | null = target;
+      while (node && node !== el) {
+        if (node instanceof HTMLElement) {
+          const cs = window.getComputedStyle(node);
+          const overflowY = cs.overflowY;
+          const scrollableY =
+            (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+            node.scrollHeight > node.clientHeight;
+          if (scrollableY) {
+            if (deltaY < 0 && node.scrollTop > 0) return true;
+            if (deltaY > 0 && node.scrollTop + node.clientHeight < node.scrollHeight) {
+              return true;
+            }
+          }
+        }
+        node = node.parentNode;
+      }
+      return false;
+    };
+
     const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) return;
+
+      const canScrollY = canScrollVerticallyFromTarget(e.target, e.deltaY);
       if (e.shiftKey) {
+        if (canScrollY) return;
         e.preventDefault();
         el.scrollLeft += e.deltaY;
         return;
       }
+
       const ax = Math.abs(e.deltaX);
       const ay = Math.abs(e.deltaY);
+      // На тачпаде жест обычно немного диагональный. Если внутри карточек есть куда
+      // скроллить по Y — отдаём событие нативному вертикальному скроллу.
+      if (canScrollY && ay >= ax * 0.8) return;
+
       if (ax > 0 && ax >= ay) {
+        const canScrollLeft = e.deltaX < 0 && el.scrollLeft > 0;
+        const canScrollRight =
+          e.deltaX > 0 && el.scrollLeft + el.clientWidth < el.scrollWidth;
+        if (!canScrollLeft && !canScrollRight) return;
         e.preventDefault();
         el.scrollLeft += e.deltaX;
       }

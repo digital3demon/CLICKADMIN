@@ -17,7 +17,7 @@ export function DashboardActions({
 }: {
   attentionCount?: number;
 }) {
-  const { open: openNewOrder, canOpen } = useNewOrderPanel();
+  const { open: openNewOrder, canOpen, canCreate } = useNewOrderPanel();
 
   return (
     <>
@@ -65,7 +65,9 @@ export function DashboardActions({
           type="button"
           disabled={!canOpen}
           title={
-            canOpen
+            !canCreate
+              ? "Нет доступа к созданию нового заказа"
+              : canOpen
               ? undefined
               : "Открыто максимум окон нового заказа (5). Закройте или сверните одно."
           }

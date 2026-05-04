@@ -16,6 +16,7 @@ import {
 } from "@/lib/order-create-service";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
+import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 
 /** Ответ: { orders, nextCursor }. Параметры: limit (1–200, по умолчанию 80), cursor (base64url). */
 export async function GET(req: Request) {
@@ -80,6 +81,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
       }
       const tenantId = await requireSessionTenantId(s);
+      const moduleAccess = await getEffectiveModuleAccess(s.tid, s.role);
+      if (moduleAccess.ORDERS_CREATE !== true) {
+        return NextResponse.json(
+          { error: "Недостаточно прав для создания заказа" },
+          { status: 403 },
+        );
+      }
       const body = (await req.json()) as CreateOrderBody;
       const result = await createOrderFromBody(
         { ordersPrisma, clientsPrisma, pricingPrisma },
