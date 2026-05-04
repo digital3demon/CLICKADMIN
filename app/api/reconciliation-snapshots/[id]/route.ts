@@ -1,20 +1,27 @@
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/get-prisma";
+import {
+  ORDER_PAYMENT_RECON_PAID,
+  ORDER_PAYMENT_RECON_UNPAID,
+  ORDER_PAYMENT_SVERKA,
+} from "@/lib/order-clinic-client-fields";
 /** Скачать автосверку (xlsx). */
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
   try {
+    const prisma = await getPrisma();
     const { id } = await ctx.params;
     if (!id?.trim()) {
       return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
     }
 
-    const row = await (await getPrisma()).clinicReconciliationSnapshot.findUnique({
+    const row = await prisma.clinicReconciliationSnapshot.findUnique({
       where: { id: id.trim() },
       select: {
+        id: true,
         periodFromStr: true,
         periodToStr: true,
         xlsxBytes: true,
@@ -30,6 +37,12 @@ export async function GET(
     );
     const raw = row.xlsxBytes;
     const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+    void prisma.clinicReconciliationSnapshot
+      .update({
+        where: { id: row.id },
+        data: { downloadedAt: new Date() },
+      })
+      .catch(() => {});
 
     return new NextResponse(u8, {
       status: 200,
@@ -51,6 +64,7 @@ export async function PATCH(
   ctx: { params: Promise<{ id: string }> },
 ) {
   try {
+    const prisma = await getPrisma();
     const { id } = await ctx.params;
     if (!id?.trim()) {
       return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
@@ -58,23 +72,86 @@ export async function PATCH(
 
     const body = (await req.json().catch(() => ({}))) as {
       dismissed?: boolean;
+      paymentStatus?: "UNPAID" | "PAID";
     };
-    if (body.dismissed !== true) {
-      return NextResponse.json({ error: "Ожидался dismissed: true" }, { status: 400 });
+    const idTrimmed = id.trim();
+    if (body.dismissed === true) {
+      await prisma.clinicReconciliationSnapshot.updateMany({
+        where: { id: idTrimmed, dismissedAt: null },
+        data: { dismissedAt: new Date() },
+      });
+      try {
+        revalidateTag("attention-reminders");
+      } catch {
+        /* ignore */
+      }
+      return NextResponse.json({ ok: true });
+    }
+    if (body.paymentStatus !== "UNPAID" && body.paymentStatus !== "PAID") {
+      return NextResponse.json(
+        { error: "Ожидался dismissed: true или paymentStatus: UNPAID|PAID" },
+        { status: 400 },
+      );
     }
 
-    await (await getPrisma()).clinicReconciliationSnapshot.updateMany({
-      where: { id: id.trim(), dismissedAt: null },
-      data: { dismissedAt: new Date() },
+    const snapshot = await prisma.clinicReconciliationSnapshot.findUnique({
+      where: { id: idTrimmed },
+      select: {
+        id: true,
+        clinicId: true,
+        periodFromStr: true,
+        periodToStr: true,
+        orderIdsJson: true,
+      },
     });
-
-    try {
-      revalidateTag("attention-reminders");
-    } catch {
-      /* ignore */
+    if (!snapshot) {
+      return NextResponse.json({ error: "Не найдено" }, { status: 404 });
     }
+    const rangeFrom = new Date(`${snapshot.periodFromStr}T00:00:00.000Z`);
+    const rangeTo = new Date(`${snapshot.periodToStr}T23:59:59.999Z`);
+    if (Number.isNaN(rangeFrom.getTime()) || Number.isNaN(rangeTo.getTime())) {
+      return NextResponse.json({ error: "Некорректный период снимка" }, { status: 400 });
+    }
+    const orderIds =
+      Array.isArray(snapshot.orderIdsJson) &&
+      snapshot.orderIdsJson.every((x) => typeof x === "string")
+        ? (snapshot.orderIdsJson as string[])
+        : [];
+    const targetPayment =
+      body.paymentStatus === "PAID"
+        ? ORDER_PAYMENT_RECON_PAID
+        : ORDER_PAYMENT_RECON_UNPAID;
+    await prisma.$transaction([
+      prisma.clinicReconciliationSnapshot.update({
+        where: { id: snapshot.id },
+        data: {
+          paymentStatus: body.paymentStatus,
+          paidAt: body.paymentStatus === "PAID" ? new Date() : null,
+        },
+      }),
+      prisma.order.updateMany({
+        where: {
+          clinicId: snapshot.clinicId,
+          archivedAt: null,
+          createdAt: { gte: rangeFrom, lte: rangeTo },
+          payment: {
+            in: [
+              ORDER_PAYMENT_SVERKA,
+              ORDER_PAYMENT_RECON_UNPAID,
+              ORDER_PAYMENT_RECON_PAID,
+            ],
+          },
+          OR: [
+            { excludeFromReconciliation: false },
+            { excludeFromReconciliationUntil: { lt: rangeTo } },
+          ],
+          ...(orderIds.length > 0 ? { id: { in: orderIds } } : {}),
+        },
+        data: { payment: targetPayment },
+      }),
+    ]);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, paymentStatus: body.paymentStatus });
   } catch (e) {
     console.error("[PATCH reconciliation-snapshot]", e);
     return NextResponse.json({ error: "Не удалось обновить" }, { status: 500 });

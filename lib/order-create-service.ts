@@ -32,6 +32,12 @@ import { getActorForRevision } from "@/lib/actor-from-session";
 import { isOrderCorrectionTrack } from "@/lib/order-correction-track";
 import { validateContinuesFromOrderId } from "@/lib/order-validate-continuation";
 import { resolveClinicIdForDoctorIpOrder } from "@/lib/resolve-order-doctor-ip-clinic";
+import {
+  ORDER_PAYMENT_NOT_PAID,
+  ORDER_PAYMENT_PARTIAL,
+  ORDER_PAYMENT_RECON_UNPAID,
+  isReconciliationPaymentStatus,
+} from "@/lib/order-clinic-client-fields";
 
 const KAITEN_TRACK = new Set<string>([
   "ORTHOPEDICS",
@@ -49,6 +55,7 @@ export type CreateOrderBody = {
   patientName?: string | null;
   legalEntity?: string | null;
   payment?: string | null;
+  paymentPartialRub?: number | null;
   excludeFromReconciliation?: boolean;
   comments?: string | null;
   clientOrderText?: string | null;
@@ -207,12 +214,14 @@ export async function createOrderFromBody(
   }
 
   let clinicPriceListKind: OrderPriceListKind | null = null;
+  let clinicWorksWithReconciliation = false;
   if (resolvedClinicId) {
     const c = await clientsPrisma.clinic.findUnique({
       where: { id: resolvedClinicId },
-      select: { orderPriceListKind: true },
+      select: { orderPriceListKind: true, worksWithReconciliation: true },
     });
     clinicPriceListKind = c?.orderPriceListKind ?? null;
+    clinicWorksWithReconciliation = c?.worksWithReconciliation === true;
   }
   const orderPriceListKind = resolvedOrderPriceListKindFromContractors({
     clinicId: resolvedClinicId,
@@ -303,6 +312,22 @@ export async function createOrderFromBody(
   const normalizedProsthetics = normalizeProstheticsInput(body.prosthetics);
   const prostheticsPrisma = prostheticsToJson(normalizedProsthetics);
 
+  const requestedPayment = body.payment?.trim() || null;
+  const payment =
+    clinicWorksWithReconciliation
+      ? ORDER_PAYMENT_RECON_UNPAID
+      : requestedPayment == null || isReconciliationPaymentStatus(requestedPayment)
+        ? ORDER_PAYMENT_NOT_PAID
+        : requestedPayment;
+  let paymentPartialRub: number | null = null;
+  if (payment === ORDER_PAYMENT_PARTIAL) {
+    const n = Number(body.paymentPartialRub);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > 99_999_999) {
+      return fail(400, "Для частичной оплаты укажите сумму (целые рубли)");
+    }
+    paymentPartialRub = n;
+  }
+
   let correctionTrack: OrderCorrectionTrack | null = null;
   if (
     body.correctionTrack !== undefined &&
@@ -343,7 +368,8 @@ export async function createOrderFromBody(
         : String(body.clientOrderText ?? "").trim() || null,
     legalEntity: body.legalEntity?.trim() || null,
     orderPriceListKind,
-    payment: body.payment?.trim() || null,
+    payment,
+    paymentPartialRub,
     excludeFromReconciliation: Boolean(body.excludeFromReconciliation),
     excludeFromReconciliationUntil: null,
     shade: null,

@@ -233,6 +233,7 @@ export default async function OrderEditPage({
     courierDeliveryName: courierDelivery?.name ?? null,
     legalEntity: order.legalEntity,
     payment: order.payment,
+    paymentPartialRub: order.paymentPartialRub,
     excludeFromReconciliation: order.excludeFromReconciliation,
     excludeFromReconciliationUntil:
       order.excludeFromReconciliationUntil?.toISOString() ?? null,

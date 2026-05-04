@@ -32,6 +32,12 @@ type SnapshotRow = {
   periodToStr: string;
   periodLabelRu: string;
   legalEntityLabel: string;
+  paymentStatus: "UNPAID" | "PAID";
+  paidAt: string | null;
+  downloadedAt: string | null;
+  invoiceFileName: string | null;
+  invoiceNumber: string | null;
+  invoiceUploadedAt: string | null;
   createdAt: string;
   dismissedAt: string | null;
 };
@@ -41,6 +47,10 @@ function slotLabelRu(slot: string): string {
   if (slot === "SECOND_HALF") return "2-я половина месяца";
   if (slot === "MONTHLY_FULL") return "Весь месяц";
   return slot;
+}
+
+function snapshotPaymentPill(status: "UNPAID" | "PAID"): string {
+  return status === "PAID" ? "ОПЛАЧЕНО" : "НЕ ОПЛАЧЕНО";
 }
 
 type PeriodLineRow = {
@@ -119,6 +129,9 @@ export function FinancePanel({
 
   const [snapshots, setSnapshots] = useState<SnapshotRow[]>([]);
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [snapshotActionId, setSnapshotActionId] = useState<string | null>(null);
+  const [snapshotActionError, setSnapshotActionError] = useState<string | null>(null);
+  const [issuingSnapshot, setIssuingSnapshot] = useState(false);
 
   const [periodLines, setPeriodLines] = useState<PeriodLineRow[]>([]);
   const [periodLinesLoading, setPeriodLinesLoading] = useState(false);
@@ -175,6 +188,84 @@ export function FinancePanel({
   useEffect(() => {
     void loadSnapshots();
   }, [loadSnapshots]);
+
+  const issueCurrentPeriodSnapshot = useCallback(async () => {
+    setIssuingSnapshot(true);
+    setSnapshotActionError(null);
+    try {
+      const res = await fetch(`/api/clinics/${clinicId}/reconciliation-snapshots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from,
+          to,
+          orderIds: selectedOrderIds,
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setSnapshotActionError(j.error ?? "Не удалось выставить период в сверку");
+        return;
+      }
+      await loadSnapshots();
+    } catch {
+      setSnapshotActionError("Сеть или сервер недоступны");
+    } finally {
+      setIssuingSnapshot(false);
+    }
+  }, [clinicId, from, to, selectedOrderIds, loadSnapshots]);
+
+  const setSnapshotPaymentStatus = useCallback(
+    async (snapshotId: string, paymentStatus: "UNPAID" | "PAID") => {
+      setSnapshotActionId(snapshotId);
+      setSnapshotActionError(null);
+      try {
+        const res = await fetch(`/api/reconciliation-snapshots/${snapshotId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentStatus }),
+        });
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setSnapshotActionError(j.error ?? "Не удалось изменить статус периода");
+          return;
+        }
+        await loadSnapshots();
+        router.refresh();
+      } catch {
+        setSnapshotActionError("Сеть или сервер недоступны");
+      } finally {
+        setSnapshotActionId(null);
+      }
+    },
+    [loadSnapshots, router],
+  );
+
+  const uploadSnapshotInvoice = useCallback(
+    async (snapshotId: string, file: File) => {
+      setSnapshotActionId(snapshotId);
+      setSnapshotActionError(null);
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch(`/api/reconciliation-snapshots/${snapshotId}/invoice`, {
+          method: "POST",
+          body: fd,
+        });
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setSnapshotActionError(j.error ?? "Не удалось загрузить счёт");
+          return;
+        }
+        await loadSnapshots();
+      } catch {
+        setSnapshotActionError("Сеть или сервер недоступны");
+      } finally {
+        setSnapshotActionId(null);
+      }
+    },
+    [loadSnapshots],
+  );
 
   const loadPeriodLines = useCallback(async () => {
     setPeriodLinesLoading(true);
@@ -484,6 +575,16 @@ export function FinancePanel({
           >
             Показать
           </button>
+          {worksWithReconciliation ? (
+            <button
+              type="button"
+              onClick={() => void issueCurrentPeriodSnapshot()}
+              disabled={issuingSnapshot}
+              className="inline-flex rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-4 py-2 text-sm font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)] disabled:opacity-60"
+            >
+              {issuingSnapshot ? "Формирование…" : "Выставить в сверку"}
+            </button>
+          ) : null}
           <a
             href={pdfHref}
             className="inline-flex rounded-full border border-[var(--card-border)] bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
@@ -497,6 +598,9 @@ export function FinancePanel({
             Скачать сверку (xlsx)
           </a>
         </div>
+        {snapshotActionError ? (
+          <p className="mt-2 text-sm text-red-700">{snapshotActionError}</p>
+        ) : null}
 
         <div className="mt-6 border-t border-[var(--card-border)] pt-5">
           <div className="flex flex-wrap items-center gap-2">
@@ -728,17 +832,17 @@ export function FinancePanel({
         {worksWithReconciliation ? (
           <div className="mt-6 border-t border-[var(--card-border)] pt-5">
             <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-              Автосверки (по расписанию)
+              Периоды сверки
             </h3>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Файлы, сформированные в конце периода (МСК, рабочие дни). Дубликаты
-              за тот же период не создаются.
+              Здесь отображаются все выставленные периоды. Для каждого периода
+              можно загрузить счёт и отметить оплату всей сверки.
             </p>
             {snapshotsLoading ? (
               <p className="mt-2 text-sm text-[var(--text-muted)]">Загрузка…</p>
             ) : snapshots.length === 0 ? (
               <p className="mt-2 text-sm text-[var(--text-muted)]">
-                Пока нет сохранённых автосверок.
+                Пока нет выставленных периодов.
               </p>
             ) : (
               <ul className="mt-3 space-y-2 text-sm">
@@ -749,13 +853,23 @@ export function FinancePanel({
                   >
                     <div className="min-w-0">
                       <p className="font-medium text-[var(--app-text)]">
-                        {s.periodLabelRu}{" "}
+                        {s.periodFromStr} — {s.periodToStr}{" "}
                         <span className="text-xs font-normal text-[var(--text-muted)]">
                           ({slotLabelRu(s.slot)})
                         </span>
                       </p>
-                      <p className="text-xs text-[var(--text-secondary)]">
-                        {s.legalEntityLabel} ·{" "}
+                      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                        <span
+                          className={
+                            s.paymentStatus === "PAID"
+                              ? "rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-900"
+                              : "rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 font-semibold text-amber-900"
+                          }
+                        >
+                          {snapshotPaymentPill(s.paymentStatus)}
+                        </span>
+                        <span>{s.legalEntityLabel}</span>
+                        <span>·</span>
                         {new Date(s.createdAt).toLocaleString("ru-RU", {
                           day: "2-digit",
                           month: "2-digit",
@@ -763,15 +877,60 @@ export function FinancePanel({
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
-                        {s.dismissedAt ? " · уведомление скрыто" : ""}
+                        {s.downloadedAt ? (
+                          <>
+                            <span>·</span>
+                            <span>
+                              скачано{" "}
+                              {new Date(s.downloadedAt).toLocaleDateString("ru-RU")}
+                            </span>
+                          </>
+                        ) : null}
                       </p>
                     </div>
-                    <a
-                      href={`/api/reconciliation-snapshots/${s.id}`}
-                      className="shrink-0 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-semibold text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
-                    >
-                      Скачать
-                    </a>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <a
+                        href={`/api/reconciliation-snapshots/${s.id}`}
+                        className="shrink-0 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-semibold text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+                      >
+                        Скачать сверку
+                      </a>
+                      {s.invoiceFileName ? (
+                        <a
+                          href={`/api/reconciliation-snapshots/${s.id}/invoice`}
+                          className="shrink-0 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-semibold text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+                        >
+                          Скачать счёт {s.invoiceNumber?.trim() || ""}
+                        </a>
+                      ) : (
+                        <label className="shrink-0 cursor-pointer rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)]">
+                          Загрузить счёт
+                          <input
+                            type="file"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              e.currentTarget.value = "";
+                              if (!f) return;
+                              void uploadSnapshotInvoice(s.id, f);
+                            }}
+                          />
+                        </label>
+                      )}
+                      <button
+                        type="button"
+                        disabled={snapshotActionId === s.id}
+                        onClick={() =>
+                          void setSnapshotPaymentStatus(
+                            s.id,
+                            s.paymentStatus === "PAID" ? "UNPAID" : "PAID",
+                          )
+                        }
+                        className="shrink-0 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                      >
+                        {s.paymentStatus === "PAID" ? "Отметить НЕ оплачено" : "Оплачено"}
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -785,8 +944,8 @@ export function FinancePanel({
               Исключено из основной сверки за период
             </h3>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Наряды с оплатой «СВЕРКА», по которым отмечено исключение из сверки
-              или перенос на следующий период. Их суммы уже учтены в обороте
+              Наряды со статусом оплаты сверки, по которым отмечено исключение из
+              сверки или перенос на следующий период. Их суммы уже учтены в обороте
               выше; в файле сверки они на отдельном листе. Здесь можно вернуть
               наряд в сверку за периоды или оставить исключение до следующего
               периода выгрузки.

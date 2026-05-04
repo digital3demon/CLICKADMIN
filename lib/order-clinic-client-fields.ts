@@ -1,5 +1,11 @@
 /** Значение «Оплата» в наряде (как в БД и старых данных). */
 export const ORDER_PAYMENT_SVERKA = "СВЕРКА" as const;
+export const ORDER_PAYMENT_NOT_PAID = "Не оплачено" as const;
+export const ORDER_PAYMENT_EXPECTED = "Ожидает оплаты" as const;
+export const ORDER_PAYMENT_PARTIAL = "Частично оплачено" as const;
+export const ORDER_PAYMENT_PAID = "Оплачено" as const;
+export const ORDER_PAYMENT_RECON_UNPAID = "Сверка-НЕ ОПЛАЧЕНО" as const;
+export const ORDER_PAYMENT_RECON_PAID = "Сверка-ОПЛАЧЕНО" as const;
 
 const LEGAL_PLACEHOLDER = "Выбрать из списка" as const;
 
@@ -19,13 +25,18 @@ export function legalEntitySelectFromClinicBilling(
 export function sverkaPaymentSelectLabel(
   reconciliationFrequency: "MONTHLY_1" | "MONTHLY_2" | null | undefined,
 ): string {
-  if (reconciliationFrequency === "MONTHLY_1") {
-    return "СВЕРКА · 1 раз в месяц";
-  }
-  if (reconciliationFrequency === "MONTHLY_2") {
-    return "СВЕРКА · 2 раза в месяц";
-  }
-  return ORDER_PAYMENT_SVERKA;
+  if (reconciliationFrequency === "MONTHLY_1") return "Сверка · 1 раз в месяц";
+  if (reconciliationFrequency === "MONTHLY_2") return "Сверка · 2 раза в месяц";
+  return "Сверка";
+}
+
+export function isReconciliationPaymentStatus(value: string | null | undefined): boolean {
+  const v = (value ?? "").trim();
+  return (
+    v === ORDER_PAYMENT_RECON_UNPAID ||
+    v === ORDER_PAYMENT_RECON_PAID ||
+    v === ORDER_PAYMENT_SVERKA
+  );
 }
 
 /** Если текущее значение не входит в список — добавляем в начало (старые/кастомные данные). */

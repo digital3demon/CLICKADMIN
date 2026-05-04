@@ -8,6 +8,11 @@ import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition
 import { parseSnapshotV1 } from "@/lib/order-revision-snapshot";
 import { orderLinesIncludedInReconciliationExport } from "@/lib/order-reconciliation-export";
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
+import {
+  ORDER_PAYMENT_RECON_PAID,
+  ORDER_PAYMENT_RECON_UNPAID,
+  ORDER_PAYMENT_SVERKA,
+} from "@/lib/order-clinic-client-fields";
 
 export type ReconciliationRow = {
   orderId: string;
@@ -606,6 +611,13 @@ export async function listClinicReconciliationExcludedOrders(
       clinicId,
       createdAt: { gte: range.from, lte: range.to },
       excludeFromReconciliation: true,
+      payment: {
+        in: [
+          ORDER_PAYMENT_SVERKA,
+          ORDER_PAYMENT_RECON_UNPAID,
+          ORDER_PAYMENT_RECON_PAID,
+        ],
+      },
       OR: [
         { excludeFromReconciliationUntil: null },
         { excludeFromReconciliationUntil: { gte: range.to } },

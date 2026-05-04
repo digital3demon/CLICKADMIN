@@ -5,7 +5,7 @@ import type { BridgeLineInput } from "@/lib/detail-lines-to-constructions";
 import type { OrderProstheticsV1 } from "@/lib/order-prosthetics";
 import type { OrderCorrectionTrackValue } from "@/lib/order-correction-track";
 
-export const ORDER_DRAFT_SNAPSHOT_VERSION = 12 as const;
+export const ORDER_DRAFT_SNAPSHOT_VERSION = 13 as const;
 
 export type OrderDraftSnapshot = {
   version: typeof ORDER_DRAFT_SNAPSHOT_VERSION;
@@ -14,6 +14,8 @@ export type OrderDraftSnapshot = {
   doctorId: string;
   legalEntity: string;
   payment: string;
+  /** v13+ — сумма частичной оплаты (целые рубли) */
+  paymentPartialRub?: number;
   /** v10+ — не включать в выгрузку сверки за период (при оплате «СВЕРКА») */
   excludeFromReconciliation?: boolean;
   patientName: string;

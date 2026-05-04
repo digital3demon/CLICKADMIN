@@ -35,8 +35,14 @@ import {
   ORDER_CLINIC_PRIVATE,
 } from "@/lib/clients-order-ui";
 import {
+  isReconciliationPaymentStatus,
   legalEntitySelectFromClinicBilling,
-  ORDER_PAYMENT_SVERKA,
+  ORDER_PAYMENT_EXPECTED,
+  ORDER_PAYMENT_NOT_PAID,
+  ORDER_PAYMENT_PAID,
+  ORDER_PAYMENT_PARTIAL,
+  ORDER_PAYMENT_RECON_PAID,
+  ORDER_PAYMENT_RECON_UNPAID,
   sverkaPaymentSelectLabel,
   withExtraSelectOption,
 } from "@/lib/order-clinic-client-fields";
@@ -118,11 +124,12 @@ const LEGAL_ENTITIES = [
 
 const PAYMENT_OPTIONS = [
   "Выбрать из списка",
-  "Не выбрано",
-  "Ожидает оплаты",
-  "Частично оплачено",
-  "Оплачено",
-  ORDER_PAYMENT_SVERKA,
+  ORDER_PAYMENT_NOT_PAID,
+  ORDER_PAYMENT_EXPECTED,
+  ORDER_PAYMENT_PARTIAL,
+  ORDER_PAYMENT_PAID,
+  ORDER_PAYMENT_RECON_UNPAID,
+  ORDER_PAYMENT_RECON_PAID,
 ] as const;
 
 const PLACEHOLDER_DOCTOR_ID = "sys-placeholder-doctor-reimport";
@@ -163,7 +170,8 @@ export function NewOrderForm({
   const [clinicId, setClinicId] = useState("");
   const [doctorId, setDoctorId] = useState("");
   const [legalEntity, setLegalEntity] = useState<string>(LEGAL_ENTITIES[0]);
-  const [payment, setPayment] = useState<string>(PAYMENT_OPTIONS[0]);
+  const [payment, setPayment] = useState<string>(ORDER_PAYMENT_NOT_PAID);
+  const [paymentPartialRubText, setPaymentPartialRubText] = useState("");
   const [patientName, setPatientName] = useState("");
   const [clientOrderText, setClientOrderText] = useState("");
   const [comments, setComments] = useState("");
@@ -255,10 +263,13 @@ export function NewOrderForm({
   const paymentSelectOptions = useMemo(() => {
     const fin = effectiveFinanceClinic ?? selectedClinic;
     const includeSverka = fin?.worksWithReconciliation === true;
-    const noSverka = PAYMENT_OPTIONS.filter((p) => p !== ORDER_PAYMENT_SVERKA);
     const base = includeSverka
-      ? [...noSverka, ORDER_PAYMENT_SVERKA]
-      : [...noSverka];
+      ? [ORDER_PAYMENT_RECON_UNPAID, ORDER_PAYMENT_RECON_PAID]
+      : PAYMENT_OPTIONS.filter(
+          (p) =>
+            p !== ORDER_PAYMENT_RECON_UNPAID &&
+            p !== ORDER_PAYMENT_RECON_PAID,
+        );
     return withExtraSelectOption(base, payment);
   }, [effectiveFinanceClinic, selectedClinic, payment]);
 
@@ -279,21 +290,28 @@ export function NewOrderForm({
     const row = clinics.find((x) => x.id === clinicId);
     if (!row) return;
     setLegalEntity(legalEntitySelectFromClinicBilling(row.billingLegalForm));
-    if (row.worksWithReconciliation === true) {
-      setPayment(ORDER_PAYMENT_SVERKA);
+    if (prev !== null && prev !== clinicId) {
+      if (row.worksWithReconciliation === true) {
+        setPayment(ORDER_PAYMENT_RECON_UNPAID);
+      } else {
+        setPayment(ORDER_PAYMENT_NOT_PAID);
+      }
     }
   }, [clinicId, clinics]);
 
   /** «Сверка» в оплате только если в карточке клиники (или ИП) включена сверка. */
   useEffect(() => {
     if (isReconciliationClinic) {
-      if (payment !== ORDER_PAYMENT_SVERKA) {
-        setPayment(ORDER_PAYMENT_SVERKA);
+      if (
+        payment !== ORDER_PAYMENT_RECON_UNPAID &&
+        payment !== ORDER_PAYMENT_RECON_PAID
+      ) {
+        setPayment(ORDER_PAYMENT_RECON_UNPAID);
       }
       return;
     }
-    if (payment === ORDER_PAYMENT_SVERKA) {
-      setPayment(PAYMENT_OPTIONS[0]);
+    if (isReconciliationPaymentStatus(payment)) {
+      setPayment(ORDER_PAYMENT_NOT_PAID);
     }
   }, [isReconciliationClinic, payment]);
 
@@ -303,9 +321,15 @@ export function NewOrderForm({
     if (legalEntity !== "ИП") return;
     const c = effectiveFinanceClinic;
     if (c?.worksWithReconciliation === true) {
-      setPayment(ORDER_PAYMENT_SVERKA);
+      setPayment(ORDER_PAYMENT_RECON_UNPAID);
     }
   }, [clinicId, legalEntity, effectiveFinanceClinic]);
+
+  useEffect(() => {
+    if (payment === ORDER_PAYMENT_PARTIAL) return;
+    if (paymentPartialRubText === "") return;
+    setPaymentPartialRubText("");
+  }, [payment, paymentPartialRubText]);
 
   const refreshOrderNumberPreview = useCallback(async () => {
     try {
@@ -335,6 +359,9 @@ export function NewOrderForm({
     setDoctorId(s.doctorId);
     setLegalEntity(s.legalEntity);
     setPayment(s.payment);
+    setPaymentPartialRubText(
+      typeof s.paymentPartialRub === "number" ? String(s.paymentPartialRub) : "",
+    );
     setPatientName(s.patientName);
     setClientOrderText(
       typeof s.clientOrderText === "string" ? s.clientOrderText : "",
@@ -401,6 +428,10 @@ export function NewOrderForm({
       doctorId,
       legalEntity,
       payment,
+      paymentPartialRub:
+        payment === ORDER_PAYMENT_PARTIAL
+          ? Number(paymentPartialRubText.trim()) || 0
+          : undefined,
       excludeFromReconciliation: false,
       patientName,
       clientOrderText,
@@ -427,6 +458,7 @@ export function NewOrderForm({
       doctorId,
       legalEntity,
       payment,
+      paymentPartialRubText,
       patientName,
       clientOrderText,
       comments,
@@ -709,6 +741,15 @@ export function NewOrderForm({
         setSaveError("Укажите корректную дату записи (Запись)");
         return;
       }
+      let parsedPaymentPartialRub: number | null = null;
+      if (payment === ORDER_PAYMENT_PARTIAL) {
+        const n = Number(paymentPartialRubText.trim());
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+          setSaveError("Для частичной оплаты укажите сумму (целые рубли)");
+          return;
+        }
+        parsedPaymentPartialRub = n;
+      }
 
       setSaving(true);
       try {
@@ -726,6 +767,7 @@ export function NewOrderForm({
             legalEntity:
               legalEntity === LEGAL_ENTITIES[0] ? null : legalEntity,
             payment: payment === PAYMENT_OPTIONS[0] ? null : payment,
+            paymentPartialRub: parsedPaymentPartialRub,
             excludeFromReconciliation: false,
             clientOrderText: clientOrderText.trim() || null,
             comments: comments.trim() || null,
@@ -848,6 +890,7 @@ export function NewOrderForm({
       patientName,
       legalEntity,
       payment,
+      paymentPartialRubText,
       selectedClinic?.worksWithReconciliation,
       clientOrderText,
       comments,
@@ -1407,16 +1450,40 @@ export function NewOrderForm({
                     >
                       {paymentSelectOptions.map((o) => (
                         <option key={o} value={o}>
-                          {o === ORDER_PAYMENT_SVERKA
+                          {isReconciliationPaymentStatus(o)
                             ? sverkaPaymentSelectLabel(
                                 (effectiveFinanceClinic ?? selectedClinic)
                                   ?.reconciliationFrequency,
-                              )
+                              ) +
+                              (o === ORDER_PAYMENT_RECON_PAID
+                                ? " · ОПЛАЧЕНО"
+                                : " · НЕ ОПЛАЧЕНО")
                             : o}
                         </option>
                       ))}
                     </select>
                   </div>
+                  {payment === ORDER_PAYMENT_PARTIAL ? (
+                    <>
+                      <FieldLabel htmlFor={`${titleId}-payment-partial`}>
+                        Оплачено (руб.)
+                      </FieldLabel>
+                      <div>
+                        <input
+                          id={`${titleId}-payment-partial`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          className={inputClass}
+                          value={paymentPartialRubText}
+                          onChange={(e) =>
+                            setPaymentPartialRubText(e.target.value)
+                          }
+                          placeholder="Например, 15000"
+                        />
+                      </div>
+                    </>
+                  ) : null}
                 </FormSection>
 
                 <section className="mt-4 border-t border-[var(--card-border)] pt-4">

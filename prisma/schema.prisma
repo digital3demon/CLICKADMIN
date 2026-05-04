@@ -30,6 +30,11 @@ enum ReconciliationSnapshotSlot {
   SECOND_HALF
 }
 
+enum ReconciliationSnapshotPaymentStatus {
+  UNPAID
+  PAID
+}
+
 /// Событие по контрагенту в общей ленте «История изменений»
 enum ContractorRevisionKind {
   CREATE
@@ -220,6 +225,16 @@ model ClinicReconciliationSnapshot {
   periodLabelRu    String
   legalEntityLabel String
   xlsxBytes        Bytes
+  /// Если выбрана подвыборка для выставления сверки — список id нарядов в этой выгрузке.
+  orderIdsJson     Json?
+  paymentStatus    ReconciliationSnapshotPaymentStatus @default(UNPAID)
+  paidAt           DateTime?
+  downloadedAt     DateTime?
+  invoiceFileName  String?
+  invoiceMimeType  String?
+  invoiceNumber    String?
+  invoiceBytes     Bytes?
+  invoiceUploadedAt DateTime?
   createdAt        DateTime                   @default(now())
   dismissedAt      DateTime?
 
@@ -774,6 +789,8 @@ model Order {
   invoiceParsedLines             Json?
   /// Сумма «к оплате» из счёта, целые рубли (если распознана)
   invoiceParsedTotalRub          Int?
+  /// Сумма частичной оплаты (целые рубли). Используется только при `payment = "Частично оплачено"`.
+  paymentPartialRub              Int?
   /// Текст блока «выставлено» / ручная правка поверх авторазбора
   invoiceParsedSummaryText       String?
   /// Комментарии к счёту и оплатам

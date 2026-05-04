@@ -40,6 +40,13 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { normalizeInvoiceParsedLines } from "@/lib/invoice-parsed-types";
 import { fetchOrderPriceListKindForOrder } from "@/lib/order-price-list-from-contractors";
 import { resolveClinicIdForDoctorIpOrder } from "@/lib/resolve-order-doctor-ip-clinic";
+import {
+  ORDER_PAYMENT_NOT_PAID,
+  ORDER_PAYMENT_PARTIAL,
+  ORDER_PAYMENT_RECON_PAID,
+  ORDER_PAYMENT_RECON_UNPAID,
+  isReconciliationPaymentStatus,
+} from "@/lib/order-clinic-client-fields";
 
 function parseOptionalDateTime(v: unknown): Date | null {
   if (v == null || v === "") return null;
@@ -78,6 +85,7 @@ type PatchBody = {
   labWorkStatus?: string;
   legalEntity?: string | null;
   payment?: string | null;
+  paymentPartialRub?: number | null;
   excludeFromReconciliation?: boolean;
   /** ISO или null — сброс отложенного периода */
   excludeFromReconciliationUntil?: string | null;
@@ -354,6 +362,8 @@ export async function PATCH(
       clinicId: true,
       doctorId: true,
       legalEntity: true,
+      payment: true,
+      paymentPartialRub: true,
       orderNumber: true,
       createdAt: true,
       archivedAt: true,
@@ -422,11 +432,6 @@ export async function PATCH(
     const t =
       body.legalEntity === null ? "" : String(body.legalEntity).trim();
     scalarData.legalEntity = t || null;
-  }
-
-  if (body.payment !== undefined) {
-    const t = body.payment === null ? "" : String(body.payment).trim();
-    scalarData.payment = t || null;
   }
 
   if (body.excludeFromReconciliation !== undefined) {
@@ -767,6 +772,60 @@ export async function PATCH(
     return NextResponse.json({ error: rClinic.error }, { status: 400 });
   }
   const nextClinicId = rClinic.clinicId;
+  const nextClinic = nextClinicId
+    ? await clientsPrisma.clinic.findUnique({
+        where: { id: nextClinicId },
+        select: { worksWithReconciliation: true },
+      })
+    : null;
+  const isReconciliationClinic = nextClinic?.worksWithReconciliation === true;
+
+  let nextPayment: string | undefined;
+  if (body.payment !== undefined) {
+    const t = body.payment === null ? "" : String(body.payment).trim();
+    nextPayment = t || "";
+  }
+  if (isReconciliationClinic) {
+    if (nextPayment === undefined) {
+      const keepPaid = (existing.payment ?? "").trim() === ORDER_PAYMENT_RECON_PAID;
+      nextPayment = keepPaid ? ORDER_PAYMENT_RECON_PAID : ORDER_PAYMENT_RECON_UNPAID;
+    } else {
+      nextPayment =
+        nextPayment === ORDER_PAYMENT_RECON_PAID
+          ? ORDER_PAYMENT_RECON_PAID
+          : ORDER_PAYMENT_RECON_UNPAID;
+    }
+  } else if (nextPayment !== undefined) {
+    if (nextPayment === "" || isReconciliationPaymentStatus(nextPayment)) {
+      nextPayment = ORDER_PAYMENT_NOT_PAID;
+    }
+  }
+  if (nextPayment !== undefined) {
+    scalarData.payment = nextPayment || null;
+  }
+
+  const paymentForPartial =
+    nextPayment !== undefined ? nextPayment : (existing.payment ?? "").trim();
+  if (paymentForPartial === ORDER_PAYMENT_PARTIAL) {
+    if (body.paymentPartialRub !== undefined) {
+      if (body.paymentPartialRub === null) {
+        return NextResponse.json(
+          { error: "Для частичной оплаты укажите сумму (целые рубли)" },
+          { status: 400 },
+        );
+      }
+      const n = Number(body.paymentPartialRub);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > 99_999_999) {
+        return NextResponse.json(
+          { error: "Для частичной оплаты укажите сумму (целые рубли)" },
+          { status: 400 },
+        );
+      }
+      scalarData.paymentPartialRub = n;
+    }
+  } else {
+    scalarData.paymentPartialRub = null;
+  }
 
   if (
     body.doctorId !== undefined ||
