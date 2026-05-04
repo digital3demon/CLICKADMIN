@@ -3,11 +3,13 @@ import {
   buildDraftValues,
   convertDocxToEditableHtml,
   convertEditableHtmlToDocx,
+  extractImageDataUrisFromHtml,
   extractContractNumberFromDocxBuffer,
   formatContractNumber,
   formatYearMonthYYMM,
   generateContractDocxFromTemplate,
   parseGeneratedContractNumber,
+  rehydrateImageMarkers,
   type ClinicContractDraftValues,
 } from "@/lib/clinic-contract";
 import { getPrisma } from "@/lib/get-prisma";
@@ -22,6 +24,38 @@ type JsonBody =
       values: ClinicContractDraftValues;
       editedHtml: string;
     };
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function markAutofilledValues(
+  html: string,
+  values: ClinicContractDraftValues,
+): string {
+  const tokens = [
+    values.contractNumber,
+    values.contractDate,
+    values.orgShortName,
+    values.inn,
+    values.ceoName,
+    values.email,
+    values.requisitesLine,
+  ]
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 2)
+    .sort((a, b) => b.length - a.length);
+
+  let out = html;
+  for (const token of tokens) {
+    const re = new RegExp(escapeRegExp(token), "g");
+    out = out.replace(
+      re,
+      `<span data-contract-fill="1" style="color:#c62828;font-weight:600">${token}</span>`,
+    );
+  }
+  return out;
+}
 
 function asDraftValues(v: unknown): ClinicContractDraftValues | null {
   if (!v || typeof v !== "object") return null;
@@ -241,7 +275,10 @@ export async function POST(
   try {
     body = (await req.json()) as JsonBody;
   } catch {
-    return NextResponse.json({ error: "Ожидается JSON или multipart/form-data" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Не удалось прочитать тело запроса. Повторите сохранение договора." },
+      { status: 400 },
+    );
   }
 
   if (body.action === "prefill") {
@@ -264,7 +301,8 @@ export async function POST(
       return NextResponse.json({ error: "Некорректные данные формы договора" }, { status: 400 });
     }
     const generated = await generateContractDocxFromTemplate(values);
-    const editorHtml = await convertDocxToEditableHtml(generated.docx);
+    const editorHtmlRaw = await convertDocxToEditableHtml(generated.docx);
+    const editorHtml = markAutofilledValues(editorHtmlRaw, values);
     return NextResponse.json({
       ok: true,
       editorText: generated.text,
@@ -283,7 +321,11 @@ export async function POST(
       return NextResponse.json({ error: "Пустой HTML редактора договора" }, { status: 400 });
     }
     const contractNumber = values.contractNumber;
-    const editedDocx = await convertEditableHtmlToDocx(editedHtml);
+    const templateGenerated = await generateContractDocxFromTemplate(values);
+    const templateHtml = await convertDocxToEditableHtml(templateGenerated.docx);
+    const imageUris = extractImageDataUrisFromHtml(templateHtml);
+    const rehydratedHtml = rehydrateImageMarkers(editedHtml, imageUris);
+    const editedDocx = await convertEditableHtmlToDocx(rehydratedHtml);
     await prisma.clinic.update({
       where: { id },
       data: {

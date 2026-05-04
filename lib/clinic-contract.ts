@@ -305,6 +305,31 @@ export async function convertEditableHtmlToDocx(html: string): Promise<Buffer> {
   return Buffer.from(out as ArrayBuffer);
 }
 
+export function extractImageDataUrisFromHtml(html: string): string[] {
+  const out: string[] = [];
+  const re = /<img\b[^>]*\bsrc="(data:[^"]+)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    out.push(m[1]);
+  }
+  return out;
+}
+
+export function rehydrateImageMarkers(
+  htmlWithMarkers: string,
+  imageDataUris: string[],
+): string {
+  return htmlWithMarkers.replace(
+    /\bsrc="contract-image:\/\/(\d+)"/g,
+    (_full, idxRaw: string) => {
+      const idx = Number(idxRaw);
+      const src = imageDataUris[idx];
+      if (!src) return 'src=""';
+      return `src="${src}"`;
+    },
+  );
+}
+
 /**
  * Извлечение номера из текста договора.
  * Не используем \b: в JS это ненадёжно для кириллицы, поэтому ищем явную конструкцию "Договор №".

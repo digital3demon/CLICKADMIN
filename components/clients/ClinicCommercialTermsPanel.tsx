@@ -176,7 +176,7 @@ export function ClinicCommercialTermsPanel({
         body: JSON.stringify({
           action: "save-generated",
           values: draftValues,
-          editedHtml: editorBodyRef.current?.innerHTML || editorHtml,
+          editedHtml: serializeEditorHtmlForSave(),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -252,6 +252,28 @@ export function ClinicCommercialTermsPanel({
     root.focus();
     document.execCommand(command, false, value);
     setEditorHtml(root.innerHTML);
+  };
+
+  const serializeEditorHtmlForSave = () => {
+    const root = editorBodyRef.current;
+    const sourceHtml = root?.innerHTML || editorHtml;
+    if (!sourceHtml) return "";
+    const wrap = document.createElement("div");
+    wrap.innerHTML = sourceHtml;
+    for (const marker of wrap.querySelectorAll('[data-contract-fill="1"]')) {
+      const parent = marker.parentNode;
+      if (!parent) continue;
+      while (marker.firstChild) {
+        parent.insertBefore(marker.firstChild, marker);
+      }
+      parent.removeChild(marker);
+    }
+    let imageIndex = 0;
+    for (const img of wrap.querySelectorAll("img")) {
+      img.setAttribute("src", `contract-image://${imageIndex}`);
+      imageIndex += 1;
+    }
+    return wrap.innerHTML;
   };
 
   const applyFontSize = (level: string) => {
@@ -850,7 +872,7 @@ export function ClinicCommercialTermsPanel({
               <div className="mx-auto w-full max-w-[820px] rounded-sm border border-zinc-300 bg-white px-10 py-8 text-zinc-900 shadow-sm">
                 <div
                   ref={editorBodyRef}
-                  className="min-h-[46vh] outline-none [&_p]:my-2 [&_img]:h-auto [&_img]:max-w-full"
+                  className="min-h-[46vh] text-[15px] leading-7 [tab-size:4] outline-none [&_p]:my-0 [&_p]:whitespace-pre-wrap [&_img]:h-auto [&_img]:max-w-full"
                   contentEditable
                   suppressContentEditableWarning
                   onInput={() =>
