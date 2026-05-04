@@ -526,7 +526,7 @@ export function FinancePanel({
         </div>
 
         <div className="mt-6 border-t border-[var(--card-border)] pt-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
               Позиции за период ({periodFrom} — {periodTo})
             </h3>
@@ -544,8 +544,6 @@ export function FinancePanel({
                   : "Убрать из сверки за период"}
               </button>
             ) : null}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setStatusFilter("ALL")}
