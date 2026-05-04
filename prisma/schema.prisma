@@ -375,6 +375,18 @@ enum AppModule {
   /// Заказы, наряды, новый заказ
   ORDERS
   KANBAN
+  /// Канбан: можно менять заголовок карточки
+  KANBAN_EDIT_TITLE
+  /// Канбан: можно менять внутренний срок
+  KANBAN_EDIT_DUE_DATE
+  /// Канбан: можно выбирать дорожку/доску в карточке
+  KANBAN_EDIT_TRACK
+  /// Канбан: можно назначать ответственных
+  KANBAN_MANAGE_ASSIGNEES
+  /// Канбан: можно назначать участников
+  KANBAN_MANAGE_PARTICIPANTS
+  /// Канбан: можно переносить карточку на другую доску
+  KANBAN_MOVE_TO_OTHER_BOARD
   /// История изменений по нарядам
   ORDER_HISTORY
   /// Финансовая аналитика
@@ -407,6 +419,7 @@ enum AppModule {
 enum UserRole {
   ADMINISTRATOR
   SENIOR_ADMINISTRATOR
+  SENIOR_TECHNICIAN
   MANAGER
   ACCOUNTANT
   FINANCIAL_MANAGER

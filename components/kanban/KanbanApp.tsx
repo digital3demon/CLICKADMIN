@@ -65,6 +65,17 @@ type SessionUserLike = {
   email?: string;
   mentionHandle?: string | null;
   avatarPresetId?: string | null;
+  moduleAccess?: Partial<
+    Record<
+      | "KANBAN_EDIT_TITLE"
+      | "KANBAN_EDIT_DUE_DATE"
+      | "KANBAN_EDIT_TRACK"
+      | "KANBAN_MANAGE_ASSIGNEES"
+      | "KANBAN_MANAGE_PARTICIPANTS"
+      | "KANBAN_MOVE_TO_OTHER_BOARD",
+      boolean
+    >
+  >;
 };
 
 function formatActivityActorLabel(u: SessionUserLike | null | undefined): string | undefined {
@@ -88,6 +99,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const [moveTargetBoardId, setMoveTargetBoardId] = useState("");
   const [activityActorLabel, setActivityActorLabel] = useState<string | undefined>(undefined);
   const [kanbanSessionUserId, setKanbanSessionUserId] = useState<string | null>(null);
+  const [kanbanCardPerms, setKanbanCardPerms] = useState({
+    editTitle: true,
+    editDueDate: true,
+    editTrack: true,
+    manageAssignees: true,
+    manageParticipants: true,
+    moveToOtherBoard: true,
+  });
   const prevModalCardRef = useRef<string | null>(null);
   const kaitenPullOnceRef = useRef(false);
   const standalonePushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -325,10 +344,27 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         if (cancelled) return;
         setActivityActorLabel(formatActivityActorLabel(j.user));
         setKanbanSessionUserId(j.user?.id?.trim() ? j.user.id : null);
+        const access = j.user?.moduleAccess ?? {};
+        setKanbanCardPerms({
+          editTitle: access.KANBAN_EDIT_TITLE !== false,
+          editDueDate: access.KANBAN_EDIT_DUE_DATE !== false,
+          editTrack: access.KANBAN_EDIT_TRACK !== false,
+          manageAssignees: access.KANBAN_MANAGE_ASSIGNEES !== false,
+          manageParticipants: access.KANBAN_MANAGE_PARTICIPANTS !== false,
+          moveToOtherBoard: access.KANBAN_MOVE_TO_OTHER_BOARD !== false,
+        });
       } catch {
         if (!cancelled) {
           setActivityActorLabel(undefined);
           setKanbanSessionUserId(null);
+          setKanbanCardPerms({
+            editTitle: true,
+            editDueDate: true,
+            editTrack: true,
+            manageAssignees: true,
+            manageParticipants: true,
+            moveToOtherBoard: true,
+          });
         }
       }
     })();
@@ -961,11 +997,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               onAddCard={addCardToColumn}
               onCopyCardLink={copyCardLink}
               onRequestMoveCard={(cid) => {
+                if (!kanbanCardPerms.moveToOtherBoard) return;
                 setMoveCardId(cid);
                 setMoveTargetBoardId("");
               }}
               onRequestDeleteCard={deleteCard}
-              allowMoveToOtherBoard={appState.boards.length > 1}
+              allowMoveToOtherBoard={
+                appState.boards.length > 1 && kanbanCardPerms.moveToOtherBoard
+              }
               onLinkedOrderMovedToKaitenMirror={
                 isDemo ? undefined : syncKaitenMirrorAfterKanbanMove
               }
@@ -1023,6 +1062,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           setCardModalId(id);
         }}
         onCopyCardLink={copyCardLink}
+        canEditTitle={kanbanCardPerms.editTitle}
+        canEditDueDate={kanbanCardPerms.editDueDate}
+        canEditTrack={kanbanCardPerms.editTrack}
+        canManageAssignees={kanbanCardPerms.manageAssignees}
+        canManageParticipants={kanbanCardPerms.manageParticipants}
         trackLaneOptions={isDemo ? [...demoTrackLanes()] : undefined}
         trackLaneFieldLabel={isDemo ? "Доска" : undefined}
         isDemo={isDemo}

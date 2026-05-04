@@ -154,6 +154,11 @@ type KanbanCardModalProps = {
   isDemo?: boolean;
   /** id пользователя CRM для комментариев в Kaiten (иначе первый участник доски). */
   commentAuthorUserId?: string | null;
+  canEditTitle?: boolean;
+  canEditDueDate?: boolean;
+  canEditTrack?: boolean;
+  canManageAssignees?: boolean;
+  canManageParticipants?: boolean;
 };
 
 export function KanbanCardModal({
@@ -169,6 +174,11 @@ export function KanbanCardModal({
   trackLaneFieldLabel,
   isDemo = false,
   commentAuthorUserId,
+  canEditTitle = true,
+  canEditDueDate = true,
+  canEditTrack = true,
+  canManageAssignees = true,
+  canManageParticipants = true,
 }: KanbanCardModalProps) {
   const [rightTab, setRightTab] = useState<"chat" | "act">("chat");
   const [blockPopupOpen, setBlockPopupOpen] = useState(false);
@@ -840,12 +850,12 @@ export function KanbanCardModal({
             <div className="min-w-0 flex-1 pr-1">
               <h2
                 ref={titleRef}
-                contentEditable={!blocked}
+                contentEditable={!blocked && canEditTitle}
                 suppressContentEditableWarning
                 className="m-0 break-words text-2xl font-semibold leading-tight tracking-tight text-[var(--kaiten-modal-text)] outline-none sm:text-3xl md:text-4xl"
                 onBlur={() => {
                   void (async () => {
-                    if (blocked) return;
+                    if (blocked || !canEditTitle) return;
                     const el = titleRef.current;
                     if (!el) return;
                     const t = (el.textContent || "").trim();
@@ -882,7 +892,7 @@ export function KanbanCardModal({
                   })();
                 }}
                 onKeyDown={(e) => {
-                  if (blocked) return;
+                  if (blocked || !canEditTitle) return;
                   if (e.key === "Enter") {
                     e.preventDefault();
                     (e.currentTarget as HTMLElement).blur();
@@ -983,7 +993,7 @@ export function KanbanCardModal({
               ))}
               <button
                 type="button"
-                disabled={blocked}
+                disabled={blocked || !canManageAssignees}
                 title="Добавить ответственного"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
                 onClick={() => setPickerMode("assign")}
@@ -1008,7 +1018,7 @@ export function KanbanCardModal({
               ))}
               <button
                 type="button"
-                disabled={blocked}
+                disabled={blocked || !canManageParticipants}
                 title="Добавить участника"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
                 onClick={() => setPickerMode("part")}
@@ -1040,7 +1050,7 @@ export function KanbanCardModal({
                   </div>
                   <select
                     className={baseInput}
-                    disabled={blocked}
+                    disabled={blocked || !canEditTrack}
                     value={card.trackLane || ""}
                     onChange={(e) => {
                       const v = e.target.value;
@@ -1149,7 +1159,7 @@ export function KanbanCardModal({
                   <input
                     type="date"
                     className={`${baseInput} max-w-[12rem]`}
-                    disabled={blocked}
+                    disabled={blocked || !canEditDueDate}
                     value={card.dueDate || ""}
                     onChange={(e) => {
                       const v = e.target.value;

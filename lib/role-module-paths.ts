@@ -8,6 +8,12 @@ type Rule = { prefix: string; module: AppModule };
  */
 const RULES: Rule[] = [
   { prefix: "/directory/users", module: "CONFIG_USERS" },
+  { prefix: "/api/orders/reorder-lines", module: "KANBAN_MOVE_TO_OTHER_BOARD" },
+  { prefix: "/api/orders/kaiten-due", module: "KANBAN_EDIT_DUE_DATE" },
+  { prefix: "/api/orders/kaiten-track", module: "KANBAN_EDIT_TRACK" },
+  { prefix: "/api/orders/kaiten-title", module: "KANBAN_EDIT_TITLE" },
+  { prefix: "/api/orders/kaiten-assignees", module: "KANBAN_MANAGE_ASSIGNEES" },
+  { prefix: "/api/orders/kaiten-participants", module: "KANBAN_MANAGE_PARTICIPANTS" },
   { prefix: "/api/users/invite", module: "CONFIG_USER_INVITES" },
   { prefix: "/api/users", module: "CONFIG_USERS" },
   { prefix: "/directory/costing", module: "CONFIG_COSTING" },

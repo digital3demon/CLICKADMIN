@@ -126,7 +126,17 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const row = await prisma.costingLine.findUnique({
       where: { id: lineId },
       include: {
-        priceListItem: { select: { id: true, code: true, name: true, priceRub: true } },
+        priceListItem: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            priceRub: true,
+            sectionTitle: true,
+            subsectionTitle: true,
+            sortOrder: true,
+          },
+        },
         poolShares: true,
       },
     });

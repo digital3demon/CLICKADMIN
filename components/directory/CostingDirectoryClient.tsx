@@ -21,7 +21,15 @@ type VersionRow = {
   };
 };
 
-type PriceLite = { id: string; code: string; name: string; priceRub: number };
+type PriceLite = {
+  id: string;
+  code: string;
+  name: string;
+  priceRub: number;
+  sectionTitle?: string | null;
+  subsectionTitle?: string | null;
+  sortOrder?: number;
+};
 
 type PoolShareRow = { poolId: string; shareRub: number };
 
@@ -101,6 +109,18 @@ type FillDrag = {
   value: number;
 };
 
+type CostingTableRow =
+  | {
+      kind: "block";
+      key: string;
+      sectionTitle: string;
+      subsectionTitle: string;
+    }
+  | {
+      kind: "line";
+      line: LineRow;
+    };
+
 function coerceRecord(raw: unknown): Record<string, number> {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out: Record<string, number> = {};
@@ -149,6 +169,14 @@ export function CostingDirectoryClient() {
   const [newProfileName, setNewProfileName] = useState("");
   const [newProfileDiscount, setNewProfileDiscount] = useState("0");
   const [newProfileClinicId, setNewProfileClinicId] = useState("");
+  const [newPriceCode, setNewPriceCode] = useState("");
+  const [newPriceName, setNewPriceName] = useState("");
+  const [newPriceSection, setNewPriceSection] = useState("");
+  const [newPriceSubsection, setNewPriceSubsection] = useState("");
+  const [newPriceRub, setNewPriceRub] = useState("");
+  const [newPriceLeadDays, setNewPriceLeadDays] = useState("");
+  const [newPriceDescription, setNewPriceDescription] = useState("");
+  const [newPriceSortOrder, setNewPriceSortOrder] = useState("");
   const [clinics, setClinics] = useState<ClinicOpt[]>([]);
 
   const [newPoolKey, setNewPoolKey] = useState("");
@@ -257,11 +285,29 @@ export function CostingDirectoryClient() {
     [editor?.columns],
   );
 
+  const tableRows = useMemo<CostingTableRow[]>(() => {
+    if (!editor) return [];
+    const rows: CostingTableRow[] = [];
+    let lastBlockKey = "";
+    for (const ln of editor.lines) {
+      const sectionTitle = ln.priceListItem?.sectionTitle?.trim() || "Без раздела";
+      const subsectionTitle = ln.priceListItem?.subsectionTitle?.trim() || "Без подраздела";
+      const blockKey = `${sectionTitle}__${subsectionTitle}`;
+      if (blockKey !== lastBlockKey) {
+        rows.push({ kind: "block", key: blockKey, sectionTitle, subsectionTitle });
+        lastBlockKey = blockKey;
+      }
+      rows.push({ kind: "line", line: ln });
+    }
+    return rows;
+  }, [editor]);
+
   const lineIndexById = useMemo(() => {
     const map = new Map<string, number>();
-    for (const [i, ln] of (editor?.lines ?? []).entries()) map.set(ln.id, i);
+    const onlyLines = tableRows.filter((r): r is { kind: "line"; line: LineRow } => r.kind === "line");
+    for (const [i, row] of onlyLines.entries()) map.set(row.line.id, i);
     return map;
-  }, [editor?.lines]);
+  }, [tableRows]);
 
   const profileDiscount = useMemo(() => {
     if (!profileId || !editor) return null;
@@ -786,6 +832,74 @@ export function CostingDirectoryClient() {
     }
   }
 
+  async function addPricePositionToPriceAndTable() {
+    if (!versionId) {
+      setBanner("Сначала выберите версию просчёта.");
+      return;
+    }
+    const code = newPriceCode.trim();
+    const name = newPriceName.trim();
+    if (!code || !name) {
+      setBanner("Для позиции прайса нужны код и название.");
+      return;
+    }
+    const priceRubParsed = Number.parseFloat(newPriceRub.replace(",", "."));
+    const leadDaysParsed = Number.parseFloat(newPriceLeadDays.replace(",", "."));
+    const sortOrderParsed = Number.parseFloat(newPriceSortOrder.replace(",", "."));
+    setSaving(true);
+    setBanner(null);
+    try {
+      const createRes = await fetch("/api/price-list-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          name,
+          sectionTitle: newPriceSection.trim() || null,
+          subsectionTitle: newPriceSubsection.trim() || null,
+          priceRub: Number.isFinite(priceRubParsed) ? priceRubParsed : 0,
+          leadWorkingDays: Number.isFinite(leadDaysParsed) ? leadDaysParsed : null,
+          description: newPriceDescription.trim() || null,
+          sortOrder: Number.isFinite(sortOrderParsed) ? sortOrderParsed : 0,
+        }),
+      });
+      const createData = (await createRes.json()) as { id?: string; error?: string };
+      if (!createRes.ok || !createData.id) {
+        throw new Error(createData.error ?? "Не удалось создать позицию прайса");
+      }
+
+      const addLineRes = await fetch(`/api/costing/versions/${versionId}/lines`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          priceListItemId: createData.id,
+          inputsJson: {
+            ...(Number.isFinite(priceRubParsed) ? { client_price: priceRubParsed } : {}),
+          },
+        }),
+      });
+      const addLineData = (await addLineRes.json()) as { error?: string };
+      if (!addLineRes.ok) {
+        throw new Error(addLineData.error ?? "Позиция создана, но не добавлена в таблицу");
+      }
+
+      setNewPriceCode("");
+      setNewPriceName("");
+      setNewPriceSection("");
+      setNewPriceSubsection("");
+      setNewPriceRub("");
+      setNewPriceLeadDays("");
+      setNewPriceDescription("");
+      setNewPriceSortOrder("");
+      await loadEditor(versionId);
+      setBanner("Новая позиция прайса создана и добавлена в просчёт.");
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const tabBtn = (id: TabId, label: string) => (
     <button
       key={id}
@@ -800,6 +914,9 @@ export function CostingDirectoryClient() {
       {label}
     </button>
   );
+
+  const tableColumnsCount =
+    2 + inputColumns.length + (editor?.sharedPools.length ?? 0) + computedColumns.length;
 
   return (
     <div className="space-y-6">
@@ -884,6 +1001,120 @@ export function CostingDirectoryClient() {
 
           {tab === "table" ? (
             <section className="space-y-4">
+              <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 sm:p-5">
+                <h2 className="text-base font-semibold text-[var(--app-text)]">
+                  Новая позиция прайса
+                </h2>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                  Создает новую позицию в прайсе (код, название, описание и т.д.) и сразу
+                  добавляет ее строкой в текущую версию таблицы просчёта.
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <label className="text-sm">
+                    <span className="block text-xs font-semibold uppercase text-[var(--text-muted)]">
+                      Код *
+                    </span>
+                    <input
+                      value={newPriceCode}
+                      onChange={(e) => setNewPriceCode(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm font-mono"
+                      placeholder="1001"
+                    />
+                  </label>
+                  <label className="text-sm sm:col-span-2 lg:col-span-2">
+                    <span className="block text-xs font-semibold uppercase text-[var(--text-muted)]">
+                      Название *
+                    </span>
+                    <input
+                      value={newPriceName}
+                      onChange={(e) => setNewPriceName(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm"
+                      placeholder="Новая работа"
+                    />
+                  </label>
+                  <label className="text-sm">
+                    <span className="block text-xs font-semibold uppercase text-[var(--text-muted)]">
+                      Цена, ₽
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newPriceRub}
+                      onChange={(e) => setNewPriceRub(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm"
+                      placeholder="0"
+                    />
+                  </label>
+                  <label className="text-sm">
+                    <span className="block text-xs font-semibold uppercase text-[var(--text-muted)]">
+                      Раздел
+                    </span>
+                    <input
+                      value={newPriceSection}
+                      onChange={(e) => setNewPriceSection(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm"
+                      placeholder="Подготовка"
+                    />
+                  </label>
+                  <label className="text-sm">
+                    <span className="block text-xs font-semibold uppercase text-[var(--text-muted)]">
+                      Подраздел
+                    </span>
+                    <input
+                      value={newPriceSubsection}
+                      onChange={(e) => setNewPriceSubsection(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm"
+                      placeholder="Сплинты"
+                    />
+                  </label>
+                  <label className="text-sm">
+                    <span className="block text-xs font-semibold uppercase text-[var(--text-muted)]">
+                      Срок (раб. дней)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newPriceLeadDays}
+                      onChange={(e) => setNewPriceLeadDays(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm"
+                      placeholder="0"
+                    />
+                  </label>
+                  <label className="text-sm">
+                    <span className="block text-xs font-semibold uppercase text-[var(--text-muted)]">
+                      Sort order
+                    </span>
+                    <input
+                      type="number"
+                      value={newPriceSortOrder}
+                      onChange={(e) => setNewPriceSortOrder(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm"
+                      placeholder="0"
+                    />
+                  </label>
+                  <label className="text-sm sm:col-span-2 lg:col-span-4">
+                    <span className="block text-xs font-semibold uppercase text-[var(--text-muted)]">
+                      Описание
+                    </span>
+                    <textarea
+                      rows={2}
+                      value={newPriceDescription}
+                      onChange={(e) => setNewPriceDescription(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm"
+                      placeholder="Комментарий к позиции"
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  disabled={saving || !versionId}
+                  onClick={() => void addPricePositionToPriceAndTable()}
+                  className="mt-3 rounded-lg bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  Добавить в прайс и таблицу
+                </button>
+              </div>
+
               <p className="text-base leading-relaxed text-[var(--text-secondary)]">
                 Одна строка = одна позиция расчёта. Общие статьи (аренда, лицензии) задаются во вкладке «Общие затраты»;
                 в формулах колонок доступны переменные <code className="rounded bg-[var(--surface-muted)] px-1 text-sm">sh_ключ</code> — доля строки в ₽.
@@ -1030,7 +1261,20 @@ export function CostingDirectoryClient() {
                     </tr>
                   </thead>
                   <tbody>
-                    {editor.lines.map((ln) => {
+                    {tableRows.map((row) => {
+                      if (row.kind === "block") {
+                        return (
+                          <tr key={`block:${row.key}`} className="border-b border-[var(--card-border)] bg-sky-50/70 dark:bg-sky-950/25">
+                            <td
+                              colSpan={tableColumnsCount}
+                              className="px-3 py-2 text-sm font-semibold text-sky-950 dark:text-sky-100"
+                            >
+                              {row.sectionTitle} / {row.subsectionTitle}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      const ln = row.line;
                       const { values, errors } = evalLine(ln.id);
                       return (
                         <tr

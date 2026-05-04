@@ -52,7 +52,17 @@ export async function POST(req: Request, ctx: Ctx) {
       inputsJson,
     },
     include: {
-      priceListItem: { select: { id: true, code: true, name: true, priceRub: true } },
+      priceListItem: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          priceRub: true,
+          sectionTitle: true,
+          subsectionTitle: true,
+          sortOrder: true,
+        },
+      },
     },
   });
   return NextResponse.json(row);

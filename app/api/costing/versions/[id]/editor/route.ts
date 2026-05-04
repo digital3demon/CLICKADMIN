@@ -39,7 +39,15 @@ export async function GET(_req: Request, ctx: Ctx) {
       orderBy: { createdAt: "asc" },
       include: {
         priceListItem: {
-          select: { id: true, code: true, name: true, priceRub: true },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            priceRub: true,
+            sectionTitle: true,
+            subsectionTitle: true,
+            sortOrder: true,
+          },
         },
         poolShares: true,
       },
@@ -60,5 +68,35 @@ export async function GET(_req: Request, ctx: Ctx) {
     getOrderWorkloadLast12Months(prisma),
   ]);
 
-  return NextResponse.json({ version, columns, lines, profiles, sharedPools, fixedCostItems, workload });
+  const sortedLines = [...lines].sort((a, b) => {
+    const aHas = a.priceListItem != null;
+    const bHas = b.priceListItem != null;
+    if (aHas !== bHas) return aHas ? -1 : 1;
+    const aSection = a.priceListItem?.sectionTitle ?? "";
+    const bSection = b.priceListItem?.sectionTitle ?? "";
+    const secCmp = aSection.localeCompare(bSection, "ru", { sensitivity: "base" });
+    if (secCmp !== 0) return secCmp;
+    const aSub = a.priceListItem?.subsectionTitle ?? "";
+    const bSub = b.priceListItem?.subsectionTitle ?? "";
+    const subCmp = aSub.localeCompare(bSub, "ru", { sensitivity: "base" });
+    if (subCmp !== 0) return subCmp;
+    const aSort = a.priceListItem?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    const bSort = b.priceListItem?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (aSort !== bSort) return aSort - bSort;
+    const aCode = a.priceListItem?.code ?? "";
+    const bCode = b.priceListItem?.code ?? "";
+    const codeCmp = aCode.localeCompare(bCode, "ru", { sensitivity: "base" });
+    if (codeCmp !== 0) return codeCmp;
+    return a.createdAt.getTime() - b.createdAt.getTime();
+  });
+
+  return NextResponse.json({
+    version,
+    columns,
+    lines: sortedLines,
+    profiles,
+    sharedPools,
+    fixedCostItems,
+    workload,
+  });
 }
