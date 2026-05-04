@@ -39,7 +39,9 @@ const KEY_LABELS: Record<string, string> = {
   orderPriceListNote: "Подпись прайса",
   prostheticsOrdered: "Протетика заказана",
   correctionTrack: "Коррекция",
-  reworkAtCustomerExpense: "Переделка за счет заказчика",
+  correctionReason: "Причина коррекции",
+  correctionPaid: "Коррекция платная",
+  reworkAtCustomerExpense: "За счёт заказчика (коррекция)",
   registeredByLabel: "Оформил",
   courierId: "Курьер",
   courierPickupId: "Курьер привоз",
@@ -87,6 +89,10 @@ export function summarizeOrderRevision(
     adminShippedOtpr: Boolean(o.adminShippedOtpr),
     prostheticsOrdered: Boolean(o.prostheticsOrdered),
     correctionTrack: o.correctionTrack ?? null,
+    correctionReason:
+      "correctionReason" in o ? (o.correctionReason ?? null) : null,
+    correctionPaid:
+      "correctionPaid" in o ? Boolean(o.correctionPaid) : false,
     reworkAtCustomerExpense:
       "reworkAtCustomerExpense" in o
         ? Boolean(o.reworkAtCustomerExpense)

@@ -82,6 +82,22 @@ export function AnalyticsPageClient() {
       lineCount: number;
       quantity: number;
     }[];
+    correctionDetail?: {
+      byTrack: {
+        track: string;
+        label: string;
+        orders: number;
+        revenue: number;
+      }[];
+      paidVsFree: {
+        paid: { orders: number; revenue: number };
+        free: { orders: number; revenue: number };
+      };
+      expense: {
+        customer: { orders: number; revenue: number };
+        lab: { orders: number; revenue: number };
+      };
+    };
   } | null>(null);
 
   const [price, setPrice] = useState<{
@@ -468,6 +484,83 @@ export function AnalyticsPageClient() {
               </p>
             </div>
           </div>
+          {finance.correctionDetail ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+                <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                    Коррекции по направлению
+                  </h4>
+                </div>
+                <div className="overflow-x-auto p-2">
+                  <table className="w-full min-w-[240px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                        <th className="py-1 pr-2">Тип</th>
+                        <th className="py-1 pr-2">Нарядов</th>
+                        <th className="py-1">Выручка</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {finance.correctionDetail.byTrack.map((r) => (
+                        <tr key={r.track} className="border-t border-[var(--border-subtle)]">
+                          <td className="py-1.5 pr-2 text-[var(--text-strong)]">{r.label}</td>
+                          <td className="py-1.5 pr-2 tabular-nums">{r.orders}</td>
+                          <td className="py-1.5 tabular-nums">{moneyRub(r.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+                <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                    Платно / бесплатно
+                  </h4>
+                </div>
+                <div className="space-y-2 p-3 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[var(--text-secondary)]">Платно</span>
+                    <span className="tabular-nums">
+                      {finance.correctionDetail.paidVsFree.paid.orders} нар. ·{" "}
+                      {moneyRub(finance.correctionDetail.paidVsFree.paid.revenue)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[var(--text-secondary)]">Бесплатно</span>
+                    <span className="tabular-nums">
+                      {finance.correctionDetail.paidVsFree.free.orders} нар. ·{" "}
+                      {moneyRub(finance.correctionDetail.paidVsFree.free.revenue)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+                <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                    За чей счёт
+                  </h4>
+                </div>
+                <div className="space-y-2 p-3 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[var(--text-secondary)]">Заказчик</span>
+                    <span className="tabular-nums">
+                      {finance.correctionDetail.expense.customer.orders} нар. ·{" "}
+                      {moneyRub(finance.correctionDetail.expense.customer.revenue)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[var(--text-secondary)]">Лаборатория</span>
+                    <span className="tabular-nums">
+                      {finance.correctionDetail.expense.lab.orders} нар. ·{" "}
+                      {moneyRub(finance.correctionDetail.expense.lab.revenue)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
           <div className="h-[320px] w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={finance.series}>
@@ -608,6 +701,83 @@ export function AnalyticsPageClient() {
               </p>
             </div>
           </div>
+          {finance.correctionDetail ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+                <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                    Коррекции по направлению
+                  </h4>
+                </div>
+                <div className="overflow-x-auto p-2">
+                  <table className="w-full min-w-[240px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                        <th className="py-1 pr-2">Тип</th>
+                        <th className="py-1 pr-2">Нарядов</th>
+                        <th className="py-1">Выручка</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {finance.correctionDetail.byTrack.map((r) => (
+                        <tr key={`rw-${r.track}`} className="border-t border-[var(--border-subtle)]">
+                          <td className="py-1.5 pr-2 text-[var(--text-strong)]">{r.label}</td>
+                          <td className="py-1.5 pr-2 tabular-nums">{r.orders}</td>
+                          <td className="py-1.5 tabular-nums">{moneyRub(r.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+                <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                    Платно / бесплатно
+                  </h4>
+                </div>
+                <div className="space-y-2 p-3 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[var(--text-secondary)]">Платно</span>
+                    <span className="tabular-nums">
+                      {finance.correctionDetail.paidVsFree.paid.orders} нар. ·{" "}
+                      {moneyRub(finance.correctionDetail.paidVsFree.paid.revenue)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[var(--text-secondary)]">Бесплатно</span>
+                    <span className="tabular-nums">
+                      {finance.correctionDetail.paidVsFree.free.orders} нар. ·{" "}
+                      {moneyRub(finance.correctionDetail.paidVsFree.free.revenue)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+                <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                    За чей счёт
+                  </h4>
+                </div>
+                <div className="space-y-2 p-3 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[var(--text-secondary)]">Заказчик</span>
+                    <span className="tabular-nums">
+                      {finance.correctionDetail.expense.customer.orders} нар. ·{" "}
+                      {moneyRub(finance.correctionDetail.expense.customer.revenue)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[var(--text-secondary)]">Лаборатория</span>
+                    <span className="tabular-nums">
+                      {finance.correctionDetail.expense.lab.orders} нар. ·{" "}
+                      {moneyRub(finance.correctionDetail.expense.lab.revenue)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
           <div className="rounded-lg border border-[var(--card-border)]">
             <div className="flex items-center justify-between border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">

@@ -118,6 +118,8 @@ type PatchBody = {
   compositionDiscountPercent?: number;
   prostheticsOrdered?: boolean;
   correctionTrack?: string | null;
+  correctionReason?: string | null;
+  correctionPaid?: boolean;
   reworkAtCustomerExpense?: boolean;
   courierId?: string | null;
   courierPickupId?: string | null;
@@ -660,10 +662,19 @@ export async function PATCH(
     }
   }
 
+  if (body.correctionReason !== undefined) {
+    scalarData.correctionReason =
+      body.correctionReason === null || body.correctionReason === ""
+        ? null
+        : String(body.correctionReason).trim().slice(0, 4000) || null;
+  }
+  if (body.correctionPaid !== undefined) {
+    scalarData.correctionPaid = Boolean(body.correctionPaid);
+  }
   if (body.reworkAtCustomerExpense !== undefined) {
     scalarData.reworkAtCustomerExpense = Boolean(body.reworkAtCustomerExpense);
   }
-  if (body.reworkAtCustomerExpense !== undefined || body.correctionTrack !== undefined) {
+  {
     const nextTrack =
       body.correctionTrack !== undefined
         ? body.correctionTrack === null || body.correctionTrack === ""
@@ -672,8 +683,11 @@ export async function PATCH(
         : existing.correctionTrack == null
           ? null
           : String(existing.correctionTrack);
-    if (nextTrack !== "REWORK") {
+    if (nextTrack == null || nextTrack === "") {
+      scalarData.correctionTrack = null;
       scalarData.reworkAtCustomerExpense = false;
+      scalarData.correctionReason = null;
+      scalarData.correctionPaid = false;
     }
   }
 

@@ -419,6 +419,8 @@ export type OrderEditInitial = {
   orderPriceListNote: string | null;
   prostheticsOrdered: boolean;
   correctionTrack: OrderCorrectionTrack | null;
+  correctionReason: string | null;
+  correctionPaid: boolean;
   reworkAtCustomerExpense: boolean;
   registeredByLabel: string | null;
   courierId: string | null;
@@ -763,19 +765,35 @@ export function OrderEditForm({
 
   const [correctionTrack, setCorrectionTrack] =
     useState<OrderCorrectionTrack | null>(initial.correctionTrack);
+  const [correctionReason, setCorrectionReason] = useState(
+    () => initial.correctionReason?.trim() ?? "",
+  );
+  const [correctionPaid, setCorrectionPaid] = useState(
+    initial.correctionPaid === true,
+  );
   const [reworkAtCustomerExpense, setReworkAtCustomerExpense] = useState(
-    initial.reworkAtCustomerExpense === true && initial.correctionTrack === "REWORK",
+    initial.reworkAtCustomerExpense === true && initial.correctionTrack != null,
   );
   useEffect(() => {
+    setCorrectionReason(initial.correctionReason?.trim() ?? "");
+    setCorrectionPaid(initial.correctionPaid === true);
     setReworkAtCustomerExpense(
-      initial.reworkAtCustomerExpense === true && initial.correctionTrack === "REWORK",
+      initial.reworkAtCustomerExpense === true && initial.correctionTrack != null,
     );
-  }, [initial.id, initial.reworkAtCustomerExpense, initial.correctionTrack]);
+  }, [
+    initial.id,
+    initial.correctionReason,
+    initial.correctionPaid,
+    initial.reworkAtCustomerExpense,
+    initial.correctionTrack,
+  ]);
   useEffect(() => {
-    if (correctionTrack !== "REWORK" && reworkAtCustomerExpense) {
+    if (correctionTrack == null) {
+      setCorrectionReason("");
+      setCorrectionPaid(false);
       setReworkAtCustomerExpense(false);
     }
-  }, [correctionTrack, reworkAtCustomerExpense]);
+  }, [correctionTrack]);
   const [courierPickupId, setCourierPickupId] = useState(() => {
     const p = initial.courierPickupId?.trim();
     if (p) return p;
@@ -1467,8 +1485,14 @@ export function OrderEditForm({
           orderPriceListNote: initial.orderPriceListNote,
           prostheticsOrdered,
           correctionTrack,
+          correctionReason:
+            correctionTrack != null
+              ? correctionReason.trim() || null
+              : null,
+          correctionPaid:
+            correctionTrack != null ? correctionPaid : false,
           reworkAtCustomerExpense:
-            correctionTrack === "REWORK" ? reworkAtCustomerExpense : false,
+            correctionTrack != null ? reworkAtCustomerExpense : false,
           courierPickupId: courierPickupId.trim() || null,
           courierDeliveryId: courierDeliveryId.trim() || null,
           courierId: courierPickupId.trim() || null,
@@ -1539,6 +1563,8 @@ export function OrderEditForm({
     initial.orderPriceListNote,
     prostheticsOrdered,
     correctionTrack,
+    correctionReason,
+    correctionPaid,
     reworkAtCustomerExpense,
     courierPickupId,
     courierDeliveryId,
@@ -1681,17 +1707,6 @@ export function OrderEditForm({
           {ORDER_CORRECTION_TRACK_LABELS[v]}
         </button>
       ))}
-      {correctionTrack === "REWORK" ? (
-        <label className={`${checkboxLabelClassEdit} ml-2`}>
-          <input
-            type="checkbox"
-            className={checkboxInputClassEdit}
-            checked={reworkAtCustomerExpense}
-            onChange={(e) => setReworkAtCustomerExpense(e.target.checked)}
-          />
-          За счет заказчика
-        </label>
-      ) : null}
     </div>
   );
 
@@ -2078,6 +2093,62 @@ export function OrderEditForm({
           </div>
           <div className="relative z-20 mt-2 border-t border-[var(--card-border)]/80 pt-2">
             {correctionPillStrip}
+            {correctionTrack != null ? (
+              <div className="mt-2 space-y-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-2">
+                <label className={labelClass} htmlFor="oe-correction-reason">
+                  Причина коррекции
+                </label>
+                <textarea
+                  id="oe-correction-reason"
+                  className={`${inputClass} min-h-[3rem] resize-y`}
+                  rows={2}
+                  maxLength={4000}
+                  value={correctionReason}
+                  onChange={(e) => setCorrectionReason(e.target.value)}
+                  placeholder="Кратко: что не так и что переделываем…"
+                />
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                    Оплата
+                  </span>
+                  <label className={`${checkboxLabelClassEdit} shrink-0`}>
+                    <input
+                      type="radio"
+                      className={checkboxInputClassEdit}
+                      name={`oe-correction-paid-${initial.id}`}
+                      checked={correctionPaid}
+                      onChange={() => setCorrectionPaid(true)}
+                    />
+                    Платно
+                  </label>
+                  <label className={`${checkboxLabelClassEdit} shrink-0`}>
+                    <input
+                      type="radio"
+                      className={checkboxInputClassEdit}
+                      name={`oe-correction-paid-${initial.id}`}
+                      checked={!correctionPaid}
+                      onChange={() => setCorrectionPaid(false)}
+                    />
+                    Бесплатно
+                  </label>
+                </div>
+                <label className={checkboxLabelClassEdit}>
+                  <input
+                    type="checkbox"
+                    className={checkboxInputClassEdit}
+                    checked={reworkAtCustomerExpense}
+                    onChange={(e) =>
+                      setReworkAtCustomerExpense(e.target.checked)
+                    }
+                  />
+                  За счёт заказчика
+                </label>
+                <p className="text-[10px] leading-snug text-[var(--text-muted)]">
+                  Если «За счёт заказчика» не отмечено — расходы учитываем за счёт
+                  лаборатории.
+                </p>
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="mt-2 border-t border-[var(--card-border)] pt-2">
@@ -2604,7 +2675,6 @@ export function OrderEditForm({
               kaitenDecideLater={initial.kaitenDecideLater === true}
               kaitenSyncError={initial.kaitenSyncError ?? null}
               kaitenCardTypeId={initial.kaitenCardTypeId ?? null}
-              workSent={adminShippedOtpr}
             />
           )}
         </div>

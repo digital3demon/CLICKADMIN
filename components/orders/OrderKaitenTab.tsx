@@ -90,7 +90,6 @@ export function OrderKaitenTab({
   kaitenDecideLater = false,
   kaitenSyncError = null,
   kaitenCardTypeId = null,
-  workSent = false,
 }: {
   orderId: string;
   kaitenCardId: number | null;
@@ -101,8 +100,6 @@ export function OrderKaitenTab({
   kaitenDecideLater?: boolean;
   kaitenSyncError?: string | null;
   kaitenCardTypeId?: string | null;
-  /** «Работа отправлена» (admin) — до этого создание в Kaiten визуально/логикой недоступно. */
-  workSent?: boolean;
 }) {
   const router = useRouter();
   const [snap, setSnap] = useState<KaitenSnapshot | null>(null);
@@ -530,7 +527,7 @@ export function OrderKaitenTab({
       String(createKaitenCardTypeId).trim() !== "" &&
       trackLane != null &&
       columnId !== "";
-    const canCreateFromCrm = workSent && hasKaitenCreateFields;
+    const canCreateFromCrm = hasKaitenCreateFields;
 
     const runCreate = async () => {
       setManualKaitenError(null);
@@ -693,15 +690,10 @@ export function OrderKaitenTab({
               ? "Создаём…"
               : "Создать карточку в Kaiten / канбан"}
           </button>
-          {!workSent ? (
+          {!hasKaitenCreateFields ? (
             <p className="mt-2 text-xs text-[var(--text-muted)]">
-              Сначала отметьте в наряде «Работа отправлена» — тогда кнопка станет
-              зелёной, когда будут выбраны тип, пространство и колонка.
-            </p>
-          ) : !hasKaitenCreateFields ? (
-            <p className="mt-2 text-xs text-[var(--text-muted)]">
-              Укажите тип карточки, пространство и колонку выше, затем снова нажмите
-              кнопку.
+              Укажите тип карточки, пространство и колонку выше — тогда кнопка станет
+              зелёной.
             </p>
           ) : null}
         </div>

@@ -4,6 +4,10 @@ import { lineAllocatedTotalRub } from "@/lib/format-order-construction";
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
 import { STOCK_MOVEMENT_KIND_LABELS } from "@/lib/inventory/stock-movement-kind-labels";
 import { orderRevenueRub } from "@/lib/analytics/order-money";
+import {
+  ORDER_CORRECTION_TRACK_LABELS,
+  ORDER_CORRECTION_TRACK_VALUES,
+} from "@/lib/order-correction-track";
 
 const PRICE_LIST = "PRICE_LIST" satisfies ConstructionCategory;
 
@@ -65,6 +69,17 @@ export async function loadFinanceReport(from: Date, to: Date) {
     }
   >();
 
+  const correctionByTrack: Record<string, { orders: number; revenue: number }> =
+    {};
+  const correctionPaidVsFree = {
+    paid: { orders: 0, revenue: 0 },
+    free: { orders: 0, revenue: 0 },
+  };
+  const correctionExpense = {
+    customer: { orders: 0, revenue: 0 },
+    lab: { orders: 0, revenue: 0 },
+  };
+
   for (const o of orders) {
     if (o.status === "CANCELLED") {
       cancelled += 1;
@@ -76,6 +91,26 @@ export async function loadFinanceReport(from: Date, to: Date) {
     if (o.correctionTrack != null) {
       correctionOrders += 1;
       correctionRevenue += rev;
+      const tr = String(o.correctionTrack);
+      if (!correctionByTrack[tr]) {
+        correctionByTrack[tr] = { orders: 0, revenue: 0 };
+      }
+      correctionByTrack[tr].orders += 1;
+      correctionByTrack[tr].revenue += rev;
+      if (o.correctionPaid) {
+        correctionPaidVsFree.paid.orders += 1;
+        correctionPaidVsFree.paid.revenue += rev;
+      } else {
+        correctionPaidVsFree.free.orders += 1;
+        correctionPaidVsFree.free.revenue += rev;
+      }
+      if (o.reworkAtCustomerExpense) {
+        correctionExpense.customer.orders += 1;
+        correctionExpense.customer.revenue += rev;
+      } else {
+        correctionExpense.lab.orders += 1;
+        correctionExpense.lab.revenue += rev;
+      }
       if (String(o.correctionTrack) === "REWORK") {
         reworkOrders += 1;
         reworkRevenue += rev;
@@ -119,6 +154,8 @@ export async function loadFinanceReport(from: Date, to: Date) {
       ? Math.round((revenueTotal / ordersActive) * 100) / 100
       : 0;
 
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
   return {
     from: from.toISOString(),
     to: to.toISOString(),
@@ -131,6 +168,37 @@ export async function loadFinanceReport(from: Date, to: Date) {
       correctionRevenue: Math.round(correctionRevenue * 100) / 100,
       reworkOrders,
       reworkRevenue: Math.round(reworkRevenue * 100) / 100,
+    },
+    correctionDetail: {
+      byTrack: ORDER_CORRECTION_TRACK_VALUES.map((k) => {
+        const row = correctionByTrack[k];
+        return {
+          track: k,
+          label: ORDER_CORRECTION_TRACK_LABELS[k],
+          orders: row?.orders ?? 0,
+          revenue: round2(row?.revenue ?? 0),
+        };
+      }),
+      paidVsFree: {
+        paid: {
+          orders: correctionPaidVsFree.paid.orders,
+          revenue: round2(correctionPaidVsFree.paid.revenue),
+        },
+        free: {
+          orders: correctionPaidVsFree.free.orders,
+          revenue: round2(correctionPaidVsFree.free.revenue),
+        },
+      },
+      expense: {
+        customer: {
+          orders: correctionExpense.customer.orders,
+          revenue: round2(correctionExpense.customer.revenue),
+        },
+        lab: {
+          orders: correctionExpense.lab.orders,
+          revenue: round2(correctionExpense.lab.revenue),
+        },
+      },
     },
     series,
     reworkTopItems: [...reworkItems.values()]

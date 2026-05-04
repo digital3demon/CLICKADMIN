@@ -116,6 +116,8 @@ export type CreateOrderBody = {
   workReceivedAt?: string | null;
   prosthetics?: unknown;
   correctionTrack?: string | null;
+  correctionReason?: string | null;
+  correctionPaid?: boolean;
   reworkAtCustomerExpense?: boolean;
   continuesFromOrderId?: string | null;
 };
@@ -353,7 +355,13 @@ export async function createOrderFromBody(
     correctionTrack = r as OrderCorrectionTrack;
   }
   const reworkAtCustomerExpense =
-    correctionTrack === "REWORK" ? Boolean(body.reworkAtCustomerExpense) : false;
+    correctionTrack != null ? Boolean(body.reworkAtCustomerExpense) : false;
+  const correctionPaid =
+    correctionTrack != null ? Boolean(body.correctionPaid) : false;
+  const correctionReason =
+    correctionTrack != null
+      ? String(body.correctionReason ?? "").trim().slice(0, 4000) || null
+      : null;
 
   let constructionCreates: Prisma.OrderConstructionCreateWithoutOrderInput[] = [];
   if (body.constructions !== undefined) {
@@ -417,6 +425,8 @@ export async function createOrderFromBody(
     ...(prostheticsPrisma === Prisma.JsonNull ? {} : { prosthetics: prostheticsPrisma }),
     registeredByLabel: revisionActor.label,
     correctionTrack,
+    correctionReason,
+    correctionPaid,
     reworkAtCustomerExpense,
   };
 

@@ -59,6 +59,47 @@ export async function GET(req: Request) {
     ws.addRow(["Переделок, шт", data.totals.reworkOrders]);
     ws.addRow(["Переделки, выручка ₽", data.totals.reworkRevenue]);
     ws.addRow([]);
+    if (data.correctionDetail) {
+      ws.addRow(["Коррекции: по направлению"]);
+      ws.addRow(["Тип", "Нарядов", "Выручка, ₽"]);
+      for (const r of data.correctionDetail.byTrack) {
+        ws.addRow([r.label, r.orders, r.revenue]);
+      }
+      ws.addRow([]);
+      ws.addRow([
+        "Коррекции платные (нарядов)",
+        data.correctionDetail.paidVsFree.paid.orders,
+      ]);
+      ws.addRow([
+        "Коррекции платные, ₽",
+        data.correctionDetail.paidVsFree.paid.revenue,
+      ]);
+      ws.addRow([
+        "Коррекции бесплатные (нарядов)",
+        data.correctionDetail.paidVsFree.free.orders,
+      ]);
+      ws.addRow([
+        "Коррекции бесплатные, ₽",
+        data.correctionDetail.paidVsFree.free.revenue,
+      ]);
+      ws.addRow([
+        "За счёт заказчика (нарядов)",
+        data.correctionDetail.expense.customer.orders,
+      ]);
+      ws.addRow([
+        "За счёт заказчика, ₽",
+        data.correctionDetail.expense.customer.revenue,
+      ]);
+      ws.addRow([
+        "За счёт лаборатории (нарядов)",
+        data.correctionDetail.expense.lab.orders,
+      ]);
+      ws.addRow([
+        "За счёт лаборатории, ₽",
+        data.correctionDetail.expense.lab.revenue,
+      ]);
+      ws.addRow([]);
+    }
     ws.addRow(["Позиции переделок"]);
     ws.addRow(["Код", "Позиция", "Переделок (нарядов)", "Строк", "Кол-во"]);
     for (const row of data.reworkTopItems ?? []) {

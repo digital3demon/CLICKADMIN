@@ -216,6 +216,8 @@ export function NewOrderForm({
   const [nextOrderPreview, setNextOrderPreview] = useState<string | null>(null);
   const [correctionTrack, setCorrectionTrack] =
     useState<OrderCorrectionTrackValue | null>(null);
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [correctionPaid, setCorrectionPaid] = useState(false);
   const [reworkAtCustomerExpense, setReworkAtCustomerExpense] = useState(false);
   const hydratedRef = useRef(false);
   const prevClinicIdForLegalRef = useRef<string | null>(null);
@@ -412,14 +414,28 @@ export function NewOrderForm({
     }
     const snapshotRework = (s as OrderDraftSnapshot & { reworkAtCustomerExpense?: boolean })
       .reworkAtCustomerExpense;
-    setReworkAtCustomerExpense(Boolean(snapshotRework) && ct === "REWORK");
+    setReworkAtCustomerExpense(
+      Boolean(snapshotRework) &&
+        ct != null &&
+        ORDER_CORRECTION_TRACK_VALUES.includes(ct),
+    );
+    setCorrectionReason(
+      typeof (s as OrderDraftSnapshot).correctionReason === "string"
+        ? (s as OrderDraftSnapshot).correctionReason ?? ""
+        : "",
+    );
+    setCorrectionPaid(
+      (s as OrderDraftSnapshot).correctionPaid === true && ct != null,
+    );
   }, [initialSnapshot]);
 
   useEffect(() => {
-    if (correctionTrack !== "REWORK" && reworkAtCustomerExpense) {
+    if (correctionTrack == null) {
+      setCorrectionReason("");
+      setCorrectionPaid(false);
       setReworkAtCustomerExpense(false);
     }
-  }, [correctionTrack, reworkAtCustomerExpense]);
+  }, [correctionTrack]);
 
   const orderDraftSnapshot = useMemo<OrderDraftSnapshot>(
     () => ({
@@ -452,6 +468,8 @@ export function NewOrderForm({
       bridgeLines: JSON.parse(JSON.stringify(bridgeLines)),
       prosthetics: JSON.parse(JSON.stringify(prosthetics)),
       correctionTrack,
+      correctionReason,
+      correctionPaid,
       reworkAtCustomerExpense,
     }),
     [
@@ -478,6 +496,8 @@ export function NewOrderForm({
       bridgeLines,
       prosthetics,
       correctionTrack,
+      correctionReason,
+      correctionPaid,
       reworkAtCustomerExpense,
     ],
   );
@@ -804,8 +824,12 @@ export function NewOrderForm({
             ],
             prosthetics,
             correctionTrack: correctionTrack ?? null,
+            correctionReason:
+              correctionTrack != null ? correctionReason.trim() || null : null,
+            correctionPaid:
+              correctionTrack != null ? correctionPaid : false,
             reworkAtCustomerExpense:
-              correctionTrack === "REWORK" ? reworkAtCustomerExpense : false,
+              correctionTrack != null ? reworkAtCustomerExpense : false,
             ...(continuationChoice
               ? { continuesFromOrderId: continuationChoice.id }
               : {}),
@@ -918,6 +942,8 @@ export function NewOrderForm({
       bridgeLines,
       prosthetics,
       correctionTrack,
+      correctionReason,
+      correctionPaid,
       reworkAtCustomerExpense,
       continuationChoice,
       pendingFiles,
@@ -1473,18 +1499,65 @@ export function NewOrderForm({
                             </button>
                           ))}
                         </div>
-                        {correctionTrack === "REWORK" ? (
-                          <label className={`${checkboxLabelClass} mt-2`}>
-                            <input
-                              type="checkbox"
-                              className={checkboxInputClass}
-                              checked={reworkAtCustomerExpense}
+                        {correctionTrack != null ? (
+                          <div className="mt-2 space-y-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-2">
+                            <label
+                              htmlFor={`${titleId}-correction-reason`}
+                              className="mb-1 block text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-body)]"
+                            >
+                              Причина коррекции
+                            </label>
+                            <textarea
+                              id={`${titleId}-correction-reason`}
+                              className={`${inputClass} min-h-[2.75rem] max-h-[min(20vh,132px)] resize-y`}
+                              rows={2}
+                              maxLength={4000}
+                              value={correctionReason}
                               onChange={(e) =>
-                                setReworkAtCustomerExpense(e.target.checked)
+                                setCorrectionReason(e.target.value)
                               }
+                              placeholder="Кратко: что не так и что переделываем…"
                             />
-                            За счет заказчика
-                          </label>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                              <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                                Оплата
+                              </span>
+                              <label className={`${checkboxLabelClass} shrink-0`}>
+                                <input
+                                  type="radio"
+                                  className={checkboxInputClass}
+                                  name={`${titleId}-correction-paid`}
+                                  checked={correctionPaid}
+                                  onChange={() => setCorrectionPaid(true)}
+                                />
+                                Платно
+                              </label>
+                              <label className={`${checkboxLabelClass} shrink-0`}>
+                                <input
+                                  type="radio"
+                                  className={checkboxInputClass}
+                                  name={`${titleId}-correction-paid`}
+                                  checked={!correctionPaid}
+                                  onChange={() => setCorrectionPaid(false)}
+                                />
+                                Бесплатно
+                              </label>
+                            </div>
+                            <label className={checkboxLabelClass}>
+                              <input
+                                type="checkbox"
+                                className={checkboxInputClass}
+                                checked={reworkAtCustomerExpense}
+                                onChange={(e) =>
+                                  setReworkAtCustomerExpense(e.target.checked)
+                                }
+                              />
+                              За счёт заказчика
+                            </label>
+                            <p className="text-[10px] leading-snug text-[var(--text-muted)]">
+                              Если не отмечено — за счёт лаборатории.
+                            </p>
+                          </div>
                         ) : null}
                       </div>
                     </div>

@@ -811,7 +811,11 @@ model Order {
   prostheticsOrdered             Boolean                   @default(false)
   /// Коррекция: направление (ортопедия / ортодонтия); null — не коррекция
   correctionTrack                OrderCorrectionTrack?
-  /// Для переделки: true — за счет заказчика, false — внутренняя переделка
+  /// Текст причины коррекции (показывается при выбранном направлении коррекции)
+  correctionReason               String?
+  /// Коррекция платная (true) / бесплатная (false)
+  correctionPaid                 Boolean                   @default(false)
+  /// При любой коррекции: true — за счёт заказчика; false — за счёт лаборатории
   reworkAtCustomerExpense        Boolean                   @default(false)
   /// Кто занёс наряд в CRM (подпись с момента создания)
   registeredByLabel              String?

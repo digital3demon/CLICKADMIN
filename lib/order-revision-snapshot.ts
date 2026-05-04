@@ -55,6 +55,8 @@ export type OrderSnapshotV1 = {
     orderPriceListNote?: string | null;
     prostheticsOrdered?: boolean;
     correctionTrack?: string | null;
+    correctionReason?: string | null;
+    correctionPaid?: boolean;
     reworkAtCustomerExpense?: boolean;
     registeredByLabel?: string | null;
     courierId?: string | null;
@@ -147,6 +149,8 @@ export function buildSnapshotFromOrder(
       orderPriceListNote: order.orderPriceListNote ?? null,
       prostheticsOrdered: order.prostheticsOrdered,
       correctionTrack: order.correctionTrack ?? null,
+      correctionReason: order.correctionReason ?? null,
+      correctionPaid: order.correctionPaid,
       reworkAtCustomerExpense: order.reworkAtCustomerExpense,
       registeredByLabel: order.registeredByLabel ?? null,
       courierId: order.courierId ?? null,
@@ -336,6 +340,10 @@ export async function applyOrderSnapshot(
             "correctionTrack" in o && o.correctionTrack
               ? (o.correctionTrack as never)
               : null,
+          correctionReason:
+            "correctionReason" in o ? (o.correctionReason ?? null) : null,
+          correctionPaid:
+            "correctionPaid" in o ? Boolean(o.correctionPaid) : false,
           reworkAtCustomerExpense:
             "reworkAtCustomerExpense" in o
               ? Boolean(o.reworkAtCustomerExpense)
