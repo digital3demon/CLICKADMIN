@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  extractImageDataUrisFromHtml,
   extractContractNumberFromDocumentText,
   formatContractNumber,
   formatYearMonthYYMM,
   parseGeneratedContractNumber,
-  rehydrateImageMarkers,
 } from "./clinic-contract";
 
 describe("contract number format", () => {
@@ -41,21 +39,5 @@ describe("extractContractNumberFromDocumentText", () => {
 
   it("возвращает null на пустом вводе", () => {
     expect(extractContractNumberFromDocumentText("")).toBeNull();
-  });
-});
-
-describe("image marker helpers", () => {
-  it("достаёт data-uri и подставляет по маркерам", () => {
-    const html = `<p>Текст</p><img src="data:image/png;base64,AAA"/><img src="data:image/jpeg;base64,BBB"/>`;
-    const dataUris = extractImageDataUrisFromHtml(html);
-    expect(dataUris).toEqual([
-      "data:image/png;base64,AAA",
-      "data:image/jpeg;base64,BBB",
-    ]);
-    const marked =
-      '<p>Текст</p><img src="contract-image://0"/><img src="contract-image://1"/>';
-    expect(rehydrateImageMarkers(marked, dataUris)).toContain(
-      'src="data:image/png;base64,AAA"',
-    );
   });
 });

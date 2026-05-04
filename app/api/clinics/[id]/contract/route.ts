@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 import {
   buildDraftValues,
-  convertDocxToEditableHtml,
-  convertEditableHtmlToDocx,
-  extractImageDataUrisFromHtml,
   extractContractNumberFromDocxBuffer,
   formatContractNumber,
   formatYearMonthYYMM,
   generateContractDocxFromTemplate,
   parseGeneratedContractNumber,
-  rehydrateImageMarkers,
   type ClinicContractDraftValues,
 } from "@/lib/clinic-contract";
 import { getPrisma } from "@/lib/get-prisma";
@@ -18,44 +14,10 @@ const MAX_DOCX_SIZE_BYTES = 12 * 1024 * 1024;
 
 type JsonBody =
   | { action: "prefill" }
-  | { action: "assemble"; values: ClinicContractDraftValues }
   | {
       action: "save-generated";
       values: ClinicContractDraftValues;
-      editedHtml: string;
     };
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function markAutofilledValues(
-  html: string,
-  values: ClinicContractDraftValues,
-): string {
-  const tokens = [
-    values.contractNumber,
-    values.contractDate,
-    values.orgShortName,
-    values.inn,
-    values.ceoName,
-    values.email,
-    values.requisitesLine,
-  ]
-    .map((x) => x.trim())
-    .filter((x) => x.length >= 2)
-    .sort((a, b) => b.length - a.length);
-
-  let out = html;
-  for (const token of tokens) {
-    const re = new RegExp(escapeRegExp(token), "g");
-    out = out.replace(
-      re,
-      `<span data-contract-fill="1" style="color:#c62828;font-weight:600">${token}</span>`,
-    );
-  }
-  return out;
-}
 
 function asDraftValues(v: unknown): ClinicContractDraftValues | null {
   if (!v || typeof v !== "object") return null;
@@ -295,37 +257,13 @@ export async function POST(
     return NextResponse.json({ ok: true, values });
   }
 
-  if (body.action === "assemble") {
-    const values = asDraftValues(body.values);
-    if (!values) {
-      return NextResponse.json({ error: "Некорректные данные формы договора" }, { status: 400 });
-    }
-    const generated = await generateContractDocxFromTemplate(values);
-    const editorHtmlRaw = await convertDocxToEditableHtml(generated.docx);
-    const editorHtml = markAutofilledValues(editorHtmlRaw, values);
-    return NextResponse.json({
-      ok: true,
-      editorText: generated.text,
-      editorHtml,
-      contractNumber: values.contractNumber,
-    });
-  }
-
   if (body.action === "save-generated") {
     const values = asDraftValues(body.values);
     if (!values) {
       return NextResponse.json({ error: "Некорректные данные договора" }, { status: 400 });
     }
-    const editedHtml = String(body.editedHtml ?? "").trim();
-    if (!editedHtml) {
-      return NextResponse.json({ error: "Пустой HTML редактора договора" }, { status: 400 });
-    }
     const contractNumber = values.contractNumber;
-    const templateGenerated = await generateContractDocxFromTemplate(values);
-    const templateHtml = await convertDocxToEditableHtml(templateGenerated.docx);
-    const imageUris = extractImageDataUrisFromHtml(templateHtml);
-    const rehydratedHtml = rehydrateImageMarkers(editedHtml, imageUris);
-    const editedDocx = await convertEditableHtmlToDocx(rehydratedHtml);
+    const generated = await generateContractDocxFromTemplate(values);
     await prisma.clinic.update({
       where: { id },
       data: {
@@ -340,13 +278,13 @@ export async function POST(
         fileName: composeAttachmentName(contractNumber),
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(editedDocx),
+        data: toDbBytes(generated.docx),
       },
       update: {
         fileName: composeAttachmentName(contractNumber),
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(editedDocx),
+        data: toDbBytes(generated.docx),
       },
     });
     await syncContractSequenceIfNeeded(clinic.tenantId, contractNumber);
