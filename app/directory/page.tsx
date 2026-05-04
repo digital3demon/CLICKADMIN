@@ -129,6 +129,20 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
+        {showPrice ? (
+          <Link
+            href="/directory/contracts"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">
+              Шаблон договора
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Загрузка DOCX-шаблона: поля для замены распознаются из красного
+              текста в кавычках.
+            </p>
+          </Link>
+        ) : null}
         {showUsers ? (
           <Link
             href="/directory/users"

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import {
+  buildContractTemplateFields,
   buildDraftValues,
+  extractContractTemplatePlaceholders,
   extractContractNumberFromDocxBuffer,
   formatContractNumber,
   formatYearMonthYYMM,
-  generateContractDocxFromTemplate,
+  generateContractDocxFromTemplateFields,
   parseGeneratedContractNumber,
-  type ClinicContractDraftValues,
+  type ContractTemplateField,
 } from "@/lib/clinic-contract";
 import { getPrisma } from "@/lib/get-prisma";
 
@@ -16,23 +18,40 @@ type JsonBody =
   | { action: "prefill" }
   | {
       action: "save-generated";
-      values: ClinicContractDraftValues;
+      fields: ContractTemplateField[];
     };
 
-function asDraftValues(v: unknown): ClinicContractDraftValues | null {
-  if (!v || typeof v !== "object") return null;
-  const row = v as Record<string, unknown>;
-  const out: ClinicContractDraftValues = {
-    contractNumber: String(row.contractNumber ?? "").trim(),
-    contractDate: String(row.contractDate ?? "").trim(),
-    orgShortName: String(row.orgShortName ?? "").trim(),
-    inn: String(row.inn ?? "").trim(),
-    ceoName: String(row.ceoName ?? "").trim(),
-    email: String(row.email ?? "").trim(),
-    requisitesLine: String(row.requisitesLine ?? "").trim(),
-  };
-  if (!out.contractNumber || !out.contractDate || !out.orgShortName) return null;
+function asTemplateFields(v: unknown): ContractTemplateField[] | null {
+  if (!Array.isArray(v)) return null;
+  const out: ContractTemplateField[] = [];
+  for (const row of v) {
+    if (!row || typeof row !== "object") return null;
+    const r = row as Record<string, unknown>;
+    out.push({
+      key: String(r.key ?? "").trim(),
+      label: String(r.label ?? "").trim(),
+      value: String(r.value ?? ""),
+    });
+  }
   return out;
+}
+
+function pickFieldValue(fields: ContractTemplateField[], matcher: (k: string) => boolean) {
+  for (const f of fields) {
+    const key = `${f.key} ${f.label}`.toLowerCase();
+    if (matcher(key)) return f.value.trim();
+  }
+  return "";
+}
+
+function pickContractNumber(fields: ContractTemplateField[]): string {
+  const explicit = pickFieldValue(
+    fields,
+    (k) => k.includes("номер") && k.includes("договор"),
+  );
+  if (explicit) return explicit;
+  const synthetic = fields.find((f) => f.key === "__contract_number__")?.value.trim();
+  return synthetic || "";
 }
 
 function composeAttachmentName(contractNumber: string): string {
@@ -244,6 +263,24 @@ export async function POST(
   }
 
   if (body.action === "prefill") {
+    const template = await prisma.contractTemplateSettings.findUnique({
+      where: { id: clinic.tenantId },
+      select: {
+        fileName: true,
+        docxBytes: true,
+        placeholders: true,
+      },
+    });
+    if (!template?.docxBytes) {
+      return NextResponse.json(
+        {
+          error:
+            "Сначала загрузите шаблон договора в «Конфигурация → Шаблон договора».",
+        },
+        { status: 400 },
+      );
+    }
+
     const now = new Date();
     const currentYm = formatYearMonthYYMM(now);
     const counter = await prisma.contractNumberSettings.findUnique({
@@ -253,17 +290,68 @@ export async function POST(
     const nextSeq =
       counter && counter.yearMonth === currentYm ? counter.lastSequence + 1 : 1;
     const nextNumber = formatContractNumber(currentYm, nextSeq);
-    const values = buildDraftValues(clinic, nextNumber, now);
-    return NextResponse.json({ ok: true, values });
+    const placeholders =
+      Array.isArray(template.placeholders) && template.placeholders.length > 0
+        ? template.placeholders
+            .map((x) => String(x ?? "").trim())
+            .filter((x) => x.length > 0)
+        : await extractContractTemplatePlaceholders(Buffer.from(template.docxBytes));
+    const fields = buildContractTemplateFields(placeholders, clinic, nextNumber, now);
+    return NextResponse.json({
+      ok: true,
+      templateFileName: template.fileName,
+      fields,
+    });
   }
 
   if (body.action === "save-generated") {
-    const values = asDraftValues(body.values);
-    if (!values) {
-      return NextResponse.json({ error: "Некорректные данные договора" }, { status: 400 });
+    const fields = asTemplateFields(body.fields);
+    if (!fields || fields.length === 0) {
+      return NextResponse.json(
+        { error: "Некорректные поля договора" },
+        { status: 400 },
+      );
     }
-    const contractNumber = values.contractNumber;
-    const generated = await generateContractDocxFromTemplate(values);
+    const template = await prisma.contractTemplateSettings.findUnique({
+      where: { id: clinic.tenantId },
+      select: { docxBytes: true },
+    });
+    if (!template?.docxBytes) {
+      return NextResponse.json(
+        { error: "Шаблон договора не загружен в конфигурации" },
+        { status: 400 },
+      );
+    }
+    const contractNumber = pickContractNumber(fields);
+    if (!contractNumber) {
+      return NextResponse.json(
+        { error: "Заполните номер договора" },
+        { status: 400 },
+      );
+    }
+    const fallbackValues = buildDraftValues(clinic, contractNumber, new Date());
+    fallbackValues.contractDate =
+      pickFieldValue(fields, (k) => k.includes("дата")) || fallbackValues.contractDate;
+    fallbackValues.orgShortName =
+      pickFieldValue(fields, (k) => k.includes("наимен")) ||
+      fallbackValues.orgShortName;
+    fallbackValues.inn =
+      pickFieldValue(fields, (k) => k.includes("инн")) || fallbackValues.inn;
+    fallbackValues.ceoName =
+      pickFieldValue(fields, (k) => k.includes("фио") || k.includes("директор")) ||
+      fallbackValues.ceoName;
+    fallbackValues.email =
+      pickFieldValue(fields, (k) => k.includes("почта") || k.includes("email")) ||
+      fallbackValues.email;
+    fallbackValues.requisitesLine =
+      pickFieldValue(fields, (k) => k.includes("реквизит")) ||
+      fallbackValues.requisitesLine;
+
+    const generated = await generateContractDocxFromTemplateFields(
+      Buffer.from(template.docxBytes),
+      fields,
+      fallbackValues,
+    );
     await prisma.clinic.update({
       where: { id },
       data: {
@@ -278,13 +366,13 @@ export async function POST(
         fileName: composeAttachmentName(contractNumber),
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(generated.docx),
+        data: toDbBytes(generated),
       },
       update: {
         fileName: composeAttachmentName(contractNumber),
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(generated.docx),
+        data: toDbBytes(generated),
       },
     });
     await syncContractSequenceIfNeeded(clinic.tenantId, contractNumber);

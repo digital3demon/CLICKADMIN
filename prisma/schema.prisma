@@ -71,6 +71,7 @@ model Tenant {
   kaitenCardTypes       KaitenCardType[]
   orderNumberSettings   OrderNumberSettings?
   contractNumberSettings ContractNumberSettings?
+  contractTemplateSettings ContractTemplateSettings?
   subscriptionInvoices  SubscriptionInvoice[]
   /// Переопределения доступа к модулям; если записи нет — см. `lib/role-module-defaults`
   roleModuleAccess      RoleModuleAccess[]
@@ -608,6 +609,17 @@ model ContractNumberSettings {
   /// Последний подтверждённый порядковый номер NNN в рамках yearMonth.
   lastSequence     Int      @default(0)
   updatedAt        DateTime @updatedAt
+}
+
+/// Один ряд на тенант: загруженный шаблон договора (.docx) и список red-quoted плейсхолдеров.
+model ContractTemplateSettings {
+  id           String   @id
+  tenant       Tenant   @relation(fields: [id], references: [id], onDelete: Cascade)
+  fileName     String
+  mimeType     String
+  docxBytes    Bytes
+  placeholders Json?
+  updatedAt    DateTime @updatedAt
 }
 
 /// Основной или индивидуальный прайс по наряду (колонка «ПРАЙС» в Excel)

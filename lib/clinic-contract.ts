@@ -53,6 +53,12 @@ export type ClinicContractDraftValues = {
   requisitesLine: string;
 };
 
+export type ContractTemplateField = {
+  key: string;
+  label: string;
+  value: string;
+};
+
 function escapeXml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -181,6 +187,138 @@ function applyTemplateBody(xml: string, v: ClinicContractDraftValues): string {
   return s;
 }
 
+function extractRedRuns(xml: string): string[] {
+  const runs = [...xml.matchAll(/<w:r[^>]*>[\s\S]*?<\/w:r>/g)].map((m) => m[0]);
+  return runs.filter((r) => r.includes('w:val="FF0000"'));
+}
+
+function normalizePlaceholderKey(label: string): string {
+  return normalizeText(label)
+    .toLowerCase()
+    .replace(/[«»"“”„]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractQuotedParts(s: string): string[] {
+  const out: string[] = [];
+  const re = /[«"“”„]\s*([^»"“”„]+?)\s*[»"“”„]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    const v = m[1].trim();
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+export async function extractContractTemplatePlaceholders(
+  templateDocx: Buffer,
+): Promise<string[]> {
+  const zip = await JSZip.loadAsync(templateDocx);
+  const files = Object.keys(zip.files).filter((name) =>
+    /^word\/(document|header\d+)\.xml$/.test(name),
+  );
+  const uniq = new Map<string, string>();
+  for (const name of files) {
+    const xml = await zip.file(name)?.async("string");
+    if (!xml) continue;
+    for (const run of extractRedRuns(xml)) {
+      const text = [...run.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+        .map((m) => decodeXmlEntities(m[1]))
+        .join("");
+      for (const quoted of extractQuotedParts(text)) {
+        const key = normalizePlaceholderKey(quoted);
+        if (!key || uniq.has(key)) continue;
+        uniq.set(key, quoted);
+      }
+    }
+  }
+  return Array.from(uniq.values());
+}
+
+function suggestValueForPlaceholder(
+  label: string,
+  clinic: ClinicContractSourceData,
+  contractNumber: string,
+  contractDate: string,
+  reqLine: string,
+): string {
+  const key = normalizePlaceholderKey(label);
+  if (key.includes("номер") && key.includes("договор")) return contractNumber;
+  if (key.includes("дата")) return contractDate;
+  if (key.includes("инн")) return clinic.inn?.trim() || "";
+  if (key.includes("кпп")) return clinic.kpp?.trim() || "";
+  if (key.includes("огрн")) return clinic.ogrn?.trim() || "";
+  if (key.includes("бик")) return clinic.bik?.trim() || "";
+  if (key.includes("расчет") || key.includes("р/с")) {
+    return clinic.settlementAccount?.trim() || "";
+  }
+  if (key.includes("корр") || key.includes("к/с")) {
+    return clinic.correspondentAccount?.trim() || "";
+  }
+  if (key.includes("банк")) return clinic.bankName?.trim() || "";
+  if (key.includes("адрес")) return clinic.legalAddress?.trim() || "";
+  if (key.includes("почта") || key.includes("email") || key.includes("e-mail")) {
+    return clinic.email?.trim() || "";
+  }
+  if (key.includes("фио") || key.includes("директор")) {
+    return clinic.ceoName?.trim() || "";
+  }
+  if (key.includes("наимен")) return orgShortName(clinic);
+  if (key.includes("реквизит")) return reqLine;
+  return "";
+}
+
+export function buildContractTemplateFields(
+  placeholders: string[],
+  clinic: ClinicContractSourceData,
+  contractNumber: string,
+  date: Date,
+): ContractTemplateField[] {
+  const dateRu = formatContractDateRu(date);
+  const reqLine = requisitesLine(clinic);
+  const rows = placeholders.map((label) => ({
+    key: normalizePlaceholderKey(label),
+    label,
+    value: suggestValueForPlaceholder(label, clinic, contractNumber, dateRu, reqLine),
+  }));
+  const hasContractNumberField = rows.some(
+    (r) => r.key.includes("номер") && r.key.includes("договор"),
+  );
+  if (!hasContractNumberField) {
+    rows.unshift({
+      key: "__contract_number__",
+      label: "Номер договора",
+      value: contractNumber,
+    });
+  }
+  return rows;
+}
+
+function applyPlaceholderMapToXml(
+  xml: string,
+  placeholderMap: Map<string, string>,
+): string {
+  if (placeholderMap.size === 0) return xml;
+  return xml.replace(/<w:r[^>]*>[\s\S]*?<\/w:r>/g, (run) => {
+    if (!run.includes('w:val="FF0000"')) return run;
+    return run.replace(/<w:t([^>]*)>([\s\S]*?)<\/w:t>/g, (_full, attrs, rawText) => {
+      const decoded = decodeXmlEntities(rawText);
+      const replaced = decoded.replace(
+        /[«"“”„]\s*([^»"“”„]+?)\s*[»"“”„]/g,
+        (quoted, inner) => {
+          const key = normalizePlaceholderKey(inner);
+          const next = placeholderMap.get(key);
+          if (!next) return quoted;
+          return next;
+        },
+      );
+      if (replaced === decoded) return `<w:t${attrs}>${rawText}</w:t>`;
+      return `<w:t${attrs}>${escapeXml(replaced)}</w:t>`;
+    });
+  });
+}
+
 function decodeXmlEntities(s: string): string {
   return s
     .replace(/&#(\d+);/g, (_m, code) => String.fromCodePoint(Number(code)))
@@ -242,6 +380,39 @@ export async function generateContractDocxFromTemplate(
     compression: "DEFLATE",
   });
   return { docx, text: xmlToPlainText(docXml) };
+}
+
+export async function generateContractDocxFromTemplateFields(
+  templateDocx: Buffer,
+  fields: ContractTemplateField[],
+  fallbackValues: ClinicContractDraftValues,
+): Promise<Buffer> {
+  const map = new Map<string, string>();
+  for (const f of fields) {
+    if (!f.key || f.key.startsWith("__")) continue;
+    map.set(normalizePlaceholderKey(f.key), f.value ?? "");
+    map.set(normalizePlaceholderKey(f.label), f.value ?? "");
+  }
+  const zip = await JSZip.loadAsync(templateDocx);
+  const docPath = "word/document.xml";
+  const docXmlRaw = await zip.file(docPath)?.async("string");
+  if (!docXmlRaw) throw new Error("Шаблон договора повреждён: нет word/document.xml");
+  let docXml = applyPlaceholderMapToXml(docXmlRaw, map);
+  if (map.size === 0) {
+    docXml = applyTemplateBody(docXmlRaw, fallbackValues);
+  }
+  zip.file(docPath, docXml);
+  for (const name of Object.keys(zip.files)) {
+    if (!/^word\/header\d+\.xml$/.test(name)) continue;
+    const raw = await zip.file(name)?.async("string");
+    if (!raw) continue;
+    const next = applyPlaceholderMapToXml(raw, map);
+    zip.file(name, next);
+  }
+  return zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+  });
 }
 
 export async function generateContractDocxFromPlainText(text: string): Promise<Buffer> {

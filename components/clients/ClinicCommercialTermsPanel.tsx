@@ -31,13 +31,9 @@ export type ClinicCommercialInitial = {
 };
 
 type ContractDraftValues = {
-  contractNumber: string;
-  contractDate: string;
-  orgShortName: string;
-  inn: string;
-  ceoName: string;
-  email: string;
-  requisitesLine: string;
+  key: string;
+  label: string;
+  value: string;
 };
 
 function yesNo(v: boolean) {
@@ -62,16 +58,16 @@ function orderPriceListKindReadLabel(v: ClinicOrderPriceListKindUi) {
   return "—";
 }
 
-function emptyContractDraftValues(): ContractDraftValues {
-  return {
-    contractNumber: "",
-    contractDate: "",
-    orgShortName: "",
-    inn: "",
-    ceoName: "",
-    email: "",
-    requisitesLine: "",
-  };
+function pickContractNumberFromFields(fields: ContractDraftValues[]): string {
+  for (const f of fields) {
+    const key = `${f.key} ${f.label}`.toLowerCase();
+    if (key.includes("номер") && key.includes("договор")) {
+      return f.value.trim();
+    }
+  }
+  return (
+    fields.find((f) => f.key === "__contract_number__")?.value.trim() || ""
+  );
 }
 
 export function ClinicCommercialTermsPanel({
@@ -89,10 +85,9 @@ export function ClinicCommercialTermsPanel({
   const [hasContractDoc, setHasContractDoc] = useState(initial.hasContractDoc);
   const [contractBusy, setContractBusy] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
+  const [contractSuccess, setContractSuccess] = useState<string | null>(null);
   const [draftOpen, setDraftOpen] = useState(false);
-  const [draftValues, setDraftValues] = useState<ContractDraftValues>(
-    emptyContractDraftValues(),
-  );
+  const [draftValues, setDraftValues] = useState<ContractDraftValues[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const initialKey = useMemo(() => JSON.stringify(initial), [initial]);
 
@@ -104,6 +99,7 @@ export function ClinicCommercialTermsPanel({
   const openCreateContract = async () => {
     setContractBusy(true);
     setContractError(null);
+    setContractSuccess(null);
     try {
       const res = await fetch(`/api/clinics/${clinicId}/contract`, {
         method: "POST",
@@ -111,7 +107,7 @@ export function ClinicCommercialTermsPanel({
         body: JSON.stringify({ action: "prefill" }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.values) {
+      if (!res.ok || !Array.isArray(data?.fields)) {
         setContractError(
           typeof data.error === "string"
             ? data.error
@@ -119,15 +115,13 @@ export function ClinicCommercialTermsPanel({
         );
         return;
       }
-      setDraftValues({
-        contractNumber: String(data.values.contractNumber ?? ""),
-        contractDate: String(data.values.contractDate ?? ""),
-        orgShortName: String(data.values.orgShortName ?? ""),
-        inn: String(data.values.inn ?? ""),
-        ceoName: String(data.values.ceoName ?? ""),
-        email: String(data.values.email ?? ""),
-        requisitesLine: String(data.values.requisitesLine ?? ""),
-      });
+      setDraftValues(
+        data.fields.map((f: { key?: unknown; label?: unknown; value?: unknown }) => ({
+          key: String(f.key ?? ""),
+          label: String(f.label ?? ""),
+          value: String(f.value ?? ""),
+        })),
+      );
       setDraftOpen(true);
     } catch {
       setContractError("Сеть или сервер недоступны");
@@ -139,13 +133,14 @@ export function ClinicCommercialTermsPanel({
   const saveGeneratedContract = async () => {
     setContractBusy(true);
     setContractError(null);
+    setContractSuccess(null);
     try {
       const res = await fetch(`/api/clinics/${clinicId}/contract`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "save-generated",
-          values: draftValues,
+          fields: draftValues,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -158,10 +153,16 @@ export function ClinicCommercialTermsPanel({
       setValues((p) => ({
         ...p,
         contractSigned: true,
-        contractNumber: String(data.contractNumber ?? draftValues.contractNumber),
+        contractNumber: String(
+          data.contractNumber ?? pickContractNumberFromFields(draftValues),
+        ),
       }));
       setHasContractDoc(true);
       setDraftOpen(false);
+      setEditing(false);
+      setContractSuccess(
+        "Договор сохранён по шаблону. Теперь доступна кнопка «Скачать договор».",
+      );
       router.refresh();
     } catch {
       setContractError("Сеть или сервер недоступны");
@@ -335,6 +336,11 @@ export function ClinicCommercialTermsPanel({
       {contractError ? (
         <p className="mt-2 text-sm text-red-600" role="alert">
           {contractError}
+        </p>
+      ) : null}
+      {contractSuccess ? (
+        <p className="mt-2 text-sm text-emerald-600" role="status">
+          {contractSuccess}
         </p>
       ) : null}
       <dl className="mt-5 space-y-4 text-sm">
@@ -613,79 +619,38 @@ export function ClinicCommercialTermsPanel({
               Проверка данных договора
             </h3>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              Поля взяты из карточки контрагента. Можно поправить перед сборкой.
+              Поля взяты из карточки контрагента. Можно поправить перед
+              сохранением. Вариант A: договор сохраняется сразу, без второго
+              окна редактора.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="text-sm">
-                <span className="mb-1 block text-[var(--text-secondary)]">Номер договора</span>
-                <input
-                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
-                  value={draftValues.contractNumber}
-                  onChange={(e) =>
-                    setDraftValues((p) => ({ ...p, contractNumber: e.target.value }))
-                  }
-                />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block text-[var(--text-secondary)]">Дата договора</span>
-                <input
-                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
-                  value={draftValues.contractDate}
-                  onChange={(e) =>
-                    setDraftValues((p) => ({ ...p, contractDate: e.target.value }))
-                  }
-                />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block text-[var(--text-secondary)]">Наименование (кратко)</span>
-                <input
-                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
-                  value={draftValues.orgShortName}
-                  onChange={(e) =>
-                    setDraftValues((p) => ({ ...p, orgShortName: e.target.value }))
-                  }
-                />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block text-[var(--text-secondary)]">ИНН</span>
-                <input
-                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
-                  value={draftValues.inn}
-                  onChange={(e) =>
-                    setDraftValues((p) => ({ ...p, inn: e.target.value }))
-                  }
-                />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block text-[var(--text-secondary)]">ФИО руководителя</span>
-                <input
-                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
-                  value={draftValues.ceoName}
-                  onChange={(e) =>
-                    setDraftValues((p) => ({ ...p, ceoName: e.target.value }))
-                  }
-                />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block text-[var(--text-secondary)]">Email</span>
-                <input
-                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
-                  value={draftValues.email}
-                  onChange={(e) =>
-                    setDraftValues((p) => ({ ...p, email: e.target.value }))
-                  }
-                />
-              </label>
-              <label className="text-sm sm:col-span-2">
-                <span className="mb-1 block text-[var(--text-secondary)]">Реквизиты строкой</span>
-                <textarea
-                  className="min-h-20 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
-                  value={draftValues.requisitesLine}
-                  onChange={(e) =>
-                    setDraftValues((p) => ({ ...p, requisitesLine: e.target.value }))
-                  }
-                />
-              </label>
+              {draftValues.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)] sm:col-span-2">
+                  Плейсхолдеры не найдены в шаблоне.
+                </p>
+              ) : (
+                draftValues.map((field, idx) => (
+                  <label
+                    key={`${field.key}-${idx}`}
+                    className={`text-sm ${field.value.length > 80 ? "sm:col-span-2" : ""}`}
+                  >
+                    <span className="mb-1 block text-[var(--text-secondary)]">
+                      {field.label || field.key || `Поле ${idx + 1}`}
+                    </span>
+                    <input
+                      className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm"
+                      value={field.value}
+                      onChange={(e) =>
+                        setDraftValues((prev) =>
+                          prev.map((p, pIdx) =>
+                            pIdx === idx ? { ...p, value: e.target.value } : p,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                ))
+              )}
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
