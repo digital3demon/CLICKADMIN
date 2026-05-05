@@ -15,6 +15,7 @@ import {
   parseYmdOrNull,
 } from "@/lib/shipments-date-range";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSiteOrigin } from "@/lib/site-origin-server";
 export const dynamic = "force-dynamic";
@@ -45,9 +46,20 @@ export default async function ShipmentsPage({
   const sp = await searchParams;
   const prisma = await getOrdersPrisma();
   const session = await getSessionFromCookies();
+  const tenantId = session ? await getTenantIdForSession(session) : null;
   const isDemo = Boolean(session?.demo);
   const siteOrigin = await getSiteOrigin();
   const tab = parseTab(sp.tab);
+
+  if (!tenantId) {
+    return (
+      <ModuleFrame title="Отгрузки" description="">
+        <p className="text-sm text-[var(--text-secondary)]">
+          Войдите в CRM, чтобы просматривать отгрузки.
+        </p>
+      </ModuleFrame>
+    );
+  }
 
   const todayYmd = moscowTodayYmd();
   const defaultFrom = addCalendarDaysYmd(todayYmd, -7);
@@ -63,6 +75,7 @@ export default async function ShipmentsPage({
     const { start, endExclusive } = moscowShipmentDayBoundsUtc(todayYmd);
     const orders = await fetchShipmentOrdersInDueRange(
       prisma,
+      tenantId,
       start,
       endExclusive,
     );
@@ -95,6 +108,7 @@ export default async function ShipmentsPage({
     const { start, endExclusive } = moscowShipmentDayBoundsUtc(ymd);
     const orders = await fetchShipmentOrdersInDueRange(
       prisma,
+      tenantId,
       start,
       endExclusive,
     );
@@ -139,6 +153,7 @@ export default async function ShipmentsPage({
         );
         orders = await fetchShipmentOrdersInDueRange(
           prisma,
+          tenantId,
           start,
           endExclusive,
         );

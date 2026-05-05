@@ -1,10 +1,17 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
+import type { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { telegramIdString } from "@/lib/auth/telegram-widget";
 import { telegramSendMessage } from "@/lib/telegram-send-message";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { DEFAULT_TENANT_SLUG } from "@/lib/tenant-constants";
+import {
+  telegramMenuLabelToCommand,
+  telegramReplyKeyboardMarkupForRole,
+  tryTelegramBotListCommand,
+} from "@/lib/telegram-bot-lists";
+import { findCrmUserByTelegramIdForBot } from "@/lib/telegram-bot-resolve-user";
 
 const LINK_TTL_MS = 15 * 60 * 1000;
 
@@ -64,11 +71,49 @@ function tenantSlugFromStartOrEnv(payload: string): string {
   return process.env.CRM_DEFAULT_TENANT_SLUG?.trim() || DEFAULT_TENANT_SLUG;
 }
 
-async function reply(botToken: string, chatId: string, text: string): Promise<void> {
-  const r = await telegramSendMessage(botToken, chatId, text);
+const TELEGRAM_REPLY_KEYBOARD_REMOVE: Record<string, unknown> = {
+  remove_keyboard: true,
+};
+
+async function reply(
+  botToken: string,
+  chatId: string,
+  text: string,
+  opts?: {
+    parseMode?: "HTML";
+    replyMarkup?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const r = await telegramSendMessage(botToken, chatId, text, opts);
   if (!r.ok) {
     console.error("[telegram-bot] sendMessage failed", { chatId, error: r.error });
   }
+}
+
+async function replyRemoveKeyboard(
+  botToken: string,
+  chatId: string,
+  text: string,
+  opts?: { parseMode?: "HTML" },
+): Promise<void> {
+  await reply(botToken, chatId, text, {
+    ...opts,
+    replyMarkup: TELEGRAM_REPLY_KEYBOARD_REMOVE,
+  });
+}
+
+async function replyWithRoleKeyboard(
+  botToken: string,
+  chatId: string,
+  text: string,
+  role: UserRole,
+  opts?: { parseMode?: "HTML" },
+): Promise<void> {
+  const kb = telegramReplyKeyboardMarkupForRole(role);
+  await reply(botToken, chatId, text, {
+    ...opts,
+    ...(kb ? { replyMarkup: kb } : {}),
+  });
 }
 
 /** id в JSON — число или строка (после прокси/обвязки). */
@@ -132,7 +177,8 @@ export async function processTelegramBotUpdate(
   const un = from && typeof from.username === "string" ? from.username.trim() : "";
   const tgUsername = un ? un.replace(/^@+/, "") : null;
 
-  const text = normalizeBotCommandText(textRaw);
+  const menuAsCmd = telegramMenuLabelToCommand(textRaw);
+  const text = menuAsCmd ?? normalizeBotCommandText(textRaw);
   const cmd = firstCommandToken(text);
 
   if (cmd === "/start") {
@@ -142,7 +188,7 @@ export async function processTelegramBotUpdate(
       select: { id: true },
     });
     if (!tenant) {
-      await reply(
+      await replyRemoveKeyboard(
         botToken,
         chatId,
         `Не найдена организация «${slug}». Откройте ссылку из профиля CRM или уточните /start у администратора.`,
@@ -154,7 +200,7 @@ export async function processTelegramBotUpdate(
       create: { telegramUserId: tgUserId, tenantSlug: slug },
       update: { tenantSlug: slug },
     });
-    await reply(
+    await replyRemoveKeyboard(
       botToken,
       chatId,
       "Привязка к CRM.\n\nОтправьте одним сообщением адрес электронной почты, который вы используете для входа в CRM (как при логине).",
@@ -166,14 +212,48 @@ export async function processTelegramBotUpdate(
     await prisma.telegramBotLinkPending.deleteMany({
       where: { telegramUserId: tgUserId },
     });
-    await reply(botToken, chatId, "Ок, привязка отменена. Снова: /start");
+    await replyRemoveKeyboard(botToken, chatId, "Ок, привязка отменена. Снова: /start");
     return;
+  }
+
+  const linkedUser = await findCrmUserByTelegramIdForBot(tgUserId);
+
+  if (linkedUser) {
+    const listReply = await tryTelegramBotListCommand({
+      command: cmd,
+      tenantId: linkedUser.tenantId,
+      role: linkedUser.role,
+    });
+    if (listReply) {
+      await replyWithRoleKeyboard(botToken, chatId, listReply.text, linkedUser.role, {
+        parseMode: listReply.parseMode,
+      });
+      return;
+    }
+    if (text.trim().startsWith("/")) {
+      await replyWithRoleKeyboard(
+        botToken,
+        chatId,
+        "Неизвестная команда. Отгрузки: /shiptd /shiptm /shipw. Сроки канбана: /dlinetd /dlinetm /dlinew. Или кнопки ниже.",
+        linkedUser.role,
+      );
+      return;
+    }
   }
 
   const pending = await prisma.telegramBotLinkPending.findUnique({
     where: { telegramUserId: tgUserId },
   });
   if (!pending) {
+    if (linkedUser) {
+      await replyWithRoleKeyboard(
+        botToken,
+        chatId,
+        "Выберите действие кнопкой ниже или команды: /shiptd /shiptm /shipw /dlinetd /dlinetm /dlinew. Привязка почты: /start.",
+        linkedUser.role,
+      );
+      return;
+    }
     await reply(
       botToken,
       chatId,
@@ -183,7 +263,7 @@ export async function processTelegramBotUpdate(
   }
 
   if (!looksLikeEmail(text)) {
-    await reply(
+    await replyRemoveKeyboard(
       botToken,
       chatId,
       "Похоже, это не email. Отправьте адрес вида name@company.ru или /cancel.",
@@ -197,7 +277,11 @@ export async function processTelegramBotUpdate(
     select: { id: true },
   });
   if (!tenant) {
-    await reply(botToken, chatId, "Ошибка: организация не найдена. Начните с /start.");
+    await replyRemoveKeyboard(
+      botToken,
+      chatId,
+      "Ошибка: организация не найдена. Начните с /start.",
+    );
     return;
   }
 
@@ -210,7 +294,7 @@ export async function processTelegramBotUpdate(
     },
   });
   if (!user) {
-    await reply(
+    await replyRemoveKeyboard(
       botToken,
       chatId,
       `Учётная запись с почтой ${email} не найдена в этой организации. Проверьте адрес или откройте ссылку из профиля на нужном поддомене.`,
@@ -219,7 +303,11 @@ export async function processTelegramBotUpdate(
   }
 
   if (user.telegramId?.trim() === tgUserId) {
-    await reply(botToken, chatId, "Этот Telegram уже привязан к вашему профилю в CRM.");
+    await replyRemoveKeyboard(
+      botToken,
+      chatId,
+      "Этот Telegram уже привязан к вашему профилю в CRM.",
+    );
     await prisma.telegramBotLinkPending.deleteMany({
       where: { telegramUserId: tgUserId },
     });
@@ -231,7 +319,7 @@ export async function processTelegramBotUpdate(
     select: { id: true },
   });
   if (taken) {
-    await reply(
+    await replyRemoveKeyboard(
       botToken,
       chatId,
       "Этот Telegram уже привязан к другой учётной записи. Сначала отвяжите его в CRM: профиль → Отвязать Telegram.",
@@ -268,7 +356,7 @@ export async function processTelegramBotUpdate(
   });
 
   const url = `${base}/login/telegram-link/confirm?token=${encodeURIComponent(token)}`;
-  await reply(
+  await replyRemoveKeyboard(
     botToken,
     chatId,
     `Найдена учётная запись: ${user.displayName}\n\nОткройте ссылку в браузере (желательно там, где вы уже вошли в CRM), чтобы подтвердить привязку:\n${url}\n\nСсылка действует ~15 минут. Если это не вы — не открывайте и напишите /cancel.`,

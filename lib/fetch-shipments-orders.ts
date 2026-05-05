@@ -12,6 +12,7 @@ const shipmentOrderSelect = {
   dueToAdminsAt: true,
   createdAt: true,
   dueDate: true,
+  kaitenCardTitleMirror: true,
   kaitenCardId: true,
   demoKanbanColumn: true,
   kaitenColumnTitle: true,
@@ -79,11 +80,13 @@ export type ShipmentOrderRow = Omit<
 /** Наряды с непустым appointmentDate в полуинтервале [start, endExclusive) (МСК-окно отгрузки). */
 export async function fetchShipmentOrdersInDueRange(
   db: PrismaClient,
+  tenantId: string,
   start: Date,
   endExclusive: Date,
 ) {
   const rows = await db.order.findMany({
     where: {
+      tenantId,
       archivedAt: null,
       appointmentDate: { not: null, gte: start, lt: endExclusive },
     },

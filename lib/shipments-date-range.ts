@@ -104,3 +104,34 @@ export function moscowShipmentInclusiveRangeBoundsUtc(
   const endExclusive = new Date(`${dayAfterTo}T12:00:00+03:00`);
   return { start, endExclusive };
 }
+
+/** Пн–Вс в Москве для календарной даты ymd (полдень МСК для стабильности). */
+function moscowWeekdayMon1Sun7(ymd: string): number {
+  const wd = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Moscow",
+    weekday: "short",
+  }).format(new Date(`${ymd}T12:00:00+03:00`));
+  const map: Record<string, number> = {
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+    Sun: 7,
+  };
+  return map[wd] ?? 1;
+}
+
+/**
+ * Пятница «рабочей недели» для отгрузок до конца недели:
+ * пн–пт — пятница той же календарной недели; сб — ближайшая следующая пятница; вс — ближайшая следующая пятница.
+ */
+export function moscowWorkWeekFridayYmd(fromYmd: string): string {
+  const idx = moscowWeekdayMon1Sun7(fromYmd);
+  let delta = 0;
+  if (idx <= 5) delta = 5 - idx;
+  else if (idx === 6) delta = 6;
+  else delta = 5;
+  return addCalendarDaysYmd(fromYmd, delta);
+}

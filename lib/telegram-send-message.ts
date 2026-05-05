@@ -10,7 +10,11 @@ export async function telegramSendMessage(
   botToken: string,
   chatId: string,
   text: string,
-  opts?: { parseMode?: "HTML" },
+  opts?: {
+    parseMode?: "HTML";
+    /** Напр. ReplyKeyboardMarkup или `{ remove_keyboard: true }` */
+    replyMarkup?: Record<string, unknown>;
+  },
 ): Promise<TelegramSendResult> {
   const t = text.trim();
   if (!t) return { ok: false, error: "Пустой текст" };
@@ -22,6 +26,9 @@ export async function telegramSendMessage(
     };
     if (opts?.parseMode === "HTML") {
       body.parse_mode = "HTML";
+    }
+    if (opts?.replyMarkup && Object.keys(opts.replyMarkup).length > 0) {
+      body.reply_markup = opts.replyMarkup;
     }
     const res = await fetch(
       `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`,
