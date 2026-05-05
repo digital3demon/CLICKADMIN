@@ -20,6 +20,14 @@ type CommentRow = {
   created?: string;
   authorName?: string;
   parentId: number | null;
+  images?: ChatImage[];
+};
+
+type ChatImage = {
+  id: string;
+  name: string;
+  url: string;
+  mime: string | null;
 };
 
 type KaitenSnapshot = {
@@ -29,7 +37,14 @@ type KaitenSnapshot = {
   columns: Array<{ id: number; title?: string; name?: string }>;
   lanes: Array<{ id: number; title?: string }>;
   comments: CommentRow[];
+  cardImages?: ChatImage[];
   kaitenCardUrl: string | null;
+};
+
+type ImagePreview = {
+  id: string;
+  name: string;
+  url: string;
 };
 
 function commentsHaveClicklab(comments: CommentRow[]): boolean {
@@ -59,6 +74,17 @@ export function OrderListKaitenChatModal({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadOk, setUploadOk] = useState<string | null>(null);
+  const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
+  const [openImage, setOpenImage] = useState<{ name: string; url: string } | null>(
+    null,
+  );
+
+  const clearImagePreviews = useCallback(() => {
+    setImagePreviews((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p.url));
+      return [];
+    });
+  }, []);
 
   const applyClicklabFlag = useCallback(
     (comments: CommentRow[]) => {
@@ -95,6 +121,11 @@ export function OrderListKaitenChatModal({
     if (!open) return;
     void load();
   }, [open, load]);
+
+  useEffect(() => {
+    if (open) return;
+    clearImagePreviews();
+  }, [open, clearImagePreviews]);
 
   useEffect(() => {
     if (!open) return;
@@ -153,14 +184,28 @@ export function OrderListKaitenChatModal({
       if (arr.length === 0) return;
       setUploadError(null);
       setUploadOk(null);
+      for (const file of arr) {
+        if (file.size > CRM_UPLOAD_MAX_BYTES) {
+          setUploadError(CRM_UPLOAD_TOO_LARGE_MESSAGE);
+          return;
+        }
+      }
+      const previews = arr
+        .filter((file) => file.type.startsWith("image/"))
+        .map((file, idx) => ({
+          id: `${file.name}-${file.size}-${file.lastModified}-${idx}`,
+          name: file.name,
+          url: URL.createObjectURL(file),
+        }));
+      setImagePreviews((prev) => {
+        prev.forEach((p) => URL.revokeObjectURL(p.url));
+        return previews;
+      });
       setUploading(true);
       try {
         let done = 0;
         const warnings: string[] = [];
         for (const file of arr) {
-          if (file.size > CRM_UPLOAD_MAX_BYTES) {
-            throw new Error(CRM_UPLOAD_TOO_LARGE_MESSAGE);
-          }
           const result = await postOrderAttachmentWithRetries(orderId, file);
           if (!result.ok) {
             throw new Error(result.error || "Не удалось загрузить файл");
@@ -198,9 +243,35 @@ export function OrderListKaitenChatModal({
   if (!open) return null;
 
   const comments = snap?.comments ?? [];
+  const cardImages = snap?.cardImages ?? [];
   const roots = comments.filter((c) => c.parentId == null);
   const childrenOf = (pid: number) =>
     comments.filter((c) => c.parentId === pid);
+  const renderChatImages = (images: ChatImage[] | undefined) => {
+    if (!images?.length) return null;
+    return (
+      <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {images.map((image) => (
+          <button
+            key={image.id}
+            type="button"
+            className="min-w-0 text-left"
+            title={image.name}
+            onClick={() => setOpenImage({ name: image.name, url: image.url })}
+          >
+            <img
+              src={image.url}
+              alt={image.name}
+              className="h-20 w-full rounded border border-[var(--card-border)] object-cover hover:opacity-90"
+            />
+            <span className="mt-1 block truncate text-[10px] text-[var(--text-muted)]">
+              {image.name}
+            </span>
+          </button>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -277,6 +348,7 @@ export function OrderListKaitenChatModal({
                       <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-text)]">
                         {c.text}
                       </p>
+                      {renderChatImages(c.images)}
                       <button
                         type="button"
                         className="mt-1 text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
@@ -297,6 +369,7 @@ export function OrderListKaitenChatModal({
                               <p className="whitespace-pre-wrap text-[var(--app-text)]">
                                 {ch.text}
                               </p>
+                              {renderChatImages(ch.images)}
                               <button
                                 type="button"
                                 className="mt-0.5 text-xs text-[var(--sidebar-blue)] hover:underline"
@@ -312,6 +385,14 @@ export function OrderListKaitenChatModal({
                   ))
                 )}
               </ul>
+              {cardImages.length > 0 ? (
+                <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                    Изображения в карточке
+                  </p>
+                  {renderChatImages(cardImages)}
+                </div>
+              ) : null}
             </>
           )}
         </div>
@@ -346,6 +427,42 @@ export function OrderListKaitenChatModal({
           {uploadOk ? (
             <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">{uploadOk}</p>
           ) : null}
+          {imagePreviews.length > 0 ? (
+            <div className="mt-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] p-2">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                  Предпросмотр изображений
+                </p>
+                <button
+                  type="button"
+                  className="text-[10px] font-medium text-[var(--sidebar-blue)] hover:underline"
+                  onClick={clearImagePreviews}
+                >
+                  Скрыть
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {imagePreviews.map((preview) => (
+                  <figure key={preview.id} className="min-w-0">
+                    <img
+                      src={preview.url}
+                      alt={preview.name}
+                      className="h-20 w-full rounded border border-[var(--card-border)] object-cover"
+                      onClick={() =>
+                        setOpenImage({ name: preview.name, url: preview.url })
+                      }
+                    />
+                    <figcaption
+                      className="mt-1 truncate text-[10px] text-[var(--text-muted)]"
+                      title={preview.name}
+                    >
+                      {preview.name}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <label className="inline-flex cursor-pointer items-center rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]">
               {uploading ? "Загрузка файлов…" : "Загрузить файл(ы)"}
@@ -376,6 +493,34 @@ export function OrderListKaitenChatModal({
           </button>
         </div>
       </div>
+      {openImage ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setOpenImage(null);
+          }}
+        >
+          <div className="max-h-full max-w-5xl">
+            <div className="mb-2 flex items-center justify-between gap-3 text-white">
+              <p className="min-w-0 truncate text-sm font-medium">{openImage.name}</p>
+              <button
+                type="button"
+                className="rounded-md bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
+                onClick={() => setOpenImage(null)}
+              >
+                Закрыть
+              </button>
+            </div>
+            <img
+              src={openImage.url}
+              alt={openImage.name}
+              className="max-h-[82vh] max-w-full rounded-lg object-contain"
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

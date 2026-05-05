@@ -142,6 +142,104 @@ function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+type KaitenChatImage = {
+  id: string;
+  name: string;
+  url: string;
+  mime: string | null;
+  commentId: number | null;
+};
+
+function stringField(o: Record<string, unknown>, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = o[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function numberField(o: Record<string, unknown>, keys: readonly string[]): number | null {
+  for (const key of keys) {
+    const value = o[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return null;
+}
+
+function looksLikeImage(name: string, mime: string | null, url: string | null): boolean {
+  if (mime?.toLowerCase().startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|avif|bmp|svg)(?:[?#].*)?$/i.test(name || url || "");
+}
+
+function kaitenImagesFromItems(
+  items: unknown[],
+  orderId: string,
+  commentId: number | null,
+): KaitenChatImage[] {
+  const out: KaitenChatImage[] = [];
+  for (const item of items) {
+    if (item == null || typeof item !== "object" || Array.isArray(item)) continue;
+    const o = item as Record<string, unknown>;
+    const fileId = numberField(o, ["id", "file_id", "attachment_id"]);
+    const name =
+      stringField(o, ["name", "file_name", "filename", "title", "original_name"]) ??
+      (fileId != null ? `image-${fileId}` : "image");
+    const mime = stringField(o, ["mime_type", "mime", "content_type", "type"]);
+    const directUrl = stringField(o, [
+      "download_url",
+      "url",
+      "src",
+      "preview_url",
+      "thumbnail_url",
+    ]);
+    if (!looksLikeImage(name, mime, directUrl)) continue;
+    const url =
+      fileId != null
+        ? `/api/orders/${encodeURIComponent(orderId)}/kaiten/files/${fileId}`
+        : directUrl;
+    if (!url) continue;
+    out.push({
+      id: `${commentId ?? "card"}-${fileId ?? url}`,
+      name,
+      url,
+      mime,
+      commentId,
+    });
+  }
+  return out;
+}
+
+function kaitenImagesFromRecord(
+  record: Record<string, unknown>,
+  orderId: string,
+  commentId: number | null,
+): KaitenChatImage[] {
+  const images: KaitenChatImage[] = [];
+  for (const key of ["files", "attachments", "attached_files", "uploads"] as const) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      images.push(...kaitenImagesFromItems(value, orderId, commentId));
+    }
+  }
+  return images;
+}
+
+function dedupeKaitenImages(images: KaitenChatImage[]): KaitenChatImage[] {
+  const seen = new Set<string>();
+  const out: KaitenChatImage[] = [];
+  for (const image of images) {
+    const key = image.url || image.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(image);
+  }
+  return out;
+}
+
 /** 5xx / обрыв на стороне Kaiten — пригодно для 2–3 повторов, не 429. */
 function isTransientKaitenHttpStatus(status: number): boolean {
   if (status === 429) return false;
@@ -422,13 +520,26 @@ export async function GET(
   );
   const trackLane = trackFromCard ?? order.kaitenTrackLane ?? null;
 
-  const comments = dedupeParsedKaitenComments(
-    comm.comments
-      .map(parseKaitenListComment)
-      .filter((x): x is NonNullable<typeof x> => x != null),
-  );
-
   const cardObj = cardRes.card as Record<string, unknown>;
+  const parsedComments = comm.comments
+    .map((raw) => {
+      const parsed = parseKaitenListComment(raw);
+      if (!parsed) return null;
+      const images =
+        raw != null && typeof raw === "object" && !Array.isArray(raw)
+          ? kaitenImagesFromRecord(
+              raw as Record<string, unknown>,
+              orderIdTrim,
+              parsed.id,
+            )
+          : [];
+      return { ...parsed, images };
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null);
+  const comments = dedupeParsedKaitenComments(parsedComments);
+  const cardImages = dedupeKaitenImages(
+    kaitenImagesFromRecord(cardObj, orderIdTrim, null),
+  );
   const columnTitle = kaitenColumnTitleFromBoard(cardObj, cols.columns);
   const { blocked: kBlocked, reason: kBlockReason } =
     kaitenBlockStateFromCard(cardObj);
@@ -441,6 +552,7 @@ export async function GET(
     columns: cols.columns,
     lanes: lns.lanes,
     comments,
+    cardImages,
     kaitenCardUrl: getKaitenCardWebUrl(order.kaitenCardId),
     spaces: listConfiguredKaitenTrackLanes(cfg)
       .filter((lane) => cfg.boardByLane[lane]?.boardId != null)

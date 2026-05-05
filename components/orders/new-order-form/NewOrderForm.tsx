@@ -139,6 +139,8 @@ const PAYMENT_OPTIONS = [
 ] as const;
 
 const PLACEHOLDER_DOCTOR_ID = "sys-placeholder-doctor-reimport";
+const CLIENT_ORDER_TEXTAREA_MAX_HEIGHT = 240;
+const COMMENTS_TEXTAREA_MAX_HEIGHT = 160;
 
 export function NewOrderForm({
   panelId,
@@ -181,7 +183,9 @@ export function NewOrderForm({
   const [patientName, setPatientName] = useState("");
   const [clientOrderText, setClientOrderText] = useState("");
   const [comments, setComments] = useState("");
-  const clientOrderTextareaRef = useAutosizeTextarea(clientOrderText);
+  const clientOrderTextareaRef = useAutosizeTextarea(clientOrderText, {
+    maxHeight: CLIENT_ORDER_TEXTAREA_MAX_HEIGHT,
+  });
   const [hasScans, setHasScans] = useState(false);
   const [hasCt, setHasCt] = useState(false);
   const [hasMri, setHasMri] = useState(false);
@@ -1891,7 +1895,9 @@ function CommentsSection({
   onChange: (v: string) => void;
   className?: string;
 }) {
-  const textareaRef = useAutosizeTextarea(value);
+  const textareaRef = useAutosizeTextarea(value, {
+    maxHeight: COMMENTS_TEXTAREA_MAX_HEIGHT,
+  });
   return (
     <section
       className={`border-t border-[var(--card-border)] pt-3 ${className}`}

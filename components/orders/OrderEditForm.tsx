@@ -368,6 +368,8 @@ const editColWrap =
 const editMainCol = `${editColWrap} flex min-h-0 flex-col xl:h-full`;
 /** Заказ от клиента / комментарий: без xl:h-full — иначе колонка тянется за соседями и авт высота textarea ломается. */
 const editNotesCol = `${editColWrap} flex min-h-0 w-full flex-col`;
+const editClientOrderMaxHeight = 240;
+const editNotesMaxHeight = 160;
 
 function moneyRu(n: number): string {
   return new Intl.NumberFormat("ru-RU", {
@@ -599,8 +601,12 @@ export function OrderEditForm({
   const [clientOrderText, setClientOrderText] = useState(
     initial.clientOrderText ?? "",
   );
-  const clientOrderTextareaRef = useAutosizeTextarea(clientOrderText);
-  const notesTextareaRef = useAutosizeTextarea(notes);
+  const clientOrderTextareaRef = useAutosizeTextarea(clientOrderText, {
+    maxHeight: editClientOrderMaxHeight,
+  });
+  const notesTextareaRef = useAutosizeTextarea(notes, {
+    maxHeight: editNotesMaxHeight,
+  });
   const [labWorkStatus, setLabWorkStatus] = useState<LabWorkStatus>(() =>
     normalizeLegacyLabWorkStatus(String(initial.labWorkStatus)),
   );
