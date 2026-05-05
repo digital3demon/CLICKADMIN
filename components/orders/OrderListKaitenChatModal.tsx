@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState, type ClipboardEvent } from "react";
 import type { KaitenTrackLane } from "@prisma/client";
 import {
   dedupeParsedKaitenComments,
@@ -184,6 +184,17 @@ export function OrderListKaitenChatModal({
     [orderId],
   );
 
+  const onPasteIntoMessage = useCallback(
+    (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      if (uploading || loading || !!loadError) return;
+      const files = e.clipboardData?.files;
+      if (!files || files.length === 0) return;
+      e.preventDefault();
+      void uploadFiles(files);
+    },
+    [loadError, loading, uploading, uploadFiles],
+  );
+
   if (!open) return null;
 
   const comments = snap?.comments ?? [];
@@ -323,6 +334,7 @@ export function OrderListKaitenChatModal({
             placeholder="Новое сообщение…"
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
+            onPaste={onPasteIntoMessage}
             disabled={loading || !!loadError || uploading}
           />
           {postError ? (
@@ -351,7 +363,7 @@ export function OrderListKaitenChatModal({
               />
             </label>
             <span className="text-[10px] text-[var(--text-muted)]">
-              Вложения уйдут в карточку Kaiten
+              Вложения уйдут в карточку Kaiten (можно вставить через Ctrl+V)
             </span>
           </div>
           <button
