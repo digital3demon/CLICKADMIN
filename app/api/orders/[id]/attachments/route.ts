@@ -310,11 +310,25 @@ export async function POST(req: Request, ctx: Ctx) {
 
     const attachmentId = newOrderAttachmentId();
     const fileBuf = Buffer.from(buf);
-    const useS3Storage = isOrderAttachmentS3Enabled();
-    const diskRelPath = useS3Storage
-      ? await writeOrderAttachmentToS3(orderId, attachmentId, fileBuf, mimeType)
-      : null;
-    const dataForDb = useS3Storage ? Buffer.alloc(0) : fileBuf;
+    const shouldUseS3Storage = isOrderAttachmentS3Enabled();
+    let diskRelPath: string | null = null;
+    let dataForDb = fileBuf;
+    let storageWarning: string | null = null;
+    if (shouldUseS3Storage) {
+      try {
+        diskRelPath = await writeOrderAttachmentToS3(
+          orderId,
+          attachmentId,
+          fileBuf,
+          mimeType,
+        );
+        dataForDb = Buffer.alloc(0);
+      } catch (e) {
+        console.error("[attachments POST] S3 write fallback to DB", e);
+        storageWarning =
+          "S3 временно недоступен, файл сохранён в базе CRM";
+      }
+    }
 
     const row = await withTransientWriteRetry(
       () =>
@@ -360,7 +374,7 @@ export async function POST(req: Request, ctx: Ctx) {
         );
       }
     } catch (e) {
-      if (useS3Storage) {
+      if (diskRelPath) {
         await deleteOrderAttachmentFile(diskRelPath).catch(() => {});
       }
       await prisma.orderAttachment
@@ -479,9 +493,13 @@ export async function POST(req: Request, ctx: Ctx) {
       }
     });
 
-    return NextResponse.json(withInvoice({ ...row }), {
-      status: 201,
-    });
+    return NextResponse.json(
+      withInvoice({
+        ...row,
+        ...(storageWarning ? { warning: storageWarning } : {}),
+      }),
+      { status: 201 },
+    );
   } catch (e) {
     console.error("[attachments POST]", e);
     const details = errorMessage(e);
