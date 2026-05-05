@@ -57,6 +57,11 @@ export function DirectoryKanbanBoardsClient({
   const importRef = useRef<HTMLInputElement>(null);
   const canSetPrivateBoards =
     !isDemo && (sessionRole === "OWNER" || sessionRole === "MANAGER");
+  const canEditKanbanAdminTag =
+    !isDemo &&
+    (sessionRole === "OWNER" ||
+      sessionRole === "SENIOR_ADMINISTRATOR" ||
+      sessionRole === "ADMINISTRATOR");
   const [createOpen, setCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
   const [createPrivate, setCreatePrivate] = useState(false);
@@ -316,7 +321,11 @@ export function DirectoryKanbanBoardsClient({
             кнопка ниже приводит типы к единому виду (цвета и порядок).
           </p>
           <div className="mt-6">
-            <KanbanBoardSettingsForm board={board} onPatchBoard={applyToBoard} />
+            <KanbanBoardSettingsForm
+              board={board}
+              onPatchBoard={applyToBoard}
+              canEditKanbanAdminTag={canEditKanbanAdminTag}
+            />
           </div>
           <div className="mt-6 flex flex-wrap gap-2 border-t border-[var(--card-border)] pt-4">
             <button

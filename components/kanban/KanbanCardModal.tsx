@@ -20,6 +20,10 @@ import {
   parseMentionUserIdsFromText,
   sanitizeMentionToken,
 } from "@/lib/kanban-comment-mentions";
+import {
+  isKanbanAdminGroupRole,
+} from "@/lib/kanban-admin-mention";
+import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
@@ -310,6 +314,12 @@ export function KanbanCardModal({
     });
   }, [pickerMerged, pickerQuery]);
 
+  const adminMentionTag = useKanbanAdminMentionTag();
+  const adminMentionUserIds = useMemo(
+    () => crmList.filter((u) => isKanbanAdminGroupRole(u.role)).map((u) => u.id),
+    [crmList],
+  );
+
   if (!cardId || !card) return null;
 
   const blocked = isCardBlocked(card);
@@ -557,9 +567,10 @@ export function KanbanCardModal({
       const { cardWord, orderWord } = oid
         ? cardOrderWordLinks(oid, cardId, board.id)
         : { cardWord: "", orderWord: "" };
-      const mentioned = parseMentionUserIdsFromText(trimmed, crmList).filter(
-        (id) => id !== actor,
-      );
+      const mentioned = parseMentionUserIdsFromText(trimmed, crmList, {
+        adminMentionTag,
+        adminUserIds: adminMentionUserIds,
+      }).filter((id) => id !== actor);
       if (mentioned.length) {
         postKanbanCrmTelegramNotify({
           kaitenCardId: card.kaitenCardId,
@@ -1448,6 +1459,8 @@ export function KanbanCardModal({
                   card={card}
                   board={board}
                   blocked={blocked}
+                  adminMentionTag={adminMentionTag}
+                  adminMentionUserIds={adminMentionUserIds}
                   onSend={sendComment}
                   onFilesDropped={attachFilesFromChat}
                   onOpenAttachment={openAttachment}
@@ -1735,6 +1748,8 @@ function ChatPanel({
   card,
   board,
   blocked,
+  adminMentionTag,
+  adminMentionUserIds,
   onSend,
   onFilesDropped,
   onOpenAttachment,
@@ -1742,6 +1757,8 @@ function ChatPanel({
   card: KanbanCard;
   board: KanbanBoard;
   blocked: boolean;
+  adminMentionTag: string;
+  adminMentionUserIds: readonly string[];
   onSend: (t: string) => boolean | Promise<boolean>;
   onFilesDropped: (files: File[]) => void | Promise<void>;
   onOpenAttachment: (f: CardFile) => void;
@@ -1768,24 +1785,42 @@ function ChatPanel({
   );
   const mentionOptions = useMemo<ChatMentionOption[]>(() => {
     const merged = mergeKanbanPickerUsers(crmChatList, board.users);
-    return merged
-      .map((row) => {
+    const synthetic: ChatMentionOption[] =
+      adminMentionUserIds.length > 0 && adminMentionTag
+        ? [
+            {
+              id: "__kanban_lab_team__",
+              label: `Лаборатория (@${adminMentionTag})`,
+              insertText: `@${adminMentionTag}`,
+              searchText:
+                `лаборатория ${adminMentionTag} администратор старший`.toLowerCase(),
+            },
+          ]
+        : [];
+    const rest = merged
+      .flatMap((row) => {
+        if ("role" in row && isKanbanAdminGroupRole(row.role)) {
+          return [];
+        }
         const label = pickerRowLabel(row);
         const token =
           "mentionHandle" in row
             ? sanitizeMentionToken(row.mentionHandle || "") || fallbackMentionToken(row)
             : fallbackMentionToken(row);
-        if (!token) return null;
+        if (!token) return [];
         const emailPart = "email" in row ? row.email || "" : "";
-        return {
-          id: row.id,
-          label,
-          insertText: `@${token}`,
-          searchText: `${label} ${emailPart} ${token}`.toLowerCase(),
-        };
+        return [
+          {
+            id: row.id,
+            label,
+            insertText: `@${token}`,
+            searchText: `${label} ${emailPart} ${token}`.toLowerCase(),
+          },
+        ];
       })
       .filter((x): x is ChatMentionOption => x != null);
-  }, [crmChatList, board.users]);
+    return [...synthetic, ...rest];
+  }, [crmChatList, board.users, adminMentionTag, adminMentionUserIds]);
   const mentionDraft = useMemo(
     () => detectMentionDraft(inp, caretPos),
     [inp, caretPos],

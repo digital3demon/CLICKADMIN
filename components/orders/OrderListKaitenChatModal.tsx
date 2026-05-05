@@ -5,8 +5,9 @@ import type { KaitenTrackLane } from "@prisma/client";
 import {
   dedupeParsedKaitenComments,
   parseKaitenListComment,
-  textIncludesClicklabMention,
+  textIncludesAdminLabMention,
 } from "@/lib/kaiten-comment-parse";
+import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
 import { useOrderListChatPatchClicklab } from "@/components/orders/OrdersListKaitenChatShell";
 import {
   CRM_UPLOAD_MAX_BYTES,
@@ -47,8 +48,11 @@ type ImagePreview = {
   url: string;
 };
 
-function commentsHaveClicklab(comments: CommentRow[]): boolean {
-  return comments.some((c) => textIncludesClicklabMention(c.text));
+function commentsHaveLabMention(
+  comments: CommentRow[],
+  adminTag: string,
+): boolean {
+  return comments.some((c) => textIncludesAdminLabMention(c.text, adminTag));
 }
 
 export function OrderListKaitenChatModal({
@@ -63,6 +67,7 @@ export function OrderListKaitenChatModal({
   onClose: () => void;
 }) {
   const titleId = useId();
+  const adminMentionTag = useKanbanAdminMentionTag();
   const patchClicklab = useOrderListChatPatchClicklab();
   const [snap, setSnap] = useState<KaitenSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -89,10 +94,10 @@ export function OrderListKaitenChatModal({
   const applyClicklabFlag = useCallback(
     (comments: CommentRow[]) => {
       if (patchClicklab) {
-        patchClicklab(orderId, commentsHaveClicklab(comments));
+        patchClicklab(orderId, commentsHaveLabMention(comments, adminMentionTag));
       }
     },
-    [orderId, patchClicklab],
+    [orderId, patchClicklab, adminMentionTag],
   );
 
   const load = useCallback(async () => {

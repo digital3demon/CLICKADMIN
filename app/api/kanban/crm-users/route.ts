@@ -23,6 +23,7 @@ export async function GET() {
       displayName: true,
       email: true,
       mentionHandle: true,
+      role: true,
       avatarPresetId: true,
       avatarCustomUploadedAt: true,
     },
@@ -33,6 +34,7 @@ export async function GET() {
     displayName: u.displayName?.trim() || u.email || "Пользователь",
     email: u.email,
     mentionHandle: u.mentionHandle?.trim() || null,
+    role: u.role,
     avatarPresetId: u.avatarPresetId,
     avatarCustomUploadedAt: u.avatarCustomUploadedAt?.toISOString() ?? null,
   }));

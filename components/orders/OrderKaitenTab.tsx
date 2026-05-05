@@ -1,7 +1,10 @@
 "use client";
 
+import type { UserRole } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
+import { isKanbanAdminGroupRole } from "@/lib/kanban-admin-mention";
 import type { KaitenTrackLane } from "@prisma/client";
 import { kaitenBlockStateFromCard } from "@/lib/kaiten-card-block";
 import {
@@ -45,6 +48,7 @@ type MentionUser = {
   displayName: string;
   email: string;
   mentionHandle: string | null;
+  role?: UserRole;
 };
 
 type MentionDraft = { start: number; end: number; query: string };
@@ -130,6 +134,7 @@ export function OrderKaitenTab({
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
+  const adminMentionTag = useKanbanAdminMentionTag();
   const [mentionIndex, setMentionIndex] = useState(0);
   const [commentCaretPos, setCommentCaretPos] = useState(0);
   const [openImage, setOpenImage] = useState<{ name: string; url: string } | null>(
@@ -433,8 +438,28 @@ export function OrderKaitenTab({
 
   const columnOptions = boardOverride?.columns ?? snap?.columns ?? [];
   const laneOptions = boardOverride?.lanes ?? snap?.lanes ?? [];
+  const adminMentionUserIds = useMemo(
+    () =>
+      mentionUsers
+        .filter((u) => u.role != null && isKanbanAdminGroupRole(u.role))
+        .map((u) => u.id),
+    [mentionUsers],
+  );
   const mentionOptions = useMemo<MentionOption[]>(() => {
-    return mentionUsers
+    const synthetic: MentionOption[] =
+      adminMentionUserIds.length > 0 && adminMentionTag
+        ? [
+            {
+              id: "__kanban_lab_team__",
+              label: `Лаборатория (@${adminMentionTag})`,
+              insertText: `@${adminMentionTag}`,
+              searchText:
+                `лаборатория ${adminMentionTag} администратор`.toLowerCase(),
+            },
+          ]
+        : [];
+    const rest = mentionUsers
+      .filter((u) => !isKanbanAdminGroupRole(u.role))
       .map((u) => {
         const fallbackByEmail = normalizeMentionToken(
           (u.email || "").split("@")[0] || "",
@@ -453,7 +478,8 @@ export function OrderKaitenTab({
         };
       })
       .filter((x): x is MentionOption => x != null);
-  }, [mentionUsers]);
+    return [...synthetic, ...rest];
+  }, [mentionUsers, adminMentionTag, adminMentionUserIds]);
   const mentionDraft = useMemo(
     () => findMentionDraft(newText, commentCaretPos),
     [newText, commentCaretPos],

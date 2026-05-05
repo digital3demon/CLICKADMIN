@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
 import { OrderListKaitenChatModal } from "@/components/orders/OrderListKaitenChatModal";
 import { useOrderListChatClicklabHighlight } from "@/components/orders/OrdersListKaitenChatShell";
 
@@ -33,6 +34,7 @@ export function OrderListOrderChatCell({
 }) {
   const [open, setOpen] = useState(false);
   const clicklab = useOrderListChatClicklabHighlight(orderId);
+  const adminMentionTag = useKanbanAdminMentionTag();
 
   return (
     <td className="max-md:hidden min-w-0 px-1.5 py-1.5 align-middle text-center sm:px-2 sm:py-2">
@@ -49,10 +51,14 @@ export function OrderListOrderChatCell({
             type="button"
             className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-[var(--table-row-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sidebar-blue)] sm:h-8 sm:w-8 ${
               clicklab
-                ? "text-amber-600 dark:text-amber-400"
+                ? "animate-pulse text-amber-500 dark:text-amber-400"
                 : "text-[var(--text-secondary)] hover:text-[var(--app-text)]"
             }`}
-            title={clicklab ? "В чате упомянули @clicklab" : "Чат Kaiten"}
+            title={
+              clicklab
+                ? `В чате упомянули @${adminMentionTag}`
+                : "Чат Kaiten"
+            }
             aria-label="Чат Kaiten"
             onClick={() => setOpen(true)}
           >

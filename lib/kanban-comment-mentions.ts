@@ -44,18 +44,36 @@ function buildMentionTokenMap(
   return tokenToId;
 }
 
+export type ParseMentionUserIdsOptions = {
+  /** Токен без @ (нормализованный), общий для ADMINISTRATOR + SENIOR_ADMINISTRATOR. */
+  adminMentionTag?: string;
+  adminUserIds?: readonly string[];
+};
+
 export function parseMentionUserIdsFromText(
   text: string,
   users: readonly KanbanMentionLookupUser[],
+  opts?: ParseMentionUserIdsOptions,
 ): string[] {
   const tokenToId = buildMentionTokenMap(users);
+  const adminTag = opts?.adminMentionTag
+    ? sanitizeMentionToken(opts.adminMentionTag).toLowerCase()
+    : "";
+  const adminIds = opts?.adminUserIds?.length
+    ? [...new Set(opts.adminUserIds.filter(Boolean))]
+    : [];
   const re = /@([^\s@]+)/gu;
   const out = new Set<string>();
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const raw = m[1]?.trim();
     if (!raw) continue;
-    const id = tokenToId.get(raw.toLowerCase());
+    const key = sanitizeMentionToken(raw).toLowerCase();
+    if (adminTag && key === adminTag) {
+      for (const id of adminIds) out.add(id);
+      continue;
+    }
+    const id = tokenToId.get(key);
     if (id) out.add(id);
   }
   return [...out];

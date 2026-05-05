@@ -19,6 +19,7 @@ import { getSiteOrigin } from "@/lib/site-origin-server";
 import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
 import {
   humanListTagLabel,
+  LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
   parseListTagParam,
@@ -160,8 +161,12 @@ export default async function OrdersPage({
       some: { resolvedAt: null, rejectedAt: null },
     },
   } satisfies Prisma.OrderWhereInput;
+  /** Кэш: в чате Kaiten есть @лаборатории (обновляется синком комментариев). */
+  const pendingLabMentionWhere = {
+    kaitenChatHasLabMention: true,
+  } satisfies Prisma.OrderWhereInput;
 
-  const [attentionCount, prostheticsPendingCount] = tenantId
+  const [attentionCount, prostheticsPendingCount, labMentionCount] = tenantId
     ? await Promise.all([
         ordersPrisma.order.count({
           where: {
@@ -173,8 +178,13 @@ export default async function OrdersPage({
             AND: [baseCountWhere, pendingProstheticsWhere],
           },
         }),
+        ordersPrisma.order.count({
+          where: {
+            AND: [baseCountWhere, pendingLabMentionWhere],
+          },
+        }),
       ])
-    : [0, 0];
+    : [0, 0, 0];
 
   let orders: Awaited<
     ReturnType<typeof fetchOrdersListPage>
@@ -449,6 +459,32 @@ export default async function OrdersPage({
               </span>
               <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
                 {prostheticsPendingCount}
+              </span>
+            </Link>
+          ) : null}
+          {labMentionCount > 0 ? (
+            <Link
+              href={ordersListHref({
+                limit: pageSize,
+                tag: LIST_TAG_KAITEN_LAB_MENTION,
+                hideShipped: hideShippedActive,
+                onlyShipped: onlyShippedActive,
+                q: listSearchQ || undefined,
+                from: fromUrl ?? undefined,
+                to: toUrl ?? undefined,
+              })}
+              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+                activeFilter?.kind === "kaitenLabMention"
+                  ? "border-violet-500/80 bg-violet-100 text-violet-950 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100"
+                  : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+              }`}
+              title="Наряды, в чате карточки Kaiten которых упомянули команду лаборатории (@…)"
+            >
+              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+                Упоминания
+              </span>
+              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+                {labMentionCount}
               </span>
             </Link>
           ) : null}

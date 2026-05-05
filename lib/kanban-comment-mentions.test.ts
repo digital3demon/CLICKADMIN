@@ -31,4 +31,14 @@ describe("parseMentionUserIdsFromText", () => {
     ];
     expect(parseMentionUserIdsFromText("Привет @vsevolodsokolov", users)).toEqual(["uid1"]);
   });
+
+  it("разворачивает общий тег лаборатории в несколько user id", () => {
+    const users = [{ id: "x", mentionHandle: "solo" }];
+    expect(
+      parseMentionUserIdsFromText("Эй @clicklab и @solo", users, {
+        adminMentionTag: "clicklab",
+        adminUserIds: ["adm1", "adm2"],
+      }).sort(),
+    ).toEqual(["adm1", "adm2", "x"].sort());
+  });
 });

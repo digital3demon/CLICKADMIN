@@ -63,6 +63,8 @@ model Tenant {
   /// Когда отдельная БД была подготовлена и подключена.
   tenantDatabaseReadyAt DateTime?
   plan                  SubscriptionPlan @default(BASIC)
+  /// Токен @упоминания «команда лаборатории» в чате Kaiten/канбана (ADMINISTRATOR + SENIOR_ADMINISTRATOR); null — «clicklab».
+  kanbanAdminMentionTag String?
   /// Опция «Канбан» (доска в CRM), отдельно от тарифа
   addonKanban           Boolean          @default(false)
   /// null — без срока / вечная лицензия
@@ -778,6 +780,8 @@ model Order {
   kaitenBlocked                  Boolean                   @default(false)
   /// Текст причины блокировки из Kaiten (красная полоса в Kaiten / подсказка в списке CRM)
   kaitenBlockReason              String?
+  /// В чате карточки Kaiten есть упоминание тега «лаборатория» (Tenant.kanbanAdminMentionTag); обновляется при синхронизации комментариев.
+  kaitenChatHasLabMention        Boolean                   @default(false)
   /// Счёт по наряду выставлен клиенту
   invoiceIssued                  Boolean                   @default(false)
   /// Номер выставленного счёта (ручной ввод)

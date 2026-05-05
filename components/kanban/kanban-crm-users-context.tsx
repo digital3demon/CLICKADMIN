@@ -1,5 +1,6 @@
 "use client";
 
+import type { UserRole } from "@prisma/client";
 import {
   createContext,
   useCallback,
@@ -15,6 +16,8 @@ export type KanbanCrmUserRow = {
   displayName: string;
   email: string;
   mentionHandle: string | null;
+  /** С сервера `/api/kanban/crm-users`; без поля — считаем не админом группы. */
+  role?: UserRole;
   avatarPresetId: string | null;
   avatarCustomUploadedAt: string | null;
 };

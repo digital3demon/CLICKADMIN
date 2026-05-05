@@ -1,3 +1,8 @@
+import {
+  DEFAULT_KANBAN_ADMIN_MENTION_TAG,
+  normalizeKanbanAdminMentionTag,
+} from "@/lib/kanban-admin-mention";
+
 const CRM_COMMENT_AUTHOR_PREFIX_RE = /^\[CRM · (.+?)\]\s*\n/;
 
 /** id комментария в ответах Kaiten REST часто приходит строкой (JSON). */
@@ -57,16 +62,28 @@ export function normalizeOrderKaitenChatTriggerSource(raw: string): string {
   return s;
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
- * Упоминание лаборатории в чате Kaiten (подсветка «Чат» в списке нарядов).
- * Учитывает HTML-сущности @, markdown (**@clicklab**), обычный HTML после strip.
+ * Упоминание «команды лаборатории» в чате Kaiten (подсветка «Чат» в списке нарядов).
+ * `tagToken` — без `@`, как в настройках организации (Tenant.kanbanAdminMentionTag).
+ * Учитывает HTML-сущности @, markdown, обычный HTML после strip.
  */
-export function textIncludesClicklabMention(raw: string): boolean {
+export function textIncludesAdminLabMention(raw: string, tagToken?: string | null): boolean {
+  const tag = normalizeKanbanAdminMentionTag(tagToken);
+  const esc = escapeRegExp(tag);
   const n = normalizeOrderKaitenChatTriggerSource(raw);
-  if (/@clicklab\b/i.test(n)) return true;
+  if (new RegExp(`@${esc}(?![\\p{L}\\p{N}._-])`, "iu").test(n)) return true;
   const mdLoosen = n.replace(/\*+/g, " ").replace(/_+/g, " ");
-  if (/@clicklab\b/i.test(mdLoosen)) return true;
-  return /@[\s._-]{0,4}clicklab\b/i.test(mdLoosen);
+  if (new RegExp(`@${esc}(?![\\p{L}\\p{N}._-])`, "iu").test(mdLoosen)) return true;
+  return new RegExp(`@[\\s._-]{0,4}${esc}(?![\\p{L}\\p{N}._-])`, "iu").test(mdLoosen);
+}
+
+/** @deprecated Используйте textIncludesAdminLabMention(raw, DEFAULT_KANBAN_ADMIN_MENTION_TAG). */
+export function textIncludesClicklabMention(raw: string): boolean {
+  return textIncludesAdminLabMention(raw, DEFAULT_KANBAN_ADMIN_MENTION_TAG);
 }
 
 /** Первая непустая строка, начинающаяся с `prefix` (корректировки «!!!», протетика «???»). */

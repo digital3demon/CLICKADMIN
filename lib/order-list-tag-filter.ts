@@ -29,6 +29,8 @@ export const LIST_TAG_INVOICE = "invoice";
 export const LIST_TAG_INVOICE_PRINTED = "invoice-printed";
 /** Жёлтый треугольник: непринятые корректировки «!!!» или расхождение суммы счёта с составом */
 export const LIST_TAG_ORDER_ATTENTION = "order-attention";
+/** В чате Kaiten есть @упоминание тега лаборатории (кэш в Order.kaitenChatHasLabMention). */
+export const LIST_TAG_KAITEN_LAB_MENTION = "kaiten-lab-mention";
 export const LIST_TAG_PAYMENT_EXPECTED = "payment-expected";
 export const LIST_TAG_PAYMENT_PARTIAL = "payment-partial";
 export const LIST_TAG_PAYMENT_PAID = "payment-paid";
@@ -71,6 +73,7 @@ export type ParsedListTag =
   | { kind: "invoice" }
   | { kind: "invoicePrinted" }
   | { kind: "orderAttention" }
+  | { kind: "kaitenLabMention" }
   | { kind: "paymentExpected" }
   | { kind: "paymentPartial" }
   | { kind: "paymentPaid" }
@@ -102,6 +105,7 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t === LIST_TAG_INVOICE) return { kind: "invoice" };
   if (t === LIST_TAG_INVOICE_PRINTED) return { kind: "invoicePrinted" };
   if (t === LIST_TAG_ORDER_ATTENTION) return { kind: "orderAttention" };
+  if (t === LIST_TAG_KAITEN_LAB_MENTION) return { kind: "kaitenLabMention" };
   if (t === LIST_TAG_PAYMENT_EXPECTED) return { kind: "paymentExpected" };
   if (t === LIST_TAG_PAYMENT_PARTIAL) return { kind: "paymentPartial" };
   if (t === LIST_TAG_PAYMENT_PAID) return { kind: "paymentPaid" };
@@ -176,6 +180,8 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
       return { invoiceAttachmentId: { not: null } };
     case "invoicePrinted":
       return { invoicePrinted: true };
+    case "kaitenLabMention":
+      return { kaitenChatHasLabMention: true };
     case "paymentExpected":
       return {
         OR: [
@@ -224,6 +230,8 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
       return "Счёт распечатан";
     case "orderAttention":
       return "Внимание: корректировки или расхождение сумм";
+    case "kaitenLabMention":
+      return "Упоминание лаборатории в чате (@…)";
     case "paymentExpected":
       return "Не оплачено";
     case "paymentPartial":

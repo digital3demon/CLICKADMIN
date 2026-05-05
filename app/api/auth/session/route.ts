@@ -3,7 +3,10 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { getPrisma } from "@/lib/get-prisma";
 import { getEffectiveModuleAccess, moduleAccessForResponse } from "@/lib/role-module-resolver";
-import { getSessionTenantRouting } from "@/lib/auth/tenant-for-session";
+import {
+  getSessionTenantRouting,
+  getTenantIdForSession,
+} from "@/lib/auth/tenant-for-session";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +23,7 @@ export async function GET() {
   let displayNameFromDb: string | null = null;
   let tenantDatabaseEnabled = false;
   let tenantDatabaseReady = false;
+  let kanbanAdminMentionTag: string | null = null;
   try {
     const db = await getPrisma();
     const row = await db.user.findUnique({
@@ -35,6 +39,15 @@ export async function GET() {
     avatarPresetId = row?.avatarPresetId ?? null;
     mentionHandle = row?.mentionHandle ?? null;
     avatarCustomUploadedAt = row?.avatarCustomUploadedAt?.toISOString() ?? null;
+    const tid = await getTenantIdForSession(s);
+    if (tid) {
+      const tenantRow = await db.tenant.findUnique({
+        where: { id: tid },
+        select: { kanbanAdminMentionTag: true },
+      });
+      const raw = tenantRow?.kanbanAdminMentionTag?.trim();
+      kanbanAdminMentionTag = raw ? raw : null;
+    }
   } catch {
     /* prisma / колонки — игнорируем, сессия всё равно валидна */
   }
@@ -57,6 +70,9 @@ export async function GET() {
       tenantDatabaseEnabled,
       tenantDatabaseReady,
       moduleAccess: moduleAccessForResponse(mod),
+    },
+    tenant: {
+      kanbanAdminMentionTag,
     },
     singleUser: isSingleUserPortable(),
     demo: Boolean(s.demo),

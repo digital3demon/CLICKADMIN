@@ -11,8 +11,9 @@ import {
 import {
   dedupeParsedKaitenComments,
   parseKaitenListComment,
-  textIncludesClicklabMention,
+  textIncludesAdminLabMention,
 } from "@/lib/kaiten-comment-parse";
+import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
@@ -29,7 +30,7 @@ type BoardColumn = { id: number; title: string; name?: string };
  * Обновляет в БД `kaitenColumnTitle` по актуальной карточке Kaiten (для списков заказов / отгрузок).
  * Карточки запрашиваются пачками; колонки доски кэшируются по `board_id`.
  *
- * `includeComments: false` — только карточка (быстро): без чата, без `clicklab`, без синка корректировок из комментариев.
+ * `includeComments: false` — только карточка (быстро): без чата, без метки «упомянули лабораторию», без синка корректировок из комментариев.
  */
 export async function syncKaitenColumnTitlesForOrderIds(
   db: PrismaClient,
@@ -40,7 +41,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
   titles: Record<string, string | null>;
   syncedCount: number;
   errorCount: number;
-  /** Есть ли в комментариях карточки упоминание @clicklab (подсветка кнопки «чат» в списке). */
+  /** Есть ли в комментариях упоминание тега лаборатории (Tenant.kanbanAdminMentionTag; подсветка «чат» в списке). */
   clicklabByOrderId: Record<string, boolean>;
 }> {
   const uniq = [...new Set(orderIds.map((x) => x.trim()).filter(Boolean))].slice(
@@ -64,6 +65,8 @@ export async function syncKaitenColumnTitlesForOrderIds(
       kaitenCardSortOrder: true,
       kaitenBlocked: true,
       kaitenBlockReason: true,
+      kaitenChatHasLabMention: true,
+      tenant: { select: { kanbanAdminMentionTag: true } },
     },
   });
 
@@ -107,6 +110,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
     );
 
     for (const { row, cardRes, commRes } of cardResponses) {
+      let computedLabMention: boolean | undefined;
       if (includeComments && commRes?.ok) {
         try {
           const comments = dedupeParsedKaitenComments(
@@ -114,9 +118,13 @@ export async function syncKaitenColumnTitlesForOrderIds(
               .map(parseKaitenListComment)
               .filter((x): x is NonNullable<typeof x> => x != null),
           ).map((c) => ({ id: c.id, text: c.text }));
-          clicklabByOrderId[row.id] = comments.some((c) =>
-            textIncludesClicklabMention(c.text),
+          const labTag = normalizeKanbanAdminMentionTag(
+            row.tenant?.kanbanAdminMentionTag,
           );
+          computedLabMention = comments.some((c) =>
+            textIncludesAdminLabMention(c.text, labTag),
+          );
+          clicklabByOrderId[row.id] = computedLabMention;
           await syncOrderChatCorrectionsFromKaitenComments(db, row.id, comments);
           await syncOrderProstheticsRequestsFromKaitenComments(db, row.id, comments);
         } catch (e) {
@@ -124,6 +132,20 @@ export async function syncKaitenColumnTitlesForOrderIds(
         }
       } else if (includeComments && commRes && !commRes.ok) {
         clicklabByOrderId[row.id] = false;
+      }
+      if (
+        includeComments &&
+        computedLabMention !== undefined &&
+        computedLabMention !== row.kaitenChatHasLabMention
+      ) {
+        try {
+          await db.order.update({
+            where: { id: row.id },
+            data: { kaitenChatHasLabMention: computedLabMention },
+          });
+        } catch (e) {
+          console.error("[kaiten-titles-sync] kaitenChatHasLabMention", row.id, e);
+        }
       }
       if (!cardRes.ok || !cardRes.card) {
         errorCount += 1;
