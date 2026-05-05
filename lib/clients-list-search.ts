@@ -151,6 +151,8 @@ export function clinicMatchesSearch(
     billingLegalForm?: BillingLegalForm | null;
     email: string | null;
     phone: string | null;
+    phoneAccounting?: string | null;
+    phoneManagement?: string | null;
     inn: string | null;
     ceoName: string | null;
   },
@@ -165,6 +167,8 @@ export function clinicMatchesSearch(
     ...billingLegalFormSearchBits(c.billingLegalForm),
     c.email,
     c.phone,
+    c.phoneAccounting,
+    c.phoneManagement,
     c.inn,
     c.ceoName,
   ]

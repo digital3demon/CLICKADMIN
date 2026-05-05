@@ -47,7 +47,7 @@ export function UrgentPillMenu({
   /** Короткая подпись в узкой пилюле (книжная ориентация). */
   const shortLabel = useMemo(() => {
     if (value === URGENT_UNSET) return "—";
-    if (value === URGENT_NO_COEF) return "б/к";
+    if (value === URGENT_NO_COEF) return "срочно";
     const o = URGENT_MENU_OPTIONS.find((x) => x.value === value);
     return o?.label ?? "…";
   }, [value]);
@@ -63,7 +63,9 @@ export function UrgentPillMenu({
         onClick={() => setOpen((o) => !o)}
       >
         <span className="min-w-0 truncate sm:max-w-none">
-          <span className="sm:hidden">С&nbsp;{shortLabel}</span>
+          <span className="sm:hidden">
+            {value === URGENT_NO_COEF ? "Срочно" : `С\u00a0${shortLabel}`}
+          </span>
           <span className="hidden sm:inline">Срочн.: {label}</span>
         </span>
         <ChevronMini open={open} />

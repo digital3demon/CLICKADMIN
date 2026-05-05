@@ -16,9 +16,12 @@ import {
   isoToDatetimeLocal,
   localDateTimeToIso,
 } from "@/lib/datetime-local";
+import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 import {
   clampDueLocalToMin,
+  DUE_DAY_DEFAULT_HM,
   earliestDueGridLocalFromCreatedAt,
+  parseHmFromDueGridLocal,
   snapDatetimeLocalToDueGrid,
 } from "@/lib/order-due-datetime";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
@@ -108,6 +111,7 @@ import {
   parseInvoiceTotalRubRuInput,
 } from "@/lib/format-invoice-total-rub-display";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
+import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
 
 type CourierOption = { id: string; name: string };
 
@@ -163,48 +167,33 @@ function OrderInvoiceFileDrop({
       );
       try {
         let lastOk: InvoiceAttachmentUploadOk | undefined;
-        for (const file of arr) {
-          const safeName = encodeURIComponent(file.name || "file");
+        for (let fi = 0; fi < arr.length; fi++) {
+          const file = arr[fi]!;
+          if (fi > 0) {
+            await new Promise((r) => setTimeout(r, 70));
+          }
           setLocalHint("Загрузка и сохранение на сервере…");
-          const res = await fetch(`/api/orders/${orderId}/attachments`, {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "content-type": "application/octet-stream",
-              "x-upload-filename": safeName,
-              "x-upload-mime": file.type || "application/octet-stream",
-              "x-as-invoice": "1",
-            },
-            body: file,
+          const result = await postOrderAttachmentWithRetries(orderId, file, {
+            asInvoice: true,
             signal: ctrl.signal,
           });
-          const rawText = await res.text();
-          let j: {
+          if (!result.ok) {
+            throw new Error(result.error);
+          }
+          const j = result.data as {
             error?: string;
             details?: string;
             id?: string;
-          } & Partial<InvoiceAttachmentUploadOk> = {};
-          if (rawText.trim()) {
-            try {
-              j = JSON.parse(rawText) as typeof j;
-            } catch {
-              j = {};
-            }
-          }
-          if (!res.ok) {
-            const base = j.error ?? "Ошибка загрузки";
-            const extra =
-              typeof j.details === "string" && j.details.trim()
-                ? ` (${j.details.trim()})`
-                : "";
-            throw new Error(`${base}${extra}`);
-          }
+          } & Partial<InvoiceAttachmentUploadOk>;
           if (!j.id || typeof j.id !== "string") {
             throw new Error(
               "Сервер вернул ответ без id вложения — обновите страницу и попробуйте снова",
             );
           }
-          lastOk = j as InvoiceAttachmentUploadOk;
+          lastOk = { ...(j as InvoiceAttachmentUploadOk), id: j.id };
+          if (result.warning?.trim()) {
+            lastOk = { ...lastOk, warning: result.warning.trim() };
+          }
         }
         setLocalHint("Счёт сохранён. Разбор PDF…");
         await Promise.resolve(onDone(lastOk));
@@ -399,6 +388,10 @@ export type OrderEditInitial = {
   urgentCoefficient: number | null;
   dueDate: string | null;
   dueToAdminsAt: string | null;
+  /** false — срок лабораторный без времени (Кайтен / шапка) */
+  kaitenAdminDueHasTime: boolean;
+  /** false — запись «в течение дня» */
+  dueToAdminsHasTime: boolean;
   /** Когда зашла работа (поступление); null — как при создании без явной даты */
   workReceivedAt: string | null;
   createdAt: string;
@@ -561,12 +554,26 @@ export function OrderEditForm({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const k = `kaitenNewOrderWarn:${initial.id}`;
-      const t = await readClientState<unknown>("user", k);
+      const kKaiten = `kaitenNewOrderWarn:${initial.id}`;
+      const kFiles = `orderAttachmentsWarn:${initial.id}`;
+      const [tKaiten, tFiles] = await Promise.all([
+        readClientState<unknown>("user", kKaiten),
+        readClientState<unknown>("user", kFiles),
+      ]);
       if (cancelled) return;
-      if (typeof t === "string" && t.trim()) {
-        setKaitenNewOrderWarn(t);
-        await deleteClientState("user", k);
+      const parts: string[] = [];
+      if (typeof tKaiten === "string" && tKaiten.trim()) {
+        parts.push(tKaiten.trim());
+        await deleteClientState("user", kKaiten);
+      }
+      if (typeof tFiles === "string" && tFiles.trim()) {
+        parts.push(
+          `Не все файлы из черновика прикрепились после сохранения:\n${tFiles.trim()}`,
+        );
+        await deleteClientState("user", kFiles);
+      }
+      if (parts.length > 0) {
+        setKaitenNewOrderWarn(parts.join("\n\n"));
       }
     })();
     return () => {
@@ -590,6 +597,8 @@ export function OrderEditForm({
   const [clientOrderText, setClientOrderText] = useState(
     initial.clientOrderText ?? "",
   );
+  const clientOrderTextareaRef = useAutosizeTextarea(clientOrderText);
+  const notesTextareaRef = useAutosizeTextarea(notes);
   const [labWorkStatus, setLabWorkStatus] = useState<LabWorkStatus>(() =>
     normalizeLegacyLabWorkStatus(String(initial.labWorkStatus)),
   );
@@ -623,6 +632,12 @@ export function OrderEditForm({
     if (!raw) return "";
     return clampDueLocalToMin(raw, dueDateMinLocal);
   });
+  const [labWholeDay, setLabWholeDay] = useState(
+    () => initial.kaitenAdminDueHasTime === false,
+  );
+  const [appointmentWholeDay, setAppointmentWholeDay] = useState(
+    () => initial.dueToAdminsHasTime === false,
+  );
 
   useEffect(() => {
     const min = earliestDueGridLocalFromCreatedAt(initial.createdAt);
@@ -632,11 +647,15 @@ export function OrderEditForm({
       isoToDatetimeLocal(initial.dueToAdminsAt),
     );
     setDueAdminsLocal(rawAdm ? clampDueLocalToMin(rawAdm, min) : "");
+    setLabWholeDay(initial.kaitenAdminDueHasTime === false);
+    setAppointmentWholeDay(initial.dueToAdminsHasTime === false);
   }, [
     initial.id,
     initial.createdAt,
     initial.dueDate,
     initial.dueToAdminsAt,
+    initial.kaitenAdminDueHasTime,
+    initial.dueToAdminsHasTime,
   ]);
   const [invoiceIssued, setInvoiceIssued] = useState(initial.invoiceIssued);
   const [invoiceNumber, setInvoiceNumber] = useState(
@@ -1462,6 +1481,8 @@ export function OrderEditForm({
                 ),
               )
             : null,
+          kaitenAdminDueHasTime: !labWholeDay,
+          dueToAdminsHasTime: !appointmentWholeDay,
           invoiceIssued,
           invoiceNumber: invoiceNumber.trim() || null,
           invoicePaperDocs,
@@ -1538,6 +1559,8 @@ export function OrderEditForm({
     dueLocal,
     dueAdminsLocal,
     dueDateMinLocal,
+    labWholeDay,
+    appointmentWholeDay,
     invoiceIssued,
     invoiceNumber,
     invoicePaperDocs,
@@ -1916,32 +1939,69 @@ export function OrderEditForm({
         />
 
         <div className="flex flex-col gap-2">
-          <DueDatetimeComboPicker
-            id="oe-due"
-            label="Срок лабораторный"
-            labelPlacement="inside"
-            value={dueLocal}
-            minLocal={dueDateMinLocal}
-            title="Срок лабораторный (8:00–23:30, шаг 30 мин)"
-            className="w-full max-w-full"
-            onChange={(raw) => {
-              setDueLocal(raw === "" ? "" : snapDatetimeLocalToDueGrid(raw));
-            }}
-          />
-          <DueDatetimeComboPicker
-            id="oe-due-admins"
-            label="Запись"
-            labelPlacement="inside"
-            value={dueAdminsLocal}
-            minLocal={dueDateMinLocal}
-            title="Дата записи пациента (8:00–23:30, шаг 30 мин)"
-            className="w-full max-w-full"
-            onChange={(raw) => {
-              setDueAdminsLocal(
-                raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
-              );
-            }}
-          />
+          <div className="flex flex-col gap-1">
+            <DueDatetimeComboPicker
+              id="oe-due"
+              label="Срок лабораторный"
+              labelPlacement="inside"
+              value={dueLocal}
+              minLocal={dueDateMinLocal}
+              title="Срок лабораторный (8:00–23:30, шаг 30 мин)"
+              className="w-full max-w-full"
+              onChange={(raw) => {
+                const s =
+                  raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
+                setDueLocal(s);
+                if (!s.trim()) {
+                  setLabWholeDay(true);
+                  return;
+                }
+                const hm = parseHmFromDueGridLocal(s);
+                if (hm && hm !== DUE_DAY_DEFAULT_HM) setLabWholeDay(false);
+              }}
+            />
+            <label className="flex cursor-pointer items-center gap-2 pl-1 text-sm text-[var(--text-secondary)]">
+              <input
+                type="checkbox"
+                className="rounded border-[var(--card-border)]"
+                checked={labWholeDay}
+                onChange={(e) => setLabWholeDay(e.target.checked)}
+              />
+              В теч. дня (без времени сдачи в шапке)
+            </label>
+          </div>
+          <div className="flex flex-col gap-1">
+            <DueDatetimeComboPicker
+              id="oe-due-admins"
+              label="Запись"
+              labelPlacement="inside"
+              value={dueAdminsLocal}
+              minLocal={dueDateMinLocal}
+              title="Дата записи пациента (8:00–23:30, шаг 30 мин)"
+              className="w-full max-w-full"
+              onChange={(raw) => {
+                const s =
+                  raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
+                setDueAdminsLocal(s);
+                if (!s.trim()) {
+                  setAppointmentWholeDay(true);
+                  return;
+                }
+                const hm = parseHmFromDueGridLocal(s);
+                if (hm && hm !== DUE_DAY_DEFAULT_HM)
+                  setAppointmentWholeDay(false);
+              }}
+            />
+            <label className="flex cursor-pointer items-center gap-2 pl-1 text-sm text-[var(--text-secondary)]">
+              <input
+                type="checkbox"
+                className="rounded border-[var(--card-border)]"
+                checked={appointmentWholeDay}
+                onChange={(e) => setAppointmentWholeDay(e.target.checked)}
+              />
+              В теч. дня (время записи не принципиально)
+            </label>
+          </div>
         </div>
       </section>
 
@@ -2109,27 +2169,29 @@ export function OrderEditForm({
 
   const oeColClientNotes = (
     <div className={editMainCol}>
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 flex-col">
         <h3 className="shrink-0 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
           Заказ от клиента
         </h3>
         <textarea
+          ref={clientOrderTextareaRef}
           id="oe-client-order"
-          className={`${inputClass} mt-2 min-h-0 flex-1 resize-y`}
-          rows={4}
+          className={`${inputClass} mt-2 min-h-[4.5rem] resize-none overflow-hidden`}
+          rows={3}
           value={clientOrderText}
           onChange={(e) => setClientOrderText(e.target.value)}
           placeholder="Вставьте формулировку клиента…"
         />
       </div>
-      <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-[var(--card-border)] pt-3">
+      <div className="mt-3 flex shrink-0 flex-col border-t border-[var(--card-border)] pt-3">
         <h3 className="shrink-0 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
           Комментарий
         </h3>
         <textarea
+          ref={notesTextareaRef}
           id="oe-notes"
-          className={`${inputClass} mt-2 min-h-0 flex-1 resize-y`}
-          rows={4}
+          className={`${inputClass} mt-2 min-h-[4.5rem] resize-none overflow-hidden`}
+          rows={3}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Внутренние пометки…"

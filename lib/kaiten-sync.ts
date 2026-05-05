@@ -114,14 +114,15 @@ export async function pushAttachmentToKaiten(
   const bytes = await readOrderAttachmentBytes(att);
 
   const mime = att.mimeType || "application/octet-stream";
-  const file = new File([new Uint8Array(bytes)], att.fileName, { type: mime });
-  const form = new FormData();
-  form.append("file", file);
 
   const url = `${auth.apiBase}/cards/${order.kaitenCardId}/files`;
-  const maxAttempts = 4;
+  /** Несколько попыток: каждый раз новый FormData/File — тело multipart одноразовое. */
+  const maxAttempts = 6;
   let lastText = "";
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const file = new File([new Uint8Array(bytes)], att.fileName, { type: mime });
+    const form = new FormData();
+    form.append("file", file);
     const res = await enqueueKaitenRequest(() =>
       fetch(url, {
         method: "PUT",

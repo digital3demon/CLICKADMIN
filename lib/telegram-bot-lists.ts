@@ -24,6 +24,7 @@ const SHIP_COMMAND_ROLES = new Set<UserRole>([
   UserRole.ADMINISTRATOR,
   UserRole.SENIOR_TECHNICIAN,
   UserRole.MANAGER,
+  UserRole.OWNER,
 ]);
 
 const DLINE_EXCLUDED_ROLES = new Set<UserRole>([
@@ -150,7 +151,7 @@ export async function tryTelegramBotListCommand(opts: {
   if (shipCmd && !telegramRoleMayShip(role)) {
     return {
       parseMode: "HTML",
-      text: "Эта команда доступна старшему администратору, администратору, старшему технику или руководителю.",
+      text: "Эта команда доступна старшему администратору, администратору, старшему технику, руководителю или владельцу.",
     };
   }
   if (dlineCmd && !telegramRoleMayDline(role)) {

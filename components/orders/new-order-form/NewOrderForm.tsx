@@ -91,10 +91,14 @@ import {
 } from "@/lib/datetime-local";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 import {
+  DUE_DAY_DEFAULT_HM,
   earliestDueGridLocalFromCreatedAt,
+  parseHmFromDueGridLocal,
   snapDatetimeLocalToDueGrid,
 } from "@/lib/order-due-datetime";
 import { writeClientState } from "@/lib/client-state-client";
+import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
+import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 
 type DoctorRow = {
   id: string;
@@ -175,6 +179,7 @@ export function NewOrderForm({
   const [patientName, setPatientName] = useState("");
   const [clientOrderText, setClientOrderText] = useState("");
   const [comments, setComments] = useState("");
+  const clientOrderTextareaRef = useAutosizeTextarea(clientOrderText);
   const [hasScans, setHasScans] = useState(false);
   const [hasCt, setHasCt] = useState(false);
   const [hasMri, setHasMri] = useState(false);
@@ -186,6 +191,8 @@ export function NewOrderForm({
   const [workDueLocal, setWorkDueLocal] = useState("");
   const [patientAppointmentLocal, setPatientAppointmentLocal] = useState("");
   const [workReceivedLocal, setWorkReceivedLocal] = useState("");
+  const [labWholeDay, setLabWholeDay] = useState(true);
+  const [appointmentWholeDay, setAppointmentWholeDay] = useState(true);
   const [formOpenedAtIso] = useState(() => new Date().toISOString());
   const [quickOrder, setQuickOrder] = useState<QuickOrderState>(() => {
     if (initialSnapshot != null) {
@@ -387,12 +394,30 @@ export function NewOrderForm({
         ),
       ) as LabWorkStatus,
     );
-    setWorkDueLocal(snapDatetimeLocalToDueGrid(s.workDueLocal ?? ""));
-    setPatientAppointmentLocal(
+    const wd = snapDatetimeLocalToDueGrid(s.workDueLocal ?? "");
+    setWorkDueLocal(wd);
+    const pa =
       "patientAppointmentLocal" in s && typeof s.patientAppointmentLocal === "string"
         ? snapDatetimeLocalToDueGrid(s.patientAppointmentLocal)
-        : "",
-    );
+        : "";
+    setPatientAppointmentLocal(pa);
+    const snap16 = s as OrderDraftSnapshot;
+    if (typeof snap16.labWholeDay === "boolean") {
+      setLabWholeDay(snap16.labWholeDay);
+    } else if (!wd.trim()) {
+      setLabWholeDay(true);
+    } else {
+      const hm = parseHmFromDueGridLocal(wd);
+      setLabWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
+    }
+    if (typeof snap16.appointmentWholeDay === "boolean") {
+      setAppointmentWholeDay(snap16.appointmentWholeDay);
+    } else if (!pa.trim()) {
+      setAppointmentWholeDay(true);
+    } else {
+      const hm = parseHmFromDueGridLocal(pa);
+      setAppointmentWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
+    }
     setWorkReceivedLocal(
       "workReceivedLocal" in s && typeof s.workReceivedLocal === "string"
         ? snapDatetimeLocalToDueGrid(s.workReceivedLocal)
@@ -454,6 +479,8 @@ export function NewOrderForm({
       labWorkStatus,
       workDueLocal,
       patientAppointmentLocal,
+      labWholeDay,
+      appointmentWholeDay,
       workReceivedLocal,
       quickOrder: JSON.parse(JSON.stringify(quickOrder)),
       detailLines: JSON.parse(JSON.stringify(detailLines)),
@@ -481,6 +508,8 @@ export function NewOrderForm({
       labWorkStatus,
       workDueLocal,
       patientAppointmentLocal,
+      labWholeDay,
+      appointmentWholeDay,
       workReceivedLocal,
       quickOrder,
       detailLines,
@@ -798,7 +827,8 @@ export function NewOrderForm({
               ? localDateTimeToIso(snapDatetimeLocalToDueGrid(workDueLocal))
               : null,
             dueToAdminsAt: appointmentIso,
-            kaitenAdminDueHasTime: true,
+            kaitenAdminDueHasTime: !labWholeDay,
+            dueToAdminsHasTime: !appointmentWholeDay,
             workReceivedAt: workReceivedLocal.trim()
               ? localDateTimeToIso(
                   snapDatetimeLocalToDueGrid(workReceivedLocal),
@@ -870,20 +900,25 @@ export function NewOrderForm({
           }
         }
         if (newId && pendingFiles.length > 0) {
-          for (const file of pendingFiles) {
-            const safeName = encodeURIComponent(file.name || "file");
-            await fetch(`/api/orders/${newId}/attachments`, {
-              method: "POST",
-              credentials: "include",
-              headers: {
-                "content-type": "application/octet-stream",
-                "x-upload-filename": safeName,
-                "x-upload-mime": file.type || "application/octet-stream",
-              },
-              body: file,
-            });
+          const fails: string[] = [];
+          for (let i = 0; i < pendingFiles.length; i++) {
+            const file = pendingFiles[i]!;
+            if (i > 0) {
+              await new Promise((r) => setTimeout(r, 70));
+            }
+            const up = await postOrderAttachmentWithRetries(newId, file);
+            if (!up.ok) {
+              fails.push(`${file.name}: ${up.error}`);
+            }
           }
           setPendingFiles([]);
+          if (fails.length > 0) {
+            void writeClientState(
+              "user",
+              `orderAttachmentsWarn:${newId}`,
+              fails.join("\n"),
+            );
+          }
         }
         if (printAfterSave && newId) {
           try {
@@ -924,6 +959,8 @@ export function NewOrderForm({
       labWorkStatus,
       workDueLocal,
       patientAppointmentLocal,
+      labWholeDay,
+      appointmentWholeDay,
       workReceivedLocal,
       quickOrder,
       detailLines,
@@ -1225,34 +1262,71 @@ export function NewOrderForm({
                   title="Когда зашла работа; если не указать — считается момент занесения наряда"
                   className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
                 />
-                <DueDatetimeComboPicker
-                  id={`${titleId}-work-due`}
-                  label="Срок лаборатории"
-                  labelPlacement="inside"
-                  value={workDueLocal}
-                  minLocal={dueDateMinLocal}
-                  onChange={(raw) => {
-                    setWorkDueLocal(
-                      raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
-                    );
-                  }}
-                  title="Срок лаборатории (8:00–23:30, шаг 30 мин)"
-                  className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
-                />
-                <DueDatetimeComboPicker
-                  id={`${titleId}-patient-appt`}
-                  label="Запись"
-                  labelPlacement="inside"
-                  value={patientAppointmentLocal}
-                  minLocal={dueDateMinLocal}
-                  onChange={(raw) => {
-                    setPatientAppointmentLocal(
-                      raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
-                    );
-                  }}
-                  title="Дата и время записи пациента (8:00–23:30, шаг 30 мин)"
-                  className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
-                />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <DueDatetimeComboPicker
+                    id={`${titleId}-work-due`}
+                    label="Срок лаборатории"
+                    labelPlacement="inside"
+                    value={workDueLocal}
+                    minLocal={dueDateMinLocal}
+                    onChange={(raw) => {
+                      const s =
+                        raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
+                      setWorkDueLocal(s);
+                      if (!s.trim()) {
+                        setLabWholeDay(true);
+                        return;
+                      }
+                      const hm = parseHmFromDueGridLocal(s);
+                      if (hm && hm !== DUE_DAY_DEFAULT_HM) setLabWholeDay(false);
+                    }}
+                    title="Срок лаборатории (8:00–23:30, шаг 30 мин)"
+                    className="w-full min-w-0 sm:min-w-[12rem]"
+                  />
+                  <label className="flex cursor-pointer items-center gap-2 pl-1 text-[0.7rem] leading-tight text-[var(--text-secondary)] sm:text-xs">
+                    <input
+                      type="checkbox"
+                      className="rounded border-[var(--card-border)]"
+                      checked={labWholeDay}
+                      onChange={(e) => setLabWholeDay(e.target.checked)}
+                    />
+                    В теч. дня (без времени сдачи в шапке)
+                  </label>
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <DueDatetimeComboPicker
+                    id={`${titleId}-patient-appt`}
+                    label="Запись"
+                    labelPlacement="inside"
+                    value={patientAppointmentLocal}
+                    minLocal={dueDateMinLocal}
+                    onChange={(raw) => {
+                      const s =
+                        raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
+                      setPatientAppointmentLocal(s);
+                      if (!s.trim()) {
+                        setAppointmentWholeDay(true);
+                        return;
+                      }
+                      const hm = parseHmFromDueGridLocal(s);
+                      if (hm && hm !== DUE_DAY_DEFAULT_HM)
+                        setAppointmentWholeDay(false);
+                    }}
+                    title="Дата и время записи пациента (8:00–23:30, шаг 30 мин)"
+                    className="w-full min-w-0 sm:min-w-[12rem]"
+                  />
+                  <label className="flex cursor-pointer items-center gap-2 pl-1 text-[0.7rem] leading-tight text-[var(--text-secondary)] sm:text-xs">
+                    <input
+                      type="checkbox"
+                      className="rounded border-[var(--card-border)]"
+                      checked={appointmentWholeDay}
+                      onChange={(e) =>
+                        setAppointmentWholeDay(e.target.checked)
+                      }
+                    />
+                    В теч. дня (время записи не принципиально)
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -1571,9 +1645,10 @@ export function NewOrderForm({
                     Заказ от клиента
                   </h3>
                   <textarea
+                    ref={clientOrderTextareaRef}
                     id={`${titleId}-client-order`}
-                    className={`${inputClass} min-h-[72px] max-h-[min(28vh,200px)] w-full resize-y lg:min-h-[88px]`}
-                    rows={4}
+                    className={`${inputClass} min-h-[72px] w-full resize-none overflow-hidden lg:min-h-[88px]`}
+                    rows={3}
                     value={clientOrderText}
                     onChange={(e) => setClientOrderText(e.target.value)}
                     placeholder="Текст заказа от клиента…"
@@ -1723,7 +1798,7 @@ function UrgentPillMenu({
         <ul
           className="absolute left-0 top-full z-50 mt-1 min-w-[11rem] overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
           role="listbox"
-          aria-label="Коэффициент срочности"
+          aria-label="Срочность"
         >
           {URGENT_MENU_OPTIONS.map((opt) => (
             <li key={opt.value} role="presentation">
@@ -1795,6 +1870,7 @@ function CommentsSection({
   onChange: (v: string) => void;
   className?: string;
 }) {
+  const textareaRef = useAutosizeTextarea(value);
   return (
     <section
       className={`border-t border-[var(--card-border)] pt-3 ${className}`}
@@ -1803,8 +1879,9 @@ function CommentsSection({
         Комментарии
       </h3>
       <textarea
-        className={`${inputClass} min-h-[72px] max-h-[min(28vh,200px)] w-full resize-y lg:min-h-[88px]`}
-        rows={4}
+        ref={textareaRef}
+        className={`${inputClass} min-h-[72px] w-full resize-none overflow-hidden lg:min-h-[88px]`}
+        rows={3}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Текст комментария…"

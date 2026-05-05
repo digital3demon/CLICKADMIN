@@ -180,6 +180,8 @@ export async function POST(
       correspondentAccount: true,
       ceoName: true,
       phone: true,
+      phoneAccounting: true,
+      phoneManagement: true,
       email: true,
     },
   });

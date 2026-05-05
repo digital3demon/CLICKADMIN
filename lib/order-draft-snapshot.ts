@@ -5,7 +5,7 @@ import type { BridgeLineInput } from "@/lib/detail-lines-to-constructions";
 import type { OrderProstheticsV1 } from "@/lib/order-prosthetics";
 import type { OrderCorrectionTrackValue } from "@/lib/order-correction-track";
 
-export const ORDER_DRAFT_SNAPSHOT_VERSION = 15 as const;
+export const ORDER_DRAFT_SNAPSHOT_VERSION = 16 as const;
 
 export type OrderDraftSnapshot = {
   version: typeof ORDER_DRAFT_SNAPSHOT_VERSION;
@@ -35,6 +35,10 @@ export type OrderDraftSnapshot = {
   workDueLocal: string;
   /** v11+ — дата записи пациента (как dueToAdminsAt) */
   patientAppointmentLocal: string;
+  /** v16+ — «в течение дня» для срока лаборатории */
+  labWholeDay?: boolean;
+  /** v16+ — «в течение дня» для записи */
+  appointmentWholeDay?: boolean;
   /** v11+ — когда работа поступила; пусто = момент занесения */
   workReceivedLocal: string;
   quickOrder: QuickOrderState;

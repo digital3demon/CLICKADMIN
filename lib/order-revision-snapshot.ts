@@ -69,6 +69,8 @@ export type OrderSnapshotV1 = {
     kaitenCardTypeId?: string | null;
     kaitenTrackLane: string | null;
     kaitenAdminDueHasTime?: boolean;
+    /** снимки до поля — считаем true */
+    dueToAdminsHasTime?: boolean;
     /** с v2 снимков всегда есть; в старых снимках отсутствует */
     kaitenCardTitleLabel?: string | null;
     kaitenCardId: number | null;
@@ -161,6 +163,7 @@ export function buildSnapshotFromOrder(
       kaitenCardTypeId: order.kaitenCardTypeId,
       kaitenTrackLane: order.kaitenTrackLane,
       kaitenAdminDueHasTime: order.kaitenAdminDueHasTime,
+      dueToAdminsHasTime: order.dueToAdminsHasTime,
       kaitenCardTitleLabel: order.kaitenCardTitleLabel,
       kaitenCardId: order.kaitenCardId,
       kaitenSyncError: order.kaitenSyncError,
@@ -375,6 +378,7 @@ export async function applyOrderSnapshot(
               : { disconnect: true },
           kaitenTrackLane: o.kaitenTrackLane as never,
           kaitenAdminDueHasTime: o.kaitenAdminDueHasTime ?? true,
+          dueToAdminsHasTime: o.dueToAdminsHasTime ?? true,
           kaitenCardTitleLabel: o.kaitenCardTitleLabel ?? null,
           kaitenCardId: o.kaitenCardId,
           kaitenSyncError: o.kaitenSyncError,

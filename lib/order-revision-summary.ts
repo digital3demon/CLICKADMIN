@@ -51,6 +51,7 @@ const KEY_LABELS: Record<string, string> = {
   kaitenCardTypeId: "Тип карточки Кайтен",
   kaitenTrackLane: "Пространство Кайтен",
   kaitenAdminDueHasTime: "Время сдачи админам в Кайтен",
+  dueToAdminsHasTime: "Точное время записи",
   kaitenCardTitleLabel: "Текст в шапку Кайтен",
   kaitenCardId: "ID карточки Кайтен",
   kaitenSyncError: "Ошибка Кайтен",
@@ -129,6 +130,12 @@ export function summarizeOrderRevision(
       "orderPriceListKind" in o ? (o.orderPriceListKind ?? null) : null,
     orderPriceListNote:
       "orderPriceListNote" in o ? (o.orderPriceListNote ?? null) : null,
+    kaitenAdminDueHasTime:
+      "kaitenAdminDueHasTime" in o
+        ? Boolean(o.kaitenAdminDueHasTime)
+        : true,
+    dueToAdminsHasTime:
+      "dueToAdminsHasTime" in o ? Boolean(o.dueToAdminsHasTime) : true,
   });
   const pkM = mergeOrder(pk);
   const nkM = mergeOrder(nk);

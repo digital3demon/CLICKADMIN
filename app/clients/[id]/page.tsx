@@ -60,6 +60,8 @@ function requisitesInitialFromClinic(clinic: {
   settlementAccount: string | null;
   correspondentAccount: string | null;
   phone: string | null;
+  phoneAccounting: string | null;
+  phoneManagement: string | null;
   email: string | null;
   ceoName: string | null;
 }) {

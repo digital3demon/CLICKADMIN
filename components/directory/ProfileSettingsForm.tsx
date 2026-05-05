@@ -6,7 +6,7 @@ import {
   PROFILE_AVATAR_PRESETS,
   profileAvatarEmoji,
 } from "@/lib/profile-avatar-presets";
-import { CRM_PROFILE_AVATAR_CHANGED_EVENT } from "@/lib/crm-client-events";
+import { CRM_PROFILE_UPDATED_EVENT } from "@/lib/crm-client-events";
 import {
   KANBAN_TELEGRAM_PREF_LABELS,
   KANBAN_TELEGRAM_PREF_SECTIONS,
@@ -211,7 +211,7 @@ export function ProfileSettingsForm({
       }
       setOkMsg("Фото профиля обновлено");
       if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent(CRM_PROFILE_AVATAR_CHANGED_EVENT));
+        window.dispatchEvent(new CustomEvent(CRM_PROFILE_UPDATED_EVENT));
       }
     } catch {
       setError("Ошибка сети");
@@ -239,7 +239,7 @@ export function ProfileSettingsForm({
       setAvatarCustomUploadedAt(null);
       setOkMsg("Своё фото удалено");
       if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent(CRM_PROFILE_AVATAR_CHANGED_EVENT));
+        window.dispatchEvent(new CustomEvent(CRM_PROFILE_UPDATED_EVENT));
       }
     } catch {
       setError("Ошибка сети");
@@ -363,6 +363,9 @@ export function ProfileSettingsForm({
       }
       setOkMsg("Сохранено");
       setTimeout(() => setOkMsg(null), 3000);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(CRM_PROFILE_UPDATED_EVENT));
+      }
     } catch {
       setError("Ошибка сети");
     } finally {

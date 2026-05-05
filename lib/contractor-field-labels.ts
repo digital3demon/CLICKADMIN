@@ -21,7 +21,9 @@ export const CLINIC_UPDATE_FIELD_LABELS: Record<string, string> = {
   bik: "БИК",
   settlementAccount: "р/с",
   correspondentAccount: "к/с",
-  phone: "телефон",
+  phone: "телефон администраторов",
+  phoneAccounting: "телефон бухгалтерии",
+  phoneManagement: "телефон руководства",
   email: "e-mail",
   ceoName: "руководитель",
 };

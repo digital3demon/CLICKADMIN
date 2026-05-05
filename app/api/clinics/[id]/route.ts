@@ -42,6 +42,8 @@ const clinicBeforePatchSelect = {
   settlementAccount: true,
   correspondentAccount: true,
   phone: true,
+  phoneAccounting: true,
+  phoneManagement: true,
   email: true,
   ceoName: true,
 } as const;
@@ -217,6 +219,12 @@ export async function PATCH(
             break;
           case "phone":
             data.phone = v;
+            break;
+          case "phoneAccounting":
+            data.phoneAccounting = v;
+            break;
+          case "phoneManagement":
+            data.phoneManagement = v;
             break;
           case "email":
             data.email = v;

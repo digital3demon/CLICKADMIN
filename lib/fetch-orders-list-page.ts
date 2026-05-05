@@ -165,7 +165,7 @@ async function fetchOrdersListPageAttentionFiltered(
   return { orders: page, nextCursor };
 }
 
-async function ordersSearchWhere(
+export async function ordersSearchWhere(
   needle: string,
 ): Promise<Prisma.OrderWhereInput> {
   const n = needle.trim();

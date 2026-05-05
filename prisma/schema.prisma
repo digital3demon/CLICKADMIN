@@ -163,7 +163,12 @@ model Clinic {
   settlementAccount            String?
   /// Корреспондентский счёт
   correspondentAccount         String?
+  /// Телефон администраторов / регистратуры (рабочий контакт по заказам)
   phone                        String?
+  /// Телефон бухгалтерии
+  phoneAccounting              String?
+  /// Телефон руководства
+  phoneManagement              String?
   email                        String?
   /// Руководитель (ФИО, должность — как заведено)
   ceoName                      String?
@@ -749,6 +754,8 @@ model Order {
   kaitenTrackLane                KaitenTrackLane?
   /// false — в Kaiten и в шапке только дата сдачи админам, без времени («в течение дня»)
   kaitenAdminDueHasTime          Boolean                   @default(true)
+  /// false — запись / приём «в течение дня», без привязки ко времени в интерфейсе
+  dueToAdminsHasTime             Boolean                   @default(true)
   /// Текст между врачом и датой в шапке; пусто — подставляется название типа карточки
   kaitenCardTitleLabel           String?
   /// ID карточки в Kaiten после успешного POST /cards

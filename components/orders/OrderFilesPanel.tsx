@@ -5,6 +5,7 @@ import {
   CRM_UPLOAD_MAX_BYTES,
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
 } from "@/lib/crm-upload-limits";
+import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
 
 const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 
@@ -95,31 +96,21 @@ export function OrderFilesPanel({
       setUploadWarn(null);
       setLoadError(null);
       try {
-        for (const file of arr) {
+        for (let i = 0; i < arr.length; i++) {
+          const file = arr[i]!;
           if (file.size <= 0) continue;
           if (file.size > MAX_BYTES) {
             throw new Error(CRM_UPLOAD_TOO_LARGE_MESSAGE);
           }
-          const safeName = encodeURIComponent(file.name || "file");
-          const res = await fetch(`/api/orders/${orderId}/attachments`, {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "content-type": "application/octet-stream",
-              "x-upload-filename": safeName,
-              "x-upload-mime": file.type || "application/octet-stream",
-            },
-            body: file,
-          });
-          const data = (await res.json().catch(() => ({}))) as {
-            error?: string;
-            warning?: string;
-          };
-          if (!res.ok) {
-            throw new Error(data.error ?? "Ошибка загрузки");
+          if (i > 0) {
+            await new Promise((r) => setTimeout(r, 70));
           }
-          if (typeof data.warning === "string" && data.warning.trim()) {
-            const w = data.warning.trim();
+          const result = await postOrderAttachmentWithRetries(orderId, file);
+          if (!result.ok) {
+            throw new Error(result.error);
+          }
+          if ("warning" in result && result.warning?.trim()) {
+            const w = result.warning.trim();
             setUploadWarn((prev) => (prev ? `${prev} · ${w}` : w));
           }
         }

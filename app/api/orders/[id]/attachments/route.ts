@@ -142,6 +142,39 @@ function isSqliteBusyError(e: unknown): boolean {
   );
 }
 
+/** PostgreSQL / высокая конкуренция — повтор записи. */
+function isTransientWriteConflict(e: unknown): boolean {
+  const msg = errorMessage(e);
+  const lower = msg.toLowerCase();
+  if (
+    lower.includes("serialization failure") ||
+    lower.includes("deadlock detected") ||
+    /p2034\b/i.test(msg)
+  ) {
+    return true;
+  }
+  return isSqliteBusyError(e);
+}
+
+async function withTransientWriteRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+): Promise<T> {
+  const max = 10;
+  let last: unknown;
+  for (let i = 0; i < max; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (!isTransientWriteConflict(e)) throw e;
+      await sleepMs(45 * (i + 1) + Math.floor(Math.random() * 60));
+    }
+  }
+  console.error(`[attachments] ${label}: retries exhausted`);
+  throw last;
+}
+
 async function sleepMs(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -276,40 +309,48 @@ export async function POST(req: Request, ctx: Ctx) {
     const attachmentId = newOrderAttachmentId();
     const fileBuf = Buffer.from(buf);
 
-    const row = await prisma.orderAttachment.create({
-      data: {
-        id: attachmentId,
-        orderId,
-        fileName,
-        mimeType,
-        size: buf.byteLength,
-        data: fileBuf,
-        diskRelPath: null,
-      },
-      select: {
-        id: true,
-        fileName: true,
-        size: true,
-        createdAt: true,
-        uploadedToKaitenAt: true,
-      },
-    });
+    const row = await withTransientWriteRetry(
+      () =>
+        prisma.orderAttachment.create({
+          data: {
+            id: attachmentId,
+            orderId,
+            fileName,
+            mimeType,
+            size: buf.byteLength,
+            data: fileBuf,
+            diskRelPath: null,
+          },
+          select: {
+            id: true,
+            fileName: true,
+            size: true,
+            createdAt: true,
+            uploadedToKaitenAt: true,
+          },
+        }),
+      "orderAttachment.create",
+    );
 
     try {
       if (asInvoice) {
-        await prisma.order.update({
-          where: { id: orderId },
-          data: {
-            invoiceAttachmentId: row.id,
-            invoiceIssued: true,
-            invoiceParsedLines: Prisma.DbNull,
-            invoiceParsedTotalRub: null,
-            invoiceParsedSummaryText: null,
-            ...(extractedInvoiceNumber
-              ? { invoiceNumber: extractedInvoiceNumber }
-              : {}),
-          },
-        });
+        await withTransientWriteRetry(
+          () =>
+            prisma.order.update({
+              where: { id: orderId },
+              data: {
+                invoiceAttachmentId: row.id,
+                invoiceIssued: true,
+                invoiceParsedLines: Prisma.DbNull,
+                invoiceParsedTotalRub: null,
+                invoiceParsedSummaryText: null,
+                ...(extractedInvoiceNumber
+                  ? { invoiceNumber: extractedInvoiceNumber }
+                  : {}),
+              },
+            }),
+          "order.update invoice",
+        );
       }
     } catch (e) {
       await prisma.orderAttachment
@@ -378,6 +419,7 @@ export async function POST(req: Request, ctx: Ctx) {
         }
       }
       if (!deferredSkipKaitenPush) {
+        await sleepMs(35 + Math.floor(Math.random() * 140));
         try {
           await pushAttachmentToKaiten(
             deferredOrderId,
@@ -386,6 +428,16 @@ export async function POST(req: Request, ctx: Ctx) {
           );
         } catch (e) {
           console.error("[attachments deferred] Kaiten push attachment", e);
+          await sleepMs(2200 + Math.floor(Math.random() * 900));
+          try {
+            await pushAttachmentToKaiten(
+              deferredOrderId,
+              deferredAttachmentId,
+              db,
+            );
+          } catch (e2) {
+            console.error("[attachments deferred] Kaiten push attachment retry", e2);
+          }
         }
       }
       if (!deferredTryPdfInvoice) return;

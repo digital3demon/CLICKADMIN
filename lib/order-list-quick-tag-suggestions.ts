@@ -67,12 +67,15 @@ const URGENT_ROWS: Array<
     ];
     out.push({
       id: `urgent-${opt.value}`,
-      title: `Срочность: ${opt.label}`,
+      title:
+        opt.value === URGENT_NO_COEF
+          ? "Срочно"
+          : `Срочность: ${opt.label}`,
       subtitle:
         opt.value === URGENT_UNSET
           ? "Снять срочность, пересчёт суммы ×1"
           : opt.value === URGENT_NO_COEF
-            ? "Срочно без числового коэффициента"
+            ? "Срочно, множитель к сумме работ ×1"
             : "Обновит шапку наряда и пересчёт стоимости работ",
       patch: { urgentSelection: opt.value },
       _keys: keys,

@@ -207,6 +207,8 @@ export default async function OrderEditPage({
     urgentCoefficient: order.urgentCoefficient,
     dueDate: order.dueDate?.toISOString() ?? null,
     dueToAdminsAt: order.dueToAdminsAt?.toISOString() ?? null,
+    kaitenAdminDueHasTime: order.kaitenAdminDueHasTime,
+    dueToAdminsHasTime: order.dueToAdminsHasTime,
     workReceivedAt: order.workReceivedAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
     invoiceIssued: order.invoiceIssued,

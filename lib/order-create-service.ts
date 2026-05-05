@@ -110,6 +110,8 @@ export type CreateOrderBody = {
   kaitenCardTypeId?: string | null;
   kaitenTrackLane?: string;
   kaitenAdminDueHasTime?: boolean;
+  /** false — запись «в течение дня», время не принципиально */
+  dueToAdminsHasTime?: boolean;
   kaitenCardTitleLabel?: string | null;
   dueDate?: string | null;
   dueToAdminsAt?: string | null;
@@ -294,6 +296,7 @@ export async function createOrderFromBody(
   dueToAdminsAt = parseOptionalDateTime(body.dueToAdminsAt);
   if (!dueToAdminsAt) return fail(400, "Укажите дату записи (Запись)");
   kaitenAdminDueHasTime = body.kaitenAdminDueHasTime !== false;
+  const dueToAdminsHasTime = body.dueToAdminsHasTime !== false;
 
   const dueDate = parseOptionalDateTime(body.dueDate);
   const serverNow = new Date();
@@ -408,7 +411,8 @@ export async function createOrderFromBody(
     createKanbanWithoutKaiten,
     kaitenCardTypeId: needKaitenPlacementFields ? kaitenCardTypeId : null,
     kaitenTrackLane: needKaitenPlacementFields ? kaitenTrackLane : null,
-    kaitenAdminDueHasTime: needKaitenPlacementFields ? kaitenAdminDueHasTime : true,
+    kaitenAdminDueHasTime,
+    dueToAdminsHasTime,
     kaitenCardTitleLabel: needKaitenPlacementFields
       ? body.kaitenCardTitleLabel?.trim() || null
       : null,

@@ -44,6 +44,23 @@ export function snapDatetimeLocalToDueGrid(local: string): string {
   return `${date}T${formatHm(snapped)}`;
 }
 
+/** Время по умолчанию при выборе только дня в календаре (`DueDatetimeComboPicker`). */
+export const DUE_DAY_DEFAULT_HM = "12:00";
+
+/**
+ * HH:mm из строки `yyyy-mm-ddTHH:mm` после snap (локально).
+ * Пустая или некорректная строка → null.
+ */
+export function parseHmFromDueGridLocal(local: string): string | null {
+  const t = local.trim();
+  if (!t) return null;
+  const i = t.indexOf("T");
+  if (i < 0) return null;
+  const hm = t.slice(i + 1, i + 6);
+  if (!/^\d{2}:\d{2}$/.test(hm)) return null;
+  return hm;
+}
+
 /** Отображение «Сдачи» в МСК, время — только слоты :00 / :30 (8:00–23:30). */
 export function formatDueDateTimeRuMskHalfHour(d: Date): string {
   const parts = new Intl.DateTimeFormat("ru-RU", {

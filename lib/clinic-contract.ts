@@ -40,6 +40,8 @@ export type ClinicContractSourceData = {
   correspondentAccount: string | null;
   ceoName: string | null;
   phone: string | null;
+  phoneAccounting: string | null;
+  phoneManagement: string | null;
   email: string | null;
 };
 
@@ -96,7 +98,13 @@ function requisitesLine(c: ClinicContractSourceData): string {
       : null,
     c.correspondentAccount ? `к/с ${c.correspondentAccount}` : null,
     c.bik ? `БИК ${c.bik}` : null,
-    c.phone ? `тел. ${c.phone}` : null,
+    c.phone?.trim() ? `тел. адм.: ${c.phone.trim()}` : null,
+    c.phoneAccounting?.trim()
+      ? `тел. бух.: ${c.phoneAccounting.trim()}`
+      : null,
+    c.phoneManagement?.trim()
+      ? `тел. рук.: ${c.phoneManagement.trim()}`
+      : null,
     c.email ? `e-mail: ${c.email}` : null,
   ].filter(Boolean);
   return parts.join(" · ");

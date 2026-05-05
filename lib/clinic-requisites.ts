@@ -9,7 +9,9 @@ export const CLINIC_REQUISITE_ROWS = [
   { key: "bik", label: "БИК" },
   { key: "settlementAccount", label: "Расчётный счёт" },
   { key: "correspondentAccount", label: "Корр. счёт" },
-  { key: "phone", label: "Телефон" },
+  { key: "phone", label: "Телефон администраторов" },
+  { key: "phoneAccounting", label: "Телефон бухгалтерии" },
+  { key: "phoneManagement", label: "Телефон руководства" },
   { key: "email", label: "E-mail" },
   { key: "ceoName", label: "Руководитель" },
 ] as const;

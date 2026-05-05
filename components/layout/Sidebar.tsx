@@ -16,7 +16,7 @@ import { isWorkdaySkyWidgetEnabled } from "@/lib/ui-flags";
 import { ThemeToggle } from "./ThemeToggle";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
 import { profileAvatarEmoji } from "@/lib/profile-avatar-presets";
-import { CRM_PROFILE_AVATAR_CHANGED_EVENT } from "@/lib/crm-client-events";
+import { CRM_PROFILE_UPDATED_EVENT } from "@/lib/crm-client-events";
 
 const WorkdaySunMoon = dynamic(
   () =>
@@ -110,11 +110,12 @@ export function Sidebar() {
   }, [loadSessionUser]);
 
   useEffect(() => {
-    const onAvatar = () => {
+    const onProfileUpdated = () => {
       void loadSessionUser();
     };
-    window.addEventListener(CRM_PROFILE_AVATAR_CHANGED_EVENT, onAvatar);
-    return () => window.removeEventListener(CRM_PROFILE_AVATAR_CHANGED_EVENT, onAvatar);
+    window.addEventListener(CRM_PROFILE_UPDATED_EVENT, onProfileUpdated);
+    return () =>
+      window.removeEventListener(CRM_PROFILE_UPDATED_EVENT, onProfileUpdated);
   }, [loadSessionUser]);
 
   const logout = useCallback(async () => {
@@ -225,9 +226,11 @@ export function Sidebar() {
         <div className="flex items-start gap-2 shell-short:gap-1.5">
           {sessionUser ? (
             <>
-              <div
-                className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--sidebar-border)] bg-black/10 text-xl dark:bg-white/10"
-                aria-hidden
+              <Link
+                href="/directory/profile"
+                className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--sidebar-border)] bg-black/10 text-xl outline-offset-2 transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)] dark:bg-white/10"
+                title="Настройка профиля"
+                aria-label="Настройка профиля"
               >
                 {sessionUser.avatarCustomUploadedAt ? (
                   <img
@@ -241,9 +244,9 @@ export function Sidebar() {
                     }}
                   />
                 ) : (
-                  <span>{profileAvatarEmoji(sessionUser.avatarPresetId)}</span>
+                  <span aria-hidden>{profileAvatarEmoji(sessionUser.avatarPresetId)}</span>
                 )}
-              </div>
+              </Link>
               <div className="min-w-0 flex-1 px-1 text-xs leading-snug text-[var(--sidebar-text)] shell-short:text-[10px]">
               <div className="font-medium text-[var(--sidebar-text-strong)]">
                 {sessionUser.displayName}

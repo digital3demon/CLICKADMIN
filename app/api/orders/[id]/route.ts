@@ -94,6 +94,10 @@ type PatchBody = {
   urgentSelection?: string;
   dueDate?: string | null;
   dueToAdminsAt?: string | null;
+  /** false — срок лабораторный без времени (Кайтен / шапка) */
+  kaitenAdminDueHasTime?: boolean;
+  /** false — запись «в течение дня» */
+  dueToAdminsHasTime?: boolean;
   workReceivedAt?: string | null;
   invoiceIssued?: boolean;
   invoiceNumber?: string | null;
@@ -134,6 +138,7 @@ const KAITEN_HEAD_PATCH_FIELDS: (keyof PatchBody)[] = [
   "notes",
   "clientOrderText",
   "dueDate",
+  "kaitenAdminDueHasTime",
   "urgentSelection",
   "doctorId",
   "clinicId",
@@ -560,6 +565,14 @@ export async function PATCH(
     }
     scalarData.dueToAdminsAt = parsed;
     scalarData.appointmentDate = parsed;
+  }
+
+  if (body.kaitenAdminDueHasTime !== undefined) {
+    scalarData.kaitenAdminDueHasTime = Boolean(body.kaitenAdminDueHasTime);
+  }
+
+  if (body.dueToAdminsHasTime !== undefined) {
+    scalarData.dueToAdminsHasTime = Boolean(body.dueToAdminsHasTime);
   }
 
   if (body.workReceivedAt !== undefined) {

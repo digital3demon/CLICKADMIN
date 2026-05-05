@@ -4,7 +4,7 @@ export const URGENT_NO_COEF = "NO_COEF";
 
 export const URGENT_MENU_OPTIONS: { value: string; label: string }[] = [
   { value: URGENT_UNSET, label: "Не указано" },
-  { value: URGENT_NO_COEF, label: "Без коэффициента" },
+  { value: URGENT_NO_COEF, label: "Срочно" },
   { value: "1.2", label: "×1,2" },
   { value: "1.5", label: "×1,5" },
   { value: "2", label: "×2" },
@@ -31,7 +31,7 @@ export function urgentSelectionFromOrder(
 
 /**
  * Множитель для суммы работ по наряду.
- * «Не указано» или «без коэффициента» → 1; иначе сохранённый коэффициент (×1,2 … ×3).
+ * «Не указано» или срочно без числового множителя → 1; иначе сохранённый коэффициент (×1,2 … ×3).
  */
 export function orderUrgentPriceMultiplier(
   isUrgent: boolean,

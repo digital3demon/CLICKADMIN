@@ -16,6 +16,8 @@ export async function GET() {
   let avatarPresetId: string | null = null;
   let mentionHandle: string | null = null;
   let avatarCustomUploadedAt: string | null = null;
+  /** Актуальное имя из БД; JWT (`s.name`) при сохранении профиля не переписывается. */
+  let displayNameFromDb: string | null = null;
   let tenantDatabaseEnabled = false;
   let tenantDatabaseReady = false;
   try {
@@ -23,11 +25,13 @@ export async function GET() {
     const row = await db.user.findUnique({
       where: { id: s.sub },
       select: {
+        displayName: true,
         avatarPresetId: true,
         mentionHandle: true,
         avatarCustomUploadedAt: true,
       },
     });
+    displayNameFromDb = row?.displayName?.trim() ? row.displayName.trim() : null;
     avatarPresetId = row?.avatarPresetId ?? null;
     mentionHandle = row?.mentionHandle ?? null;
     avatarCustomUploadedAt = row?.avatarCustomUploadedAt?.toISOString() ?? null;
@@ -45,7 +49,7 @@ export async function GET() {
     user: {
       id: s.sub,
       email: s.email,
-      displayName: s.name,
+      displayName: displayNameFromDb ?? s.name,
       role: s.role,
       avatarPresetId,
       mentionHandle,

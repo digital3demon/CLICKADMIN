@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import type { Prisma } from "@prisma/client";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
@@ -18,6 +19,9 @@ import { getSiteOrigin } from "@/lib/site-origin-server";
 import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
 import {
   humanListTagLabel,
+  LIST_TAG_ORDER_ATTENTION,
+  LIST_TAG_PROSTHETICS_PENDING,
+  orderAttentionListSupersetWhere,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
@@ -32,6 +36,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { PrismaDataLoadErrorCallout } from "@/components/layout/PrismaDataLoadErrorCallout";
+import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
 export const dynamic = "force-dynamic";
 
 /** Контент списка на всю ширину рабочей области (таблица сама делит колонки). */
@@ -121,6 +126,50 @@ export default async function OrdersPage({
     periodParsed.mode === "range"
       ? `${periodParsed.fromYmd} — ${periodParsed.toYmd}`
       : null;
+  const baseCountParts: Prisma.OrderWhereInput[] = [
+    { tenantId: tenantId ?? "__missing_tenant__" },
+    { archivedAt: null },
+  ];
+  if (onlyShippedActive) {
+    baseCountParts.push({ adminShippedOtpr: true });
+  } else if (hideShippedActive) {
+    baseCountParts.push({ adminShippedOtpr: false });
+  }
+  if (listSearchQ) {
+    baseCountParts.push(await ordersSearchWhere(listSearchQ));
+  }
+  if (createdAtRange) {
+    baseCountParts.push({
+      createdAt: {
+        gte: createdAtRange.start,
+        lt: createdAtRange.endExclusive,
+      },
+    });
+  }
+  const baseCountWhere =
+    baseCountParts.length === 1 ? baseCountParts[0] : { AND: baseCountParts };
+  const [attentionCount, prostheticsPendingCount] = tenantId
+    ? await Promise.all([
+        ordersPrisma.order.count({
+          where: {
+            AND: [baseCountWhere, orderAttentionListSupersetWhere()],
+          },
+        }),
+        ordersPrisma.order.count({
+          where: {
+            AND: [
+              baseCountWhere,
+              {
+                prostheticsOrdered: false,
+                prostheticsRequests: {
+                  some: { resolvedAt: null, rejectedAt: null },
+                },
+              },
+            ],
+          },
+        }),
+      ])
+    : [0, 0];
 
   let orders: Awaited<
     ReturnType<typeof fetchOrdersListPage>
@@ -346,6 +395,54 @@ export default async function OrdersPage({
               </Link>
             </>
           )}
+          <Link
+            href={ordersListHref({
+              limit: pageSize,
+              tag: LIST_TAG_ORDER_ATTENTION,
+              hideShipped: hideShippedActive,
+              onlyShipped: onlyShippedActive,
+              q: listSearchQ || undefined,
+              from: fromUrl ?? undefined,
+              to: toUrl ?? undefined,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "orderAttention"
+                ? "border-amber-500/80 bg-amber-100 text-amber-950 dark:border-amber-700 dark:bg-amber-950/45 dark:text-amber-100"
+                : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+            }`}
+            title="Быстрый фильтр по тегу «Корректировки / Внимание»"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              Корректировки
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {attentionCount}
+            </span>
+          </Link>
+          <Link
+            href={ordersListHref({
+              limit: pageSize,
+              tag: LIST_TAG_PROSTHETICS_PENDING,
+              hideShipped: hideShippedActive,
+              onlyShipped: onlyShippedActive,
+              q: listSearchQ || undefined,
+              from: fromUrl ?? undefined,
+              to: toUrl ?? undefined,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "prostheticsPending"
+                ? "border-sky-500/80 bg-sky-100 text-sky-950 dark:border-sky-700 dark:bg-sky-950/45 dark:text-sky-100"
+                : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+            }`}
+            title="Быстрый фильтр по тегу «Заказ протетики»"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              Заказ протетики
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {prostheticsPendingCount}
+            </span>
+          </Link>
         </div>
       </div>
       {activeFilter ? (
