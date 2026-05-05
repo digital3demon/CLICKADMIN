@@ -21,7 +21,6 @@ import {
   humanListTagLabel,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
-  orderAttentionListSupersetWhere,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
@@ -148,24 +147,30 @@ export default async function OrdersPage({
   }
   const baseCountWhere =
     baseCountParts.length === 1 ? baseCountParts[0] : { AND: baseCountParts };
+  /** Непринятые корректировки «!!!» (как колонка списка и формулировка счётчика). */
+  const pendingCorrectionsWhere = {
+    chatCorrections: {
+      some: { resolvedAt: null, rejectedAt: null },
+    },
+  } satisfies Prisma.OrderWhereInput;
+  /** Открытые заявки «???» по протетике без отметки «Протетика заказана». */
+  const pendingProstheticsWhere = {
+    prostheticsOrdered: false,
+    prostheticsRequests: {
+      some: { resolvedAt: null, rejectedAt: null },
+    },
+  } satisfies Prisma.OrderWhereInput;
+
   const [attentionCount, prostheticsPendingCount] = tenantId
     ? await Promise.all([
         ordersPrisma.order.count({
           where: {
-            AND: [baseCountWhere, orderAttentionListSupersetWhere()],
+            AND: [baseCountWhere, pendingCorrectionsWhere],
           },
         }),
         ordersPrisma.order.count({
           where: {
-            AND: [
-              baseCountWhere,
-              {
-                prostheticsOrdered: false,
-                prostheticsRequests: {
-                  some: { resolvedAt: null, rejectedAt: null },
-                },
-              },
-            ],
+            AND: [baseCountWhere, pendingProstheticsWhere],
           },
         }),
       ])
@@ -395,54 +400,58 @@ export default async function OrdersPage({
               </Link>
             </>
           )}
-          <Link
-            href={ordersListHref({
-              limit: pageSize,
-              tag: LIST_TAG_ORDER_ATTENTION,
-              hideShipped: hideShippedActive,
-              onlyShipped: onlyShippedActive,
-              q: listSearchQ || undefined,
-              from: fromUrl ?? undefined,
-              to: toUrl ?? undefined,
-            })}
-            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-              activeFilter?.kind === "orderAttention"
-                ? "border-amber-500/80 bg-amber-100 text-amber-950 dark:border-amber-700 dark:bg-amber-950/45 dark:text-amber-100"
-                : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-            }`}
-            title="Быстрый фильтр по тегу «Корректировки / Внимание»"
-          >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-              Корректировки
-            </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-              {attentionCount}
-            </span>
-          </Link>
-          <Link
-            href={ordersListHref({
-              limit: pageSize,
-              tag: LIST_TAG_PROSTHETICS_PENDING,
-              hideShipped: hideShippedActive,
-              onlyShipped: onlyShippedActive,
-              q: listSearchQ || undefined,
-              from: fromUrl ?? undefined,
-              to: toUrl ?? undefined,
-            })}
-            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-              activeFilter?.kind === "prostheticsPending"
-                ? "border-sky-500/80 bg-sky-100 text-sky-950 dark:border-sky-700 dark:bg-sky-950/45 dark:text-sky-100"
-                : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-            }`}
-            title="Быстрый фильтр по тегу «Заказ протетики»"
-          >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-              Заказ протетики
-            </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-              {prostheticsPendingCount}
-            </span>
-          </Link>
+          {attentionCount > 0 ? (
+            <Link
+              href={ordersListHref({
+                limit: pageSize,
+                tag: LIST_TAG_ORDER_ATTENTION,
+                hideShipped: hideShippedActive,
+                onlyShipped: onlyShippedActive,
+                q: listSearchQ || undefined,
+                from: fromUrl ?? undefined,
+                to: toUrl ?? undefined,
+              })}
+              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+                activeFilter?.kind === "orderAttention"
+                  ? "border-amber-500/80 bg-amber-100 text-amber-950 dark:border-amber-700 dark:bg-amber-950/45 dark:text-amber-100"
+                  : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+              }`}
+              title="Наряды с непринятыми корректировками из чата («!!!»); в списке также может попасть расхождение суммы счёта с составом"
+            >
+              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+                Корректировки
+              </span>
+              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+                {attentionCount}
+              </span>
+            </Link>
+          ) : null}
+          {prostheticsPendingCount > 0 ? (
+            <Link
+              href={ordersListHref({
+                limit: pageSize,
+                tag: LIST_TAG_PROSTHETICS_PENDING,
+                hideShipped: hideShippedActive,
+                onlyShipped: onlyShippedActive,
+                q: listSearchQ || undefined,
+                from: fromUrl ?? undefined,
+                to: toUrl ?? undefined,
+              })}
+              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+                activeFilter?.kind === "prostheticsPending"
+                  ? "border-sky-500/80 bg-sky-100 text-sky-950 dark:border-sky-700 dark:bg-sky-950/45 dark:text-sky-100"
+                  : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+              }`}
+              title="Быстрый фильтр по тегу «Заказ протетики»"
+            >
+              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+                Заказ протетики
+              </span>
+              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+                {prostheticsPendingCount}
+              </span>
+            </Link>
+          ) : null}
         </div>
       </div>
       {activeFilter ? (
