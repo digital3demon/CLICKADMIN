@@ -1,17 +1,16 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getKaitenRestAuth } from "@/lib/kaiten-rest";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
-type RouteProps = {
-  params?: Promise<{ id: string; fileId: string }>;
-};
-
-export async function GET(_req: Request, { params }: RouteProps) {
-  const resolvedParams = params ? await params : null;
-  const orderId = resolvedParams?.id?.trim() ?? "";
-  const fileIdRaw = resolvedParams?.fileId?.trim() ?? "";
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string; fileId: string }> },
+) {
+  const resolvedParams = await params;
+  const orderId = resolvedParams.id.trim();
+  const fileIdRaw = resolvedParams.fileId.trim();
   const fileId = Number(fileIdRaw);
   if (!orderId || !Number.isFinite(fileId)) {
     return NextResponse.json({ error: "Некорректный файл" }, { status: 400 });
