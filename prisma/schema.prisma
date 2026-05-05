@@ -428,6 +428,8 @@ enum AppModule {
   DIRECTORY
   /// Плитки: прайс, склад, канбан-доски, кайтен, курьеры (отдельно)
   CONFIG_PRICING
+  /// Можно исправлять активный прайс: менять позиции и удалять ошибки.
+  CONFIG_PRICING_CORRECTION
   CONFIG_WAREHOUSE
   CONFIG_KANBAN_BOARDS
   CONFIG_KAITEN

@@ -26,6 +26,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "ATTENTION",
   "DIRECTORY",
   "CONFIG_PRICING",
+  "CONFIG_PRICING_CORRECTION",
   "CONFIG_WAREHOUSE",
   "CONFIG_KANBAN_BOARDS",
   "CONFIG_KAITEN",
@@ -55,6 +56,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   ATTENTION: "Внимание / напоминания",
   DIRECTORY: "Конфигурация (хаб)",
   CONFIG_PRICING: "Конфиг: прайс",
+  CONFIG_PRICING_CORRECTION: "Конфиг: коррекция актуального прайса",
   CONFIG_WAREHOUSE: "Конфиг: склад",
   CONFIG_KANBAN_BOARDS: "Конфиг: доски канбана",
   CONFIG_KAITEN: "Конфиг: Kaiten",
@@ -132,6 +134,8 @@ export function defaultModuleAllowed(
     case "CONFIG_ORDERS_IMPORT_EXPORT":
     case "CONFIG_CONTRACT_TEMPLATE":
       return true;
+    case "CONFIG_PRICING_CORRECTION":
+      return false;
     case "CONFIG_COSTING":
     case "CONFIG_USERS":
       return false;

@@ -17,11 +17,47 @@ type Row = {
 
 type ListRow = { id: string; name: string; sortOrder: number; itemCount: number };
 
+type EditDraft = {
+  code: string;
+  name: string;
+  description: string;
+  priceRub: string;
+  leadWorkingDays: string;
+};
+
 type PriceListsPayload = {
   activePriceListId: string;
   lists: ListRow[];
   error?: string;
 };
+
+function draftFromRow(row: Row): EditDraft {
+  return {
+    code: row.code,
+    name: row.name,
+    description: row.description ?? "",
+    priceRub: String(row.priceRub),
+    leadWorkingDays:
+      row.leadWorkingDays == null ? "" : String(row.leadWorkingDays),
+  };
+}
+
+function normalizeIntText(value: string): number | null {
+  const text = value.replace(/\s/g, "").trim();
+  if (!text) return null;
+  const parsed = Number.parseInt(text, 10);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+}
+
+function draftChanged(row: Row, draft: EditDraft): boolean {
+  return (
+    draft.code.trim() !== row.code ||
+    draft.name.trim() !== row.name ||
+    draft.description.trim() !== (row.description ?? "") ||
+    (normalizeIntText(draft.priceRub) ?? 0) !== row.priceRub ||
+    normalizeIntText(draft.leadWorkingDays) !== row.leadWorkingDays
+  );
+}
 
 export function PriceListDirectoryClient() {
   const [lists, setLists] = useState<ListRow[]>([]);
@@ -44,6 +80,11 @@ export function PriceListDirectoryClient() {
   const [creatingList, setCreatingList] = useState(false);
   const [createListErr, setCreateListErr] = useState<string | null>(null);
   const [settingActive, setSettingActive] = useState(false);
+  const [canCorrectActivePrice, setCanCorrectActivePrice] = useState(false);
+  const [correctionMode, setCorrectionMode] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, EditDraft>>({});
+  const [correctionBusyId, setCorrectionBusyId] = useState<string | null>(null);
+  const [correctionError, setCorrectionError] = useState<string | null>(null);
 
   const refreshCatalogsAndItems = useCallback(
     async (preferredEditId: string | null) => {
@@ -93,6 +134,32 @@ export function PriceListDirectoryClient() {
     void refreshCatalogsAndItems(null);
   }, [refreshCatalogsAndItems]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" });
+        const data = (await res.json().catch(() => ({}))) as {
+          user?: { moduleAccess?: Record<string, boolean> } | null;
+        };
+        if (cancelled) return;
+        setCanCorrectActivePrice(
+          data.user?.moduleAccess?.CONFIG_PRICING_CORRECTION === true,
+        );
+      } catch {
+        if (!cancelled) setCanCorrectActivePrice(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!correctionMode) return;
+    setDrafts(Object.fromEntries(items.map((it) => [it.id, draftFromRow(it)])));
+  }, [items, correctionMode]);
+
   const reloadItemsOnly = useCallback(async (listId: string) => {
     try {
       const ir = await fetch(
@@ -115,6 +182,9 @@ export function PriceListDirectoryClient() {
   const onEditListChange = useCallback(
     (id: string) => {
       setEditListId(id);
+      setCorrectionMode(false);
+      setDrafts({});
+      setCorrectionError(null);
       void reloadItemsOnly(id);
     },
     [reloadItemsOnly],
@@ -224,6 +294,8 @@ export function PriceListDirectoryClient() {
         return;
       }
       setActivePriceListId(editListId);
+      setCorrectionMode(false);
+      setDrafts({});
     } catch {
       setLoadError("Сеть недоступна");
     } finally {
@@ -231,8 +303,91 @@ export function PriceListDirectoryClient() {
     }
   }
 
+  function startCorrectionMode() {
+    if (!canCorrectActivePrice || editListId !== activePriceListId) return;
+    setDrafts(Object.fromEntries(items.map((it) => [it.id, draftFromRow(it)])));
+    setCorrectionError(null);
+    setCorrectionMode(true);
+  }
+
+  function updateDraft(id: string, patch: Partial<EditDraft>) {
+    setDrafts((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? draftFromRow(items.find((it) => it.id === id)!)), ...patch },
+    }));
+  }
+
+  async function saveCorrection(row: Row) {
+    const draft = drafts[row.id] ?? draftFromRow(row);
+    const code = draft.code.trim();
+    const name = draft.name.trim();
+    const price = normalizeIntText(draft.priceRub);
+    if (!code || !name || price == null) {
+      setCorrectionError("Укажите код, название и цену");
+      return;
+    }
+    const leadWorkingDays = normalizeIntText(draft.leadWorkingDays);
+    const ok = window.confirm(
+      `Сохранить изменения позиции «${row.code} · ${row.name}»?`,
+    );
+    if (!ok) return;
+    setCorrectionBusyId(row.id);
+    setCorrectionError(null);
+    try {
+      const res = await fetch(`/api/price-list-items/${encodeURIComponent(row.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          name,
+          priceRub: price,
+          leadWorkingDays,
+          description: draft.description.trim() || null,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setCorrectionError(data.error ?? "Не удалось сохранить позицию");
+        return;
+      }
+      if (editListId) await reloadItemsOnly(editListId);
+    } catch {
+      setCorrectionError("Сеть недоступна");
+    } finally {
+      setCorrectionBusyId(null);
+    }
+  }
+
+  async function deleteCorrection(row: Row) {
+    const ok = window.confirm(
+      `Удалить позицию «${row.code} · ${row.name}» из актуального прайса? Это физическое удаление из БД.`,
+    );
+    if (!ok) return;
+    setCorrectionBusyId(row.id);
+    setCorrectionError(null);
+    try {
+      const res = await fetch(`/api/price-list-items/${encodeURIComponent(row.id)}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setCorrectionError(data.error ?? "Не удалось удалить позицию");
+        return;
+      }
+      await refreshCatalogsAndItems(editListId);
+    } catch {
+      setCorrectionError("Сеть недоступна");
+    } finally {
+      setCorrectionBusyId(null);
+    }
+  }
+
   const editListLabel =
     lists.find((l) => l.id === editListId)?.name ?? "—";
+  const isActiveEditList = Boolean(
+    editListId && activePriceListId && editListId === activePriceListId,
+  );
+  const canOpenCorrection = canCorrectActivePrice && isActiveEditList;
 
   return (
     <div className="space-y-8">
@@ -280,6 +435,21 @@ export function PriceListDirectoryClient() {
           >
             {settingActive ? "Сохранение…" : "Использовать в нарядах"}
           </button>
+          {canCorrectActivePrice ? (
+            <button
+              type="button"
+              disabled={!canOpenCorrection}
+              onClick={correctionMode ? () => setCorrectionMode(false) : startCorrectionMode}
+              title={
+                canOpenCorrection
+                  ? "Изменить актуальный прайс"
+                  : "Корректировать можно только выбранный актуальный прайс"
+              }
+              className="h-9 shrink-0 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 text-sm font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {correctionMode ? "Закрыть изменение" : "Изменить"}
+            </button>
+          ) : null}
           <PriceOverridesManager />
         </div>
 
@@ -423,9 +593,16 @@ export function PriceListDirectoryClient() {
       </section>
 
       <section ref={positionsSectionRef}>
-        <h2 className="text-lg font-semibold text-[var(--app-text)]">
-          Позиции каталога «{editListLabel}»
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-[var(--app-text)]">
+            Позиции каталога «{editListLabel}»
+          </h2>
+          {correctionMode ? (
+            <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
+              Режим изменения актуального прайса
+            </span>
+          ) : null}
+        </div>
         {items.length === 0 ? (
           <p className="mt-3 text-sm text-[var(--text-secondary)]">Нет активных позиций.</p>
         ) : (
@@ -439,6 +616,115 @@ export function PriceListDirectoryClient() {
             />
             {filteredForTabs.length === 0 ? (
               <p className="text-sm text-[var(--text-muted)]">Ничего не найдено</p>
+            ) : correctionMode ? (
+              <div className="min-w-0 overflow-x-auto">
+                {correctionError ? (
+                  <p className="mb-3 text-sm text-red-600">{correctionError}</p>
+                ) : null}
+                <table className="min-w-[980px] w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--card-border)] text-left text-xs uppercase tracking-wide text-[var(--text-muted)]">
+                      <th className="px-2 py-2">Код</th>
+                      <th className="px-2 py-2">Название</th>
+                      <th className="px-2 py-2">Описание</th>
+                      <th className="px-2 py-2">Цена</th>
+                      <th className="px-2 py-2">Срок</th>
+                      <th className="px-2 py-2">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredForTabs.map((row) => {
+                      const draft = drafts[row.id] ?? draftFromRow(row);
+                      const changed = draftChanged(row, draft);
+                      const busy = correctionBusyId === row.id;
+                      return (
+                        <tr
+                          key={row.id}
+                          className="border-b border-[var(--card-border)] align-top last:border-b-0"
+                        >
+                          <td className="px-2 py-2">
+                            <input
+                              value={draft.code}
+                              onChange={(e) =>
+                                updateDraft(row.id, { code: e.target.value })
+                              }
+                              className="h-9 w-28 rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              value={draft.name}
+                              onChange={(e) =>
+                                updateDraft(row.id, { name: e.target.value })
+                              }
+                              className="h-9 min-w-[14rem] w-full rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 text-sm"
+                            />
+                            <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                              {row.sectionTitle ?? "Без раздела"}
+                              {row.subsectionTitle ? ` · ${row.subsectionTitle}` : ""}
+                            </p>
+                          </td>
+                          <td className="px-2 py-2">
+                            <textarea
+                              value={draft.description}
+                              onChange={(e) =>
+                                updateDraft(row.id, {
+                                  description: e.target.value,
+                                })
+                              }
+                              rows={2}
+                              className="min-w-[16rem] w-full rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              inputMode="numeric"
+                              value={draft.priceRub}
+                              onChange={(e) =>
+                                updateDraft(row.id, { priceRub: e.target.value })
+                              }
+                              className="h-9 w-28 rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              inputMode="numeric"
+                              value={draft.leadWorkingDays}
+                              onChange={(e) =>
+                                updateDraft(row.id, {
+                                  leadWorkingDays: e.target.value,
+                                })
+                              }
+                              placeholder="нет"
+                              className="h-9 w-24 rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex flex-col gap-2">
+                              <button
+                                type="button"
+                                disabled={!changed || busy || correctionBusyId != null}
+                                onClick={() => void saveCorrection(row)}
+                                className="rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                              >
+                                {busy ? "Сохранение…" : "Сохранить"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy || correctionBusyId != null}
+                                onClick={() => void deleteCorrection(row)}
+                                className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/70 dark:text-red-300 dark:hover:bg-red-950/30"
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <PriceListTabbedBody items={filteredForTabs} />
             )}
