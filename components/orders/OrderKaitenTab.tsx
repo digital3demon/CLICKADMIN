@@ -30,6 +30,14 @@ type CommentRow = {
   created?: string;
   authorName?: string;
   parentId: number | null;
+  images?: ChatImage[];
+};
+
+type ChatImage = {
+  id: string;
+  name: string;
+  url: string;
+  mime: string | null;
 };
 
 type MentionUser = {
@@ -76,6 +84,7 @@ type KaitenSnapshot = {
   columns: Array<{ id: number; title?: string; name?: string }>;
   lanes: Array<{ id: number; title?: string }>;
   comments: CommentRow[];
+  cardImages?: ChatImage[];
   kaitenCardUrl: string | null;
   spaces: SpaceOpt[];
 };
@@ -123,6 +132,9 @@ export function OrderKaitenTab({
   const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [commentCaretPos, setCommentCaretPos] = useState(0);
+  const [openImage, setOpenImage] = useState<{ name: string; url: string } | null>(
+    null,
+  );
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   /** Только если пользователь сменил пространство — иначе PATCH не трогает доску. */
@@ -754,9 +766,35 @@ export function OrderKaitenTab({
   }
 
   const comments = snap?.comments ?? [];
+  const cardImages = snap?.cardImages ?? [];
   const roots = comments.filter((c) => c.parentId == null);
   const childrenOf = (pid: number) =>
     comments.filter((c) => c.parentId === pid);
+  const renderChatImages = (images: ChatImage[] | undefined) => {
+    if (!images?.length) return null;
+    return (
+      <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {images.map((image) => (
+          <button
+            key={image.id}
+            type="button"
+            className="min-w-0 text-left"
+            title={image.name}
+            onClick={() => setOpenImage({ name: image.name, url: image.url })}
+          >
+            <img
+              src={image.url}
+              alt={image.name}
+              className="h-20 w-full rounded border border-[var(--card-border)] object-cover hover:opacity-90"
+            />
+            <span className="mt-1 block truncate text-[10px] text-[var(--text-muted)]">
+              {image.name}
+            </span>
+          </button>
+        ))}
+      </div>
+    );
+  };
 
   const setBlockedInKaiten = async (blocked: boolean, reason?: string) => {
     setBlockBusy(true);
@@ -1006,6 +1044,7 @@ export function OrderKaitenTab({
                 <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-text)]">
                   {c.text}
                 </p>
+                {renderChatImages(c.images)}
                 <button
                   type="button"
                   className="mt-1 text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
@@ -1028,6 +1067,7 @@ export function OrderKaitenTab({
                         <p className="whitespace-pre-wrap text-[var(--app-text)]">
                           {ch.text}
                         </p>
+                        {renderChatImages(ch.images)}
                         <button
                           type="button"
                           className="mt-0.5 text-xs text-[var(--sidebar-blue)] hover:underline"
@@ -1043,6 +1083,15 @@ export function OrderKaitenTab({
             ))
           )}
         </ul>
+
+        {cardImages.length > 0 ? (
+          <div className="mt-3 shrink-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+              Изображения в карточке
+            </p>
+            {renderChatImages(cardImages)}
+          </div>
+        ) : null}
 
         {replyToId != null ? (
           <p className="mt-3 text-xs text-[var(--text-muted)]">
@@ -1136,6 +1185,34 @@ export function OrderKaitenTab({
         </button>
       </div>
       </div>
+      {openImage ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setOpenImage(null);
+          }}
+        >
+          <div className="max-h-full max-w-5xl">
+            <div className="mb-2 flex items-center justify-between gap-3 text-white">
+              <p className="min-w-0 truncate text-sm font-medium">{openImage.name}</p>
+              <button
+                type="button"
+                className="rounded-md bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
+                onClick={() => setOpenImage(null)}
+              >
+                Закрыть
+              </button>
+            </div>
+            <img
+              src={openImage.url}
+              alt={openImage.name}
+              className="max-h-[82vh] max-w-full rounded-lg object-contain"
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

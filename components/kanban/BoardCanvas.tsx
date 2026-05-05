@@ -603,7 +603,7 @@ export function BoardCanvas({
   onLinkedOrderMovedToKaitenMirror,
 }: BoardCanvasProps) {
   const columnIds = board.columns.map((c) => c.id);
-  /** Горизонтальная полоса колонок: wheel без passive — наклон колеса / Shift+колесо (см. эффект ниже). */
+  /** Горизонтальная полоса колонок: wheel без passive — только горизонтальный жест / Shift+колесо. */
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
@@ -669,18 +669,6 @@ export function BoardCanvas({
         if (!canScrollLeft && !canScrollRight) return;
         e.preventDefault();
         el.scrollLeft += e.deltaX;
-        return;
-      }
-
-      // Вертикальный скролл над полосой колонок (не над скроллящимся списком карточек)
-      // → сдвигаем доску по X, иначе страница «дергается» вместе с колонками.
-      if (!canScrollY && ay > 0.5) {
-        const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
-        if (maxLeft <= 0) return;
-        if (e.deltaY > 0 && el.scrollLeft >= maxLeft - 0.5) return;
-        if (e.deltaY < 0 && el.scrollLeft <= 0.5) return;
-        e.preventDefault();
-        el.scrollLeft = Math.max(0, Math.min(maxLeft, el.scrollLeft + e.deltaY));
         return;
       }
 
