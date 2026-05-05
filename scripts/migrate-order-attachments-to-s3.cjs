@@ -115,8 +115,11 @@ async function main() {
   let processed = 0;
   let migrated = 0;
   let skipped = 0;
+  let missingSource = 0;
   let failed = 0;
   let cursor = null;
+  const failOnMissing =
+    String(process.env.ATTACHMENTS_MIGRATE_S3_FAIL_ON_MISSING || "").trim() === "1";
 
   console.log(
     `[attachments->s3] start; dryRun=${dryRun} batch=${batchSize} limit=${limit || "no-limit"} keepDbData=${keepDbData}`,
@@ -185,10 +188,25 @@ async function main() {
             );
           }
         } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          // Частый случай при переносе: в БД есть diskRelPath, но файла на диске уже нет.
+          if (msg.includes("ENOENT")) {
+            missingSource += 1;
+            const level = failOnMissing ? "error" : "warn";
+            console[level](
+              `[attachments->s3] missing-source id=${row.id} order=${row.orderId} file="${row.fileName}" ${msg}`,
+            );
+            if (failOnMissing) {
+              failed += 1;
+            } else {
+              skipped += 1;
+            }
+            continue;
+          }
           failed += 1;
           console.error(
             `[attachments->s3] failed id=${row.id} order=${row.orderId} file="${row.fileName}"`,
-            e instanceof Error ? e.message : e,
+            msg,
           );
         }
       }
@@ -198,7 +216,7 @@ async function main() {
   }
 
   console.log(
-    `[attachments->s3] done processed=${processed} migrated=${migrated} skipped=${skipped} failed=${failed}`,
+    `[attachments->s3] done processed=${processed} migrated=${migrated} skipped=${skipped} missingSource=${missingSource} failed=${failed}`,
   );
   if (failed > 0) {
     process.exitCode = 2;
