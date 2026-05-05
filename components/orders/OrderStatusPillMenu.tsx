@@ -1,6 +1,8 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useCallback, useRef, useState } from "react";
+import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
 import type { OrderStatus } from "@prisma/client";
 import {
   ORDER_STATUS_LABELS,
@@ -36,13 +38,20 @@ export function OrderStatusPillMenu({
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const close = useCallback(() => setOpen(false), []);
-  useMenuDismiss(open, close, wrapRef);
+  useMenuDismiss(open, close, wrapRef, listRef);
+  const pos = useFixedDropdownPosition(open, buttonRef, {
+    maxListHeight: 288,
+    minWidthPx: 176,
+  });
   const label = ORDER_STATUS_LABELS[value];
 
   return (
     <div className="relative z-[60]" ref={wrapRef}>
       <button
+        ref={buttonRef}
         type="button"
         className={BTN}
         aria-expanded={open}
@@ -53,34 +62,46 @@ export function OrderStatusPillMenu({
         <span className="truncate">{label}</span>
         <ChevronMini open={open} />
       </button>
-      {open ? (
-        <ul
-          className="absolute left-0 top-full z-[200] mt-1 max-h-72 min-w-[11rem] overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
-          role="listbox"
-          aria-label="Статус заказа"
-        >
-          {ORDER_STATUS_ORDER.map((key) => (
-            <li key={key} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={key === value}
-                className={`flex w-full items-center px-3 py-2 text-left text-xs font-medium hover:bg-[var(--surface-hover)] ${
-                  key === value
-                    ? "bg-[var(--surface-hover)] text-[var(--app-text)]"
-                    : "text-[var(--text-body)]"
-                }`}
-                onClick={() => {
-                  onChange(key);
-                  setOpen(false);
-                }}
-              >
-                {ORDER_STATUS_LABELS[key]}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {typeof document !== "undefined" && open
+        ? createPortal(
+            <ul
+              ref={listRef}
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                width: pos.width,
+                maxHeight: pos.maxHeight,
+                zIndex: 10000,
+              }}
+              className="overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
+              role="listbox"
+              aria-label="Статус заказа"
+            >
+              {ORDER_STATUS_ORDER.map((key) => (
+                <li key={key} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={key === value}
+                    className={`flex w-full items-center px-3 py-2 text-left text-xs font-medium hover:bg-[var(--surface-hover)] ${
+                      key === value
+                        ? "bg-[var(--surface-hover)] text-[var(--app-text)]"
+                        : "text-[var(--text-body)]"
+                    }`}
+                    onClick={() => {
+                      onChange(key);
+                      setOpen(false);
+                    }}
+                  >
+                    {ORDER_STATUS_LABELS[key]}
+                  </button>
+                </li>
+              ))}
+            </ul>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

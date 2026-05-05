@@ -366,6 +366,8 @@ const editColWrap =
   "min-w-0 space-y-0 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] p-2.5 sm:p-3";
 /** То же для верхней четырёхколоночной сетки: выравнивание по высоте строки. */
 const editMainCol = `${editColWrap} flex min-h-0 flex-col xl:h-full`;
+/** Заказ от клиента / комментарий: без xl:h-full — иначе колонка тянется за соседями и авт высота textarea ломается. */
+const editNotesCol = `${editColWrap} flex min-h-0 w-full flex-col`;
 
 function moneyRu(n: number): string {
   return new Intl.NumberFormat("ru-RU", {
@@ -2168,7 +2170,7 @@ export function OrderEditForm({
   );
 
   const oeColClientNotes = (
-    <div className={editMainCol}>
+    <div className={editNotesCol}>
       <div className="flex shrink-0 flex-col">
         <h3 className="shrink-0 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
           Заказ от клиента

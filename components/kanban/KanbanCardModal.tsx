@@ -60,6 +60,7 @@ import {
   IconX,
 } from "./kanban-icons";
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
+import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 
 function kanbanCardAbsoluteUrl(cardId: string, boardId: string): string {
   if (typeof window === "undefined") return "";
@@ -188,6 +189,7 @@ export function KanbanCardModal({
   const [pickerQuery, setPickerQuery] = useState("");
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
+  const descTextareaRef = useAutosizeTextarea(descDraft);
   const [fileViewer, setFileViewer] = useState<
     | null
     | { mode: "image"; images: CardFile[]; index: number }
@@ -1232,9 +1234,11 @@ export function KanbanCardModal({
                 <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-sky-800/90 dark:text-sky-300/90">
                   Описание и детали заказа
                 </div>
-                <div className="grid min-h-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] sm:items-stretch">
+                <div className="grid min-h-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] sm:items-start">
                   <textarea
-                    className={`${baseInput} min-h-[100px] resize-y sm:min-h-[120px]`}
+                    ref={descTextareaRef}
+                    className={`${baseInput} min-h-[100px] resize-none overflow-hidden sm:min-h-[120px]`}
+                    rows={3}
                     disabled={blocked}
                     value={descDraft}
                     onChange={(e) => setDescDraft(e.target.value)}

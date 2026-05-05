@@ -198,7 +198,7 @@ export function PodrobnoSection({
       ) : null}
 
       {priceLines.length === 0 ? null : (
-        <div className="flex gap-3 overflow-x-auto pb-1 pt-1 [scrollbar-gutter:stable]">
+        <div className="flex gap-3 overflow-x-auto overscroll-x-contain pb-1 pt-1 [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]">
           {priceLines.map((line) => (
             <div
               key={line.id}

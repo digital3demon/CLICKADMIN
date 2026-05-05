@@ -15,8 +15,10 @@ import {
 } from "@/lib/kaiten-sync";
 import {
   deleteOrderAttachmentFile,
+  isOrderAttachmentS3Enabled,
   newOrderAttachmentId,
   readOrderAttachmentBytes,
+  writeOrderAttachmentToS3,
 } from "@/lib/order-attachment-storage";
 import {
   CRM_UPLOAD_MAX_BYTES,
@@ -308,6 +310,11 @@ export async function POST(req: Request, ctx: Ctx) {
 
     const attachmentId = newOrderAttachmentId();
     const fileBuf = Buffer.from(buf);
+    const useS3Storage = isOrderAttachmentS3Enabled();
+    const diskRelPath = useS3Storage
+      ? await writeOrderAttachmentToS3(orderId, attachmentId, fileBuf, mimeType)
+      : null;
+    const dataForDb = useS3Storage ? Buffer.alloc(0) : fileBuf;
 
     const row = await withTransientWriteRetry(
       () =>
@@ -318,8 +325,8 @@ export async function POST(req: Request, ctx: Ctx) {
             fileName,
             mimeType,
             size: buf.byteLength,
-            data: fileBuf,
-            diskRelPath: null,
+            data: dataForDb,
+            diskRelPath,
           },
           select: {
             id: true,
@@ -353,6 +360,9 @@ export async function POST(req: Request, ctx: Ctx) {
         );
       }
     } catch (e) {
+      if (useS3Storage) {
+        await deleteOrderAttachmentFile(diskRelPath).catch(() => {});
+      }
       await prisma.orderAttachment
         .delete({ where: { id: row.id } })
         .catch(() => {});

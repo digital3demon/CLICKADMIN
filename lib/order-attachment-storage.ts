@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { deleteS3Object, getS3ObjectBytes, isS3StorageEnabled, putS3ObjectBytes } from "@/lib/s3-client";
 
 /**
  * Новые вложения — в БД (`OrderAttachment.data`). Корень на диске нужен только для
@@ -24,6 +25,40 @@ export function orderAttachmentDiskRelPath(
 
 export function newOrderAttachmentId(): string {
   return randomUUID();
+}
+
+const S3_REL_PREFIX = "s3:";
+
+function s3RelPathFromKey(key: string): string {
+  return `${S3_REL_PREFIX}${key}`;
+}
+
+function s3KeyFromRelPath(rel: string): string | null {
+  if (!rel.startsWith(S3_REL_PREFIX)) return null;
+  const key = rel.slice(S3_REL_PREFIX.length).trim();
+  return key || null;
+}
+
+export function orderAttachmentS3ObjectKey(
+  orderId: string,
+  attachmentId: string,
+): string {
+  return `orders/${orderId}/attachments/${attachmentId}`;
+}
+
+export function isOrderAttachmentS3Enabled(): boolean {
+  return isS3StorageEnabled();
+}
+
+export async function writeOrderAttachmentToS3(
+  orderId: string,
+  attachmentId: string,
+  body: Buffer,
+  contentType: string,
+): Promise<string> {
+  const key = orderAttachmentS3ObjectKey(orderId, attachmentId);
+  await putS3ObjectBytes(key, body, contentType);
+  return s3RelPathFromKey(key);
 }
 
 function absolutePathFromRel(rel: string): string {
@@ -49,6 +84,10 @@ export async function readOrderAttachmentBytes(row: {
   diskRelPath: string | null;
 }): Promise<Buffer> {
   if (row.diskRelPath) {
+    const s3Key = s3KeyFromRelPath(row.diskRelPath);
+    if (s3Key) {
+      return await getS3ObjectBytes(s3Key);
+    }
     const abs = absolutePathFromRel(row.diskRelPath);
     return await fs.readFile(abs);
   }
@@ -63,6 +102,11 @@ export async function deleteOrderAttachmentFile(
   rel: string | null | undefined,
 ): Promise<void> {
   if (!rel) return;
+  const s3Key = s3KeyFromRelPath(rel);
+  if (s3Key) {
+    await deleteS3Object(s3Key);
+    return;
+  }
   try {
     await fs.unlink(absolutePathFromRel(rel));
   } catch (e) {

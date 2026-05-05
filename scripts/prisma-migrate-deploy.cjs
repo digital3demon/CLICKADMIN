@@ -232,5 +232,46 @@ if (shouldAutoActivateTenantDb()) {
   console.log(`tenant routing auto-activated for slug="${tenantSlug}"`);
 }
 
+function shouldAutoMigrateAttachmentsToS3() {
+  return String(process.env.ATTACHMENTS_MIGRATE_S3_ON_DEPLOY || "").trim() === "1";
+}
+
+if (shouldAutoMigrateAttachmentsToS3()) {
+  const script = pathToEnsure("migrate-order-attachments-to-s3.cjs");
+  if (!fs.existsSync(script)) {
+    console.error("Не найден скрипт migrate-order-attachments-to-s3.cjs в выкладке.");
+    process.exit(1);
+  }
+  const args = [];
+  if (String(process.env.ATTACHMENTS_MIGRATE_S3_DRY_RUN || "").trim() === "1") {
+    args.push("--dry-run");
+  }
+  const batch = String(process.env.ATTACHMENTS_MIGRATE_S3_BATCH || "").trim();
+  if (batch) args.push(`--batch=${batch}`);
+  const limit = String(process.env.ATTACHMENTS_MIGRATE_S3_LIMIT || "").trim();
+  if (limit) args.push(`--limit=${limit}`);
+
+  const ef = path.join(bundleRoot, ".env");
+  const nodeArgs = [];
+  if (fs.existsSync(ef)) {
+    nodeArgs.push("--env-file", ef);
+  }
+  nodeArgs.push(script, ...args);
+
+  console.log(
+    `attachments->s3 auto-migrate: start (${args.length > 0 ? args.join(" ") : "default"})`,
+  );
+  const migrate = spawnSync(process.execPath, nodeArgs, {
+    cwd: bundleRoot,
+    stdio: "inherit",
+    env: process.env,
+    shell: false,
+  });
+  if (migrate.status !== 0) {
+    process.exit(migrate.status === null ? 1 : migrate.status);
+  }
+  console.log("attachments->s3 auto-migrate: done");
+}
+
 console.log("single db mode: OK.");
 process.exit(0);

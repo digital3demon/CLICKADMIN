@@ -651,6 +651,9 @@ export function BoardCanvas({
       if (e.ctrlKey) return;
 
       const canScrollY = canScrollVerticallyFromTarget(e.target, e.deltaY);
+      const ax = Math.abs(e.deltaX);
+      const ay = Math.abs(e.deltaY);
+
       if (e.shiftKey) {
         if (canScrollY) return;
         e.preventDefault();
@@ -658,20 +661,30 @@ export function BoardCanvas({
         return;
       }
 
-      const ax = Math.abs(e.deltaX);
-      const ay = Math.abs(e.deltaY);
-      // На тачпаде жест обычно немного диагональный. Если внутри карточек есть куда
-      // скроллить по Y — отдаём событие нативному вертикальному скроллу.
-      if (canScrollY && ay >= ax * 0.8) return;
-
-      if (ax > 0 && ax >= ay) {
-        const canScrollLeft = e.deltaX < 0 && el.scrollLeft > 0;
-        const canScrollRight =
-          e.deltaX > 0 && el.scrollLeft + el.clientWidth < el.scrollWidth;
+      // Явный горизонтальный жест (тачпад / горизонтальное колесо)
+      if (ax > 0.5 && ax >= ay * 1.05) {
+        const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+        const canScrollLeft = e.deltaX < 0 && el.scrollLeft > 0.5;
+        const canScrollRight = e.deltaX > 0 && el.scrollLeft < maxLeft - 0.5;
         if (!canScrollLeft && !canScrollRight) return;
         e.preventDefault();
         el.scrollLeft += e.deltaX;
+        return;
       }
+
+      // Вертикальный скролл над полосой колонок (не над скроллящимся списком карточек)
+      // → сдвигаем доску по X, иначе страница «дергается» вместе с колонками.
+      if (!canScrollY && ay > 0.5) {
+        const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+        if (maxLeft <= 0) return;
+        if (e.deltaY > 0 && el.scrollLeft >= maxLeft - 0.5) return;
+        if (e.deltaY < 0 && el.scrollLeft <= 0.5) return;
+        e.preventDefault();
+        el.scrollLeft = Math.max(0, Math.min(maxLeft, el.scrollLeft + e.deltaY));
+        return;
+      }
+
+      if (canScrollY && ay >= ax * 0.85) return;
     };
 
     el.addEventListener("wheel", onWheel, { passive: false });
@@ -853,7 +866,7 @@ export function BoardCanvas({
     >
       <div
         ref={horizontalScrollRef}
-        className="relative z-0 flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth p-2 [-webkit-overflow-scrolling:touch] sm:p-4"
+        className="relative z-0 flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain p-2 [-webkit-overflow-scrolling:touch] sm:p-4"
       >
         <div className="flex w-max min-w-0 shrink-0 items-start gap-2 sm:gap-3">
           <SortableContext

@@ -1,6 +1,8 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
 import { useRouter } from "next/navigation";
 import {
   kaitenColumnTitleFromBoard,
@@ -85,8 +87,14 @@ function KaitenHeaderPillMenuWithKaiten({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const close = useCallback(() => setOpen(false), []);
-  useMenuDismiss(open, close, wrapRef);
+  useMenuDismiss(open, close, wrapRef, listRef);
+  const pos = useFixedDropdownPosition(open, buttonRef, {
+    maxListHeight: 288,
+    minWidthPx: 200,
+  });
 
   const [columnTitle, setColumnTitle] = useState(() =>
     kaitenStatusDisplay({
@@ -244,6 +252,7 @@ function KaitenHeaderPillMenuWithKaiten({
   return (
     <div className="relative z-[60]" ref={wrapRef}>
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         className={`inline-flex min-h-9 max-w-[min(100vw-8rem,16rem)] items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide shadow-sm sm:min-h-10 sm:px-3 sm:text-xs ${pillClass} ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
@@ -266,54 +275,66 @@ function KaitenHeaderPillMenuWithKaiten({
         <span className="truncate">{columnTitle}</span>
         {!disabled ? <ChevronMini open={open} /> : null}
       </button>
-      {open && !disabled ? (
-        <ul
-          className="absolute left-0 top-full z-[200] mt-1 max-h-72 min-w-[12.5rem] overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
-          role="listbox"
-          aria-label="Колонка Kaiten"
-        >
-          {loading ? (
-            <li className="px-3 py-2 text-xs text-[var(--text-muted)]">
-              Загрузка…
-            </li>
-          ) : loadError ? (
-            <li className="px-3 py-2 text-xs text-red-600 dark:text-red-400">
-              {loadError}
-            </li>
-          ) : snap?.columns?.length ? (
-            snap.columns.map((col) => {
-              const title = String(col.title ?? col.name ?? "").trim() || "—";
-              const currentId =
-                snap.card && typeof snap.card.column_id === "number"
-                  ? snap.card.column_id
-                  : null;
-              const selected = col.id === currentId;
-              return (
-                <li key={col.id} role="presentation">
-                  <button
-                    type="button"
-                    role="option"
-                    disabled={savingId != null}
-                    aria-selected={selected}
-                    className={`flex w-full items-center px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide hover:bg-[var(--surface-hover)] ${
-                      selected
-                        ? "bg-[var(--surface-hover)] text-[var(--app-text)]"
-                        : "text-[var(--text-body)]"
-                    }`}
-                    onClick={() => void onPickColumn(col.id)}
-                  >
-                    {savingId === col.id ? "…" : title}
-                  </button>
+      {typeof document !== "undefined" && open && !disabled
+        ? createPortal(
+            <ul
+              ref={listRef}
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                width: pos.width,
+                maxHeight: pos.maxHeight,
+                zIndex: 10000,
+              }}
+              className="overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
+              role="listbox"
+              aria-label="Колонка Kaiten"
+            >
+              {loading ? (
+                <li className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                  Загрузка…
                 </li>
-              );
-            })
-          ) : (
-            <li className="px-3 py-2 text-xs text-[var(--text-muted)]">
-              Нет колонок
-            </li>
-          )}
-        </ul>
-      ) : null}
+              ) : loadError ? (
+                <li className="px-3 py-2 text-xs text-red-600 dark:text-red-400">
+                  {loadError}
+                </li>
+              ) : snap?.columns?.length ? (
+                snap.columns.map((col) => {
+                  const title = String(col.title ?? col.name ?? "").trim() || "—";
+                  const currentId =
+                    snap.card && typeof snap.card.column_id === "number"
+                      ? snap.card.column_id
+                      : null;
+                  const selected = col.id === currentId;
+                  return (
+                    <li key={col.id} role="presentation">
+                      <button
+                        type="button"
+                        role="option"
+                        disabled={savingId != null}
+                        aria-selected={selected}
+                        className={`flex w-full items-center px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide hover:bg-[var(--surface-hover)] ${
+                          selected
+                            ? "bg-[var(--surface-hover)] text-[var(--app-text)]"
+                            : "text-[var(--text-body)]"
+                        }`}
+                        onClick={() => void onPickColumn(col.id)}
+                      >
+                        {savingId === col.id ? "…" : title}
+                      </button>
+                    </li>
+                  );
+                })
+              ) : (
+                <li className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                  Нет колонок
+                </li>
+              )}
+            </ul>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

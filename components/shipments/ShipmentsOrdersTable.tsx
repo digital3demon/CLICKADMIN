@@ -124,15 +124,15 @@ export function ShipmentsOrdersTable({
               </th>
               <th
                 className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
-                title="Запись: дата и время приёма пациента"
-              >
-                Запись
-              </th>
-              <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
                 title="Срок лабораторный"
               >
                 Лаборатория
+              </th>
+              <th
+                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
+                title="Запись: дата и время приёма пациента"
+              >
+                Запись
               </th>
               <th
                 className="min-w-[11rem] whitespace-nowrap px-2 py-2 text-center align-top normal-case print:px-1.5"
@@ -269,6 +269,13 @@ export function ShipmentsOrdersTable({
                   </td>
                   <td className="min-w-0 px-2 py-2 align-middle text-[var(--text-secondary)] print:px-1.5">
                     <OrderListDueCell
+                      orderId={o.id}
+                      dueIso={o.dueDate?.toISOString() ?? null}
+                      createdAtIso={o.createdAt.toISOString()}
+                    />
+                  </td>
+                  <td className="min-w-0 px-2 py-2 align-middle text-[var(--text-secondary)] print:px-1.5">
+                    <OrderListDueCell
                       variant="appointment"
                       orderId={o.id}
                       dueIso={
@@ -276,13 +283,6 @@ export function ShipmentsOrdersTable({
                         o.dueToAdminsAt?.toISOString() ??
                         null
                       }
-                      createdAtIso={o.createdAt.toISOString()}
-                    />
-                  </td>
-                  <td className="min-w-0 px-2 py-2 align-middle text-[var(--text-secondary)] print:px-1.5">
-                    <OrderListDueCell
-                      orderId={o.id}
-                      dueIso={o.dueDate?.toISOString() ?? null}
                       createdAtIso={o.createdAt.toISOString()}
                     />
                   </td>

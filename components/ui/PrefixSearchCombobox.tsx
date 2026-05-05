@@ -8,6 +8,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
+import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
 
 export type PrefixComboboxOption = {
   value: string;
@@ -69,6 +71,10 @@ export function PrefixSearchCombobox({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
+  const pos = useFixedDropdownPosition(open, inputRef, {
+    maxListHeight: 240,
+    minWidthPx: 200,
+  });
 
   const withEmpty = useMemo(
     (): PrefixComboboxOption[] => [
@@ -134,6 +140,7 @@ export function PrefixSearchCombobox({
     const onPtr = (e: PointerEvent) => {
       const t = e.target as Node;
       if (wrapRef.current?.contains(t)) return;
+      if (listRef.current?.contains(t)) return;
       close();
     };
     document.addEventListener("pointerdown", onPtr);
@@ -222,18 +229,30 @@ export function PrefixSearchCombobox({
             blurCloseTimer.current = null;
             const ae = document.activeElement;
             if (wrapRef.current?.contains(ae)) return;
+            if (listRef.current?.contains(ae)) return;
             setOpen(false);
             setSearchQuery("");
           }, 120);
         }}
         onKeyDown={onKeyDown}
       />
-      {open && !disabled ? (
+      {typeof document !== "undefined" &&
+      open &&
+      !disabled &&
+      createPortal(
         <ul
           ref={listRef}
           id={listboxId}
           role="listbox"
-          className="absolute z-[100] mt-1 max-h-60 w-full overflow-auto rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] py-1 text-sm shadow-lg"
+          style={{
+            position: "fixed",
+            top: pos.top,
+            left: pos.left,
+            width: pos.width,
+            maxHeight: pos.maxHeight,
+            zIndex: 10000,
+          }}
+          className="overflow-auto rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] py-1 text-sm shadow-lg"
         >
           {filtered.length === 0 ? (
             <li className="px-2.5 py-2 text-[var(--text-muted)]">Совпадений нет</li>
@@ -262,8 +281,9 @@ export function PrefixSearchCombobox({
               </li>
             ))
           )}
-        </ul>
-      ) : null}
+        </ul>,
+        document.body,
+      )}
     </div>
   );
 }

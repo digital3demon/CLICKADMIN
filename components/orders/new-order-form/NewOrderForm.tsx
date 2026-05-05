@@ -14,6 +14,8 @@ import {
   LabStatusPillMenu,
   useMenuDismiss,
 } from "@/components/orders/LabStatusPillMenu";
+import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
+import { createPortal } from "react-dom";
 import { OrderCorrectionDetails } from "@/components/orders/OrderCorrectionDetails";
 import {
   LAB_WORK_STATUS_DEFAULT,
@@ -1775,8 +1777,14 @@ function UrgentPillMenu({
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const close = useCallback(() => setOpen(false), []);
-  useMenuDismiss(open, close, wrapRef);
+  useMenuDismiss(open, close, wrapRef, listRef);
+  const pos = useFixedDropdownPosition(open, buttonRef, {
+    maxListHeight: 320,
+    minWidthPx: 176,
+  });
   const pillClass = urgentPillStyles(value);
   const label = urgentPillLabel(value);
   const isUnset = value === URGENT_UNSET;
@@ -1784,6 +1792,7 @@ function UrgentPillMenu({
   return (
     <div className="relative z-[1]" ref={wrapRef}>
       <button
+        ref={buttonRef}
         type="button"
         className={`inline-flex min-h-11 min-w-[7rem] max-w-[min(100vw-10rem,13rem)] items-center rounded-full py-2 text-left text-xs font-semibold uppercase tracking-wide shadow-sm ${pillClass} ${isUnset ? "justify-end gap-0 pl-3 pr-2" : "gap-1.5 px-3"}`}
         aria-expanded={open}
@@ -1794,32 +1803,44 @@ function UrgentPillMenu({
         {!isUnset ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
         <ChevronMini open={open} />
       </button>
-      {open ? (
-        <ul
-          className="absolute left-0 top-full z-50 mt-1 min-w-[11rem] overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
-          role="listbox"
-          aria-label="Срочность"
-        >
-          {URGENT_MENU_OPTIONS.map((opt) => (
-            <li key={opt.value} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={opt.value === value}
-                className={`flex w-full items-center px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide hover:bg-[var(--surface-hover)] ${
-                  opt.value === value ? "bg-[var(--surface-hover)] text-[var(--app-text)]" : "text-[var(--text-body)]"
-                }`}
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-              >
-                {opt.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {typeof document !== "undefined" && open
+        ? createPortal(
+            <ul
+              ref={listRef}
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                width: pos.width,
+                maxHeight: pos.maxHeight,
+                zIndex: 10000,
+              }}
+              className="overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
+              role="listbox"
+              aria-label="Срочность"
+            >
+              {URGENT_MENU_OPTIONS.map((opt) => (
+                <li key={opt.value} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={opt.value === value}
+                    className={`flex w-full items-center px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide hover:bg-[var(--surface-hover)] ${
+                      opt.value === value ? "bg-[var(--surface-hover)] text-[var(--app-text)]" : "text-[var(--text-body)]"
+                    }`}
+                    onClick={() => {
+                      onChange(opt.value);
+                      setOpen(false);
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                </li>
+              ))}
+            </ul>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

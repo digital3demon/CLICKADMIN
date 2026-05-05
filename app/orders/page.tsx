@@ -554,15 +554,15 @@ export default async function OrdersPage({
               </th>
               <th
                 className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
-                title="Запись: дата и время приёма пациента"
-              >
-                Запись
-              </th>
-              <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
                 title="Срок лабораторный"
               >
                 Лаборатория
+              </th>
+              <th
+                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                title="Запись: дата и время приёма пациента"
+              >
+                Запись
               </th>
               <th
                 className="min-w-[11rem] whitespace-nowrap px-1.5 py-1.5 text-center align-top normal-case sm:px-2 sm:py-2"
@@ -709,6 +709,13 @@ export default async function OrdersPage({
                   </td>
                   <td className="min-w-0 px-1.5 py-1.5 align-middle text-[var(--text-secondary)] sm:px-2 sm:py-2">
                     <OrderListDueCell
+                      orderId={o.id}
+                      dueIso={o.dueDate?.toISOString() ?? null}
+                      createdAtIso={o.createdAt.toISOString()}
+                    />
+                  </td>
+                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-[var(--text-secondary)] sm:px-2 sm:py-2">
+                    <OrderListDueCell
                       variant="appointment"
                       orderId={o.id}
                       dueIso={
@@ -716,13 +723,6 @@ export default async function OrdersPage({
                         o.dueToAdminsAt?.toISOString() ??
                         null
                       }
-                      createdAtIso={o.createdAt.toISOString()}
-                    />
-                  </td>
-                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-[var(--text-secondary)] sm:px-2 sm:py-2">
-                    <OrderListDueCell
-                      orderId={o.id}
-                      dueIso={o.dueDate?.toISOString() ?? null}
                       createdAtIso={o.createdAt.toISOString()}
                     />
                   </td>

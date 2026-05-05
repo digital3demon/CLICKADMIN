@@ -1,6 +1,8 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
 import {
   LAB_WORK_STATUS_LABELS,
   LAB_WORK_STATUS_ORDER,
@@ -12,12 +14,15 @@ export function useMenuDismiss(
   open: boolean,
   close: () => void,
   wrapRef: RefObject<HTMLElement | null>,
+  popoverRef?: RefObject<HTMLElement | null>,
 ) {
   useEffect(() => {
     if (!open) return;
     const onPointer = (e: PointerEvent) => {
-      const el = wrapRef.current;
-      if (el && !el.contains(e.target as Node)) close();
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t)) return;
+      if (popoverRef?.current?.contains(t)) return;
+      close();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
@@ -28,7 +33,7 @@ export function useMenuDismiss(
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, close, wrapRef]);
+  }, [open, close, wrapRef, popoverRef]);
 }
 
 function ChevronMini({ open }: { open: boolean }) {
@@ -59,8 +64,14 @@ export function LabStatusPillMenu({
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const close = useCallback(() => setOpen(false), []);
-  useMenuDismiss(open, close, wrapRef);
+  useMenuDismiss(open, close, wrapRef, listRef);
+  const pos = useFixedDropdownPosition(open, buttonRef, {
+    maxListHeight: 288,
+    minWidthPx: 200,
+  });
   const pillClass = LAB_WORK_STATUS_PILL_STYLES[value];
   const label = LAB_WORK_STATUS_LABELS[value];
   const sizeClass = compact
@@ -70,6 +81,7 @@ export function LabStatusPillMenu({
   return (
     <div className="relative z-[60]" ref={wrapRef}>
       <button
+        ref={buttonRef}
         type="button"
         className={`inline-flex items-center gap-1.5 rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${sizeClass} ${pillClass}`}
         aria-expanded={open}
@@ -80,32 +92,44 @@ export function LabStatusPillMenu({
         <span className="truncate">{label}</span>
         <ChevronMini open={open} />
       </button>
-      {open ? (
-        <ul
-          className="absolute left-0 top-full z-[200] mt-1 max-h-72 min-w-[12.5rem] overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
-          role="listbox"
-          aria-label="Выбор статуса работы"
-        >
-          {LAB_WORK_STATUS_ORDER.map((key) => (
-            <li key={key} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={key === value}
-                className={`flex w-full items-center px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide hover:bg-[var(--surface-hover)] ${
-                  key === value ? "bg-[var(--surface-hover)] text-[var(--app-text)]" : "text-[var(--text-body)]"
-                }`}
-                onClick={() => {
-                  onChange(key);
-                  setOpen(false);
-                }}
-              >
-                {LAB_WORK_STATUS_LABELS[key]}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {typeof document !== "undefined" && open
+        ? createPortal(
+            <ul
+              ref={listRef}
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                width: pos.width,
+                maxHeight: pos.maxHeight,
+                zIndex: 10000,
+              }}
+              className="overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
+              role="listbox"
+              aria-label="Выбор статуса работы"
+            >
+              {LAB_WORK_STATUS_ORDER.map((key) => (
+                <li key={key} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={key === value}
+                    className={`flex w-full items-center px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide hover:bg-[var(--surface-hover)] ${
+                      key === value ? "bg-[var(--surface-hover)] text-[var(--app-text)]" : "text-[var(--text-body)]"
+                    }`}
+                    onClick={() => {
+                      onChange(key);
+                      setOpen(false);
+                    }}
+                  >
+                    {LAB_WORK_STATUS_LABELS[key]}
+                  </button>
+                </li>
+              ))}
+            </ul>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

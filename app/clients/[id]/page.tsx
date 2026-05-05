@@ -116,7 +116,12 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
     clinic = await prisma.clinic.findUnique({
       where: { id },
       include: {
-        _count: { select: { orders: true, doctorLinks: true } },
+        _count: {
+          select: {
+            orders: { where: { archivedAt: null } },
+            doctorLinks: true,
+          },
+        },
         contractDoc: { select: { updatedAt: true } },
         doctorLinks: {
           orderBy: { doctor: { fullName: "asc" } },
@@ -125,6 +130,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
           },
         },
         orders: {
+          where: { archivedAt: null },
           orderBy: { createdAt: "desc" },
           take: ORDERS_PREVIEW,
           include: {
@@ -192,7 +198,12 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
     clinic = await prisma.clinic.findUnique({
       where: { id },
       include: {
-        _count: { select: { orders: true, doctorLinks: true } },
+        _count: {
+          select: {
+            orders: { where: { archivedAt: null } },
+            doctorLinks: true,
+          },
+        },
         contractDoc: { select: { updatedAt: true } },
         doctorLinks: {
           orderBy: { doctor: { fullName: "asc" } },
@@ -201,6 +212,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
           },
         },
         orders: {
+          where: { archivedAt: null },
           orderBy: { createdAt: "desc" },
           take: ORDERS_PREVIEW,
           include: {

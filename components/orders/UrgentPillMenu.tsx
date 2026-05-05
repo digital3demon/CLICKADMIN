@@ -1,6 +1,8 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
 import {
   URGENT_MENU_OPTIONS,
   URGENT_NO_COEF,
@@ -36,8 +38,14 @@ export function UrgentPillMenu({
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const close = useCallback(() => setOpen(false), []);
-  useMenuDismiss(open, close, wrapRef);
+  useMenuDismiss(open, close, wrapRef, listRef);
+  const pos = useFixedDropdownPosition(open, buttonRef, {
+    maxListHeight: 320,
+    minWidthPx: 200,
+  });
 
   const label = useMemo(() => {
     const o = URGENT_MENU_OPTIONS.find((x) => x.value === value);
@@ -55,6 +63,7 @@ export function UrgentPillMenu({
   return (
     <div className="relative z-[60]" ref={wrapRef}>
       <button
+        ref={buttonRef}
         type="button"
         className={BTN}
         aria-expanded={open}
@@ -70,34 +79,46 @@ export function UrgentPillMenu({
         </span>
         <ChevronMini open={open} />
       </button>
-      {open ? (
-        <ul
-          className="absolute right-0 top-full z-[200] mt-1 max-h-80 min-w-[12.5rem] overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl sm:left-0 sm:right-auto"
-          role="listbox"
-          aria-label="Срочность"
-        >
-          {URGENT_MENU_OPTIONS.map((opt) => (
-            <li key={opt.value} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={opt.value === value}
-                className={`flex w-full items-center px-3 py-2 text-left text-xs font-medium hover:bg-[var(--surface-hover)] ${
-                  opt.value === value
-                    ? "bg-[var(--surface-hover)] text-[var(--app-text)]"
-                    : "text-[var(--text-body)]"
-                }`}
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-              >
-                {opt.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {typeof document !== "undefined" && open
+        ? createPortal(
+            <ul
+              ref={listRef}
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                width: pos.width,
+                maxHeight: pos.maxHeight,
+                zIndex: 10000,
+              }}
+              className="overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1 shadow-xl"
+              role="listbox"
+              aria-label="Срочность"
+            >
+              {URGENT_MENU_OPTIONS.map((opt) => (
+                <li key={opt.value} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={opt.value === value}
+                    className={`flex w-full items-center px-3 py-2 text-left text-xs font-medium hover:bg-[var(--surface-hover)] ${
+                      opt.value === value
+                        ? "bg-[var(--surface-hover)] text-[var(--app-text)]"
+                        : "text-[var(--text-body)]"
+                    }`}
+                    onClick={() => {
+                      onChange(opt.value);
+                      setOpen(false);
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                </li>
+              ))}
+            </ul>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

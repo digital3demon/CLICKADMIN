@@ -8,6 +8,11 @@ import {
   textIncludesClicklabMention,
 } from "@/lib/kaiten-comment-parse";
 import { useOrderListChatPatchClicklab } from "@/components/orders/OrdersListKaitenChatShell";
+import {
+  CRM_UPLOAD_MAX_BYTES,
+  CRM_UPLOAD_TOO_LARGE_MESSAGE,
+} from "@/lib/crm-upload-limits";
+import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
 
 type CommentRow = {
   id: number;
@@ -51,6 +56,9 @@ export function OrderListKaitenChatModal({
   const [replyToId, setReplyToId] = useState<number | null>(null);
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadOk, setUploadOk] = useState<string | null>(null);
 
   const applyClicklabFlag = useCallback(
     (comments: CommentRow[]) => {
@@ -138,6 +146,43 @@ export function OrderListKaitenChatModal({
       setPosting(false);
     }
   };
+
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const arr = Array.from(files);
+      if (arr.length === 0) return;
+      setUploadError(null);
+      setUploadOk(null);
+      setUploading(true);
+      try {
+        let done = 0;
+        const warnings: string[] = [];
+        for (const file of arr) {
+          if (file.size > CRM_UPLOAD_MAX_BYTES) {
+            throw new Error(CRM_UPLOAD_TOO_LARGE_MESSAGE);
+          }
+          const result = await postOrderAttachmentWithRetries(orderId, file);
+          if (!result.ok) {
+            throw new Error(result.error || "Не удалось загрузить файл");
+          }
+          done += 1;
+          if (result.warning) {
+            warnings.push(result.warning);
+          }
+        }
+        const base =
+          done === 1
+            ? "Файл загружен. Вложение отправлено в Kaiten."
+            : `Файлы загружены (${done}). Вложения отправлены в Kaiten.`;
+        setUploadOk(warnings.length > 0 ? `${base} ${warnings.join(" · ")}` : base);
+      } catch (e) {
+        setUploadError(e instanceof Error ? e.message : "Ошибка загрузки файлов");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [orderId],
+  );
 
   if (!open) return null;
 
@@ -278,14 +323,40 @@ export function OrderListKaitenChatModal({
             placeholder="Новое сообщение…"
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
-            disabled={loading || !!loadError}
+            disabled={loading || !!loadError || uploading}
           />
           {postError ? (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{postError}</p>
           ) : null}
+          {uploadError ? (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{uploadError}</p>
+          ) : null}
+          {uploadOk ? (
+            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">{uploadOk}</p>
+          ) : null}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]">
+              {uploading ? "Загрузка файлов…" : "Загрузить файл(ы)"}
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                disabled={uploading || loading || !!loadError}
+                onChange={(e) => {
+                  const fl = e.currentTarget.files;
+                  e.currentTarget.value = "";
+                  if (!fl?.length) return;
+                  void uploadFiles(fl);
+                }}
+              />
+            </label>
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Вложения уйдут в карточку Kaiten
+            </span>
+          </div>
           <button
             type="button"
-            disabled={posting || !newText.trim() || loading || !!loadError}
+            disabled={posting || !newText.trim() || loading || !!loadError || uploading}
             onClick={() => void sendComment()}
             className="mt-2 w-full rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
           >

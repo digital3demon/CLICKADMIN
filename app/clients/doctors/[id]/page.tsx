@@ -168,8 +168,11 @@ export default async function DoctorCardPage({
           },
           orderBy: { clinic: { name: "asc" } },
         },
-        _count: { select: { orders: true } },
+        _count: {
+          select: { orders: { where: { archivedAt: null } } },
+        },
         orders: {
+          where: { archivedAt: null },
           orderBy: { createdAt: "desc" },
           take: ORDERS_PREVIEW,
           include: {

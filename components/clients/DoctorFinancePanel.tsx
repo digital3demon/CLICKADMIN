@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 function moneyRu(n: number): string {
   return new Intl.NumberFormat("ru-RU", {
@@ -32,6 +32,7 @@ export function DoctorFinancePanel({
   periodLineCount: number;
   periodWithoutPrice: number;
 }) {
+  const router = useRouter();
   const [from, setFrom] = useState(periodFrom);
   const [to, setTo] = useState(periodTo);
 
@@ -49,12 +50,17 @@ export function DoctorFinancePanel({
     return `${hrefBase}?${q.toString()}`;
   }, [doctorId, from, to, hrefBase]);
 
+  const applyPeriod = useCallback(() => {
+    router.push(applyHref);
+    router.refresh();
+  }, [router, applyHref]);
+
   const xlsxHref = useMemo(() => {
     const q = new URLSearchParams();
-    q.set("from", periodFrom);
-    q.set("to", periodTo);
+    q.set("from", from);
+    q.set("to", to);
     return `/api/doctors/${doctorId}/reconciliation?${q.toString()}`;
-  }, [doctorId, periodFrom, periodTo]);
+  }, [doctorId, from, to]);
 
   return (
     <section
@@ -130,13 +136,13 @@ export function DoctorFinancePanel({
               className="rounded-md border border-[var(--input-border)] px-2 py-1.5 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
             />
           </label>
-          <Link
-            href={applyHref}
-            scroll={false}
+          <button
+            type="button"
+            onClick={() => void applyPeriod()}
             className="inline-flex rounded-full bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
           >
             Показать
-          </Link>
+          </button>
           <a
             href={xlsxHref}
             className="inline-flex rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm font-semibold text-[var(--text-strong)] hover:bg-[var(--card-bg)]"

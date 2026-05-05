@@ -71,7 +71,12 @@ export default async function ClientsPage({ searchParams }: PageProps) {
         where: { deletedAt: null },
         orderBy: { name: "asc" },
         include: {
-          _count: { select: { orders: true, doctorLinks: true } },
+          _count: {
+            select: {
+              orders: { where: { archivedAt: null } },
+              doctorLinks: true,
+            },
+          },
         },
       });
 
