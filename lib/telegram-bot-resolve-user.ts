@@ -51,3 +51,17 @@ export async function findCrmUserByTelegramIdForBot(
 
   return null;
 }
+
+/** Общий админский Telegram организации (Tenant.adminSharedTelegramChatId). */
+export async function findTenantAdminSharedTelegramForBot(
+  telegramUserIdStr: string,
+): Promise<{ tenantId: string } | null> {
+  const tid = telegramUserIdStr.trim();
+  if (!tid) return null;
+
+  const row = await prisma.tenant.findFirst({
+    where: { adminSharedTelegramChatId: tid },
+    select: { id: true },
+  });
+  return row ? { tenantId: row.id } : null;
+}

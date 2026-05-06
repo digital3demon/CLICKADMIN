@@ -63,7 +63,12 @@ import {
   IconUnlock,
   IconX,
 } from "./kanban-icons";
+import {
+  extractOrderNumberLabelFromKanbanCardTitle,
+  type KanbanMentionTelegramContext,
+} from "@/lib/kanban-mention-telegram-html";
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
+import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 
 function kanbanCardAbsoluteUrl(cardId: string, boardId: string): string {
@@ -107,9 +112,11 @@ function cardOrderWordLinks(
 function postKanbanCrmTelegramNotify(payload: {
   kaitenCardId?: number | null;
   event: KanbanTelegramPrefKey;
-  lines: string[];
+  lines?: string[];
   /** Две ссылки «карточке» + «заказе» для ADMINISTRATOR / SENIOR_ADMINISTRATOR. */
   linesAdmin?: string[];
+  /** Сервер собирает HTML строку (номер наряда + Kaiten / канбан). */
+  mentionContext?: KanbanMentionTelegramContext;
   targetUserIds?: string[];
   broadcastExcludeUserIds?: string[];
   /** На сервере: достаточно любого из ключей (для @упоминаний — комментарий или упоминание). */
@@ -506,6 +513,41 @@ export function KanbanCardModal({
   const sendComment = async (text: string): Promise<boolean> => {
     const trimmed = text.trim();
     if (!trimmed) return false;
+
+    const actor = chatActorUserId || board.users[0]?.id || "";
+    const mentionedIds = parseMentionUserIdsFromText(trimmed, crmList, {
+      adminMentionTag,
+      adminUserIds: adminMentionUserIds,
+    }).filter((id) => id !== actor);
+
+    const fireMentionTelegram = () => {
+      if (!mentionedIds.length) return;
+      const actorRow = crmById.get(actor);
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const orderNum = extractOrderNumberLabelFromKanbanCardTitle(
+        (card.title || "").trim(),
+      );
+      const oid = card.linkedOrderId?.trim();
+      postKanbanCrmTelegramNotify({
+        kaitenCardId: card.kaitenCardId,
+        event: "tg_mentioned_in_comment",
+        alternatePrefKeys: ["tg_comment_added"],
+        targetUserIds: mentionedIds,
+        mentionContext: {
+          actorDisplayName: userPersonDisplayName(actorRow ?? {}),
+          actorMentionHandle: actorRow?.mentionHandle ?? null,
+          linkedOrderId: oid ?? null,
+          orderNumberLabel: orderNum || null,
+          kaitenCardId: card.kaitenCardId ?? null,
+          kanbanCardAbsoluteUrl: kanbanCardAbsoluteUrl(cardId, board.id),
+          orderPageAbsoluteUrl: oid
+            ? `${origin}/orders/${encodeURIComponent(oid)}`
+            : null,
+        },
+      });
+    };
+
     const linkedKaiten =
       Boolean(card.linkedOrderId) &&
       card.kaitenCardId != null &&
@@ -517,19 +559,20 @@ export function KanbanCardModal({
         toast(r.error, true);
         return false;
       }
-      const actor = chatActorUserId || board.users[0]?.id || "";
-      let snap = await fetchOrderKaitenCommentsForKanban(card.linkedOrderId, actor, {
+      fireMentionTelegram();
+      const chatActor = chatActorUserId || board.users[0]?.id || "";
+      let snap = await fetchOrderKaitenCommentsForKanban(card.linkedOrderId, chatActor, {
         refresh: true,
       });
       if (!snap.ok) {
-        snap = await fetchOrderKaitenCommentsForKanban(card.linkedOrderId, actor);
+        snap = await fetchOrderKaitenCommentsForKanban(card.linkedOrderId, chatActor);
       }
       if (snap.ok) {
         onApply((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
           fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
-          pushActivity(fc.card, "Комментарий", actor, b, act);
+          pushActivity(fc.card, "Комментарий", chatActor, b, act);
         });
         return true;
       }
@@ -541,19 +584,19 @@ export function KanbanCardModal({
       const fc = findCard(b, cardId);
       if (!fc) return;
       const c = fc.card;
-      const actor =
+      const localActor =
         (commentAuthorUserId ?? "").trim() || b.users[0]?.id || "";
       c.comments = c.comments || [];
       c.comments.push({
         id: generateId("cm"),
-        userId: actor,
+        userId: localActor,
         text: trimmed,
         createdAt: new Date().toISOString(),
       });
-      pushActivity(c, "Комментарий", actor, b, act);
+      pushActivity(c, "Комментарий", localActor, b, act);
     });
+    fireMentionTelegram();
     if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
-      const actor = chatActorUserId || board.users[0]?.id || "";
       const authorName =
         crmById.get(actor)?.displayName ??
         userNameById(board, actor) ??
@@ -566,27 +609,6 @@ export function KanbanCardModal({
       const { cardWord, orderWord } = oid
         ? cardOrderWordLinks(oid, cardId, board.id)
         : { cardWord: "", orderWord: "" };
-      const mentioned = parseMentionUserIdsFromText(trimmed, crmList, {
-        adminMentionTag,
-        adminUserIds: adminMentionUserIds,
-      }).filter((id) => id !== actor);
-      if (mentioned.length) {
-        postKanbanCrmTelegramNotify({
-          kaitenCardId: card.kaitenCardId,
-          event: "tg_mentioned_in_comment",
-          alternatePrefKeys: ["tg_comment_added"],
-          targetUserIds: mentioned,
-          parseMode: "HTML",
-          lines: [`${who} упомянул вас в ${linkHtml} «${snippet}»`],
-          ...(oid
-            ? {
-                linesAdmin: [
-                  `${who} упомянул вас в ${cardWord} и ${orderWord} «${snippet}»`,
-                ],
-              }
-            : {}),
-        });
-      }
       postKanbanCrmTelegramNotify({
         kaitenCardId: card.kaitenCardId,
         event: "tg_comment_added",
@@ -599,7 +621,7 @@ export function KanbanCardModal({
               ],
             }
           : {}),
-        broadcastExcludeUserIds: mentioned,
+        broadcastExcludeUserIds: mentionedIds,
       });
     }
     if (

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, UserRole } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getPrisma } from "@/lib/get-prisma";
@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 
 const ME_PROFILE_SELECT = {
   id: true,
+  role: true,
   displayName: true,
   email: true,
   avatarPresetId: true,
@@ -49,10 +50,12 @@ function profileUserJson(user: MeProfileUser) {
     telegramId: _tid,
     telegramUsername,
     telegramKanbanNotifyPrefs,
+    role,
     ...rest
   } = user;
   return {
     ...rest,
+    role: role as UserRole,
     telegramLinked: Boolean(_tid?.trim()),
     telegramUsername,
     telegramKanbanNotifyPrefs: mergeKanbanTelegramPrefs(telegramKanbanNotifyPrefs),

@@ -1,5 +1,9 @@
 import type { PrismaClient, UserRole } from "@prisma/client";
 import {
+  adminSharedMessengerAllowsEvent,
+  mergeAdminSharedMessengerNotifyPrefs,
+} from "@/lib/admin-shared-messenger-prefs";
+import {
   isKanbanTelegramPrefEnabled,
   mergeKanbanTelegramPrefs,
   type KanbanTelegramPrefKey,
@@ -110,6 +114,63 @@ function hasAnyKanbanPrefEnabled(
   return keys.some((k) => isKanbanTelegramPrefEnabled(merged, k));
 }
 
+/** Общий админский Telegram организации (настройки «Мессенджер для админов»). */
+export async function notifyTenantAdminSharedTelegramChat(
+  prisma: PrismaClient,
+  opts: {
+    tenantId: string;
+    event: KanbanTelegramPrefKey;
+    alternatePrefKeys?: KanbanTelegramPrefKey[];
+    lines: string[];
+    linesAdmin?: string[];
+    parseMode?: "HTML";
+    skip?: boolean;
+  },
+): Promise<void> {
+  if (opts.skip) return;
+  const token = botToken();
+  if (!token) return;
+
+  const useAdmin =
+    (opts.linesAdmin ?? []).some(Boolean) && opts.linesAdmin
+      ? opts.linesAdmin
+      : opts.lines;
+  const text = useAdmin.filter(Boolean).join("\n").trim();
+  if (!text) return;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: opts.tenantId },
+    select: {
+      adminSharedTelegramChatId: true,
+      adminSharedMessengerNotifyPrefs: true,
+    },
+  });
+  if (!tenant) return;
+  const chatId = tenant.adminSharedTelegramChatId?.trim();
+  if (!chatId) return;
+
+  const merged = mergeAdminSharedMessengerNotifyPrefs(
+    tenant.adminSharedMessengerNotifyPrefs,
+  );
+  const prefKeys: KanbanTelegramPrefKey[] = [
+    opts.event,
+    ...(opts.alternatePrefKeys ?? []),
+  ];
+  if (!adminSharedMessengerAllowsEvent(merged, prefKeys)) return;
+
+  const r = await telegramSendMessage(token, chatId, text, {
+    parseMode: opts.parseMode,
+  });
+  if (!r.ok) {
+    console.warn(
+      "[telegram-kanban-notify] tenant shared chat send failed",
+      opts.tenantId,
+      opts.event,
+      r.error,
+    );
+  }
+}
+
 /**
  * Уведомления только указанным user id (каждый независимо проверяет prefs и Telegram).
  * Автор действия не получает сообщение.
@@ -128,6 +189,8 @@ export async function notifyKanbanTelegramTargetUsers(
     skip?: boolean;
     parseMode?: "HTML";
     linesAdmin?: string[];
+    /** Дублирование на общий админский Telegram тенанта (если привязан и включены prefs). */
+    tenantId?: string | null;
   },
 ): Promise<void> {
   if (opts.skip) return;
@@ -184,5 +247,18 @@ export async function notifyKanbanTelegramTargetUsers(
         r.error,
       );
     }
+  }
+
+  const tid = opts.tenantId?.trim();
+  if (tid) {
+    await notifyTenantAdminSharedTelegramChat(prisma, {
+      tenantId: tid,
+      event: opts.event,
+      alternatePrefKeys: opts.alternatePrefKeys,
+      lines: opts.lines,
+      linesAdmin: opts.linesAdmin,
+      parseMode: opts.parseMode,
+      skip: opts.skip,
+    });
   }
 }

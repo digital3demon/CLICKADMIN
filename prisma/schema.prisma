@@ -69,6 +69,11 @@ model Tenant {
   labDueHmSlots         Json?
   /// Опция «Канбан» (доска в CRM), отдельно от тарифа
   addonKanban           Boolean          @default(false)
+  /// Общий Telegram-аккаунт администраторов (не привязан к пользователю CRM). Уникален по всем тенантам.
+  adminSharedTelegramChatId       String? @unique
+  adminSharedTelegramUsername     String?
+  /// Уведомления на общий аккаунт (JSON); пока — упоминания в чатах и др.
+  adminSharedMessengerNotifyPrefs Json?
   /// null — без срока / вечная лицензия
   subscriptionValidTo   DateTime?
   createdAt             DateTime         @default(now())

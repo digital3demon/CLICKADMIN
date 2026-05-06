@@ -26,6 +26,8 @@ import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-reques
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
+import { notifyTelegramForMentionsInOrderKaitenComment } from "@/lib/order-kaiten-comment-mention-telegram";
+import { getSiteOrigin } from "@/lib/site-origin-server";
 
 type PostBody = {
   text?: string;
@@ -193,6 +195,20 @@ export async function POST(
   }
 
   invalidateKaitenSnapshotCache(orderId.trim());
+
+  if (session?.sub && !session.demo) {
+    const origin = await getSiteOrigin();
+    void notifyTelegramForMentionsInOrderKaitenComment({
+      sessionDemo: Boolean(session.demo),
+      actorUserId: session.sub,
+      tenantId,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      kaitenCardId: order.kaitenCardId,
+      text,
+      siteOrigin: origin,
+    }).catch((e) => console.error("[kaiten comments] mention tg", e));
+  }
 
   return NextResponse.json({ ok: true, comment: res.comment });
 }

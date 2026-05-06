@@ -1,5 +1,6 @@
 "use client";
 
+import type { UserRole } from "@prisma/client";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -47,6 +48,7 @@ async function parseJsonResponse<T>(r: Response): Promise<
 
 type ProfileUser = {
   id: string;
+  role?: UserRole;
   displayName: string;
   email: string;
   avatarPresetId: string | null;
@@ -92,6 +94,7 @@ export function ProfileSettingsForm({
   );
   const [tgBusy, setTgBusy] = useState(false);
   const [tgError, setTgError] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,6 +136,7 @@ export function ProfileSettingsForm({
       setTelegramLinked(Boolean(j.user.telegramLinked));
       setTelegramUsername(j.user.telegramUsername ?? null);
       setTgPrefs(j.user.telegramKanbanNotifyPrefs ?? null);
+      setUserRole(j.user.role ?? null);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         setError(
@@ -360,6 +364,7 @@ export function ProfileSettingsForm({
         setTelegramLinked(Boolean(j.user.telegramLinked));
         setTelegramUsername(j.user.telegramUsername ?? null);
         setTgPrefs(j.user.telegramKanbanNotifyPrefs ?? null);
+        setUserRole(j.user.role ?? null);
       }
       setOkMsg("Сохранено");
       setTimeout(() => setOkMsg(null), 3000);
@@ -517,10 +522,16 @@ export function ProfileSettingsForm({
               Отвязать Telegram
             </button>
           )}
-          {telegramLinked && tgPrefs ? (
+          {telegramLinked &&
+          tgPrefs &&
+          (userRole === "ADMINISTRATOR" || userRole === "SENIOR_ADMINISTRATOR") ? (
             <div className="space-y-4 border-t border-[var(--card-border)] pt-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                Настройки уведомлений
+                Личный Telegram: какие уведомления присылать
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">
+                Для старшего администратора и администратора можно точечно включать типы
+                событий; список событий расширим позже.
               </p>
               {KANBAN_TELEGRAM_PREF_SECTIONS.map((sec) => (
                 <div key={sec.id}>
@@ -549,7 +560,14 @@ export function ProfileSettingsForm({
               ))}
               <p className="text-[0.65rem] leading-snug text-[var(--text-muted)]">
                 С сервера сейчас уходит рассылка при сохранении канбана CRM в наряд
-                (колонка и тип карточки). Остальные пункты — на будущее.
+                (колонка и тип карточки). Остальные пункты — по мере подключения.
+              </p>
+            </div>
+          ) : telegramLinked && tgPrefs ? (
+            <div className="space-y-2 border-t border-[var(--card-border)] pt-4">
+              <p className="text-xs text-[var(--text-muted)]">
+                Детальные переключатели уведомлений в личный Telegram для вашей роли будут
+                добавлены позже.
               </p>
             </div>
           ) : null}

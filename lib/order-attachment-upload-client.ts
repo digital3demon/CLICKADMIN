@@ -78,6 +78,10 @@ export async function postOrderAttachmentWithRetries(
         typeof data.error === "string" && data.error.trim()
           ? data.error.trim()
           : "";
+      const detailsStr =
+        typeof data.details === "string" && data.details.trim()
+          ? data.details.trim()
+          : "";
       if (res.ok) {
         const w =
           typeof data.warning === "string" && data.warning.trim()
@@ -88,7 +92,8 @@ export async function postOrderAttachmentWithRetries(
         }
         return { ok: true, data };
       }
-      lastError = errStr || `Ошибка загрузки (${res.status})`;
+      lastError =
+        errStr || detailsStr || `Ошибка загрузки (${res.status})`;
       if (!isRetryableAttachmentUploadHttpStatus(res.status)) {
         return { ok: false, error: lastError };
       }

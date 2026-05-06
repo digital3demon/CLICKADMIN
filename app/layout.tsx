@@ -10,6 +10,15 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: APP_DISPLAY_NAME,
   description: "Учёт нарядов зуботехнической лаборатории",
+  icons: {
+    icon: [
+      { url: "/favicons/favicon-blue-48.png", sizes: "48x48", type: "image/png" },
+      { url: "/favicons/favicon-blue-96.png", sizes: "96x96", type: "image/png" },
+      { url: "/favicons/favicon-blue-144.png", sizes: "144x144", type: "image/png" },
+    ],
+    shortcut: ["/favicons/favicon-blue-48.png"],
+    apple: [{ url: "/favicons/favicon-white-144.png", sizes: "144x144", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {

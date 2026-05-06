@@ -205,18 +205,25 @@ async function fetchOrdersListPageAttentionFiltered(
 
 export async function ordersSearchWhere(
   needle: string,
+  tenantId?: string | null,
 ): Promise<Prisma.OrderWhereInput> {
   const n = needle.trim();
   if (!n) return {};
   const clientsPrisma = await getClientsPrisma();
   const [doctors, clinics] = await Promise.all([
     clientsPrisma.doctor.findMany({
-      where: { fullName: { contains: n } },
+      where: {
+        ...(tenantId ? { tenantId } : {}),
+        fullName: { contains: n, mode: "insensitive" },
+      },
       select: { id: true },
       take: 100,
     }),
     clientsPrisma.clinic.findMany({
-      where: { name: { contains: n } },
+      where: {
+        ...(tenantId ? { tenantId } : {}),
+        name: { contains: n, mode: "insensitive" },
+      },
       select: { id: true },
       take: 100,
     }),
@@ -225,8 +232,8 @@ export async function ordersSearchWhere(
   const clinicIds = clinics.map((x) => x.id);
   return {
     OR: [
-      { orderNumber: { contains: n } },
-      { patientName: { contains: n } },
+      { orderNumber: { contains: n, mode: "insensitive" } },
+      { patientName: { contains: n, mode: "insensitive" } },
       ...(doctorIds.length > 0 ? [{ doctorId: { in: doctorIds } }] : []),
       ...(clinicIds.length > 0 ? [{ clinicId: { in: clinicIds } }] : []),
     ],
@@ -344,7 +351,7 @@ export async function fetchOrdersListPage(
       ? String(opts.search).trim()
       : "";
   if (searchTrim) {
-    parts.push(await ordersSearchWhere(searchTrim));
+    parts.push(await ordersSearchWhere(searchTrim, opts.tenantId));
   }
   if (opts.createdAtRange) {
     parts.push({

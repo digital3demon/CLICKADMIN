@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import type { UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { telegramIdString } from "@/lib/auth/telegram-widget";
 import { telegramSendMessage } from "@/lib/telegram-send-message";
@@ -11,7 +11,10 @@ import {
   telegramReplyKeyboardMarkupForRole,
   tryTelegramBotListCommand,
 } from "@/lib/telegram-bot-lists";
-import { findCrmUserByTelegramIdForBot } from "@/lib/telegram-bot-resolve-user";
+import {
+  findCrmUserByTelegramIdForBot,
+  findTenantAdminSharedTelegramForBot,
+} from "@/lib/telegram-bot-resolve-user";
 
 const LINK_TTL_MS = 15 * 60 * 1000;
 
@@ -217,15 +220,25 @@ export async function processTelegramBotUpdate(
   }
 
   const linkedUser = await findCrmUserByTelegramIdForBot(tgUserId);
+  const sharedTenant = linkedUser
+    ? null
+    : await findTenantAdminSharedTelegramForBot(tgUserId);
 
-  if (linkedUser) {
+  const effectiveTenantId = linkedUser?.tenantId ?? sharedTenant?.tenantId ?? null;
+  const effectiveRole: UserRole | null = linkedUser
+    ? linkedUser.role
+    : sharedTenant
+      ? UserRole.MANAGER
+      : null;
+
+  if (effectiveTenantId && effectiveRole) {
     const listReply = await tryTelegramBotListCommand({
       command: cmd,
-      tenantId: linkedUser.tenantId,
-      role: linkedUser.role,
+      tenantId: effectiveTenantId,
+      role: effectiveRole,
     });
     if (listReply) {
-      await replyWithRoleKeyboard(botToken, chatId, listReply.text, linkedUser.role, {
+      await replyWithRoleKeyboard(botToken, chatId, listReply.text, effectiveRole, {
         parseMode: listReply.parseMode,
       });
       return;
@@ -235,7 +248,7 @@ export async function processTelegramBotUpdate(
         botToken,
         chatId,
         "Неизвестная команда. Отгрузки: /shiptd /shiptm /shipw. Сроки канбана: /dlinetd /dlinetm /dlinew. Или кнопки ниже.",
-        linkedUser.role,
+        effectiveRole,
       );
       return;
     }
@@ -245,12 +258,12 @@ export async function processTelegramBotUpdate(
     where: { telegramUserId: tgUserId },
   });
   if (!pending) {
-    if (linkedUser) {
+    if (effectiveTenantId && effectiveRole) {
       await replyWithRoleKeyboard(
         botToken,
         chatId,
         "Выберите действие кнопкой ниже или команды: /shiptd /shiptm /shipw /dlinetd /dlinetm /dlinew. Привязка почты: /start.",
-        linkedUser.role,
+        effectiveRole,
       );
       return;
     }
@@ -323,6 +336,19 @@ export async function processTelegramBotUpdate(
       botToken,
       chatId,
       "Этот Telegram уже привязан к другой учётной записи. Сначала отвяжите его в CRM: профиль → Отвязать Telegram.",
+    );
+    return;
+  }
+
+  const reservedShared = await prisma.tenant.findFirst({
+    where: { adminSharedTelegramChatId: tgUserId },
+    select: { id: true },
+  });
+  if (reservedShared) {
+    await replyRemoveKeyboard(
+      botToken,
+      chatId,
+      "Этот Telegram используется как общий админский чат организации. Отвяжите его в конфигурации канбана или используйте другой аккаунт для личной привязки.",
     );
     return;
   }

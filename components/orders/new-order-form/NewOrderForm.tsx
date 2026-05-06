@@ -1005,25 +1005,29 @@ export function NewOrderForm({
           }
         }
         if (newId && pendingFiles.length > 0) {
-          const fails: string[] = [];
-          for (let i = 0; i < pendingFiles.length; i++) {
-            const file = pendingFiles[i]!;
-            if (i > 0) {
-              await new Promise((r) => setTimeout(r, 70));
-            }
-            const up = await postOrderAttachmentWithRetries(newId, file);
-            if (!up.ok) {
-              fails.push(`${file.name}: ${up.error}`);
-            }
-          }
+          const filesToUpload = [...pendingFiles];
           setPendingFiles([]);
-          if (fails.length > 0) {
-            void writeClientState(
-              "user",
-              `orderAttachmentsWarn:${newId}`,
-              fails.join("\n"),
-            );
-          }
+          // Большие пачки файлов грузим в фоне: сохранение/печать не должны "висеть".
+          void (async () => {
+            const fails: string[] = [];
+            for (let i = 0; i < filesToUpload.length; i++) {
+              const file = filesToUpload[i]!;
+              if (i > 0) {
+                await new Promise((r) => setTimeout(r, 90));
+              }
+              const up = await postOrderAttachmentWithRetries(newId, file);
+              if (!up.ok) {
+                fails.push(`${file.name}: ${up.error}`);
+              }
+            }
+            if (fails.length > 0) {
+              void writeClientState(
+                "user",
+                `orderAttachmentsWarn:${newId}`,
+                fails.join("\n"),
+              );
+            }
+          })();
         }
         if (printAfterSave && newId) {
           try {

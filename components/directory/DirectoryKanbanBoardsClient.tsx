@@ -20,6 +20,7 @@ import {
 } from "@/lib/kanban/model";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AdminMessengerTenantSettings } from "@/components/directory/AdminMessengerTenantSettings";
 import { LabDueSlotsTenantSettings } from "@/components/directory/LabDueSlotsTenantSettings";
 import { KanbanAutomationsForm } from "@/components/kanban/KanbanAutomationsForm";
 import { KanbanBoardSettingsForm } from "@/components/kanban/KanbanBoardSettingsForm";
@@ -46,9 +47,11 @@ function loadKanbanStateForDirectory(isDemo: boolean) {
 export function DirectoryKanbanBoardsClient({
   isDemo = false,
   sessionRole,
+  telegramBotUsername = "",
 }: {
   isDemo?: boolean;
   sessionRole: UserRole;
+  telegramBotUsername?: string;
 }) {
   const [appState, setAppState] = useState(() => loadKanbanStateForDirectory(isDemo));
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -64,6 +67,11 @@ export function DirectoryKanbanBoardsClient({
     (sessionRole === "OWNER" ||
       sessionRole === "SENIOR_ADMINISTRATOR" ||
       sessionRole === "ADMINISTRATOR");
+  const canEditAdminMessenger =
+    !isDemo &&
+    (sessionRole === "OWNER" ||
+      sessionRole === "MANAGER" ||
+      sessionRole === "SENIOR_ADMINISTRATOR");
   const [createOpen, setCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
   const [createPrivate, setCreatePrivate] = useState(false);
@@ -227,6 +235,12 @@ export function DirectoryKanbanBoardsClient({
       <div className="space-y-8">
         {!isDemo ? (
           <LabDueSlotsTenantSettings canEdit={canEditKanbanAdminTag} />
+        ) : null}
+        {!isDemo ? (
+          <AdminMessengerTenantSettings
+            canEdit={canEditAdminMessenger}
+            telegramBotUsername={telegramBotUsername}
+          />
         ) : null}
         <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
           <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">

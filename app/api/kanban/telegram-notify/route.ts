@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
+import {
+  buildKanbanMentionInCommentTelegramHtmlLine,
+  type KanbanMentionTelegramContext,
+} from "@/lib/kanban-mention-telegram-html";
 import {
   parseKanbanTelegramPrefKey,
   type KanbanTelegramPrefKey,
@@ -12,6 +17,48 @@ import {
 } from "@/lib/telegram-kanban-notify";
 
 export const dynamic = "force-dynamic";
+
+function parseMentionContextPayload(
+  raw: unknown,
+): KanbanMentionTelegramContext | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const m = raw as Record<string, unknown>;
+  const actorDisplayName =
+    typeof m.actorDisplayName === "string" ? m.actorDisplayName.trim() : "";
+  const kanbanCardAbsoluteUrl =
+    typeof m.kanbanCardAbsoluteUrl === "string"
+      ? m.kanbanCardAbsoluteUrl.trim()
+      : "";
+  if (!actorDisplayName || !kanbanCardAbsoluteUrl) return null;
+
+  const linkedOrderId =
+    typeof m.linkedOrderId === "string" ? m.linkedOrderId.trim() : "";
+  const orderPageAbsoluteUrl =
+    typeof m.orderPageAbsoluteUrl === "string"
+      ? m.orderPageAbsoluteUrl.trim()
+      : "";
+  if (linkedOrderId && !orderPageAbsoluteUrl) return null;
+
+  const orderNumberLabel =
+    typeof m.orderNumberLabel === "string" ? m.orderNumberLabel.trim() : "";
+  const actorMentionHandle =
+    typeof m.actorMentionHandle === "string" ? m.actorMentionHandle.trim() : "";
+
+  let kaitenCardId: number | null = null;
+  if (m.kaitenCardId != null && Number.isFinite(Number(m.kaitenCardId))) {
+    kaitenCardId = Number(m.kaitenCardId);
+  }
+
+  return {
+    actorDisplayName,
+    actorMentionHandle: actorMentionHandle || null,
+    linkedOrderId: linkedOrderId || null,
+    orderNumberLabel: orderNumberLabel || null,
+    kaitenCardId,
+    kanbanCardAbsoluteUrl,
+    orderPageAbsoluteUrl: orderPageAbsoluteUrl || null,
+  };
+}
 
 export async function POST(req: Request) {
   const session = await getSessionFromCookies();
@@ -33,27 +80,43 @@ export async function POST(req: Request) {
   }
   const o = body as Record<string, unknown>;
 
-  const kaitenRaw = o.kaitenCardId;
-  if (shouldSkipCrmKanbanTelegram(kaitenRaw as number | null | undefined)) {
-    return NextResponse.json({ ok: true, skipped: "kaiten" });
-  }
-
   const event = parseKanbanTelegramPrefKey(o.event);
   if (!event) {
     return NextResponse.json({ error: "Неизвестное событие" }, { status: 400 });
   }
 
-  const lines = o.lines;
-  if (!Array.isArray(lines) || !lines.every((x) => typeof x === "string")) {
-    return NextResponse.json({ error: "lines: массив строк" }, { status: 400 });
+  const kaitenRaw = o.kaitenCardId;
+  const skipKaitenDuplicate =
+    shouldSkipCrmKanbanTelegram(kaitenRaw as number | null | undefined) &&
+    event !== "tg_mentioned_in_comment";
+  if (skipKaitenDuplicate) {
+    return NextResponse.json({ ok: true, skipped: "kaiten" });
   }
 
-  const linesAdminRaw = o.linesAdmin;
-  const linesAdmin =
-    Array.isArray(linesAdminRaw) &&
-    linesAdminRaw.every((x) => typeof x === "string")
-      ? (linesAdminRaw as string[])
-      : undefined;
+  const mentionCtx = parseMentionContextPayload(o.mentionContext);
+
+  let effectiveLines: string[];
+  let effectiveLinesAdmin: string[] | undefined;
+  let parseMode: "HTML" | undefined;
+
+  if (mentionCtx && event === "tg_mentioned_in_comment") {
+    effectiveLines = [buildKanbanMentionInCommentTelegramHtmlLine(mentionCtx)];
+    effectiveLinesAdmin = undefined;
+    parseMode = "HTML";
+  } else {
+    const lines = o.lines;
+    if (!Array.isArray(lines) || !lines.every((x) => typeof x === "string")) {
+      return NextResponse.json({ error: "lines: массив строк" }, { status: 400 });
+    }
+    effectiveLines = lines as string[];
+    const linesAdminRaw = o.linesAdmin;
+    effectiveLinesAdmin =
+      Array.isArray(linesAdminRaw) &&
+      linesAdminRaw.every((x) => typeof x === "string")
+        ? (linesAdminRaw as string[])
+        : undefined;
+    parseMode = o.parseMode === "HTML" ? ("HTML" as const) : undefined;
+  }
 
   const targetUserIds = Array.isArray(o.targetUserIds)
     ? o.targetUserIds.filter((x): x is string => typeof x === "string" && x.length > 0)
@@ -74,10 +137,9 @@ export async function POST(req: Request) {
     }
   }
 
-  const parseMode = o.parseMode === "HTML" ? ("HTML" as const) : undefined;
-
   const prisma = await getPrisma();
   const actorUserId = session.sub;
+  const tenantId = await getTenantIdForSession(session);
 
   try {
     if (targetUserIds.length > 0) {
@@ -87,18 +149,19 @@ export async function POST(req: Request) {
           alternatePrefKeys.length > 0 ? alternatePrefKeys : undefined,
         actorUserId,
         targetUserIds,
-        lines: lines as string[],
+        lines: effectiveLines,
         parseMode,
-        linesAdmin,
+        linesAdmin: effectiveLinesAdmin,
+        tenantId,
       });
     } else {
       await notifyKanbanTelegramSubscribers(prisma, {
         event,
         actorUserId,
-        lines: lines as string[],
+        lines: effectiveLines,
         alsoExcludeUserIds: broadcastExcludeUserIds,
         parseMode,
-        linesAdmin,
+        linesAdmin: effectiveLinesAdmin,
       });
     }
   } catch (e) {

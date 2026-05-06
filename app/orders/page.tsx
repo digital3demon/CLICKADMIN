@@ -137,7 +137,7 @@ export default async function OrdersPage({
     baseCountParts.push({ adminShippedOtpr: false });
   }
   if (listSearchQ) {
-    baseCountParts.push(await ordersSearchWhere(listSearchQ));
+    baseCountParts.push(await ordersSearchWhere(listSearchQ, tenantId));
   }
   if (createdAtRange) {
     baseCountParts.push({
@@ -440,8 +440,8 @@ export default async function OrdersPage({
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "orderAttention"
-                  ? "border-amber-500/80 bg-amber-100 text-amber-950 dark:border-amber-700 dark:bg-amber-950/45 dark:text-amber-100"
-                  : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                  ? "border-amber-400/90 bg-amber-100 text-amber-950 ring-2 ring-amber-500/85 dark:border-amber-700 dark:bg-amber-950/45 dark:text-amber-100 dark:ring-amber-500/70"
+                  : "border-amber-300/70 bg-amber-100/70 text-amber-950 hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/35 dark:text-amber-100 dark:hover:bg-amber-950/50"
               }`}
               title="Наряды с непринятыми корректировками из чата («!!!»); в списке также может попасть расхождение суммы счёта с составом"
             >
@@ -466,8 +466,8 @@ export default async function OrdersPage({
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "prostheticsPending"
-                  ? "border-sky-500/80 bg-sky-100 text-sky-950 dark:border-sky-700 dark:bg-sky-950/45 dark:text-sky-100"
-                  : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                  ? "border-sky-400/90 bg-sky-100 text-sky-950 ring-2 ring-sky-500/85 dark:border-sky-700 dark:bg-sky-950/45 dark:text-sky-100 dark:ring-sky-500/70"
+                  : "border-sky-300/70 bg-sky-100/70 text-sky-950 hover:bg-sky-100 dark:border-sky-800/60 dark:bg-sky-950/35 dark:text-sky-100 dark:hover:bg-sky-950/50"
               }`}
               title="Быстрый фильтр по тегу «Заказ протетики»"
             >
@@ -492,8 +492,8 @@ export default async function OrdersPage({
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "kaitenLabMention"
-                  ? "border-violet-500/80 bg-violet-100 text-violet-950 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100"
-                  : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                  ? "border-violet-400/90 bg-violet-100 text-violet-950 ring-2 ring-violet-500/90 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100 dark:ring-violet-500/75"
+                  : "border-violet-300/70 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/35 dark:text-violet-100 dark:hover:bg-violet-950/50"
               }`}
               title="Наряды, в чате карточки Kaiten которых упомянули команду лаборатории (@…)"
             >

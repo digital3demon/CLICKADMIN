@@ -40,6 +40,7 @@ export function OrderListKaitenPoller({
   const offsetRef = useRef(0);
   const backoffRef = useRef(0);
   const tickIndexRef = useRef(0);
+  const mentionStateRef = useRef("");
   /** Синк с Kaiten длится десятки секунд — не запускаем новый POST, пока предыдущий не завершён. */
   const inFlightRef = useRef(false);
 
@@ -91,11 +92,21 @@ export function OrderListKaitenPoller({
       if (data.clicklabByOrderId && Object.keys(data.clicklabByOrderId).length > 0) {
         onSyncExtras?.({ clicklabByOrderId: data.clicklabByOrderId });
       }
+      const mentionKey = data.clicklabByOrderId
+        ? Object.entries(data.clicklabByOrderId)
+            .filter(([, v]) => v === true)
+            .map(([id]) => id)
+            .sort()
+            .join("|")
+        : "";
+      const mentionChanged = mentionKey !== mentionStateRef.current;
+      mentionStateRef.current = mentionKey;
       if (
         (data.syncedCount ?? 0) > 0 ||
         data.newCorrectionsImported ||
         data.newProstheticsImported ||
-        data.kaitenLabMentionDbChanged === true
+        data.kaitenLabMentionDbChanged === true ||
+        mentionChanged
       ) {
         router.refresh();
       }

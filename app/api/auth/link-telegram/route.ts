@@ -55,6 +55,21 @@ export async function POST(req: Request) {
     }
 
     const tid = telegramIdString(auth.id);
+
+    const tenantShared = await prisma.tenant.findFirst({
+      where: { adminSharedTelegramChatId: tid },
+      select: { id: true },
+    });
+    if (tenantShared) {
+      return NextResponse.json(
+        {
+          error:
+            "Этот Telegram зарезервирован как общий админский чат организации. Отвяжите его в конфигурации канбана или используйте другой аккаунт.",
+        },
+        { status: 409 },
+      );
+    }
+
     const taken = await prisma.user.findFirst({
       where: {
         telegramId: tid,

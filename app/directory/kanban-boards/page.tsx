@@ -15,7 +15,11 @@ export default async function DirectoryKanbanBoardsPage() {
       title="Канбан и ERP"
       description="Доски встроенного канбана (страница «Канбан» в меню), слоты времени для поля «Срок лабораторный» в нарядах. Интеграция Kaiten API — в разделе «Кайтен»."
     >
-      <DirectoryKanbanBoardsClient isDemo={isDemo} sessionRole={role} />
+      <DirectoryKanbanBoardsClient
+        isDemo={isDemo}
+        sessionRole={role}
+        telegramBotUsername={process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME ?? ""}
+      />
       <p className="mt-8 text-sm">
         <Link
           href="/directory"
