@@ -94,12 +94,12 @@ const padTable =
   "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:py-1 sm:text-xs sm:leading-snug md:text-sm";
 
 /**
- * Облако тегов: 2 фиксированные колонки (левая/правая) без auto-flow «поехавшей» сетки.
- * Длинный блок «Заблокировано» живёт в левой колонке и не растягивает строку на всю ширину.
- * Кнопка «+» рендерится отдельно справа и центрируется по высоте облака.
+ * Облако тегов: адаптивная плотная упаковка без жёстких шаблонов.
+ * Пилюли не растягиваются на всю строку, а занимают естественную ширину
+ * с мягкими лимитами через clamp; длинный текст переносится внутри пилюли.
  */
-const TAG_CLOUD_LANES_CLASS =
-  "inline-grid min-h-min min-w-0 max-w-full grid-cols-[minmax(0,12.5rem)_minmax(0,12.5rem)] content-start items-start gap-x-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)] md:grid-cols-[minmax(0,15rem)_minmax(0,15rem)]";
+const TAG_CLOUD_PACK_CLASS =
+  "flex min-h-min w-full min-w-0 flex-wrap content-start items-start gap-x-1.5 gap-y-1.5";
 
 const TAG_ADD_BUTTON_CLASS =
   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-sm font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-7 sm:w-7";
@@ -108,10 +108,23 @@ const TAG_ADD_BUTTON_CLASS =
 const TAG_SLOT_HUGE_MIN_CHARS = 28;
 
 type TagSlotSize = "huge" | "large" | "small";
-type TagLane = "left" | "right";
+
+function kaitenBlockedTagSlot(reason: string | null | undefined): "huge" | "large" {
+  return (reason ?? "").trim().length >= TAG_SLOT_HUGE_MIN_CHARS ? "huge" : "large";
+}
 
 function customTagSlot(label: string): "huge" | "large" {
   return label.trim().length >= TAG_SLOT_HUGE_MIN_CHARS ? "huge" : "large";
+}
+
+function tagCloudCellClass(slot: TagSlotSize): string {
+  if (slot === "huge") {
+    return "flex min-w-0 max-w-full grow-0 shrink basis-[clamp(13rem,44%,19rem)] items-start [&>*]:min-w-0 [&>*]:max-w-full";
+  }
+  if (slot === "large") {
+    return "flex min-w-0 max-w-full grow-0 shrink basis-[clamp(8.5rem,30%,12.5rem)] items-start [&>*]:min-w-0 [&>*]:max-w-full";
+  }
+  return "flex min-w-0 max-w-full grow-0 shrink-0 basis-auto items-start [&>*]:max-w-full";
 }
 const TAG_EDIT_BUTTON_CLASS =
   "rounded p-1 text-xs leading-none hover:opacity-90";
@@ -178,7 +191,7 @@ function OrderAttentionWarningGlyph({ className }: { className: string }) {
   );
 }
 
-type TagCloudItem = { key: string; lane: TagLane; node: ReactNode };
+type TagCloudItem = { key: string; slot: TagSlotSize; node: ReactNode };
 
 function tagHref(
   pageSize: number,
@@ -498,9 +511,10 @@ export function OrderListTagsCell({
     const items: TagCloudItem[] = [];
 
     if (kaitenBlocked) {
+      const blockedSlot = kaitenBlockedTagSlot(kaitenBlockReason);
       items.push({
         key: "blocked",
-        lane: "left",
+        slot: blockedSlot,
         node: (
           <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
             <Link
@@ -542,7 +556,7 @@ export function OrderListTagsCell({
     if (adminShippedOtpr) {
       items.push({
         key: "otpr",
-        lane: "left",
+        slot: "small",
         node: (
           <span className="inline-flex items-center gap-0.5">
             <Link
@@ -581,7 +595,7 @@ export function OrderListTagsCell({
 
     items.push({
       key: "kaiten",
-      lane: kaitenBlocked ? "right" : "left",
+      slot: "large",
       node: kaitenFilterKey ? (
         <Link
           href={href(kaitenFilterKey)}
@@ -607,7 +621,7 @@ export function OrderListTagsCell({
     if (isUrgent) {
       items.push({
         key: "urgent",
-        lane: "right",
+        slot: "small",
         node: (
           <span className="inline-flex items-center gap-0.5">
             <Link
@@ -635,7 +649,7 @@ export function OrderListTagsCell({
     if (prostheticsOrdered) {
       items.push({
         key: "prost",
-        lane: "left",
+        slot: "large",
         node: (
           <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
             <Link
@@ -663,7 +677,7 @@ export function OrderListTagsCell({
     if (hasInvoiceAttachment) {
       items.push({
         key: "inv",
-        lane: "left",
+        slot: "small",
         node: (
           <Link
             href={href(LIST_TAG_INVOICE)}
@@ -679,7 +693,7 @@ export function OrderListTagsCell({
     if (invoicePrinted) {
       items.push({
         key: "invpr",
-        lane: "left",
+        slot: "large",
         node: (
           <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
             <Link
@@ -706,7 +720,7 @@ export function OrderListTagsCell({
 
     items.push({
       key: "pay",
-      lane: kaitenBlocked ? "left" : "right",
+      slot: "large",
       node: (
         <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
           {paymentFilterTag ? (
@@ -748,7 +762,7 @@ export function OrderListTagsCell({
       const ctSlot = customTagSlot(t.label);
       items.push({
         key: `ct-${t.id}`,
-        lane: "left",
+        slot: ctSlot,
         node: (
           <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
             <Link
@@ -756,7 +770,7 @@ export function OrderListTagsCell({
               title="Показать наряды с этим тегом"
               className={`min-w-0 border border-violet-200 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-100 ${padTable} ${
                 ctSlot === "huge"
-                  ? "w-full max-w-none whitespace-pre-wrap break-words rounded-xl px-2 py-1 text-left leading-snug"
+                  ? "w-full max-w-full whitespace-pre-wrap break-words rounded-xl px-2 py-1 text-left leading-snug"
                   : "max-w-full shrink truncate rounded-full"
               }`}
             >
@@ -838,25 +852,13 @@ export function OrderListTagsCell({
     </button>
   );
 
-  const leftCloudItems = tagCloudItems.filter((it) => it.lane === "left");
-  const rightCloudItems = tagCloudItems.filter((it) => it.lane === "right");
-
-  const tagCloudColumns = (
-    <div className={TAG_CLOUD_LANES_CLASS}>
-      <div className="flex min-w-0 flex-col gap-y-1.5">
-        {leftCloudItems.map((it) => (
-          <div key={it.key} className="flex min-w-0 items-start [&>*]:min-w-0 [&>*]:max-w-full">
-            {it.node}
-          </div>
-        ))}
-      </div>
-      <div className="flex min-w-0 flex-col gap-y-1.5">
-        {rightCloudItems.map((it) => (
-          <div key={it.key} className="flex min-w-0 items-start [&>*]:min-w-0 [&>*]:max-w-full">
-            {it.node}
-          </div>
-        ))}
-      </div>
+  const tagCloudPack = (
+    <div className={`${TAG_CLOUD_PACK_CLASS} min-w-0 flex-1`}>
+      {tagCloudItems.map((it) => (
+        <div key={it.key} className={tagCloudCellClass(it.slot)}>
+          {it.node}
+        </div>
+      ))}
     </div>
   );
 
@@ -906,14 +908,14 @@ export function OrderListTagsCell({
                 </Link>
               ) : null}
             </div>
-            <div className="inline-flex min-w-0 max-w-full items-center gap-x-1.5">
-              {tagCloudColumns}
+            <div className="flex min-w-0 flex-1 items-center gap-x-1.5">
+              {tagCloudPack}
               {addTagButton}
             </div>
           </>
         ) : (
-          <div className="inline-flex min-w-0 max-w-full items-center gap-x-1.5">
-            {tagCloudColumns}
+          <div className="flex w-full min-w-0 items-center gap-x-1.5">
+            {tagCloudPack}
             {addTagButton}
           </div>
         )}
