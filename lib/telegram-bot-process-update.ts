@@ -15,6 +15,7 @@ import {
   findCrmUserByTelegramIdForBot,
   findTenantAdminSharedTelegramForBot,
 } from "@/lib/telegram-bot-resolve-user";
+import { verifyAdminSharedMessengerBotStartToken } from "@/lib/admin-shared-messenger-bot-link";
 
 const LINK_TTL_MS = 15 * 60 * 1000;
 
@@ -185,7 +186,74 @@ export async function processTelegramBotUpdate(
   const cmd = firstCommandToken(text);
 
   if (cmd === "/start") {
-    const slug = tenantSlugFromStartOrEnv(startPayload(text));
+    const payload = startPayload(text);
+    const shared = verifyAdminSharedMessengerBotStartToken(payload);
+    if (payload.startsWith("sa_") && !shared.ok) {
+      await replyRemoveKeyboard(
+        botToken,
+        chatId,
+        "Ссылка привязки общего чата недействительна или истекла. Сгенерируйте новую в CRM.",
+      );
+      return;
+    }
+    if (shared.ok) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: shared.tenantId },
+        select: { id: true, name: true },
+      });
+      if (!tenant) {
+        await replyRemoveKeyboard(
+          botToken,
+          chatId,
+          "Организация для привязки не найдена. Сгенерируйте ссылку заново в CRM.",
+        );
+        return;
+      }
+      const userUsing = await prisma.user.findFirst({
+        where: { telegramId: tgUserId },
+        select: { id: true },
+      });
+      if (userUsing) {
+        await replyRemoveKeyboard(
+          botToken,
+          chatId,
+          "Этот Telegram уже привязан к пользователю CRM. Для общего чата используйте отдельный Telegram-аккаунт.",
+        );
+        return;
+      }
+      const otherTenant = await prisma.tenant.findFirst({
+        where: {
+          adminSharedTelegramChatId: tgUserId,
+          NOT: { id: tenant.id },
+        },
+        select: { id: true },
+      });
+      if (otherTenant) {
+        await replyRemoveKeyboard(
+          botToken,
+          chatId,
+          "Этот Telegram уже используется как общий админский чат в другой организации.",
+        );
+        return;
+      }
+      await prisma.tenant.update({
+        where: { id: tenant.id },
+        data: {
+          adminSharedTelegramChatId: tgUserId,
+          adminSharedTelegramUsername: tgUsername,
+        },
+      });
+      await prisma.telegramBotLinkPending.deleteMany({
+        where: { telegramUserId: tgUserId },
+      });
+      await replyRemoveKeyboard(
+        botToken,
+        chatId,
+        `Готово. Этот Telegram подключён как общий админский чат CRM${tenant.name?.trim() ? ` («${tenant.name.trim()}»)` : ""}.`,
+      );
+      return;
+    }
+    const slug = tenantSlugFromStartOrEnv(payload);
     const tenant = await prisma.tenant.findUnique({
       where: { slug },
       select: { id: true },

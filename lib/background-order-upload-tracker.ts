@@ -40,6 +40,10 @@ export function snapshotBackgroundOrderUploads(): BackgroundOrderUploadItem[] {
   return snapshotCache;
 }
 
+export function hasUploadingBackgroundOrderUploads(): boolean {
+  return snapshotCache.some((item) => item.status === "uploading");
+}
+
 export function startBackgroundOrderUpload(input: {
   orderId: string;
   orderNumber: string | null | undefined;

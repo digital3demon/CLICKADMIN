@@ -7,14 +7,8 @@ import {
 } from "@/lib/crm-upload-limits";
 import {
   normalizeOrderAttachmentUploadQueue,
-  postOrderAttachmentWithRetries,
 } from "@/lib/order-attachment-upload-client";
-import {
-  completeBackgroundOrderUpload,
-  failBackgroundOrderUpload,
-  setBackgroundOrderUploadProgress,
-  startBackgroundOrderUpload,
-} from "@/lib/background-order-upload-tracker";
+import { enqueueOrderAttachmentFiles } from "@/lib/order-attachment-background-queue";
 
 const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 
@@ -74,6 +68,14 @@ export function OrderFilesPanel({
     void refreshList();
   }, [refreshList]);
 
+  useEffect(() => {
+    if (!orderId) return;
+    const timer = window.setInterval(() => {
+      void refreshList();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [orderId, refreshList]);
+
   const addPending = useCallback(
     (files: FileList | File[]) => {
       const raw = Array.from(files);
@@ -114,105 +116,24 @@ export function OrderFilesPanel({
         setBusy(false);
         return;
       }
-      const trackerId = startBackgroundOrderUpload({
-        orderId,
-        orderNumber: orderNumber ?? orderId,
-        total: arr.length,
-      });
-      const runUploadRound = async (queueFiles: File[]) => {
-        let done = 0;
-        const fails: string[] = [];
-        const failedFiles: File[] = [];
-        const rounds = 3;
-        const concurrency = 2;
-        let pending = [...queueFiles];
-        for (let round = 1; round <= rounds && pending.length > 0; round += 1) {
-          const queue = pending;
-          pending = [];
-          for (let i = 0; i < queue.length; i += concurrency) {
-            const batch = queue.slice(i, i + concurrency);
-            const results = await Promise.all(
-              batch.map((file) => postOrderAttachmentWithRetries(orderId, file)),
-            );
-            for (let j = 0; j < batch.length; j += 1) {
-              const file = batch[j]!;
-              const result = results[j]!;
-              if (result.ok) {
-                done += 1;
-                setBackgroundOrderUploadProgress(trackerId, done);
-                if ("warning" in result && result.warning?.trim()) {
-                  const w = result.warning.trim();
-                  setUploadWarn((prev) => (prev ? `${prev} · ${w}` : w));
-                }
-              } else if (round < rounds) {
-                pending.push(file);
-              } else {
-                failedFiles.push(file);
-                fails.push(`${file.name}: ${result.error}`);
-              }
-            }
-          }
-        }
-        return { fails, failedFiles };
-      };
-      const armRetry = (retryFiles: File[], fails: string[]) => {
-        failBackgroundOrderUpload(trackerId, {
-          error: `Не удалось загрузить ${fails.length} файл(ов)`,
-          total: retryFiles.length,
-          onRetry: async () => {
-            const retry = await runUploadRound(retryFiles);
-            if (retry.fails.length === 0) {
-              await refreshList();
-              onServerListChange?.();
-              completeBackgroundOrderUpload(trackerId, {
-                success: true,
-              });
-              return;
-            }
-            setLoadError(
-              `Не удалось загрузить ${retry.fails.length} файл(ов): ${retry.fails.join(" · ")}`,
-            );
-            armRetry(retry.failedFiles, retry.fails);
-          },
-        });
-      };
       try {
-        const first = await runUploadRound(arr);
-        if (first.fails.length > 0) {
-          setLoadError(
-            `Не удалось загрузить ${first.fails.length} файл(ов): ${first.fails.join(" · ")}`,
-          );
-          armRetry(first.failedFiles, first.fails);
-          return;
-        }
-        await refreshList();
-        onServerListChange?.();
-        completeBackgroundOrderUpload(trackerId, {
-          success: true,
+        await enqueueOrderAttachmentFiles({
+          orderId,
+          orderNumber: orderNumber ?? orderId,
+          files: arr,
         });
+        setUploadWarn(
+          arr.length === 1
+            ? "Файл поставлен в очередь загрузки."
+            : `Файлы поставлены в очередь загрузки (${arr.length}).`,
+        );
       } catch (e) {
         setLoadError(e instanceof Error ? e.message : "Ошибка загрузки");
-        failBackgroundOrderUpload(trackerId, {
-          error: "Ошибка загрузки файлов",
-          total: arr.length,
-          onRetry: async () => {
-            const retry = await runUploadRound(arr);
-            if (retry.fails.length === 0) {
-              await refreshList();
-              onServerListChange?.();
-              completeBackgroundOrderUpload(trackerId, {
-                success: true,
-              });
-              return;
-            }
-            armRetry(retry.failedFiles, retry.fails);
-          },
-        });
       } finally {
         setBusy(false);
       }
     },
-    [orderId, orderNumber, refreshList, onServerListChange],
+    [orderId, orderNumber],
   );
 
   const onPickFiles = useCallback(

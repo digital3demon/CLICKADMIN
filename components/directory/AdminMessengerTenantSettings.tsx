@@ -32,6 +32,9 @@ export function AdminMessengerTenantSettings({
   > | null>(null);
   const [widgetError, setWidgetError] = useState<string | null>(null);
   const [widgetReloadKey, setWidgetReloadKey] = useState(0);
+  const [botFallbackLink, setBotFallbackLink] = useState<string | null>(null);
+  const [botFallbackCommand, setBotFallbackCommand] = useState<string | null>(null);
+  const [botFallbackBusy, setBotFallbackBusy] = useState(false);
   const widgetMountRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -125,6 +128,32 @@ export function AdminMessengerTenantSettings({
       setSaving(false);
     }
   };
+
+  const prepareBotFallback = useCallback(async () => {
+    setBotFallbackBusy(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/tenant/admin-shared-messenger/link-via-bot", {
+        method: "POST",
+        credentials: "include",
+      });
+      const j = (await r.json().catch(() => ({}))) as {
+        error?: string;
+        deepLink?: string;
+        command?: string;
+      };
+      if (!r.ok) {
+        setError(j.error ?? "Не удалось создать ссылку для привязки");
+        return;
+      }
+      setBotFallbackLink(j.deepLink ?? null);
+      setBotFallbackCommand(j.command ?? null);
+    } catch {
+      setError("Сеть");
+    } finally {
+      setBotFallbackBusy(false);
+    }
+  }, []);
 
   const bot = normalizeTelegramBotUsername(telegramBotUsername);
   const botLooksValid = looksLikeTelegramBotUsername(bot);
@@ -294,6 +323,41 @@ export function AdminMessengerTenantSettings({
                   </button>
                 </div>
               ) : null}
+              <div className="mt-3 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Резервный вход без виджета
+                </p>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  Если кнопка Telegram не отображается из-за блокировки сети, используйте
+                  привязку через бота по одноразовой ссылке.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={botFallbackBusy}
+                    className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    onClick={() => void prepareBotFallback()}
+                  >
+                    {botFallbackBusy ? "Готовлю ссылку..." : "Получить ссылку привязки"}
+                  </button>
+                  {botFallbackLink ? (
+                    <a
+                      href={botFallbackLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
+                    >
+                      Открыть бота и привязать
+                    </a>
+                  ) : null}
+                </div>
+                {botFallbackCommand ? (
+                  <p className="mt-2 break-all text-[11px] text-[var(--text-secondary)]">
+                    Если ссылка не открывается, отправьте боту команду:{" "}
+                    <span className="font-mono text-[var(--app-text)]">{botFallbackCommand}</span>
+                  </p>
+                ) : null}
+              </div>
             </>
           )}
         </div>

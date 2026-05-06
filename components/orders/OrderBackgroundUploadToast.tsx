@@ -1,11 +1,13 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import {
+  hasUploadingBackgroundOrderUploads,
   retryBackgroundOrderUpload,
   snapshotBackgroundOrderUploads,
   subscribeBackgroundOrderUploads,
 } from "@/lib/background-order-upload-tracker";
+import { kickOrderAttachmentBackgroundProcessor } from "@/lib/order-attachment-background-queue";
 
 export function OrderBackgroundUploadToast() {
   const items = useSyncExternalStore(
@@ -13,6 +15,21 @@ export function OrderBackgroundUploadToast() {
     snapshotBackgroundOrderUploads,
     snapshotBackgroundOrderUploads,
   );
+
+  useEffect(() => {
+    // Resume unfinished uploads after hard refresh/reopen.
+    kickOrderAttachmentBackgroundProcessor();
+  }, []);
+
+  useEffect(() => {
+    if (!hasUploadingBackgroundOrderUploads()) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [items]);
 
   if (items.length === 0) return null;
 

@@ -110,18 +110,12 @@ import {
 import { writeClientState } from "@/lib/client-state-client";
 import {
   normalizeOrderAttachmentUploadQueue,
-  postOrderAttachmentWithRetries,
 } from "@/lib/order-attachment-upload-client";
 import {
   CRM_UPLOAD_MAX_BYTES,
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
 } from "@/lib/crm-upload-limits";
-import {
-  completeBackgroundOrderUpload,
-  failBackgroundOrderUpload,
-  setBackgroundOrderUploadProgress,
-  startBackgroundOrderUpload,
-} from "@/lib/background-order-upload-tracker";
+import { enqueueOrderAttachmentFiles } from "@/lib/order-attachment-background-queue";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 
 type DoctorRow = {
@@ -1040,78 +1034,19 @@ export function NewOrderForm({
             }
             if (uploadQueue.length === 0) return;
 
-            const trackerId = startBackgroundOrderUpload({
-              orderId: newId,
-              orderNumber: data.orderNumber ?? null,
-              total: uploadQueue.length,
-            });
-            const runUploadRound = async (queueFiles: File[]) => {
-              let uploaded = 0;
-              const fails: string[] = [];
-              const failedFiles: File[] = [];
-              let pending = [...queueFiles];
-              const rounds = 3;
-              const concurrency = 2;
-              for (
-                let round = 1;
-                round <= rounds && pending.length > 0;
-                round += 1
-              ) {
-                const queue = pending;
-                pending = [];
-                for (let i = 0; i < queue.length; i += concurrency) {
-                  const batch = queue.slice(i, i + concurrency);
-                  const results = await Promise.all(
-                    batch.map((file) => postOrderAttachmentWithRetries(newId, file)),
-                  );
-                  for (let j = 0; j < batch.length; j += 1) {
-                    const file = batch[j]!;
-                    const up = results[j]!;
-                    if (up.ok) {
-                      uploaded += 1;
-                      setBackgroundOrderUploadProgress(trackerId, uploaded);
-                    } else if (round < rounds) {
-                      pending.push(file);
-                    } else {
-                      failedFiles.push(file);
-                      fails.push(`${file.name}: ${up.error}`);
-                    }
-                  }
-                }
-              }
-              return { fails, failedFiles };
-            };
-            const armRetry = (retryFiles: File[], fails: string[]) => {
-              if (fails.length > 0) {
-                void writeClientState(
-                  "user",
-                  `orderAttachmentsWarn:${newId}`,
-                  fails.join("\n"),
-                );
-              }
-              failBackgroundOrderUpload(trackerId, {
-                error: `Не удалось загрузить ${fails.length} файл(ов)`,
-                total: retryFiles.length,
-                onRetry: async () => {
-                  const retry = await runUploadRound(retryFiles);
-                  if (retry.fails.length === 0) {
-                    completeBackgroundOrderUpload(trackerId, {
-                      success: true,
-                    });
-                    return;
-                  }
-                  armRetry(retry.failedFiles, retry.fails);
-                },
+            try {
+              await enqueueOrderAttachmentFiles({
+                orderId: newId,
+                orderNumber: data.orderNumber ?? null,
+                files: uploadQueue,
               });
-            };
-            const first = await runUploadRound(uploadQueue);
-            if (first.fails.length > 0) {
-              armRetry(first.failedFiles, first.fails);
-              return;
+            } catch (e) {
+              const msg =
+                e instanceof Error && e.message.trim()
+                  ? e.message.trim()
+                  : "Не удалось поставить файлы в очередь загрузки";
+              void writeClientState("user", `orderAttachmentsWarn:${newId}`, msg);
             }
-            completeBackgroundOrderUpload(trackerId, {
-              success: true,
-            });
           })();
         }
         if (printAfterSave && newId) {

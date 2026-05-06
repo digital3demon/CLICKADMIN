@@ -30,7 +30,8 @@ export const maxDuration = 300;
 export const runtime = "nodejs";
 
 const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
-const UPLOAD_BODY_TIMEOUT_MS = 60_000;
+/** Согласовано с `maxDuration` (5 мин) — крупные вложения до 1 ГБ. */
+const UPLOAD_BODY_TIMEOUT_MS = 300_000;
 
 type Ctx = { params: Promise<{ id: string }> };
 

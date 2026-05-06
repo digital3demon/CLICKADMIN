@@ -114,15 +114,18 @@ import {
   parseInvoiceTotalRubRuInput,
 } from "@/lib/format-invoice-total-rub-display";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
+import {
+  CRM_UPLOAD_MAX_BYTES,
+  formatCrmUploadMaxShortRu,
+} from "@/lib/crm-upload-limits";
 import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
 import { CORRECTION_PRICE_ITEM_CODE } from "@/lib/pricing/correction-price-item";
 import { fetchCorrectionPriceListMeta } from "@/lib/pricing/fetch-correction-price-list-meta";
 
 type CourierOption = { id: string; name: string };
 
-const INVOICE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
-/** Лимит ожидания ответа при больших PDF и сетевых задержках. */
-const INVOICE_UPLOAD_CLIENT_TIMEOUT_MS = 90_000;
+/** Лимит ожидания ответа при больших PDF и сетевых задержках (лимит файла до 1 ГБ). */
+const INVOICE_UPLOAD_CLIENT_TIMEOUT_MS = 300_000;
 
 type InvoiceAttachmentUploadOk = {
   id: string;
@@ -156,10 +159,10 @@ function OrderInvoiceFileDrop({
   const upload = useCallback(
     async (files: FileList | File[]) => {
       const arr = Array.from(files).filter(
-        (f) => f.size > 0 && f.size <= INVOICE_UPLOAD_MAX_BYTES,
+        (f) => f.size > 0 && f.size <= CRM_UPLOAD_MAX_BYTES,
       );
       if (arr.length === 0) {
-        const msg = "Нет подходящего файла (макс. 10 МБ)";
+        const msg = `Нет подходящего файла (макс. ${formatCrmUploadMaxShortRu()})`;
         setLocalHint(msg);
         onFail(msg);
         return;

@@ -1,8 +1,12 @@
 import type { CardComment } from "@/lib/kanban/types";
 import { kaitenJsonIntId } from "@/lib/kaiten-comment-parse";
+import {
+  CRM_UPLOAD_MAX_BYTES,
+  formatCrmUploadMaxShortRu,
+} from "@/lib/crm-upload-limits";
 
-/** Лимит тела POST /api/orders/[id]/attachments (сырой файл). */
-export const ORDER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+/** Совпадает с POST `/api/orders/[id]/attachments`. */
+export const ORDER_ATTACHMENT_MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 
 type KaitenSnapshotComment = {
   id?: number;
@@ -120,7 +124,7 @@ export async function uploadOrderAttachmentFromFile(
   if (file.size > ORDER_ATTACHMENT_MAX_BYTES) {
     return {
       ok: false,
-      error: `Файл больше ${Math.round(ORDER_ATTACHMENT_MAX_BYTES / 1024 / 1024)} МБ (лимит вложений наряда)`,
+      error: `Файл больше ${formatCrmUploadMaxShortRu()} (лимит вложений наряда)`,
     };
   }
   try {
