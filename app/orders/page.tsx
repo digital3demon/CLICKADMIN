@@ -712,17 +712,17 @@ export default async function OrdersPage({
                       {o.orderNumber}
                     </Link>
                   </td>
-                  <td className="min-w-0 max-w-[12rem] px-1.5 py-1.5 align-middle text-[var(--text-strong)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 max-w-[12rem] px-1.5 py-1.5 align-middle text-center text-[var(--text-strong)] sm:px-2 sm:py-2">
                     {o.clinic ? (
                       <Link
                         href={`/clients/${o.clinic.id}`}
                         title={o.clinic.name}
-                        className="block hyphens-auto break-words text-[var(--sidebar-blue)] hover:underline"
+                        className="block hyphens-auto break-words text-center text-[var(--sidebar-blue)] hover:underline"
                       >
                         {o.clinic.name}
                       </Link>
                     ) : (
-                      <span className="block break-words text-[var(--text-secondary)]">
+                      <span className="block break-words text-center text-[var(--text-secondary)]">
                         Частное лицо
                       </span>
                     )}

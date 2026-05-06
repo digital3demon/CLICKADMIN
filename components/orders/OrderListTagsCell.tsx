@@ -122,7 +122,7 @@ function tagCloudCellClass(slot: TagSlotSize): string {
     return "flex min-w-0 w-full max-w-full grow-0 shrink basis-auto items-start sm:max-w-[clamp(12rem,42vw,17rem)] [&>*]:min-w-0 [&>*]:max-w-full";
   }
   if (slot === "large") {
-    return "flex min-w-0 max-w-full grow-0 shrink basis-[clamp(7.5rem,26vw,10.75rem)] items-start [&>*]:min-w-0 [&>*]:max-w-full";
+    return "flex min-w-0 max-w-full grow-0 shrink basis-auto items-start [&>*]:min-w-0 [&>*]:max-w-full";
   }
   return "flex min-w-0 max-w-full grow-0 shrink-0 basis-auto items-start [&>*]:max-w-full";
 }
@@ -885,7 +885,7 @@ export function OrderListTagsCell({
   const tagRows = buildTagRows(tagCloudItems);
 
   const tagCloudPack = (
-    <div className="flex min-w-0 flex-1 flex-col gap-y-1.5">
+    <div className="flex min-w-0 max-w-full flex-col gap-y-1.5">
       {tagRows.map((row, rowIdx) => (
         <div key={`row-${rowIdx}`} className={TAG_CLOUD_PACK_CLASS}>
           {row.map((it) => (
@@ -945,13 +945,17 @@ export function OrderListTagsCell({
               ) : null}
             </div>
             <div className="flex min-w-0 flex-1 items-center gap-x-1.5">
-              {tagCloudPack}
+              <div className="min-w-0 max-w-[calc(100%-2.75rem)] flex-1 sm:max-w-[calc(100%-3rem)]">
+                {tagCloudPack}
+              </div>
               <div className="shrink-0 self-center">{addTagButton}</div>
             </div>
           </>
         ) : (
           <div className="flex w-full min-w-0 items-center gap-x-1.5">
-            {tagCloudPack}
+            <div className="min-w-0 max-w-[calc(100%-2.75rem)] flex-1 sm:max-w-[calc(100%-3rem)]">
+              {tagCloudPack}
+            </div>
             <div className="shrink-0 self-center">{addTagButton}</div>
           </div>
         )}
