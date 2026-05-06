@@ -94,14 +94,12 @@ const padTable =
   "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:py-1 sm:text-xs sm:leading-snug md:text-sm";
 
 /**
- * Облако тегов в ячейке: grid 4 колонки (четверть ряда каждая).
- * Набор в одну строку по ширине: до 4 «маленьких» (по 1 кол.), до 2 «больших» (по 2 кол.), одна «огромная» —
- * не шире суммы двух колонок (col-span-2), т.е. как одна «большая» пилюля или две «маленьких» в сумме; на одной строке рядом может стоять вторая большая пилюля.
- * Кнопка «+» вынесена из сетки: справа, по вертикали по центру блока облака.
- * Порог «огромной» по символам — TAG_SLOT_HUGE_MIN_CHARS.
+ * Облако тегов: 4 фиксированных слота по ширине (не растягиваются на всю колонку таблицы).
+ * Итого в ряд: до 4 «маленьких», до 2 «больших», «огромная» не шире 2 слотов (col-span-2).
+ * Кнопка «+» находится вне grid и стоит справа по центру от блока тегов.
  */
 const TAG_CLOUD_GRID_CLASS =
-  "grid min-h-min w-full min-w-0 grid-cols-4 content-start items-start gap-x-1 gap-y-1.5";
+  "inline-grid min-h-min min-w-0 max-w-full grid-cols-[repeat(4,minmax(0,6.5rem))] content-start items-start gap-x-1 gap-y-1.5 sm:grid-cols-[repeat(4,minmax(0,7.5rem))] md:grid-cols-[repeat(4,minmax(0,8rem))]";
 
 const TAG_ADD_BUTTON_CLASS =
   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-sm font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-7 sm:w-7";
@@ -851,7 +849,7 @@ export function OrderListTagsCell({
   );
 
   const tagCloudGrid = (
-    <div className={`${TAG_CLOUD_GRID_CLASS} min-w-0 flex-1`}>
+    <div className={`${TAG_CLOUD_GRID_CLASS} min-w-0`}>
       {tagCloudItems.map((it) => (
         <div key={it.key} className={tagCloudCellClass(it.slot)}>
           {it.node}
