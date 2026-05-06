@@ -14,15 +14,32 @@ type QueuedUploadRow = {
   orderNumber: string;
   fileName: string;
   mimeType: string;
+  size: number;
   lastModified: number;
   blob: Blob;
   createdAt: number;
+  attempts: number;
+  failed: boolean;
+  lastError: string | null;
+  fallbackTried: boolean;
 };
 
 const DB_NAME = "crm-order-attachment-queue";
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const STORE = "uploads";
 const IDX_ORDER = "byOrderId";
+const MAX_QUEUE_ATTEMPTS = 3;
+
+function resolveOrderProcessConcurrency(): number {
+  if (typeof navigator === "undefined") return 4;
+  const raw = Number((navigator as { hardwareConcurrency?: unknown }).hardwareConcurrency);
+  if (!Number.isFinite(raw) || raw <= 0) return 4;
+  if (raw <= 4) return 4;
+  if (raw <= 8) return 6;
+  return 8;
+}
+
+const ORDER_PROCESS_CONCURRENCY = resolveOrderProcessConcurrency();
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let processorRunning = false;
@@ -59,7 +76,8 @@ async function txGetAll(storeName: string): Promise<QueuedUploadRow[]> {
     const tx = db.transaction(storeName, "readonly");
     const st = tx.objectStore(storeName);
     const req = st.getAll();
-    req.onsuccess = () => resolve((req.result as QueuedUploadRow[]) ?? []);
+    req.onsuccess = () =>
+      resolve(((req.result as QueuedUploadRow[]) ?? []).map(normalizeQueuedRow));
     req.onerror = () => reject(req.error ?? new Error("IDB getAll failed"));
   });
 }
@@ -71,7 +89,8 @@ async function txGetByOrder(orderId: string): Promise<QueuedUploadRow[]> {
     const st = tx.objectStore(STORE);
     const idx = st.index(IDX_ORDER);
     const req = idx.getAll(orderId);
-    req.onsuccess = () => resolve((req.result as QueuedUploadRow[]) ?? []);
+    req.onsuccess = () =>
+      resolve(((req.result as QueuedUploadRow[]) ?? []).map(normalizeQueuedRow));
     req.onerror = () => reject(req.error ?? new Error("IDB getByOrder failed"));
   });
 }
@@ -87,6 +106,18 @@ async function txPutMany(rows: QueuedUploadRow[]): Promise<void> {
     tx.onerror = () => reject(tx.error ?? new Error("IDB putMany failed"));
     tx.onabort = () => reject(tx.error ?? new Error("IDB putMany aborted"));
   });
+}
+
+function normalizeQueuedRow(row: QueuedUploadRow): QueuedUploadRow {
+  return {
+    ...row,
+    size: Number.isFinite(row.size) ? Math.max(0, Number(row.size)) : row.blob.size,
+    attempts: Number.isFinite(row.attempts) ? Math.max(0, Math.round(row.attempts)) : 0,
+    failed: row.failed === true,
+    lastError:
+      typeof row.lastError === "string" && row.lastError.trim() ? row.lastError.trim() : null,
+    fallbackTried: row.fallbackTried === true,
+  };
 }
 
 async function txDeleteOne(id: string): Promise<void> {
@@ -110,10 +141,21 @@ function ensureOrderTracker(orderId: string, orderNumber: string, total: number)
   if (existing && existing.total === total) {
     return existing;
   }
+  if (existing) {
+    completeBackgroundOrderUpload(existing.trackerId, { success: false });
+  }
   const trackerId = startBackgroundOrderUpload({ orderId, orderNumber, total });
   const next = { trackerId, uploaded: 0, total, orderNumber };
   trackerByOrderId.set(orderId, next);
   return next;
+}
+
+function isOrderMissingError(message: string | null | undefined): boolean {
+  const text = String(message || "")
+    .trim()
+    .toLowerCase();
+  if (!text) return false;
+  return text.includes("заказ не найден") || text.includes("некорректный id наряда");
 }
 
 async function processOrderQueue(orderId: string): Promise<void> {
@@ -126,8 +168,43 @@ async function processOrderQueue(orderId: string): Promise<void> {
   const tracker = ensureOrderTracker(orderId, rows[0]!.orderNumber, rows.length);
   const fails: Array<{ id: string; error: string }> = [];
   let uploaded = 0;
+  let dropped = 0;
 
   for (const row of rows) {
+    if (row.failed && row.attempts >= MAX_QUEUE_ATTEMPTS) {
+      if (!row.fallbackTried) {
+        const file = new File([row.blob], row.fileName, {
+          type: row.mimeType || "application/octet-stream",
+          lastModified: row.lastModified || Date.now(),
+        });
+        const fallback = await postOrderAttachmentWithRetries(orderId, file, {
+          maxAttempts: 1,
+        });
+        if (fallback.ok) {
+          await txDeleteOne(row.id);
+          uploaded += 1;
+          setBackgroundOrderUploadProgress(tracker.trackerId, uploaded + dropped);
+          continue;
+        }
+        const fallbackError = fallback.error?.trim() || row.lastError || "Загрузка не удалась";
+        await txPutMany([
+          {
+            ...row,
+            failed: true,
+            lastError: fallbackError,
+            fallbackTried: true,
+          },
+        ]);
+      }
+      if (isOrderMissingError(row.lastError)) {
+        await txDeleteOne(row.id);
+        dropped += 1;
+        setBackgroundOrderUploadProgress(tracker.trackerId, uploaded + dropped);
+        continue;
+      }
+      fails.push({ id: row.id, error: row.lastError ?? "Загрузка не удалась" });
+      continue;
+    }
     const file = new File([row.blob], row.fileName, {
       type: row.mimeType || "application/octet-stream",
       lastModified: row.lastModified || Date.now(),
@@ -136,9 +213,26 @@ async function processOrderQueue(orderId: string): Promise<void> {
     if (res.ok) {
       await txDeleteOne(row.id);
       uploaded += 1;
-      setBackgroundOrderUploadProgress(tracker.trackerId, uploaded);
+      setBackgroundOrderUploadProgress(tracker.trackerId, uploaded + dropped);
       continue;
     }
+    if (isOrderMissingError(res.error)) {
+      await txDeleteOne(row.id);
+      dropped += 1;
+      setBackgroundOrderUploadProgress(tracker.trackerId, uploaded + dropped);
+      continue;
+    }
+    const nextAttempts = row.attempts + 1;
+    const finalError = res.error?.trim() || "Загрузка не удалась";
+    await txPutMany([
+      {
+        ...row,
+        attempts: nextAttempts,
+        failed: true,
+        lastError: finalError,
+        fallbackTried: false,
+      },
+    ]);
     fails.push({ id: row.id, error: res.error });
   }
 
@@ -148,15 +242,29 @@ async function processOrderQueue(orderId: string): Promise<void> {
     return;
   }
 
-  const failMsg = `Не удалось загрузить ${fails.length} файл(ов)`;
+  const failMsg =
+    fails.length === 1 ? "Загрузка не удалась" : `Загрузка не удалась (${fails.length} файлов)`;
   failBackgroundOrderUpload(tracker.trackerId, {
     error: failMsg,
     total: fails.length,
     onRetry: async () => {
+      const latest = await txGetByOrder(orderId);
+      const resetRows = latest
+        .filter((r) => r.failed)
+        .map((r) => ({
+          ...r,
+          attempts: 0,
+          failed: false,
+          lastError: null,
+          fallbackTried: false,
+        }));
+      if (resetRows.length > 0) {
+        await txPutMany(resetRows);
+      }
       trackerByOrderId.set(orderId, {
         trackerId: tracker.trackerId,
         uploaded: 0,
-        total: fails.length,
+        total: (await txGetByOrder(orderId)).length || fails.length,
         orderNumber: tracker.orderNumber,
       });
       await processOrderQueue(orderId);
@@ -175,9 +283,14 @@ export async function enqueueOrderAttachmentFiles(params: {
     orderNumber: params.orderNumber?.trim() || params.orderId,
     fileName: file.name || "file",
     mimeType: file.type || "application/octet-stream",
+    size: file.size || 0,
     lastModified: file.lastModified || Date.now(),
     blob: file,
     createdAt: Date.now(),
+    attempts: 0,
+    failed: false,
+    lastError: null,
+    fallbackTried: false,
   }));
   await txPutMany(rows);
   kickOrderAttachmentBackgroundProcessor();
@@ -196,13 +309,52 @@ export function kickOrderAttachmentBackgroundProcessor(): void {
         processorRequested = false;
         const rows = await txGetAll(STORE);
         const orderIds = [...new Set(rows.map((r) => r.orderId))];
-        for (const orderId of orderIds) {
-          await processOrderQueue(orderId);
+        for (let i = 0; i < orderIds.length; i += ORDER_PROCESS_CONCURRENCY) {
+          const batch = orderIds.slice(i, i + ORDER_PROCESS_CONCURRENCY);
+          const settled = await Promise.allSettled(
+            batch.map(async (orderId) => {
+              await processOrderQueue(orderId);
+            }),
+          );
+          for (const result of settled) {
+            if (result.status === "rejected") {
+              console.error("[order-attachment-queue] order batch item failed", result.reason);
+            }
+          }
         }
       } while (processorRequested);
     } finally {
       processorRunning = false;
     }
   })();
+}
+
+export type QueuedOrderAttachmentMeta = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+  failed: boolean;
+  attempts: number;
+  error: string | null;
+};
+
+export async function listQueuedOrderAttachmentFiles(
+  orderId: string,
+): Promise<QueuedOrderAttachmentMeta[]> {
+  const rows = await txGetByOrder(orderId);
+  return rows
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((row) => ({
+      id: row.id,
+      fileName: row.fileName,
+      mimeType: row.mimeType,
+      size: row.size,
+      createdAt: new Date(row.createdAt).toISOString(),
+      failed: row.failed,
+      attempts: row.attempts,
+      error: row.lastError,
+    }));
 }
 

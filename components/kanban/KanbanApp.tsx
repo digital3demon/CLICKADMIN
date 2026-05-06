@@ -49,6 +49,11 @@ import { kanbanLinkedOrdersPullIntervalMs } from "@/lib/kanban-linked-pull-ms";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
+import {
+  applyKanbanArchiveSettings,
+  extractKanbanArchiveSettings,
+  KANBAN_ARCHIVE_SETTINGS_KEY,
+} from "@/lib/kanban/archive-settings-sync";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -118,6 +123,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const mirrorSyncInFlightRef = useRef(false);
   const mirrorSyncQueuedRef = useRef(false);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const archiveSettingsReadyRef = useRef(false);
+  const lastArchiveSettingsSigRef = useRef("");
   /** Перед первым GET отдаём локальные карточки без наряда на сервер — иначе пустой ответ затрёт их. */
   const standalonePrimedRef = useRef(false);
   const router = useRouter();
@@ -261,6 +268,41 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo]);
 
   useEffect(() => {
+    if (isDemo) {
+      archiveSettingsReadyRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    const pullArchiveSettings = async () => {
+      const remote = await readClientState<unknown>("tenant", KANBAN_ARCHIVE_SETTINGS_KEY);
+      if (cancelled) return;
+      if (remote) {
+        lastArchiveSettingsSigRef.current = JSON.stringify(remote);
+        setAppState((prev) => (prev ? applyKanbanArchiveSettings(prev, remote) : prev));
+      }
+      if (!archiveSettingsReadyRef.current) {
+        archiveSettingsReadyRef.current = true;
+      }
+    };
+    void pullArchiveSettings();
+    const onVisibleOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      void pullArchiveSettings();
+    };
+    const intervalId = window.setInterval(() => {
+      void pullArchiveSettings();
+    }, 15_000);
+    document.addEventListener("visibilitychange", onVisibleOrFocus);
+    window.addEventListener("focus", onVisibleOrFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibleOrFocus);
+      window.removeEventListener("focus", onVisibleOrFocus);
+    };
+  }, [isDemo]);
+
+  useEffect(() => {
     if (!appState) return;
     saveKanbanState(appState, isDemo);
     if (kanbanStateSaveTimerRef.current) {
@@ -277,6 +319,15 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         clearTimeout(kanbanStateSaveTimerRef.current);
       }
     };
+  }, [appState, isDemo]);
+
+  useEffect(() => {
+    if (isDemo || !appState || !archiveSettingsReadyRef.current) return;
+    const payload = extractKanbanArchiveSettings(appState);
+    const sig = JSON.stringify(payload);
+    if (sig === lastArchiveSettingsSigRef.current) return;
+    lastArchiveSettingsSigRef.current = sig;
+    void writeClientState("tenant", KANBAN_ARCHIVE_SETTINGS_KEY, payload);
   }, [appState, isDemo]);
 
   useEffect(() => {

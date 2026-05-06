@@ -8,7 +8,11 @@ import {
 import {
   normalizeOrderAttachmentUploadQueue,
 } from "@/lib/order-attachment-upload-client";
-import { enqueueOrderAttachmentFiles } from "@/lib/order-attachment-background-queue";
+import {
+  enqueueOrderAttachmentFiles,
+  listQueuedOrderAttachmentFiles,
+  type QueuedOrderAttachmentMeta,
+} from "@/lib/order-attachment-background-queue";
 
 const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 
@@ -46,6 +50,7 @@ export function OrderFilesPanel({
   onServerListChange?: () => void;
 }) {
   const [list, setList] = useState<AttachmentMeta[]>([]);
+  const [queued, setQueued] = useState<QueuedOrderAttachmentMeta[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [uploadWarn, setUploadWarn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,17 +69,32 @@ export function OrderFilesPanel({
     }
   }, [orderId]);
 
+  const refreshQueueList = useCallback(async () => {
+    if (!orderId) {
+      setQueued([]);
+      return;
+    }
+    try {
+      const rows = await listQueuedOrderAttachmentFiles(orderId);
+      setQueued(rows);
+    } catch {
+      setQueued([]);
+    }
+  }, [orderId]);
+
   useEffect(() => {
     void refreshList();
-  }, [refreshList]);
+    void refreshQueueList();
+  }, [refreshList, refreshQueueList]);
 
   useEffect(() => {
     if (!orderId) return;
     const timer = window.setInterval(() => {
       void refreshList();
+      void refreshQueueList();
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [orderId, refreshList]);
+  }, [orderId, refreshList, refreshQueueList]);
 
   const addPending = useCallback(
     (files: FileList | File[]) => {
@@ -122,6 +142,7 @@ export function OrderFilesPanel({
           orderNumber: orderNumber ?? orderId,
           files: arr,
         });
+        await refreshQueueList();
         setUploadWarn(
           arr.length === 1
             ? "Файл поставлен в очередь загрузки."
@@ -133,7 +154,7 @@ export function OrderFilesPanel({
         setBusy(false);
       }
     },
-    [orderId, orderNumber],
+    [orderId, orderNumber, refreshQueueList],
   );
 
   const onPickFiles = useCallback(
@@ -212,6 +233,7 @@ export function OrderFilesPanel({
         );
         if (!res.ok) throw new Error("Не удалось удалить");
         await refreshList();
+        await refreshQueueList();
         onServerListChange?.();
       } catch (e) {
         setLoadError(e instanceof Error ? e.message : "Ошибка удаления");
@@ -219,7 +241,7 @@ export function OrderFilesPanel({
         setBusy(false);
       }
     },
-    [orderId, refreshList, onServerListChange],
+    [orderId, refreshList, refreshQueueList, onServerListChange],
   );
 
   return (
@@ -300,7 +322,7 @@ export function OrderFilesPanel({
         </div>
       ) : null}
 
-      {orderId && list.length > 0 ? (
+      {orderId && (list.length > 0 || queued.length > 0) ? (
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
             Файлы в наряде
@@ -320,6 +342,9 @@ export function OrderFilesPanel({
                 </a>
                 <span className="text-xs text-[var(--text-muted)]">
                   {formatSize(a.size)}
+                  <span className="ml-2 text-emerald-700 dark:text-emerald-400">
+                    · в CRM/канбан
+                  </span>
                   {a.uploadedToKaitenAt ? (
                     <span className="ml-2 text-emerald-700 dark:text-emerald-400">
                       · в Kaiten
@@ -340,11 +365,38 @@ export function OrderFilesPanel({
                 </button>
               </li>
             ))}
+            {queued.map((q) => (
+              <li
+                key={`queued-${q.id}`}
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm opacity-90"
+              >
+                <span className="font-medium text-[var(--text-strong)]">
+                  {q.fileName}
+                  {q.failed && q.error ? (
+                    <span className="ml-2 text-xs font-normal text-red-600 dark:text-red-400">
+                      ({q.error})
+                    </span>
+                  ) : null}
+                </span>
+                <span className="text-xs text-[var(--text-muted)]">
+                  {formatSize(q.size)}
+                  {q.failed ? (
+                    <span className="ml-2 text-red-700 dark:text-red-400">
+                      · не в CRM/канбан · не в Kaiten · загрузка не удалась
+                    </span>
+                  ) : (
+                    <span className="ml-2 text-amber-700 dark:text-amber-400">
+                      · не в CRM/канбан · не в Kaiten · загружается
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
           </ul>
         </div>
       ) : null}
 
-      {orderId && list.length === 0 && !loadError ? (
+      {orderId && list.length === 0 && queued.length === 0 && !loadError ? (
         <p className="text-sm text-[var(--text-muted)]">Пока нет прикреплённых файлов.</p>
       ) : null}
     </div>

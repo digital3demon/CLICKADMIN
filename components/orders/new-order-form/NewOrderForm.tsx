@@ -991,33 +991,12 @@ export function NewOrderForm({
           return;
         }
         const newId = data.id;
-        if (newId && !kaiten.kaitenDecideLater) {
-          const kRes = await fetch(`/api/orders/${newId}/kaiten`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "create" }),
-          });
-          const kData = (await kRes.json().catch(() => ({}))) as {
-            error?: string;
-            ok?: boolean;
-          };
-          if (!kRes.ok) {
-            const msg =
-              typeof kData.error === "string"
-                ? kData.error
-                : "Не удалось создать карточку Kaiten. Наряд уже сохранён в CRM.";
-            void writeClientState("user", `kaitenNewOrderWarn:${newId}`, msg);
-            setKaitenModalOpen(false);
-            setContinuationChoice(null);
-            router.push(`/orders/${newId}`);
-            onAfterSuccessfulSave();
-            return;
-          }
+        if (!newId) {
+          setSaveError("Наряд сохранён, но не получен id заказа");
+          return;
         }
-        if (newId && pendingFiles.length > 0) {
+        if (pendingFiles.length > 0) {
           const filesToUpload = [...pendingFiles];
-          setPendingFiles([]);
           const normalized = normalizeOrderAttachmentUploadQueue(
             filesToUpload,
             CRM_UPLOAD_MAX_BYTES,
@@ -1040,6 +1019,7 @@ export function NewOrderForm({
                 orderNumber: data.orderNumber ?? null,
                 files: uploadQueue,
               });
+              setPendingFiles([]);
             } catch (e) {
               const msg =
                 e instanceof Error && e.message.trim()
@@ -1049,12 +1029,31 @@ export function NewOrderForm({
             }
           })();
         }
-        if (printAfterSave && newId) {
-          try {
-            await printOrderNarjadPdf(newId);
-          } catch {
+        if (!kaiten.kaitenDecideLater) {
+          void (async () => {
+            const kRes = await fetch(`/api/orders/${newId}/kaiten`, {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "create" }),
+            });
+            const kData = (await kRes.json().catch(() => ({}))) as {
+              error?: string;
+              ok?: boolean;
+            };
+            if (!kRes.ok) {
+              const msg =
+                typeof kData.error === "string"
+                  ? kData.error
+                  : "Не удалось создать карточку Kaiten. Наряд уже сохранён в CRM.";
+              void writeClientState("user", `kaitenNewOrderWarn:${newId}`, msg);
+            }
+          })();
+        }
+        if (printAfterSave) {
+          void printOrderNarjadPdf(newId).catch(() => {
             /* наряд уже сохранён */
-          }
+          });
         }
         if (quickOrder.tiles.length > 0) {
           saveQuickOrderTemplate(quickOrder);

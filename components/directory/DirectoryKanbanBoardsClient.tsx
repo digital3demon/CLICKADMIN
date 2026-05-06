@@ -27,6 +27,11 @@ import { KanbanBoardSettingsForm } from "@/components/kanban/KanbanBoardSettings
 import { KanbanCrmUsersProvider } from "@/components/kanban/kanban-crm-users-context";
 import { IconBoard, IconPlus } from "@/components/kanban/kanban-icons";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
+import {
+  applyKanbanArchiveSettings,
+  extractKanbanArchiveSettings,
+  KANBAN_ARCHIVE_SETTINGS_KEY,
+} from "@/lib/kanban/archive-settings-sync";
 
 type ToastItem = { id: string; text: string; err?: boolean };
 type CrmUserPick = { id: string; displayName: string; email: string };
@@ -77,6 +82,8 @@ export function DirectoryKanbanBoardsClient({
   const [createPrivate, setCreatePrivate] = useState(false);
   const [crmUsers, setCrmUsers] = useState<CrmUserPick[]>([]);
   const [pickedUserIds, setPickedUserIds] = useState<string[]>([]);
+  const archiveSettingsReadyRef = useRef(false);
+  const lastArchiveSettingsSigRef = useRef("");
 
   useEffect(() => {
     saveKanbanState(appState, isDemo);
@@ -99,6 +106,50 @@ export function DirectoryKanbanBoardsClient({
       cancelled = true;
     };
   }, [isDemo]);
+
+  useEffect(() => {
+    if (isDemo) {
+      archiveSettingsReadyRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    const pullArchiveSettings = async () => {
+      const remote = await readClientState<unknown>("tenant", KANBAN_ARCHIVE_SETTINGS_KEY);
+      if (cancelled) return;
+      if (remote) {
+        lastArchiveSettingsSigRef.current = JSON.stringify(remote);
+        setAppState((prev) => applyKanbanArchiveSettings(prev, remote));
+      }
+      if (!archiveSettingsReadyRef.current) {
+        archiveSettingsReadyRef.current = true;
+      }
+    };
+    void pullArchiveSettings();
+    const onVisibleOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      void pullArchiveSettings();
+    };
+    const intervalId = window.setInterval(() => {
+      void pullArchiveSettings();
+    }, 15_000);
+    document.addEventListener("visibilitychange", onVisibleOrFocus);
+    window.addEventListener("focus", onVisibleOrFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibleOrFocus);
+      window.removeEventListener("focus", onVisibleOrFocus);
+    };
+  }, [isDemo]);
+
+  useEffect(() => {
+    if (isDemo || !archiveSettingsReadyRef.current) return;
+    const payload = extractKanbanArchiveSettings(appState);
+    const sig = JSON.stringify(payload);
+    if (sig === lastArchiveSettingsSigRef.current) return;
+    lastArchiveSettingsSigRef.current = sig;
+    void writeClientState("tenant", KANBAN_ARCHIVE_SETTINGS_KEY, payload);
+  }, [appState, isDemo]);
 
   useEffect(() => {
     if (!canSetPrivateBoards) return;

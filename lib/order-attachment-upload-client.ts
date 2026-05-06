@@ -2,7 +2,7 @@
  * Повторы загрузки вложения к наряду (новый заказ / редактирование): сеть, таймаут, занятость БД, всплески.
  */
 
-const MAX_ATTEMPTS = 6;
+const MAX_ATTEMPTS = 3;
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -83,10 +83,14 @@ export async function postOrderAttachmentWithRetries(
   options?: {
     asInvoice?: boolean;
     signal?: AbortSignal;
+    maxAttempts?: number;
   },
 ): Promise<PostOrderAttachmentResult> {
   let lastError = "Не удалось сохранить файл";
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  const limit = Number.isFinite(options?.maxAttempts)
+    ? Math.max(1, Math.min(MAX_ATTEMPTS, Math.round(Number(options?.maxAttempts))))
+    : MAX_ATTEMPTS;
+  for (let attempt = 0; attempt < limit; attempt++) {
     if (options?.signal?.aborted) {
       return { ok: false, error: "Отменено" };
     }
@@ -145,8 +149,10 @@ export async function postOrderAttachmentWithRetries(
       lastError =
         e instanceof Error ? e.message : "Сеть недоступна — попробуйте снова";
     }
-    const wait = jitterMs(Math.min(10_000, 280 * 2 ** attempt));
-    await sleepMs(wait);
+    if (attempt + 1 < limit) {
+      const wait = jitterMs(Math.min(10_000, 280 * 2 ** attempt));
+      await sleepMs(wait);
+    }
   }
   return { ok: false, error: lastError };
 }
