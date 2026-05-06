@@ -16,8 +16,14 @@ const items = new Map<string, BackgroundOrderUploadItem>();
 const listeners = new Set<Listener>();
 const clearTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const retryHandlers = new Map<string, () => Promise<void>>();
+let snapshotCache: BackgroundOrderUploadItem[] = [];
+
+function refreshSnapshotCache(): void {
+  snapshotCache = [...items.values()];
+}
 
 function emit(): void {
+  refreshSnapshotCache();
   listeners.forEach((l) => l());
 }
 
@@ -31,7 +37,7 @@ export function subscribeBackgroundOrderUploads(listener: Listener): () => void 
 }
 
 export function snapshotBackgroundOrderUploads(): BackgroundOrderUploadItem[] {
-  return [...items.values()];
+  return snapshotCache;
 }
 
 export function startBackgroundOrderUpload(input: {
