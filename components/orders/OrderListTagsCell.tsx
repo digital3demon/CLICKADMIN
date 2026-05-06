@@ -94,15 +94,19 @@ const padTable =
   "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:py-1 sm:text-xs sm:leading-snug md:text-sm";
 
 /**
- * Облако тегов в ячейке: не flex-wrap, а grid 4 колонки.
- * По ширине ряда — не больше одной «огромной» (col-span-4), двух «больших» (col-span-2) или четырёх «маленьких» (col-span-1).
- * Высота строк не ограничиваем. Новый тег — сразу задать slot в tagCloudItems; длинный текст внутри ячейки: min-w-0 + break-words, без отдельных max-w на всю полосу строки.
- * Порог «огромной» по символам — TAG_SLOT_HUGE_MIN_CHARS (блокировка Kaiten, длинный кастомный тег).
+ * Облако тегов в ячейке: grid 4 колонки (четверть ряда каждая).
+ * Набор в одну строку по ширине: до 4 «маленьких» (по 1 кол.), до 2 «больших» (по 2 кол.), одна «огромная» —
+ * не шире суммы двух колонок (col-span-2), т.е. как одна «большая» пилюля или две «маленьких» в сумме; на одной строке рядом может стоять вторая большая пилюля.
+ * Кнопка «+» вынесена из сетки: справа, по вертикали по центру блока облака.
+ * Порог «огромной» по символам — TAG_SLOT_HUGE_MIN_CHARS.
  */
 const TAG_CLOUD_GRID_CLASS =
   "grid min-h-min w-full min-w-0 grid-cols-4 content-start items-start gap-x-1 gap-y-1.5";
 
-/** Длинный текст → «огромная» пилюля на всю ширину ряда (4 колонки). ~28 ловит длинные кастомные подписи без простыни. */
+const TAG_ADD_BUTTON_CLASS =
+  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-sm font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-7 sm:w-7";
+
+/** Длинный текст → слот «огромная» (две колонки сетки, перенос вниз). ~28 ловит длинные кастомные подписи. */
 const TAG_SLOT_HUGE_MIN_CHARS = 28;
 
 type TagSlotSize = "huge" | "large" | "small";
@@ -117,7 +121,7 @@ function customTagSlot(label: string): "huge" | "large" {
 
 function tagCloudCellClass(slot: TagSlotSize): string {
   const span =
-    slot === "huge" ? "col-span-4" : slot === "large" ? "col-span-2" : "col-span-1";
+    slot === "huge" ? "col-span-2" : slot === "large" ? "col-span-2" : "col-span-1";
   return `${span} flex min-h-0 min-w-0 items-start [&>*]:min-w-0`;
 }
 const TAG_EDIT_BUTTON_CLASS =
@@ -514,11 +518,7 @@ export function OrderListTagsCell({
             <Link
               href={href(LIST_TAG_KAITEN_BLOCKED)}
               title="Показать наряды, заблокированные в Kaiten"
-              className={`inline-flex min-w-0 flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable} ${
-                blockedSlot === "huge"
-                  ? "w-full max-w-none"
-                  : "w-full max-w-full sm:max-w-[min(100%,20rem)]"
-              }`}
+              className={`inline-flex w-full min-w-0 max-w-full flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`}
             >
               <span className="inline-flex shrink-0 items-center gap-1 leading-tight">
                 <span aria-hidden className="shrink-0">
@@ -789,23 +789,6 @@ export function OrderListTagsCell({
       });
     }
 
-    items.push({
-      key: "add",
-      slot: "small",
-      node: (
-        <button
-          type="button"
-          disabled={busy}
-          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-sm font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-7 sm:w-7"
-          title="Добавить свой тег к наряду"
-          aria-label="Добавить тег"
-          onClick={() => setAddOpen(true)}
-        >
-          +
-        </button>
-      ),
-    });
-
     return items;
   }, [
     adminShippedOtpr,
@@ -854,6 +837,29 @@ export function OrderListTagsCell({
     !kaitenBlocked &&
     customListTagLabelMeansKaitenBlock(newLabel.trim());
 
+  const addTagButton = (
+    <button
+      type="button"
+      disabled={busy}
+      className={TAG_ADD_BUTTON_CLASS}
+      title="Добавить свой тег к наряду"
+      aria-label="Добавить тег"
+      onClick={() => setAddOpen(true)}
+    >
+      +
+    </button>
+  );
+
+  const tagCloudGrid = (
+    <div className={`${TAG_CLOUD_GRID_CLASS} min-w-0 flex-1`}>
+      {tagCloudItems.map((it) => (
+        <div key={it.key} className={tagCloudCellClass(it.slot)}>
+          {it.node}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <Fragment>
       <div
@@ -900,23 +906,15 @@ export function OrderListTagsCell({
                 </Link>
               ) : null}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className={TAG_CLOUD_GRID_CLASS}>
-                {tagCloudItems.map((it) => (
-                  <div key={it.key} className={tagCloudCellClass(it.slot)}>
-                    {it.node}
-                  </div>
-                ))}
-              </div>
+            <div className="flex min-w-0 flex-1 items-center gap-x-1.5">
+              {tagCloudGrid}
+              {addTagButton}
             </div>
           </>
         ) : (
-          <div className={TAG_CLOUD_GRID_CLASS}>
-            {tagCloudItems.map((it) => (
-              <div key={it.key} className={tagCloudCellClass(it.slot)}>
-                {it.node}
-              </div>
-            ))}
+          <div className="flex w-full min-w-0 items-center gap-x-1.5">
+            {tagCloudGrid}
+            {addTagButton}
           </div>
         )}
       </div>
