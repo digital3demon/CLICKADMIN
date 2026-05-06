@@ -6,6 +6,10 @@ import {
   type AdminSharedMessengerNotifyKey,
   mergeAdminSharedMessengerNotifyPrefs,
 } from "@/lib/admin-shared-messenger-prefs";
+import {
+  looksLikeTelegramBotUsername,
+  normalizeTelegramBotUsername,
+} from "@/lib/telegram-bot-username";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Props = {
@@ -26,6 +30,8 @@ export function AdminMessengerTenantSettings({
     AdminSharedMessengerNotifyKey,
     boolean
   > | null>(null);
+  const [widgetError, setWidgetError] = useState<string | null>(null);
+  const [widgetReloadKey, setWidgetReloadKey] = useState(0);
   const widgetMountRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -120,12 +126,14 @@ export function AdminMessengerTenantSettings({
     }
   };
 
-  const bot = telegramBotUsername.replace(/^@+/, "").trim();
+  const bot = normalizeTelegramBotUsername(telegramBotUsername);
+  const botLooksValid = looksLikeTelegramBotUsername(bot);
 
   useEffect(() => {
-    if (!canEdit || linked || !bot || loading || !prefs) return;
+    if (!canEdit || linked || !botLooksValid || loading || !prefs) return;
     const el = widgetMountRef.current;
     if (!el) return;
+    setWidgetError(null);
 
     const w = window as unknown as {
       adminSharedMessengerOnAuth?: (user: Record<string, unknown>) => void;
@@ -162,13 +170,27 @@ export function AdminMessengerTenantSettings({
     s.setAttribute("data-size", "large");
     s.setAttribute("data-onauth", "adminSharedMessengerOnAuth(user)");
     s.setAttribute("data-request-access", "write");
+    s.onerror = () => {
+      setWidgetError(
+        "Не удалось загрузить Telegram Login Widget. Проверьте интернет/блокировщики и попробуйте ещё раз.",
+      );
+    };
     el.appendChild(s);
+    const healthTimer = window.setTimeout(() => {
+      const hasWidget = Boolean(el.querySelector("iframe"));
+      if (!hasWidget) {
+        setWidgetError(
+          "Кнопка Telegram не отрисовалась. Обычно это неверный NEXT_PUBLIC_TELEGRAM_BOT_NAME (должно быть имя бота, например MyLabBot, без @ и без ссылки).",
+        );
+      }
+    }, 2200);
 
     return () => {
+      window.clearTimeout(healthTimer);
       delete w.adminSharedMessengerOnAuth;
       el.innerHTML = "";
     };
-  }, [canEdit, linked, bot, load, loading, prefs]);
+  }, [canEdit, linked, bot, botLooksValid, load, loading, prefs, widgetReloadKey]);
 
   if (!canEdit) return null;
 
@@ -245,6 +267,12 @@ export function AdminMessengerTenantSettings({
               <span className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_NAME</span> (имя бота без
               @), пересборки фронта и деплоя. Без неё виджет не создаётся.
             </p>
+          ) : !botLooksValid ? (
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+              Неверный формат <span className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_NAME</span>.
+              Укажите username бота (например{" "}
+              <span className="font-mono">MyLabBot</span>) без @ и без URL.
+            </p>
           ) : (
             <>
               <p className="text-sm text-[var(--text-secondary)]">
@@ -252,6 +280,20 @@ export function AdminMessengerTenantSettings({
                 общим рабочим чатом администраторов.
               </p>
               <div ref={widgetMountRef} className="mt-2 min-h-[44px]" />
+              {widgetError ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    {widgetError}
+                  </p>
+                  <button
+                    type="button"
+                    className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--surface-hover)]"
+                    onClick={() => setWidgetReloadKey((n) => n + 1)}
+                  >
+                    Повторить виджет
+                  </button>
+                </div>
+              ) : null}
             </>
           )}
         </div>

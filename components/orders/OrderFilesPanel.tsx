@@ -5,7 +5,10 @@ import {
   CRM_UPLOAD_MAX_BYTES,
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
 } from "@/lib/crm-upload-limits";
-import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
+import {
+  normalizeOrderAttachmentUploadQueue,
+  postOrderAttachmentWithRetries,
+} from "@/lib/order-attachment-upload-client";
 import {
   completeBackgroundOrderUpload,
   failBackgroundOrderUpload,
@@ -99,10 +102,18 @@ export function OrderFilesPanel({
   const uploadServer = useCallback(
     async (files: FileList | File[]) => {
       if (!orderId) return;
-      const arr = Array.from(files);
+      const normalized = normalizeOrderAttachmentUploadQueue(files, MAX_BYTES);
+      const arr = normalized.queue;
       setBusy(true);
       setUploadWarn(null);
       setLoadError(null);
+      if (normalized.skippedTooLarge) {
+        setLoadError(CRM_UPLOAD_TOO_LARGE_MESSAGE);
+      }
+      if (arr.length === 0) {
+        setBusy(false);
+        return;
+      }
       const trackerId = startBackgroundOrderUpload({
         orderId,
         orderNumber: orderNumber ?? orderId,
@@ -114,12 +125,7 @@ export function OrderFilesPanel({
         const failedFiles: File[] = [];
         const rounds = 3;
         const concurrency = 2;
-        let pending = queueFiles.filter((file) => file.size > 0);
-        for (const file of pending) {
-          if (file.size > MAX_BYTES) {
-            throw new Error(CRM_UPLOAD_TOO_LARGE_MESSAGE);
-          }
-        }
+        let pending = [...queueFiles];
         for (let round = 1; round <= rounds && pending.length > 0; round += 1) {
           const queue = pending;
           pending = [];
@@ -305,7 +311,7 @@ export function OrderFilesPanel({
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        onPaste={handlePasteZone}
+        onPaste={listenPaste ? undefined : handlePasteZone}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();

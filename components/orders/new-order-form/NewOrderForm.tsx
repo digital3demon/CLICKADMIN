@@ -108,7 +108,14 @@ import {
   snapDatetimeLocalToLabDueGrid,
 } from "@/lib/order-due-datetime";
 import { writeClientState } from "@/lib/client-state-client";
-import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
+import {
+  normalizeOrderAttachmentUploadQueue,
+  postOrderAttachmentWithRetries,
+} from "@/lib/order-attachment-upload-client";
+import {
+  CRM_UPLOAD_MAX_BYTES,
+  CRM_UPLOAD_TOO_LARGE_MESSAGE,
+} from "@/lib/crm-upload-limits";
 import {
   completeBackgroundOrderUpload,
   failBackgroundOrderUpload,
@@ -1017,12 +1024,26 @@ export function NewOrderForm({
         if (newId && pendingFiles.length > 0) {
           const filesToUpload = [...pendingFiles];
           setPendingFiles([]);
+          const normalized = normalizeOrderAttachmentUploadQueue(
+            filesToUpload,
+            CRM_UPLOAD_MAX_BYTES,
+          );
+          const uploadQueue = normalized.queue;
           // Большие пачки файлов грузим в фоне: сохранение/печать не должны "висеть".
           void (async () => {
+            if (normalized.skippedTooLarge) {
+              void writeClientState(
+                "user",
+                `orderAttachmentsWarn:${newId}`,
+                CRM_UPLOAD_TOO_LARGE_MESSAGE,
+              );
+            }
+            if (uploadQueue.length === 0) return;
+
             const trackerId = startBackgroundOrderUpload({
               orderId: newId,
               orderNumber: data.orderNumber ?? null,
-              total: filesToUpload.length,
+              total: uploadQueue.length,
             });
             const runUploadRound = async (queueFiles: File[]) => {
               let uploaded = 0;
@@ -1083,7 +1104,7 @@ export function NewOrderForm({
                 },
               });
             };
-            const first = await runUploadRound(filesToUpload);
+            const first = await runUploadRound(uploadQueue);
             if (first.fails.length > 0) {
               armRetry(first.failedFiles, first.fails);
               return;

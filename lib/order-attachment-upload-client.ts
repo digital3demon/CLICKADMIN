@@ -33,6 +33,47 @@ export type PostOrderAttachmentResult =
     }
   | { ok: false; error: string };
 
+export type NormalizeOrderAttachmentQueueResult = {
+  queue: File[];
+  skippedTooLarge: boolean;
+  skippedEmpty: boolean;
+};
+
+/**
+ * Очередь для POST и для счётчика прогресса: без пустых файлов, без превышения лимита,
+ * без дубликатов с одинаковыми name+size (двойной paste/drag иногда дублирует записи).
+ */
+export function normalizeOrderAttachmentUploadQueue(
+  files: FileList | File[],
+  maxBytes: number,
+): NormalizeOrderAttachmentQueueResult {
+  const raw = Array.from(files);
+  let skippedTooLarge = false;
+  let skippedEmpty = false;
+  const candidates: File[] = [];
+  for (const f of raw) {
+    if (f.size === 0) {
+      skippedEmpty = true;
+      continue;
+    }
+    if (f.size > maxBytes) {
+      skippedTooLarge = true;
+      continue;
+    }
+    candidates.push(f);
+  }
+  const seen = new Set<string>();
+  const queue: File[] = [];
+  for (const f of candidates) {
+    const key = `${f.name}-${f.size}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      queue.push(f);
+    }
+  }
+  return { queue, skippedTooLarge, skippedEmpty };
+}
+
 /**
  * POST `/api/orders/:id/attachments` с повторами и экспоненциальной паузой.
  */

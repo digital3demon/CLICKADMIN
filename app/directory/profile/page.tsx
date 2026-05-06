@@ -6,6 +6,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_TENANT_SLUG } from "@/lib/tenant-constants";
+import { normalizeTelegramBotUsername } from "@/lib/telegram-bot-username";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,9 @@ export default async function DirectoryProfilePage() {
     if (tenant?.slug) telegramTenantSlug = tenant.slug;
   }
 
-  const telegramBot = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME?.trim();
+  const telegramBot = normalizeTelegramBotUsername(
+    process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME,
+  );
   const telegramNotifyEnabled =
     Boolean(telegramBot) && !session.demo && !isSingleUserPortable();
 

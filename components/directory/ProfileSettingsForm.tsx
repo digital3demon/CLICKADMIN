@@ -13,6 +13,7 @@ import {
   KANBAN_TELEGRAM_PREF_SECTIONS,
   type KanbanTelegramPrefKey,
 } from "@/lib/kanban-telegram-prefs";
+import { normalizeTelegramBotUsername } from "@/lib/telegram-bot-username";
 import { DEFAULT_TENANT_SLUG } from "@/lib/tenant-constants";
 
 async function parseJsonResponse<T>(r: Response): Promise<
@@ -72,6 +73,9 @@ export function ProfileSettingsForm({
   /** Поддомен/ slug организации для deep-link t.me/...?start= (мультиарендность). */
   telegramTenantSlugForDeepLink?: string;
 }) {
+  const normalizedTelegramBotUsername = normalizeTelegramBotUsername(
+    telegramBotUsername,
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -481,10 +485,10 @@ export function ProfileSettingsForm({
                     пришлёт подтверждение.
                   </li>
                 </ol>
-                {telegramBotUsername.trim() ? (
+                {normalizedTelegramBotUsername ? (
                   <p className="mt-3">
                     <a
-                      href={`https://t.me/${encodeURIComponent(telegramBotUsername.replace(/^@+/, "").trim())}?start=${encodeURIComponent(telegramTenantSlugForDeepLink.trim() || DEFAULT_TENANT_SLUG)}`}
+                      href={`https://t.me/${encodeURIComponent(normalizedTelegramBotUsername)}?start=${encodeURIComponent(telegramTenantSlugForDeepLink.trim() || DEFAULT_TENANT_SLUG)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex text-sm font-medium text-[var(--sidebar-blue)] hover:underline"

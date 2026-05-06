@@ -3,6 +3,7 @@ import type { UserRole } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { DirectoryKanbanBoardsClient } from "@/components/directory/DirectoryKanbanBoardsClient";
+import { normalizeTelegramBotUsername } from "@/lib/telegram-bot-username";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ export default async function DirectoryKanbanBoardsPage() {
   const session = await getSessionFromCookies();
   const isDemo = Boolean(session?.demo);
   const role: UserRole = session?.role ?? "USER";
+  const telegramBotUsername = normalizeTelegramBotUsername(
+    process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME,
+  );
   return (
     <ModuleFrame
       title="Канбан и ERP"
@@ -18,7 +22,7 @@ export default async function DirectoryKanbanBoardsPage() {
       <DirectoryKanbanBoardsClient
         isDemo={isDemo}
         sessionRole={role}
-        telegramBotUsername={process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME ?? ""}
+        telegramBotUsername={telegramBotUsername}
       />
       <p className="mt-8 text-sm">
         <Link

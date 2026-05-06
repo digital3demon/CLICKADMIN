@@ -14,7 +14,10 @@ import {
   CRM_UPLOAD_MAX_BYTES,
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
 } from "@/lib/crm-upload-limits";
-import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
+import {
+  normalizeOrderAttachmentUploadQueue,
+  postOrderAttachmentWithRetries,
+} from "@/lib/order-attachment-upload-client";
 import {
   completeBackgroundOrderUpload,
   failBackgroundOrderUpload,
@@ -226,16 +229,15 @@ export function OrderListKaitenChatModal({
 
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
-      const arr = Array.from(files);
+      const { queue: arr, skippedTooLarge } =
+        normalizeOrderAttachmentUploadQueue(files, CRM_UPLOAD_MAX_BYTES);
+      if (skippedTooLarge) {
+        setUploadError(CRM_UPLOAD_TOO_LARGE_MESSAGE);
+        return;
+      }
       if (arr.length === 0) return;
       setUploadError(null);
       setUploadOk(null);
-      for (const file of arr) {
-        if (file.size > CRM_UPLOAD_MAX_BYTES) {
-          setUploadError(CRM_UPLOAD_TOO_LARGE_MESSAGE);
-          return;
-        }
-      }
       const previews = arr
         .filter((file) => file.type.startsWith("image/"))
         .map((file, idx) => ({
