@@ -6,7 +6,7 @@ import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 
 const WINDOW = 10;
 /** Каждый тик — синк с комментариями (упоминания лаборатории, корректировки из чата). */
-const FULL_COMMENT_SYNC_EVERY_N_TICKS = 1;
+const FULL_COMMENT_SYNC_EVERY_N_TICKS = 3;
 
 function isRateLimited(res: Response, data: { error?: string }): boolean {
   if (res.status === 429) return true;

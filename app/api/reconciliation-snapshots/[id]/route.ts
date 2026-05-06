@@ -1,6 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/get-prisma";
+import { recordContractorRevision } from "@/lib/record-contractor-revision";
 import {
   ORDER_PAYMENT_RECON_PAID,
   ORDER_PAYMENT_RECON_UNPAID,
@@ -76,10 +77,25 @@ export async function PATCH(
     };
     const idTrimmed = id.trim();
     if (body.dismissed === true) {
-      await prisma.clinicReconciliationSnapshot.updateMany({
+      const before = await prisma.clinicReconciliationSnapshot.findUnique({
+        where: { id: idTrimmed },
+        select: { id: true, clinicId: true, periodLabelRu: true, dismissedAt: true },
+      });
+      const updated = await prisma.clinicReconciliationSnapshot.updateMany({
         where: { id: idTrimmed, dismissedAt: null },
         data: { dismissedAt: new Date() },
       });
+      if (before && updated.count > 0) {
+        try {
+          await recordContractorRevision(prisma, {
+            kind: "UPDATE",
+            clinicId: before.clinicId,
+            summary: `Сверка скрыта из уведомлений: ${before.periodLabelRu}`,
+          });
+        } catch (e) {
+          console.error("[reconciliation-snapshot] revision log dismiss", e);
+        }
+      }
       try {
         revalidateTag("attention-reminders");
       } catch {
@@ -150,6 +166,17 @@ export async function PATCH(
         data: { payment: targetPayment },
       }),
     ]);
+    try {
+      await recordContractorRevision(prisma, {
+        kind: "UPDATE",
+        clinicId: snapshot.clinicId,
+        summary: `Сверка: статус оплаты «${
+          body.paymentStatus === "PAID" ? "Оплачено" : "Не оплачено"
+        }» (${snapshot.periodFromStr} — ${snapshot.periodToStr})`,
+      });
+    } catch (e) {
+      console.error("[reconciliation-snapshot] revision log payment", e);
+    }
 
     return NextResponse.json({ ok: true, paymentStatus: body.paymentStatus });
   } catch (e) {

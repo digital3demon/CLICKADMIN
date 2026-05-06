@@ -6,6 +6,7 @@ import {
 } from "@/lib/crm-upload-limits";
 import { buildInvoiceCaptionRuFromFileName } from "@/lib/format-invoice-number-ru";
 import { extractInvoiceNumberFromPdfBuffer } from "@/lib/extract-invoice-number-from-pdf";
+import { recordContractorRevision } from "@/lib/record-contractor-revision";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -59,7 +60,7 @@ export async function POST(
     }
     const snapshot = await prisma.clinicReconciliationSnapshot.findUnique({
       where: { id: snapshotId },
-      select: { id: true },
+      select: { id: true, clinicId: true, periodLabelRu: true },
     });
     if (!snapshot) {
       return NextResponse.json({ error: "Снимок не найден" }, { status: 404 });
@@ -105,6 +106,15 @@ export async function POST(
         invoiceUploadedAt: true,
       },
     });
+    try {
+      await recordContractorRevision(prisma, {
+        kind: "UPDATE",
+        clinicId: snapshot.clinicId,
+        summary: `Сверка: загружен счёт «${name}» (${snapshot.periodLabelRu})`,
+      });
+    } catch (e) {
+      console.error("[reconciliation-snapshot-invoice] revision log", e);
+    }
     return NextResponse.json({ snapshot: row });
   } catch (e) {
     console.error("[POST reconciliation snapshot invoice]", e);

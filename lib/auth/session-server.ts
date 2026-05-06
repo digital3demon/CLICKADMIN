@@ -30,11 +30,41 @@ export async function getSessionFromCookies(): Promise<SessionClaims | null> {
     if (!m?.sid) return null;
     const row = await prisma.userDeviceSession.findUnique({
       where: { id: m.sid },
-      select: { userId: true, revokedAt: true, expiresAt: true },
+      select: {
+        userId: true,
+        revokedAt: true,
+        expiresAt: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            displayName: true,
+            role: true,
+            isActive: true,
+            tenantId: true,
+            tenant: {
+              select: {
+                plan: true,
+                addonKanban: true,
+              },
+            },
+          },
+        },
+      },
     });
     if (!row || row.userId !== m.sub || row.revokedAt != null) return null;
     if (row.expiresAt.getTime() <= Date.now()) return null;
-    return m;
+    if (!row.user || row.user.isActive !== true) return null;
+    return {
+      sub: row.user.id,
+      email: row.user.email,
+      role: row.user.role,
+      name: row.user.displayName,
+      sid: m.sid,
+      tid: row.user.tenantId,
+      plan: row.user.tenant?.plan,
+      addonKanban: row.user.tenant?.addonKanban === true,
+    };
   } catch {
     return null;
   }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/get-prisma";
 import { buildClinicReconciliationXlsxBuffer, parseRangeFromYmdStrings } from "@/lib/clinic-reconciliation-xlsx";
 import { Prisma, ReconciliationSnapshotSlot } from "@prisma/client";
+import { recordContractorRevision } from "@/lib/record-contractor-revision";
 /** Список автосверок клиники (без файла). */
 export async function GET(
   _req: Request,
@@ -74,6 +75,7 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> },
 ) {
   try {
+    const prisma = await getPrisma();
     const { id } = await ctx.params;
     if (!id?.trim()) {
       return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
@@ -94,7 +96,7 @@ export async function POST(
       );
     }
 
-    const clinic = await (await getPrisma()).clinic.findUnique({
+    const clinic = await prisma.clinic.findUnique({
       where: { id },
       select: { id: true, name: true },
     });
@@ -115,15 +117,20 @@ export async function POST(
     );
     const legalEntityLabel = String(body.legalEntityLabel ?? "").trim() || "Сверка";
     const label = periodLabelRu(fromStr, toStr);
+    const uniqueKey = {
+      clinicId: clinic.id,
+      slot: ReconciliationSnapshotSlot.MONTHLY_FULL,
+      periodFromStr: fromStr,
+      periodToStr: toStr,
+    } as const;
+    const existed = await prisma.clinicReconciliationSnapshot.findUnique({
+      where: { clinicId_slot_periodFromStr_periodToStr: uniqueKey },
+      select: { id: true },
+    });
 
-    const snapshot = await (await getPrisma()).clinicReconciliationSnapshot.upsert({
+    const snapshot = await prisma.clinicReconciliationSnapshot.upsert({
       where: {
-        clinicId_slot_periodFromStr_periodToStr: {
-          clinicId: clinic.id,
-          slot: ReconciliationSnapshotSlot.MONTHLY_FULL,
-          periodFromStr: fromStr,
-          periodToStr: toStr,
-        },
+        clinicId_slot_periodFromStr_periodToStr: uniqueKey,
       },
       update: {
         legalEntityLabel,
@@ -165,6 +172,17 @@ export async function POST(
         dismissedAt: true,
       },
     });
+    try {
+      await recordContractorRevision(prisma, {
+        kind: "UPDATE",
+        clinicId: clinic.id,
+        summary: existed
+          ? `Сверка обновлена: ${label}`
+          : `Сверка сформирована: ${label}`,
+      });
+    } catch (e) {
+      console.error("[reconciliation-snapshots] revision log", e);
+    }
 
     return NextResponse.json({ snapshot }, { status: 201 });
   } catch (e) {

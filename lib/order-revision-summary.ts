@@ -145,8 +145,16 @@ export function summarizeOrderRevision(
     }
   });
 
+  const prevUnitPrices = prev.constructions.map((c) => c.unitPrice ?? null);
+  const nextUnitPrices = next.constructions.map((c) => c.unitPrice ?? null);
+  const pricesChanged =
+    JSON.stringify(prevUnitPrices) !== JSON.stringify(nextUnitPrices);
+
   if (JSON.stringify(prev.constructions) !== JSON.stringify(next.constructions)) {
     parts.push("Состав работ");
+    if (pricesChanged) {
+      parts.push("Цена в составе");
+    }
   }
 
   if (JSON.stringify(prev.prosthetics ?? null) !== JSON.stringify(next.prosthetics ?? null)) {

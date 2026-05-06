@@ -43,6 +43,10 @@ type KaitenSnapshot = {
   kaitenCardUrl: string | null;
 };
 
+type KaitenChatFastPayload = {
+  comments: CommentRow[];
+};
+
 type ImagePreview = {
   id: string;
   name: string;
@@ -65,6 +69,7 @@ export function OrderListKaitenChatModal({
   const [snap, setSnap] = useState<KaitenSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hydrating, setHydrating] = useState(false);
   const [newText, setNewText] = useState("");
   const [replyToId, setReplyToId] = useState<number | null>(null);
   const [posting, setPosting] = useState(false);
@@ -87,21 +92,53 @@ export function OrderListKaitenChatModal({
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setHydrating(false);
+    let fastLoaded = false;
     try {
-      const res = await fetch(`/api/orders/${orderId}/kaiten?refresh=1`);
+      try {
+        const chatRes = await fetch(`/api/orders/${orderId}/kaiten/chat`);
+        const chatData = (await chatRes.json()) as
+          | { error?: string }
+          | KaitenChatFastPayload;
+        if (chatRes.ok && Array.isArray((chatData as KaitenChatFastPayload).comments)) {
+          const comments = (chatData as KaitenChatFastPayload).comments ?? [];
+          setSnap((prev) => ({
+            configured: prev?.configured ?? true,
+            card: prev?.card ?? {},
+            trackLane: prev?.trackLane ?? null,
+            columns: prev?.columns ?? [],
+            lanes: prev?.lanes ?? [],
+            comments,
+            cardImages: prev?.cardImages ?? [],
+            kaitenCardUrl: prev?.kaitenCardUrl ?? null,
+          }));
+          fastLoaded = true;
+          setLoading(false);
+          setHydrating(true);
+        }
+      } catch {
+        /* fast-path optional */
+      }
+
+      const res = await fetch(`/api/orders/${orderId}/kaiten`);
       const data = (await res.json()) as { error?: string } & Partial<KaitenSnapshot>;
       if (!res.ok) {
-        setLoadError(data.error ?? "Не удалось загрузить чат");
-        setSnap(null);
+        if (!fastLoaded) {
+          setLoadError(data.error ?? "Не удалось загрузить чат");
+          setSnap(null);
+        }
         return;
       }
       const s = data as KaitenSnapshot;
       setSnap(s);
     } catch {
-      setLoadError("Сеть недоступна");
-      setSnap(null);
+      if (!fastLoaded) {
+        setLoadError("Сеть недоступна");
+        setSnap(null);
+      }
     } finally {
       setLoading(false);
+      setHydrating(false);
     }
   }, [orderId]);
 
@@ -208,14 +245,20 @@ export function OrderListKaitenChatModal({
       try {
         let done = 0;
         const warnings: string[] = [];
-        for (const file of arr) {
-          const result = await postOrderAttachmentWithRetries(orderId, file);
-          if (!result.ok) {
-            throw new Error(result.error || "Не удалось загрузить файл");
-          }
-          done += 1;
-          if (result.warning) {
-            warnings.push(result.warning);
+        const concurrency = 2;
+        for (let i = 0; i < arr.length; i += concurrency) {
+          const batch = arr.slice(i, i + concurrency);
+          const results = await Promise.all(
+            batch.map((file) => postOrderAttachmentWithRetries(orderId, file)),
+          );
+          for (const result of results) {
+            if (!result.ok) {
+              throw new Error(result.error || "Не удалось загрузить файл");
+            }
+            done += 1;
+            if (result.warning) {
+              warnings.push(result.warning);
+            }
           }
         }
         const base =
@@ -329,6 +372,11 @@ export function OrderListKaitenChatModal({
               <p className="mb-2 text-[0.65rem] text-[var(--text-muted)]">
                 Сообщения из чата карточки Kaiten (канбан). Отправка уходит в Kaiten.
               </p>
+              {hydrating ? (
+                <p className="mb-2 text-[10px] text-[var(--text-muted)]">
+                  Обновляю данные карточки Kaiten в фоне…
+                </p>
+              ) : null}
               <ul className="space-y-3">
                 {roots.length === 0 ? (
                   <li className="text-sm text-[var(--text-muted)]">Сообщений пока нет.</li>

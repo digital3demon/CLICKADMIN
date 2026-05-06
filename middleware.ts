@@ -202,6 +202,14 @@ export async function middleware(req: NextRequest) {
     return redirectPublic(req, `/login?${qs.toString()}`);
   }
 
+  let activeUserContext:
+    | {
+        role: UserRole;
+        tenantId: string;
+        tenant: { plan: SubscriptionPlan; addonKanban: boolean } | null;
+      }
+    | null = null;
+
   if (!session.demo) {
     const sid = session.sid?.trim();
     if (!sid) {
@@ -230,13 +238,33 @@ export async function middleware(req: NextRequest) {
     }
     const active = await prisma.userDeviceSession.findUnique({
       where: { id: sid },
-      select: { userId: true, revokedAt: true, expiresAt: true },
+      select: {
+        userId: true,
+        revokedAt: true,
+        expiresAt: true,
+        user: {
+          select: {
+            id: true,
+            role: true,
+            isActive: true,
+            tenantId: true,
+            tenant: {
+              select: {
+                plan: true,
+                addonKanban: true,
+              },
+            },
+          },
+        },
+      },
     });
     const invalid =
       !active ||
       active.userId !== session.sub ||
       active.revokedAt != null ||
-      active.expiresAt.getTime() <= Date.now();
+      active.expiresAt.getTime() <= Date.now() ||
+      !active.user ||
+      active.user.isActive !== true;
     if (invalid) {
       if (pathname.startsWith("/api/")) {
         const out = NextResponse.json(
@@ -261,9 +289,20 @@ export async function middleware(req: NextRequest) {
       });
       return securityHeaders(redir);
     }
+    activeUserContext = {
+      role: active.user.role,
+      tenantId: active.user.tenantId,
+      tenant: active.user.tenant
+        ? {
+            plan: active.user.tenant.plan,
+            addonKanban: active.user.tenant.addonKanban,
+          }
+        : null,
+    };
   }
 
-  const role = session.role as UserRole;
+  const role = (activeUserContext?.role ?? session.role) as UserRole;
+  const effectiveTenantId = activeUserContext?.tenantId ?? session.tid;
 
   if (!session.demo && !isSingleUserPortable()) {
     const slug = tenantSlugFromHostHeader(host);
@@ -288,7 +327,7 @@ export async function middleware(req: NextRequest) {
         new NextResponse("Организация не найдена", { status: 404 }),
       );
     }
-    if (session.tid && session.tid !== tenantRow.id) {
+    if (effectiveTenantId && effectiveTenantId !== tenantRow.id) {
       if (pathname.startsWith("/api/")) {
         const out = NextResponse.json(
           { error: "Сессия относится к другой организации. Выйдите и войдите на своём поддомене." },
@@ -322,8 +361,11 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  const plan: SubscriptionPlan = session.plan ?? "ULTRA";
-  const addonK = session.addonKanban === true;
+  const plan: SubscriptionPlan =
+    activeUserContext?.tenant?.plan ?? session.plan ?? "ULTRA";
+  const addonK =
+    activeUserContext?.tenant?.addonKanban === true ||
+    session.addonKanban === true;
 
   if (!canAccessKanban(plan, addonK)) {
     if (
@@ -440,8 +482,8 @@ export async function middleware(req: NextRequest) {
     return securityHeaders(out);
   }
 
-  if (!session.demo && !isSingleUserPortable() && session.tid) {
-    const access = await getEffectiveModuleAccess(session.tid, role);
+  if (!session.demo && !isSingleUserPortable() && effectiveTenantId) {
+    const access = await getEffectiveModuleAccess(effectiveTenantId, role);
     const mod = getModuleForPathname(pathname);
     if (mod != null && access[mod] !== true) {
       if (pathname.startsWith("/api/")) {

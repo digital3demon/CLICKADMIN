@@ -110,6 +110,7 @@ export async function POST(
     );
   }
 
+  let needCommentBackfill = false;
   try {
     if (isOrderChatCorrectionTrigger(text)) {
       const kid = kaitenApiCommentNumericId(res.comment);
@@ -118,21 +119,8 @@ export async function POST(
           kaitenCommentId: kid,
         });
       } else {
-        const list = await kaitenListComments(auth, order.kaitenCardId);
-        if (list.ok) {
-          const parsed = list.comments
-            .map(parseKaitenListComment)
-            .filter((x): x is NonNullable<typeof x> => x != null);
-          const forSync = parsed.map((c) => ({ id: c.id, text: c.text }));
-          await syncOrderChatCorrectionsFromKaitenComments(prisma, order.id, forSync);
-          await syncOrderProstheticsRequestsFromKaitenComments(
-            prisma,
-            order.id,
-            forSync,
-          );
-        } else {
-          await createOrderChatCorrectionIfNeeded(prisma, order.id, text, "KAITEN");
-        }
+        needCommentBackfill = true;
+        await createOrderChatCorrectionIfNeeded(prisma, order.id, text, "KAITEN");
       }
     }
     if (isOrderProstheticsRequestTrigger(text)) {
@@ -142,20 +130,8 @@ export async function POST(
           kaitenCommentId: kid,
         });
       } else {
-        const list = await kaitenListComments(auth, order.kaitenCardId);
-        if (list.ok) {
-          const parsed = list.comments
-            .map(parseKaitenListComment)
-            .filter((x): x is NonNullable<typeof x> => x != null);
-          const forSync = parsed.map((c) => ({ id: c.id, text: c.text }));
-          await syncOrderProstheticsRequestsFromKaitenComments(
-            prisma,
-            order.id,
-            forSync,
-          );
-        } else {
-          await createOrderProstheticsRequestIfNeeded(prisma, order.id, text, "KAITEN");
-        }
+        needCommentBackfill = true;
+        await createOrderProstheticsRequestIfNeeded(prisma, order.id, text, "KAITEN");
       }
     }
   } catch (e) {
@@ -183,6 +159,10 @@ export async function POST(
         where: { id: order.id },
         select: { tenant: { select: { kanbanAdminMentionTag: true } } },
       });
+      if (needCommentBackfill) {
+        await syncOrderChatCorrectionsFromKaitenComments(prisma, order.id, parsed);
+        await syncOrderProstheticsRequestsFromKaitenComments(prisma, order.id, parsed);
+      }
       await syncKaitenLabMentionFromParsedComments(
         prisma,
         order.id,

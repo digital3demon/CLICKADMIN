@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, UserRole } from "@prisma/client";
 import { getClientsPrisma } from "@/lib/get-domain-prisma";
 import {
   listTagWhere,
@@ -12,6 +12,11 @@ import {
 } from "@/lib/orders-list-cursor";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
 import { kaitenLabMentionPendingForUser } from "@/lib/order-kaiten-lab-mention-pending";
+
+const LAB_MENTION_ACK_ROLES: UserRole[] = [
+  "ADMINISTRATOR",
+  "SENIOR_ADMINISTRATOR",
+];
 
 /** Поля списка заказов (страница «Заказы» и GET /api/orders). */
 export const ordersListPageSelect = {
@@ -106,26 +111,25 @@ function toOrderListPageRow(o: OrderListPageRowRaw): OrderListPageRow {
 
 async function hydrateKaitenLabMentionForOrdersList(
   db: PrismaClient,
-  userId: string | null | undefined,
+  _userId: string | null | undefined,
   rows: OrderListPageRow[],
 ): Promise<OrderListPageRow[]> {
   if (rows.length === 0) return rows;
-  if (!userId) {
-    return rows.map((r) => ({
-      ...r,
-      listKaitenLabMentionHighlight: kaitenLabMentionPendingForUser({
-        kaitenChatHasLabMention: r.kaitenChatHasLabMention,
-        kaitenLabMentionSignalAt: r.kaitenLabMentionSignalAt ?? null,
-        ackAt: null,
-      }),
-    }));
-  }
   const ids = rows.map((r) => r.id);
   const acks = await db.orderKaitenLabMentionAck.findMany({
-    where: { userId, orderId: { in: ids } },
+    where: {
+      orderId: { in: ids },
+      user: { role: { in: LAB_MENTION_ACK_ROLES } },
+    },
     select: { orderId: true, ackAt: true },
   });
-  const ackMap = new Map(acks.map((a) => [a.orderId, a.ackAt]));
+  const ackMap = new Map<string, Date>();
+  for (const a of acks) {
+    const prev = ackMap.get(a.orderId);
+    if (!prev || a.ackAt.getTime() > prev.getTime()) {
+      ackMap.set(a.orderId, a.ackAt);
+    }
+  }
   return rows.map((r) => ({
     ...r,
     listKaitenLabMentionHighlight: kaitenLabMentionPendingForUser({
@@ -179,6 +183,78 @@ async function fetchOrdersListPageAttentionFiltered(
     for (const o of rows) {
       const row = toOrderListPageRow(o);
       if (row.listPendingChatCorrections || row.listCompositionMismatch) {
+        collected.push(row);
+        if (collected.length >= take) break;
+      }
+    }
+
+    const lastRow = rows[rows.length - 1]!;
+    seek = { c: lastRow.createdAt, i: lastRow.id };
+    if (!lastBatchFull) break;
+  }
+
+  const hasMore =
+    collected.length > pageSize ||
+    (collected.length === pageSize && lastBatchFull);
+
+  const page = collected.slice(0, pageSize);
+  const lastOut = page[page.length - 1];
+  const nextCursor =
+    hasMore && lastOut
+      ? encodeOrdersListCursor(lastOut.createdAt, lastOut.id)
+      : null;
+
+  return { orders: page, nextCursor };
+}
+
+async function fetchOrdersListPageLabMentionFiltered(
+  db: PrismaClient,
+  baseParts: Prisma.OrderWhereInput[],
+  dec: { c: string; i: string } | null,
+  take: number,
+  pageSize: number,
+  userId: string | null | undefined,
+): Promise<{ orders: OrderListPageRow[]; nextCursor: string | null }> {
+  const batchSize = Math.max(80, take * 4);
+  let seek: { c: Date; i: string } | null = dec
+    ? { c: new Date(dec.c), i: dec.i }
+    : null;
+  const collected: OrderListPageRow[] = [];
+  let lastBatchFull = false;
+
+  for (let iter = 0; iter < 50 && collected.length < take; iter++) {
+    const cursorPart: Prisma.OrderWhereInput = seek
+      ? {
+          OR: [
+            { createdAt: { lt: seek.c } },
+            {
+              AND: [{ createdAt: seek.c }, { id: { lt: seek.i } }],
+            },
+          ],
+        }
+      : {};
+
+    const batchParts = [...baseParts, cursorPart];
+    const where: Prisma.OrderWhereInput =
+      batchParts.length === 1 ? batchParts[0]! : { AND: batchParts };
+
+    const rows = await db.order.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: batchSize,
+      select: ordersListPageSelect,
+    });
+
+    if (rows.length === 0) break;
+    lastBatchFull = rows.length === batchSize;
+
+    const hydrated = await hydrateKaitenLabMentionForOrdersList(
+      db,
+      userId ?? null,
+      rows.map((o) => toOrderListPageRow(o)),
+    );
+    for (const row of hydrated) {
+      if (row.listKaitenLabMentionHighlight) {
         collected.push(row);
         if (collected.length >= take) break;
       }
@@ -377,6 +453,20 @@ export async function fetchOrdersListPage(
         opts.ordersListForUserId ?? null,
         await hydrateContractors(attention.orders),
       ),
+    };
+  }
+  if (parsedTag?.kind === "kaitenLabMention") {
+    const mentions = await fetchOrdersListPageLabMentionFiltered(
+      db,
+      parts,
+      dec,
+      take,
+      opts.pageSize,
+      opts.ordersListForUserId ?? null,
+    );
+    return {
+      ...mentions,
+      orders: await hydrateContractors(mentions.orders),
     };
   }
 

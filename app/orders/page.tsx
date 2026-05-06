@@ -162,11 +162,6 @@ export default async function OrdersPage({
       some: { resolvedAt: null, rejectedAt: null },
     },
   } satisfies Prisma.OrderWhereInput;
-  /** Кэш: в чате Kaiten есть @лаборатории (обновляется синком комментариев). */
-  const pendingLabMentionWhere = {
-    kaitenChatHasLabMention: true,
-  } satisfies Prisma.OrderWhereInput;
-
   const [attentionCount, prostheticsPendingCount] = tenantId
     ? await Promise.all([
         ordersPrisma.order.count({
@@ -183,18 +178,12 @@ export default async function OrdersPage({
     : [0, 0];
 
   let labMentionCount = 0;
-  if (tenantId && session?.sub) {
+  if (tenantId) {
     labMentionCount = await countOrdersWithPendingKaitenLabMentionForUser(
       ordersPrisma,
       baseCountWhere,
-      session.sub,
+      session?.sub,
     );
-  } else if (tenantId) {
-    labMentionCount = await ordersPrisma.order.count({
-      where: {
-        AND: [baseCountWhere, pendingLabMentionWhere],
-      },
-    });
   }
 
   let orders: Awaited<

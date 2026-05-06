@@ -12,6 +12,8 @@ const ORDER_KIND_RU: Record<string, string> = {
 const CONTRACTOR_KIND_RU: Record<string, string> = {
   CREATE: "Создание",
   UPDATE: "Сохранение",
+  DELETE: "Удаление",
+  RESTORE: "Восстановление",
 };
 
 const TAKE_EACH = 100;
@@ -192,7 +194,9 @@ export default async function OrdersHistoryPage() {
                         className="min-w-0 px-2 py-2 sm:px-3 sm:py-2.5 text-[var(--text-secondary)]"
                         title={item.row.summary}
                       >
-                        <span className="block truncate">{item.row.summary}</span>
+                        <span className="block whitespace-normal break-words">
+                          {item.row.summary}
+                        </span>
                       </td>
                       <td className="min-w-0 whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         <Link
@@ -262,7 +266,9 @@ export default async function OrdersHistoryPage() {
                         className="min-w-0 px-2 py-2 sm:px-3 sm:py-2.5 text-[var(--text-secondary)]"
                         title={item.row.summary}
                       >
-                        <span className="block truncate">{item.row.summary}</span>
+                        <span className="block whitespace-normal break-words">
+                          {item.row.summary}
+                        </span>
                       </td>
                       <td className="min-w-0 whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         {item.row.clinic ? (
