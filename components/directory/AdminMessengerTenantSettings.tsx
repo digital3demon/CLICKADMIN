@@ -123,13 +123,14 @@ export function AdminMessengerTenantSettings({
   const bot = telegramBotUsername.replace(/^@+/, "").trim();
 
   useEffect(() => {
-    if (!canEdit || linked || !bot) return;
+    if (!canEdit || linked || !bot || loading || !prefs) return;
     const el = widgetMountRef.current;
     if (!el) return;
 
     const w = window as unknown as {
       adminSharedMessengerOnAuth?: (user: Record<string, unknown>) => void;
     };
+    /** Telegram Login Widget вызывает функцию из data-onauth — см. https://core.telegram.org/widgets/login */
     w.adminSharedMessengerOnAuth = async (user: Record<string, unknown>) => {
       setSaving(true);
       setError(null);
@@ -159,7 +160,7 @@ export function AdminMessengerTenantSettings({
     s.async = true;
     s.setAttribute("data-telegram-login", bot);
     s.setAttribute("data-size", "large");
-    s.setAttribute("data-onauth", "adminSharedMessengerOnAuth");
+    s.setAttribute("data-onauth", "adminSharedMessengerOnAuth(user)");
     s.setAttribute("data-request-access", "write");
     el.appendChild(s);
 
@@ -167,7 +168,7 @@ export function AdminMessengerTenantSettings({
       delete w.adminSharedMessengerOnAuth;
       el.innerHTML = "";
     };
-  }, [canEdit, linked, bot, load]);
+  }, [canEdit, linked, bot, load, loading, prefs]);
 
   if (!canEdit) return null;
 
@@ -188,14 +189,6 @@ export function AdminMessengerTenantSettings({
       {error ? (
         <p className="mt-3 rounded-md border border-red-800/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
           {error}
-        </p>
-      ) : null}
-
-      {!loading && !bot ? (
-        <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
-          Задайте на сервере{" "}
-          <span className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_NAME</span> — имя бота для
-          виджета входа Telegram.
         </p>
       ) : null}
 
@@ -246,6 +239,12 @@ export function AdminMessengerTenantSettings({
                 </ul>
               </div>
             </>
+          ) : !bot ? (
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+              Кнопка входа Telegram здесь появится после настройки переменной окружения{" "}
+              <span className="font-mono">NEXT_PUBLIC_TELEGRAM_BOT_NAME</span> (имя бота без
+              @), пересборки фронта и деплоя. Без неё виджет не создаётся.
+            </p>
           ) : (
             <>
               <p className="text-sm text-[var(--text-secondary)]">
