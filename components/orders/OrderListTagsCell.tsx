@@ -102,7 +102,7 @@ const TAG_CLOUD_PACK_CLASS =
   "flex min-h-min w-full min-w-0 flex-wrap content-start items-start gap-x-1.5 gap-y-1.5";
 
 const TAG_ADD_BUTTON_CLASS =
-  "absolute right-0 top-1/2 inline-flex h-6 w-6 shrink-0 -translate-y-1/2 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-sm font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-7 sm:w-7";
+  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-sm font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-7 sm:w-7";
 
 /** Длинный текст → слот «огромная» (две колонки сетки, перенос вниз). ~28 ловит длинные кастомные подписи. */
 const TAG_SLOT_HUGE_MIN_CHARS = 28;
@@ -119,10 +119,10 @@ function customTagSlot(label: string): "huge" | "large" {
 
 function tagCloudCellClass(slot: TagSlotSize): string {
   if (slot === "huge") {
-    return "flex min-w-0 w-full max-w-[clamp(13rem,46vw,20rem)] grow-0 shrink items-start [&>*]:min-w-0 [&>*]:max-w-full";
+    return "flex min-w-0 w-full max-w-full grow-0 shrink basis-auto items-start sm:max-w-[clamp(12rem,42vw,17rem)] [&>*]:min-w-0 [&>*]:max-w-full";
   }
   if (slot === "large") {
-    return "flex min-w-0 max-w-[clamp(8.5rem,32vw,12.5rem)] grow-0 shrink-0 basis-auto items-start [&>*]:min-w-0 [&>*]:max-w-full";
+    return "flex min-w-0 max-w-full grow-0 shrink basis-[clamp(7.5rem,26vw,10.75rem)] items-start [&>*]:min-w-0 [&>*]:max-w-full";
   }
   return "flex min-w-0 max-w-full grow-0 shrink-0 basis-auto items-start [&>*]:max-w-full";
 }
@@ -192,6 +192,36 @@ function OrderAttentionWarningGlyph({ className }: { className: string }) {
 }
 
 type TagCloudItem = { key: string; slot: TagSlotSize; node: ReactNode };
+
+function buildTagRows(items: TagCloudItem[]): TagCloudItem[][] {
+  const rows: TagCloudItem[][] = [];
+  let current: TagCloudItem[] = [];
+
+  const flushCurrent = () => {
+    if (current.length === 0) return;
+    rows.push(current);
+    current = [];
+  };
+
+  for (const it of items) {
+    // "Большая/огромная" заблокировка — всегда отдельной строкой.
+    if (it.key === "blocked" && it.slot === "huge") {
+      flushCurrent();
+      rows.push([it]);
+      continue;
+    }
+    if (it.slot === "huge") {
+      flushCurrent();
+      rows.push([it]);
+      continue;
+    }
+    if (current.length >= 2) flushCurrent();
+    current.push(it);
+    if (current.length >= 2) flushCurrent();
+  }
+  flushCurrent();
+  return rows;
+}
 
 function tagHref(
   pageSize: number,
@@ -852,11 +882,17 @@ export function OrderListTagsCell({
     </button>
   );
 
+  const tagRows = buildTagRows(tagCloudItems);
+
   const tagCloudPack = (
-    <div className={`${TAG_CLOUD_PACK_CLASS} min-w-0 flex-1`}>
-      {tagCloudItems.map((it) => (
-        <div key={it.key} className={tagCloudCellClass(it.slot)}>
-          {it.node}
+    <div className="flex min-w-0 flex-1 flex-col gap-y-1.5">
+      {tagRows.map((row, rowIdx) => (
+        <div key={`row-${rowIdx}`} className={TAG_CLOUD_PACK_CLASS}>
+          {row.map((it) => (
+            <div key={it.key} className={tagCloudCellClass(it.slot)}>
+              {it.node}
+            </div>
+          ))}
         </div>
       ))}
     </div>
@@ -908,15 +944,15 @@ export function OrderListTagsCell({
                 </Link>
               ) : null}
             </div>
-            <div className="relative flex min-w-0 flex-1 items-center gap-x-1.5 pr-9 sm:pr-10">
+            <div className="flex min-w-0 flex-1 items-center gap-x-1.5">
               {tagCloudPack}
-              {addTagButton}
+              <div className="shrink-0 self-center">{addTagButton}</div>
             </div>
           </>
         ) : (
-          <div className="relative flex w-full min-w-0 items-center gap-x-1.5 pr-9 sm:pr-10">
+          <div className="flex w-full min-w-0 items-center gap-x-1.5">
             {tagCloudPack}
-            {addTagButton}
+            <div className="shrink-0 self-center">{addTagButton}</div>
           </div>
         )}
       </div>
