@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
@@ -43,6 +44,8 @@ export async function POST(
     },
     update: { ackAt: new Date() },
   });
+
+  revalidatePath("/orders");
 
   return NextResponse.json({ ok: true });
 }

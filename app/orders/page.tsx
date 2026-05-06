@@ -479,30 +479,32 @@ export default async function OrdersPage({
               </span>
             </Link>
           ) : null}
-          <Link
-            href={ordersListHref({
-              limit: pageSize,
-              tag: LIST_TAG_KAITEN_LAB_MENTION,
-              hideShipped: hideShippedActive,
-              onlyShipped: onlyShippedActive,
-              q: listSearchQ || undefined,
-              from: fromUrl ?? undefined,
-              to: toUrl ?? undefined,
-            })}
-            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-              activeFilter?.kind === "kaitenLabMention"
-                ? "border-violet-500/80 bg-violet-100 text-violet-950 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100"
-                : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-            }`}
-            title="Наряды, в чате карточки Kaiten которых упомянули команду лаборатории (@…)"
-          >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-              Упоминания
-            </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-              {labMentionCount}
-            </span>
-          </Link>
+          {labMentionCount > 0 ? (
+            <Link
+              href={ordersListHref({
+                limit: pageSize,
+                tag: LIST_TAG_KAITEN_LAB_MENTION,
+                hideShipped: hideShippedActive,
+                onlyShipped: onlyShippedActive,
+                q: listSearchQ || undefined,
+                from: fromUrl ?? undefined,
+                to: toUrl ?? undefined,
+              })}
+              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+                activeFilter?.kind === "kaitenLabMention"
+                  ? "border-violet-500/80 bg-violet-100 text-violet-950 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100"
+                  : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+              }`}
+              title="Наряды, в чате карточки Kaiten которых упомянули команду лаборатории (@…)"
+            >
+              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+                Упоминания
+              </span>
+              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+                {labMentionCount}
+              </span>
+            </Link>
+          ) : null}
         </div>
       </div>
       {activeFilter ? (

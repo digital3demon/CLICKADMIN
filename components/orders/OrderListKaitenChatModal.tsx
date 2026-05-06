@@ -110,23 +110,20 @@ export function OrderListKaitenChatModal({
     void load();
   }, [open, load]);
 
+  /** Подтверждение просмотра чата для текущего пользователя (БД), затем обновление RSC. */
   useEffect(() => {
     if (!open) return;
-    let cancelled = false;
     void (async () => {
       try {
         const res = await fetch(
           `/api/orders/${encodeURIComponent(orderId)}/kaiten-lab-mention-ack`,
-          { method: "POST" },
+          { method: "POST", credentials: "same-origin" },
         );
-        if (!cancelled && res.ok) router.refresh();
+        if (res.ok) router.refresh();
       } catch {
         /* ignore */
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [open, orderId, router]);
 
   useEffect(() => {

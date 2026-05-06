@@ -483,20 +483,23 @@ export function OrderListTagsCell({
     if (kaitenBlocked) {
       items.push({
         key: "blocked",
-        flex: "grow",
+        /** Не тянуть на всю ширину строки — узкая пилюля с переносом текста причины вниз. */
+        flex: "shrink",
         node: (
           <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
             <Link
               href={href(LIST_TAG_KAITEN_BLOCKED)}
               title="Показать наряды, заблокированные в Kaiten"
-              className={`inline-flex min-w-0 max-w-full flex-col items-stretch gap-y-0.5 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`}
+              className={`inline-flex w-fit max-w-[min(100%,17rem)] flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none sm:max-w-[min(100%,20rem)] md:max-w-[min(100%,24rem)] dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`}
             >
-              <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap leading-tight">
-                <span aria-hidden>⛔</span>
-                <span>Заблокировано</span>
+              <span className="inline-flex shrink-0 items-center gap-1 leading-tight">
+                <span aria-hidden className="shrink-0">
+                  ⛔
+                </span>
+                <span className="leading-tight">Заблокировано</span>
               </span>
               {kaitenBlockReason?.trim() ? (
-                <span className="max-w-full whitespace-pre-wrap break-words text-left text-[10px] font-normal leading-snug text-red-900/95 dark:text-red-100/90 sm:text-[11px]">
+                <span className="w-full min-w-0 whitespace-pre-wrap break-words text-left text-[10px] font-normal leading-snug text-red-900/95 dark:text-red-100/90 sm:text-[11px]">
                   {kaitenBlockReason.trim()}
                 </span>
               ) : (
