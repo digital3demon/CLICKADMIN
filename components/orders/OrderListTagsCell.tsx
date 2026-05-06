@@ -93,9 +93,33 @@ type Props = {
 const padTable =
   "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:py-1 sm:text-xs sm:leading-snug md:text-sm";
 
-/** Облако тегов: перенос по реальной ширине колонки таблицы (`min-w-0` у ячейки). */
-const TAG_CLOUD_CLASS =
-  "flex min-h-min w-full min-w-0 flex-wrap content-start items-center gap-x-1 gap-y-1.5";
+/**
+ * Облако тегов в ячейке: не flex-wrap, а grid 4 колонки.
+ * По ширине ряда — не больше одной «огромной» (col-span-4), двух «больших» (col-span-2) или четырёх «маленьких» (col-span-1).
+ * Высота строк не ограничиваем. Новый тег — сразу задать slot в tagCloudItems; длинный текст внутри ячейки: min-w-0 + break-words, без отдельных max-w на всю полосу строки.
+ * Порог «огромной» по символам — TAG_SLOT_HUGE_MIN_CHARS (блокировка Kaiten, длинный кастомный тег).
+ */
+const TAG_CLOUD_GRID_CLASS =
+  "grid min-h-min w-full min-w-0 grid-cols-4 content-start items-start gap-x-1 gap-y-1.5";
+
+/** Длинный текст → «огромная» пилюля на всю ширину ряда (4 колонки). ~28 ловит длинные кастомные подписи без простыни. */
+const TAG_SLOT_HUGE_MIN_CHARS = 28;
+
+type TagSlotSize = "huge" | "large" | "small";
+
+function kaitenBlockedTagSlot(reason: string | null | undefined): "huge" | "large" {
+  return (reason ?? "").trim().length >= TAG_SLOT_HUGE_MIN_CHARS ? "huge" : "large";
+}
+
+function customTagSlot(label: string): "huge" | "large" {
+  return label.trim().length >= TAG_SLOT_HUGE_MIN_CHARS ? "huge" : "large";
+}
+
+function tagCloudCellClass(slot: TagSlotSize): string {
+  const span =
+    slot === "huge" ? "col-span-4" : slot === "large" ? "col-span-2" : "col-span-1";
+  return `${span} flex min-h-0 min-w-0 items-start [&>*]:min-w-0`;
+}
 const TAG_EDIT_BUTTON_CLASS =
   "rounded p-1 text-xs leading-none hover:opacity-90";
 
@@ -161,7 +185,7 @@ function OrderAttentionWarningGlyph({ className }: { className: string }) {
   );
 }
 
-type TagCloudItem = { key: string; flex: "shrink" | "grow"; node: ReactNode };
+type TagCloudItem = { key: string; slot: TagSlotSize; node: ReactNode };
 
 function tagHref(
   pageSize: number,
@@ -481,16 +505,20 @@ export function OrderListTagsCell({
     const items: TagCloudItem[] = [];
 
     if (kaitenBlocked) {
+      const blockedSlot = kaitenBlockedTagSlot(kaitenBlockReason);
       items.push({
         key: "blocked",
-        /** Не тянуть на всю ширину строки — узкая пилюля с переносом текста причины вниз. */
-        flex: "shrink",
+        slot: blockedSlot,
         node: (
           <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
             <Link
               href={href(LIST_TAG_KAITEN_BLOCKED)}
               title="Показать наряды, заблокированные в Kaiten"
-              className={`inline-flex w-fit max-w-[min(100%,17rem)] flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none sm:max-w-[min(100%,20rem)] md:max-w-[min(100%,24rem)] dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`}
+              className={`inline-flex min-w-0 flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable} ${
+                blockedSlot === "huge"
+                  ? "w-full max-w-none"
+                  : "w-full max-w-full sm:max-w-[min(100%,20rem)]"
+              }`}
             >
               <span className="inline-flex shrink-0 items-center gap-1 leading-tight">
                 <span aria-hidden className="shrink-0">
@@ -526,7 +554,7 @@ export function OrderListTagsCell({
     if (adminShippedOtpr) {
       items.push({
         key: "otpr",
-        flex: "shrink",
+        slot: "small",
         node: (
           <span className="inline-flex items-center gap-0.5">
             <Link
@@ -565,7 +593,7 @@ export function OrderListTagsCell({
 
     items.push({
       key: "kaiten",
-      flex: "grow",
+      slot: "large",
       node: kaitenFilterKey ? (
         <Link
           href={href(kaitenFilterKey)}
@@ -591,7 +619,7 @@ export function OrderListTagsCell({
     if (isUrgent) {
       items.push({
         key: "urgent",
-        flex: "shrink",
+        slot: "small",
         node: (
           <span className="inline-flex items-center gap-0.5">
             <Link
@@ -619,7 +647,7 @@ export function OrderListTagsCell({
     if (prostheticsOrdered) {
       items.push({
         key: "prost",
-        flex: "grow",
+        slot: "large",
         node: (
           <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
             <Link
@@ -647,7 +675,7 @@ export function OrderListTagsCell({
     if (hasInvoiceAttachment) {
       items.push({
         key: "inv",
-        flex: "shrink",
+        slot: "small",
         node: (
           <Link
             href={href(LIST_TAG_INVOICE)}
@@ -663,7 +691,7 @@ export function OrderListTagsCell({
     if (invoicePrinted) {
       items.push({
         key: "invpr",
-        flex: "grow",
+        slot: "large",
         node: (
           <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
             <Link
@@ -690,7 +718,7 @@ export function OrderListTagsCell({
 
     items.push({
       key: "pay",
-      flex: "grow",
+      slot: "large",
       node: (
         <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
           {paymentFilterTag ? (
@@ -729,15 +757,20 @@ export function OrderListTagsCell({
 
     for (const t of customTags) {
       const inner = listTagCustomLabel(t.label);
+      const ctSlot = customTagSlot(t.label);
       items.push({
         key: `ct-${t.id}`,
-        flex: "grow",
+        slot: ctSlot,
         node: (
-          <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
+          <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
             <Link
               href={href(inner)}
               title="Показать наряды с этим тегом"
-              className={`min-w-0 max-w-full shrink truncate rounded-full border border-violet-200 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-100 ${padTable}`}
+              className={`min-w-0 border border-violet-200 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-100 ${padTable} ${
+                ctSlot === "huge"
+                  ? "w-full max-w-none whitespace-pre-wrap break-words rounded-xl px-2 py-1 text-left leading-snug"
+                  : "max-w-full shrink truncate rounded-full"
+              }`}
             >
               {t.label}
             </Link>
@@ -758,7 +791,7 @@ export function OrderListTagsCell({
 
     items.push({
       key: "add",
-      flex: "shrink",
+      slot: "small",
       node: (
         <button
           type="button"
@@ -868,16 +901,9 @@ export function OrderListTagsCell({
               ) : null}
             </div>
             <div className="min-w-0 flex-1">
-              <div className={TAG_CLOUD_CLASS}>
+              <div className={TAG_CLOUD_GRID_CLASS}>
                 {tagCloudItems.map((it) => (
-                  <div
-                    key={it.key}
-                    className={
-                      it.flex === "grow"
-                        ? "flex min-h-0 min-w-0 max-w-full items-center [&>*]:min-w-0 [&>*]:max-w-full"
-                        : "flex min-h-0 shrink-0 items-center [&>*]:max-w-full"
-                    }
-                  >
+                  <div key={it.key} className={tagCloudCellClass(it.slot)}>
                     {it.node}
                   </div>
                 ))}
@@ -885,16 +911,9 @@ export function OrderListTagsCell({
             </div>
           </>
         ) : (
-          <div className={TAG_CLOUD_CLASS}>
+          <div className={TAG_CLOUD_GRID_CLASS}>
             {tagCloudItems.map((it) => (
-              <div
-                key={it.key}
-                className={
-                  it.flex === "grow"
-                    ? "flex min-h-0 min-w-0 max-w-full items-center [&>*]:min-w-0 [&>*]:max-w-full"
-                    : "flex min-h-0 shrink-0 items-center [&>*]:max-w-full"
-                }
-              >
+              <div key={it.key} className={tagCloudCellClass(it.slot)}>
                 {it.node}
               </div>
             ))}
