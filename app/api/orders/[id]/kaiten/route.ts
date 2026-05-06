@@ -46,6 +46,24 @@ import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 const TRACK_LANES: KaitenTrackLane[] = ["ORTHOPEDICS", "ORTHODONTICS", "TEST"];
+const LEGACY_KAITEN_TYPE_NAME_BY_ID: Record<string, string> = {
+  kt_vrem: "Временные",
+  kt_mio: "МиоСплинт",
+  kt_mod: "Модели",
+  kt_nak: "Накладки",
+  kt_nakmrt: "Накладки МРТ",
+  kt_orto: "ОртоАппараты",
+  kt_ortox: "ОртоАппараты x Хирургия",
+  kt_post: "Постоянные",
+  kt_spl: "Сплинт",
+  kt_splmrt: "Сплинт МРТ",
+  kt_hir: "Хирургия",
+};
+
+function legacyKaitenTypeName(id: string): string | null {
+  const hit = LEGACY_KAITEN_TYPE_NAME_BY_ID[id];
+  return typeof hit === "string" && hit.trim() ? hit.trim() : null;
+}
 
 function mirrorFieldsFromKaitenCard(card: Record<string, unknown>): {
   kaitenCardTitleMirror?: string | null;
@@ -722,17 +740,26 @@ export async function POST(
         data.kaitenCardType = { disconnect: true };
       } else {
         const kid = String(b.kaitenCardTypeId).trim();
-        const kt = await clientsPrisma.kaitenCardType.findFirst({
-          where: { id: kid },
+        let kt = await clientsPrisma.kaitenCardType.findFirst({
+          where: { tenantId, id: kid },
           select: { id: true },
         });
+        if (!kt) {
+          const legacyName = legacyKaitenTypeName(kid);
+          if (legacyName) {
+            kt = await clientsPrisma.kaitenCardType.findFirst({
+              where: { tenantId, name: legacyName },
+              select: { id: true },
+            });
+          }
+        }
         if (!kt) {
           return NextResponse.json(
             { error: "Тип карточки Kaiten не найден" },
             { status: 400 },
           );
         }
-        data.kaitenCardType = { connect: { id: kid } };
+        data.kaitenCardType = { connect: { id: kt.id } };
       }
     }
     const laneAfter =
@@ -742,7 +769,21 @@ export async function POST(
       if (b.kaitenCardTypeId === null || b.kaitenCardTypeId === "") {
         typeIdAfter = null;
       } else {
-        typeIdAfter = String(b.kaitenCardTypeId).trim();
+        const kid = String(b.kaitenCardTypeId).trim();
+        let kt = await clientsPrisma.kaitenCardType.findFirst({
+          where: { tenantId, id: kid },
+          select: { id: true },
+        });
+        if (!kt) {
+          const legacyName = legacyKaitenTypeName(kid);
+          if (legacyName) {
+            kt = await clientsPrisma.kaitenCardType.findFirst({
+              where: { tenantId, name: legacyName },
+              select: { id: true },
+            });
+          }
+        }
+        typeIdAfter = kt?.id ?? kid;
       }
     }
     if (
@@ -1140,23 +1181,36 @@ export async function PATCH(
     patch.sort_order = body.sortOrder;
   }
 
+  let resolvedKaitenCardTypeId: string | null | undefined;
   if (body.kaitenCardTypeId !== undefined) {
     if (
       typeof body.kaitenCardTypeId === "string" &&
       body.kaitenCardTypeId.trim().length > 0
     ) {
       const kid = body.kaitenCardTypeId.trim();
-      const kt = await clientsPrisma.kaitenCardType.findUnique({
-        where: { id: kid },
-        select: { externalTypeId: true },
+      let kt = await clientsPrisma.kaitenCardType.findFirst({
+        where: { tenantId, id: kid },
+        select: { id: true, externalTypeId: true },
       });
+      if (!kt) {
+        const legacyName = legacyKaitenTypeName(kid);
+        if (legacyName) {
+          kt = await clientsPrisma.kaitenCardType.findFirst({
+            where: { tenantId, name: legacyName },
+            select: { id: true, externalTypeId: true },
+          });
+        }
+      }
       if (!kt) {
         return NextResponse.json(
           { error: "Тип карточки не найден" },
           { status: 400 },
         );
       }
+      resolvedKaitenCardTypeId = kt.id;
       patch.type_id = kt.externalTypeId;
+    } else {
+      resolvedKaitenCardTypeId = null;
     }
   }
 
@@ -1308,14 +1362,9 @@ export async function PATCH(
             }
           : {}),
         ...(body.kaitenCardTypeId !== undefined
-          ? body.kaitenCardTypeId === null ||
-            (typeof body.kaitenCardTypeId === "string" && !body.kaitenCardTypeId.trim())
+          ? resolvedKaitenCardTypeId == null
             ? { kaitenCardType: { disconnect: true } }
-            : {
-                kaitenCardType: {
-                  connect: { id: String(body.kaitenCardTypeId).trim() },
-                },
-              }
+            : { kaitenCardType: { connect: { id: resolvedKaitenCardTypeId } } }
           : {}),
       },
     });

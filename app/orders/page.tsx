@@ -727,38 +727,38 @@ export default async function OrdersPage({
                       </span>
                     )}
                   </td>
-                  <td className="min-w-0 max-w-[12rem] px-1.5 py-1.5 align-middle text-[var(--text-body)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 max-w-[12rem] px-1.5 py-1.5 align-middle text-center text-[var(--text-body)] sm:px-2 sm:py-2">
                     {o.clinic?.address?.trim() ? (
                       <span
-                        className="block hyphens-auto break-words text-[var(--text-secondary)]"
+                        className="block hyphens-auto break-words text-center text-[var(--text-secondary)]"
                         title={o.clinic.address.trim()}
                       >
                         {o.clinic.address.trim()}
                       </span>
                     ) : (
-                      <span className="block text-[var(--text-muted)]">—</span>
+                      <span className="block text-center text-[var(--text-muted)]">—</span>
                     )}
                   </td>
-                  <td className="min-w-0 max-w-[10rem] px-1.5 py-1.5 align-middle text-[var(--text-strong)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 max-w-[10rem] px-1.5 py-1.5 align-middle text-center text-[var(--text-strong)] sm:px-2 sm:py-2">
                     <Link
                       href={`/clients/doctors/${o.doctor.id}`}
                       title={o.doctor.fullName}
-                      className="block break-words text-[var(--sidebar-blue)] hover:underline sm:leading-snug"
+                      className="block break-words text-center text-[var(--sidebar-blue)] hover:underline sm:leading-snug"
                     >
                       {personNameSurnameInitials(o.doctor.fullName)}
                     </Link>
                   </td>
                   <td
-                    className="min-w-0 max-w-[10rem] px-1.5 py-1.5 align-middle text-[var(--text-body)] sm:px-2 sm:py-2"
+                    className="min-w-0 max-w-[10rem] px-1.5 py-1.5 align-middle text-center text-[var(--text-body)] sm:px-2 sm:py-2"
                     title={o.patientName ?? undefined}
                   >
-                    <span className="block hyphens-auto break-words">
+                    <span className="block hyphens-auto break-words text-center">
                       {o.patientName
                         ? personNameSurnameInitials(o.patientName)
                         : "—"}
                     </span>
                   </td>
-                  <td className="min-w-0 whitespace-nowrap px-1.5 py-1.5 align-middle text-sm text-[var(--text-secondary)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 whitespace-nowrap px-1.5 py-1.5 align-middle text-center text-sm text-[var(--text-secondary)] sm:px-2 sm:py-2">
                     {formatAdmission(o)}
                   </td>
                   <td className="min-w-0 px-1.5 py-1.5 align-middle text-[var(--text-secondary)] sm:px-2 sm:py-2">
