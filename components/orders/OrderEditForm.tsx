@@ -2291,6 +2291,7 @@ export function OrderEditForm({
           <OrderFilesPanel
             key={`${initial.id}-${invoiceAttachmentId ?? "no-inv"}`}
             orderId={initial.id}
+            orderNumber={initial.orderNumber}
             listenPaste
             onServerListChange={() => router.refresh()}
           />

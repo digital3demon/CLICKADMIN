@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderCorrectionToastStack } from "@/components/orders/OrderCorrectionToastStack";
+import { OrderBackgroundUploadToast } from "@/components/orders/OrderBackgroundUploadToast";
 import { Sidebar } from "./Sidebar";
 
 const SIDEBAR_W = "calc(100% / 7)";
@@ -134,6 +135,7 @@ export function AppShell({ children }: AppShellProps) {
       </aside>
 
       <OrderCorrectionToastStack />
+      <OrderBackgroundUploadToast />
     </div>
   );
 }

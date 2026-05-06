@@ -15,6 +15,12 @@ import {
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
 } from "@/lib/crm-upload-limits";
 import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
+import {
+  completeBackgroundOrderUpload,
+  failBackgroundOrderUpload,
+  setBackgroundOrderUploadProgress,
+  startBackgroundOrderUpload,
+} from "@/lib/background-order-upload-tracker";
 
 type CommentRow = {
   id: number;
@@ -242,37 +248,117 @@ export function OrderListKaitenChatModal({
         return previews;
       });
       setUploading(true);
-      try {
+      const trackerId = startBackgroundOrderUpload({
+        orderId,
+        orderNumber,
+        total: arr.length,
+      });
+      const runUploadRound = async (queueFiles: File[]) => {
         let done = 0;
         const warnings: string[] = [];
+        const fails: string[] = [];
+        const failedFiles: File[] = [];
+        const rounds = 3;
         const concurrency = 2;
-        for (let i = 0; i < arr.length; i += concurrency) {
-          const batch = arr.slice(i, i + concurrency);
-          const results = await Promise.all(
-            batch.map((file) => postOrderAttachmentWithRetries(orderId, file)),
-          );
-          for (const result of results) {
-            if (!result.ok) {
-              throw new Error(result.error || "Не удалось загрузить файл");
-            }
-            done += 1;
-            if (result.warning) {
-              warnings.push(result.warning);
+        let pending = [...queueFiles];
+        for (let round = 1; round <= rounds && pending.length > 0; round += 1) {
+          const queue = pending;
+          pending = [];
+          for (let i = 0; i < queue.length; i += concurrency) {
+            const batch = queue.slice(i, i + concurrency);
+            const results = await Promise.all(
+              batch.map((file) => postOrderAttachmentWithRetries(orderId, file)),
+            );
+            for (let j = 0; j < batch.length; j += 1) {
+              const file = batch[j]!;
+              const result = results[j]!;
+              if (result.ok) {
+                done += 1;
+                setBackgroundOrderUploadProgress(trackerId, done);
+                if (result.warning) {
+                  warnings.push(result.warning);
+                }
+              } else if (round < rounds) {
+                pending.push(file);
+              } else {
+                failedFiles.push(file);
+                fails.push(`${file.name}: ${result.error}`);
+              }
             }
           }
         }
+        return { done, warnings, fails, failedFiles };
+      };
+      const armRetry = (retryFiles: File[], fails: string[]) => {
+        failBackgroundOrderUpload(trackerId, {
+          error: `Не удалось загрузить ${fails.length} файл(ов)`,
+          total: retryFiles.length,
+          onRetry: async () => {
+            const retry = await runUploadRound(retryFiles);
+            if (retry.fails.length === 0) {
+              const base =
+                retry.done === 1
+                  ? "Файл загружен. Вложение отправлено в Kaiten."
+                  : `Файлы загружены (${retry.done}). Вложения отправлены в Kaiten.`;
+              setUploadOk(
+                retry.warnings.length > 0
+                  ? `${base} ${retry.warnings.join(" · ")}`
+                  : base,
+              );
+              completeBackgroundOrderUpload(trackerId, {
+                success: true,
+              });
+              return;
+            }
+            setUploadError(
+              `Не удалось загрузить ${retry.fails.length} файл(ов): ${retry.fails.join(" · ")}`,
+            );
+            armRetry(retry.failedFiles, retry.fails);
+          },
+        });
+      };
+      try {
+        const first = await runUploadRound(arr);
+        if (first.fails.length > 0) {
+          setUploadError(
+            `Не удалось загрузить ${first.fails.length} файл(ов): ${first.fails.join(" · ")}`,
+          );
+          armRetry(first.failedFiles, first.fails);
+          return;
+        }
         const base =
-          done === 1
+          first.done === 1
             ? "Файл загружен. Вложение отправлено в Kaiten."
-            : `Файлы загружены (${done}). Вложения отправлены в Kaiten.`;
-        setUploadOk(warnings.length > 0 ? `${base} ${warnings.join(" · ")}` : base);
+            : `Файлы загружены (${first.done}). Вложения отправлены в Kaiten.`;
+        setUploadOk(
+          first.warnings.length > 0
+            ? `${base} ${first.warnings.join(" · ")}`
+            : base,
+        );
+        completeBackgroundOrderUpload(trackerId, {
+          success: true,
+        });
       } catch (e) {
         setUploadError(e instanceof Error ? e.message : "Ошибка загрузки файлов");
+        failBackgroundOrderUpload(trackerId, {
+          error: "Ошибка загрузки файлов",
+          total: arr.length,
+          onRetry: async () => {
+            const retry = await runUploadRound(arr);
+            if (retry.fails.length === 0) {
+              completeBackgroundOrderUpload(trackerId, {
+                success: true,
+              });
+              return;
+            }
+            armRetry(retry.failedFiles, retry.fails);
+          },
+        });
       } finally {
         setUploading(false);
       }
     },
-    [orderId],
+    [orderId, orderNumber],
   );
 
   const onPasteIntoMessage = useCallback(

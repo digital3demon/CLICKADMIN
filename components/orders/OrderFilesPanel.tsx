@@ -6,6 +6,12 @@ import {
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
 } from "@/lib/crm-upload-limits";
 import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
+import {
+  completeBackgroundOrderUpload,
+  failBackgroundOrderUpload,
+  setBackgroundOrderUploadProgress,
+  startBackgroundOrderUpload,
+} from "@/lib/background-order-upload-tracker";
 
 const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 
@@ -26,6 +32,7 @@ function formatSize(n: number): string {
 
 export function OrderFilesPanel({
   orderId,
+  orderNumber,
   listenPaste,
   pendingFiles,
   onPendingChange,
@@ -33,6 +40,7 @@ export function OrderFilesPanel({
 }: {
   /** null — черновик: файлы только в pendingFiles до сохранения наряда */
   orderId: string | null;
+  orderNumber?: string | null;
   /** Вешать обработчик вставки на window (только если в буфере есть файлы) */
   listenPaste: boolean;
   pendingFiles?: File[];
@@ -95,34 +103,110 @@ export function OrderFilesPanel({
       setBusy(true);
       setUploadWarn(null);
       setLoadError(null);
-      try {
-        for (let i = 0; i < arr.length; i++) {
-          const file = arr[i]!;
-          if (file.size <= 0) continue;
+      const trackerId = startBackgroundOrderUpload({
+        orderId,
+        orderNumber: orderNumber ?? orderId,
+        total: arr.length,
+      });
+      const runUploadRound = async (queueFiles: File[]) => {
+        let done = 0;
+        const fails: string[] = [];
+        const failedFiles: File[] = [];
+        const rounds = 3;
+        const concurrency = 2;
+        let pending = queueFiles.filter((file) => file.size > 0);
+        for (const file of pending) {
           if (file.size > MAX_BYTES) {
             throw new Error(CRM_UPLOAD_TOO_LARGE_MESSAGE);
           }
-          if (i > 0) {
-            await new Promise((r) => setTimeout(r, 70));
+        }
+        for (let round = 1; round <= rounds && pending.length > 0; round += 1) {
+          const queue = pending;
+          pending = [];
+          for (let i = 0; i < queue.length; i += concurrency) {
+            const batch = queue.slice(i, i + concurrency);
+            const results = await Promise.all(
+              batch.map((file) => postOrderAttachmentWithRetries(orderId, file)),
+            );
+            for (let j = 0; j < batch.length; j += 1) {
+              const file = batch[j]!;
+              const result = results[j]!;
+              if (result.ok) {
+                done += 1;
+                setBackgroundOrderUploadProgress(trackerId, done);
+                if ("warning" in result && result.warning?.trim()) {
+                  const w = result.warning.trim();
+                  setUploadWarn((prev) => (prev ? `${prev} · ${w}` : w));
+                }
+              } else if (round < rounds) {
+                pending.push(file);
+              } else {
+                failedFiles.push(file);
+                fails.push(`${file.name}: ${result.error}`);
+              }
+            }
           }
-          const result = await postOrderAttachmentWithRetries(orderId, file);
-          if (!result.ok) {
-            throw new Error(result.error);
-          }
-          if ("warning" in result && result.warning?.trim()) {
-            const w = result.warning.trim();
-            setUploadWarn((prev) => (prev ? `${prev} · ${w}` : w));
-          }
+        }
+        return { fails, failedFiles };
+      };
+      const armRetry = (retryFiles: File[], fails: string[]) => {
+        failBackgroundOrderUpload(trackerId, {
+          error: `Не удалось загрузить ${fails.length} файл(ов)`,
+          total: retryFiles.length,
+          onRetry: async () => {
+            const retry = await runUploadRound(retryFiles);
+            if (retry.fails.length === 0) {
+              await refreshList();
+              onServerListChange?.();
+              completeBackgroundOrderUpload(trackerId, {
+                success: true,
+              });
+              return;
+            }
+            setLoadError(
+              `Не удалось загрузить ${retry.fails.length} файл(ов): ${retry.fails.join(" · ")}`,
+            );
+            armRetry(retry.failedFiles, retry.fails);
+          },
+        });
+      };
+      try {
+        const first = await runUploadRound(arr);
+        if (first.fails.length > 0) {
+          setLoadError(
+            `Не удалось загрузить ${first.fails.length} файл(ов): ${first.fails.join(" · ")}`,
+          );
+          armRetry(first.failedFiles, first.fails);
+          return;
         }
         await refreshList();
         onServerListChange?.();
+        completeBackgroundOrderUpload(trackerId, {
+          success: true,
+        });
       } catch (e) {
         setLoadError(e instanceof Error ? e.message : "Ошибка загрузки");
+        failBackgroundOrderUpload(trackerId, {
+          error: "Ошибка загрузки файлов",
+          total: arr.length,
+          onRetry: async () => {
+            const retry = await runUploadRound(arr);
+            if (retry.fails.length === 0) {
+              await refreshList();
+              onServerListChange?.();
+              completeBackgroundOrderUpload(trackerId, {
+                success: true,
+              });
+              return;
+            }
+            armRetry(retry.failedFiles, retry.fails);
+          },
+        });
       } finally {
         setBusy(false);
       }
     },
-    [orderId, refreshList, onServerListChange],
+    [orderId, orderNumber, refreshList, onServerListChange],
   );
 
   const onPickFiles = useCallback(
