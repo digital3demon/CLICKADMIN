@@ -1096,6 +1096,12 @@ export function KanbanCardModal({
                     onChange={(e) => {
                       void (async () => {
                         const v = e.target.value;
+                        const selectedTypeName =
+                          v.trim().length > 0
+                            ? ((board.cardTypes || kaitenCardTypes()).find(
+                                (t) => t.id === v,
+                              )?.name ?? null)
+                            : null;
                         if (card.linkedOrderId) {
                           const hasKaiten =
                             card.kaitenCardId != null &&
@@ -1103,6 +1109,7 @@ export function KanbanCardModal({
                           if (hasKaiten) {
                             const r = await patchOrderKaitenCard(card.linkedOrderId, {
                               kaitenCardTypeId: v.trim() ? v : null,
+                              kaitenCardTypeName: selectedTypeName,
                             });
                             if (!r.ok) {
                               toast(r.error, true);
@@ -1117,6 +1124,7 @@ export function KanbanCardModal({
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({
                                   kaitenCardTypeId: v.trim() ? v : null,
+                                  kaitenCardTypeName: selectedTypeName,
                                 }),
                               },
                             );

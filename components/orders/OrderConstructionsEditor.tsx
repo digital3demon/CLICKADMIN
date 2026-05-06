@@ -9,7 +9,6 @@ import {
 } from "@/components/orders/new-order-form/PriceListPickModal";
 import { PriceListLineToothModal } from "@/components/orders/new-order-form/PriceListLineToothModal";
 import { parseDraftDiscountPercentString } from "@/lib/format-order-construction";
-import { draftPriceListRowIsCorrectionKp } from "@/lib/pricing/correction-price-item";
 
 const inp =
   "w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]";
@@ -543,12 +542,11 @@ export function OrderConstructionsEditor({
                     <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase text-[var(--text-muted)]">
                       Цена за ед., ₽
                       <input
-                        className={inp}
+                        className={`${inp} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`}
                         value={row.unitPrice}
-                        onChange={(e) =>
-                          patch(idx, { unitPrice: e.target.value })
-                        }
-                        placeholder="пусто — без цены"
+                        readOnly
+                        title="Цена рассчитывается автоматически. Меняется скидкой и срочностью."
+                        placeholder="авто"
                       />
                     </label>
                     <label className="flex min-w-0 flex-col gap-0.5 text-[10px] font-medium uppercase text-[var(--text-muted)]">
@@ -586,7 +584,6 @@ export function OrderConstructionsEditor({
       <div className="grid min-w-0 grid-cols-1 gap-3 pb-1 pt-1 sm:grid-cols-2">
         {value.map((row, idx) => {
           if (row.kind !== "priceList") return null;
-          const kpLockedUnitPrice = draftPriceListRowIsCorrectionKp(row);
           return (
             <div
               key={`pl-${idx}`}
@@ -641,26 +638,11 @@ export function OrderConstructionsEditor({
                       type="number"
                       min={0}
                       step={0.01}
-                      className={
-                        kpLockedUnitPrice
-                          ? `${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`
-                          : financeInputClass
-                      }
+                      className={`${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`}
                       value={row.unitPrice}
                       placeholder="—"
-                      readOnly={kpLockedUnitPrice}
-                      title={
-                        kpLockedUnitPrice
-                          ? "Для коррекции / переделки сумму меняет только скидка на строке"
-                          : undefined
-                      }
-                      onChange={(e) => {
-                        if (kpLockedUnitPrice) return;
-                        const v = e.target.value.trim();
-                        patch(idx, {
-                          unitPrice: v,
-                        });
-                      }}
+                      readOnly
+                      title="Цена из прайса/индивидуальной цены. Меняется только скидкой и срочностью."
                     />
                   </label>
                   <label className="min-w-0 flex flex-col gap-0.5 text-[10px] font-medium lowercase tracking-wide text-[var(--text-muted)]">

@@ -112,7 +112,46 @@ type PatchBody = {
    * Пустая строка или null — снять тип только в CRM (в Kaiten тип не трогаем).
    */
   kaitenCardTypeId?: string | null;
+  /** Человекочитаемое имя типа (fallback при несовпадении id между канбаном и БД CRM). */
+  kaitenCardTypeName?: string | null;
 };
+
+function normalizeKaitenTypeName(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+async function findTenantKaitenCardTypeByIdOrName(
+  prisma: Awaited<ReturnType<typeof getClientsPrisma>>,
+  tenantId: string,
+  rawId: string,
+  rawName?: string | null,
+): Promise<{ id: string; externalTypeId: number } | null> {
+  const id = String(rawId || "").trim();
+  if (!id) return null;
+  let row = await prisma.kaitenCardType.findFirst({
+    where: { tenantId, id },
+    select: { id: true, externalTypeId: true },
+  });
+  if (row) return row;
+  const legacyName = legacyKaitenTypeName(id);
+  if (legacyName) {
+    row = await prisma.kaitenCardType.findFirst({
+      where: { tenantId, name: legacyName },
+      select: { id: true, externalTypeId: true },
+    });
+    if (row) return row;
+  }
+  const name = typeof rawName === "string" ? rawName.trim() : "";
+  if (!name) return null;
+  const needle = normalizeKaitenTypeName(name);
+  if (!needle) return null;
+  const candidates = await prisma.kaitenCardType.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true, name: true, externalTypeId: true },
+  });
+  const hit = candidates.find((x) => normalizeKaitenTypeName(x.name) === needle);
+  return hit ? { id: hit.id, externalTypeId: hit.externalTypeId } : null;
+}
 
 /**
  * Не перезаписывать блокировку в Prisma при PATCH без `blocked`: ответ Kaiten часто без
@@ -656,6 +695,7 @@ type KaitenPostBody =
       action: "create";
       kaitenTrackLane?: KaitenTrackLane;
       kaitenCardTypeId?: string | null;
+      kaitenCardTypeName?: string | null;
       columnId?: number;
     }
   | { action: "link"; cardId: number };
@@ -722,6 +762,7 @@ export async function POST(
       action: "create";
       kaitenTrackLane?: KaitenTrackLane;
       kaitenCardTypeId?: string | null;
+      kaitenCardTypeName?: string | null;
       columnId?: number;
     };
 
@@ -740,19 +781,12 @@ export async function POST(
         data.kaitenCardType = { disconnect: true };
       } else {
         const kid = String(b.kaitenCardTypeId).trim();
-        let kt = await clientsPrisma.kaitenCardType.findFirst({
-          where: { tenantId, id: kid },
-          select: { id: true },
-        });
-        if (!kt) {
-          const legacyName = legacyKaitenTypeName(kid);
-          if (legacyName) {
-            kt = await clientsPrisma.kaitenCardType.findFirst({
-              where: { tenantId, name: legacyName },
-              select: { id: true },
-            });
-          }
-        }
+        const kt = await findTenantKaitenCardTypeByIdOrName(
+          clientsPrisma,
+          tenantId,
+          kid,
+          b.kaitenCardTypeName,
+        );
         if (!kt) {
           return NextResponse.json(
             { error: "Тип карточки Kaiten не найден" },
@@ -770,19 +804,12 @@ export async function POST(
         typeIdAfter = null;
       } else {
         const kid = String(b.kaitenCardTypeId).trim();
-        let kt = await clientsPrisma.kaitenCardType.findFirst({
-          where: { tenantId, id: kid },
-          select: { id: true },
-        });
-        if (!kt) {
-          const legacyName = legacyKaitenTypeName(kid);
-          if (legacyName) {
-            kt = await clientsPrisma.kaitenCardType.findFirst({
-              where: { tenantId, name: legacyName },
-              select: { id: true },
-            });
-          }
-        }
+        const kt = await findTenantKaitenCardTypeByIdOrName(
+          clientsPrisma,
+          tenantId,
+          kid,
+          b.kaitenCardTypeName,
+        );
         typeIdAfter = kt?.id ?? kid;
       }
     }
@@ -1188,19 +1215,12 @@ export async function PATCH(
       body.kaitenCardTypeId.trim().length > 0
     ) {
       const kid = body.kaitenCardTypeId.trim();
-      let kt = await clientsPrisma.kaitenCardType.findFirst({
-        where: { tenantId, id: kid },
-        select: { id: true, externalTypeId: true },
-      });
-      if (!kt) {
-        const legacyName = legacyKaitenTypeName(kid);
-        if (legacyName) {
-          kt = await clientsPrisma.kaitenCardType.findFirst({
-            where: { tenantId, name: legacyName },
-            select: { id: true, externalTypeId: true },
-          });
-        }
-      }
+      const kt = await findTenantKaitenCardTypeByIdOrName(
+        clientsPrisma,
+        tenantId,
+        kid,
+        body.kaitenCardTypeName,
+      );
       if (!kt) {
         return NextResponse.json(
           { error: "Тип карточки не найден" },

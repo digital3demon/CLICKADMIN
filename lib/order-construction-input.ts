@@ -192,11 +192,8 @@ export async function buildConstructionCreatesFromInput(
 
     const plid = trimOrNull(c.priceListItemId);
     if (plid) {
-      let unitPrice = price;
-      if (unitPrice == null) {
-        const rub = overridePriceByPlId.get(plid) ?? defaultPriceByPlId.get(plid);
-        if (rub != null) unitPrice = rub;
-      }
+      // Цена прайс-позиции всегда берётся из прайса/оверрайда, не из ручного ввода клиента.
+      const unitPrice = overridePriceByPlId.get(plid) ?? defaultPriceByPlId.get(plid) ?? null;
       let teethJson: string[] | undefined;
       if ("teethFdi" in c && Array.isArray(c.teethFdi)) {
         const teeth = c.teethFdi.map((x) => String(x));

@@ -12,7 +12,6 @@ import {
   type DetailLine,
   newDetailLineId,
 } from "./detail-lines";
-import { detailPriceListLabelLooksLikeCorrectionKp } from "@/lib/pricing/correction-price-item";
 
 type ConstructionTypeRow = { id: string; name: string };
 
@@ -201,8 +200,6 @@ export function PodrobnoSection({
       {priceLines.length === 0 ? null : (
         <div className="flex gap-3 overflow-x-auto overscroll-x-contain pb-1 pt-1 [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]">
           {priceLines.map((line) => {
-            const kpLockedUnitPrice =
-              detailPriceListLabelLooksLikeCorrectionKp(line.label);
             return (
             <div
               key={line.id}
@@ -262,27 +259,11 @@ export function PodrobnoSection({
                     type="number"
                     min={0}
                     step={0.01}
-                    className={
-                      kpLockedUnitPrice
-                        ? `${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`
-                        : financeInputClass
-                    }
+                    className={`${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`}
                     value={line.unitPrice ?? ""}
                     placeholder="—"
-                    readOnly={kpLockedUnitPrice}
-                    title={
-                      kpLockedUnitPrice
-                        ? "База из прайса; скидку на строке задайте в «Составе заказа»"
-                        : undefined
-                    }
-                    onChange={(e) => {
-                      if (kpLockedUnitPrice) return;
-                      const v = e.target.value.trim();
-                      patchPriceLine(line.id, {
-                        unitPrice:
-                          v === "" ? null : Math.max(0, Number(v) || 0),
-                      });
-                    }}
+                    readOnly
+                    title="Цена из прайса/индивидуальной цены. Меняется только скидкой и срочностью."
                   />
                 </label>
               </div>

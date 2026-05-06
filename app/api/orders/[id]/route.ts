@@ -89,6 +89,43 @@ function legacyKaitenTypeName(id: string): string | null {
   return typeof hit === "string" && hit.trim() ? hit.trim() : null;
 }
 
+function normalizeKaitenTypeName(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+async function findTenantKaitenCardTypeIdByAny(
+  prisma: Awaited<ReturnType<typeof getClientsPrisma>>,
+  tenantId: string,
+  rawId: string,
+  rawName?: string | null,
+): Promise<string | null> {
+  const id = String(rawId || "").trim();
+  if (!id) return null;
+  let row = await prisma.kaitenCardType.findFirst({
+    where: { tenantId, id },
+    select: { id: true },
+  });
+  if (row) return row.id;
+  const legacyName = legacyKaitenTypeName(id);
+  if (legacyName) {
+    row = await prisma.kaitenCardType.findFirst({
+      where: { tenantId, name: legacyName },
+      select: { id: true },
+    });
+    if (row) return row.id;
+  }
+  const name = typeof rawName === "string" ? rawName.trim() : "";
+  if (!name) return null;
+  const needle = normalizeKaitenTypeName(name);
+  if (!needle) return null;
+  const candidates = await prisma.kaitenCardType.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true, name: true },
+  });
+  const hit = candidates.find((x) => normalizeKaitenTypeName(x.name) === needle);
+  return hit?.id ?? null;
+}
+
 type PatchBody = {
   /** Ручная смена номера (уникальность в БД; при связи с Kaiten синхронизируется шапка карточки). */
   orderNumber?: string;
@@ -148,6 +185,8 @@ type PatchBody = {
   demoKanbanColumn?: string | null;
   /** Только демо-сессия: тип карточки (KaitenCardType в демо-БД) */
   kaitenCardTypeId?: string | null;
+  /** Человекочитаемое имя типа (fallback при несовпадении id между канбаном и БД CRM). */
+  kaitenCardTypeName?: string | null;
 };
 
 /** Поля шапки наряда, влияющие на заголовок/описание/срочность карточки Kaiten и зеркала канбана. */
@@ -969,26 +1008,19 @@ export async function PATCH(
       scalarData.kaitenCardTypeId = null;
     } else {
       const kid = String(body.kaitenCardTypeId).trim();
-      let kt = await clientsPrisma.kaitenCardType.findFirst({
-        where: { tenantId, id: kid },
-        select: { id: true },
-      });
-      if (!kt) {
-        const legacyName = legacyKaitenTypeName(kid);
-        if (legacyName) {
-          kt = await clientsPrisma.kaitenCardType.findFirst({
-            where: { tenantId, name: legacyName },
-            select: { id: true },
-          });
-        }
-      }
-      if (!kt) {
+      const resolvedId = await findTenantKaitenCardTypeIdByAny(
+        clientsPrisma,
+        tenantId,
+        kid,
+        body.kaitenCardTypeName,
+      );
+      if (!resolvedId) {
         return NextResponse.json(
           { error: "Тип карточки не найден" },
           { status: 400 },
         );
       }
-      scalarData.kaitenCardTypeId = kt.id;
+      scalarData.kaitenCardTypeId = resolvedId;
     }
   }
 
