@@ -115,6 +115,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const kaitenPullOnceRef = useRef(false);
   const standalonePushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const standalonePushInFlightRef = useRef(false);
+  const mirrorSyncInFlightRef = useRef(false);
+  const mirrorSyncQueuedRef = useRef(false);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Перед первым GET отдаём локальные карточки без наряда на сервер — иначе пустой ответ затрёт их. */
   const standalonePrimedRef = useRef(false);
@@ -123,6 +125,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   /** Наряды с сервера + локальные карточки без наряда (общие для тенанта). */
   const syncKanbanMirrorFromApi = useCallback(async () => {
+    if (mirrorSyncInFlightRef.current) {
+      mirrorSyncQueuedRef.current = true;
+      return;
+    }
+    mirrorSyncInFlightRef.current = true;
     try {
       if (isDemo) {
         const r = await fetch("/api/kanban/linked-orders", { credentials: "include" });
@@ -174,6 +181,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       });
     } catch {
       /* offline */
+    } finally {
+      mirrorSyncInFlightRef.current = false;
+      if (mirrorSyncQueuedRef.current) {
+        mirrorSyncQueuedRef.current = false;
+        window.setTimeout(() => {
+          void syncKanbanMirrorFromApi();
+        }, 120);
+      }
     }
   }, [isDemo]);
 
