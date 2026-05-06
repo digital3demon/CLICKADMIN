@@ -8,15 +8,21 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import {
   combineDueLocalCalendarDayAndHm,
   dueGridDayLatestLocal,
   dueHalfHourTimeOptions,
+  dueLabDayLatestLocal,
+  dueLabTimeOptions,
   dueLocalIsBefore,
   snapDatetimeLocalToDueGrid,
+  snapDatetimeLocalToLabDueGrid,
 } from "@/lib/order-due-datetime";
+
+export type DueDatetimeTimeGrid = "halfHour" | "labDue";
 
 const MONTHS_RU = [
   "Январь",
@@ -150,6 +156,15 @@ type DueDatetimeComboPickerProps = {
    * Для узкой полосы в шапке: у триггера нет `sm:min-w-[11rem]`, блок может сжиматься в одном flex-ряду.
    */
   fitRow?: boolean;
+  /** Под сеткой дней календаря в выпадающем окне (например «В теч. дня»). */
+  calendarFooter?: ReactNode;
+  /**
+   * Срок лабораторный — слоты из настроек организации и «в теч. дня» (чекбокс снаружи).
+   * Остальные поля — полчасовая сетка по умолчанию.
+   */
+  timeGrid?: DueDatetimeTimeGrid;
+  /** Для `timeGrid="labDue"`: список HH:mm из конфигурации (иначе — значения по умолчанию). */
+  labHmSlots?: readonly string[] | null;
 };
 
 export function DueDatetimeComboPicker({
@@ -166,6 +181,9 @@ export function DueDatetimeComboPicker({
   labelPlacement = "above",
   minLocal,
   fitRow = false,
+  calendarFooter,
+  timeGrid = "halfHour",
+  labHmSlots,
 }: DueDatetimeComboPickerProps) {
   const genId = useId();
   const triggerId = id ?? genId;
@@ -177,13 +195,25 @@ export function DueDatetimeComboPicker({
   const timeOptionRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const [pos, setPos] = useState({ top: 0, left: 0, width: 280 });
 
-  const timeOptions = useMemo(() => dueHalfHourTimeOptions(), []);
+  const timeOptions = useMemo(
+    () =>
+      timeGrid === "labDue"
+        ? dueLabTimeOptions(labHmSlots)
+        : dueHalfHourTimeOptions(),
+    [timeGrid, labHmSlots],
+  );
+
+  const snapToGrid = useMemo(() => {
+    if (timeGrid === "halfHour") return snapDatetimeLocalToDueGrid;
+    return (local: string) =>
+      snapDatetimeLocalToLabDueGrid(local, labHmSlots);
+  }, [timeGrid, labHmSlots]);
 
   const minTrim = (minLocal ?? "").trim();
 
   const snappedValue = useMemo(
-    () => (value.trim() ? snapDatetimeLocalToDueGrid(value) : ""),
-    [value],
+    () => (value.trim() ? snapToGrid(value) : ""),
+    [value, snapToGrid],
   );
 
   const selectedDate: Date | null = useMemo(() => {
@@ -276,25 +306,28 @@ export function DueDatetimeComboPicker({
 
   const today = new Date();
 
-  const defaultHm = "12:00";
+  const defaultHm =
+    timeGrid === "labDue"
+      ? dueLabTimeOptions(labHmSlots)[0] ?? "09:00"
+      : "12:00";
 
   const commit = useCallback(
     (local: string) => {
-      let s = snapDatetimeLocalToDueGrid(local);
+      let s = snapToGrid(local);
       if (minTrim && s && dueLocalIsBefore(s, minTrim)) {
         s = minTrim;
       }
       onChange(s);
     },
-    [onChange, minTrim],
+    [onChange, minTrim, snapToGrid],
   );
 
   useEffect(() => {
     if (!minTrim) return;
-    const s = value.trim() ? snapDatetimeLocalToDueGrid(value) : "";
+    const s = value.trim() ? snapToGrid(value) : "";
     if (!s || !dueLocalIsBefore(s, minTrim)) return;
     onChange(minTrim);
-  }, [minTrim, value, onChange]);
+  }, [minTrim, value, onChange, snapToGrid]);
 
   const onPickDay = (date: Date) => {
     const hm = selectedHm ?? defaultHm;
@@ -309,20 +342,24 @@ export function DueDatetimeComboPicker({
   const dayPickDisabled = useCallback(
     (cellDate: Date) => {
       if (!minTrim) return false;
-      return dueLocalIsBefore(dueGridDayLatestLocal(cellDate), minTrim);
+      const dayLatest =
+        timeGrid === "labDue"
+          ? dueLabDayLatestLocal(cellDate, labHmSlots)
+          : dueGridDayLatestLocal(cellDate);
+      return dueLocalIsBefore(dayLatest, minTrim);
     },
-    [minTrim],
+    [minTrim, timeGrid, labHmSlots],
   );
 
   const timePickDisabled = useCallback(
     (hm: string) => {
       if (!minTrim || !selectedDate) return false;
-      const cand = snapDatetimeLocalToDueGrid(
+      const cand = snapToGrid(
         combineDueLocalCalendarDayAndHm(selectedDate, hm),
       );
       return Boolean(cand && dueLocalIsBefore(cand, minTrim));
     },
-    [minTrim, selectedDate],
+    [minTrim, selectedDate, snapToGrid],
   );
 
   const minCalendarYm = useMemo(() => {
@@ -435,6 +472,11 @@ export function DueDatetimeComboPicker({
             );
           })}
         </div>
+        {calendarFooter ? (
+          <div className="mt-2 border-t border-[var(--card-border)] pt-2">
+            {calendarFooter}
+          </div>
+        ) : null}
       </div>
       <div className="flex w-full shrink-0 flex-col border-t border-[var(--card-border)] sm:w-[7.5rem] sm:border-t-0 sm:border-l">
         <div className="border-b border-[var(--card-border)] px-2 py-1.5 text-center text-xs font-semibold text-[var(--sidebar-blue)]">

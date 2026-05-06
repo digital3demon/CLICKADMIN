@@ -19,10 +19,13 @@ import {
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 import {
   clampDueLocalToMin,
+  clampLabDueLocalToMin,
   DUE_DAY_DEFAULT_HM,
   earliestDueGridLocalFromCreatedAt,
+  earliestLabDueGridLocalFromCreatedAt,
   parseHmFromDueGridLocal,
   snapDatetimeLocalToDueGrid,
+  snapDatetimeLocalToLabDueGrid,
 } from "@/lib/order-due-datetime";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 import {
@@ -44,7 +47,7 @@ import {
   withExtraSelectOption,
 } from "@/lib/order-clinic-client-fields";
 import {
-  orderPriceListKindRu,
+  orderPriceListFieldDisplayLabel,
   resolvedOrderPriceListKindFromContractors,
 } from "@/lib/order-price-list-from-contractors";
 import {
@@ -112,6 +115,8 @@ import {
 } from "@/lib/format-invoice-total-rub-display";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
 import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
+import { CORRECTION_PRICE_ITEM_CODE } from "@/lib/pricing/correction-price-item";
+import { fetchCorrectionPriceListMeta } from "@/lib/pricing/fetch-correction-price-list-meta";
 
 type CourierOption = { id: string; name: string };
 
@@ -399,6 +404,8 @@ export type OrderEditInitial = {
   /** Когда зашла работа (поступление); null — как при создании без явной даты */
   workReceivedAt: string | null;
   createdAt: string;
+  /** HH:mm для «Срок лабораторный» (конфигурация «Канбан и ERP»). */
+  labDueHmSlots: string[];
   invoiceIssued: boolean;
   invoiceNumber: string | null;
   invoicePaperDocs: boolean;
@@ -414,6 +421,8 @@ export type OrderEditInitial = {
   invoiceParsedSummaryText: string | null;
   invoicePaymentNotes: string | null;
   orderPriceListKind: "MAIN" | "CUSTOM" | null;
+  /** Активный каталог прайса (название в конфигурации) — для подписи, когда у контрагентов не задан индивидуальный прайс */
+  workspaceActivePriceListName: string | null;
   orderPriceListNote: string | null;
   prostheticsOrdered: boolean;
   correctionTrack: OrderCorrectionTrack | null;
@@ -628,10 +637,27 @@ export function OrderEditForm({
     [initial.createdAt],
   );
 
+  const dueLabMinLocal = useMemo(
+    () =>
+      earliestLabDueGridLocalFromCreatedAt(
+        initial.createdAt,
+        initial.labDueHmSlots,
+      ),
+    [initial.createdAt, initial.labDueHmSlots],
+  );
+
   const [dueLocal, setDueLocal] = useState(() => {
-    const raw = snapDatetimeLocalToDueGrid(isoToDatetimeLocal(initial.dueDate));
+    const slots = initial.labDueHmSlots;
+    const minLab = earliestLabDueGridLocalFromCreatedAt(
+      initial.createdAt,
+      slots,
+    );
+    const raw = snapDatetimeLocalToLabDueGrid(
+      isoToDatetimeLocal(initial.dueDate),
+      slots,
+    );
     if (!raw) return "";
-    return clampDueLocalToMin(raw, dueDateMinLocal);
+    return clampLabDueLocalToMin(raw, minLab, slots);
   });
   const [dueAdminsLocal, setDueAdminsLocal] = useState(() => {
     const raw = snapDatetimeLocalToDueGrid(
@@ -648,13 +674,23 @@ export function OrderEditForm({
   );
 
   useEffect(() => {
-    const min = earliestDueGridLocalFromCreatedAt(initial.createdAt);
-    const rawDue = snapDatetimeLocalToDueGrid(isoToDatetimeLocal(initial.dueDate));
-    setDueLocal(rawDue ? clampDueLocalToMin(rawDue, min) : "");
+    const minHalf = earliestDueGridLocalFromCreatedAt(initial.createdAt);
+    const slots = initial.labDueHmSlots;
+    const minLab = earliestLabDueGridLocalFromCreatedAt(
+      initial.createdAt,
+      slots,
+    );
+    const rawDue = snapDatetimeLocalToLabDueGrid(
+      isoToDatetimeLocal(initial.dueDate),
+      slots,
+    );
+    setDueLocal(
+      rawDue ? clampLabDueLocalToMin(rawDue, minLab, slots) : "",
+    );
     const rawAdm = snapDatetimeLocalToDueGrid(
       isoToDatetimeLocal(initial.dueToAdminsAt),
     );
-    setDueAdminsLocal(rawAdm ? clampDueLocalToMin(rawAdm, min) : "");
+    setDueAdminsLocal(rawAdm ? clampDueLocalToMin(rawAdm, minHalf) : "");
     setLabWholeDay(initial.kaitenAdminDueHasTime === false);
     setAppointmentWholeDay(initial.dueToAdminsHasTime === false);
   }, [
@@ -664,6 +700,7 @@ export function OrderEditForm({
     initial.dueToAdminsAt,
     initial.kaitenAdminDueHasTime,
     initial.dueToAdminsHasTime,
+    initial.labDueHmSlots,
   ]);
   const [invoiceIssued, setInvoiceIssued] = useState(initial.invoiceIssued);
   const [invoiceNumber, setInvoiceNumber] = useState(
@@ -847,6 +884,60 @@ export function OrderEditForm({
   const [draftLines, setDraftLines] = useState<DraftConstructionLine[]>(() =>
     constructionsToDraft(initial.constructions),
   );
+  /** Платная коррекция: строка прайса «КП» в составе появляется/убирается с выбором «Платно». */
+  useEffect(() => {
+    if (correctionTrack == null || !correctionPaid) {
+      setDraftLines((prev) =>
+        prev.filter(
+          (row) =>
+            !(
+              row.kind === "priceList" &&
+              row.priceListCode.trim() === CORRECTION_PRICE_ITEM_CODE
+            ),
+        ),
+      );
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const meta = await fetchCorrectionPriceListMeta({
+        clinicId,
+        doctorId,
+      });
+      if (cancelled || !meta) return;
+      setDraftLines((prev) => {
+        if (
+          prev.some(
+            (row) =>
+              row.kind === "priceList" &&
+              row.priceListCode.trim() === CORRECTION_PRICE_ITEM_CODE,
+          )
+        ) {
+          return prev;
+        }
+        const line: DraftConstructionLine = {
+          kind: "priceList",
+          constructionTypeId: "",
+          priceListItemId: meta.id,
+          priceListCode: meta.code,
+          priceListName: meta.name,
+          materialId: "",
+          shade: "",
+          quantity: 1,
+          unitPrice: String(meta.priceRub),
+          lineDiscountPercent: "0",
+          teethCsv: "",
+          arch: null,
+          bridgeFrom: "",
+          bridgeTo: "",
+        };
+        return [...prev, line];
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [correctionTrack, correctionPaid, clinicId, doctorId]);
   const [compositionDiscountPercent, setCompositionDiscountPercent] = useState(
     () => initial.compositionDiscountPercent ?? 0,
   );
@@ -1121,6 +1212,18 @@ export function OrderEditForm({
       clinicKind: clinicForPrice?.orderPriceListKind ?? null,
     });
   }, [clinicId, legalEntity, selectedClinic, effectiveFinanceClinic, doctorId, allDoctors]);
+
+  const orderPriceListUiLabel = useMemo(
+    () =>
+      orderPriceListFieldDisplayLabel(
+        resolvedOrderPriceListKind,
+        initial.workspaceActivePriceListName,
+      ),
+    [
+      resolvedOrderPriceListKind,
+      initial.workspaceActivePriceListName,
+    ],
+  );
 
   const paymentSelectOptions = useMemo(() => {
     const fin = effectiveFinanceClinic ?? selectedClinic;
@@ -1475,9 +1578,13 @@ export function OrderEditForm({
           urgentSelection,
           dueDate: dueLocal.trim()
             ? localDateTimeToIso(
-                clampDueLocalToMin(
-                  snapDatetimeLocalToDueGrid(dueLocal),
-                  dueDateMinLocal,
+                clampLabDueLocalToMin(
+                  snapDatetimeLocalToLabDueGrid(
+                    dueLocal,
+                    initial.labDueHmSlots,
+                  ),
+                  dueLabMinLocal,
+                  initial.labDueHmSlots,
                 ),
               )
             : null,
@@ -1567,6 +1674,8 @@ export function OrderEditForm({
     dueLocal,
     dueAdminsLocal,
     dueDateMinLocal,
+    dueLabMinLocal,
+    initial.labDueHmSlots,
     labWholeDay,
     appointmentWholeDay,
     invoiceIssued,
@@ -1867,7 +1976,7 @@ export function OrderEditForm({
                 className="mt-1 rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-sm text-[var(--text-strong)]"
                 title="Значение подставляется из карточки врача и клиники при сохранении наряда"
               >
-                {orderPriceListKindRu(resolvedOrderPriceListKind)}
+                {orderPriceListUiLabel}
               </div>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
                 Настраивается в карточке клиники и врача (как юрлицо): приоритет у
@@ -1947,69 +2056,84 @@ export function OrderEditForm({
         />
 
         <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-1">
-            <DueDatetimeComboPicker
-              id="oe-due"
-              label="Срок лабораторный"
-              labelPlacement="inside"
-              value={dueLocal}
-              minLocal={dueDateMinLocal}
-              title="Срок лабораторный (8:00–23:30, шаг 30 мин)"
-              className="w-full max-w-full"
-              onChange={(raw) => {
-                const s =
-                  raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
-                setDueLocal(s);
-                if (!s.trim()) {
-                  setLabWholeDay(true);
-                  return;
-                }
-                const hm = parseHmFromDueGridLocal(s);
-                if (hm && hm !== DUE_DAY_DEFAULT_HM) setLabWholeDay(false);
-              }}
-            />
-            <label className="flex cursor-pointer items-center gap-2 pl-1 text-sm text-[var(--text-secondary)]">
-              <input
-                type="checkbox"
-                className="rounded border-[var(--card-border)]"
-                checked={labWholeDay}
-                onChange={(e) => setLabWholeDay(e.target.checked)}
-              />
-              В теч. дня (без времени сдачи в шапке)
-            </label>
-          </div>
-          <div className="flex flex-col gap-1">
-            <DueDatetimeComboPicker
-              id="oe-due-admins"
-              label="Запись"
-              labelPlacement="inside"
-              value={dueAdminsLocal}
-              minLocal={dueDateMinLocal}
-              title="Дата записи пациента (8:00–23:30, шаг 30 мин)"
-              className="w-full max-w-full"
-              onChange={(raw) => {
-                const s =
-                  raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
-                setDueAdminsLocal(s);
-                if (!s.trim()) {
-                  setAppointmentWholeDay(true);
-                  return;
-                }
-                const hm = parseHmFromDueGridLocal(s);
-                if (hm && hm !== DUE_DAY_DEFAULT_HM)
-                  setAppointmentWholeDay(false);
-              }}
-            />
-            <label className="flex cursor-pointer items-center gap-2 pl-1 text-sm text-[var(--text-secondary)]">
-              <input
-                type="checkbox"
-                className="rounded border-[var(--card-border)]"
-                checked={appointmentWholeDay}
-                onChange={(e) => setAppointmentWholeDay(e.target.checked)}
-              />
-              В теч. дня (время записи не принципиально)
-            </label>
-          </div>
+          <DueDatetimeComboPicker
+            id="oe-due"
+            label="Срок лабораторный"
+            labelPlacement="inside"
+            value={dueLocal}
+            minLocal={dueLabMinLocal}
+            timeGrid="labDue"
+            labHmSlots={initial.labDueHmSlots}
+            title={`Срок лабораторный: ${initial.labDueHmSlots.join(", ")} или «В теч. дня»`}
+            className="w-full max-w-full"
+            onChange={(raw) => {
+              const s =
+                raw === ""
+                  ? ""
+                  : snapDatetimeLocalToLabDueGrid(
+                      raw,
+                      initial.labDueHmSlots,
+                    );
+              setDueLocal(s);
+              if (!s.trim()) {
+                setLabWholeDay(true);
+                return;
+              }
+              const hm = parseHmFromDueGridLocal(s);
+              if (hm && hm !== DUE_DAY_DEFAULT_HM) setLabWholeDay(false);
+            }}
+            calendarFooter={
+              <label
+                htmlFor="oe-lab-whole-day"
+                className="flex cursor-pointer items-center gap-2 text-xs text-[var(--text-secondary)]"
+              >
+                <input
+                  id="oe-lab-whole-day"
+                  type="checkbox"
+                  className="rounded border-[var(--card-border)]"
+                  checked={labWholeDay}
+                  onChange={(e) => setLabWholeDay(e.target.checked)}
+                />
+                В теч. дня
+              </label>
+            }
+          />
+          <DueDatetimeComboPicker
+            id="oe-due-admins"
+            label="Запись"
+            labelPlacement="inside"
+            value={dueAdminsLocal}
+            minLocal={dueDateMinLocal}
+            title="Дата записи пациента (8:00–23:30, шаг 30 мин)"
+            className="w-full max-w-full"
+            onChange={(raw) => {
+              const s =
+                raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
+              setDueAdminsLocal(s);
+              if (!s.trim()) {
+                setAppointmentWholeDay(true);
+                return;
+              }
+              const hm = parseHmFromDueGridLocal(s);
+              if (hm && hm !== DUE_DAY_DEFAULT_HM)
+                setAppointmentWholeDay(false);
+            }}
+            calendarFooter={
+              <label
+                htmlFor="oe-appt-whole-day"
+                className="flex cursor-pointer items-center gap-2 text-xs text-[var(--text-secondary)]"
+              >
+                <input
+                  id="oe-appt-whole-day"
+                  type="checkbox"
+                  className="rounded border-[var(--card-border)]"
+                  checked={appointmentWholeDay}
+                  onChange={(e) => setAppointmentWholeDay(e.target.checked)}
+                />
+                В теч. дня
+              </label>
+            }
+          />
         </div>
       </section>
 
@@ -2969,7 +3093,7 @@ export function OrderEditForm({
         </>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-4 xl:gap-3 xl:items-stretch">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-4 xl:gap-3 xl:items-start">
             {oeColCustomer}
             {oeColDeadlines}
             {oeColFiles}

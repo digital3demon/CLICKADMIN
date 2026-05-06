@@ -6,6 +6,9 @@ import type {
   KanbanAutomationRule,
 } from "@/lib/kanban/types";
 import { createEmptyAutomationRule } from "@/lib/kanban/automations";
+import { useMemo } from "react";
+import { mergeKanbanPickerUsers, pickerRowLabel } from "./KanbanPersonAvatar";
+import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 import { IconPlus, IconTrash } from "./kanban-icons";
 
 type Props = {
@@ -38,7 +41,16 @@ function KanbanActionEditor({
   onChange: (next: KanbanAutomationAction) => void;
 }) {
   const cols = board.columns || [];
-  const users = board.users || [];
+  const { list: crmList } = useKanbanCrmUsers();
+  const pickerUsers = useMemo(
+    () =>
+      mergeKanbanPickerUsers(
+        crmList,
+        board.users || [],
+        board.excludedCrmUserIds,
+      ),
+    [crmList, board.users, board.excludedCrmUserIds],
+  );
   const types = board.cardTypes || [];
 
   return (
@@ -51,7 +63,11 @@ function KanbanActionEditor({
           onChange={(e) => {
             const t = e.target.value as KanbanAutomationAction["type"];
             if (t === "move_to_column") onChange({ type: "move_to_column", columnId: cols[0]?.id ?? "" });
-            else if (t === "add_assignee") onChange({ type: "add_assignee", userId: users[0]?.id ?? "" });
+            else if (t === "add_assignee")
+              onChange({
+                type: "add_assignee",
+                userId: pickerUsers[0]?.id ?? "",
+              });
             else if (t === "set_due_in_days") onChange({ type: "set_due_in_days", days: 7 });
             else if (t === "clear_due") onChange({ type: "clear_due" });
             else if (t === "add_comment") onChange({ type: "add_comment", text: "" });
@@ -91,9 +107,9 @@ function KanbanActionEditor({
             value={action.userId}
             onChange={(e) => onChange({ ...action, userId: e.target.value })}
           >
-            {users.map((u) => (
+            {pickerUsers.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.name}
+                {pickerRowLabel(u)}
               </option>
             ))}
           </select>

@@ -225,11 +225,7 @@ function KanbanCardView({
         style={typeRing}
       >
         <article
-          className={`relative overflow-visible border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,transform,border-color] dark:border-white/[0.1] rounded-[8px] max-md:rounded-[6px] ${
-            blocked
-              ? "cursor-default dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)]"
-              : "cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)]"
-          } ${blocked ? "" : "hover:shadow-[var(--kanban-shadow-elevated)]"}`}
+          className={`relative overflow-visible border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,transform,border-color] dark:border-white/[0.1] rounded-[8px] max-md:rounded-[6px] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] hover:shadow-[var(--kanban-shadow-elevated)]`}
           {...(dragListeners ?? {})}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest(".card-more-menu")) return;
@@ -467,17 +463,16 @@ function SortableKanbanCard({
   onRequestDeleteCard: (id: string) => void;
   allowMoveToOtherBoard: boolean;
 }) {
-  const blocked = isCardBlocked(card);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: card.id,
-      disabled: dndLocked || blocked,
+      disabled: dndLocked,
     });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.55 : undefined,
-    ...(dndLocked || blocked ? {} : { touchAction: "none" as const }),
+    ...(dndLocked ? {} : { touchAction: "none" as const }),
   };
 
   return (
@@ -491,7 +486,7 @@ function SortableKanbanCard({
         onMoveCard={() => onRequestMoveCard(card.id)}
         onArchiveCard={() => onRequestArchiveCard(card.id)}
         onDeleteCard={() => onRequestDeleteCard(card.id)}
-        dragListeners={blocked || dndLocked ? undefined : listeners}
+        dragListeners={dndLocked ? undefined : listeners}
         allowMoveToOtherBoard={allowMoveToOtherBoard}
       />
     </div>

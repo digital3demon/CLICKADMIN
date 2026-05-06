@@ -12,8 +12,8 @@ export default async function DirectoryKanbanBoardsPage() {
   const role: UserRole = session?.role ?? "USER";
   return (
     <ModuleFrame
-      title="Канбан: доски"
-      description="Создание досок, переименование, типы карточек и участники для встроенного канбана (страница «Канбан» в меню). Отдельно от интеграции Kaiten API — см. раздел «Кайтен»."
+      title="Канбан и ERP"
+      description="Доски встроенного канбана (страница «Канбан» в меню), слоты времени для поля «Срок лабораторный» в нарядах. Интеграция Kaiten API — в разделе «Кайтен»."
     >
       <DirectoryKanbanBoardsClient isDemo={isDemo} sessionRole={role} />
       <p className="mt-8 text-sm">

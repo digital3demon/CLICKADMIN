@@ -1,4 +1,7 @@
-import type { OrderPriceListKind, PrismaClient } from "@prisma/client";
+import type {
+  OrderPriceListKind,
+  PrismaClient,
+} from "@prisma/client";
 
 /**
  * Прайс в наряде: сначала значение из карточки врача, иначе из карточки клиники
@@ -47,4 +50,31 @@ export function orderPriceListKindRu(
   if (v === "MAIN") return "Основной каталог";
   if (v === "CUSTOM") return "Индивидуальный";
   return "Не задано";
+}
+
+/** Название активного каталога прайса в настройках рабочего пространства (наряды по умолчанию). */
+export async function fetchWorkspaceActivePriceListName(
+  prisma: PrismaClient,
+): Promise<string | null> {
+  const row = await prisma.priceListWorkspaceSettings.findFirst({
+    select: {
+      activePriceList: { select: { name: true } },
+    },
+  });
+  const n = row?.activePriceList?.name?.trim();
+  return n || null;
+}
+
+/**
+ * Поле «Прайс» на форме наряда: при отсутствии индивидуального условия у клиники/врача —
+ * показываем имя основного каталога из системы, не «Не задано».
+ */
+export function orderPriceListFieldDisplayLabel(
+  contractorResolvedKind: OrderPriceListKind | null | undefined,
+  workspaceActivePriceListName: string | null | undefined,
+): string {
+  if (contractorResolvedKind === "CUSTOM") return "Индивидуальный";
+  const name = (workspaceActivePriceListName ?? "").trim();
+  if (name) return name;
+  return "Основной каталог";
 }

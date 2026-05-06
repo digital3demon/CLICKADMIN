@@ -1,8 +1,35 @@
 import { describe, expect, it } from "vitest";
 import {
   CORRECTION_PRICE_ITEM_CODE,
+  detailPriceListLabelLooksLikeCorrectionKp,
+  draftPriceListRowIsCorrectionKp,
   sumCorrectionPriceLinesAllocatedRub,
 } from "@/lib/pricing/correction-price-item";
+
+describe("detailPriceListLabelLooksLikeCorrectionKp / draftPriceListRowIsCorrectionKp", () => {
+  it("узнаёт подпись КП и строку черновика", () => {
+    expect(detailPriceListLabelLooksLikeCorrectionKp("КП · Коррекция / переделка")).toBe(
+      true,
+    );
+    expect(
+      detailPriceListLabelLooksLikeCorrectionKp(
+        '7117 · Дистализирующий аппарат на 2 мини импланта',
+      ),
+    ).toBe(false);
+    expect(
+      draftPriceListRowIsCorrectionKp({
+        kind: "priceList",
+        priceListCode: CORRECTION_PRICE_ITEM_CODE,
+      }),
+    ).toBe(true);
+    expect(
+      draftPriceListRowIsCorrectionKp({
+        kind: "priceList",
+        priceListCode: "7117",
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("sumCorrectionPriceLinesAllocatedRub", () => {
   it("суммирует только строки с кодом КП", () => {

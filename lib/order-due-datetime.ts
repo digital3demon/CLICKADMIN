@@ -1,3 +1,8 @@
+import {
+  normalizeLabDueHmSlots,
+  snapLocalTimeToLabHm,
+} from "@/lib/lab-due-hm-slots";
+
 const MIN_TOTAL = 8 * 60;
 const MAX_TOTAL = 23 * 60 + 30;
 
@@ -16,6 +21,31 @@ function formatHm(totalMin: number): string {
   const hh = Math.floor(totalMin / 60);
   const mm = totalMin % 60;
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
+/** Слоты времени для срока лабораторного (настраиваются в конфигурации «Канбан и ERP»). */
+export function dueLabTimeOptions(slotsHm?: readonly string[] | null): string[] {
+  return [...normalizeLabDueHmSlots(slotsHm ?? null)];
+}
+
+/**
+ * Время срока лабораторного к ближайшему настроенному слоту (локально).
+ */
+export function snapDatetimeLocalToLabDueGrid(
+  local: string,
+  slotsHm?: readonly string[] | null,
+): string {
+  const t = local.trim();
+  if (!t) return "";
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const date = `${y}-${mo}-${day}`;
+  const total = d.getHours() * 60 + d.getMinutes();
+  const hm = snapLocalTimeToLabHm(total, slotsHm);
+  return `${date}T${hm}`;
 }
 
 /** Слоты времени для срока сдачи: 08:00–23:30 с шагом 30 мин (локально). */
@@ -125,6 +155,53 @@ export function dueLocalIsBefore(a: string, b: string): boolean {
   return x < y;
 }
 
+/**
+ * Первый настроенный слот не раньше `minLocal` (строки `yyyy-mm-ddTHH:mm`).
+ */
+export function advanceLocalToLabSlotAtOrAfter(
+  minLocal: string,
+  slotsHm?: readonly string[] | null,
+): string {
+  const t = minLocal.trim();
+  if (!t) return "";
+  const d0 = new Date(t);
+  if (Number.isNaN(d0.getTime())) return "";
+  const hms = normalizeLabDueHmSlots(slotsHm ?? null);
+  for (let add = 0; add < 370; add++) {
+    const d = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + add);
+    const ds = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    for (const hm of hms) {
+      const cand = `${ds}T${hm}`;
+      if (!dueLocalIsBefore(cand, t)) return cand;
+    }
+  }
+  return t;
+}
+
+export function earliestLabDueGridLocalFromCreatedAt(
+  createdIso: string,
+  slotsHm?: readonly string[] | null,
+): string {
+  const half = earliestDueGridLocalFromCreatedAt(createdIso);
+  return advanceLocalToLabSlotAtOrAfter(half, slotsHm);
+}
+
+/** Нижняя граница для поля «Срок лабораторный» с учётом настроенных слотов. */
+export function clampLabDueLocalToMin(
+  local: string,
+  minLocal: string,
+  slotsHm?: readonly string[] | null,
+): string {
+  const s = snapDatetimeLocalToLabDueGrid(local, slotsHm).trim();
+  const m = minLocal.trim();
+  if (!s) return "";
+  if (!m) return s;
+  return advanceLocalToLabSlotAtOrAfter(
+    dueLocalIsBefore(s, m) ? m : s,
+    slotsHm,
+  );
+}
+
 /** Ограничить значение срока снизу (обе строки уже в сетке полчаса). */
 export function clampDueLocalToMin(local: string, minLocal: string): string {
   const s = local.trim();
@@ -140,6 +217,15 @@ export function combineDueLocalCalendarDayAndHm(d: Date, hm: string): string {
   const mo = pad2(d.getMonth() + 1);
   const da = pad2(d.getDate());
   return `${y}-${mo}-${da}T${hm}`;
+}
+
+/** Последний допустимый слот дня для «срок лабораторный» (проверка min на календаре). */
+export function dueLabDayLatestLocal(
+  day: Date,
+  slotsHm?: readonly string[] | null,
+): string {
+  const hms = normalizeLabDueHmSlots(slotsHm ?? null);
+  return combineDueLocalCalendarDayAndHm(day, hms[hms.length - 1] ?? "14:00");
 }
 
 /** Последний допустимый слот сетки на календарный день `d` (локально). */

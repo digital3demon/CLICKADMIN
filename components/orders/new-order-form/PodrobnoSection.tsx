@@ -12,6 +12,7 @@ import {
   type DetailLine,
   newDetailLineId,
 } from "./detail-lines";
+import { detailPriceListLabelLooksLikeCorrectionKp } from "@/lib/pricing/correction-price-item";
 
 type ConstructionTypeRow = { id: string; name: string };
 
@@ -199,7 +200,10 @@ export function PodrobnoSection({
 
       {priceLines.length === 0 ? null : (
         <div className="flex gap-3 overflow-x-auto overscroll-x-contain pb-1 pt-1 [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]">
-          {priceLines.map((line) => (
+          {priceLines.map((line) => {
+            const kpLockedUnitPrice =
+              detailPriceListLabelLooksLikeCorrectionKp(line.label);
+            return (
             <div
               key={line.id}
               className="w-[min(100%,20rem)] shrink-0 space-y-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3"
@@ -258,10 +262,21 @@ export function PodrobnoSection({
                     type="number"
                     min={0}
                     step={0.01}
-                    className={financeInputClass}
+                    className={
+                      kpLockedUnitPrice
+                        ? `${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`
+                        : financeInputClass
+                    }
                     value={line.unitPrice ?? ""}
                     placeholder="—"
+                    readOnly={kpLockedUnitPrice}
+                    title={
+                      kpLockedUnitPrice
+                        ? "База из прайса; скидку на строке задайте в «Составе заказа»"
+                        : undefined
+                    }
                     onChange={(e) => {
+                      if (kpLockedUnitPrice) return;
                       const v = e.target.value.trim();
                       patchPriceLine(line.id, {
                         unitPrice:
@@ -309,7 +324,8 @@ export function PodrobnoSection({
                 )}
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 

@@ -40,6 +40,7 @@ export async function POST(req: Request) {
       syncedCount: 0,
       errorCount: 0,
       clicklabByOrderId: {},
+      kaitenLabMentionDbChanged: false,
       newCorrectionsImported: false,
       newProstheticsImported: false,
     });
@@ -67,10 +68,15 @@ export async function POST(req: Request) {
     const pendingProsthBefore = await prisma.orderProstheticsRequest.count({
       where: { resolvedAt: null, rejectedAt: null },
     });
-    const { titles, syncedCount, errorCount, clicklabByOrderId } =
-      await syncKaitenColumnTitlesForOrderIds(prisma, auth, orderIds, {
-        includeComments,
-      });
+    const {
+      titles,
+      syncedCount,
+      errorCount,
+      clicklabByOrderId,
+      kaitenLabMentionDbChanged,
+    } = await syncKaitenColumnTitlesForOrderIds(prisma, auth, orderIds, {
+      includeComments,
+    });
     const pendingCorrAfter = await prisma.orderChatCorrection.count({
       where: { resolvedAt: null, rejectedAt: null },
     });
@@ -86,6 +92,7 @@ export async function POST(req: Request) {
       syncedCount,
       errorCount,
       clicklabByOrderId,
+      kaitenLabMentionDbChanged,
       newCorrectionsImported,
       newProstheticsImported,
     });

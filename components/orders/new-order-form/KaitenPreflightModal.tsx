@@ -44,6 +44,8 @@ type KaitenPreflightModalProps = {
   /** Дублирование поля из шапки наряда — можно поправить перед сохранением. */
   labDueLocal: string;
   labDueMinLocal: string;
+  /** Слоты времени «Срок лабораторный» из конфигурации тенанта. */
+  labHmSlots?: readonly string[] | null;
   onLabDueLocalChange: (raw: string) => void;
   /** Ошибка сохранения наряда (видна поверх формы, пока открыта модалка). */
   saveError?: string | null;
@@ -80,6 +82,7 @@ export function KaitenPreflightModal({
   onConfirm,
   labDueLocal,
   labDueMinLocal,
+  labHmSlots,
   onLabDueLocalChange,
   saveError,
 }: KaitenPreflightModalProps) {
@@ -258,8 +261,14 @@ export function KaitenPreflightModal({
               labelPlacement="inside"
               value={labDueLocal}
               minLocal={labDueMinLocal}
+              timeGrid="labDue"
+              labHmSlots={labHmSlots ?? undefined}
               onChange={onLabDueLocalChange}
-              title="То же поле, что в шапке наряда (8:00–23:30, шаг 30 мин)"
+              title={
+                labHmSlots?.length
+                  ? `То же поле, что в шапке наряда: ${labHmSlots.join(", ")} или «В теч. дня»`
+                  : "То же поле, что в шапке наряда"
+              }
             />
           </div>
           <div

@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 
 const WINDOW = 10;
-/** Каждый N-й тик — полный синк с комментариями (@clicklab, корректировки из чата). */
-const FULL_COMMENT_SYNC_EVERY_N_TICKS = 3;
+/** Каждый тик — синк с комментариями (упоминания лаборатории, корректировки из чата). */
+const FULL_COMMENT_SYNC_EVERY_N_TICKS = 1;
 
 function isRateLimited(res: Response, data: { error?: string }): boolean {
   if (res.status === 429) return true;
@@ -79,6 +79,7 @@ export function OrderListKaitenPoller({
         newCorrectionsImported?: boolean;
         newProstheticsImported?: boolean;
         clicklabByOrderId?: Record<string, boolean>;
+        kaitenLabMentionDbChanged?: boolean;
       };
       if (!res.ok || isRateLimited(res, data)) {
         backoffRef.current = Date.now() + 90_000;
@@ -93,7 +94,8 @@ export function OrderListKaitenPoller({
       if (
         (data.syncedCount ?? 0) > 0 ||
         data.newCorrectionsImported ||
-        data.newProstheticsImported
+        data.newProstheticsImported ||
+        data.kaitenLabMentionDbChanged === true
       ) {
         router.refresh();
       }

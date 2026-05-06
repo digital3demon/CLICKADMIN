@@ -65,6 +65,8 @@ model Tenant {
   plan                  SubscriptionPlan @default(BASIC)
   /// Токен @упоминания «команда лаборатории» в чате Kaiten/канбана (ADMINISTRATOR + SENIOR_ADMINISTRATOR); null — «clicklab».
   kanbanAdminMentionTag String?
+  /// Слоты времени для поля «Срок лабораторный» в нарядах (JSON-массив строк HH:mm); null — 9:00 и 14:00.
+  labDueHmSlots         Json?
   /// Опция «Канбан» (доска в CRM), отдельно от тарифа
   addonKanban           Boolean          @default(false)
   /// null — без срока / вечная лицензия
@@ -90,6 +92,7 @@ model Tenant {
   userClientState       UserClientState[]
   /// Активные пользовательские сессии для ограничения устройств
   deviceSessions        UserDeviceSession[]
+  orderKaitenLabMentionAcks OrderKaitenLabMentionAck[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -511,6 +514,7 @@ model User {
   orderChatCorrectionsRejected     OrderChatCorrection[]     @relation("OrderChatCorrectionRejectedBy")
   orderProstheticsRequestsResolved OrderProstheticsRequest[] @relation("OrderProstheticsRequestResolvedBy")
   orderProstheticsRequestsRejected OrderProstheticsRequest[] @relation("OrderProstheticsRequestRejectedBy")
+  orderKaitenLabMentionAcks      OrderKaitenLabMentionAck[]
   /// Клиентские состояния на уровне пользователя (UI prefs, флаги и т.п.)
   clientState                   UserClientState[]
   deviceSessions                UserDeviceSession[]
@@ -782,6 +786,10 @@ model Order {
   kaitenBlockReason              String?
   /// В чате карточки Kaiten есть упоминание тега «лаборатория» (Tenant.kanbanAdminMentionTag); обновляется при синхронизации комментариев.
   kaitenChatHasLabMention        Boolean                   @default(false)
+  /// Последний «сигнал» для пользовательских подтверждений: новое упоминание в чате после просмотра (сравнивают с OrderKaitenLabMentionAck.ackAt).
+  kaitenLabMentionSignalAt       DateTime?
+  /// Макс. id комментария Kaiten с @лаборатории — чтобы не дублировать signal при повторном синке того же набора.
+  kaitenLabMentionWaterlineCommentId Int?
   /// Счёт по наряду выставлен клиенту
   invoiceIssued                  Boolean                   @default(false)
   /// Номер выставленного счёта (ручной ввод)
@@ -854,6 +862,7 @@ model Order {
   chatCorrections                OrderChatCorrection[]
   /// Заявки по протетике из чата (префикс «???»)
   prostheticsRequests            OrderProstheticsRequest[]
+  kaitenLabMentionAcks           OrderKaitenLabMentionAck[]
   /// Мягкое архивирование («удаление»): наряд скрыт из списков и канбана; номер YYMM-NNN снимается (плейхолдер `ARCH:id`), чтобы его можно было выдать другому наряду.
   archivedAt                     DateTime?
   createdAt                      DateTime                  @default(now())
@@ -871,6 +880,23 @@ model Order {
   @@index([courierDeliveryId])
   @@index([continuesFromOrderId])
   @@index([archivedAt, createdAt])
+}
+
+/// Пользователь отметил просмотр чата Kaiten при упоминании лаборатории; новый «сигнал» в Order снимает устаревание ack.
+model OrderKaitenLabMentionAck {
+  id       String   @id @default(cuid())
+  tenantId String
+  userId   String
+  orderId  String
+  ackAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orderId])
+  @@index([tenantId, userId])
+  @@index([orderId])
 }
 
 /// Корректировка состава: текст из чата Kaiten/канбана с префиксом «!!!»; принятие — галочка админом.

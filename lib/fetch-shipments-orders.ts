@@ -12,6 +12,8 @@ const shipmentOrderSelect = {
   dueToAdminsAt: true,
   createdAt: true,
   dueDate: true,
+  kaitenAdminDueHasTime: true,
+  kaitenCardTitleLabel: true,
   kaitenCardTitleMirror: true,
   kaitenCardId: true,
   demoKanbanColumn: true,

@@ -460,11 +460,12 @@ export function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function clampArchiveRetentionDays(raw: number | null | undefined): number {
-  if (!Number.isFinite(raw)) return 30;
+/** В JSON доски хранится срок в днях; в UI конфигурируют годы (×365). Макс. 30 лет. */
+export function clampArchiveRetentionDays(raw: number | null | undefined): number {
+  if (!Number.isFinite(raw)) return 365;
   const n = Math.round(Number(raw));
   if (n < 1) return 1;
-  if (n > 365) return 365;
+  if (n > 365 * 30) return 365 * 30;
   return n;
 }
 
@@ -807,6 +808,10 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
   if (!Array.isArray(board.accessUserIds)) board.accessUserIds = [];
   if (!Array.isArray(board.autoArchiveRules)) board.autoArchiveRules = [];
   if (!Array.isArray(board.archivedCards)) board.archivedCards = [];
+  if (!Array.isArray(board.excludedCrmUserIds)) board.excludedCrmUserIds = [];
+  board.excludedCrmUserIds = board.excludedCrmUserIds
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
   board.archiveRetentionDays = clampArchiveRetentionDays(board.archiveRetentionDays);
   board.accessUserIds = board.accessUserIds
     .map((x) => String(x || "").trim())
@@ -929,7 +934,8 @@ export function createBoardShell(boardId: string, title: string): KanbanBoard {
     cardTypes,
     automations: [],
     autoArchiveRules: [],
-    archiveRetentionDays: 30,
+    excludedCrmUserIds: [],
+    archiveRetentionDays: 365,
     archivedCards: [],
   };
 }
@@ -1750,7 +1756,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         patientName: row.patientName,
         doctor: { fullName: row.doctorFullName || "—" },
         dueDate: dueDateAt,
-        kaitenLabDueHasTime: true,
+        kaitenLabDueHasTime: row.kaitenAdminDueHasTime !== false,
         kaitenCardTitleLabel: row.kaitenCardTitleLabel,
         kaitenCardType: row.kaitenCardTypeName
           ? { name: row.kaitenCardTypeName }
@@ -1855,7 +1861,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       patientName: row.patientName,
       doctor: { fullName: row.doctorFullName || "—" },
       dueDate: dueDateAt,
-      kaitenLabDueHasTime: true,
+      kaitenLabDueHasTime: row.kaitenAdminDueHasTime !== false,
       kaitenCardTitleLabel: row.kaitenCardTitleLabel,
       kaitenCardType: row.kaitenCardTypeName
         ? { name: row.kaitenCardTypeName }

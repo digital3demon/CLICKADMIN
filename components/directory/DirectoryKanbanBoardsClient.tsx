@@ -20,8 +20,10 @@ import {
 } from "@/lib/kanban/model";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LabDueSlotsTenantSettings } from "@/components/directory/LabDueSlotsTenantSettings";
 import { KanbanAutomationsForm } from "@/components/kanban/KanbanAutomationsForm";
 import { KanbanBoardSettingsForm } from "@/components/kanban/KanbanBoardSettingsForm";
+import { KanbanCrmUsersProvider } from "@/components/kanban/kanban-crm-users-context";
 import { IconBoard, IconPlus } from "@/components/kanban/kanban-icons";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 
@@ -220,8 +222,12 @@ export function DirectoryKanbanBoardsClient({
   };
 
   return (
-    <>
+    <KanbanCrmUsersProvider>
+      <>
       <div className="space-y-8">
+        {!isDemo ? (
+          <LabDueSlotsTenantSettings canEdit={canEditKanbanAdminTag} />
+        ) : null}
         <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
           <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">
             Доски
@@ -314,7 +320,7 @@ export function DirectoryKanbanBoardsClient({
 
         <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
           <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">
-            Типы карточек и участники
+            Типы карточек и исключения из списков
           </h2>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             Относится к доске «{board.title}». Изменения сохраняются автоматически;
@@ -533,5 +539,6 @@ export function DirectoryKanbanBoardsClient({
         ))}
       </div>
     </>
+    </KanbanCrmUsersProvider>
   );
 }

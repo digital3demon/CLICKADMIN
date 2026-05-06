@@ -18,6 +18,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSiteOrigin } from "@/lib/site-origin-server";
+import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 export const dynamic = "force-dynamic";
 
 /** Колонка по ширине таблицы, к левому краю — как на странице «Заказы». */
@@ -61,6 +62,8 @@ export default async function ShipmentsPage({
     );
   }
 
+  const labDueHmSlots = await getLabDueHmSlotsForTenant(tenantId);
+
   const todayYmd = moscowTodayYmd();
   const defaultFrom = addCalendarDaysYmd(todayYmd, -7);
   const defaultTo = todayYmd;
@@ -97,6 +100,7 @@ export default async function ShipmentsPage({
             listHeading={`Приём пациента (МСК), окно ${todayYmd} 00:00 — ${addCalendarDaysYmd(todayYmd, 1)} 12:00 · нарядов: ${orders.length}`}
             isDemo={isDemo}
             siteOrigin={siteOrigin}
+            labDueHmSlots={labDueHmSlots}
           />
         </div>
       </ModuleFrame>
@@ -130,6 +134,7 @@ export default async function ShipmentsPage({
             listHeading={`Приём пациента (МСК), окно ${ymd} 00:00 — ${addCalendarDaysYmd(ymd, 1)} 12:00 · нарядов: ${orders.length}`}
             isDemo={isDemo}
             siteOrigin={siteOrigin}
+            labDueHmSlots={labDueHmSlots}
           />
         </div>
       </ModuleFrame>
@@ -221,6 +226,7 @@ export default async function ShipmentsPage({
             listHeadingScreen={false}
             isDemo={isDemo}
             siteOrigin={siteOrigin}
+            labDueHmSlots={labDueHmSlots}
           />
         ) : null}
       </div>

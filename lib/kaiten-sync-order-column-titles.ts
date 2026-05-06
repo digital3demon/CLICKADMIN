@@ -17,6 +17,7 @@ import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
+import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 
 const MAX_IDS = 10;
 /** Параллельные карточки — очередь в kaitenFetch + малый параллелизм снижает 429. */
@@ -43,6 +44,8 @@ export async function syncKaitenColumnTitlesForOrderIds(
   errorCount: number;
   /** Есть ли в комментариях упоминание тега лаборатории (Tenant.kanbanAdminMentionTag; подсветка «чат» в списке). */
   clicklabByOrderId: Record<string, boolean>;
+  /** Было ли изменение флага упоминания в БД (для router.refresh счётчика «Упоминания»). */
+  kaitenLabMentionDbChanged: boolean;
 }> {
   const uniq = [...new Set(orderIds.map((x) => x.trim()).filter(Boolean))].slice(
     0,
@@ -52,6 +55,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
   const clicklabByOrderId: Record<string, boolean> = {};
   let syncedCount = 0;
   let errorCount = 0;
+  let kaitenLabMentionDbChanged = false;
   const includeComments = opts?.includeComments === true;
   /** Без очереди 90ms между запросами — иначе фоновый опрос списка растягивается на десятки секунд. 429 обрабатывается в kaitenFetch. */
   const burst = { burst: true } as const;
@@ -127,25 +131,18 @@ export async function syncKaitenColumnTitlesForOrderIds(
           clicklabByOrderId[row.id] = computedLabMention;
           await syncOrderChatCorrectionsFromKaitenComments(db, row.id, comments);
           await syncOrderProstheticsRequestsFromKaitenComments(db, row.id, comments);
+          const labChanged = await syncKaitenLabMentionFromParsedComments(
+            db,
+            row.id,
+            comments,
+            row.tenant?.kanbanAdminMentionTag,
+          );
+          if (labChanged) kaitenLabMentionDbChanged = true;
         } catch (e) {
           console.error("[kaiten-titles-sync] chat corrections", row.id, e);
         }
       } else if (includeComments && commRes && !commRes.ok) {
         clicklabByOrderId[row.id] = false;
-      }
-      if (
-        includeComments &&
-        computedLabMention !== undefined &&
-        computedLabMention !== row.kaitenChatHasLabMention
-      ) {
-        try {
-          await db.order.update({
-            where: { id: row.id },
-            data: { kaitenChatHasLabMention: computedLabMention },
-          });
-        } catch (e) {
-          console.error("[kaiten-titles-sync] kaitenChatHasLabMention", row.id, e);
-        }
       }
       if (!cardRes.ok || !cardRes.card) {
         errorCount += 1;
@@ -211,5 +208,11 @@ export async function syncKaitenColumnTitlesForOrderIds(
     }
   }
 
-  return { titles, syncedCount, errorCount, clicklabByOrderId };
+  return {
+    titles,
+    syncedCount,
+    errorCount,
+    clicklabByOrderId,
+    kaitenLabMentionDbChanged,
+  };
 }

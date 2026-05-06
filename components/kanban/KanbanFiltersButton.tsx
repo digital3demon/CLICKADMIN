@@ -48,8 +48,9 @@ export function KanbanFiltersButton({
 }: KanbanFiltersButtonProps) {
   const { list: crmList } = useKanbanCrmUsers();
   const filterUserOptions = useMemo(
-    () => mergeKanbanPickerUsers(crmList, board.users),
-    [crmList, board.users],
+    () =>
+      mergeKanbanPickerUsers(crmList, board.users, board.excludedCrmUserIds),
+    [crmList, board.users, board.excludedCrmUserIds],
   );
   const [open, setOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");

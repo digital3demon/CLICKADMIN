@@ -4,6 +4,9 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getClientsPrisma, getOrdersPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
+import { getKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
+import { kaitenCommentsForSyncFromSnapshotPayload } from "@/lib/order-chat-correction-db";
+import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +119,11 @@ export async function GET() {
     const cardTypeById = new Map(cardTypes.map((x) => [x.id, x]));
     const priceItemById = new Map(priceItems.map((x) => [x.id, x]));
 
+    const tenantTagRow = await ordersPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { kanbanAdminMentionTag: true },
+    });
+
     const orders: KaitenLinkedOrderForKanban[] = rows.map((o) => {
       const invId = o.invoiceAttachmentId;
       const attRows = invId
@@ -164,6 +172,26 @@ export async function GET() {
         attachments,
       };
     });
+
+    void (async () => {
+      try {
+        const labTag = tenantTagRow?.kanbanAdminMentionTag;
+        for (const o of rows) {
+          if (o.kaitenCardId == null) continue;
+          const snap = getKaitenSnapshotCache(o.id);
+          if (snap == null) continue;
+          const comm = kaitenCommentsForSyncFromSnapshotPayload(snap);
+          await syncKaitenLabMentionFromParsedComments(
+            ordersPrisma,
+            o.id,
+            comm,
+            labTag,
+          );
+        }
+      } catch (e) {
+        console.error("[kanban/linked-orders] lab mention from snapshot", e);
+      }
+    })();
 
     return NextResponse.json({ orders });
   } catch (e) {

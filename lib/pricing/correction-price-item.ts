@@ -8,6 +8,31 @@ import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
  */
 export const CORRECTION_PRICE_ITEM_CODE = "КП";
 
+/** Черновик строки прайса с кодом КП (платная коррекция / переделка). */
+export function draftPriceListRowIsCorrectionKp(row: {
+  kind: string;
+  priceListCode?: string;
+}): boolean {
+  return (
+    row.kind === "priceList" &&
+    (row.priceListCode ?? "").trim() === CORRECTION_PRICE_ITEM_CODE
+  );
+}
+
+/**
+ * Строка «Подробно» из прайса — позиция КП по подписи (до перезагрузки конфигурации).
+ * Цену за ед. не редактируют вручную — только скидку на строке.
+ */
+export function detailPriceListLabelLooksLikeCorrectionKp(
+  label: string | undefined | null,
+): boolean {
+  const lab = (label ?? "").trim();
+  return (
+    lab.startsWith(`${CORRECTION_PRICE_ITEM_CODE} ·`) ||
+    /\bКоррекция\s*\/\s*переделка\b/i.test(lab)
+  );
+}
+
 type LineWithPl = {
   category: ConstructionCategory;
   quantity: number;

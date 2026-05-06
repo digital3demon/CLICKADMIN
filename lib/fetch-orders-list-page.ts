@@ -11,6 +11,7 @@ import {
   encodeOrdersListCursor,
 } from "@/lib/orders-list-cursor";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
+import { kaitenLabMentionPendingForUser } from "@/lib/order-kaiten-lab-mention-pending";
 
 /** Поля списка заказов (страница «Заказы» и GET /api/orders). */
 export const ordersListPageSelect = {
@@ -24,6 +25,8 @@ export const ordersListPageSelect = {
   paymentPartialRub: true,
   adminShippedOtpr: true,
   kaitenCardId: true,
+  kaitenChatHasLabMention: true,
+  kaitenLabMentionSignalAt: true,
   demoKanbanColumn: true,
   kaitenCardType: { select: { id: true, name: true } },
   kaitenColumnTitle: true,
@@ -71,6 +74,8 @@ export type OrderListPageRow = Omit<
   listCompositionMismatch: boolean;
   listPendingChatCorrections: boolean;
   listPendingProstheticsRequests: boolean;
+  /** Нужна ли янтарная индикация чата для текущего пользователя (с учётом ack в БД). */
+  listKaitenLabMentionHighlight: boolean;
 };
 
 function toOrderListPageRow(o: OrderListPageRowRaw): OrderListPageRow {
@@ -95,7 +100,40 @@ function toOrderListPageRow(o: OrderListPageRowRaw): OrderListPageRow {
     }),
     listPendingChatCorrections: (chatCorrections?.length ?? 0) > 0,
     listPendingProstheticsRequests: (prostheticsRequests?.length ?? 0) > 0,
+    listKaitenLabMentionHighlight: false,
   };
+}
+
+async function hydrateKaitenLabMentionForOrdersList(
+  db: PrismaClient,
+  userId: string | null | undefined,
+  rows: OrderListPageRow[],
+): Promise<OrderListPageRow[]> {
+  if (rows.length === 0) return rows;
+  if (!userId) {
+    return rows.map((r) => ({
+      ...r,
+      listKaitenLabMentionHighlight: kaitenLabMentionPendingForUser({
+        kaitenChatHasLabMention: r.kaitenChatHasLabMention,
+        kaitenLabMentionSignalAt: r.kaitenLabMentionSignalAt ?? null,
+        ackAt: null,
+      }),
+    }));
+  }
+  const ids = rows.map((r) => r.id);
+  const acks = await db.orderKaitenLabMentionAck.findMany({
+    where: { userId, orderId: { in: ids } },
+    select: { orderId: true, ackAt: true },
+  });
+  const ackMap = new Map(acks.map((a) => [a.orderId, a.ackAt]));
+  return rows.map((r) => ({
+    ...r,
+    listKaitenLabMentionHighlight: kaitenLabMentionPendingForUser({
+      kaitenChatHasLabMention: r.kaitenChatHasLabMention,
+      kaitenLabMentionSignalAt: r.kaitenLabMentionSignalAt ?? null,
+      ackAt: ackMap.get(r.id) ?? null,
+    }),
+  }));
 }
 
 async function fetchOrdersListPageAttentionFiltered(
@@ -255,6 +293,8 @@ export async function fetchOrdersListPage(
     search?: string | null | undefined;
     /** Фильтр по дате создания наряда (МСК), границы [start, endExclusive). */
     createdAtRange?: { start: Date; endExclusive: Date } | null | undefined;
+    /** Для подсветки «Упоминания»: учитываем OrderKaitenLabMentionAck текущего пользователя. */
+    ordersListForUserId?: string | null;
   },
 ): Promise<{
   orders: OrderListPageRow[];
@@ -325,7 +365,11 @@ export async function fetchOrdersListPage(
     );
     return {
       ...attention,
-      orders: await hydrateContractors(attention.orders),
+      orders: await hydrateKaitenLabMentionForOrdersList(
+        db,
+        opts.ordersListForUserId ?? null,
+        await hydrateContractors(attention.orders),
+      ),
     };
   }
 
@@ -350,5 +394,12 @@ export async function fetchOrdersListPage(
 
   const orders = await hydrateContractors(page.map((o) => toOrderListPageRow(o)));
 
-  return { orders, nextCursor };
+  return {
+    orders: await hydrateKaitenLabMentionForOrdersList(
+      db,
+      opts.ordersListForUserId ?? null,
+      orders,
+    ),
+    nextCursor,
+  };
 }

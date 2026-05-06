@@ -68,7 +68,9 @@ import {
 import { printOrderNarjadPdf } from "@/lib/print-order-narjad";
 import { OrderProstheticsBlock } from "@/components/orders/OrderProstheticsBlock";
 import { PodrobnoSection } from "./PodrobnoSection";
-import type { DetailLine } from "./detail-lines";
+import { type DetailLine, newDetailLineId } from "./detail-lines";
+import { detailPriceListLabelLooksLikeCorrectionKp } from "@/lib/pricing/correction-price-item";
+import { fetchCorrectionPriceListMeta } from "@/lib/pricing/fetch-correction-price-list-meta";
 import {
   KaitenPreflightModal,
   type KaitenSavePayload,
@@ -93,10 +95,17 @@ import {
 } from "@/lib/datetime-local";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 import {
+  DEFAULT_LAB_DUE_HM_SLOTS,
+  normalizeLabDueHmSlots,
+} from "@/lib/lab-due-hm-slots";
+import {
+  clampLabDueLocalToMin,
   DUE_DAY_DEFAULT_HM,
   earliestDueGridLocalFromCreatedAt,
+  earliestLabDueGridLocalFromCreatedAt,
   parseHmFromDueGridLocal,
   snapDatetimeLocalToDueGrid,
+  snapDatetimeLocalToLabDueGrid,
 } from "@/lib/order-due-datetime";
 import { writeClientState } from "@/lib/client-state-client";
 import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
@@ -141,6 +150,11 @@ const PAYMENT_OPTIONS = [
 const PLACEHOLDER_DOCTOR_ID = "sys-placeholder-doctor-reimport";
 const CLIENT_ORDER_TEXTAREA_MAX_HEIGHT = 240;
 const COMMENTS_TEXTAREA_MAX_HEIGHT = 160;
+
+function detailLineLooksLikeCorrectionKp(l: DetailLine): boolean {
+  if (l.kind !== "priceList") return false;
+  return detailPriceListLabelLooksLikeCorrectionKp(l.label);
+}
 
 export function NewOrderForm({
   panelId,
@@ -200,6 +214,9 @@ export function NewOrderForm({
   const [labWholeDay, setLabWholeDay] = useState(true);
   const [appointmentWholeDay, setAppointmentWholeDay] = useState(true);
   const [formOpenedAtIso] = useState(() => new Date().toISOString());
+  const [labDueHmSlots, setLabDueHmSlots] = useState<string[]>(() => [
+    ...DEFAULT_LAB_DUE_HM_SLOTS,
+  ]);
   const [quickOrder, setQuickOrder] = useState<QuickOrderState>(() => {
     if (initialSnapshot != null) {
       return mergeQuickOrderFromSnapshot(initialSnapshot.quickOrder);
@@ -275,6 +292,44 @@ export function NewOrderForm({
     () => earliestDueGridLocalFromCreatedAt(formOpenedAtIso),
     [formOpenedAtIso],
   );
+
+  const dueLabMinLocal = useMemo(
+    () =>
+      earliestLabDueGridLocalFromCreatedAt(formOpenedAtIso, labDueHmSlots),
+    [formOpenedAtIso, labDueHmSlots],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/tenant/lab-due-hm-slots", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const j = (await res.json()) as { slots?: unknown };
+        if (!res.ok || cancelled) return;
+        setLabDueHmSlots(normalizeLabDueHmSlots(j.slots ?? null));
+      } catch {
+        /* дефолт из состояния */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setWorkDueLocal((prev) => {
+      if (!prev.trim()) return prev;
+      const minLab = earliestLabDueGridLocalFromCreatedAt(
+        formOpenedAtIso,
+        labDueHmSlots,
+      );
+      const raw = snapDatetimeLocalToLabDueGrid(prev, labDueHmSlots);
+      return clampLabDueLocalToMin(raw, minLab, labDueHmSlots);
+    });
+  }, [labDueHmSlots, formOpenedAtIso]);
 
   const paymentSelectOptions = useMemo(() => {
     const fin = effectiveFinanceClinic ?? selectedClinic;
@@ -400,7 +455,7 @@ export function NewOrderForm({
         ),
       ) as LabWorkStatus,
     );
-    const wd = snapDatetimeLocalToDueGrid(s.workDueLocal ?? "");
+    const wd = snapDatetimeLocalToLabDueGrid(s.workDueLocal ?? "");
     setWorkDueLocal(wd);
     const pa =
       "patientAppointmentLocal" in s && typeof s.patientAppointmentLocal === "string"
@@ -459,6 +514,48 @@ export function NewOrderForm({
       setCorrectionPaid(false);
     }
   }, [correctionTrack]);
+
+  useEffect(() => {
+    if (correctionTrack == null || !correctionPaid) {
+      setDetailLines((prev) =>
+        prev.filter((l) => !detailLineLooksLikeCorrectionKp(l)),
+      );
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const meta = await fetchCorrectionPriceListMeta({
+        clinicId:
+          clinicId && clinicId !== ORDER_CLINIC_PRIVATE ? clinicId : null,
+        doctorId: doctorId.trim() ? doctorId : null,
+      });
+      if (cancelled || !meta) return;
+      setDetailLines((prev) => {
+        if (
+          prev.some(
+            (l) =>
+              l.kind === "priceList" && l.priceListItemId === meta.id,
+          )
+        ) {
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+            id: newDetailLineId(),
+            kind: "priceList",
+            priceListItemId: meta.id,
+            label: `${meta.code} · ${meta.name}`,
+            quantity: 1,
+            unitPrice: meta.priceRub,
+          },
+        ];
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [correctionTrack, correctionPaid, clinicId, doctorId]);
 
   const orderDraftSnapshot = useMemo<OrderDraftSnapshot>(
     () => ({
@@ -830,7 +927,9 @@ export function NewOrderForm({
                 : Number(urgentSelection),
             labWorkStatus,
             dueDate: workDueLocal.trim()
-              ? localDateTimeToIso(snapDatetimeLocalToDueGrid(workDueLocal))
+              ? localDateTimeToIso(
+                  snapDatetimeLocalToLabDueGrid(workDueLocal, labDueHmSlots),
+                )
               : null,
             dueToAdminsAt: appointmentIso,
             kaitenAdminDueHasTime: !labWholeDay,
@@ -964,6 +1063,7 @@ export function NewOrderForm({
       urgentSelection,
       labWorkStatus,
       workDueLocal,
+      labDueHmSlots,
       patientAppointmentLocal,
       labWholeDay,
       appointmentWholeDay,
@@ -1009,10 +1109,13 @@ export function NewOrderForm({
         saving={saving}
         saveError={saveError}
         labDueLocal={workDueLocal}
-        labDueMinLocal={dueDateMinLocal}
+        labDueMinLocal={dueLabMinLocal}
+        labHmSlots={labDueHmSlots}
         onLabDueLocalChange={(raw) => {
           setWorkDueLocal(
-            raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
+            raw === ""
+              ? ""
+              : snapDatetimeLocalToLabDueGrid(raw, labDueHmSlots),
           );
         }}
         onCloseModal={() => {
@@ -1268,71 +1371,83 @@ export function NewOrderForm({
                   title="Когда зашла работа; если не указать — считается момент занесения наряда"
                   className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
                 />
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <DueDatetimeComboPicker
-                    id={`${titleId}-work-due`}
-                    label="Срок лаборатории"
-                    labelPlacement="inside"
-                    value={workDueLocal}
-                    minLocal={dueDateMinLocal}
-                    onChange={(raw) => {
-                      const s =
-                        raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
-                      setWorkDueLocal(s);
-                      if (!s.trim()) {
-                        setLabWholeDay(true);
-                        return;
-                      }
-                      const hm = parseHmFromDueGridLocal(s);
-                      if (hm && hm !== DUE_DAY_DEFAULT_HM) setLabWholeDay(false);
-                    }}
-                    title="Срок лаборатории (8:00–23:30, шаг 30 мин)"
-                    className="w-full min-w-0 sm:min-w-[12rem]"
-                  />
-                  <label className="flex cursor-pointer items-center gap-2 pl-1 text-[0.7rem] leading-tight text-[var(--text-secondary)] sm:text-xs">
-                    <input
-                      type="checkbox"
-                      className="rounded border-[var(--card-border)]"
-                      checked={labWholeDay}
-                      onChange={(e) => setLabWholeDay(e.target.checked)}
-                    />
-                    В теч. дня (без времени сдачи в шапке)
-                  </label>
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <DueDatetimeComboPicker
-                    id={`${titleId}-patient-appt`}
-                    label="Запись"
-                    labelPlacement="inside"
-                    value={patientAppointmentLocal}
-                    minLocal={dueDateMinLocal}
-                    onChange={(raw) => {
-                      const s =
-                        raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
-                      setPatientAppointmentLocal(s);
-                      if (!s.trim()) {
-                        setAppointmentWholeDay(true);
-                        return;
-                      }
-                      const hm = parseHmFromDueGridLocal(s);
-                      if (hm && hm !== DUE_DAY_DEFAULT_HM)
-                        setAppointmentWholeDay(false);
-                    }}
-                    title="Дата и время записи пациента (8:00–23:30, шаг 30 мин)"
-                    className="w-full min-w-0 sm:min-w-[12rem]"
-                  />
-                  <label className="flex cursor-pointer items-center gap-2 pl-1 text-[0.7rem] leading-tight text-[var(--text-secondary)] sm:text-xs">
-                    <input
-                      type="checkbox"
-                      className="rounded border-[var(--card-border)]"
-                      checked={appointmentWholeDay}
-                      onChange={(e) =>
-                        setAppointmentWholeDay(e.target.checked)
-                      }
-                    />
-                    В теч. дня (время записи не принципиально)
-                  </label>
-                </div>
+                <DueDatetimeComboPicker
+                  id={`${titleId}-work-due`}
+                  label="Срок лаборатории"
+                  labelPlacement="inside"
+                  value={workDueLocal}
+                  minLocal={dueLabMinLocal}
+                  timeGrid="labDue"
+                  labHmSlots={labDueHmSlots}
+                  onChange={(raw) => {
+                    const s =
+                      raw === ""
+                        ? ""
+                        : snapDatetimeLocalToLabDueGrid(raw, labDueHmSlots);
+                    setWorkDueLocal(s);
+                    if (!s.trim()) {
+                      setLabWholeDay(true);
+                      return;
+                    }
+                    const hm = parseHmFromDueGridLocal(s);
+                    if (hm && hm !== DUE_DAY_DEFAULT_HM) setLabWholeDay(false);
+                  }}
+                  title={`Срок лаборатории: ${labDueHmSlots.join(", ")} или «В теч. дня»`}
+                  className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
+                  calendarFooter={
+                    <label
+                      htmlFor={`${titleId}-lab-whole-day`}
+                      className="flex cursor-pointer items-center gap-2 text-[0.7rem] leading-tight text-[var(--text-secondary)] sm:text-xs"
+                    >
+                      <input
+                        id={`${titleId}-lab-whole-day`}
+                        type="checkbox"
+                        className="rounded border-[var(--card-border)]"
+                        checked={labWholeDay}
+                        onChange={(e) => setLabWholeDay(e.target.checked)}
+                      />
+                      В теч. дня
+                    </label>
+                  }
+                />
+                <DueDatetimeComboPicker
+                  id={`${titleId}-patient-appt`}
+                  label="Запись"
+                  labelPlacement="inside"
+                  value={patientAppointmentLocal}
+                  minLocal={dueDateMinLocal}
+                  onChange={(raw) => {
+                    const s =
+                      raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
+                    setPatientAppointmentLocal(s);
+                    if (!s.trim()) {
+                      setAppointmentWholeDay(true);
+                      return;
+                    }
+                    const hm = parseHmFromDueGridLocal(s);
+                    if (hm && hm !== DUE_DAY_DEFAULT_HM)
+                      setAppointmentWholeDay(false);
+                  }}
+                  title="Дата и время записи пациента (8:00–23:30, шаг 30 мин)"
+                  className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
+                  calendarFooter={
+                    <label
+                      htmlFor={`${titleId}-appt-whole-day`}
+                      className="flex cursor-pointer items-center gap-2 text-[0.7rem] leading-tight text-[var(--text-secondary)] sm:text-xs"
+                    >
+                      <input
+                        id={`${titleId}-appt-whole-day`}
+                        type="checkbox"
+                        className="rounded border-[var(--card-border)]"
+                        checked={appointmentWholeDay}
+                        onChange={(e) =>
+                          setAppointmentWholeDay(e.target.checked)
+                        }
+                      />
+                      В теч. дня
+                    </label>
+                  }
+                />
               </div>
             </div>
           </div>

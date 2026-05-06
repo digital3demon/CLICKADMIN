@@ -20,7 +20,6 @@ import {
   findCardInAppState,
   generateId,
   getActiveBoard,
-  isCardBlocked,
   KAITEN_MIRROR_DEFAULT_QUEUE_TITLE,
   KANBAN_KAITEN_CARD_TYPES_SYNCED_EVENT,
   loadKanbanState,
@@ -806,10 +805,6 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     if (!appState) return;
     const found = findCardInAppState(appState, cardId);
     if (!found) return;
-    if (isCardBlocked(found.card)) {
-      showToast("Снимите блокировку", true);
-      return;
-    }
     const home = found.board;
     const colIdx = home.columns.findIndex((c) => c.id === found.col.id);
     if (colIdx < 0 || colIdx >= home.columns.length - 1) {
@@ -1220,7 +1215,21 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               </button>
             </div>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Доска: {board.title}. Хранение: {board.archiveRetentionDays ?? 30} дн.
+              Доска: {board.title}. Хранение:{" "}
+              {(() => {
+                const d = Number.isFinite(board.archiveRetentionDays)
+                  ? Number(board.archiveRetentionDays)
+                  : 365;
+                const y = d / 365;
+                const s =
+                  d % 365 === 0
+                    ? String(Math.round(y))
+                    : y.toLocaleString("ru-RU", {
+                        maximumFractionDigits: 3,
+                        minimumFractionDigits: 0,
+                      });
+                return `${s} г.`;
+              })()}
             </p>
             {archivedCards.length === 0 ? (
               <p className="mt-4 text-sm text-[var(--text-muted)]">

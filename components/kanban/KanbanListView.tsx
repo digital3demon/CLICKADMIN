@@ -311,7 +311,6 @@ export function KanbanListView({
             const participants = card.participants || [];
             const homeColIdx = homeColumnIndexForCard(rowBoard, card.id);
             const canAdvance =
-              !blocked &&
               homeColIdx >= 0 &&
               homeColIdx < rowBoard.columns.length - 1;
             const initials = (ct?.name || "?").trim().slice(0, 1).toUpperCase();

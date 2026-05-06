@@ -9,6 +9,7 @@ import {
 } from "./detail-lines";
 import { ToothChartModal } from "./ToothChartModal";
 import { PriceListTabbedBody } from "@/components/price-list/PriceListTabbedBody";
+import { detailPriceListLabelLooksLikeCorrectionKp } from "@/lib/pricing/correction-price-item";
 
 type ConstructionTypeRow = {
   id: string;
@@ -432,10 +433,31 @@ export function DetailTab({
                       type="number"
                       min={0}
                       step={0.01}
-                      className={financeInputClass}
+                      className={
+                        line.kind === "priceList" &&
+                        detailPriceListLabelLooksLikeCorrectionKp(line.label)
+                          ? `${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`
+                          : financeInputClass
+                      }
                       value={line.unitPrice ?? ""}
                       placeholder="—"
+                      readOnly={
+                        line.kind === "priceList" &&
+                        detailPriceListLabelLooksLikeCorrectionKp(line.label)
+                      }
+                      title={
+                        line.kind === "priceList" &&
+                        detailPriceListLabelLooksLikeCorrectionKp(line.label)
+                          ? "Для коррекции / переделки сумму меняет только скидка на строке (в составе заказа)"
+                          : undefined
+                      }
                       onChange={(e) => {
+                        if (
+                          line.kind === "priceList" &&
+                          detailPriceListLabelLooksLikeCorrectionKp(line.label)
+                        ) {
+                          return;
+                        }
                         const v = e.target.value.trim();
                         patchLineFinance(line.id, {
                           unitPrice:

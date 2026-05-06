@@ -8,8 +8,11 @@ import {
 } from "@/lib/datetime-local";
 import {
   clampDueLocalToMin,
+  clampLabDueLocalToMin,
   earliestDueGridLocalFromCreatedAt,
+  earliestLabDueGridLocalFromCreatedAt,
   snapDatetimeLocalToDueGrid,
+  snapDatetimeLocalToLabDueGrid,
 } from "@/lib/order-due-datetime";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 
@@ -20,32 +23,66 @@ export function OrderListDueCell({
   dueIso,
   createdAtIso,
   variant = "lab",
+  labHmSlots,
 }: {
   orderId: string;
   dueIso: string | null;
   createdAtIso: string;
   /** `lab` — срок лабораторный (`dueDate`); `appointment` — запись / приём (`dueToAdminsAt` + `appointmentDate`). */
   variant?: OrderListDueCellVariant;
+  /** Слоты «Срок лабораторный» из конфигурации тенанта; для `appointment` не используются. */
+  labHmSlots?: readonly string[] | null;
 }) {
   const router = useRouter();
-  const minLocal = earliestDueGridLocalFromCreatedAt(createdAtIso);
+  const minLocalHalf = earliestDueGridLocalFromCreatedAt(createdAtIso);
+  const minLocalLab = earliestLabDueGridLocalFromCreatedAt(
+    createdAtIso,
+    labHmSlots,
+  );
+  const minLocal = variant === "lab" ? minLocalLab : minLocalHalf;
 
   const [value, setValue] = useState(() => {
-    const raw = snapDatetimeLocalToDueGrid(isoToDatetimeLocal(dueIso));
+    const raw =
+      variant === "lab"
+        ? snapDatetimeLocalToLabDueGrid(
+            isoToDatetimeLocal(dueIso),
+            labHmSlots,
+          )
+        : snapDatetimeLocalToDueGrid(isoToDatetimeLocal(dueIso));
     if (!raw) return "";
-    return clampDueLocalToMin(raw, minLocal);
+    return variant === "lab"
+      ? clampLabDueLocalToMin(raw, minLocalLab, labHmSlots)
+      : clampDueLocalToMin(raw, minLocalHalf);
   });
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const raw = snapDatetimeLocalToDueGrid(isoToDatetimeLocal(dueIso));
-    setValue(raw ? clampDueLocalToMin(raw, minLocal) : "");
-  }, [dueIso, minLocal]);
+    const raw =
+      variant === "lab"
+        ? snapDatetimeLocalToLabDueGrid(
+            isoToDatetimeLocal(dueIso),
+            labHmSlots,
+          )
+        : snapDatetimeLocalToDueGrid(isoToDatetimeLocal(dueIso));
+    setValue(
+      raw
+        ? variant === "lab"
+          ? clampLabDueLocalToMin(raw, minLocalLab, labHmSlots)
+          : clampDueLocalToMin(raw, minLocalHalf)
+        : "",
+    );
+  }, [dueIso, variant, minLocalHalf, minLocalLab, labHmSlots]);
 
   const saveValue = useCallback(
     async (snapped: string) => {
-      const prev = snapDatetimeLocalToDueGrid(isoToDatetimeLocal(dueIso));
+      const prev =
+        variant === "lab"
+          ? snapDatetimeLocalToLabDueGrid(
+              isoToDatetimeLocal(dueIso),
+              labHmSlots,
+            )
+          : snapDatetimeLocalToDueGrid(isoToDatetimeLocal(dueIso));
       if (snapped === prev) return;
 
       const nextIso = snapped ? localDateTimeToIso(snapped) : null;
@@ -77,7 +114,7 @@ export function OrderListDueCell({
         setSaving(false);
       }
     },
-    [orderId, dueIso, router, variant],
+    [orderId, dueIso, router, variant, labHmSlots],
   );
 
   const ariaLab =
@@ -87,7 +124,9 @@ export function OrderListDueCell({
   const titleHint =
     variant === "appointment"
       ? "Запись: дата и время приёма (8:00–23:30, шаг 30 мин)"
-      : "Срок лабораторный (8:00–23:30, шаг 30 мин)";
+      : labHmSlots?.length
+        ? `Срок лабораторный: ${labHmSlots.join(", ")} или «В теч. дня»`
+        : "Срок лабораторный: настроенные слоты времени или «В теч. дня»";
 
   return (
     <div className="min-w-0 leading-none">
@@ -96,11 +135,18 @@ export function OrderListDueCell({
         value={value}
         disabled={saving}
         minLocal={minLocal}
+        timeGrid={variant === "lab" ? "labDue" : "halfHour"}
+        labHmSlots={variant === "lab" ? labHmSlots ?? undefined : undefined}
         aria-label={ariaLab}
         title={titleHint}
         className="w-max max-w-full"
         onChange={(raw) => {
-          const snapped = raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
+          const snapped =
+            raw === ""
+              ? ""
+              : variant === "lab"
+                ? snapDatetimeLocalToLabDueGrid(raw, labHmSlots)
+                : snapDatetimeLocalToDueGrid(raw);
           setValue(snapped);
           setErr(null);
           void saveValue(snapped);

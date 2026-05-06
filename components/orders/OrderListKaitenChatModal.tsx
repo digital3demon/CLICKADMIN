@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState, type ClipboardEvent } from "react";
-import type { KaitenTrackLane } from "@prisma/client";
 import {
-  dedupeParsedKaitenComments,
-  parseKaitenListComment,
-  textIncludesAdminLabMention,
-} from "@/lib/kaiten-comment-parse";
-import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
-import { useOrderListChatPatchClicklab } from "@/components/orders/OrdersListKaitenChatShell";
+  useCallback,
+  useEffect,
+  useId,
+  useState,
+  type ClipboardEvent,
+} from "react";
+import { useRouter } from "next/navigation";
+import type { KaitenTrackLane } from "@prisma/client";
+import { dedupeParsedKaitenComments, parseKaitenListComment } from "@/lib/kaiten-comment-parse";
 import {
   CRM_UPLOAD_MAX_BYTES,
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
@@ -48,13 +49,6 @@ type ImagePreview = {
   url: string;
 };
 
-function commentsHaveLabMention(
-  comments: CommentRow[],
-  adminTag: string,
-): boolean {
-  return comments.some((c) => textIncludesAdminLabMention(c.text, adminTag));
-}
-
 export function OrderListKaitenChatModal({
   orderId,
   orderNumber,
@@ -66,9 +60,8 @@ export function OrderListKaitenChatModal({
   open: boolean;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const titleId = useId();
-  const adminMentionTag = useKanbanAdminMentionTag();
-  const patchClicklab = useOrderListChatPatchClicklab();
   const [snap, setSnap] = useState<KaitenSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -91,15 +84,6 @@ export function OrderListKaitenChatModal({
     });
   }, []);
 
-  const applyClicklabFlag = useCallback(
-    (comments: CommentRow[]) => {
-      if (patchClicklab) {
-        patchClicklab(orderId, commentsHaveLabMention(comments, adminMentionTag));
-      }
-    },
-    [orderId, patchClicklab, adminMentionTag],
-  );
-
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -113,19 +97,37 @@ export function OrderListKaitenChatModal({
       }
       const s = data as KaitenSnapshot;
       setSnap(s);
-      applyClicklabFlag(s.comments ?? []);
     } catch {
       setLoadError("Сеть недоступна");
       setSnap(null);
     } finally {
       setLoading(false);
     }
-  }, [orderId, applyClicklabFlag]);
+  }, [orderId]);
 
   useEffect(() => {
     if (!open) return;
     void load();
   }, [open, load]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/orders/${encodeURIComponent(orderId)}/kaiten-lab-mention-ack`,
+          { method: "POST" },
+        );
+        if (!cancelled && res.ok) router.refresh();
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, orderId, router]);
 
   useEffect(() => {
     if (open) return;
@@ -170,7 +172,6 @@ export function OrderListKaitenChatModal({
         setSnap((prev) => {
           if (!prev) return prev;
           const next = dedupeParsedKaitenComments([...prev.comments, row]);
-          applyClicklabFlag(next);
           return { ...prev, comments: next };
         });
       } else {

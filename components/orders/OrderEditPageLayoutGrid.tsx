@@ -207,7 +207,7 @@ export function OrderEditPageLayoutGrid({
           <div
             key={rowKey}
             data-order-layout-row={rowKey}
-            className={`grid grid-cols-1 ${rowGapClass(rowKey)} xl:grid-cols-12 xl:items-stretch`}
+            className={`grid grid-cols-1 ${rowGapClass(rowKey)} xl:grid-cols-12 xl:items-start`}
             onDragOver={customizeMode ? onDragOver : undefined}
             onDrop={
               customizeMode
@@ -273,7 +273,7 @@ export function OrderEditPageLayoutGrid({
                     </div>
                   ) : null}
                   <div
-                    className={`min-h-0 min-w-0 flex-1 ${bg ? "rounded-md p-1" : ""}`}
+                    className={`min-h-0 min-w-0 ${bg ? "rounded-md p-1" : ""}`}
                     style={bg ? { backgroundColor: bg } : undefined}
                   >
                     {blocks[cell.id]}

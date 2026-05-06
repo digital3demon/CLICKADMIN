@@ -32,6 +32,7 @@ export function ShipmentsOrdersTable({
   listHeadingScreen = true,
   isDemo = false,
   siteOrigin = null,
+  labDueHmSlots,
 }: {
   orders: ShipmentOrderRow[];
   emptyHint: string;
@@ -41,6 +42,7 @@ export function ShipmentsOrdersTable({
   listHeadingScreen?: boolean;
   isDemo?: boolean;
   siteOrigin?: string | null;
+  labDueHmSlots: readonly string[];
 }) {
   if (orders.length === 0) {
     return (
@@ -272,6 +274,7 @@ export function ShipmentsOrdersTable({
                       orderId={o.id}
                       dueIso={o.dueDate?.toISOString() ?? null}
                       createdAtIso={o.createdAt.toISOString()}
+                      labHmSlots={labDueHmSlots}
                     />
                   </td>
                   <td className="min-w-0 px-2 py-2 align-middle text-[var(--text-secondary)] print:px-1.5">

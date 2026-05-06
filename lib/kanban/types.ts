@@ -161,13 +161,16 @@ export type KanbanBoard = {
   /** Список userId, у кого есть доступ к закрытой доске. */
   accessUserIds?: string[];
   columns: KanbanColumn[];
+  /** Устаревшие локально заведённые участники (без CRM); подмешиваются к списку выбора. */
   users: KanbanUser[];
+  /** id пользователей CRM, которых не показывать в «Ответственные» / «Участники». */
+  excludedCrmUserIds?: string[];
   cardTypes: CardTypeDef[];
   /** Правила автоматизации (локально в браузере). */
   automations?: KanbanAutomationRule[];
   /** Автоархивация: выбор колонки и таймаут до архива. */
   autoArchiveRules?: KanbanAutoArchiveRule[];
-  /** Сколько дней хранить карточки в архиве до удаления. */
+  /** Сколько дней хранить карточки в архиве до удаления (в UI задаётся в годах, 1 г. = 365 дн.). */
   archiveRetentionDays?: number;
   /** Архив карточек по доске. */
   archivedCards?: KanbanArchivedCard[];

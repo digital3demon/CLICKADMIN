@@ -16,6 +16,9 @@ import {
 } from "@/lib/shipments-date-range";
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
 import { endYmdKanbanDlinetm } from "@/lib/kanban-dline-end-ymd";
+import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
+import type { ShipmentOrderRow } from "@/lib/fetch-shipments-orders";
+import { getClientsPrisma } from "@/lib/get-domain-prisma";
 
 const MAX_LINK_LINES = 120;
 
@@ -43,13 +46,47 @@ function telegramEscapeHtmlAttr(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
-function orderCardHeadline(o: {
-  kaitenCardTitleMirror: string | null;
+/** Одна строка, как в списке Kaiten/канбана (две строки шапки склеиваются пробелом). */
+function telegramOrderCardTitleOneLineFromShipmentRow(o: ShipmentOrderRow): string {
+  return buildKaitenCardTitle({
+    orderNumber: o.orderNumber,
+    patientName: o.patientName,
+    doctor: o.doctor,
+    dueDate: o.dueDate,
+    kaitenLabDueHasTime: o.kaitenAdminDueHasTime !== false,
+    kaitenCardTitleLabel: o.kaitenCardTitleLabel,
+    kaitenCardType: o.kaitenCardType,
+    isUrgent: o.isUrgent,
+    urgentCoefficient: o.urgentCoefficient,
+  })
+    .replace(/\n/g, " ")
+    .trim();
+}
+
+function telegramOrderCardTitleOneLineFromParts(p: {
   orderNumber: string;
+  patientName: string | null;
+  dueDate: Date | null;
+  kaitenAdminDueHasTime: boolean | null;
+  kaitenCardTitleLabel: string | null;
+  doctor: { fullName: string };
+  kaitenCardType: { name: string } | null;
+  isUrgent: boolean;
+  urgentCoefficient: number | null;
 }): string {
-  const t = o.kaitenCardTitleMirror?.trim();
-  if (t) return t;
-  return o.orderNumber;
+  return buildKaitenCardTitle({
+    orderNumber: p.orderNumber,
+    patientName: p.patientName,
+    doctor: p.doctor,
+    dueDate: p.dueDate,
+    kaitenLabDueHasTime: p.kaitenAdminDueHasTime !== false,
+    kaitenCardTitleLabel: p.kaitenCardTitleLabel,
+    kaitenCardType: p.kaitenCardType,
+    isUrgent: p.isUrgent,
+    urgentCoefficient: p.urgentCoefficient,
+  })
+    .replace(/\n/g, " ")
+    .trim();
 }
 
 function orderCardHref(kaitenCardId: number | null, orderId: string): string {
@@ -196,7 +233,7 @@ export async function tryTelegramBotListCommand(opts: {
     );
     const items = rows.map((o) => ({
       url: orderCardHref(o.kaitenCardId, o.id),
-      label: orderCardHeadline(o),
+      label: telegramOrderCardTitleOneLineFromShipmentRow(o),
     }));
     return {
       parseMode: "HTML",
@@ -236,15 +273,58 @@ export async function tryTelegramBotListCommand(opts: {
     select: {
       id: true,
       orderNumber: true,
+      patientName: true,
+      dueDate: true,
+      kaitenAdminDueHasTime: true,
+      kaitenCardTitleLabel: true,
+      doctorId: true,
+      kaitenCardTypeId: true,
       kaitenCardId: true,
-      kaitenCardTitleMirror: true,
+      isUrgent: true,
+      urgentCoefficient: true,
     },
   });
 
-  const items = dueRows.map((o) => ({
-    url: orderCardHref(o.kaitenCardId, o.id),
-    label: orderCardHeadline(o),
-  }));
+  const clientsPrisma = await getClientsPrisma();
+  const doctorIds = Array.from(new Set(dueRows.map((x) => x.doctorId)));
+  const cardTypeIds = Array.from(
+    new Set(dueRows.map((x) => x.kaitenCardTypeId).filter(Boolean)),
+  ) as string[];
+  const [doctors, cardTypes] = await Promise.all([
+    clientsPrisma.doctor.findMany({
+      where: { id: { in: doctorIds } },
+      select: { id: true, fullName: true },
+    }),
+    cardTypeIds.length
+      ? clientsPrisma.kaitenCardType.findMany({
+          where: { id: { in: cardTypeIds } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const doctorById = new Map(doctors.map((d) => [d.id, d]));
+  const cardTypeById = new Map(cardTypes.map((t) => [t.id, t]));
+
+  const items = dueRows.map((row) => {
+    const doctor = doctorById.get(row.doctorId);
+    const kt = row.kaitenCardTypeId
+      ? cardTypeById.get(row.kaitenCardTypeId)
+      : undefined;
+    return {
+      url: orderCardHref(row.kaitenCardId, row.id),
+      label: telegramOrderCardTitleOneLineFromParts({
+        orderNumber: row.orderNumber,
+        patientName: row.patientName,
+        dueDate: row.dueDate,
+        kaitenAdminDueHasTime: row.kaitenAdminDueHasTime,
+        kaitenCardTitleLabel: row.kaitenCardTitleLabel,
+        doctor: { fullName: doctor?.fullName ?? "—" },
+        kaitenCardType: kt ? { name: kt.name } : null,
+        isUrgent: row.isUrgent,
+        urgentCoefficient: row.urgentCoefficient,
+      }),
+    };
+  });
 
   return {
     parseMode: "HTML",

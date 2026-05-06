@@ -56,6 +56,7 @@ export async function GET(req: Request) {
         onlyShipped: onlyShipped || undefined,
         search: search || undefined,
         createdAtRange,
+        ordersListForUserId: s.sub,
       });
       return NextResponse.json({ orders, nextCursor });
     } catch (e) {

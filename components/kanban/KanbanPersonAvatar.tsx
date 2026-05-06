@@ -119,16 +119,22 @@ export function KanbanPersonAvatar({
 export function mergeKanbanPickerUsers(
   crmList: readonly KanbanCrmUserRow[],
   boardUsers: KanbanUser[],
+  excludedCrmUserIds?: readonly string[] | null,
 ): Array<KanbanCrmUserRow | KanbanUser> {
+  const excl = new Set(
+    (excludedCrmUserIds || [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean),
+  );
   const seen = new Set<string>();
   const out: Array<KanbanCrmUserRow | KanbanUser> = [];
   for (const u of crmList) {
-    if (!u?.id || seen.has(u.id)) continue;
+    if (!u?.id || seen.has(u.id) || excl.has(u.id)) continue;
     seen.add(u.id);
     out.push(u);
   }
   for (const u of boardUsers) {
-    if (!u?.id || seen.has(u.id)) continue;
+    if (!u?.id || seen.has(u.id) || excl.has(u.id)) continue;
     seen.add(u.id);
     out.push(u);
   }

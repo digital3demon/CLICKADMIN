@@ -17,6 +17,7 @@ import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { getSiteOrigin } from "@/lib/site-origin-server";
 import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
+import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 import {
   humanListTagLabel,
   LIST_TAG_KAITEN_LAB_MENTION,
@@ -37,14 +38,14 @@ import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { PrismaDataLoadErrorCallout } from "@/components/layout/PrismaDataLoadErrorCallout";
 import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
+import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 export const dynamic = "force-dynamic";
 
 /** Контент списка на всю ширину рабочей области (таблица сама делит колонки). */
 const ORDERS_MAIN_LAYOUT = "w-full min-w-0 max-w-full";
 
-/** Колонка по ширине таблицы, выровнена к левому краю (к меню), не по центру окна. */
-const ORDERS_LIST_STACK =
-  "w-fit max-w-full min-w-0 self-start space-y-4";
+/** Вся ширина main: иначе при узком окне таблица с `w-max` не получает горизонтальный скролл. */
+const ORDERS_LIST_STACK = "w-full min-w-0 space-y-4";
 
 /** Меньше внешних полей, чем у стандартного ModuleFrame — ближе к сайдбару. */
 const ORDERS_FRAME_ROOT =
@@ -166,7 +167,7 @@ export default async function OrdersPage({
     kaitenChatHasLabMention: true,
   } satisfies Prisma.OrderWhereInput;
 
-  const [attentionCount, prostheticsPendingCount, labMentionCount] = tenantId
+  const [attentionCount, prostheticsPendingCount] = tenantId
     ? await Promise.all([
         ordersPrisma.order.count({
           where: {
@@ -178,34 +179,50 @@ export default async function OrdersPage({
             AND: [baseCountWhere, pendingProstheticsWhere],
           },
         }),
-        ordersPrisma.order.count({
-          where: {
-            AND: [baseCountWhere, pendingLabMentionWhere],
-          },
-        }),
       ])
-    : [0, 0, 0];
+    : [0, 0];
+
+  let labMentionCount = 0;
+  if (tenantId && session?.sub) {
+    labMentionCount = await countOrdersWithPendingKaitenLabMentionForUser(
+      ordersPrisma,
+      baseCountWhere,
+      session.sub,
+    );
+  } else if (tenantId) {
+    labMentionCount = await ordersPrisma.order.count({
+      where: {
+        AND: [baseCountWhere, pendingLabMentionWhere],
+      },
+    });
+  }
 
   let orders: Awaited<
     ReturnType<typeof fetchOrdersListPage>
   >["orders"];
   let nextCursor: string | null = null;
+  let labDueHmSlots: string[] = [];
   try {
     if (!tenantId) {
       throw new Error("tenant_context_required");
     }
-    const page = await fetchOrdersListPage(ordersPrisma, {
-      tenantId,
-      cursor: sp.cursor,
-      pageSize,
-      tag: activeFilter ? rawTag : undefined,
-      hideShipped: hideShippedActive,
-      onlyShipped: onlyShippedActive,
-      search: listSearchQ || undefined,
-      createdAtRange: createdAtRange ?? undefined,
-    });
+    const [page, slots] = await Promise.all([
+      fetchOrdersListPage(ordersPrisma, {
+        tenantId,
+        cursor: sp.cursor,
+        pageSize,
+        tag: activeFilter ? rawTag : undefined,
+        hideShipped: hideShippedActive,
+        onlyShipped: onlyShippedActive,
+        search: listSearchQ || undefined,
+        createdAtRange: createdAtRange ?? undefined,
+        ordersListForUserId: session?.sub ?? null,
+      }),
+      getLabDueHmSlotsForTenant(tenantId),
+    ]);
     orders = page.orders;
     nextCursor = page.nextCursor;
+    labDueHmSlots = slots;
   } catch (e) {
     console.error("[orders page] prisma", e);
     const msg = e instanceof Error ? e.message : String(e);
@@ -462,32 +479,30 @@ export default async function OrdersPage({
               </span>
             </Link>
           ) : null}
-          {labMentionCount > 0 ? (
-            <Link
-              href={ordersListHref({
-                limit: pageSize,
-                tag: LIST_TAG_KAITEN_LAB_MENTION,
-                hideShipped: hideShippedActive,
-                onlyShipped: onlyShippedActive,
-                q: listSearchQ || undefined,
-                from: fromUrl ?? undefined,
-                to: toUrl ?? undefined,
-              })}
-              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-                activeFilter?.kind === "kaitenLabMention"
-                  ? "border-violet-500/80 bg-violet-100 text-violet-950 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100"
-                  : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-              }`}
-              title="Наряды, в чате карточки Kaiten которых упомянули команду лаборатории (@…)"
-            >
-              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-                Упоминания
-              </span>
-              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-                {labMentionCount}
-              </span>
-            </Link>
-          ) : null}
+          <Link
+            href={ordersListHref({
+              limit: pageSize,
+              tag: LIST_TAG_KAITEN_LAB_MENTION,
+              hideShipped: hideShippedActive,
+              onlyShipped: onlyShippedActive,
+              q: listSearchQ || undefined,
+              from: fromUrl ?? undefined,
+              to: toUrl ?? undefined,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "kaitenLabMention"
+                ? "border-violet-500/80 bg-violet-100 text-violet-950 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100"
+                : "border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+            }`}
+            title="Наряды, в чате карточки Kaiten которых упомянули команду лаборатории (@…)"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              Упоминания
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {labMentionCount}
+            </span>
+          </Link>
         </div>
       </div>
       {activeFilter ? (
@@ -528,7 +543,7 @@ export default async function OrdersPage({
         </div>
       ) : null}
       <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
-        <table className="w-max max-w-full min-w-0 border-collapse text-left text-sm">
+        <table className="w-max min-w-0 border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
               <th
@@ -655,6 +670,7 @@ export default async function OrdersPage({
                     orderId={o.id}
                     orderNumber={o.orderNumber}
                     kaitenCardId={o.kaitenCardId}
+                    labMentionHighlight={o.listKaitenLabMentionHighlight}
                   />
                   <td className="max-md:hidden min-w-0 px-1.5 py-1.5 align-middle sm:px-2 sm:py-2">
                     <div className="flex min-w-0 flex-nowrap items-center justify-start gap-0.5 sm:gap-1">
@@ -748,6 +764,7 @@ export default async function OrdersPage({
                       orderId={o.id}
                       dueIso={o.dueDate?.toISOString() ?? null}
                       createdAtIso={o.createdAt.toISOString()}
+                      labHmSlots={labDueHmSlots}
                     />
                   </td>
                   <td className="min-w-0 px-1.5 py-1.5 align-middle text-[var(--text-secondary)] sm:px-2 sm:py-2">

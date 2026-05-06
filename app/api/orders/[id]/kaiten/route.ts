@@ -37,6 +37,7 @@ import {
   kaitenCommentsForSyncFromSnapshotPayload,
   syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
+import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
@@ -257,6 +258,12 @@ function scheduleKaitenCommentSyncFromSnapshot(
 ): void {
   void (async () => {
     try {
+      const mentionCtx = await prisma.order.findFirst({
+        where: { id: orderId.trim() },
+        select: { tenant: { select: { kanbanAdminMentionTag: true } } },
+      });
+      const labTag = mentionCtx?.tenant?.kanbanAdminMentionTag;
+
       const comm = await kaitenListComments(auth, cardId);
       if (comm.ok) {
         const parsed = dedupeParsedKaitenComments(
@@ -274,6 +281,12 @@ function scheduleKaitenCommentSyncFromSnapshot(
           orderId.trim(),
           parsed,
         );
+        await syncKaitenLabMentionFromParsedComments(
+          prisma,
+          orderId.trim(),
+          parsed,
+          labTag,
+        );
       } else {
         const snapComments = kaitenCommentsForSyncFromSnapshotPayload(
           cachedSnapshot,
@@ -287,6 +300,12 @@ function scheduleKaitenCommentSyncFromSnapshot(
           prisma,
           orderId.trim(),
           snapComments,
+        );
+        await syncKaitenLabMentionFromParsedComments(
+          prisma,
+          orderId.trim(),
+          snapComments,
+          labTag,
         );
       }
     } catch (e) {
@@ -327,6 +346,7 @@ export async function GET(
       id: true,
       kaitenCardId: true,
       kaitenTrackLane: true,
+      tenant: { select: { kanbanAdminMentionTag: true } },
     },
   });
   if (!order) {
@@ -597,6 +617,12 @@ export async function GET(
           ...mirrorFieldsFromKaitenCard(cardObj),
         },
       });
+      await syncKaitenLabMentionFromParsedComments(
+        ordersPrisma,
+        orderIdTrim,
+        comments.map((c) => ({ id: c.id, text: c.text })),
+        order.tenant?.kanbanAdminMentionTag,
+      );
     } catch (e) {
       console.error("[kaiten GET] kaitenColumnTitle / block (deferred)", e);
     }

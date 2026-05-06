@@ -5,8 +5,9 @@ import {
   DEFAULT_KANBAN_ADMIN_MENTION_TAG,
   normalizeKanbanAdminMentionTag,
 } from "@/lib/kanban-admin-mention";
-import { generateId } from "@/lib/kanban/model";
-import { useEffect, useState } from "react";
+import { clampArchiveRetentionDays, generateId } from "@/lib/kanban/model";
+import { useEffect, useMemo, useState } from "react";
+import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 import { IconTrash } from "./kanban-icons";
 
 type KanbanBoardSettingsFormProps = {
@@ -22,11 +23,21 @@ export function KanbanBoardSettingsForm({
   canEditKanbanAdminTag = false,
 }: KanbanBoardSettingsFormProps) {
   const types = board.cardTypes || [];
-  const users = board.users || [];
   const archiveRules = board.autoArchiveRules || [];
-  const retentionDays = Number.isFinite(board.archiveRetentionDays)
-    ? Number(board.archiveRetentionDays)
-    : 30;
+  const { list: crmUsers, loading: crmUsersLoading } = useKanbanCrmUsers();
+  const excludedIds = board.excludedCrmUserIds ?? [];
+  const excludedSet = useMemo(() => new Set(excludedIds), [excludedIds]);
+  const candidatesToExclude = useMemo(
+    () => crmUsers.filter((u) => u?.id && !excludedSet.has(u.id)),
+    [crmUsers, excludedSet],
+  );
+  const [pickExcludeUserId, setPickExcludeUserId] = useState("");
+  const retentionYearsRaw =
+    (Number.isFinite(board.archiveRetentionDays)
+      ? Number(board.archiveRetentionDays)
+      : 365) / 365;
+  const retentionYears =
+    Math.round(retentionYearsRaw * 1000) / 1000;
 
   const [labTagDraft, setLabTagDraft] = useState(DEFAULT_KANBAN_ADMIN_MENTION_TAG);
   const [labTagSaving, setLabTagSaving] = useState(false);
@@ -228,129 +239,106 @@ export function KanbanBoardSettingsForm({
 
       <section>
         <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
-          Участники доски
+          Исключить пользователей
         </h3>
         <p className="mb-3 text-[0.8125rem] leading-snug text-[var(--text-muted)]">
-          Эти люди доступны в списках «Ответственные» и «Участники» в карточках.
+          По умолчанию в списках «Ответственные» и «Участники» в карточках доступны все
+          пользователи организации. Здесь можно скрыть лишних только для этой доски (они не
+          смогут быть выбраны в новых назначениях).
         </p>
+        {crmUsersLoading ? (
+          <p className="text-sm text-[var(--text-muted)]">Загрузка пользователей…</p>
+        ) : null}
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-[var(--card-border)] text-left text-[var(--text-muted)]">
-              <th className="py-2 pr-2">Имя</th>
-              <th className="w-24 py-2 pr-2">Инициалы</th>
-              <th className="w-20 py-2 pr-2">Цвет</th>
-              <th className="w-10 py-2" />
+              <th className="py-2 pr-2">Исключён из списков</th>
+              <th className="w-12 py-2" />
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-b border-[var(--border-subtle)]">
-                <td className="py-2 pr-2">
-                  <input
-                    type="text"
-                    value={u.name}
-                    onChange={(e) =>
-                      onPatchBoard((b) => {
-                        const x = b.users.find((y) => y.id === u.id);
-                        if (x) x.name = e.target.value;
-                      })
-                    }
-                    className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
-                  />
-                </td>
-                <td className="py-2 pr-2">
-                  <input
-                    type="text"
-                    value={u.initials}
-                    maxLength={4}
-                    onChange={(e) =>
-                      onPatchBoard((b) => {
-                        const x = b.users.find((y) => y.id === u.id);
-                        if (x) x.initials = e.target.value;
-                      })
-                    }
-                    className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
-                  />
-                </td>
-                <td className="py-2 pr-2">
-                  <input
-                    type="color"
-                    value={
-                      u.color && /^#[0-9a-fA-F]{6}$/.test(String(u.color).trim())
-                        ? String(u.color).trim()
-                        : "#64748b"
-                    }
-                    onChange={(e) =>
-                      onPatchBoard((b) => {
-                        const x = b.users.find((y) => y.id === u.id);
-                        if (x) x.color = e.target.value;
-                      })
-                    }
-                    className="h-8 w-full min-w-[3.5rem] cursor-pointer rounded border border-[var(--input-border)] bg-[var(--input-bg)]"
-                  />
-                </td>
-                <td className="py-2 text-right">
-                  <button
-                    type="button"
-                    title="Удалить участника"
-                    className="inline-flex rounded p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
-                    onClick={() => {
-                      if (
-                        !window.confirm(
-                          `Удалить «${u.name}»? Ссылки на этого участника в карточках будут сняты.`,
-                        )
-                      )
-                        return;
-                      onPatchBoard((b) => {
-                        b.users = b.users.filter((x) => x.id !== u.id);
-                        b.columns.forEach((col) => {
-                          col.cards.forEach((c) => {
-                            c.assignees = (c.assignees || []).filter(
-                              (id) => id !== u.id,
-                            );
-                            c.participants = (c.participants || []).filter(
-                              (id) => id !== u.id,
-                            );
-                            if (c.createdByUserId === u.id) c.createdByUserId = "";
-                            if (c.blockedByUserId === u.id) c.blockedByUserId = "";
-                            (c.comments || []).forEach((cm) => {
-                              if (cm.userId === u.id) cm.userId = "";
-                            });
-                            (c.activity || []).forEach((a) => {
-                              if (a.userId === u.id) a.userId = "";
-                            });
-                            (c.files || []).forEach((f) => {
-                              if (f.addedByUserId === u.id) f.addedByUserId = "";
-                            });
-                          });
-                        });
-                      });
-                    }}
-                  >
-                    <IconTrash />
-                  </button>
+            {excludedIds.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={2}
+                  className="py-3 text-[var(--text-muted)]"
+                >
+                  Никого не исключено — все пользователи CRM доступны для выбора.
                 </td>
               </tr>
-            ))}
+            ) : (
+              excludedIds.map((uid) => {
+                const row = crmUsers.find((u) => u.id === uid);
+                const label =
+                  row?.displayName?.trim() ||
+                  row?.email?.trim() ||
+                  uid;
+                return (
+                  <tr key={uid} className="border-b border-[var(--border-subtle)]">
+                    <td className="py-2 pr-2 text-[var(--app-text)]">{label}</td>
+                    <td className="py-2 text-right">
+                      <button
+                        type="button"
+                        title="Вернуть в списки"
+                        className="inline-flex rounded p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                        onClick={() =>
+                          onPatchBoard((b) => {
+                            b.excludedCrmUserIds = (b.excludedCrmUserIds || []).filter(
+                              (x) => x !== uid,
+                            );
+                          })
+                        }
+                      >
+                        <IconTrash />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
-        <button
-          type="button"
-          className="mt-3 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-          onClick={() =>
-            onPatchBoard((b) => {
-              b.users = b.users || [];
-              b.users.push({
-                id: generateId("ku"),
-                name: "Новый участник",
-                initials: "Н",
-                color: "#64748b",
+        <div className="mt-3 flex max-w-xl flex-wrap items-end gap-2">
+          <label className="block min-w-[12rem] flex-1 text-sm">
+            <span className="mb-1 block text-[var(--text-secondary)]">
+              Добавить в исключения
+            </span>
+            <select
+              className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1.5 text-[var(--app-text)]"
+              value={pickExcludeUserId}
+              disabled={candidatesToExclude.length === 0}
+              onChange={(e) => setPickExcludeUserId(e.target.value)}
+            >
+              <option value="">
+                {candidatesToExclude.length === 0
+                  ? "Нет доступных пользователей"
+                  : "Выберите пользователя…"}
+              </option>
+              {candidatesToExclude.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.displayName?.trim() || u.email || u.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+            disabled={!pickExcludeUserId.trim()}
+            onClick={() => {
+              const id = pickExcludeUserId.trim();
+              if (!id) return;
+              onPatchBoard((b) => {
+                const cur = b.excludedCrmUserIds || [];
+                if (cur.includes(id)) return;
+                b.excludedCrmUserIds = [...cur, id];
               });
-            })
-          }
-        >
-          + Добавить участника
-        </button>
+              setPickExcludeUserId("");
+            }}
+          >
+            Исключить
+          </button>
+        </div>
       </section>
 
       <section>
@@ -363,19 +351,23 @@ export function KanbanBoardSettingsForm({
         </p>
         <label className="mb-4 block max-w-xs text-sm">
           <span className="mb-1 block text-[var(--text-secondary)]">
-            Хранить в архиве (дней)
+            Хранить в архиве (лет)
           </span>
           <input
             type="number"
-            min={1}
-            max={365}
-            value={retentionDays}
+            min={1 / 365}
+            max={30}
+            step={0.01}
+            value={retentionYears}
             onChange={(e) =>
               onPatchBoard((b) => {
-                const v = Number(e.target.value);
-                b.archiveRetentionDays = Number.isFinite(v)
-                  ? Math.max(1, Math.min(365, Math.round(v)))
-                  : 30;
+                const y = Number(e.target.value);
+                if (!Number.isFinite(y)) {
+                  b.archiveRetentionDays = clampArchiveRetentionDays(365);
+                  return;
+                }
+                const days = Math.round(y * 365);
+                b.archiveRetentionDays = clampArchiveRetentionDays(days);
               })
             }
             className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"

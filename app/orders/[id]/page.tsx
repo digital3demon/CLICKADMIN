@@ -21,6 +21,9 @@ import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { invoiceParsedSnapshotForOrderEdit } from "@/lib/order-invoice-initial-for-edit";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
+import { resolveRegisteredByLabelForDisplay } from "@/lib/registered-by-label-display";
+import { fetchWorkspaceActivePriceListName } from "@/lib/order-price-list-from-contractors";
+import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -194,6 +197,16 @@ export default async function OrderEditPage({
 
   const invParsed = invoiceParsedSnapshotForOrderEdit(order);
 
+  const registeredByLabelResolved = await resolveRegisteredByLabelForDisplay(
+    tenantId,
+    order.registeredByLabel,
+  );
+
+  const workspaceActivePriceListName =
+    await fetchWorkspaceActivePriceListName(pricingPrisma);
+
+  const labDueHmSlots = await getLabDueHmSlotsForTenant(tenantId);
+
   const initial: OrderEditInitial = {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -211,6 +224,7 @@ export default async function OrderEditPage({
     dueToAdminsHasTime: order.dueToAdminsHasTime,
     workReceivedAt: order.workReceivedAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
+    labDueHmSlots,
     invoiceIssued: order.invoiceIssued,
     invoiceNumber: order.invoiceNumber,
     invoicePaperDocs: order.invoicePaperDocs,
@@ -225,12 +239,13 @@ export default async function OrderEditPage({
     invoiceParsedSummaryText: invParsed.invoiceParsedSummaryText,
     invoicePaymentNotes: order.invoicePaymentNotes,
     orderPriceListKind: order.orderPriceListKind,
+    workspaceActivePriceListName,
     orderPriceListNote: order.orderPriceListNote,
     prostheticsOrdered: order.prostheticsOrdered,
     correctionTrack: order.correctionTrack ?? null,
     correctionReason: order.correctionReason ?? null,
     correctionPaid: order.correctionPaid,
-    registeredByLabel: order.registeredByLabel,
+    registeredByLabel: registeredByLabelResolved,
     courierId: order.courierId,
     courierName: courier?.name ?? null,
     courierPickupId: order.courierPickupId,

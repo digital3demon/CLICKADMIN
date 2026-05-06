@@ -298,8 +298,9 @@ export function KanbanCardModal({
   }, [cardId, linkedOrderId, kaitenCardIdForChat, chatActorUserId, onApply]);
 
   const pickerMerged = useMemo(
-    () => mergeKanbanPickerUsers(crmList, board.users),
-    [crmList, board.users],
+    () =>
+      mergeKanbanPickerUsers(crmList, board.users, board.excludedCrmUserIds),
+    [crmList, board.users, board.excludedCrmUserIds],
   );
 
   const pickerFiltered = useMemo(() => {
@@ -326,7 +327,6 @@ export function KanbanCardModal({
   const dueHintKind = deadlineHintKind(card.dueDate);
 
   const openBlockPopup = () => {
-    if (blocked) return;
     setBlockReasonDraft("");
     setBlockPopupOpen(true);
   };
@@ -492,7 +492,6 @@ export function KanbanCardModal({
   };
 
   const addCheckItem = () => {
-    if (blocked) return;
     onApply((b) => {
       const fc = findCard(b, cardId);
       if (!fc) return;
@@ -506,7 +505,7 @@ export function KanbanCardModal({
 
   const sendComment = async (text: string): Promise<boolean> => {
     const trimmed = text.trim();
-    if (blocked || !trimmed) return false;
+    if (!trimmed) return false;
     const linkedKaiten =
       Boolean(card.linkedOrderId) &&
       card.kaitenCardId != null &&
@@ -619,7 +618,7 @@ export function KanbanCardModal({
   };
 
   const attachFilesFromChat = async (fileList: File[]) => {
-    if (blocked || !fileList.length) return;
+    if (!fileList.length) return;
     const actor = chatActorUserId || board.users[0]?.id || "";
     const linked =
       Boolean(card.linkedOrderId) &&
@@ -716,8 +715,8 @@ export function KanbanCardModal({
           >
             <h3 className="m-0 text-sm font-semibold">Блокировка карточки</h3>
             <p className="mt-1 text-[0.75rem] text-[var(--kaiten-modal-muted)]">
-              Укажите причину. Пока карточка заблокирована, её нельзя редактировать и
-              переносить.
+              Укажите причину остановки — это метка на доске для команды; редактирование и
+              перенос карточки не ограничиваются.
             </p>
             <textarea
               value={blockReasonDraft}
@@ -863,12 +862,12 @@ export function KanbanCardModal({
             <div className="min-w-0 flex-1 pr-1">
               <h2
                 ref={titleRef}
-                contentEditable={!blocked && canEditTitle}
+                contentEditable={canEditTitle}
                 suppressContentEditableWarning
                 className="m-0 break-words text-2xl font-semibold leading-tight tracking-tight text-[var(--kaiten-modal-text)] outline-none sm:text-3xl md:text-4xl"
                 onBlur={() => {
                   void (async () => {
-                    if (blocked || !canEditTitle) return;
+                    if (!canEditTitle) return;
                     const el = titleRef.current;
                     if (!el) return;
                     const t = (el.textContent || "").trim();
@@ -905,7 +904,7 @@ export function KanbanCardModal({
                   })();
                 }}
                 onKeyDown={(e) => {
-                  if (blocked || !canEditTitle) return;
+                  if (!canEditTitle) return;
                   if (e.key === "Enter") {
                     e.preventDefault();
                     (e.currentTarget as HTMLElement).blur();
@@ -944,7 +943,6 @@ export function KanbanCardModal({
               type="button"
               title={blocked ? "Снять блокировку" : "Заблокировать карточку"}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
-              disabled={false}
               onClick={() => {
                 if (blocked) {
                   onApply((b) => {
@@ -982,7 +980,6 @@ export function KanbanCardModal({
             <button
               type="button"
               title="Следующий столбец"
-              disabled={blocked}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40"
               onClick={() => onMoveNextStage(cardId)}
             >
@@ -994,7 +991,7 @@ export function KanbanCardModal({
                 Отв.
               </span>
               {(card.assignees || []).map((uid) => (
-                <span key={uid} className={blocked ? "opacity-50" : ""}>
+                <span key={uid}>
                   <KanbanPersonAvatar
                     userId={uid}
                     homeBoard={board}
@@ -1006,7 +1003,7 @@ export function KanbanCardModal({
               ))}
               <button
                 type="button"
-                disabled={blocked || !canManageAssignees}
+                disabled={!canManageAssignees}
                 title="Добавить ответственного"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
                 onClick={() => setPickerMode("assign")}
@@ -1019,7 +1016,7 @@ export function KanbanCardModal({
                 Участн.
               </span>
               {(card.participants || []).map((uid) => (
-                <span key={uid} className={blocked ? "opacity-50" : ""}>
+                <span key={uid}>
                   <KanbanPersonAvatar
                     userId={uid}
                     homeBoard={board}
@@ -1031,7 +1028,7 @@ export function KanbanCardModal({
               ))}
               <button
                 type="button"
-                disabled={blocked || !canManageParticipants}
+                disabled={!canManageParticipants}
                 title="Добавить участника"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
                 onClick={() => setPickerMode("part")}
@@ -1063,7 +1060,7 @@ export function KanbanCardModal({
                   </div>
                   <select
                     className={baseInput}
-                    disabled={blocked || !canEditTrack}
+                    disabled={!canEditTrack}
                     value={card.trackLane || ""}
                     onChange={(e) => {
                       const v = e.target.value;
@@ -1095,12 +1092,10 @@ export function KanbanCardModal({
                   </div>
                   <select
                     className={baseInput}
-                    disabled={blocked}
                     value={card.cardTypeId || ""}
                     onChange={(e) => {
                       void (async () => {
                         const v = e.target.value;
-                        if (blocked) return;
                         if (card.linkedOrderId) {
                           const hasKaiten =
                             card.kaitenCardId != null &&
@@ -1172,7 +1167,7 @@ export function KanbanCardModal({
                   <input
                     type="date"
                     className={`${baseInput} max-w-[12rem]`}
-                    disabled={blocked || !canEditDueDate}
+                    disabled={!canEditDueDate}
                     value={card.dueDate || ""}
                     onChange={(e) => {
                       const v = e.target.value;
@@ -1250,12 +1245,10 @@ export function KanbanCardModal({
                     ref={descTextareaRef}
                     className={`${baseInput} min-h-[100px] resize-none overflow-hidden sm:min-h-[120px]`}
                     rows={3}
-                    disabled={blocked}
                     value={descDraft}
                     onChange={(e) => setDescDraft(e.target.value)}
                     onBlur={() => {
                       void (async () => {
-                        if (blocked) return;
                         if (descDraft === (card.description || "")) return;
                         if (
                           card.linkedOrderId &&
@@ -1321,8 +1314,7 @@ export function KanbanCardModal({
                           >
                             <button
                               type="button"
-                              disabled={blocked}
-                              className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded px-0.5 py-0.5 text-left transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded px-0.5 py-0.5 text-left transition-opacity hover:opacity-90"
                               onClick={() => openAttachment(f)}
                               title={f.name}
                             >
@@ -1336,46 +1328,44 @@ export function KanbanCardModal({
                                 {f.name}
                               </span>
                             </button>
-                            {!blocked ? (
-                              <button
-                                type="button"
-                                className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded bg-[var(--kaiten-modal-bg)]/90 p-0.5 text-[var(--kaiten-modal-muted)] opacity-0 shadow-sm ring-1 ring-[var(--kaiten-modal-border)] transition-opacity hover:text-red-500 group-hover:opacity-100"
-                                title="Убрать файл"
-                                aria-label="Убрать файл"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void (async () => {
-                                    if (f.orderAttachmentId && card.linkedOrderId) {
-                                      const del = await deleteOrderAttachmentById(
-                                        card.linkedOrderId,
-                                        f.orderAttachmentId,
-                                      );
-                                      if (!del.ok) {
-                                        toast(del.error, true);
-                                        return;
-                                      }
+                            <button
+                              type="button"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded bg-[var(--kaiten-modal-bg)]/90 p-0.5 text-[var(--kaiten-modal-muted)] opacity-0 shadow-sm ring-1 ring-[var(--kaiten-modal-border)] transition-opacity hover:text-red-500 group-hover:opacity-100"
+                              title="Убрать файл"
+                              aria-label="Убрать файл"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void (async () => {
+                                  if (f.orderAttachmentId && card.linkedOrderId) {
+                                    const del = await deleteOrderAttachmentById(
+                                      card.linkedOrderId,
+                                      f.orderAttachmentId,
+                                    );
+                                    if (!del.ok) {
+                                      toast(del.error, true);
+                                      return;
                                     }
-                                    onApply((b) => {
-                                      const fc = findCard(b, cardId);
-                                      if (!fc) return;
-                                      fc.card.files = (fc.card.files || []).filter(
-                                        (x) => x.id !== f.id,
-                                      );
-                                      fc.card.updatedAt = new Date().toISOString();
-                                      pushActivity(
-                                        fc.card,
-                                        `Удалён файл: ${f.name}`,
-                                        b.users[0]?.id,
-                                        b,
-                                        act,
-                                      );
-                                    });
-                                  })();
-                                }}
-                              >
-                                <IconX className="h-3.5 w-3.5" />
-                              </button>
-                            ) : null}
+                                  }
+                                  onApply((b) => {
+                                    const fc = findCard(b, cardId);
+                                    if (!fc) return;
+                                    fc.card.files = (fc.card.files || []).filter(
+                                      (x) => x.id !== f.id,
+                                    );
+                                    fc.card.updatedAt = new Date().toISOString();
+                                    pushActivity(
+                                      fc.card,
+                                      `Удалён файл: ${f.name}`,
+                                      b.users[0]?.id,
+                                      b,
+                                      act,
+                                    );
+                                  });
+                                })();
+                              }}
+                            >
+                              <IconX className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         ))
                       )}
@@ -1391,7 +1381,6 @@ export function KanbanCardModal({
                   </span>
                   <button
                     type="button"
-                    disabled={blocked}
                     className="text-[0.75rem] text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
                     onClick={addCheckItem}
                   >
@@ -1401,7 +1390,6 @@ export function KanbanCardModal({
                 <ChecklistEditor
                   card={card}
                   cardId={cardId}
-                  blocked={blocked}
                   onApply={onApply}
                   activityActorLabel={act}
                   kaitenLinked={
@@ -1414,12 +1402,6 @@ export function KanbanCardModal({
                 />
               </div>
 
-              {blocked && (
-                <p className="mt-2 text-[0.75rem] text-[var(--kaiten-modal-muted)]">
-                  Карточка заблокирована. Снимите блокировку, чтобы снова менять поля и
-                  переносить её.
-                </p>
-              )}
               </div>
 
               {dueHintKind !== "none" ? (
@@ -1458,7 +1440,6 @@ export function KanbanCardModal({
                 <ChatPanel
                   card={card}
                   board={board}
-                  blocked={blocked}
                   adminMentionTag={adminMentionTag}
                   adminMentionUserIds={adminMentionUserIds}
                   onSend={sendComment}
@@ -1508,6 +1489,81 @@ export function KanbanCardModal({
 type AttachmentViewerState =
   | { mode: "image"; images: CardFile[]; index: number }
   | { mode: "pdf"; pdfs: CardFile[]; index: number };
+
+/** Превью вложения: повтор при сбое загрузки (сеть / сессия / кэш), плейсхолдер если не удалось. */
+function KanbanAttachmentImg({
+  file,
+  alt,
+  className,
+  variant = "chat",
+}: {
+  file: CardFile;
+  alt: string;
+  className?: string;
+  /** В полноэкранном просмотре — светлый текст на чёрном фоне. */
+  variant?: "chat" | "viewer";
+}) {
+  const base = (file.dataUrl || "").trim();
+  const [src, setSrc] = useState(base);
+  const [failed, setFailed] = useState(!base);
+  const retryIx = useRef(0);
+
+  useEffect(() => {
+    setSrc(base);
+    setFailed(!base);
+    retryIx.current = 0;
+  }, [base, file.id]);
+
+  const onError = useCallback(() => {
+    if (base.startsWith("data:")) {
+      setFailed(true);
+      return;
+    }
+    if (!base) {
+      setFailed(true);
+      return;
+    }
+    const maxExtra = 2;
+    if (retryIx.current >= maxExtra) {
+      setFailed(true);
+      return;
+    }
+    retryIx.current++;
+    const sep = base.includes("?") ? "&" : "?";
+    setSrc(`${base}${sep}_kb=${retryIx.current}_${Date.now()}`);
+  }, [base]);
+
+  if (failed) {
+    const muted =
+      variant === "viewer"
+        ? "text-white/75"
+        : "text-[var(--kaiten-modal-muted)]";
+    const bg = variant === "viewer" ? "bg-white/10" : "bg-black/35";
+    return (
+      <div
+        className={`flex h-full min-h-[4rem] w-full flex-col items-center justify-center gap-1 px-1 text-center ${muted} ${bg} ${className ?? ""}`}
+      >
+        <span className="text-[0.6rem] leading-tight">
+          Превью недоступно · откройте файл по клику
+        </span>
+        <span className="line-clamp-3 break-all text-[0.55rem] opacity-80">
+          {file.name}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src || base}
+      alt={alt}
+      className={className}
+      onError={onError}
+      decoding="async"
+    />
+  );
+}
 
 function CardAttachmentViewerOverlay({
   state,
@@ -1611,10 +1667,10 @@ function CardAttachmentViewerOverlay({
           ) : null}
           {state.mode === "image" ? (
             <div className="flex h-[min(82vh,800px)] min-h-[200px] items-center justify-center p-2 sm:p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={current.dataUrl}
+              <KanbanAttachmentImg
+                file={current}
                 alt=""
+                variant="viewer"
                 className="max-h-full max-w-full object-contain"
               />
             </div>
@@ -1747,7 +1803,6 @@ function fallbackMentionToken(row: KanbanCrmUserRow | { name: string }): string 
 function ChatPanel({
   card,
   board,
-  blocked,
   adminMentionTag,
   adminMentionUserIds,
   onSend,
@@ -1756,7 +1811,6 @@ function ChatPanel({
 }: {
   card: KanbanCard;
   board: KanbanBoard;
-  blocked: boolean;
   adminMentionTag: string;
   adminMentionUserIds: readonly string[];
   onSend: (t: string) => boolean | Promise<boolean>;
@@ -1784,7 +1838,11 @@ function ChatPanel({
     [card.comments, card.files, card.id],
   );
   const mentionOptions = useMemo<ChatMentionOption[]>(() => {
-    const merged = mergeKanbanPickerUsers(crmChatList, board.users);
+    const merged = mergeKanbanPickerUsers(
+      crmChatList,
+      board.users,
+      board.excludedCrmUserIds,
+    );
     const synthetic: ChatMentionOption[] =
       adminMentionUserIds.length > 0 && adminMentionTag
         ? [
@@ -1820,7 +1878,13 @@ function ChatPanel({
       })
       .filter((x): x is ChatMentionOption => x != null);
     return [...synthetic, ...rest];
-  }, [crmChatList, board.users, adminMentionTag, adminMentionUserIds]);
+  }, [
+    crmChatList,
+    board.users,
+    board.excludedCrmUserIds,
+    adminMentionTag,
+    adminMentionUserIds,
+  ]);
   const mentionDraft = useMemo(
     () => detectMentionDraft(inp, caretPos),
     [inp, caretPos],
@@ -1887,16 +1951,14 @@ function ChatPanel({
   return (
     <div
       className={`flex min-h-0 flex-1 flex-col transition-[box-shadow] ${
-        dragOver && !blocked
+        dragOver
           ? "ring-2 ring-[var(--kaiten-accent)] ring-inset ring-offset-0"
           : ""
       }`}
       onDragEnter={(e) => {
-        if (blocked) return;
         if (e.dataTransfer?.types?.includes("Files")) setDragOver(true);
       }}
       onDragOver={(e) => {
-        if (blocked) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
       }}
@@ -1906,7 +1968,6 @@ function ChatPanel({
       onDrop={(e) => {
         e.preventDefault();
         setDragOver(false);
-        if (blocked) return;
         if (e.dataTransfer.files?.length) flushFiles(e.dataTransfer.files);
       }}
     >
@@ -1935,9 +1996,8 @@ function ChatPanel({
                         onClick={() => onOpenAttachment(imgFile)}
                       >
                         <div className="aspect-square w-full overflow-hidden rounded-md border border-[var(--kaiten-modal-border)] bg-black/20">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={imgFile.dataUrl}
+                          <KanbanAttachmentImg
+                            file={imgFile}
                             alt=""
                             className="h-full w-full object-cover"
                           />
@@ -2011,7 +2071,6 @@ function ChatPanel({
           type="text"
           className="min-w-0 flex-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)] placeholder:text-[var(--kaiten-modal-muted)]"
           placeholder="Сообщение в чат (в т.ч. обсуждение файлов)…"
-          disabled={blocked}
           value={inp}
           onChange={(e) => {
             setInp(e.target.value);
@@ -2060,7 +2119,6 @@ function ChatPanel({
         />
         <button
           type="button"
-          disabled={blocked}
           className="shrink-0 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-1.5 text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
           onClick={() => {
             void submitMessage();
@@ -2186,14 +2244,12 @@ function ChecklistCheckboxWithFirework({
 function ChecklistEditor({
   card,
   cardId,
-  blocked,
   onApply,
   activityActorLabel,
   kaitenLinked,
 }: {
   card: KanbanCard;
   cardId: string;
-  blocked: boolean;
   onApply: (fn: (b: KanbanBoard) => void) => void;
   activityActorLabel?: string;
   kaitenLinked?: boolean;
@@ -2209,7 +2265,7 @@ function ChecklistEditor({
         <div key={item.id} className="mb-1 flex items-center gap-2">
           <ChecklistCheckboxWithFirework
             completed={item.completed}
-            disabled={blocked}
+            disabled={false}
             onToggle={() =>
               onApply((b) => {
                 const fc = findCard(b, cardId);
@@ -2224,7 +2280,6 @@ function ChecklistEditor({
           <input
             type="text"
             className="min-w-0 flex-1 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1.5 py-0.5 text-[0.8125rem] text-[var(--kaiten-modal-text)]"
-            disabled={blocked}
             defaultValue={item.text}
             onBlur={(e) => {
               const v = e.target.value;
@@ -2239,7 +2294,6 @@ function ChecklistEditor({
           />
           <button
             type="button"
-            disabled={blocked}
             className="text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
             onClick={() =>
               onApply((b) => {

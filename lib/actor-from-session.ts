@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getPrisma } from "@/lib/get-prisma";
-import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
+import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 
 /**
  * Пользователь и подпись для записей в журнале (наряды, контрагенты).
@@ -27,6 +27,6 @@ export async function getActorForRevision(): Promise<{
   }
   return {
     userId: session.sub,
-    label: userActivityDisplayLabel(u),
+    label: userPersonDisplayName(u),
   };
 }

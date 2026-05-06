@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import {
   buildKaitenCommentTextWithCrmAuthor,
+  dedupeParsedKaitenComments,
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
@@ -24,6 +25,7 @@ import {
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
+import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 
 type PostBody = {
   text?: string;
@@ -165,6 +167,29 @@ export async function POST(
     });
   } catch {
     /* ignore */
+  }
+
+  try {
+    const list = await kaitenListComments(auth, order.kaitenCardId);
+    if (list.ok) {
+      const parsed = dedupeParsedKaitenComments(
+        list.comments
+          .map(parseKaitenListComment)
+          .filter((x): x is NonNullable<typeof x> => x != null),
+      ).map((c) => ({ id: c.id, text: c.text }));
+      const tenantTagRow = await prisma.order.findUnique({
+        where: { id: order.id },
+        select: { tenant: { select: { kanbanAdminMentionTag: true } } },
+      });
+      await syncKaitenLabMentionFromParsedComments(
+        prisma,
+        order.id,
+        parsed,
+        tenantTagRow?.tenant?.kanbanAdminMentionTag,
+      );
+    }
+  } catch (e) {
+    console.error("[kaiten comments] lab mention sync", e);
   }
 
   invalidateKaitenSnapshotCache(orderId.trim());
