@@ -2,12 +2,16 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import {
+  dismissBackgroundOrderUpload,
   hasUploadingBackgroundOrderUploads,
   retryBackgroundOrderUpload,
   snapshotBackgroundOrderUploads,
   subscribeBackgroundOrderUploads,
 } from "@/lib/background-order-upload-tracker";
-import { kickOrderAttachmentBackgroundProcessor } from "@/lib/order-attachment-background-queue";
+import {
+  cancelOrderAttachmentBackgroundUpload,
+  kickOrderAttachmentBackgroundProcessor,
+} from "@/lib/order-attachment-background-queue";
 
 export function OrderBackgroundUploadToast() {
   const items = useSyncExternalStore(
@@ -47,6 +51,19 @@ export function OrderBackgroundUploadToast() {
               : "border-[var(--card-border)] bg-[var(--card-bg)]",
           ].join(" ")}
         >
+          {item.status === "uploading" ? (
+            <button
+              type="button"
+              className="self-start rounded border border-[var(--card-border)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+              title="Отменить загрузку"
+              onClick={() => {
+                void cancelOrderAttachmentBackgroundUpload(item.orderId);
+                dismissBackgroundOrderUpload(item.id);
+              }}
+            >
+              ✕
+            </button>
+          ) : null}
           {item.status === "success" ? (
             <svg
               viewBox="0 0 20 20"

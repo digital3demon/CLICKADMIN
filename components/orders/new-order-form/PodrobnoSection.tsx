@@ -91,6 +91,7 @@ export function PodrobnoSection({
           id: newDetailLineId(),
           kind: "priceList",
           priceListItemId: row.id,
+          leadWorkingDays: row.leadWorkingDays,
           label,
           quantity: 1,
           unitPrice: row.priceRub,

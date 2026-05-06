@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { normalizeLabDueHmSlots } from "@/lib/lab-due-hm-slots";
+import {
+  normalizeProductionCalendarCountry,
+  PRODUCTION_CALENDAR_COUNTRIES,
+  type ProductionCalendarCountry,
+} from "@/lib/production-calendar";
 
 const inp =
   "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]";
@@ -12,6 +17,7 @@ export function LabDueSlotsTenantSettings({
   canEdit: boolean;
 }) {
   const [slots, setSlots] = useState<string[]>([]);
+  const [country, setCountry] = useState<ProductionCalendarCountry>("RU");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,12 +28,18 @@ export function LabDueSlotsTenantSettings({
     setError(null);
     try {
       const res = await fetch("/api/tenant/lab-due-hm-slots");
-      const j = (await res.json()) as { slots?: string[]; error?: string };
+      const j = (await res.json()) as {
+        slots?: string[];
+        country?: string;
+        error?: string;
+      };
       if (!res.ok) throw new Error(j.error ?? "Ошибка загрузки");
       setSlots(normalizeLabDueHmSlots(j.slots ?? null));
+      setCountry(normalizeProductionCalendarCountry(j.country));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
       setSlots(normalizeLabDueHmSlots(null));
+      setCountry("RU");
     } finally {
       setLoading(false);
     }
@@ -51,11 +63,16 @@ export function LabDueSlotsTenantSettings({
       const res = await fetch("/api/tenant/lab-due-hm-slots", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slots: normalized }),
+        body: JSON.stringify({ slots: normalized, country }),
       });
-      const j = (await res.json()) as { slots?: string[]; error?: string };
+      const j = (await res.json()) as {
+        slots?: string[];
+        country?: string;
+        error?: string;
+      };
       if (!res.ok) throw new Error(j.error ?? "Не сохранено");
       setSlots(normalizeLabDueHmSlots(j.slots ?? normalized));
+      setCountry(normalizeProductionCalendarCountry(j.country ?? country));
       setOk(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
@@ -77,6 +94,30 @@ export function LabDueSlotsTenantSettings({
         <p className="mt-4 text-sm text-[var(--text-muted)]">Загрузка…</p>
       ) : (
         <div className="mt-4 space-y-3">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Производственный календарь (страна)
+            </label>
+            <select
+              className={`${inp} max-w-xs`}
+              disabled={!canEdit || saving}
+              value={country}
+              onChange={(e) =>
+                setCountry(
+                  normalizeProductionCalendarCountry(e.target.value),
+                )
+              }
+            >
+              {PRODUCTION_CALENDAR_COUNTRIES.map((c) => (
+                <option key={c} value={c}>
+                  {c === "RU" ? "Россия" : c === "BY" ? "Беларусь" : "Казахстан"}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-[var(--text-muted)]">
+              Используется для автоподстановки срока лаборатории по рабочим дням из прайса.
+            </p>
+          </div>
           <ul className="list-none space-y-2 p-0">
             {slots.map((hm, idx) => (
               <li key={`${idx}-${hm}`} className="flex flex-wrap items-center gap-2">

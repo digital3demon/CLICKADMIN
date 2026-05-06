@@ -143,3 +143,15 @@ export async function retryBackgroundOrderUpload(id: string): Promise<void> {
   await handler();
 }
 
+export function dismissBackgroundOrderUpload(id: string): void {
+  const prevTimer = clearTimers.get(id);
+  if (prevTimer) {
+    clearTimeout(prevTimer);
+    clearTimers.delete(id);
+  }
+  retryHandlers.delete(id);
+  if (!items.has(id)) return;
+  items.delete(id);
+  emit();
+}
+

@@ -42,6 +42,7 @@ export type DraftConstructionLine = {
   teethCsv: string;
   /** Для прайса: челюсть; для «дуга» — выбранная дуга; иначе заглушка */
   arch: JawArch | null;
+  leadWorkingDays?: number | null;
   bridgeFrom: string;
   bridgeTo: string;
 };
@@ -80,6 +81,7 @@ export function constructionsToDraft(
       code: string;
       name: string;
       priceRub: number;
+      leadWorkingDays?: number | null;
     } | null;
     materialId: string | null;
     shade: string | null;
@@ -119,6 +121,7 @@ export function constructionsToDraft(
           r.lineDiscountPercent != null && Number.isFinite(r.lineDiscountPercent)
             ? String(r.lineDiscountPercent)
             : "0",
+        leadWorkingDays: pl?.leadWorkingDays ?? null,
         teethCsv: teethFromJson(r.teethFdi),
         arch: jaw,
         bridgeFrom: "",
@@ -346,6 +349,7 @@ export function OrderConstructionsEditor({
       }
       line.unitPrice = String(row.priceRub);
       line.lineDiscountPercent = "0";
+      line.leadWorkingDays = row.leadWorkingDays;
       onChange([...value, line]);
     },
     [value, onChange],

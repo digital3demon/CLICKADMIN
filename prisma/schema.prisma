@@ -50,6 +50,13 @@ enum SubscriptionPlan {
   ULTRA
 }
 
+/// Производственный календарь для расчёта рабочих дней (по умолчанию Россия).
+enum ProductionCalendarCountry {
+  RU
+  BY
+  KZ
+}
+
 /// Организация (тенант): поддомен `slug`, прайс-модули, опция канбана
 model Tenant {
   id                    String           @id @default(cuid())
@@ -67,6 +74,8 @@ model Tenant {
   kanbanAdminMentionTag String?
   /// Слоты времени для поля «Срок лабораторный» в нарядах (JSON-массив строк HH:mm); null — 9:00 и 14:00.
   labDueHmSlots         Json?
+  /// Страна производственного календаря для автосроков по прайсу (рабочие дни).
+  productionCalendarCountry ProductionCalendarCountry @default(RU)
   /// Опция «Канбан» (доска в CRM), отдельно от тарифа
   addonKanban           Boolean          @default(false)
   /// Общий Telegram-аккаунт администраторов (не привязан к пользователю CRM). Уникален по всем тенантам.

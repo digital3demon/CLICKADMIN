@@ -44,6 +44,8 @@ const ORDER_PROCESS_CONCURRENCY = resolveOrderProcessConcurrency();
 let dbPromise: Promise<IDBDatabase> | null = null;
 let processorRunning = false;
 let processorRequested = false;
+const canceledOrderIds = new Set<string>();
+const orderAbortControllers = new Map<string, AbortController>();
 const trackerByOrderId = new Map<
   string,
   { trackerId: string; uploaded: number; total: number; orderNumber: string }
@@ -131,6 +133,26 @@ async function txDeleteOne(id: string): Promise<void> {
   });
 }
 
+async function txDeleteByOrder(orderId: string): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const st = tx.objectStore(STORE);
+    const idx = st.index(IDX_ORDER);
+    const req = idx.openCursor(IDBKeyRange.only(orderId));
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) return;
+      cursor.delete();
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error ?? new Error("IDB deleteByOrder failed"));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error("IDB deleteByOrder tx failed"));
+    tx.onabort = () => reject(tx.error ?? new Error("IDB deleteByOrder tx aborted"));
+  });
+}
+
 function ensureOrderTracker(orderId: string, orderNumber: string, total: number): {
   trackerId: string;
   uploaded: number;
@@ -159,6 +181,12 @@ function isOrderMissingError(message: string | null | undefined): boolean {
 }
 
 async function processOrderQueue(orderId: string): Promise<void> {
+  if (canceledOrderIds.has(orderId)) {
+    await txDeleteByOrder(orderId);
+    canceledOrderIds.delete(orderId);
+    trackerByOrderId.delete(orderId);
+    return;
+  }
   const rows = (await txGetByOrder(orderId)).sort((a, b) => a.createdAt - b.createdAt);
   if (rows.length === 0) {
     trackerByOrderId.delete(orderId);
@@ -166,11 +194,17 @@ async function processOrderQueue(orderId: string): Promise<void> {
   }
 
   const tracker = ensureOrderTracker(orderId, rows[0]!.orderNumber, rows.length);
+  const abortController = new AbortController();
+  orderAbortControllers.set(orderId, abortController);
   const fails: Array<{ id: string; error: string }> = [];
   let uploaded = 0;
   let dropped = 0;
 
-  for (const row of rows) {
+  try {
+    for (const row of rows) {
+      if (canceledOrderIds.has(orderId)) {
+        break;
+      }
     if (row.failed && row.attempts >= MAX_QUEUE_ATTEMPTS) {
       if (!row.fallbackTried) {
         const file = new File([row.blob], row.fileName, {
@@ -179,6 +213,7 @@ async function processOrderQueue(orderId: string): Promise<void> {
         });
         const fallback = await postOrderAttachmentWithRetries(orderId, file, {
           maxAttempts: 1,
+          signal: abortController.signal,
         });
         if (fallback.ok) {
           await txDeleteOne(row.id);
@@ -209,7 +244,9 @@ async function processOrderQueue(orderId: string): Promise<void> {
       type: row.mimeType || "application/octet-stream",
       lastModified: row.lastModified || Date.now(),
     });
-    const res = await postOrderAttachmentWithRetries(orderId, file);
+    const res = await postOrderAttachmentWithRetries(orderId, file, {
+      signal: abortController.signal,
+    });
     if (res.ok) {
       await txDeleteOne(row.id);
       uploaded += 1;
@@ -234,6 +271,17 @@ async function processOrderQueue(orderId: string): Promise<void> {
       },
     ]);
     fails.push({ id: row.id, error: res.error });
+  }
+  } finally {
+    orderAbortControllers.delete(orderId);
+  }
+
+  if (canceledOrderIds.has(orderId)) {
+    await txDeleteByOrder(orderId);
+    canceledOrderIds.delete(orderId);
+    completeBackgroundOrderUpload(tracker.trackerId, { success: false });
+    trackerByOrderId.delete(orderId);
+    return;
   }
 
   if (fails.length === 0) {
@@ -327,6 +375,26 @@ export function kickOrderAttachmentBackgroundProcessor(): void {
       processorRunning = false;
     }
   })();
+}
+
+export async function cancelOrderAttachmentBackgroundUpload(orderId: string): Promise<void> {
+  const key = String(orderId || "").trim();
+  if (!key) return;
+  canceledOrderIds.add(key);
+  const abort = orderAbortControllers.get(key);
+  if (abort) {
+    try {
+      abort.abort();
+    } catch {
+      /* noop */
+    }
+  }
+  await txDeleteByOrder(key);
+  const tracker = trackerByOrderId.get(key);
+  if (tracker) {
+    completeBackgroundOrderUpload(tracker.trackerId, { success: false });
+    trackerByOrderId.delete(key);
+  }
 }
 
 export type QueuedOrderAttachmentMeta = {

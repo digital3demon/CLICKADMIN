@@ -2,6 +2,7 @@ import {
   normalizeLabDueHmSlots,
   snapLocalTimeToLabHm,
 } from "@/lib/lab-due-hm-slots";
+import { addWorkingDaysAfterYmd } from "@/lib/production-calendar";
 
 const MIN_TOTAL = 8 * 60;
 const MAX_TOTAL = 23 * 60 + 30;
@@ -176,6 +177,30 @@ export function advanceLocalToLabSlotAtOrAfter(
     }
   }
   return t;
+}
+
+/**
+ * Автосрок лаборатории: базовая дата + N рабочих дней по производственному календарю страны.
+ * Для N=0 ставит ближайший доступный слот не раньше базового момента.
+ */
+export function autoLabDueLocalFromLeadWorkingDays(input: {
+  baseLocal: string;
+  leadWorkingDays: number;
+  slotsHm?: readonly string[] | null;
+  country?: string | null;
+}): string {
+  const raw = input.baseLocal.trim();
+  if (!raw) return "";
+  const base = new Date(raw);
+  if (Number.isNaN(base.getTime())) return "";
+  const baseYmd = `${base.getFullYear()}-${pad2(base.getMonth() + 1)}-${pad2(base.getDate())}`;
+  const lead = Math.max(0, Math.trunc(Number(input.leadWorkingDays) || 0));
+  if (lead === 0) {
+    return advanceLocalToLabSlotAtOrAfter(raw, input.slotsHm);
+  }
+  const dueYmd = addWorkingDaysAfterYmd(baseYmd, lead, input.country);
+  const firstSlot = normalizeLabDueHmSlots(input.slotsHm ?? null)[0] ?? "09:00";
+  return `${dueYmd}T${firstSlot}`;
 }
 
 export function earliestLabDueGridLocalFromCreatedAt(

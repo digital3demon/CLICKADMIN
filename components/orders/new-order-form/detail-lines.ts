@@ -27,6 +27,7 @@ export type DetailPriceListLine = {
   id: string;
   kind: "priceList";
   priceListItemId: string;
+  leadWorkingDays?: number | null;
   /** Подпись в списке до перезагрузки данных конфигурации */
   label?: string;
   /** true — цена подставлена из индивидуальных условий клиники */

@@ -4,6 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
 import { normalizeLabDueHmSlots } from "@/lib/lab-due-hm-slots";
+import { normalizeProductionCalendarCountry } from "@/lib/production-calendar";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +25,13 @@ export async function GET() {
   const prisma = await getPrisma();
   const row = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { labDueHmSlots: true },
+    select: { labDueHmSlots: true, productionCalendarCountry: true },
   });
   const slots = normalizeLabDueHmSlots(row?.labDueHmSlots ?? null);
-  return NextResponse.json({ slots });
+  const country = normalizeProductionCalendarCountry(
+    row?.productionCalendarCountry,
+  );
+  return NextResponse.json({ slots, country });
 }
 
 export async function PATCH(req: Request) {
@@ -45,7 +49,8 @@ export async function PATCH(req: Request) {
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
-  const rawSlots = (body as { slots?: unknown }).slots;
+  const raw = body as { slots?: unknown; country?: unknown };
+  const rawSlots = raw.slots;
   if (!Array.isArray(rawSlots)) {
     return NextResponse.json(
       { error: "Ожидается массив слотов времени" },
@@ -60,12 +65,19 @@ export async function PATCH(req: Request) {
     );
   }
 
+  const country = normalizeProductionCalendarCountry(
+    typeof raw.country === "string" ? raw.country : null,
+  );
+
   const tenantId = await requireSessionTenantId(s);
   const prisma = await getPrisma();
   await prisma.tenant.update({
     where: { id: tenantId },
-    data: { labDueHmSlots: normalized },
+    data: {
+      labDueHmSlots: normalized,
+      productionCalendarCountry: country,
+    },
   });
 
-  return NextResponse.json({ ok: true, slots: normalized });
+  return NextResponse.json({ ok: true, slots: normalized, country });
 }

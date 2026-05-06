@@ -23,7 +23,7 @@ import { invoiceParsedSnapshotForOrderEdit } from "@/lib/order-invoice-initial-f
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { resolveRegisteredByLabelForDisplay } from "@/lib/registered-by-label-display";
 import { fetchWorkspaceActivePriceListName } from "@/lib/order-price-list-from-contractors";
-import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
+import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -163,7 +163,7 @@ export default async function OrderEditPage({
   const priceItems = priceListItemIds.length
     ? await pricingPrisma.priceListItem.findMany({
         where: { id: { in: priceListItemIds } },
-        select: { id: true, code: true, name: true, priceRub: true },
+        select: { id: true, code: true, name: true, priceRub: true, leadWorkingDays: true },
       })
     : [];
   const priceItemById = new Map(priceItems.map((x) => [x.id, x]));
@@ -205,7 +205,8 @@ export default async function OrderEditPage({
   const workspaceActivePriceListName =
     await fetchWorkspaceActivePriceListName(pricingPrisma);
 
-  const labDueHmSlots = await getLabDueHmSlotsForTenant(tenantId);
+  const { slots: labDueHmSlots, country: productionCalendarCountry } =
+    await getLabDueSettingsForTenant(tenantId);
 
   const initial: OrderEditInitial = {
     id: order.id,
@@ -225,6 +226,7 @@ export default async function OrderEditPage({
     workReceivedAt: order.workReceivedAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
     labDueHmSlots,
+    productionCalendarCountry,
     invoiceIssued: order.invoiceIssued,
     invoiceNumber: order.invoiceNumber,
     invoicePaperDocs: order.invoicePaperDocs,

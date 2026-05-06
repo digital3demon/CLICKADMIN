@@ -99,6 +99,7 @@ import {
   normalizeLabDueHmSlots,
 } from "@/lib/lab-due-hm-slots";
 import {
+  autoLabDueLocalFromLeadWorkingDays,
   clampLabDueLocalToMin,
   DUE_DAY_DEFAULT_HM,
   earliestDueGridLocalFromCreatedAt,
@@ -107,6 +108,7 @@ import {
   snapDatetimeLocalToDueGrid,
   snapDatetimeLocalToLabDueGrid,
 } from "@/lib/order-due-datetime";
+import { normalizeProductionCalendarCountry } from "@/lib/production-calendar";
 import { writeClientState } from "@/lib/client-state-client";
 import {
   normalizeOrderAttachmentUploadQueue,
@@ -224,6 +226,9 @@ export function NewOrderForm({
   const [labDueHmSlots, setLabDueHmSlots] = useState<string[]>(() => [
     ...DEFAULT_LAB_DUE_HM_SLOTS,
   ]);
+  const [productionCalendarCountry, setProductionCalendarCountry] =
+    useState("RU");
+  const [labDueAutoByPrice, setLabDueAutoByPrice] = useState(true);
   const [quickOrder, setQuickOrder] = useState<QuickOrderState>(() => {
     if (initialSnapshot != null) {
       return mergeQuickOrderFromSnapshot(initialSnapshot.quickOrder);
@@ -295,6 +300,18 @@ export function NewOrderForm({
 
   const effectiveClinicIdForPrice = effectiveFinanceClinic?.id ?? null;
 
+  const maxLeadWorkingDaysFromPriceLines = useMemo(() => {
+    let maxLead: number | null = null;
+    for (const line of detailLines) {
+      if (line.kind !== "priceList") continue;
+      const lead = line.leadWorkingDays;
+      if (typeof lead !== "number" || !Number.isFinite(lead)) continue;
+      const norm = Math.max(0, Math.trunc(lead));
+      maxLead = maxLead == null ? norm : Math.max(maxLead, norm);
+    }
+    return maxLead;
+  }, [detailLines]);
+
   const dueDateMinLocal = useMemo(
     () => earliestDueGridLocalFromCreatedAt(formOpenedAtIso),
     [formOpenedAtIso],
@@ -314,9 +331,14 @@ export function NewOrderForm({
           credentials: "include",
           cache: "no-store",
         });
-        const j = (await res.json()) as { slots?: unknown };
+        const j = (await res.json()) as { slots?: unknown; country?: unknown };
         if (!res.ok || cancelled) return;
         setLabDueHmSlots(normalizeLabDueHmSlots(j.slots ?? null));
+        setProductionCalendarCountry(
+          normalizeProductionCalendarCountry(
+            typeof j.country === "string" ? j.country : null,
+          ),
+        );
       } catch {
         /* дефолт из состояния */
       }
@@ -337,6 +359,32 @@ export function NewOrderForm({
       return clampLabDueLocalToMin(raw, minLab, labDueHmSlots);
     });
   }, [labDueHmSlots, formOpenedAtIso]);
+
+  useEffect(() => {
+    if (!labDueAutoByPrice) return;
+    if (maxLeadWorkingDaysFromPriceLines == null) return;
+    const baseLocal = workReceivedLocal.trim() || dueLabMinLocal;
+    const autoLocal = autoLabDueLocalFromLeadWorkingDays({
+      baseLocal,
+      leadWorkingDays: maxLeadWorkingDaysFromPriceLines,
+      slotsHm: labDueHmSlots,
+      country: productionCalendarCountry,
+    });
+    if (!autoLocal.trim()) return;
+    const next = clampLabDueLocalToMin(autoLocal, dueLabMinLocal, labDueHmSlots);
+    setWorkDueLocal((prev) => (prev === next ? prev : next));
+    if (next.trim()) {
+      const hm = parseHmFromDueGridLocal(next);
+      setLabWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
+    }
+  }, [
+    dueLabMinLocal,
+    labDueAutoByPrice,
+    labDueHmSlots,
+    maxLeadWorkingDaysFromPriceLines,
+    productionCalendarCountry,
+    workReceivedLocal,
+  ]);
 
   const paymentSelectOptions = useMemo(() => {
     const fin = effectiveFinanceClinic ?? selectedClinic;
@@ -464,6 +512,7 @@ export function NewOrderForm({
     );
     const wd = snapDatetimeLocalToLabDueGrid(s.workDueLocal ?? "");
     setWorkDueLocal(wd);
+    setLabDueAutoByPrice(!wd.trim());
     const pa =
       "patientAppointmentLocal" in s && typeof s.patientAppointmentLocal === "string"
         ? snapDatetimeLocalToDueGrid(s.patientAppointmentLocal)
@@ -1135,6 +1184,7 @@ export function NewOrderForm({
         labDueMinLocal={dueLabMinLocal}
         labHmSlots={labDueHmSlots}
         onLabDueLocalChange={(raw) => {
+          setLabDueAutoByPrice(false);
           setWorkDueLocal(
             raw === ""
               ? ""
@@ -1403,6 +1453,7 @@ export function NewOrderForm({
                   timeGrid="labDue"
                   labHmSlots={labDueHmSlots}
                   onChange={(raw) => {
+                    setLabDueAutoByPrice(false);
                     const s =
                       raw === ""
                         ? ""

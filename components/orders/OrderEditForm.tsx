@@ -18,6 +18,7 @@ import {
 } from "@/lib/datetime-local";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 import {
+  autoLabDueLocalFromLeadWorkingDays,
   clampDueLocalToMin,
   clampLabDueLocalToMin,
   DUE_DAY_DEFAULT_HM,
@@ -121,6 +122,7 @@ import {
 import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
 import { CORRECTION_PRICE_ITEM_CODE } from "@/lib/pricing/correction-price-item";
 import { fetchCorrectionPriceListMeta } from "@/lib/pricing/fetch-correction-price-list-meta";
+import { normalizeProductionCalendarCountry } from "@/lib/production-calendar";
 
 type CourierOption = { id: string; name: string };
 
@@ -409,6 +411,8 @@ export type OrderEditInitial = {
   createdAt: string;
   /** HH:mm для «Срок лабораторный» (конфигурация «Канбан и ERP»). */
   labDueHmSlots: string[];
+  /** Страна производственного календаря для автосрока по прайсу. */
+  productionCalendarCountry?: string;
   invoiceIssued: boolean;
   invoiceNumber: string | null;
   invoicePaperDocs: boolean;
@@ -457,6 +461,7 @@ export type OrderEditInitial = {
       code: string;
       name: string;
       priceRub: number;
+      leadWorkingDays?: number | null;
     } | null;
     materialId: string | null;
     shade: string | null;
@@ -696,6 +701,7 @@ export function OrderEditForm({
     setDueAdminsLocal(rawAdm ? clampDueLocalToMin(rawAdm, minHalf) : "");
     setLabWholeDay(initial.kaitenAdminDueHasTime === false);
     setAppointmentWholeDay(initial.dueToAdminsHasTime === false);
+    setLabDueAutoByPrice(!Boolean(initial.dueDate));
   }, [
     initial.id,
     initial.createdAt,
@@ -887,6 +893,23 @@ export function OrderEditForm({
   const [draftLines, setDraftLines] = useState<DraftConstructionLine[]>(() =>
     constructionsToDraft(initial.constructions),
   );
+  const [labDueAutoByPrice, setLabDueAutoByPrice] = useState(
+    () => !Boolean(initial.dueDate),
+  );
+  const productionCalendarCountry = normalizeProductionCalendarCountry(
+    initial.productionCalendarCountry,
+  );
+  const maxLeadWorkingDaysFromPriceLines = useMemo(() => {
+    let maxLead: number | null = null;
+    for (const row of draftLines) {
+      if (row.kind !== "priceList") continue;
+      const lead = row.leadWorkingDays;
+      if (typeof lead !== "number" || !Number.isFinite(lead)) continue;
+      const norm = Math.max(0, Math.trunc(lead));
+      maxLead = maxLead == null ? norm : Math.max(maxLead, norm);
+    }
+    return maxLead;
+  }, [draftLines]);
   /** Платная коррекция: строка прайса «КП» в составе появляется/убирается с выбором «Платно». */
   useEffect(() => {
     if (correctionTrack == null || !correctionPaid) {
@@ -941,6 +964,38 @@ export function OrderEditForm({
       cancelled = true;
     };
   }, [correctionTrack, correctionPaid, clinicId, doctorId]);
+
+  useEffect(() => {
+    if (!labDueAutoByPrice) return;
+    if (dueLocal.trim()) return;
+    if (maxLeadWorkingDaysFromPriceLines == null) return;
+    const baseLocal = dueLabMinLocal;
+    const autoLocal = autoLabDueLocalFromLeadWorkingDays({
+      baseLocal,
+      leadWorkingDays: maxLeadWorkingDaysFromPriceLines,
+      slotsHm: initial.labDueHmSlots,
+      country: productionCalendarCountry,
+    });
+    if (!autoLocal.trim()) return;
+    const next = clampLabDueLocalToMin(
+      autoLocal,
+      dueLabMinLocal,
+      initial.labDueHmSlots,
+    );
+    setDueLocal(next);
+    if (next.trim()) {
+      const hm = parseHmFromDueGridLocal(next);
+      setLabWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
+    }
+  }, [
+    dueLabMinLocal,
+    dueLocal,
+    initial.labDueHmSlots,
+    labDueAutoByPrice,
+    maxLeadWorkingDaysFromPriceLines,
+    productionCalendarCountry,
+  ]);
+
   const [compositionDiscountPercent, setCompositionDiscountPercent] = useState(
     () => initial.compositionDiscountPercent ?? 0,
   );
@@ -2070,6 +2125,7 @@ export function OrderEditForm({
             title={`Срок лабораторный: ${initial.labDueHmSlots.join(", ")} или «В теч. дня»`}
             className="w-full max-w-full"
             onChange={(raw) => {
+              setLabDueAutoByPrice(false);
               const s =
                 raw === ""
                   ? ""

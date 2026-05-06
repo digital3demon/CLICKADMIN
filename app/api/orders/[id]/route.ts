@@ -284,7 +284,13 @@ async function hydrateOrderResponse<T extends OrderForHydration>(
     priceListItemIds.length
       ? pricingPrisma.priceListItem.findMany({
           where: { id: { in: priceListItemIds } },
-          select: { id: true, code: true, name: true, priceRub: true },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            priceRub: true,
+            leadWorkingDays: true,
+          },
         })
       : Promise.resolve([]),
   ]);
