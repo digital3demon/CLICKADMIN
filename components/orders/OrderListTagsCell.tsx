@@ -94,12 +94,12 @@ const padTable =
   "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:py-1 sm:text-xs sm:leading-snug md:text-sm";
 
 /**
- * Облако тегов: 4 фиксированных слота по ширине (не растягиваются на всю колонку таблицы).
- * Итого в ряд: до 4 «маленьких», до 2 «больших», «огромная» не шире 2 слотов (col-span-2).
- * Кнопка «+» находится вне grid и стоит справа по центру от блока тегов.
+ * Облако тегов: 2 фиксированные колонки (левая/правая) без auto-flow «поехавшей» сетки.
+ * Длинный блок «Заблокировано» живёт в левой колонке и не растягивает строку на всю ширину.
+ * Кнопка «+» рендерится отдельно справа и центрируется по высоте облака.
  */
-const TAG_CLOUD_GRID_CLASS =
-  "inline-grid min-h-min min-w-0 max-w-full grid-cols-[repeat(4,minmax(0,6.5rem))] content-start items-start gap-x-1 gap-y-1.5 sm:grid-cols-[repeat(4,minmax(0,7.5rem))] md:grid-cols-[repeat(4,minmax(0,8rem))]";
+const TAG_CLOUD_LANES_CLASS =
+  "inline-grid min-h-min min-w-0 max-w-full grid-cols-[minmax(0,12.5rem)_minmax(0,12.5rem)] content-start items-start gap-x-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)] md:grid-cols-[minmax(0,15rem)_minmax(0,15rem)]";
 
 const TAG_ADD_BUTTON_CLASS =
   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-sm font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-7 sm:w-7";
@@ -108,19 +108,10 @@ const TAG_ADD_BUTTON_CLASS =
 const TAG_SLOT_HUGE_MIN_CHARS = 28;
 
 type TagSlotSize = "huge" | "large" | "small";
-
-function kaitenBlockedTagSlot(reason: string | null | undefined): "huge" | "large" {
-  return (reason ?? "").trim().length >= TAG_SLOT_HUGE_MIN_CHARS ? "huge" : "large";
-}
+type TagLane = "left" | "right";
 
 function customTagSlot(label: string): "huge" | "large" {
   return label.trim().length >= TAG_SLOT_HUGE_MIN_CHARS ? "huge" : "large";
-}
-
-function tagCloudCellClass(slot: TagSlotSize): string {
-  const span =
-    slot === "huge" ? "col-span-2" : slot === "large" ? "col-span-2" : "col-span-1";
-  return `${span} flex min-h-0 min-w-0 items-start [&>*]:min-w-0`;
 }
 const TAG_EDIT_BUTTON_CLASS =
   "rounded p-1 text-xs leading-none hover:opacity-90";
@@ -187,7 +178,7 @@ function OrderAttentionWarningGlyph({ className }: { className: string }) {
   );
 }
 
-type TagCloudItem = { key: string; slot: TagSlotSize; node: ReactNode };
+type TagCloudItem = { key: string; lane: TagLane; node: ReactNode };
 
 function tagHref(
   pageSize: number,
@@ -507,10 +498,9 @@ export function OrderListTagsCell({
     const items: TagCloudItem[] = [];
 
     if (kaitenBlocked) {
-      const blockedSlot = kaitenBlockedTagSlot(kaitenBlockReason);
       items.push({
         key: "blocked",
-        slot: blockedSlot,
+        lane: "left",
         node: (
           <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
             <Link
@@ -552,7 +542,7 @@ export function OrderListTagsCell({
     if (adminShippedOtpr) {
       items.push({
         key: "otpr",
-        slot: "small",
+        lane: "left",
         node: (
           <span className="inline-flex items-center gap-0.5">
             <Link
@@ -591,7 +581,7 @@ export function OrderListTagsCell({
 
     items.push({
       key: "kaiten",
-      slot: "large",
+      lane: kaitenBlocked ? "right" : "left",
       node: kaitenFilterKey ? (
         <Link
           href={href(kaitenFilterKey)}
@@ -617,7 +607,7 @@ export function OrderListTagsCell({
     if (isUrgent) {
       items.push({
         key: "urgent",
-        slot: "small",
+        lane: "right",
         node: (
           <span className="inline-flex items-center gap-0.5">
             <Link
@@ -645,7 +635,7 @@ export function OrderListTagsCell({
     if (prostheticsOrdered) {
       items.push({
         key: "prost",
-        slot: "large",
+        lane: "left",
         node: (
           <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
             <Link
@@ -673,7 +663,7 @@ export function OrderListTagsCell({
     if (hasInvoiceAttachment) {
       items.push({
         key: "inv",
-        slot: "small",
+        lane: "left",
         node: (
           <Link
             href={href(LIST_TAG_INVOICE)}
@@ -689,7 +679,7 @@ export function OrderListTagsCell({
     if (invoicePrinted) {
       items.push({
         key: "invpr",
-        slot: "large",
+        lane: "left",
         node: (
           <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
             <Link
@@ -716,7 +706,7 @@ export function OrderListTagsCell({
 
     items.push({
       key: "pay",
-      slot: "large",
+      lane: kaitenBlocked ? "left" : "right",
       node: (
         <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
           {paymentFilterTag ? (
@@ -758,7 +748,7 @@ export function OrderListTagsCell({
       const ctSlot = customTagSlot(t.label);
       items.push({
         key: `ct-${t.id}`,
-        slot: ctSlot,
+        lane: "left",
         node: (
           <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
             <Link
@@ -848,13 +838,25 @@ export function OrderListTagsCell({
     </button>
   );
 
-  const tagCloudGrid = (
-    <div className={`${TAG_CLOUD_GRID_CLASS} min-w-0`}>
-      {tagCloudItems.map((it) => (
-        <div key={it.key} className={tagCloudCellClass(it.slot)}>
-          {it.node}
-        </div>
-      ))}
+  const leftCloudItems = tagCloudItems.filter((it) => it.lane === "left");
+  const rightCloudItems = tagCloudItems.filter((it) => it.lane === "right");
+
+  const tagCloudColumns = (
+    <div className={TAG_CLOUD_LANES_CLASS}>
+      <div className="flex min-w-0 flex-col gap-y-1.5">
+        {leftCloudItems.map((it) => (
+          <div key={it.key} className="flex min-w-0 items-start [&>*]:min-w-0 [&>*]:max-w-full">
+            {it.node}
+          </div>
+        ))}
+      </div>
+      <div className="flex min-w-0 flex-col gap-y-1.5">
+        {rightCloudItems.map((it) => (
+          <div key={it.key} className="flex min-w-0 items-start [&>*]:min-w-0 [&>*]:max-w-full">
+            {it.node}
+          </div>
+        ))}
+      </div>
     </div>
   );
 
@@ -904,14 +906,14 @@ export function OrderListTagsCell({
                 </Link>
               ) : null}
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-x-1.5">
-              {tagCloudGrid}
+            <div className="inline-flex min-w-0 max-w-full items-center gap-x-1.5">
+              {tagCloudColumns}
               {addTagButton}
             </div>
           </>
         ) : (
-          <div className="flex w-full min-w-0 items-center gap-x-1.5">
-            {tagCloudGrid}
+          <div className="inline-flex min-w-0 max-w-full items-center gap-x-1.5">
+            {tagCloudColumns}
             {addTagButton}
           </div>
         )}

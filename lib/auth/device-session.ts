@@ -67,7 +67,17 @@ export async function issueUserDeviceSessionOrThrow(input: {
       },
     });
     if (activeSameType > 0) {
-      throw new DeviceLimitReachedError(deviceType);
+      // UX: если сессия "залипла" (например, неуспешный logout на старом устройстве),
+      // не блокируем вход, а заменяем предыдущую активную сессию этого типа новой.
+      await tx.userDeviceSession.updateMany({
+        where: {
+          userId: input.userId,
+          deviceType,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: { revokedAt: now },
+      });
     }
 
     await tx.userDeviceSession.create({
