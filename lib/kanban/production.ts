@@ -103,6 +103,17 @@ function colByTitle(board: KanbanBoard, title: string) {
   return board.columns.find((col) => normalizeKey(col.title) === want) ?? null;
 }
 
+function colByLaneAndStage(
+  board: KanbanBoard,
+  laneName: string,
+  stageTitle: string,
+) {
+  const target = normalizeKey(`${laneName} · ${stageTitle}`);
+  const exact = board.columns.find((col) => normalizeKey(col.title) === target);
+  if (exact) return exact;
+  return colByTitle(board, stageTitle);
+}
+
 function buildInitialChecklist(files: CardFile[]): ProductionChecklistItem[] {
   return files.map((f) => ({
     id: generateId("pchk"),
@@ -120,10 +131,10 @@ function upsertChildCardForLane(input: {
   laneId: string;
   laneName: string;
   files: CardFile[];
-  todoColumnId: string;
+  settings: NonNullable<KanbanBoard["productionSettings"]>;
   activityActorLabel?: string;
 }): string {
-  const { board, parent, laneId, laneName, files, todoColumnId, activityActorLabel } = input;
+  const { board, parent, laneId, laneName, files, settings, activityActorLabel } = input;
   const existing = board.columns
     .flatMap((col) => col.cards)
     .find((card) => card.parentCardId === parent.id && card.productionLaneId === laneId);
@@ -133,7 +144,7 @@ function upsertChildCardForLane(input: {
     existing.updatedAt = new Date().toISOString();
     return existing.id;
   }
-  const todoCol = board.columns.find((c) => c.id === todoColumnId);
+  const todoCol = colByLaneAndStage(board, laneName, settings.childTodoColumnTitle);
   if (!todoCol) return "";
   const child = createCard({
     title: `${parent.title} · ${laneName}`,
@@ -161,13 +172,12 @@ export function syncProductionChildrenForParent(
   board: KanbanBoard,
   parentCardId: string,
   activityActorLabel?: string,
+  parentCard?: KanbanCard,
 ): string[] {
   const settings = normalizeProductionSettings(board);
   if (!settings.enabled) return [];
-  const parent = cardById(board, parentCardId);
+  const parent = parentCard ?? cardById(board, parentCardId);
   if (!parent || parent.parentCardId) return [];
-  const todoCol = colByTitle(board, settings.childTodoColumnTitle);
-  if (!todoCol) return [];
   const grouped = new Map<string, CardFile[]>();
   for (const f of parent.files || []) {
     const laneId = resolveLaneForFileName(f.name, settings);
@@ -185,7 +195,7 @@ export function syncProductionChildrenForParent(
       laneId,
       laneName,
       files,
-      todoColumnId: todoCol.id,
+      settings,
       activityActorLabel,
     });
     if (childId) childIds.push(childId);
@@ -266,9 +276,14 @@ export async function expandProductionChecklistFromArchives(
 
 export function isProductionChildDone(board: KanbanBoard, childCardId: string): boolean {
   const settings = normalizeProductionSettings(board);
-  const doneCol = colByTitle(board, settings.childDoneColumnTitle);
-  if (!doneCol) return false;
-  return doneCol.cards.some((c) => c.id === childCardId);
+  const doneRaw = normalizeKey(settings.childDoneColumnTitle);
+  for (const col of board.columns) {
+    if (!col.cards.some((c) => c.id === childCardId)) continue;
+    const colRaw = normalizeKey(col.title);
+    if (colRaw === doneRaw) return true;
+    if (colRaw.endsWith(`· ${doneRaw}`)) return true;
+  }
+  return false;
 }
 
 export function markProductionChildReadyState(board: KanbanBoard, cardId: string): void {

@@ -17,13 +17,15 @@ import {
   pushActivity,
 } from "@/lib/kanban/model";
 import {
+  closestCenter,
+  rectIntersection,
   DndContext,
   type DragEndEvent,
   type DraggableSyntheticListeners,
   KeyboardSensor,
   PointerSensor,
   TouchSensor,
-  closestCorners,
+  pointerWithin,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -617,6 +619,22 @@ export function BoardCanvas({
     }),
   );
 
+  /**
+   * На границах колонок closestCorners часто "дёргает" цель.
+   * Сначала берём реальный hit-test указателя, затем пересечение,
+   * и только потом ближайший центр как мягкий fallback.
+   */
+  const collisionDetection = useCallback(
+    (...args: Parameters<typeof pointerWithin>) => {
+      const pointerHits = pointerWithin(...args);
+      if (pointerHits.length > 0) return pointerHits;
+      const intersections = rectIntersection(...args);
+      if (intersections.length > 0) return intersections;
+      return closestCenter(...args);
+    },
+    [],
+  );
+
   useEffect(() => {
     const el = horizontalScrollRef.current;
     if (!el) return;
@@ -852,7 +870,7 @@ export function BoardCanvas({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collisionDetection}
       onDragEnd={onDragEnd}
     >
       <div

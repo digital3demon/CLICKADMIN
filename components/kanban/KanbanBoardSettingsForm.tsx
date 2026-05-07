@@ -16,12 +16,14 @@ type KanbanBoardSettingsFormProps = {
   onPatchBoard: (fn: (b: KanbanBoard) => void) => void;
   /** Редактирование тега @лаборатории для организации (не локально для одной доски). */
   canEditKanbanAdminTag?: boolean;
+  onEnsureProductionBoardNow?: () => void;
 };
 
 export function KanbanBoardSettingsForm({
   board,
   onPatchBoard,
   canEditKanbanAdminTag = false,
+  onEnsureProductionBoardNow,
 }: KanbanBoardSettingsFormProps) {
   const production = board.productionSettings ?? defaultProductionSettings();
   const types = board.cardTypes || [];
@@ -44,6 +46,10 @@ export function KanbanBoardSettingsForm({
   const [labTagDraft, setLabTagDraft] = useState(DEFAULT_KANBAN_ADMIN_MENTION_TAG);
   const [labTagSaving, setLabTagSaving] = useState(false);
   const [labTagError, setLabTagError] = useState<string | null>(null);
+  const [archive3dDraft, setArchive3dDraft] = useState(
+    (production.archive3dExtensions || []).join(", "),
+  );
+  const [laneKeywordsDraft, setLaneKeywordsDraft] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +71,15 @@ export function KanbanBoardSettingsForm({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    setArchive3dDraft((production.archive3dExtensions || []).join(", "));
+    const map: Record<string, string> = {};
+    for (const lane of production.lanes) {
+      map[lane.id] = (lane.keywords || []).join(", ");
+    }
+    setLaneKeywordsDraft(map);
+  }, [board.id, production.archive3dExtensions, production.lanes]);
 
   const persistLabTag = async () => {
     if (!canEditKanbanAdminTag) return;
@@ -100,6 +115,27 @@ export function KanbanBoardSettingsForm({
 
   return (
     <div className="space-y-8">
+      <section>
+        <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
+          Режим доски
+        </h3>
+        <label className="inline-flex items-center gap-2 text-sm text-[var(--text-body)]">
+          <input
+            type="checkbox"
+            checked={board.distributeNewOrders !== false}
+            onChange={(e) =>
+              onPatchBoard((b) => {
+                b.distributeNewOrders = e.target.checked;
+              })
+            }
+          />
+          Доска для распределения новых заказов
+        </label>
+        <p className="mt-2 text-[0.75rem] text-[var(--text-muted)]">
+          Только отмеченные доски видны в выборе пространства при создании нового наряда.
+        </p>
+      </section>
+
       <section>
         <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
           Чат канбана и Kaiten
@@ -143,6 +179,17 @@ export function KanbanBoardSettingsForm({
           Автосоздание дочерних карточек при переносе в «Производство», маршрутизация по ключевым
           словам в именах файлов и автоархивация готовых дочерних.
         </p>
+        {onEnsureProductionBoardNow ? (
+          <div className="mb-3">
+            <button
+              type="button"
+              className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+              onClick={onEnsureProductionBoardNow}
+            >
+              Создать/обновить доску Производство сейчас
+            </button>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">
             <span className="mb-1 block text-[var(--text-secondary)]">Колонка-триггер (родитель)</span>
@@ -236,11 +283,12 @@ export function KanbanBoardSettingsForm({
             </span>
             <input
               type="text"
-              value={(production.archive3dExtensions || []).join(", ")}
-              onChange={(e) =>
+              value={archive3dDraft}
+              onChange={(e) => setArchive3dDraft(e.target.value)}
+              onBlur={() =>
                 onPatchBoard((b) => {
                   const p = normalizeProductionSettings(b);
-                  p.archive3dExtensions = e.target.value
+                  p.archive3dExtensions = archive3dDraft
                     .split(",")
                     .map((x) => x.trim())
                     .filter(Boolean);
@@ -281,13 +329,16 @@ export function KanbanBoardSettingsForm({
                   <td className="py-2 pr-2">
                     <input
                       type="text"
-                      value={(lane.keywords || []).join(", ")}
+                      value={laneKeywordsDraft[lane.id] ?? (lane.keywords || []).join(", ")}
                       onChange={(e) =>
+                        setLaneKeywordsDraft((prev) => ({ ...prev, [lane.id]: e.target.value }))
+                      }
+                      onBlur={() =>
                         onPatchBoard((b) => {
                           const p = normalizeProductionSettings(b);
                           const row = p.lanes.find((x) => x.id === lane.id);
                           if (!row) return;
-                          row.keywords = e.target.value
+                          row.keywords = (laneKeywordsDraft[lane.id] || "")
                             .split(",")
                             .map((x) => x.trim())
                             .filter(Boolean);

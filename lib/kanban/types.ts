@@ -173,6 +173,8 @@ export type KanbanAutomationEvent =
 export type KanbanBoard = {
   id: string;
   title: string;
+  /** Участвует в распределении новых заказов из формы наряда. */
+  distributeNewOrders?: boolean;
   /** Закрытая доска: доступ только пользователям из `accessUserIds`. */
   isPrivate?: boolean;
   /** Список userId, у кого есть доступ к закрытой доске. */

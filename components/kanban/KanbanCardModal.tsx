@@ -2,6 +2,7 @@
 
 import type { CardComment, CardFile, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import {
+  downloadCardFile,
   isCardFileImage,
   isPdfMime,
   openOrDownloadCardFile,
@@ -55,6 +56,7 @@ import {
 } from "./KanbanPersonAvatar";
 import type { KanbanCrmUserRow } from "./kanban-crm-users-context";
 import {
+  IconArrowLeft,
   IconArrowRight,
   IconBrick,
   IconLink,
@@ -155,6 +157,7 @@ type KanbanCardModalProps = {
   onClose: () => void;
   onApply: (fn: (b: KanbanBoard) => void) => void;
   toast: (msg: string, err?: boolean) => void;
+  onMovePrevStage: (id: string) => void;
   onMoveNextStage: (id: string) => void;
   /** Копирует в буфер ссылку на карточку (как в меню на доске). */
   onCopyCardLink: (cardId: string) => void;
@@ -181,6 +184,7 @@ export function KanbanCardModal({
   onClose,
   onApply,
   toast,
+  onMovePrevStage,
   onMoveNextStage,
   onCopyCardLink,
   trackLaneOptions,
@@ -267,6 +271,7 @@ export function KanbanCardModal({
 
   const linkedOrderId = card?.linkedOrderId;
   const kaitenCardIdForChat = card?.kaitenCardId;
+  const currentColumnTitle = found?.col?.title || "—";
   const chatActorUserId =
     (commentAuthorUserId ?? "").trim() || board.users[0]?.id || "";
 
@@ -334,6 +339,19 @@ export function KanbanCardModal({
 
   const blocked = isCardBlocked(card);
   const dueHintKind = deadlineHintKind(card.dueDate);
+  const currentColumnIndex = board.columns.findIndex((col) => col.id === found.col.id);
+  const prevColumnTitle =
+    currentColumnIndex > 0 ? board.columns[currentColumnIndex - 1]?.title || "" : "";
+  const nextColumnTitle =
+    currentColumnIndex >= 0 && currentColumnIndex + 1 < board.columns.length
+      ? board.columns[currentColumnIndex + 1]?.title || ""
+      : "";
+  const movePrevTitle = prevColumnTitle
+    ? `Перенести в "${prevColumnTitle}"`
+    : "Карточка уже в первом столбце";
+  const moveNextTitle = nextColumnTitle
+    ? `Перенести в "${nextColumnTitle}"`
+    : "Карточка уже в последнем столбце";
 
   const openBlockPopup = () => {
     setBlockReasonDraft("");
@@ -1045,7 +1063,15 @@ export function KanbanCardModal({
             </button>
             <button
               type="button"
-              title="Следующий столбец"
+              title={movePrevTitle}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40"
+              onClick={() => onMovePrevStage(cardId)}
+            >
+              <IconArrowLeft />
+            </button>
+            <button
+              type="button"
+              title={moveNextTitle}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40"
               onClick={() => onMoveNextStage(cardId)}
             >
@@ -1119,10 +1145,10 @@ export function KanbanCardModal({
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-2.5">
-              <div className="mb-3 grid gap-3 sm:grid-cols-2">
+              <div className="mb-3 grid gap-3 sm:grid-cols-3">
                 <div>
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
-                    {trackLaneFieldLabel ?? "Расположение (дорожка)"}
+                    {trackLaneFieldLabel ?? "Расположение"}
                   </div>
                   <select
                     className={baseInput}
@@ -1151,6 +1177,14 @@ export function KanbanCardModal({
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+                    Столбец
+                  </div>
+                  <div className={`${baseInput} min-h-[2.25rem] truncate`}>
+                    {currentColumnTitle}
+                  </div>
                 </div>
                 <div>
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
@@ -1385,7 +1419,7 @@ export function KanbanCardModal({
                         (card.files || []).map((f) => (
                           <div
                             key={f.id}
-                            className="group relative rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] py-0.5 pl-1 pr-7"
+                            className="group relative rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] py-0.5 pl-1 pr-14"
                           >
                             <button
                               type="button"
@@ -1402,6 +1436,18 @@ export function KanbanCardModal({
                               <span className="min-w-0 flex-1 break-words text-left text-[0.7rem] leading-snug text-[var(--kaiten-modal-text)] line-clamp-3">
                                 {f.name}
                               </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="absolute right-5 top-1/2 -translate-y-1/2 rounded bg-[var(--kaiten-modal-bg)]/90 p-0.5 text-[var(--kaiten-modal-muted)] opacity-0 shadow-sm ring-1 ring-[var(--kaiten-modal-border)] transition-opacity hover:text-[var(--kaiten-modal-text)] group-hover:opacity-100"
+                              title="Скачать файл"
+                              aria-label="Скачать файл"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadCardFile(f);
+                              }}
+                            >
+                              <span className="px-1 text-[0.6rem] leading-none">↓</span>
                             </button>
                             <button
                               type="button"
@@ -1596,6 +1642,7 @@ export function KanbanCardModal({
           onClose={closeFileViewer}
           onPrev={viewerGoPrev}
           onNext={viewerGoNext}
+          onDownload={downloadCardFile}
         />
       ) : null}
     </div>
@@ -1686,11 +1733,13 @@ function CardAttachmentViewerOverlay({
   onClose,
   onPrev,
   onNext,
+  onDownload,
 }: {
   state: AttachmentViewerState;
   onClose: () => void;
   onPrev: () => void;
   onNext: () => void;
+  onDownload: (file: CardFile) => void;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1745,6 +1794,13 @@ function CardAttachmentViewerOverlay({
             {current.name}
           </span>
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              className="rounded-md border border-white/20 px-2 py-1 text-xs text-white/90 hover:bg-white/10 hover:text-white"
+              onClick={() => onDownload(current)}
+            >
+              Скачать
+            </button>
             {count > 1 ? (
               <span className="text-xs tabular-nums text-white/65">
                 {state.index + 1} / {count}
@@ -2104,24 +2160,39 @@ function ChatPanel({
                   {block.comments.map((cm) => {
                     const imgFile = resolveChatImageFile(card, cm)!;
                     return (
-                      <button
+                      <div
                         key={cm.id}
-                        type="button"
-                        className="group flex min-w-0 cursor-zoom-in flex-col gap-0.5 text-left transition-opacity hover:opacity-95"
-                        title={imgFile.name}
-                        onClick={() => onOpenAttachment(imgFile)}
+                        className="group flex min-w-0 flex-col gap-0.5"
                       >
-                        <div className="aspect-square w-full overflow-hidden rounded-md border border-[var(--kaiten-modal-border)] bg-black/20">
-                          <KanbanAttachmentImg
-                            file={imgFile}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
+                        <button
+                          type="button"
+                          className="cursor-zoom-in text-left transition-opacity hover:opacity-95"
+                          title={imgFile.name}
+                          onClick={() => onOpenAttachment(imgFile)}
+                        >
+                          <div className="aspect-square w-full overflow-hidden rounded-md border border-[var(--kaiten-modal-border)] bg-black/20">
+                            <KanbanAttachmentImg
+                              file={imgFile}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        </button>
+                        <div className="flex items-start justify-between gap-1">
+                          <span className="line-clamp-2 min-w-0 flex-1 break-all text-[0.55rem] leading-tight text-[var(--kaiten-modal-muted)]">
+                            {cm.text.trim() || imgFile.name}
+                          </span>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded border border-[var(--kaiten-modal-border)] px-1 py-0.5 text-[0.55rem] leading-none text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
+                            onClick={() => downloadCardFile(imgFile)}
+                            title="Скачать файл"
+                            aria-label={`Скачать ${imgFile.name}`}
+                          >
+                            Скачать
+                          </button>
                         </div>
-                        <span className="line-clamp-2 break-all text-[0.55rem] leading-tight text-[var(--kaiten-modal-muted)]">
-                          {cm.text.trim() || imgFile.name}
-                        </span>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

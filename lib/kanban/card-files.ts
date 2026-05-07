@@ -19,13 +19,8 @@ export function isPdfMime(mime: string, name?: string): boolean {
   return n.endsWith(".pdf");
 }
 
-/** Скачивание вложения. Картинки и PDF открывайте через просмотрщик в модалке карточки. */
-export function openOrDownloadCardFile(f: CardFile): void {
-  const mime = f.mime || "";
-  if (isImageMime(mime) || isPdfMime(mime, f.name)) {
-    window.open(f.dataUrl, "_blank", "noopener,noreferrer");
-    return;
-  }
+/** Принудительно скачать файл с именем (для любого MIME). */
+export function downloadCardFile(f: CardFile): void {
   const a = document.createElement("a");
   a.href = f.dataUrl;
   a.download = f.name || "file";
@@ -33,6 +28,16 @@ export function openOrDownloadCardFile(f: CardFile): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+/** Скачивание вложения. Картинки и PDF открывайте через просмотрщик в модалке карточки. */
+export function openOrDownloadCardFile(f: CardFile): void {
+  const mime = f.mime || "";
+  if (isImageMime(mime) || isPdfMime(mime, f.name)) {
+    window.open(f.dataUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
+  downloadCardFile(f);
 }
 
 export function readFileAsCardFile(file: File, userId: string): Promise<CardFile> {

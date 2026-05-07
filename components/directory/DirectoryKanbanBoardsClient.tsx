@@ -18,6 +18,7 @@ import {
   saveKanbanState,
   withActiveBoard,
 } from "@/lib/kanban/model";
+import { normalizeProductionSettings } from "@/lib/kanban/production";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminMessengerTenantSettings } from "@/components/directory/AdminMessengerTenantSettings";
@@ -251,6 +252,63 @@ export function DirectoryKanbanBoardsClient({
     showToast("Настройки доски сохранены");
   };
 
+  const ensureProductionBoardNow = useCallback(() => {
+    let created = false;
+    let changed = false;
+    patchApp((s) => {
+      const source = getActiveBoard(s);
+      const srcSettings = normalizeProductionSettings(source);
+      const lanes = srcSettings.lanes.length
+        ? srcSettings.lanes
+        : [{ id: "lane_print", name: "Печать", keywords: [] }];
+      const neededTitles: string[] = [];
+      for (const lane of lanes) {
+        neededTitles.push(`${lane.name} · ${srcSettings.childTodoColumnTitle}`);
+        neededTitles.push(`${lane.name} · ${srcSettings.childInProgressColumnTitle}`);
+        neededTitles.push(`${lane.name} · ${srcSettings.childDoneColumnTitle}`);
+      }
+      let prod = s.boards.find((b) => b.title.trim().toLowerCase() === "производство");
+      if (!prod) {
+        created = true;
+        changed = true;
+        prod = {
+          id: generateId("board"),
+          title: "Производство",
+          isPrivate: false,
+          accessUserIds: [],
+          columns: neededTitles.map((title) => ({ id: generateId("col"), title, cards: [] })),
+          users: structuredClone(source.users || []),
+          excludedCrmUserIds: structuredClone(source.excludedCrmUserIds || []),
+          cardTypes: structuredClone(source.cardTypes || []),
+          automations: [],
+          autoArchiveRules: [],
+          archiveRetentionDays: source.archiveRetentionDays ?? 365,
+          archivedCards: [],
+          productionSettings: structuredClone(srcSettings),
+        };
+        s.boards.push(prod);
+      } else {
+        const existing = new Set(prod.columns.map((c) => c.title.trim().toLowerCase()));
+        for (const title of neededTitles) {
+          const key = title.trim().toLowerCase();
+          if (existing.has(key)) continue;
+          changed = true;
+          prod.columns.push({ id: generateId("col"), title, cards: [] });
+          existing.add(key);
+        }
+        prod.productionSettings = structuredClone(srcSettings);
+        prod.users = structuredClone(source.users || []);
+        prod.cardTypes = structuredClone(source.cardTypes || []);
+        prod.excludedCrmUserIds = structuredClone(source.excludedCrmUserIds || []);
+      }
+    });
+    if (created) {
+      showToast("Доска «Производство» создана");
+      return;
+    }
+    showToast(changed ? "Доска «Производство» обновлена" : "Доска «Производство» уже актуальна");
+  }, [patchApp, showToast]);
+
   const openCreateModal = () => {
     setCreateTitle(`Доска ${appState.boards.length + 1}`);
     setCreatePrivate(false);
@@ -280,6 +338,36 @@ export function DirectoryKanbanBoardsClient({
     setCreateOpen(false);
     showToast(createPrivate ? "Создана закрытая доска" : "Создана новая доска");
   };
+
+  const deleteActiveBoard = useCallback(() => {
+    const target = board;
+    if (!target) return;
+    if (appState.boards.length <= 1) {
+      showToast("Нельзя удалить последнюю доску", true);
+      return;
+    }
+    const cardsCount = target.columns.reduce((sum, col) => sum + col.cards.length, 0);
+    setConfirm({
+      message:
+        cardsCount > 0
+          ? `Удалить доску «${target.title}»? Карточек внутри: ${cardsCount}. Действие необратимо.`
+          : `Удалить доску «${target.title}»? Действие необратимо.`,
+      onOk: () => {
+        patchApp((s) => {
+          const keepBoards = s.boards.filter((b) => b.id !== target.id);
+          if (keepBoards.length === 0) return;
+          s.boards = keepBoards;
+          if (s.activeBoardId === target.id || !keepBoards.some((b) => b.id === s.activeBoardId)) {
+            s.activeBoardId =
+              keepBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
+              keepBoards[0]!.id;
+          }
+        });
+        setConfirm(null);
+        showToast(`Доска «${target.title}» удалена`);
+      },
+    });
+  }, [appState.boards.length, board, patchApp, showToast]);
 
   return (
     <KanbanCrmUsersProvider>
@@ -384,6 +472,21 @@ export function DirectoryKanbanBoardsClient({
                 Переименовать…
               </button>
             ) : null}
+            {!isDemo ? (
+              <button
+                type="button"
+                className="rounded-md border border-red-300/70 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100 dark:border-red-800/70 dark:bg-red-950/25 dark:text-red-300 dark:hover:bg-red-950/40"
+                onClick={deleteActiveBoard}
+                disabled={appState.boards.length <= 1}
+                title={
+                  appState.boards.length <= 1
+                    ? "Нельзя удалить последнюю доску"
+                    : "Удалить активную доску"
+                }
+              >
+                Удалить доску
+              </button>
+            ) : null}
           </div>
         </section>
 
@@ -400,6 +503,7 @@ export function DirectoryKanbanBoardsClient({
               board={board}
               onPatchBoard={applyToBoard}
               canEditKanbanAdminTag={canEditKanbanAdminTag}
+              onEnsureProductionBoardNow={ensureProductionBoardNow}
             />
           </div>
           <div className="mt-6 flex flex-wrap gap-2 border-t border-[var(--card-border)] pt-4">

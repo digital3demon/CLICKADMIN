@@ -3,6 +3,11 @@
 import type { KaitenTrackLane } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
+import { readClientState } from "@/lib/client-state-client";
+import {
+  KANBAN_BOARD_ORTHODONTICS_ID,
+  KANBAN_BOARD_ORTHOPEDICS_ID,
+} from "@/lib/kanban/model";
 export type KaitenSavePayload =
   | { kaitenDecideLater: true; createKanbanWithoutKaiten?: false }
   | {
@@ -74,6 +79,23 @@ function defaultTrackLane(lanes: KaitenTrackLane[]): KaitenTrackLane {
   return lanes[0]!;
 }
 
+function distributionLanesFromTenantKanbanState(raw: unknown): KaitenTrackLane[] | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const state = raw as { boards?: unknown };
+  if (!Array.isArray(state.boards)) return null;
+  const lanes = new Set<KaitenTrackLane>();
+  for (const item of state.boards) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const board = item as { id?: unknown; distributeNewOrders?: unknown };
+    const id = typeof board.id === "string" ? board.id : "";
+    const enabled = board.distributeNewOrders !== false;
+    if (!enabled) continue;
+    if (id === KANBAN_BOARD_ORTHOPEDICS_ID) lanes.add("ORTHOPEDICS");
+    if (id === KANBAN_BOARD_ORTHODONTICS_ID) lanes.add("ORTHODONTICS");
+  }
+  return [...lanes];
+}
+
 export function KaitenPreflightModal({
   open,
   saving,
@@ -98,6 +120,9 @@ export function KaitenPreflightModal({
   const [laneAllowlist, setLaneAllowlist] = useState<KaitenTrackLane[] | null>(
     null,
   );
+  const [distributionLaneAllowlist, setDistributionLaneAllowlist] = useState<
+    KaitenTrackLane[] | null
+  >(null);
   const [workLabel, setWorkLabel] = useState("");
 
   useEffect(() => {
@@ -106,6 +131,7 @@ export function KaitenPreflightModal({
     setKanbanOnly(false);
     setSpace("ORTHOPEDICS");
     setLaneAllowlist(null);
+    setDistributionLaneAllowlist(null);
     setWorkLabel("");
     setLoadError(null);
     let cancelled = false;
@@ -127,6 +153,15 @@ export function KaitenPreflightModal({
         setLaneAllowlist(
           Array.isArray(data.trackLanes) ? data.trackLanes : [],
         );
+        const tenantKanbanState = await readClientState<unknown>(
+          "tenant",
+          "kanbanAppStateV3",
+        );
+        if (!cancelled) {
+          setDistributionLaneAllowlist(
+            distributionLanesFromTenantKanbanState(tenantKanbanState),
+          );
+        }
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : "Сеть недоступна");
@@ -139,23 +174,30 @@ export function KaitenPreflightModal({
   }, [open]);
 
   const spaceOptions = useMemo(() => {
-    if (laneAllowlist == null) return SPACE_OPTIONS;
-    return SPACE_OPTIONS.filter((o) => laneAllowlist.includes(o.value));
-  }, [laneAllowlist]);
+    let base = SPACE_OPTIONS;
+    if (laneAllowlist != null) {
+      base = base.filter((o) => laneAllowlist.includes(o.value));
+    }
+    if (distributionLaneAllowlist != null) {
+      base = base.filter((o) => distributionLaneAllowlist.includes(o.value));
+    }
+    return base;
+  }, [laneAllowlist, distributionLaneAllowlist]);
 
   useEffect(() => {
-    if (laneAllowlist == null || laneAllowlist.length === 0) return;
-    if (!laneAllowlist.includes(space)) {
-      setSpace(defaultTrackLane(laneAllowlist));
+    if (spaceOptions.length === 0) return;
+    const available = spaceOptions.map((o) => o.value);
+    if (!available.includes(space)) {
+      setSpace(defaultTrackLane(available));
     }
-  }, [laneAllowlist, space]);
+  }, [spaceOptions, space]);
 
   const kaitenFieldsRequired = !decideLater || kanbanOnly;
 
   const canSubmit = useMemo(() => {
     if (!kaitenFieldsRequired) return true;
     if (loadError || cardTypes.length === 0 || !cardTypeId) return false;
-    if (laneAllowlist !== null && laneAllowlist.length === 0) return false;
+    if (spaceOptions.length === 0) return false;
     if (!space) return false;
     return true;
   }, [
@@ -163,7 +205,7 @@ export function KaitenPreflightModal({
     loadError,
     cardTypes.length,
     cardTypeId,
-    laneAllowlist,
+    spaceOptions.length,
     space,
   ]);
 
@@ -344,6 +386,13 @@ export function KaitenPreflightModal({
                     KAITEN_ORTHOPEDICS_* и/или KAITEN_ORTHODONTICS_* и при
                     необходимости KAITEN_TEST_* — board id и id колонки «в
                     работу»).
+                  </p>
+                ) : null}
+                {distributionLaneAllowlist !== null &&
+                distributionLaneAllowlist.length === 0 ? (
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    В настройках канбана не отмечено ни одной доски как «Доска для распределения
+                    новых заказов».
                   </p>
                 ) : null}
                 <div className="flex flex-wrap gap-2">

@@ -49,6 +49,13 @@ export function trackLanes() {
 export const KANBAN_BOARD_ORTHOPEDICS_ID = "kanban_board_orthopedics";
 export const KANBAN_BOARD_ORTHODONTICS_ID = "kanban_board_orthodontics";
 
+function defaultDistributeNewOrdersByBoardId(boardId: string): boolean {
+  return (
+    boardId === KANBAN_BOARD_ORTHOPEDICS_ID ||
+    boardId === KANBAN_BOARD_ORTHODONTICS_ID
+  );
+}
+
 /**
  * Виртуальные доски: только представление, карточки остаются на дорожках «Ортопедия» / «Ортодонтия».
  * «Мои» — карточки, где пользователь в **участниках** (`participants`); «Распределить» — где он **ответственный** (`assignees`).
@@ -812,6 +819,9 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
 
 export function migrateBoard(board: KanbanBoard): KanbanBoard {
   if (!board || !board.columns) return board;
+  if (typeof board.distributeNewOrders !== "boolean") {
+    board.distributeNewOrders = defaultDistributeNewOrdersByBoardId(board.id);
+  }
   if (typeof board.isPrivate !== "boolean") board.isPrivate = false;
   if (!Array.isArray(board.accessUserIds)) board.accessUserIds = [];
   if (!Array.isArray(board.autoArchiveRules)) board.autoArchiveRules = [];
@@ -964,6 +974,7 @@ export function createBoardShell(boardId: string, title: string): KanbanBoard {
   return {
     id: boardId,
     title,
+    distributeNewOrders: defaultDistributeNewOrdersByBoardId(boardId),
     isPrivate: false,
     accessUserIds: [],
     columns,

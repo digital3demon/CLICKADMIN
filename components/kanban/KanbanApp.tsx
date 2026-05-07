@@ -5,6 +5,7 @@ import type {
   KanbanAppState,
   KanbanArchivedCard,
   KanbanBoard,
+  KanbanColumn,
   KanbanCard,
 } from "@/lib/kanban/types";
 import { runKanbanAutomations } from "@/lib/kanban/automations";
@@ -38,6 +39,7 @@ import {
 import {
   autoArchiveReadyProductionChildren,
   expandProductionChecklistFromArchives,
+  isProductionChildDone,
   markProductionChildReadyState,
   moveParentToAssemblyIfReady,
   normalizeProductionSettings,
@@ -892,9 +894,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const nextTitle = home.columns[colIdx + 1].title;
     const nextCol = home.columns[colIdx + 1];
     const settings = normalizeProductionSettings(home);
+    const doneTitle = settings.childDoneColumnTitle.trim().toLowerCase();
+    const nextTitleRaw = nextTitle.trim().toLowerCase();
     const childIncomplete =
       Boolean(found.card.parentCardId) &&
-      nextTitle.trim().toLowerCase() === settings.childDoneColumnTitle.trim().toLowerCase() &&
+      (nextTitleRaw === doneTitle || nextTitleRaw.endsWith(`· ${doneTitle}`)) &&
       (found.card.productionChecklist || []).some((x) => !x.completed);
     if (childIncomplete) {
       const ok = window.confirm(
@@ -960,16 +964,116 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     showToast(`Этап: «${nextTitle}»`);
   };
 
-  const enrichProductionChecklistForChild = useCallback((childId: string) => {
+  const moveCardToPrevStage = (cardId: string) => {
+    if (!appState) return;
+    const found = findCardInAppState(appState, cardId);
+    if (!found) return;
+    const home = found.board;
+    const colIdx = home.columns.findIndex((c) => c.id === found.col.id);
+    if (colIdx <= 0) {
+      showToast("Это первая колонка", true);
+      return;
+    }
+    const prevTitle = home.columns[colIdx - 1].title;
+    const prevCol = home.columns[colIdx - 1];
+    const linkedSorts = prevCol.cards
+      .filter((c) => c.linkedOrderId)
+      .map((c) => c.kaitenCardSortOrder)
+      .filter((x): x is number => x != null && Number.isFinite(x));
+    const sortOrder = (linkedSorts.length ? Math.max(...linkedSorts) : 0) + 1;
+    const cardSnapshot = found.card;
+    setAppState((s) => {
+      if (!s) return s;
+      const next = structuredClone(s);
+      const b = next.boards.find((x) => x.id === home.id);
+      if (!b) return s;
+      const f = findCard(b, cardId);
+      if (!f) return s;
+      const fromColId = f.col.id;
+      const c = f.card;
+      f.col.cards = f.col.cards.filter((x) => x.id !== cardId);
+      const prevCol = b.columns[colIdx - 1];
+      prevCol.cards.push(c);
+      const now = new Date().toISOString();
+      c.lastMovedAt = now;
+      c.updatedAt = now;
+      pushActivity(c, `Перемещена в «${prevCol.title}»`, b.users[0]?.id, b, activityActorLabel);
+      runKanbanAutomations(
+        b,
+        {
+          type: "card_moved_to_column",
+          cardId,
+          fromColumnId: fromColId,
+          toColumnId: prevCol.id,
+        },
+        0,
+        activityActorLabel,
+      );
+      return next;
+    });
+    if (
+      !isDemo &&
+      cardSnapshot.linkedOrderId &&
+      typeof cardSnapshot.kaitenCardId === "number" &&
+      Number.isFinite(cardSnapshot.kaitenCardId)
+    ) {
+      void syncKaitenMirrorAfterKanbanMove({
+        orderId: cardSnapshot.linkedOrderId,
+        kaitenCardId: cardSnapshot.kaitenCardId,
+        columnTitle: prevTitle,
+        sortOrder,
+      });
+    }
+    showToast(`Этап: «${prevTitle}»`);
+  };
+
+  const enrichProductionChecklistForChild = useCallback((boardId: string, childId: string) => {
     void (async () => {
       const cur = appStateRef.current;
-      if (!cur || isKanbanAggregateBoardId(cur.activeBoardId)) return;
+      if (!cur) return;
       const next = structuredClone(cur);
-      const b = getActiveBoard(next);
+      const b = next.boards.find((x) => x.id === boardId);
+      if (!b) return;
       await expandProductionChecklistFromArchives(b, childId);
       setAppState(next);
     })();
   }, []);
+
+  const ensureProductionBoard = useCallback(
+    (state: KanbanAppState, sourceBoard: KanbanBoard): KanbanBoard => {
+      const existing = state.boards.find((x) => x.title.trim().toLowerCase() === "производство");
+      if (existing) return existing;
+      const sourceSettings = normalizeProductionSettings(sourceBoard);
+      const lanes = sourceSettings.lanes.length
+        ? sourceSettings.lanes
+        : [{ id: "lane_print", name: "Печать", keywords: [] }];
+      const mk = (title: string): KanbanColumn => ({ id: generateId("col"), title, cards: [] });
+      const columns: KanbanColumn[] = [];
+      for (const lane of lanes) {
+        columns.push(mk(`${lane.name} · ${sourceSettings.childTodoColumnTitle}`));
+        columns.push(mk(`${lane.name} · ${sourceSettings.childInProgressColumnTitle}`));
+        columns.push(mk(`${lane.name} · ${sourceSettings.childDoneColumnTitle}`));
+      }
+      const board: KanbanBoard = {
+        id: generateId("board"),
+        title: "Производство",
+        isPrivate: false,
+        accessUserIds: [],
+        columns,
+        users: structuredClone(sourceBoard.users || []),
+        excludedCrmUserIds: structuredClone(sourceBoard.excludedCrmUserIds || []),
+        cardTypes: structuredClone(sourceBoard.cardTypes || []),
+        automations: [],
+        autoArchiveRules: [],
+        archiveRetentionDays: sourceBoard.archiveRetentionDays ?? 365,
+        archivedCards: [],
+        productionSettings: structuredClone(sourceSettings),
+      };
+      state.boards.push(board);
+      return board;
+    },
+    [],
+  );
 
   if (!appState || !board || !displayBoard) {
     return (
@@ -1188,15 +1292,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   const card = findCard(b, cardId)?.card;
                   if (!card) return s;
                   if (!card.parentCardId && toCol.title.trim().toLowerCase() === settings.triggerColumnTitle.trim().toLowerCase()) {
-                    const childIds = syncProductionChildrenForParent(b, cardId, activityActorLabel);
+                    const prodBoard = ensureProductionBoard(next, b);
+                    const childIds = syncProductionChildrenForParent(
+                      prodBoard,
+                      cardId,
+                      activityActorLabel,
+                      card,
+                    );
+                    card.childCardIds = childIds;
                     for (const childId of childIds) {
-                      enrichProductionChecklistForChild(childId);
+                      enrichProductionChecklistForChild(prodBoard.id, childId);
                     }
                   }
                   if (card.parentCardId) {
+                    const doneRaw = settings.childDoneColumnTitle.trim().toLowerCase();
+                    const toRaw = toCol.title.trim().toLowerCase();
                     const needWarn =
-                      toCol.title.trim().toLowerCase() ===
-                        settings.childDoneColumnTitle.trim().toLowerCase() &&
+                      (toRaw === doneRaw || toRaw.endsWith(`· ${doneRaw}`)) &&
                       warnIfChildMovedToDoneWithIncompleteChecklist(b, cardId);
                     if (needWarn) {
                       window.alert(
@@ -1204,8 +1316,31 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                       );
                     }
                     markProductionChildReadyState(b, cardId);
-                    if (parentCanMoveToAssembly(b, card.parentCardId)) {
-                      moveParentToAssemblyIfReady(b, card.parentCardId, activityActorLabel);
+                    const parentLoc = findCardInAppState(next, card.parentCardId);
+                    if (parentLoc) {
+                      const allDone = (parentLoc.card.childCardIds || []).every((cid) =>
+                        next.boards.some((bb) => isProductionChildDone(bb, cid)),
+                      );
+                      if (allDone) {
+                        const parentSettings = normalizeProductionSettings(parentLoc.board);
+                        const assembly = parentLoc.board.columns.find(
+                          (col) =>
+                            col.title.trim().toLowerCase() ===
+                            parentSettings.parentDoneColumnTitle.trim().toLowerCase(),
+                        );
+                        if (assembly && parentLoc.col.id !== assembly.id) {
+                          parentLoc.col.cards = parentLoc.col.cards.filter((x) => x.id !== parentLoc.card.id);
+                          assembly.cards.unshift(parentLoc.card);
+                          parentLoc.card.lastMovedAt = new Date().toISOString();
+                          pushActivity(
+                            parentLoc.card,
+                            `Перемещена в «${assembly.title}»`,
+                            parentLoc.board.users[0]?.id,
+                            parentLoc.board,
+                            activityActorLabel,
+                          );
+                        }
+                      }
                     }
                   }
                   return next;
@@ -1260,6 +1395,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         onClose={() => setCardModalId(null)}
         onApply={applyModalBoard}
         toast={showToast}
+        onMovePrevStage={(id) => {
+          moveCardToPrevStage(id);
+          setCardModalId(id);
+        }}
         onMoveNextStage={(id) => {
           moveCardToNextStage(id);
           setCardModalId(id);
