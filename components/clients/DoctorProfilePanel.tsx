@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { displayOrDash, formatBirthdayRu } from "@/lib/format-display";
+import {
+  DoctorTelegramGroupsCard,
+  type DoctorTelegramGroupRow,
+} from "@/components/clients/DoctorTelegramGroupsCard";
 
 /** Пустая строка = в БД null. */
 export type DoctorOrderPriceListKindUi = "" | "MAIN" | "CUSTOM";
@@ -77,9 +81,11 @@ const btnBase =
 export function DoctorProfilePanel({
   doctorId,
   initial,
+  telegramGroups = [],
 }: {
   doctorId: string;
   initial: DoctorProfileFormState;
+  telegramGroups?: DoctorTelegramGroupRow[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -676,6 +682,8 @@ export function DoctorProfilePanel({
           </dd>
         </div>
       </dl>
+
+      <DoctorTelegramGroupsCard doctorId={doctorId} groups={telegramGroups} />
     </section>
   );
 }

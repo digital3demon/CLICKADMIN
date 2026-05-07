@@ -479,3 +479,132 @@ export async function loadWarehouseReport(from: Date, to: Date) {
     topItems,
   };
 }
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+export async function loadProductionReworkReport(tenantId: string, from: Date, to: Date) {
+  const stateRow = await (await getPrisma()).tenantClientState.findUnique({
+    where: { tenantId_key: { tenantId, key: "kanbanAppStateV3" } },
+    select: { value: true },
+  });
+  if (!stateRow) {
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      totals: { reworkEvents: 0, reworkedObjects: 0, reworkedCards: 0 },
+      byBoard: [] as Array<{ boardId: string; boardTitle: string; reworkEvents: number }>,
+      topItems: [] as Array<{
+        boardId: string;
+        boardTitle: string;
+        cardId: string;
+        cardTitle: string;
+        laneId: string;
+        objectText: string;
+        sourceFileName: string;
+        reworkEvents: number;
+      }>,
+    };
+  }
+
+  const appState = asRecord(stateRow.value);
+  const boards = asArray(appState?.boards);
+  const byBoard = new Map<string, { boardId: string; boardTitle: string; reworkEvents: number }>();
+  const byObject = new Map<
+    string,
+    {
+      boardId: string;
+      boardTitle: string;
+      cardId: string;
+      cardTitle: string;
+      laneId: string;
+      objectText: string;
+      sourceFileName: string;
+      reworkEvents: number;
+    }
+  >();
+  const reworkedCards = new Set<string>();
+  let totalEvents = 0;
+
+  for (const boardRaw of boards) {
+    const board = asRecord(boardRaw);
+    if (!board) continue;
+    const boardId = String(board.id || "");
+    const boardTitle = String(board.title || "Без названия");
+    const columns = asArray(board.columns);
+    let boardEvents = 0;
+
+    for (const colRaw of columns) {
+      const col = asRecord(colRaw);
+      if (!col) continue;
+      const cards = asArray(col.cards);
+      for (const cardRaw of cards) {
+        const card = asRecord(cardRaw);
+        if (!card) continue;
+        if (!String(card.parentCardId || "").trim()) continue;
+        const cardId = String(card.id || "");
+        const cardTitle = String(card.title || "Без названия");
+        const laneId = String(card.productionLaneId || "");
+        const checklist = asArray(card.productionChecklist);
+
+        for (const itemRaw of checklist) {
+          const item = asRecord(itemRaw);
+          if (!item) continue;
+          const events = asArray(item.reworkEvents);
+          if (!events.length) continue;
+          let inRange = 0;
+          for (const tsRaw of events) {
+            const ts = new Date(String(tsRaw || ""));
+            const ms = ts.getTime();
+            if (!Number.isFinite(ms)) continue;
+            if (ms < from.getTime() || ms > to.getTime()) continue;
+            inRange += 1;
+          }
+          if (inRange === 0) continue;
+          totalEvents += inRange;
+          boardEvents += inRange;
+          reworkedCards.add(cardId);
+
+          const itemId = String(item.id || "");
+          const key = `${cardId}:${itemId}`;
+          const cur = byObject.get(key) ?? {
+            boardId,
+            boardTitle,
+            cardId,
+            cardTitle,
+            laneId,
+            objectText: String(item.text || "Без названия"),
+            sourceFileName: String(item.sourceFileName || ""),
+            reworkEvents: 0,
+          };
+          cur.reworkEvents += inRange;
+          byObject.set(key, cur);
+        }
+      }
+    }
+
+    if (boardEvents > 0) {
+      byBoard.set(boardId, { boardId, boardTitle, reworkEvents: boardEvents });
+    }
+  }
+
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+    totals: {
+      reworkEvents: totalEvents,
+      reworkedObjects: byObject.size,
+      reworkedCards: reworkedCards.size,
+    },
+    byBoard: [...byBoard.values()].sort((a, b) => b.reworkEvents - a.reworkEvents),
+    topItems: [...byObject.values()]
+      .sort((a, b) => b.reworkEvents - a.reworkEvents || a.objectText.localeCompare(b.objectText))
+      .slice(0, 50),
+  };
+}

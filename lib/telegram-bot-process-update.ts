@@ -16,6 +16,7 @@ import {
   findTenantAdminSharedTelegramForBot,
 } from "@/lib/telegram-bot-resolve-user";
 import { verifyAdminSharedMessengerBotStartToken } from "@/lib/admin-shared-messenger-bot-link";
+import { verifyDoctorTelegramGroupBindToken } from "@/lib/doctor-telegram-group-bind";
 
 const LINK_TTL_MS = 15 * 60 * 1000;
 
@@ -32,20 +33,20 @@ function normalizeEmail(s: string): string {
 }
 
 /** Текст входящего сообщения: команды, в т.ч. с «косой» не из ASCII-клавиатуры. */
-function normalizeBotCommandText(raw: string): string {
+export function normalizeBotCommandText(raw: string): string {
   let t = raw.trim().replace(/^\uFEFF/, "");
   /* U+FF0F fullwidth solidus, U+2215 division slash — иногда вместо `/` */
   t = t.replace(/^[\uFF0F\u2215]/, "/");
   return t;
 }
 
-function firstCommandToken(text: string): string {
+export function firstCommandToken(text: string): string {
   const t = normalizeBotCommandText(text);
   const first = t.split(/\s+/)[0] ?? "";
   return (first.split("@")[0] ?? "").toLowerCase();
 }
 
-function startPayload(text: string): string {
+export function startPayload(text: string): string {
   const t = normalizeBotCommandText(text);
   const parts = t.split(/\s+/);
   if (parts.length < 2) return "";
@@ -53,7 +54,7 @@ function startPayload(text: string): string {
 }
 
 /** Сообщение с текстом: обычное, правка, бизнес-чат (Telegram Business). */
-function pickIncomingTextMessage(
+export function pickIncomingTextMessage(
   update: Record<string, unknown>,
 ): Record<string, unknown> | null {
   const keys = [
@@ -250,6 +251,24 @@ export async function processTelegramBotUpdate(
         botToken,
         chatId,
         `Готово. Этот Telegram подключён как общий админский чат CRM${tenant.name?.trim() ? ` («${tenant.name.trim()}»)` : ""}.`,
+      );
+      return;
+    }
+    const payloadTrim = payload.trim();
+    if (payloadTrim.startsWith("dg_")) {
+      const dg = verifyDoctorTelegramGroupBindToken(payloadTrim);
+      if (!dg.ok) {
+        await replyRemoveKeyboard(
+          botToken,
+          chatId,
+          "Ссылка привязки группы недействительна или истекла. Сгенерируйте команду в карточке врача заново.",
+        );
+        return;
+      }
+      await replyRemoveKeyboard(
+        botToken,
+        chatId,
+        "Привязка группы к врачу в CRM:\n\n1) Добавьте этого бота в нужную группу Telegram.\n2) В этой группе отправьте команду из карточки врача целиком (начинается с /start и содержит dg_…).\n\nКоманда действует ограниченное время — при необходимости сгенерируйте новую.",
       );
       return;
     }

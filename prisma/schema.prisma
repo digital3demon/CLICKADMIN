@@ -109,6 +109,8 @@ model Tenant {
   /// Активные пользовательские сессии для ограничения устройств
   deviceSessions        UserDeviceSession[]
   orderKaitenLabMentionAcks OrderKaitenLabMentionAck[]
+  doctorTelegramGroups      DoctorTelegramGroup[]
+  doctorMessengerItems      DoctorMessengerItem[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -339,8 +341,70 @@ model Doctor {
   createdAt                    DateTime                      @default(now())
   /// Мягкое удаление: скрыта в списках, восстановление из «Истории»
   deletedAt                    DateTime?
+  telegramGroups               DoctorTelegramGroup[]
+  messengerItems               DoctorMessengerItem[]
 
   @@index([tenantId])
+}
+
+/// Группа Telegram, привязанная к карточке врача (несколько групп на одного доктора).
+model DoctorTelegramGroup {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  doctorId       String
+  doctor         Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  /// Telegram chat id (строка; для групп отрицательное число).
+  telegramChatId String
+  /// Короткая подпись в CRM («Клиника …», «Общий чат»).
+  label          String?
+  createdAt      DateTime @default(now())
+
+  messengerItems DoctorMessengerItem[]
+
+  @@unique([tenantId, telegramChatId])
+  @@index([doctorId])
+}
+
+enum DoctorMessengerItemStatus {
+  OPEN
+  ARCHIVED
+}
+
+/// Сообщение из группы доктора с упоминанием @clicklab_admin — очередь для ответа из CRM.
+model DoctorMessengerItem {
+  id                    String                    @id @default(cuid())
+  tenantId              String
+  tenant                Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  doctorId              String
+  doctor                Doctor                    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  doctorTelegramGroupId String?
+  doctorTelegramGroup    DoctorTelegramGroup?      @relation(fields: [doctorTelegramGroupId], references: [id], onDelete: SetNull)
+
+  telegramChatId        String
+  telegramMessageId     String
+
+  fromTgUserId          String?
+  fromTgUsername        String?
+
+  textFull              String                    @db.Text
+  snippetBefore         String                    @db.Text
+  snippetAfter          String                    @db.Text
+
+  status                DoctorMessengerItemStatus @default(OPEN)
+  archivedAt            DateTime?
+
+  replyTelegramMessageId String?
+  replyText              String?                  @db.Text
+  replyAuthorUserId      String?
+  replyAuthorUser        User?                    @relation("DoctorMessengerReplyAuthor", fields: [replyAuthorUserId], references: [id], onDelete: SetNull)
+  repliedAt              DateTime?
+
+  createdAt             DateTime                  @default(now())
+
+  @@unique([tenantId, telegramChatId, telegramMessageId])
+  @@index([tenantId, status, createdAt])
+  @@index([doctorId])
 }
 
 /// Журнал изменений клиник и врачей (контрагенты)
@@ -541,6 +605,7 @@ model User {
   /// Клиентские состояния на уровне пользователя (UI prefs, флаги и т.п.)
   clientState                   UserClientState[]
   deviceSessions                UserDeviceSession[]
+  doctorMessengerReplies        DoctorMessengerItem[]    @relation("DoctorMessengerReplyAuthor")
 
   @@unique([tenantId, email])
   @@index([role])

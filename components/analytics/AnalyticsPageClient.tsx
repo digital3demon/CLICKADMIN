@@ -21,6 +21,7 @@ import {
 const TABS = [
   { id: "finance" as const, label: "Финансы" },
   { id: "rework" as const, label: "Переделки" },
+  { id: "production" as const, label: "Производство" },
   { id: "price" as const, label: "Позиции прайса" },
   { id: "contractors" as const, label: "Клиники и врачи" },
   { id: "warehouse" as const, label: "Склад" },
@@ -139,6 +140,28 @@ export function AnalyticsPageClient() {
       costRub: number;
     }[];
   } | null>(null);
+  const [production, setProduction] = useState<{
+    totals: {
+      reworkEvents: number;
+      reworkedObjects: number;
+      reworkedCards: number;
+    };
+    byBoard: {
+      boardId: string;
+      boardTitle: string;
+      reworkEvents: number;
+    }[];
+    topItems: {
+      boardId: string;
+      boardTitle: string;
+      cardId: string;
+      cardTitle: string;
+      laneId: string;
+      objectText: string;
+      sourceFileName: string;
+      reworkEvents: number;
+    }[];
+  } | null>(null);
 
   const now = useMemo(() => new Date(), []);
   const [reconYear, setReconYear] = useState<number>(now.getUTCFullYear());
@@ -219,6 +242,7 @@ export function AnalyticsPageClient() {
     setPrice(null);
     setContractors(null);
     setWarehouse(null);
+    setProduction(null);
     setReconciliation(null);
     setError(null);
   }, [q, reconQ]);
@@ -241,6 +265,8 @@ export function AnalyticsPageClient() {
               ? `/api/analytics/contractors?${q}`
               : tabNow === "warehouse"
                 ? `/api/analytics/warehouse?${q}`
+                : tabNow === "production"
+                  ? `/api/analytics/production?${q}`
                 : `/api/analytics/reconciliation?${reconQ}`;
       try {
         const res = await fetch(path, { signal: ac.signal });
@@ -279,6 +305,8 @@ export function AnalyticsPageClient() {
           setContractors(j as NonNullable<typeof contractors>);
         else if (tabNow === "warehouse") {
           setWarehouse(j as NonNullable<typeof warehouse>);
+        } else if (tabNow === "production") {
+          setProduction(j as NonNullable<typeof production>);
         } else {
           setReconciliation(j as NonNullable<typeof reconciliation>);
         }
@@ -406,6 +434,8 @@ export function AnalyticsPageClient() {
             ? !contractors
             : tab === "warehouse"
               ? !warehouse
+              : tab === "production"
+                ? !production
               : !reconciliation) ? (
         <p className="text-sm text-[var(--text-muted)]">Загрузка отчёта…</p>
       ) : null}
@@ -784,6 +814,116 @@ export function AnalyticsPageClient() {
                         <td className="px-3 py-2 tabular-nums">{r.reworkOrders}</td>
                         <td className="px-3 py-2 tabular-nums">{r.lineCount}</td>
                         <td className="px-3 py-2 tabular-nums">{r.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {tab === "production" && production ? (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-[var(--text-secondary)]">
+              Переделки по объектам производственного чеклиста из CRM-канбана.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Событий переделки
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                {production.totals.reworkEvents}
+              </p>
+            </div>
+            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Объектов с переделкой
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                {production.totals.reworkedObjects}
+              </p>
+            </div>
+            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Карточек с переделкой
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
+                {production.totals.reworkedCards}
+              </p>
+            </div>
+          </div>
+          <div className="rounded-lg border border-[var(--card-border)]">
+            <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                По доскам
+              </h4>
+            </div>
+            {production.byBoard.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-[var(--text-muted)]">
+                За период нет переделок в производственном чеклисте.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[480px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                      <th className="px-3 py-2">Доска</th>
+                      <th className="px-3 py-2">Событий переделки</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {production.byBoard.map((row) => (
+                      <tr
+                        key={row.boardId}
+                        className="border-b border-[var(--border-subtle)] hover:bg-[var(--table-row-hover)]"
+                      >
+                        <td className="px-3 py-2 text-[var(--text-strong)]">{row.boardTitle}</td>
+                        <td className="px-3 py-2 tabular-nums">{row.reworkEvents}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div className="rounded-lg border border-[var(--card-border)]">
+            <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                Часто переделываемые объекты
+              </h4>
+            </div>
+            {production.topItems.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-[var(--text-muted)]">
+                За период нет данных по объектам.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                      <th className="px-3 py-2">Объект</th>
+                      <th className="px-3 py-2">Карточка</th>
+                      <th className="px-3 py-2">Доска</th>
+                      <th className="px-3 py-2">Файл</th>
+                      <th className="px-3 py-2">Переделок</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {production.topItems.map((row) => (
+                      <tr
+                        key={`${row.cardId}:${row.objectText}:${row.sourceFileName}`}
+                        className="border-b border-[var(--border-subtle)] hover:bg-[var(--table-row-hover)]"
+                      >
+                        <td className="px-3 py-2 text-[var(--text-strong)]">{row.objectText}</td>
+                        <td className="px-3 py-2">{row.cardTitle}</td>
+                        <td className="px-3 py-2">{row.boardTitle}</td>
+                        <td className="px-3 py-2">{row.sourceFileName || "—"}</td>
+                        <td className="px-3 py-2 tabular-nums">{row.reworkEvents}</td>
                       </tr>
                     ))}
                   </tbody>

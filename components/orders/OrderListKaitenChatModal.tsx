@@ -9,7 +9,6 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import type { KaitenTrackLane } from "@prisma/client";
-import { dedupeParsedKaitenComments, parseKaitenListComment } from "@/lib/kaiten-comment-parse";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import {
   CRM_UPLOAD_MAX_BYTES,
@@ -21,12 +20,15 @@ import {
 import { enqueueOrderAttachmentFiles } from "@/lib/order-attachment-background-queue";
 
 type CommentRow = {
-  id: number;
+  id: string | number;
   text: string;
   created?: string;
   authorName?: string;
-  parentId: number | null;
+  parentId: string | number | null;
   images?: ChatImage[];
+  source?: "CRM" | "KAITEN";
+  syncStatus?: "local" | "pending" | "synced" | "failed" | "retried";
+  syncedAt?: string | null;
 };
 
 type ChatImage = {
@@ -35,6 +37,8 @@ type ChatImage = {
   url: string;
   mime: string | null;
 };
+
+type ChatAction = "comment" | "correction" | "prosthetics";
 
 type KaitenSnapshot = {
   configured: boolean;
@@ -57,22 +61,6 @@ type ImagePreview = {
   url: string;
 };
 
-type KanbanRow = {
-  id: string;
-  text: string;
-  createdAt: string;
-  resolvedAt: string | null;
-  rejectedAt: string | null;
-};
-
-type KanbanFeedItem = {
-  id: string;
-  text: string;
-  createdAt: string;
-  source: "correction" | "prosthetics";
-  state: "pending" | "accepted" | "rejected";
-};
-
 function isNoKaitenCardError(errorText: string | null | undefined): boolean {
   const t = String(errorText || "").toLowerCase();
   return t.includes("не привяз") || t.includes("нет карточки kaiten");
@@ -93,12 +81,11 @@ export function OrderListKaitenChatModal({
   const titleId = useId();
   const [snap, setSnap] = useState<KaitenSnapshot | null>(null);
   const [chatMode, setChatMode] = useState<"kaiten" | "kanban">("kaiten");
-  const [kanbanFeed, setKanbanFeed] = useState<KanbanFeedItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hydrating, setHydrating] = useState(false);
   const [newText, setNewText] = useState("");
-  const [replyToId, setReplyToId] = useState<number | null>(null);
+  const [replyToId, setReplyToId] = useState<string | number | null>(null);
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -116,52 +103,6 @@ export function OrderListKaitenChatModal({
     });
   }, []);
 
-  const loadKanbanFeed = useCallback(async () => {
-    const [corrRes, protRes] = await Promise.all([
-      fetch(`/api/orders/${orderId}/chat-corrections`, {
-        credentials: "include",
-        cache: "no-store",
-      }),
-      fetch(`/api/orders/${orderId}/prosthetics-requests`, {
-        credentials: "include",
-        cache: "no-store",
-      }),
-    ]);
-    const corrData = (await corrRes.json().catch(() => ({}))) as {
-      corrections?: KanbanRow[];
-      error?: string;
-    };
-    const protData = (await protRes.json().catch(() => ({}))) as {
-      requests?: KanbanRow[];
-      error?: string;
-    };
-    if (!corrRes.ok) {
-      throw new Error(corrData.error ?? "Не удалось загрузить корректировки");
-    }
-    if (!protRes.ok) {
-      throw new Error(protData.error ?? "Не удалось загрузить заявки по протетике");
-    }
-    const corrections = Array.isArray(corrData.corrections) ? corrData.corrections : [];
-    const requests = Array.isArray(protData.requests) ? protData.requests : [];
-    const mapped: KanbanFeedItem[] = [
-      ...corrections.map((row) => ({
-        id: `corr-${row.id}`,
-        text: row.text,
-        createdAt: row.createdAt,
-        source: "correction" as const,
-        state: (row.rejectedAt ? "rejected" : row.resolvedAt ? "accepted" : "pending") as KanbanFeedItem["state"],
-      })),
-      ...requests.map((row) => ({
-        id: `pros-${row.id}`,
-        text: row.text,
-        createdAt: row.createdAt,
-        source: "prosthetics" as const,
-        state: (row.rejectedAt ? "rejected" : row.resolvedAt ? "accepted" : "pending") as KanbanFeedItem["state"],
-      })),
-    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    setKanbanFeed(mapped);
-  }, [orderId]);
-
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -170,12 +111,19 @@ export function OrderListKaitenChatModal({
     let fastLoaded = false;
     try {
       try {
-        const chatRes = await fetch(`/api/orders/${orderId}/kaiten/chat`);
+        const chatRes = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+          credentials: "include",
+          cache: "no-store",
+        });
         const chatData = (await chatRes.json()) as
-          | { error?: string }
+          | { error?: string; hasCard?: boolean; cardImages?: ChatImage[]; comments?: CommentRow[] }
           | KaitenChatFastPayload;
-        if (chatRes.ok && Array.isArray((chatData as KaitenChatFastPayload).comments)) {
-          const comments = (chatData as KaitenChatFastPayload).comments ?? [];
+        if (
+          chatRes.ok &&
+          (chatData as { hasCard?: boolean }).hasCard === true &&
+          Array.isArray((chatData as { comments?: CommentRow[] }).comments)
+        ) {
+          const comments = (chatData as { comments: CommentRow[] }).comments ?? [];
           setSnap((prev) => ({
             configured: prev?.configured ?? true,
             card: prev?.card ?? {},
@@ -183,7 +131,9 @@ export function OrderListKaitenChatModal({
             columns: prev?.columns ?? [],
             lanes: prev?.lanes ?? [],
             comments,
-            cardImages: prev?.cardImages ?? [],
+            cardImages: Array.isArray((chatData as { cardImages?: ChatImage[] }).cardImages)
+              ? (chatData as { cardImages: ChatImage[] }).cardImages
+              : prev?.cardImages ?? [],
             kaitenCardUrl: prev?.kaitenCardUrl ?? null,
           }));
           fastLoaded = true;
@@ -199,8 +149,29 @@ export function OrderListKaitenChatModal({
       if (!res.ok) {
         if (isNoKaitenCardError(data.error)) {
           setChatMode("kanban");
+          const kanbanRes = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+            credentials: "include",
+            cache: "no-store",
+          });
+          const kanbanData = (await kanbanRes.json().catch(() => ({}))) as {
+            comments?: CommentRow[];
+            cardImages?: ChatImage[];
+            hasCard?: boolean;
+          };
+          if (kanbanRes.ok && kanbanData.hasCard === true) {
+            setSnap({
+              configured: true,
+              card: {},
+              trackLane: null,
+              columns: [],
+              lanes: [],
+              comments: Array.isArray(kanbanData.comments) ? kanbanData.comments : [],
+              cardImages: Array.isArray(kanbanData.cardImages) ? kanbanData.cardImages : [],
+              kaitenCardUrl: null,
+            });
+            return;
+          }
           setSnap(null);
-          await loadKanbanFeed();
           return;
         }
         if (!fastLoaded) {
@@ -210,7 +181,11 @@ export function OrderListKaitenChatModal({
         return;
       }
       const s = data as KaitenSnapshot;
-      setSnap(s);
+      setSnap((prev) => ({
+        ...s,
+        comments: prev?.comments ?? s.comments,
+        cardImages: prev?.cardImages ?? s.cardImages,
+      }));
     } catch {
       if (!fastLoaded) {
         setLoadError("Сеть недоступна");
@@ -258,35 +233,20 @@ export function OrderListKaitenChatModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const sendComment = async () => {
+  const sendComment = async (action: ChatAction = "comment") => {
     const t = newText.trim();
     if (!t) return;
     setPosting(true);
     setPostError(null);
     try {
-      if (chatMode === "kanban") {
-        const res = await fetch(`/api/orders/${orderId}/chat-corrections`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ text: t }),
-        });
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        if (!res.ok) {
-          setPostError(data.error ?? "Не отправлено");
-          return;
-        }
-        setNewText("");
-        setReplyToId(null);
-        await loadKanbanFeed();
-        return;
-      }
-      const res = await fetch(`/api/orders/${orderId}/kaiten/comments`, {
+      const res = await fetch(`/api/orders/${orderId}/kanban-chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           text: t,
-          parentCommentId: replyToId,
+          action,
+          parentId: replyToId != null ? String(replyToId) : null,
         }),
       });
       const data = (await res.json()) as {
@@ -294,21 +254,60 @@ export function OrderListKaitenChatModal({
         comment?: Record<string, unknown>;
       };
       if (!res.ok) {
+        if (chatMode !== "kanban") {
+          const kaitenText =
+            action === "correction"
+              ? `!!! ${t}`
+              : action === "prosthetics"
+                ? `??? ${t}`
+                : t;
+          const fb = await fetch(`/api/orders/${orderId}/kaiten/comments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: kaitenText,
+              parentCommentId:
+                replyToId != null && Number.isFinite(Number(replyToId))
+                  ? Number(replyToId)
+                  : null,
+            }),
+          });
+          const fbData = (await fb.json().catch(() => ({}))) as { error?: string };
+          if (!fb.ok) {
+            setPostError(fbData.error ?? data.error ?? "Не отправлено");
+            return;
+          }
+          await load();
+          setNewText("");
+          setReplyToId(null);
+          return;
+        }
         setPostError(data.error ?? "Не отправлено");
         return;
       }
+      const refreshed = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const refreshedData = (await refreshed.json().catch(() => ({}))) as {
+        comments?: CommentRow[];
+        cardImages?: ChatImage[];
+      };
+      setSnap((prev) =>
+        prev
+          ? {
+              ...prev,
+              comments: Array.isArray(refreshedData.comments)
+                ? refreshedData.comments
+                : prev.comments,
+              cardImages: Array.isArray(refreshedData.cardImages)
+                ? refreshedData.cardImages
+                : prev.cardImages,
+            }
+          : prev,
+      );
       setNewText("");
       setReplyToId(null);
-      const row = data.comment ? parseKaitenListComment(data.comment) : null;
-      if (row) {
-        setSnap((prev) => {
-          if (!prev) return prev;
-          const next = dedupeParsedKaitenComments([...prev.comments, row]);
-          return { ...prev, comments: next };
-        });
-      } else {
-        await load();
-      }
     } catch {
       setPostError("Сеть недоступна");
     } finally {
@@ -381,8 +380,39 @@ export function OrderListKaitenChatModal({
   const isKanbanMode = chatMode === "kanban";
   const kanbanCardUrl = kanbanOrderDeepLinkPath(orderId);
   const roots = comments.filter((c) => c.parentId == null);
-  const childrenOf = (pid: number) =>
+  const childrenOf = (pid: string | number) =>
     comments.filter((c) => c.parentId === pid);
+  const syncStatusLabel = (v: CommentRow["syncStatus"]) => {
+    if (v === "pending") return "Синхронизация…";
+    if (v === "failed") return "Не отправлено в Kaiten";
+    if (v === "retried") return "Повторная отправка…";
+    if (v === "synced") return "Синхронизировано";
+    if (v === "local") return "Локально";
+    return "";
+  };
+  const retrySync = async (commentId: string | number) => {
+    if (posting || loading) return;
+    setPosting(true);
+    setPostError(null);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ retryCommentId: String(commentId) }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setPostError(data.error ?? "Не удалось повторить отправку");
+        return;
+      }
+      await load();
+    } catch {
+      setPostError("Сеть недоступна");
+    } finally {
+      setPosting(false);
+    }
+  };
   const renderChatImages = (images: ChatImage[] | undefined) => {
     if (!images?.length) return null;
     return (
@@ -470,7 +500,7 @@ export function OrderListKaitenChatModal({
               ) : null}
               <p className="mb-2 text-[0.65rem] text-[var(--text-muted)]">
                 {isKanbanMode
-                  ? "Kaiten-карточка не привязана: используем чат канбана CRM. Префиксы !!! и ??? работают для корректировок и протетики."
+                  ? "Kaiten-карточка не привязана: используем чат карточки CRM-канбана."
                   : "Сообщения из чата карточки Kaiten (канбан). Отправка уходит в Kaiten."}
               </p>
               {hydrating && !isKanbanMode ? (
@@ -479,36 +509,8 @@ export function OrderListKaitenChatModal({
                 </p>
               ) : null}
               <ul className="space-y-3">
-                {isKanbanMode && kanbanFeed.length === 0 ? (
+                {roots.length === 0 ? (
                   <li className="text-sm text-[var(--text-muted)]">Сообщений пока нет.</li>
-                ) : !isKanbanMode && roots.length === 0 ? (
-                  <li className="text-sm text-[var(--text-muted)]">Сообщений пока нет.</li>
-                ) : isKanbanMode ? (
-                  kanbanFeed.map((item) => (
-                    <li
-                      key={item.id}
-                      className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2"
-                    >
-                      <div className="flex flex-wrap items-baseline justify-between gap-2 text-[10px] text-[var(--text-muted)]">
-                        <span className="font-medium text-[var(--text-strong)]">
-                          {item.source === "correction" ? "Корректировка" : "Протетика"}
-                        </span>
-                        <span>
-                          {new Date(item.createdAt).toLocaleString("ru-RU")}
-                        </span>
-                      </div>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-text)]">
-                        {item.text}
-                      </p>
-                      <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                        {item.state === "accepted"
-                          ? "Принято"
-                          : item.state === "rejected"
-                            ? "Отклонено"
-                            : "Ожидает обработки"}
-                      </p>
-                    </li>
-                  ))
                 ) : (
                   roots.map((c) => (
                     <li
@@ -529,6 +531,21 @@ export function OrderListKaitenChatModal({
                         {c.text}
                       </p>
                       {renderChatImages(c.images)}
+                      {c.syncStatus ? (
+                        <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
+                          <span>{syncStatusLabel(c.syncStatus)}</span>
+                          {c.syncStatus === "failed" ? (
+                            <button
+                              type="button"
+                              className="font-medium text-[var(--sidebar-blue)] hover:underline"
+                              onClick={() => void retrySync(c.id)}
+                              disabled={posting}
+                            >
+                              Повторить отправку
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <button
                         type="button"
                         className="mt-1 text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
@@ -550,6 +567,21 @@ export function OrderListKaitenChatModal({
                                 {ch.text}
                               </p>
                               {renderChatImages(ch.images)}
+                              {ch.syncStatus ? (
+                                <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
+                                  <span>{syncStatusLabel(ch.syncStatus)}</span>
+                                  {ch.syncStatus === "failed" ? (
+                                    <button
+                                      type="button"
+                                      className="font-medium text-[var(--sidebar-blue)] hover:underline"
+                                      onClick={() => void retrySync(ch.id)}
+                                      disabled={posting}
+                                    >
+                                      Повторить отправку
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
                               <button
                                 type="button"
                                 className="mt-0.5 text-xs text-[var(--sidebar-blue)] hover:underline"
@@ -673,6 +705,24 @@ export function OrderListKaitenChatModal({
           >
             {posting ? "Отправка…" : isKanbanMode ? "Отправить в канбан" : "Отправить в Kaiten"}
           </button>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={posting || !newText.trim() || loading || !!loadError || uploading}
+              onClick={() => void sendComment("correction")}
+              className="rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
+            >
+              Внести корректировку
+            </button>
+            <button
+              type="button"
+              disabled={posting || !newText.trim() || loading || !!loadError || uploading}
+              onClick={() => void sendComment("prosthetics")}
+              className="rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
+            >
+              Заказать протетику
+            </button>
+          </div>
         </div>
       </div>
       {openImage ? (

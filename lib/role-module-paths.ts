@@ -56,6 +56,8 @@ const RULES: Rule[] = [
   { prefix: "/shipments", module: "SHIPMENTS" },
   { prefix: "/warehouse", module: "WAREHOUSE" },
   { prefix: "/inventory", module: "WAREHOUSE" },
+  { prefix: "/messengers", module: "CLIENTS" },
+  { prefix: "/api/messengers", module: "CLIENTS" },
   { prefix: "/clients", module: "CLIENTS" },
   { prefix: "/contractors", module: "CLIENTS" },
   { prefix: "/attention", module: "ATTENTION" },

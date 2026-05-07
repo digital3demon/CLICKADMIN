@@ -86,6 +86,11 @@ export function OrderListKaitenPoller({
         backoffRef.current = Date.now() + 90_000;
         return;
       }
+      void fetch("/api/orders/kanban-chat-retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds: batch }),
+      }).catch(() => {});
       if (n > WINDOW) {
         offsetRef.current = (offsetRef.current + WINDOW) % n;
       }

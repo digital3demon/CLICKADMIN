@@ -178,6 +178,8 @@ function buildInitialChecklist(
     sourceFileId: f.id,
     sourceFileName: f.name,
     fromArchive: false,
+    reworkCount: 0,
+    reworkEvents: [],
   }));
 }
 
@@ -261,7 +263,9 @@ function isSameChecklistSnapshot(
       (aa.sourceFileId || null) !== (bb.sourceFileId || null) ||
       (aa.sourceFileName || null) !== (bb.sourceFileName || null) ||
       aa.fromArchive !== bb.fromArchive ||
-      (aa.archiveEntryName || null) !== (bb.archiveEntryName || null)
+      (aa.archiveEntryName || null) !== (bb.archiveEntryName || null) ||
+      (aa.reworkCount || 0) !== (bb.reworkCount || 0) ||
+      JSON.stringify(aa.reworkEvents || []) !== JSON.stringify(bb.reworkEvents || [])
     ) {
       return false;
     }
@@ -536,6 +540,8 @@ export async function expandProductionChecklistFromArchives(
         sourceFileId: f.id,
         sourceFileName: f.name,
         fromArchive: false,
+        reworkCount: 0,
+        reworkEvents: [],
       });
       continue;
     }
@@ -565,6 +571,8 @@ export async function expandProductionChecklistFromArchives(
           sourceFileName: f.name,
           fromArchive: true,
           archiveEntryName: name,
+          reworkCount: 0,
+          reworkEvents: [],
         });
       }
     } catch {

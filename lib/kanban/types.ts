@@ -27,6 +27,10 @@ export type ProductionChecklistItem = ChecklistItem & {
   sourceFileName: string;
   fromArchive: boolean;
   archiveEntryName?: string;
+  /** Сколько раз этот объект уходил в переделку. */
+  reworkCount?: number;
+  /** История отметок переделки (ISO timestamp). */
+  reworkEvents?: string[];
 };
 
 export type CardFile = {
@@ -56,10 +60,22 @@ export type CardComment = {
   userId: string;
   text: string;
   createdAt: string;
+  /** Локальный parent (id комментария в CRM-канбане) для тредов. */
+  parentId?: string | null;
   /** Автор из Kaiten (REST), если не совпадает с участниками доски CRM */
   authorLabel?: string;
   /** id из `card.files` — в чате показываем крупное превью только для картинок */
   imageFileId?: string;
+  /** Внешний id комментария (например, Kaiten) для дедупликации и anti-loop. */
+  externalCommentId?: string | null;
+  /** Внешний parent id (например, parent в Kaiten) для восстановления тредов. */
+  externalParentId?: string | null;
+  /** Источник сообщения в общем двустороннем потоке. */
+  source?: "CRM" | "KAITEN";
+  /** Состояние выгрузки CRM→Kaiten. Для Kaiten-сообщений обычно `synced`. */
+  syncStatus?: "local" | "pending" | "synced" | "failed" | "retried";
+  /** Когда сообщение успешно синхронизировано с внешней системой. */
+  syncedAt?: string | null;
 };
 
 export type CardActivity = {

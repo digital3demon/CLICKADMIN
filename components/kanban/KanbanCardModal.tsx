@@ -1,6 +1,12 @@
 "use client";
 
-import type { CardComment, CardFile, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
+import type {
+  CardComment,
+  CardFile,
+  ChecklistItem,
+  KanbanBoard,
+  KanbanCard,
+} from "@/lib/kanban/types";
 import {
   downloadCardFile,
   isCardFileImage,
@@ -389,6 +395,36 @@ export function KanbanCardModal({
     };
   }, [cardId, linkedOrderId, kaitenCardIdForChat, chatActorUserId, onApply]);
 
+  useEffect(() => {
+    if (!cardId || !linkedOrderId) return;
+    if (kaitenCardIdForChat != null && Number.isFinite(kaitenCardIdForChat)) return;
+    let cancelled = false;
+    const load = () => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") return;
+      void (async () => {
+        const res = await fetch(`/api/orders/${linkedOrderId}/kanban-chat`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const data = (await res.json().catch(() => ({}))) as { comments?: CardComment[] };
+        if (cancelled || !res.ok) return;
+        const nextComments = Array.isArray(data.comments) ? data.comments : [];
+        onApply((b) => {
+          const fc = findCard(b, cardId);
+          if (!fc) return;
+          fc.card.comments = withImagePlaceholders(nextComments, fc.card);
+        });
+      })();
+    };
+    load();
+    const iv = window.setInterval(load, kaitenClientPollIntervalMs());
+    return () => {
+      cancelled = true;
+      window.clearInterval(iv);
+    };
+  }, [cardId, linkedOrderId, kaitenCardIdForChat, onApply]);
+
   const pickerMerged = useMemo(
     () =>
       mergeKanbanPickerUsers(crmList, board.users, board.excludedCrmUserIds),
@@ -623,6 +659,8 @@ export function KanbanCardModal({
           sourceFileId: "manual",
           sourceFileName: "manual",
           fromArchive: false,
+          reworkCount: 0,
+          reworkEvents: [],
         });
         syncParentProductionChecklistSnapshot(b, fc.card.id);
         return;
@@ -728,6 +766,49 @@ export function KanbanCardModal({
       }
       toast("Сообщение ушло в Kaiten, список чата не обновился — откройте карточку снова", true);
       return true;
+    }
+
+    if (card.linkedOrderId) {
+      const action =
+        isOrderChatCorrectionTrigger(trimmed)
+          ? "correction"
+          : isOrderProstheticsRequestTrigger(trimmed)
+            ? "prosthetics"
+            : "comment";
+      try {
+        const postRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: trimmed, action }),
+        });
+        const postData = (await postRes.json().catch(() => ({}))) as { error?: string };
+        if (!postRes.ok) {
+          toast(postData.error ?? "Не удалось отправить сообщение в CRM-канбан", true);
+          return false;
+        }
+        const getRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const getData = (await getRes.json().catch(() => ({}))) as {
+          comments?: CardComment[];
+        };
+        if (getRes.ok && Array.isArray(getData.comments)) {
+          const nextComments = getData.comments as CardComment[];
+          onApply((b) => {
+            const fc = findCard(b, cardId);
+            if (!fc) return;
+            fc.card.comments = withImagePlaceholders(nextComments, fc.card);
+            pushActivity(fc.card, "Комментарий", actor, b, act);
+          });
+          fireMentionTelegram();
+          return true;
+        }
+      } catch {
+        toast("Сеть недоступна", true);
+        return false;
+      }
     }
 
     onApply((b) => {
@@ -2327,6 +2408,15 @@ function withImagePlaceholders(comments: CardComment[], card: KanbanCard): CardC
   return base;
 }
 
+function chatSyncStatusLabel(cm: CardComment): string {
+  if (cm.syncStatus === "pending") return "Синхронизация…";
+  if (cm.syncStatus === "failed") return "Не отправлено в Kaiten";
+  if (cm.syncStatus === "retried") return "Повторная отправка…";
+  if (cm.syncStatus === "synced") return "Синхронизировано";
+  if (cm.syncStatus === "local") return "Локально";
+  return "";
+}
+
 /** Сначала все превью изображений (как в наряде), затем текст — визуально галерея всегда сверху. */
 function orderCommentsImagesFirst(comments: CardComment[], card: KanbanCard): CardComment[] {
   const imgs: CardComment[] = [];
@@ -2661,6 +2751,11 @@ function ChatPanel({
               <div className="mb-0.5 text-[0.7rem] text-[var(--kaiten-modal-muted)]">
                 {author} · {relativeTimeRu(cm.createdAt)}
               </div>
+              {cm.syncStatus ? (
+                <div className="mb-0.5 text-[0.68rem] text-[var(--kaiten-modal-muted)]">
+                  {chatSyncStatusLabel(cm)}
+                </div>
+              ) : null}
               {cm.imageFileId && !imgFile ? (
                 <div className="mt-0.5 text-[0.75rem] text-[var(--kaiten-modal-muted)]">
                   Изображение удалено из карточки
@@ -2877,6 +2972,12 @@ function ChecklistCheckboxWithFirework({
   );
 }
 
+function productionReworkCount(item: ChecklistItem): number {
+  const n = Number((item as ChecklistItem & { reworkCount?: unknown }).reworkCount);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.floor(n);
+}
+
 function ChecklistEditor({
   card,
   cardId,
@@ -2890,18 +2991,19 @@ function ChecklistEditor({
   activityActorLabel?: string;
   kaitenLinked?: boolean;
 }) {
-  const cl = card.parentCardId
+  const isProductionChecklist = Boolean(card.parentCardId);
+  const cl = isProductionChecklist
     ? card.productionChecklist || []
     : card.checklist || [];
   const hasZipSourceFile =
-    Boolean(card.parentCardId) &&
+    isProductionChecklist &&
     (card.files || []).some((f) => {
       const name = String(f.name || "").trim().toLowerCase();
       const mime = String(f.mime || "").trim().toLowerCase();
       return name.endsWith(".zip") || mime.includes("zip");
     });
   const hasArchiveChecklistRows =
-    Boolean(card.parentCardId) &&
+    isProductionChecklist &&
     (card.productionChecklist || []).some((row) => row.fromArchive);
   const showNo3dInArchiveWarning = hasZipSourceFile && !hasArchiveChecklistRows;
   const done = cl.filter((i) => i.completed).length;
@@ -2915,7 +3017,9 @@ function ChecklistEditor({
           В архиве не найдено 3D-файлов для чеклиста.
         </div>
       ) : null}
-      {cl.map((item) => (
+      {cl.map((item) => {
+        const reworkCount = isProductionChecklist ? productionReworkCount(item) : 0;
+        return (
         <div key={item.id} className="mb-1 flex items-center gap-2">
           <ChecklistCheckboxWithFirework
             completed={item.completed}
@@ -2964,6 +3068,41 @@ function ChecklistEditor({
               {formatDateTimeRu(item.completedAt)}
             </span>
           ) : null}
+          {isProductionChecklist ? (
+            <button
+              type="button"
+              className="shrink-0 rounded border border-rose-500/40 bg-rose-500/15 px-1.5 py-0.5 text-[0.66rem] font-medium text-rose-200 hover:bg-rose-500/25"
+              onClick={() =>
+                onApply((b) => {
+                  const fc = findCard(b, cardId);
+                  if (!fc || !fc.card.parentCardId) return;
+                  const list = fc.card.productionChecklist || [];
+                  const it = list.find((x) => x.id === item.id);
+                  if (!it) return;
+                  const at = new Date().toISOString();
+                  it.reworkCount = (it.reworkCount || 0) + 1;
+                  it.reworkEvents = [...(it.reworkEvents || []), at];
+                  it.completed = false;
+                  it.completedAt = null;
+                  syncParentProductionChecklistSnapshot(b, fc.card.id);
+                  pushActivity(
+                    fc.card,
+                    `Переделка: ${it.text}`,
+                    b.users[0]?.id,
+                    b,
+                    activityActorLabel,
+                  );
+                })
+              }
+            >
+              Переделываем
+            </button>
+          ) : null}
+          {isProductionChecklist && reworkCount > 0 ? (
+            <span className="shrink-0 rounded border border-rose-500/35 bg-rose-500/10 px-1.5 py-0.5 text-[0.62rem] text-rose-200">
+              переделок: {reworkCount}
+            </span>
+          ) : null}
           <button
             type="button"
             className="text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
@@ -2985,7 +3124,8 @@ function ChecklistEditor({
             <IconX />
           </button>
         </div>
-      ))}
+        );
+      })}
       <div className="mt-2 flex items-center gap-2">
         <div className="h-1.5 max-w-[280px] flex-1 overflow-hidden rounded-full bg-[var(--kaiten-modal-border)]">
           <div

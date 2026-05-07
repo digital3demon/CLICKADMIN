@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { processTelegramBotUpdate } from "@/lib/telegram-bot-process-update";
+import { tryTelegramBotAddedChatIdAnnounce } from "@/lib/telegram-bot-my-chat-member";
+import { tryTelegramDoctorGroupsAndMessenger } from "@/lib/telegram-doctor-groups-and-messenger";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +76,8 @@ export async function POST(req: Request) {
   }
 
   try {
+    await tryTelegramBotAddedChatIdAnnounce(body, token);
+    await tryTelegramDoctorGroupsAndMessenger(body, token);
     await processTelegramBotUpdate(body, token);
   } catch (e) {
     console.error("[telegram webhook]", e);

@@ -816,7 +816,22 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
         }))
       : [],
     files: Array.isArray(partial.files) ? partial.files : [],
-    comments: partial.comments || [],
+    comments: (partial.comments || []).map((cm) => ({
+      ...cm,
+      parentId: cm.parentId ?? null,
+      externalCommentId: cm.externalCommentId ?? null,
+      externalParentId: cm.externalParentId ?? null,
+      source: cm.source === "KAITEN" ? "KAITEN" : "CRM",
+      syncStatus:
+        cm.syncStatus === "pending" ||
+        cm.syncStatus === "synced" ||
+        cm.syncStatus === "failed" ||
+        cm.syncStatus === "retried" ||
+        cm.syncStatus === "local"
+          ? cm.syncStatus
+          : "local",
+      syncedAt: cm.syncedAt ?? null,
+    })),
     activity: partial.activity || [],
     blocked: !!partial.blocked,
     blockReason: partial.blockReason != null ? String(partial.blockReason) : "",
@@ -971,6 +986,22 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
           ...item,
           completedAt: item.completed ? item.completedAt ?? null : null,
         })),
+      }));
+      c.comments = (c.comments || []).map((cm) => ({
+        ...cm,
+        parentId: cm.parentId ?? null,
+        externalCommentId: cm.externalCommentId ?? null,
+        externalParentId: cm.externalParentId ?? null,
+        source: cm.source === "KAITEN" ? "KAITEN" : "CRM",
+        syncStatus:
+          cm.syncStatus === "pending" ||
+          cm.syncStatus === "synced" ||
+          cm.syncStatus === "failed" ||
+          cm.syncStatus === "retried" ||
+          cm.syncStatus === "local"
+            ? cm.syncStatus
+            : "local",
+        syncedAt: cm.syncedAt ?? null,
       }));
       (c.files || []).forEach((f) => {
         if (!f.addedAt) f.addedAt = c.updatedAt || new Date().toISOString();
@@ -1831,6 +1862,12 @@ function syncChatImageCommentsWithImageFiles(card: KanbanCard): void {
       text: "",
       createdAt: f.addedAt || new Date().toISOString(),
       imageFileId: f.id,
+      parentId: null,
+      externalCommentId: null,
+      externalParentId: null,
+      source: "CRM",
+      syncStatus: "local",
+      syncedAt: null,
     });
   }
   card.comments = nextComments;

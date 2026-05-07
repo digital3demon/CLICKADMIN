@@ -180,6 +180,10 @@ export default async function DoctorCardPage({
             clinic: { select: { id: true, name: true } },
           },
         },
+        telegramGroups: {
+          orderBy: { createdAt: "asc" },
+          select: { id: true, telegramChatId: true, label: true },
+        },
       },
     });
   } catch (e) {
@@ -278,6 +282,7 @@ export default async function DoctorCardPage({
           <DoctorProfilePanel
             doctorId={id}
             initial={profileInitialFromDoctor(doctor)}
+            telegramGroups={doctor.telegramGroups}
           />
           {doctor.isIpEntrepreneur &&
           doctor.ipClinicAsSource &&

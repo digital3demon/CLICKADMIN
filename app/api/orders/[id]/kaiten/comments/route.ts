@@ -28,6 +28,13 @@ import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 import { notifyTelegramForMentionsInOrderKaitenComment } from "@/lib/order-kaiten-comment-mention-telegram";
 import { getSiteOrigin } from "@/lib/site-origin-server";
+import { getPrisma } from "@/lib/get-prisma";
+import {
+  findCardByLinkedOrderId,
+  KANBAN_CHAT_STATE_KEY,
+  parseKanbanAppState,
+  upsertKaitenCommentsToCard,
+} from "@/lib/kanban/chat-sync";
 
 type PostBody = {
   text?: string;
@@ -150,11 +157,12 @@ export async function POST(
   try {
     const list = await kaitenListComments(auth, order.kaitenCardId);
     if (list.ok) {
-      const parsed = dedupeParsedKaitenComments(
+      const parsedFull = dedupeParsedKaitenComments(
         list.comments
           .map(parseKaitenListComment)
           .filter((x): x is NonNullable<typeof x> => x != null),
-      ).map((c) => ({ id: c.id, text: c.text }));
+      );
+      const parsed = parsedFull.map((c) => ({ id: c.id, text: c.text }));
       const tenantTagRow = await prisma.order.findUnique({
         where: { id: order.id },
         select: { tenant: { select: { kanbanAdminMentionTag: true } } },
@@ -169,6 +177,42 @@ export async function POST(
         parsed,
         tenantTagRow?.tenant?.kanbanAdminMentionTag,
       );
+      try {
+        const corePrisma = await getPrisma();
+        const row = await corePrisma.tenantClientState.findUnique({
+          where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
+          select: { value: true },
+        });
+        const state = parseKanbanAppState(row?.value ?? null);
+        if (state) {
+          const loc = findCardByLinkedOrderId(state, order.id);
+          if (loc) {
+            const card =
+              state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
+            const merged = upsertKaitenCommentsToCard(
+              card.comments || [],
+              parsedFull.map((c) => ({
+                id: c.id,
+                text: c.text,
+                created: c.created,
+                authorName: c.authorName,
+                parentId: c.parentId,
+              })),
+            );
+            if (merged.changed) {
+              card.comments = merged.next;
+              card.updatedAt = new Date().toISOString();
+              await corePrisma.tenantClientState.upsert({
+                where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
+                create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },
+                update: { value: state as never },
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[kaiten comments] kanban ingest", e);
+      }
     }
   } catch (e) {
     console.error("[kaiten comments] lab mention sync", e);
