@@ -92,6 +92,7 @@ type BoardCanvasProps = {
     columnTitle?: string;
     sortOrder: number;
   }) => void;
+  onCardColumnChanged?: (args: { cardId: string; fromColumnId: string; toColumnId: string }) => void;
 };
 
 const CARD_MENU_WIDTH = 220;
@@ -193,7 +194,9 @@ function KanbanCardView({
   const blocked = isCardBlocked(card);
   const accent = getCardTypeAccent(homeBoard, card.cardTypeId);
   const ct = (homeBoard.cardTypes || []).find((t) => t.id === card.cardTypeId);
-  const cl = card.checklist || [];
+  const cl = card.parentCardId
+    ? card.productionChecklist || []
+    : card.checklist || [];
   const done = cl.filter((i) => i.completed).length;
   const pct = cl.length ? Math.round((done / cl.length) * 100) : 0;
   const assignees = card.assignees || [];
@@ -596,6 +599,7 @@ export function BoardCanvas({
   onRequestDeleteCard,
   allowMoveToOtherBoard = true,
   onLinkedOrderMovedToKaitenMirror,
+  onCardColumnChanged,
 }: BoardCanvasProps) {
   const columnIds = board.columns.map((c) => c.id);
   /** Горизонтальная полоса колонок: wheel без passive — только горизонтальный жест / Shift+колесо. */
@@ -808,6 +812,10 @@ export function BoardCanvas({
           );
         }
       });
+
+      if (fromContainer !== toColId) {
+        onCardColumnChanged?.({ cardId, fromColumnId: fromContainer, toColumnId: toColId });
+      }
 
       if (
         onLinkedOrderMovedToKaitenMirror &&

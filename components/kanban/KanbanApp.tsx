@@ -35,6 +35,16 @@ import {
   KANBAN_BOARD_ORTHOPEDICS_ID,
   withActiveBoard,
 } from "@/lib/kanban/model";
+import {
+  autoArchiveReadyProductionChildren,
+  expandProductionChecklistFromArchives,
+  markProductionChildReadyState,
+  moveParentToAssemblyIfReady,
+  normalizeProductionSettings,
+  parentCanMoveToAssembly,
+  syncProductionChildrenForParent,
+  warnIfChildMovedToDoneWithIncompleteChecklist,
+} from "@/lib/kanban/production";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
 import {
   applyStandaloneRowsFromServer,
@@ -532,6 +542,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const runSweep = () => {
       let archivedCount = 0;
       let deletedCount = 0;
+      let productionArchivedCount = 0;
       setAppState((s) => {
         if (!s) return s;
         const next = structuredClone(s);
@@ -539,12 +550,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           const out = applyBoardArchivePolicies(b);
           archivedCount += out.archivedCount;
           deletedCount += out.deletedCount;
+          productionArchivedCount += autoArchiveReadyProductionChildren(b);
         }
-        if (archivedCount === 0 && deletedCount === 0) return s;
+        if (archivedCount === 0 && deletedCount === 0 && productionArchivedCount === 0) return s;
         return next;
       });
-      if (archivedCount > 0) {
-        showToast(`В архив перемещено карточек: ${archivedCount}`);
+      if (archivedCount + productionArchivedCount > 0) {
+        showToast(`В архив перемещено карточек: ${archivedCount + productionArchivedCount}`);
       }
       if (deletedCount > 0) {
         showToast(`Из архива удалено по сроку: ${deletedCount}`);
@@ -879,6 +891,17 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     }
     const nextTitle = home.columns[colIdx + 1].title;
     const nextCol = home.columns[colIdx + 1];
+    const settings = normalizeProductionSettings(home);
+    const childIncomplete =
+      Boolean(found.card.parentCardId) &&
+      nextTitle.trim().toLowerCase() === settings.childDoneColumnTitle.trim().toLowerCase() &&
+      (found.card.productionChecklist || []).some((x) => !x.completed);
+    if (childIncomplete) {
+      const ok = window.confirm(
+        "Не все пункты производственного чеклиста отмечены как готовые. Перенести карточку в «Готово»?",
+      );
+      if (!ok) return;
+    }
     const linkedSorts = nextCol.cards
       .filter((c) => c.linkedOrderId)
       .map((c) => c.kaitenCardSortOrder)
@@ -912,6 +935,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         0,
         activityActorLabel,
       );
+      const movedCard = findCard(b, cardId)?.card;
+      if (movedCard?.parentCardId) {
+        markProductionChildReadyState(b, cardId);
+        if (parentCanMoveToAssembly(b, movedCard.parentCardId)) {
+          moveParentToAssemblyIfReady(b, movedCard.parentCardId, activityActorLabel);
+        }
+      }
       return next;
     });
     if (
@@ -929,6 +959,17 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     }
     showToast(`Этап: «${nextTitle}»`);
   };
+
+  const enrichProductionChecklistForChild = useCallback((childId: string) => {
+    void (async () => {
+      const cur = appStateRef.current;
+      if (!cur || isKanbanAggregateBoardId(cur.activeBoardId)) return;
+      const next = structuredClone(cur);
+      const b = getActiveBoard(next);
+      await expandProductionChecklistFromArchives(b, childId);
+      setAppState(next);
+    })();
+  }, []);
 
   if (!appState || !board || !displayBoard) {
     return (
@@ -1136,6 +1177,40 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               onLinkedOrderMovedToKaitenMirror={
                 isDemo ? undefined : syncKaitenMirrorAfterKanbanMove
               }
+              onCardColumnChanged={({ cardId, toColumnId }) => {
+                setAppState((s) => {
+                  if (!s || isKanbanAggregateBoardId(s.activeBoardId)) return s;
+                  const next = structuredClone(s);
+                  const b = getActiveBoard(next);
+                  const settings = normalizeProductionSettings(b);
+                  const toCol = b.columns.find((c) => c.id === toColumnId);
+                  if (!toCol) return s;
+                  const card = findCard(b, cardId)?.card;
+                  if (!card) return s;
+                  if (!card.parentCardId && toCol.title.trim().toLowerCase() === settings.triggerColumnTitle.trim().toLowerCase()) {
+                    const childIds = syncProductionChildrenForParent(b, cardId, activityActorLabel);
+                    for (const childId of childIds) {
+                      enrichProductionChecklistForChild(childId);
+                    }
+                  }
+                  if (card.parentCardId) {
+                    const needWarn =
+                      toCol.title.trim().toLowerCase() ===
+                        settings.childDoneColumnTitle.trim().toLowerCase() &&
+                      warnIfChildMovedToDoneWithIncompleteChecklist(b, cardId);
+                    if (needWarn) {
+                      window.alert(
+                        "Внимание: не все пункты производственного чеклиста отмечены как готовые.",
+                      );
+                    }
+                    markProductionChildReadyState(b, cardId);
+                    if (parentCanMoveToAssembly(b, card.parentCardId)) {
+                      moveParentToAssemblyIfReady(b, card.parentCardId, activityActorLabel);
+                    }
+                  }
+                  return next;
+                });
+              }}
             />
           ) : appState.viewMode === "calendar" ? (
             <KanbanCalendar
@@ -1195,6 +1270,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         canEditTrack={kanbanCardPerms.editTrack}
         canManageAssignees={kanbanCardPerms.manageAssignees}
         canManageParticipants={kanbanCardPerms.manageParticipants}
+        onOpenLinkedCard={(id) => setCardModalId(id)}
         trackLaneOptions={isDemo ? [...demoTrackLanes()] : undefined}
         trackLaneFieldLabel={isDemo ? "Доска" : undefined}
         isDemo={isDemo}

@@ -18,6 +18,13 @@ export type ChecklistItem = {
   completed: boolean;
 };
 
+export type ProductionChecklistItem = ChecklistItem & {
+  sourceFileId: string;
+  sourceFileName: string;
+  fromArchive: boolean;
+  archiveEntryName?: string;
+};
+
 export type CardFile = {
   id: string;
   name: string;
@@ -84,6 +91,16 @@ export type KanbanCard = {
   trackLane: string;
   createdAt: string;
   updatedAt: string;
+  /** Производство: дочерняя карточка знает родителя. */
+  parentCardId?: string;
+  /** Производство: родительская карточка хранит id дочерних карточек. */
+  childCardIds?: string[];
+  /** Производство: дорожка (Печать / Фрезер / ...). */
+  productionLaneId?: string;
+  /** Производство: чеклист по файлам/архивам. */
+  productionChecklist?: ProductionChecklistItem[];
+  /** Производство: завершена ли работа по карточке (для автоархивации). */
+  productionReadyAt?: string | null;
 };
 
 export type KanbanColumn = {
@@ -174,6 +191,23 @@ export type KanbanBoard = {
   archiveRetentionDays?: number;
   /** Архив карточек по доске. */
   archivedCards?: KanbanArchivedCard[];
+  /** Настройки производственного контура на доске. */
+  productionSettings?: {
+    enabled: boolean;
+    triggerColumnTitle: string;
+    parentDoneColumnTitle: string;
+    childTodoColumnTitle: string;
+    childInProgressColumnTitle: string;
+    childDoneColumnTitle: string;
+    unmatchedLaneId: string;
+    childAutoArchiveAfterDays: number;
+    archive3dExtensions: string[];
+    lanes: Array<{
+      id: string;
+      name: string;
+      keywords: string[];
+    }>;
+  };
 };
 
 export type KanbanFilters = {

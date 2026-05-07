@@ -799,6 +799,14 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
     trackLane: partial.trackLane != null ? partial.trackLane : "",
     createdAt: partial.createdAt || now,
     updatedAt: partial.updatedAt || now,
+    parentCardId: partial.parentCardId || undefined,
+    childCardIds: Array.isArray(partial.childCardIds) ? partial.childCardIds : [],
+    productionLaneId: partial.productionLaneId || undefined,
+    productionChecklist: Array.isArray(partial.productionChecklist)
+      ? partial.productionChecklist
+      : [],
+    productionReadyAt:
+      partial.productionReadyAt === undefined ? null : partial.productionReadyAt,
   };
 }
 
@@ -808,6 +816,32 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
   if (!Array.isArray(board.accessUserIds)) board.accessUserIds = [];
   if (!Array.isArray(board.autoArchiveRules)) board.autoArchiveRules = [];
   if (!Array.isArray(board.archivedCards)) board.archivedCards = [];
+  if (!board.productionSettings || typeof board.productionSettings !== "object") {
+    board.productionSettings = {
+      enabled: true,
+      triggerColumnTitle: "Производство",
+      parentDoneColumnTitle: "Сборка",
+      childTodoColumnTitle: "К исполнению",
+      childInProgressColumnTitle: "В работе",
+      childDoneColumnTitle: "Готово",
+      unmatchedLaneId: "lane_unsorted",
+      childAutoArchiveAfterDays: 0,
+      archive3dExtensions: [".stl", ".ply", ".obj"],
+      lanes: [
+        {
+          id: "lane_print",
+          name: "Печать",
+          keywords: ["модель", "модели", "моделька", "штампик", "штампики"],
+        },
+        {
+          id: "lane_mill",
+          name: "Фрезер",
+          keywords: ["сплинт", "фрезер", "фрезеровка"],
+        },
+        { id: "lane_unsorted", name: "Не распределено", keywords: [] },
+      ],
+    };
+  }
   if (!Array.isArray(board.excludedCrmUserIds)) board.excludedCrmUserIds = [];
   board.excludedCrmUserIds = board.excludedCrmUserIds
     .map((x) => String(x || "").trim())
@@ -871,6 +905,9 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
       if (c.trackLane == null) c.trackLane = "";
       if (c.lastMovedAt === undefined) c.lastMovedAt = null;
       if (typeof c.urgent !== "boolean") c.urgent = false;
+      if (!Array.isArray(c.childCardIds)) c.childCardIds = [];
+      if (!Array.isArray(c.productionChecklist)) c.productionChecklist = [];
+      if (c.productionReadyAt === undefined) c.productionReadyAt = null;
       (c.files || []).forEach((f) => {
         if (!f.addedAt) f.addedAt = c.updatedAt || new Date().toISOString();
         if (!f.addedByUserId && board.users && board.users[0])
@@ -937,6 +974,30 @@ export function createBoardShell(boardId: string, title: string): KanbanBoard {
     excludedCrmUserIds: [],
     archiveRetentionDays: 365,
     archivedCards: [],
+    productionSettings: {
+      enabled: true,
+      triggerColumnTitle: "Производство",
+      parentDoneColumnTitle: "Сборка",
+      childTodoColumnTitle: "К исполнению",
+      childInProgressColumnTitle: "В работе",
+      childDoneColumnTitle: "Готово",
+      unmatchedLaneId: "lane_unsorted",
+      childAutoArchiveAfterDays: 0,
+      archive3dExtensions: [".stl", ".ply", ".obj"],
+      lanes: [
+        {
+          id: "lane_print",
+          name: "Печать",
+          keywords: ["модель", "модели", "моделька", "штампик", "штампики"],
+        },
+        {
+          id: "lane_mill",
+          name: "Фрезер",
+          keywords: ["сплинт", "фрезер", "фрезеровка"],
+        },
+        { id: "lane_unsorted", name: "Не распределено", keywords: [] },
+      ],
+    },
   };
 }
 

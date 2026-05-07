@@ -171,6 +171,7 @@ type KanbanCardModalProps = {
   canEditTrack?: boolean;
   canManageAssignees?: boolean;
   canManageParticipants?: boolean;
+  onOpenLinkedCard?: (cardId: string) => void;
 };
 
 export function KanbanCardModal({
@@ -191,6 +192,7 @@ export function KanbanCardModal({
   canEditTrack = true,
   canManageAssignees = true,
   canManageParticipants = true,
+  onOpenLinkedCard,
 }: KanbanCardModalProps) {
   const [rightTab, setRightTab] = useState<"chat" | "act">("chat");
   const [blockPopupOpen, setBlockPopupOpen] = useState(false);
@@ -502,11 +504,19 @@ export function KanbanCardModal({
     onApply((b) => {
       const fc = findCard(b, cardId);
       if (!fc) return;
-      fc.card.checklist.push({
-        id: generateId("ch"),
-        text: "Новый пункт",
-        completed: false,
-      });
+      if (fc.card.parentCardId) {
+        fc.card.productionChecklist = fc.card.productionChecklist || [];
+        fc.card.productionChecklist.push({
+          id: generateId("pchk"),
+          text: "Новый пункт",
+          completed: false,
+          sourceFileId: "manual",
+          sourceFileName: "manual",
+          fromArchive: false,
+        });
+        return;
+      }
+      fc.card.checklist.push({ id: generateId("ch"), text: "Новый пункт", completed: false });
     });
   };
 
@@ -642,7 +652,9 @@ export function KanbanCardModal({
   const attachFilesFromChat = async (fileList: File[]) => {
     if (!fileList.length) return;
     const actor = chatActorUserId || board.users[0]?.id || "";
+    const productionOnly = Boolean(card.parentCardId || (card.childCardIds || []).length > 0);
     const linked =
+      !productionOnly &&
       Boolean(card.linkedOrderId) &&
       card.kaitenCardId != null &&
       Number.isFinite(card.kaitenCardId);
@@ -693,6 +705,38 @@ export function KanbanCardModal({
 
   const cardImageFiles = (card.files || []).filter((f) => isCardFileImage(f));
   const cardPdfFiles = (card.files || []).filter((f) => isPdfMime(f.mime || "", f.name));
+  const childStatusRows = (card.childCardIds || [])
+    .map((childId) => {
+      for (const col of board.columns) {
+        const child = col.cards.find((x) => x.id === childId);
+        if (child) {
+          const checklist = child.productionChecklist || [];
+          const done = checklist.filter((x) => x.completed).length;
+          return {
+            id: child.id,
+            title: child.title,
+            columnTitle: col.title,
+            checklistDone: done,
+            checklistTotal: checklist.length,
+          };
+        }
+      }
+      return null;
+    })
+    .filter((x): x is NonNullable<typeof x> => Boolean(x));
+  const childStatusBadge = (columnTitle: string): string => {
+    const col = columnTitle.trim().toLowerCase();
+    if (col === "готово") {
+      return "border-emerald-500/40 bg-emerald-500/15 text-emerald-300";
+    }
+    if (col === "в работе") {
+      return "border-amber-500/40 bg-amber-500/15 text-amber-300";
+    }
+    if (col === "к исполнению") {
+      return "border-zinc-500/40 bg-zinc-500/15 text-zinc-300";
+    }
+    return "border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)]";
+  };
 
   const openAttachment = (f: CardFile) => {
     if (isCardFileImage(f)) {
@@ -1333,8 +1377,9 @@ export function KanbanCardModal({
                     <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden">
                       {(card.files || []).length === 0 ? (
                         <p className="m-0 px-0.5 py-1 text-[0.7rem] leading-snug text-[var(--kaiten-modal-muted)]">
-                          Вложения из наряда подтягиваются сюда автоматически. Чтобы отправить ещё файл в Kaiten и
-                          обсудить в чате — перетащите его в область чата справа.
+                          {card.parentCardId || (card.childCardIds || []).length > 0
+                            ? "Файлы производства хранятся только в CRM-канбане. Перетащите архив/файл в чат справа."
+                            : "Вложения из наряда подтягиваются сюда автоматически. Чтобы отправить ещё файл в Kaiten и обсудить в чате — перетащите его в область чата справа."}
                         </p>
                       ) : (
                         (card.files || []).map((f) => (
@@ -1407,7 +1452,7 @@ export function KanbanCardModal({
               <div className="mb-3">
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
-                    Чеклист
+                    {card.parentCardId ? "Производственный чеклист" : "Чеклист"}
                   </span>
                   <button
                     type="button"
@@ -1431,6 +1476,47 @@ export function KanbanCardModal({
                   }
                 />
               </div>
+
+              {!card.parentCardId && childStatusRows.length > 0 ? (
+                <div className="mb-3">
+                  <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+                    Дочерние карточки производства
+                  </div>
+                  <div className="space-y-1.5">
+                    {childStatusRows.map((row) => (
+                      <div
+                        key={row.id}
+                        className="flex items-center justify-between gap-2 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-[0.8rem] text-[var(--kaiten-modal-text)]">
+                            {row.title}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[0.68rem] text-[var(--kaiten-modal-muted)]">
+                            <span
+                              className={`inline-flex rounded border px-1.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wide ${childStatusBadge(row.columnTitle)}`}
+                            >
+                              {row.columnTitle}
+                            </span>
+                            {row.checklistTotal > 0
+                              ? ` · чеклист ${row.checklistDone}/${row.checklistTotal}`
+                              : ""}
+                          </div>
+                        </div>
+                        {onOpenLinkedCard ? (
+                          <button
+                            type="button"
+                            className="shrink-0 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-1 text-[0.68rem] text-[var(--kaiten-modal-text)]"
+                            onClick={() => onOpenLinkedCard(row.id)}
+                          >
+                            Открыть
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               </div>
 
@@ -2284,7 +2370,9 @@ function ChecklistEditor({
   activityActorLabel?: string;
   kaitenLinked?: boolean;
 }) {
-  const cl = card.checklist || [];
+  const cl = card.parentCardId
+    ? card.productionChecklist || []
+    : card.checklist || [];
   const done = cl.filter((i) => i.completed).length;
   const total = cl.length;
   const pct = total ? Math.round((done / total) * 100) : 0;
@@ -2300,7 +2388,10 @@ function ChecklistEditor({
               onApply((b) => {
                 const fc = findCard(b, cardId);
                 if (!fc) return;
-                const it = fc.card.checklist.find((x) => x.id === item.id);
+                const list = fc.card.parentCardId
+                  ? fc.card.productionChecklist || []
+                  : fc.card.checklist || [];
+                const it = list.find((x) => x.id === item.id);
                 if (!it) return;
                 it.completed = !it.completed;
                 pushActivity(fc.card, `Чеклист: ${it.text}`, b.users[0]?.id, b, activityActorLabel);
@@ -2317,7 +2408,10 @@ function ChecklistEditor({
               onApply((b) => {
                 const fc = findCard(b, cardId);
                 if (!fc) return;
-                const it = fc.card.checklist.find((x) => x.id === item.id);
+                const list = fc.card.parentCardId
+                  ? fc.card.productionChecklist || []
+                  : fc.card.checklist || [];
+                const it = list.find((x) => x.id === item.id);
                 if (it) it.text = v;
               });
             }}
@@ -2329,7 +2423,13 @@ function ChecklistEditor({
               onApply((b) => {
                 const fc = findCard(b, cardId);
                 if (!fc) return;
-                fc.card.checklist = fc.card.checklist.filter((x) => x.id !== item.id);
+                if (fc.card.parentCardId) {
+                  fc.card.productionChecklist = (fc.card.productionChecklist || []).filter(
+                    (x) => x.id !== item.id,
+                  );
+                  return;
+                }
+                fc.card.checklist = (fc.card.checklist || []).filter((x) => x.id !== item.id);
               })
             }
           >
