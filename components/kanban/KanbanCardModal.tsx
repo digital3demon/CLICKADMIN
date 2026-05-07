@@ -293,22 +293,19 @@ export function KanbanCardModal({
   const currentColumnTitle = found?.col?.title || "—";
   const laneTransfer = useMemo(() => {
     if (!cardId || !found || !onMoveToColumn) return null;
-    const current = splitBoardLaneColumnTitle(found.col.title);
-    if (!current) return null;
-    const lanes = new Set<string>();
-    const targetColumnByLane = new Map<string, string>();
+    const columns: Array<{ id: string; title: string; laneName: string }> = [];
     for (const col of board.columns) {
       const parts = splitBoardLaneColumnTitle(col.title);
-      if (!parts) continue;
-      lanes.add(parts.laneName);
-      if (parts.stageName.trim().toLowerCase() !== current.stageName.trim().toLowerCase()) continue;
-      targetColumnByLane.set(parts.laneName, col.id);
+      columns.push({
+        id: col.id,
+        title: col.title,
+        laneName: parts?.laneName || "Доска",
+      });
     }
-    if (lanes.size < 2) return null;
+    if (columns.length < 2) return null;
     return {
-      currentLaneName: current.laneName,
-      laneNames: [...lanes],
-      targetColumnByLane,
+      currentColumnId: found.col.id,
+      columns,
     };
   }, [cardId, found, onMoveToColumn, board.columns]);
   const chatActorUserId =
@@ -1224,26 +1221,21 @@ export function KanbanCardModal({
                   {laneTransfer ? (
                     <div className="mt-2">
                       <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
-                        Перенос между дорожками
+                        Перенос по доске
                       </div>
                       <select
                         className={baseInput}
-                        value={laneTransfer.currentLaneName}
+                        value={laneTransfer.currentColumnId}
                         onChange={(e) => {
-                          const laneName = e.target.value;
-                          if (laneName === laneTransfer.currentLaneName) return;
-                          const targetColumnId = laneTransfer.targetColumnByLane.get(laneName);
-                          if (!targetColumnId) {
-                            toast("Для этой дорожки нет подходящего столбца этапа", true);
-                            return;
-                          }
+                          const targetColumnId = e.target.value;
+                          if (targetColumnId === laneTransfer.currentColumnId) return;
                           if (!cardId || !onMoveToColumn) return;
                           onMoveToColumn(cardId, targetColumnId);
                         }}
                       >
-                        {laneTransfer.laneNames.map((laneName) => (
-                          <option key={laneName} value={laneName}>
-                            {laneName}
+                        {laneTransfer.columns.map((col) => (
+                          <option key={col.id} value={col.id}>
+                            {col.title}
                           </option>
                         ))}
                       </select>

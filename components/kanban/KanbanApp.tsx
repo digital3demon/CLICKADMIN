@@ -1136,15 +1136,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         const inTriggerColumn =
           loc.col.title.trim().toLowerCase() === settings.triggerColumnTitle.trim().toLowerCase();
         if (!inTriggerColumn) return s;
+        const prodBoard = ensureProductionBoard(next, loc.board);
         const childIds = syncProductionChildrenForParent(
-          loc.board,
+          prodBoard,
           cardId,
           activityActorLabel,
           loc.card,
         );
         if (!childIds.length) return s;
         loc.card.childCardIds = childIds;
-        expandBoardId = loc.board.id;
+        expandBoardId = prodBoard.id;
         expandChildIds = childIds;
         return next;
       });
