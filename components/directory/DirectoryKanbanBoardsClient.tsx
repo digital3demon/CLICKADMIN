@@ -2,6 +2,7 @@
 
 import type { UserRole } from "@prisma/client";
 import type { KanbanBoard } from "@/lib/kanban/types";
+import dynamic from "next/dynamic";
 import {
   clearKanbanBrowserStorage,
   createInitialBoard,
@@ -25,8 +26,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminMessengerTenantSettings } from "@/components/directory/AdminMessengerTenantSettings";
 import { LabDueSlotsTenantSettings } from "@/components/directory/LabDueSlotsTenantSettings";
 import { OrderArchiveRetentionTenantSettings } from "@/components/directory/OrderArchiveRetentionTenantSettings";
-import { KanbanAutomationsForm } from "@/components/kanban/KanbanAutomationsForm";
-import { KanbanBoardSettingsForm } from "@/components/kanban/KanbanBoardSettingsForm";
 import { KanbanCrmUsersProvider } from "@/components/kanban/kanban-crm-users-context";
 import { IconBoard, IconPlus } from "@/components/kanban/kanban-icons";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
@@ -35,6 +34,22 @@ import {
   extractKanbanArchiveSettings,
   KANBAN_ARCHIVE_SETTINGS_KEY,
 } from "@/lib/kanban/archive-settings-sync";
+
+const KanbanAutomationsForm = dynamic(
+  () => import("@/components/kanban/KanbanAutomationsForm").then((m) => m.KanbanAutomationsForm),
+  { ssr: false, loading: () => null },
+);
+const KanbanBoardSettingsForm = dynamic(
+  () => import("@/components/kanban/KanbanBoardSettingsForm").then((m) => m.KanbanBoardSettingsForm),
+  { ssr: false, loading: () => null },
+);
+const KanbanProductionSettingsForm = dynamic(
+  () =>
+    import("@/components/kanban/KanbanProductionSettingsForm").then(
+      (m) => m.KanbanProductionSettingsForm,
+    ),
+  { ssr: false, loading: () => null },
+);
 
 type ToastItem = { id: string; text: string; err?: boolean };
 type CrmUserPick = { id: string; displayName: string; email: string };
@@ -56,10 +71,12 @@ export function DirectoryKanbanBoardsClient({
   isDemo = false,
   sessionRole,
   telegramBotUsername = "",
+  canEditKanbanCardTypes = true,
 }: {
   isDemo?: boolean;
   sessionRole: UserRole;
   telegramBotUsername?: string;
+  canEditKanbanCardTypes?: boolean;
 }) {
   const [appState, setAppState] = useState(() => loadKanbanStateForDirectory(isDemo));
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -88,12 +105,25 @@ export function DirectoryKanbanBoardsClient({
   const [pickExcludeUserId, setPickExcludeUserId] = useState("");
   const archiveSettingsReadyRef = useRef(false);
   const lastArchiveSettingsSigRef = useRef("");
+  const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const archiveSettingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     saveKanbanState(appState, isDemo);
-    const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
-    const scope = isDemo ? "user" : "tenant";
-    void writeClientState(scope, key, appState);
+    if (kanbanStateSaveTimerRef.current) {
+      clearTimeout(kanbanStateSaveTimerRef.current);
+    }
+    kanbanStateSaveTimerRef.current = setTimeout(() => {
+      kanbanStateSaveTimerRef.current = null;
+      const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
+      const scope = isDemo ? "user" : "tenant";
+      void writeClientState(scope, key, appState);
+    }, 450);
+    return () => {
+      if (kanbanStateSaveTimerRef.current) {
+        clearTimeout(kanbanStateSaveTimerRef.current);
+      }
+    };
   }, [appState, isDemo]);
 
   useEffect(() => {
@@ -134,6 +164,7 @@ export function DirectoryKanbanBoardsClient({
       void pullArchiveSettings();
     };
     const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       void pullArchiveSettings();
     }, 15_000);
     document.addEventListener("visibilitychange", onVisibleOrFocus);
@@ -152,7 +183,18 @@ export function DirectoryKanbanBoardsClient({
     const sig = JSON.stringify(payload);
     if (sig === lastArchiveSettingsSigRef.current) return;
     lastArchiveSettingsSigRef.current = sig;
-    void writeClientState("tenant", KANBAN_ARCHIVE_SETTINGS_KEY, payload);
+    if (archiveSettingsSaveTimerRef.current) {
+      clearTimeout(archiveSettingsSaveTimerRef.current);
+    }
+    archiveSettingsSaveTimerRef.current = setTimeout(() => {
+      archiveSettingsSaveTimerRef.current = null;
+      void writeClientState("tenant", KANBAN_ARCHIVE_SETTINGS_KEY, payload);
+    }, 600);
+    return () => {
+      if (archiveSettingsSaveTimerRef.current) {
+        clearTimeout(archiveSettingsSaveTimerRef.current);
+      }
+    };
   }, [appState, isDemo]);
 
   useEffect(() => {
@@ -791,6 +833,22 @@ export function DirectoryKanbanBoardsClient({
 
         <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
           <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">
+            Производственный контур (доска «{board.title}»)
+          </h2>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            Отдельные настройки создания и маршрутизации дочерних производственных карточек.
+          </p>
+          <div className="mt-6">
+            <KanbanProductionSettingsForm
+              board={board}
+              onPatchBoard={applyToBoard}
+              onEnsureProductionBoardNow={ensureProductionBoardNow}
+            />
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+          <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">
             Типы карточек (общие для всех досок)
           </h2>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
@@ -802,12 +860,13 @@ export function DirectoryKanbanBoardsClient({
               board={board}
               onPatchBoard={applyToBoard}
               onPatchCardTypes={applyToAllBoards}
-              onEnsureProductionBoardNow={ensureProductionBoardNow}
+              canEditCardTypes={canEditKanbanCardTypes}
             />
           </div>
           <div className="mt-6 flex flex-wrap gap-2 border-t border-[var(--card-border)] pt-4">
             <button
               type="button"
+              disabled={!canEditKanbanCardTypes}
               className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-95"
               onClick={saveNormalized}
             >

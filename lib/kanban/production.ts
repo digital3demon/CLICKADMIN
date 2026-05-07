@@ -198,6 +198,12 @@ export function syncProductionChildrenForParent(
     grouped.set(laneId, list);
   }
   if (grouped.size === 0) return { childIds: [], newlyCreated: [] };
+  const hasExplicitLane = [...grouped.keys()].some(
+    (laneId) => laneId !== settings.unmatchedLaneId,
+  );
+  if (hasExplicitLane) {
+    grouped.delete(settings.unmatchedLaneId);
+  }
   const childIds: string[] = [];
   const newlyCreated: Array<{ childId: string; laneName: string }> = [];
   for (const [laneId, files] of grouped.entries()) {
@@ -263,7 +269,7 @@ export async function expandProductionChecklistFromArchives(
         .filter((entry) => !entry.dir)
         .map((entry) => entry.name)
         .filter((name) => Boolean(name) && is3dObjectPath(name, settings.archive3dExtensions));
-      if (names.length === 0) throw new Error("empty");
+      if (names.length === 0) continue;
       for (const name of names) {
         next.push({
           id: generateId("pchk"),
@@ -276,14 +282,9 @@ export async function expandProductionChecklistFromArchives(
         });
       }
     } catch {
-      next.push({
-        id: generateId("pchk"),
-        text: f.name,
-        completed: false,
-        sourceFileId: f.id,
-        sourceFileName: f.name,
-        fromArchive: false,
-      });
+      // Для архивов не подставляем имя архива как пункт чеклиста:
+      // показываем только реальные 3D-файлы изнутри ZIP.
+      continue;
     }
   }
   child.productionChecklist = next;

@@ -453,6 +453,8 @@ enum AppModule {
   CONFIG_PRICING_CORRECTION
   CONFIG_WAREHOUSE
   CONFIG_KANBAN_BOARDS
+  /// Конфиг: типы карточек встроенного канбана
+  CONFIG_KANBAN_CARD_TYPES
   CONFIG_KAITEN
   CONFIG_COURIERS
   /// Конфиг: экспорт / импорт работ (xlsx)

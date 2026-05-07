@@ -2561,12 +2561,28 @@ function ChecklistEditor({
   const cl = card.parentCardId
     ? card.productionChecklist || []
     : card.checklist || [];
+  const hasZipSourceFile =
+    Boolean(card.parentCardId) &&
+    (card.files || []).some((f) => {
+      const name = String(f.name || "").trim().toLowerCase();
+      const mime = String(f.mime || "").trim().toLowerCase();
+      return name.endsWith(".zip") || mime.includes("zip");
+    });
+  const hasArchiveChecklistRows =
+    Boolean(card.parentCardId) &&
+    (card.productionChecklist || []).some((row) => row.fromArchive);
+  const showNo3dInArchiveWarning = hasZipSourceFile && !hasArchiveChecklistRows;
   const done = cl.filter((i) => i.completed).length;
   const total = cl.length;
   const pct = total ? Math.round((done / total) * 100) : 0;
 
   return (
     <div>
+      {showNo3dInArchiveWarning ? (
+        <div className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[0.75rem] leading-snug text-amber-200">
+          В архиве не найдено 3D-файлов для чеклиста.
+        </div>
+      ) : null}
       {cl.map((item) => (
         <div key={item.id} className="mb-1 flex items-center gap-2">
           <ChecklistCheckboxWithFirework

@@ -637,10 +637,10 @@ export default async function OrdersPage({
             ) : (
               orders.map((o) => {
                 const kaitenUrl =
-                  isDemo && siteOrigin
-                    ? `${siteOrigin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(o.id)}`
-                    : o.kaitenCardId != null
-                      ? getKaitenCardWebUrl(o.kaitenCardId)
+                  o.kaitenCardId != null
+                    ? getKaitenCardWebUrl(o.kaitenCardId)
+                    : siteOrigin
+                      ? `${siteOrigin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(o.id)}`
                       : null;
                 const workSent = o.adminShippedOtpr;
                 const blocked = o.kaitenBlocked === true;
@@ -660,7 +660,6 @@ export default async function OrdersPage({
                   <OrderListOrderChatCell
                     orderId={o.id}
                     orderNumber={o.orderNumber}
-                    kaitenCardId={o.kaitenCardId}
                     labMentionHighlight={o.listKaitenLabMentionHighlight}
                   />
                   <td className="max-md:hidden min-w-0 px-1.5 py-1.5 align-middle sm:px-2 sm:py-2">
@@ -676,7 +675,7 @@ export default async function OrdersPage({
                         <OrderKaitenQrModal
                           url={kaitenUrl}
                           compact
-                          variant={isDemo ? "kanban" : "kaiten"}
+                          variant={o.kaitenCardId != null && !isDemo ? "kaiten" : "kanban"}
                         />
                       ) : o.kaitenCardId != null ? (
                         <span

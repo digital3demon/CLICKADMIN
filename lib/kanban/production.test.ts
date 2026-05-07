@@ -66,11 +66,11 @@ describe("kanban production routing", () => {
     });
     board.columns[1]?.cards.push(parent);
     const syncRes = syncProductionChildrenForParent(board, parent.id);
-    expect(syncRes.childIds.length).toBe(3);
+    expect(syncRes.childIds.length).toBe(2);
     const childCards = board.columns[2]?.cards ?? [];
     expect(childCards.some((c) => c.productionLaneId === "lane_print")).toBe(true);
     expect(childCards.some((c) => c.productionLaneId === "lane_mill")).toBe(true);
-    expect(childCards.some((c) => c.productionLaneId === "lane_unsorted")).toBe(true);
+    expect(childCards.some((c) => c.productionLaneId === "lane_unsorted")).toBe(false);
   });
 
   it("puts unmatched files into fallback lane", () => {
@@ -168,6 +168,34 @@ describe("kanban production checklist from archives", () => {
     const list = child.productionChecklist || [];
     expect(list.length).toBe(1);
     expect(list[0]?.text).toBe("b.mesh");
+  });
+
+  it("does not fallback to archive filename when no 3d entries found", async () => {
+    const board = makeBoard();
+    const zip = new JSZip();
+    zip.file("Быстрова_Е.П.-Садовникова_Г.Г.constructionInfo", "meta");
+    const buffer = await zip.generateAsync({ type: "uint8array" });
+    const dataUrl = `data:application/zip;base64,${Buffer.from(buffer).toString("base64")}`;
+    const child = createCard({
+      id: "c-child-3",
+      title: "Child 3",
+      parentCardId: "p11",
+      files: [
+        {
+          id: "zip3",
+          name: "2602-089-Быстрова-Садовникова-сплинт-1.zip",
+          mime: "application/zip",
+          size: buffer.byteLength,
+          dataUrl,
+          addedAt: new Date().toISOString(),
+          addedByUserId: "u1",
+        },
+      ],
+    });
+    board.columns[2]?.cards.push(child);
+    await expandProductionChecklistFromArchives(board, child.id);
+    const list = child.productionChecklist || [];
+    expect(list.length).toBe(0);
   });
 });
 

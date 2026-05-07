@@ -69,16 +69,27 @@ import {
   extractKanbanArchiveSettings,
   KANBAN_ARCHIVE_SETTINGS_KEY,
 } from "@/lib/kanban/archive-settings-sync";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
 import { BoardCanvas } from "./BoardCanvas";
-import { KanbanCalendar } from "./KanbanCalendar";
-import { KanbanCardModal } from "./KanbanCardModal";
 import { KanbanFiltersButton } from "./KanbanFiltersButton";
-import { KanbanListView } from "./KanbanListView";
 import { IconBoard, IconListRows } from "./kanban-icons";
+
+const KanbanCalendar = dynamic(
+  () => import("./KanbanCalendar").then((m) => m.KanbanCalendar),
+  { ssr: false, loading: () => null },
+);
+const KanbanListView = dynamic(
+  () => import("./KanbanListView").then((m) => m.KanbanListView),
+  { ssr: false, loading: () => null },
+);
+const KanbanCardModal = dynamic(
+  () => import("./KanbanCardModal").then((m) => m.KanbanCardModal),
+  { ssr: false, loading: () => null },
+);
 
 type ToastItem = { id: string; text: string; err?: boolean };
 
@@ -314,6 +325,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       void pullArchiveSettings();
     };
     const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       void pullArchiveSettings();
     }, 15_000);
     document.addEventListener("visibilitychange", onVisibleOrFocus);
@@ -337,7 +349,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
       const scope = isDemo ? "user" : "tenant";
       void writeClientState(scope, key, appState);
-    }, 350);
+    }, 550);
     return () => {
       if (kanbanStateSaveTimerRef.current) {
         clearTimeout(kanbanStateSaveTimerRef.current);
@@ -369,10 +381,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const pullIfVisible = () => {
       if (document.visibilityState === "visible") void syncKanbanMirrorFromApi();
     };
-    const iv = window.setInterval(
-      () => void syncKanbanMirrorFromApi(),
-      kanbanLinkedOrdersPullIntervalMs(),
-    );
+    const iv = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void syncKanbanMirrorFromApi();
+    }, kanbanLinkedOrdersPullIntervalMs());
     document.addEventListener("visibilitychange", pullIfVisible);
     window.addEventListener("focus", pullIfVisible);
     return () => {

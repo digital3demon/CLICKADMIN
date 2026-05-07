@@ -519,13 +519,13 @@ export type OrderEditInitial = {
   }>;
 };
 
-/** Вкладки документооборота / Kaiten / истории (на странице наряда — над нижней панелью). */
-const SECONDARY_TABS = ["Документооборот", "Кайтен", "История"] as const;
+/** Вкладки документооборота / Канбан-Кайтен / истории (на странице наряда — над нижней панелью). */
+const SECONDARY_TABS = ["Документооборот", "Канбан/Кайтен", "История"] as const;
 export type OrderEditTab = (typeof SECONDARY_TABS)[number];
 type EditTab = OrderEditTab;
 
 function normalizeSecondaryTab(t: EditTab | undefined): EditTab {
-  if (t === "Кайтен" || t === "История" || t === "Документооборот") return t;
+  if (t === "Канбан/Кайтен" || t === "История" || t === "Документооборот") return t;
   return "Документооборот";
 }
 
@@ -535,8 +535,8 @@ export function OrderEditForm({
   isDemoMode = false,
   demoKanbanCardTypes = [],
   canAcceptChatCorrections = false,
-  /** Подпись вкладки доски: лаб=«Кайтен» (кроме демо), коммерция=«Канбан» — с сервера, без NEXT_PUBLIC. */
-  boardTabLabel: boardTabLabelProp,
+  /** Ссылка на карточку наряда в CRM канбане (fallback, если нет Kaiten-карточки). */
+  kanbanCardUrl = null,
   orderPageFrame,
 }: {
   initial: OrderEditInitial;
@@ -545,7 +545,7 @@ export function OrderEditForm({
   demoKanbanCardTypes?: Array<{ id: string; name: string }>;
   /** Принять корректировки из чата (роль админ / ст. админ / фин. менеджер). */
   canAcceptChatCorrections?: boolean;
-  boardTabLabel?: "Канбан" | "Кайтен";
+  kanbanCardUrl?: string | null;
   /** Шапка модуля: этап работы, срочность, пилюли-индикаторы и «Сохранить». */
   orderPageFrame?: {
     title: string;
@@ -553,8 +553,6 @@ export function OrderEditForm({
     description?: string;
   };
 }) {
-  const boardTabLabel =
-    boardTabLabelProp ?? (isDemoMode ? "Канбан" : "Кайтен");
   const isOrderPageFramed = orderPageFrame != null;
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<EditTab>(() =>
@@ -2567,7 +2565,7 @@ export function OrderEditForm({
         {(
           [
             { key: "Документооборот" as const, label: "Документооборот" },
-            { key: "Кайтен" as const, label: boardTabLabel },
+            { key: "Канбан/Кайтен" as const, label: "Канбан/Кайтен" },
             { key: "История" as const, label: "История" },
           ] as const
         ).map(({ key, label }) => {
@@ -2850,7 +2848,7 @@ export function OrderEditForm({
             <div className="hidden min-w-0 lg:block" aria-hidden />
           </div>
         </div>
-      ) : activeTab === "Кайтен" ? (
+      ) : activeTab === "Канбан/Кайтен" ? (
         <div className={editColWrap}>
           {isDemoMode ? (
             <OrderDemoKanbanTab
@@ -2864,6 +2862,7 @@ export function OrderEditForm({
               orderId={initial.id}
               kaitenCardId={initial.kaitenCardId}
               kaitenCardUrl={initial.kaitenCardUrl}
+              kanbanCardUrl={kanbanCardUrl}
               initialTrackLane={initial.kaitenTrackLane}
               initialKaitenBlocked={initial.kaitenBlocked}
               initialKaitenBlockReason={initial.kaitenBlockReason}
@@ -3045,11 +3044,17 @@ export function OrderEditForm({
               >
                 Печать наряда (PDF)
               </OrderNarjadPrintTrigger>
-              {initial.kaitenCardUrl ? (
+              {initial.kaitenCardUrl || kanbanCardUrl ? (
                 <OrderKaitenQrModal
-                  url={initial.kaitenCardUrl}
-                  labelFull={isDemoMode ? "QR канбана" : "QR Kaiten"}
-                  variant={isDemoMode ? "kanban" : "kaiten"}
+                  url={initial.kaitenCardUrl || kanbanCardUrl}
+                  labelFull={
+                    initial.kaitenCardUrl
+                      ? isDemoMode
+                        ? "QR канбана"
+                        : "QR Kaiten"
+                      : "QR канбана"
+                  }
+                  variant={initial.kaitenCardUrl ? (isDemoMode ? "kanban" : "kaiten") : "kanban"}
                 />
               ) : initial.kaitenCardId != null && !isDemoMode ? (
                 <span

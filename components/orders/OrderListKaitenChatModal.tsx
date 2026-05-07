@@ -10,6 +10,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { KaitenTrackLane } from "@prisma/client";
 import { dedupeParsedKaitenComments, parseKaitenListComment } from "@/lib/kaiten-comment-parse";
+import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import {
   CRM_UPLOAD_MAX_BYTES,
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
@@ -56,6 +57,27 @@ type ImagePreview = {
   url: string;
 };
 
+type KanbanRow = {
+  id: string;
+  text: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  rejectedAt: string | null;
+};
+
+type KanbanFeedItem = {
+  id: string;
+  text: string;
+  createdAt: string;
+  source: "correction" | "prosthetics";
+  state: "pending" | "accepted" | "rejected";
+};
+
+function isNoKaitenCardError(errorText: string | null | undefined): boolean {
+  const t = String(errorText || "").toLowerCase();
+  return t.includes("не привяз") || t.includes("нет карточки kaiten");
+}
+
 export function OrderListKaitenChatModal({
   orderId,
   orderNumber,
@@ -70,6 +92,8 @@ export function OrderListKaitenChatModal({
   const router = useRouter();
   const titleId = useId();
   const [snap, setSnap] = useState<KaitenSnapshot | null>(null);
+  const [chatMode, setChatMode] = useState<"kaiten" | "kanban">("kaiten");
+  const [kanbanFeed, setKanbanFeed] = useState<KanbanFeedItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hydrating, setHydrating] = useState(false);
@@ -92,10 +116,57 @@ export function OrderListKaitenChatModal({
     });
   }, []);
 
+  const loadKanbanFeed = useCallback(async () => {
+    const [corrRes, protRes] = await Promise.all([
+      fetch(`/api/orders/${orderId}/chat-corrections`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+      fetch(`/api/orders/${orderId}/prosthetics-requests`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+    ]);
+    const corrData = (await corrRes.json().catch(() => ({}))) as {
+      corrections?: KanbanRow[];
+      error?: string;
+    };
+    const protData = (await protRes.json().catch(() => ({}))) as {
+      requests?: KanbanRow[];
+      error?: string;
+    };
+    if (!corrRes.ok) {
+      throw new Error(corrData.error ?? "Не удалось загрузить корректировки");
+    }
+    if (!protRes.ok) {
+      throw new Error(protData.error ?? "Не удалось загрузить заявки по протетике");
+    }
+    const corrections = Array.isArray(corrData.corrections) ? corrData.corrections : [];
+    const requests = Array.isArray(protData.requests) ? protData.requests : [];
+    const mapped: KanbanFeedItem[] = [
+      ...corrections.map((row) => ({
+        id: `corr-${row.id}`,
+        text: row.text,
+        createdAt: row.createdAt,
+        source: "correction" as const,
+        state: (row.rejectedAt ? "rejected" : row.resolvedAt ? "accepted" : "pending") as KanbanFeedItem["state"],
+      })),
+      ...requests.map((row) => ({
+        id: `pros-${row.id}`,
+        text: row.text,
+        createdAt: row.createdAt,
+        source: "prosthetics" as const,
+        state: (row.rejectedAt ? "rejected" : row.resolvedAt ? "accepted" : "pending") as KanbanFeedItem["state"],
+      })),
+    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    setKanbanFeed(mapped);
+  }, [orderId]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     setHydrating(false);
+    setChatMode("kaiten");
     let fastLoaded = false;
     try {
       try {
@@ -126,6 +197,12 @@ export function OrderListKaitenChatModal({
       const res = await fetch(`/api/orders/${orderId}/kaiten`);
       const data = (await res.json()) as { error?: string } & Partial<KaitenSnapshot>;
       if (!res.ok) {
+        if (isNoKaitenCardError(data.error)) {
+          setChatMode("kanban");
+          setSnap(null);
+          await loadKanbanFeed();
+          return;
+        }
         if (!fastLoaded) {
           setLoadError(data.error ?? "Не удалось загрузить чат");
           setSnap(null);
@@ -153,6 +230,7 @@ export function OrderListKaitenChatModal({
   /** Подтверждение просмотра чата для текущего пользователя (БД), затем обновление RSC. */
   useEffect(() => {
     if (!open) return;
+    if (chatMode !== "kaiten") return;
     void (async () => {
       try {
         const res = await fetch(
@@ -164,7 +242,7 @@ export function OrderListKaitenChatModal({
         /* ignore */
       }
     })();
-  }, [open, orderId, router]);
+  }, [open, orderId, router, chatMode]);
 
   useEffect(() => {
     if (open) return;
@@ -186,6 +264,23 @@ export function OrderListKaitenChatModal({
     setPosting(true);
     setPostError(null);
     try {
+      if (chatMode === "kanban") {
+        const res = await fetch(`/api/orders/${orderId}/chat-corrections`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ text: t }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setPostError(data.error ?? "Не отправлено");
+          return;
+        }
+        setNewText("");
+        setReplyToId(null);
+        await loadKanbanFeed();
+        return;
+      }
       const res = await fetch(`/api/orders/${orderId}/kaiten/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -252,8 +347,8 @@ export function OrderListKaitenChatModal({
         if (enqueued > 0) {
           setUploadOk(
             enqueued === 1
-              ? "Файл поставлен в очередь загрузки (CRM/Kaiten)."
-              : `Файлы поставлены в очередь загрузки (${enqueued}) (CRM/Kaiten).`,
+              ? `Файл поставлен в очередь загрузки (${chatMode === "kanban" ? "CRM/Канбан" : "CRM/Kaiten"}).`
+              : `Файлы поставлены в очередь загрузки (${enqueued}) (${chatMode === "kanban" ? "CRM/Канбан" : "CRM/Kaiten"}).`,
           );
         } else {
           setUploadOk("Такой файл уже есть в очереди загрузки.");
@@ -264,7 +359,7 @@ export function OrderListKaitenChatModal({
         setUploading(false);
       }
     },
-    [orderId, orderNumber],
+    [orderId, orderNumber, chatMode],
   );
 
   const onPasteIntoMessage = useCallback(
@@ -283,6 +378,8 @@ export function OrderListKaitenChatModal({
 
   const comments = snap?.comments ?? [];
   const cardImages = snap?.cardImages ?? [];
+  const isKanbanMode = chatMode === "kanban";
+  const kanbanCardUrl = kanbanOrderDeepLinkPath(orderId);
   const roots = comments.filter((c) => c.parentId == null);
   const childrenOf = (pid: number) =>
     comments.filter((c) => c.parentId === pid);
@@ -352,7 +449,16 @@ export function OrderListKaitenChatModal({
             </div>
           ) : (
             <>
-              {snap?.kaitenCardUrl ? (
+              {isKanbanMode ? (
+                <a
+                  href={kanbanCardUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mb-3 inline-block text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
+                >
+                  Открыть карточку в канбане CRM →
+                </a>
+              ) : snap?.kaitenCardUrl ? (
                 <a
                   href={snap.kaitenCardUrl}
                   target="_blank"
@@ -363,16 +469,46 @@ export function OrderListKaitenChatModal({
                 </a>
               ) : null}
               <p className="mb-2 text-[0.65rem] text-[var(--text-muted)]">
-                Сообщения из чата карточки Kaiten (канбан). Отправка уходит в Kaiten.
+                {isKanbanMode
+                  ? "Kaiten-карточка не привязана: используем чат канбана CRM. Префиксы !!! и ??? работают для корректировок и протетики."
+                  : "Сообщения из чата карточки Kaiten (канбан). Отправка уходит в Kaiten."}
               </p>
-              {hydrating ? (
+              {hydrating && !isKanbanMode ? (
                 <p className="mb-2 text-[10px] text-[var(--text-muted)]">
                   Обновляю данные карточки Kaiten в фоне…
                 </p>
               ) : null}
               <ul className="space-y-3">
-                {roots.length === 0 ? (
+                {isKanbanMode && kanbanFeed.length === 0 ? (
                   <li className="text-sm text-[var(--text-muted)]">Сообщений пока нет.</li>
+                ) : !isKanbanMode && roots.length === 0 ? (
+                  <li className="text-sm text-[var(--text-muted)]">Сообщений пока нет.</li>
+                ) : isKanbanMode ? (
+                  kanbanFeed.map((item) => (
+                    <li
+                      key={item.id}
+                      className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2 text-[10px] text-[var(--text-muted)]">
+                        <span className="font-medium text-[var(--text-strong)]">
+                          {item.source === "correction" ? "Корректировка" : "Протетика"}
+                        </span>
+                        <span>
+                          {new Date(item.createdAt).toLocaleString("ru-RU")}
+                        </span>
+                      </div>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-text)]">
+                        {item.text}
+                      </p>
+                      <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                        {item.state === "accepted"
+                          ? "Принято"
+                          : item.state === "rejected"
+                            ? "Отклонено"
+                            : "Ожидает обработки"}
+                      </p>
+                    </li>
+                  ))
                 ) : (
                   roots.map((c) => (
                     <li
@@ -429,7 +565,7 @@ export function OrderListKaitenChatModal({
                   ))
                 )}
               </ul>
-              {cardImages.length > 0 ? (
+              {!isKanbanMode && cardImages.length > 0 ? (
                 <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
                     Изображения в карточке
@@ -524,7 +660,9 @@ export function OrderListKaitenChatModal({
               />
             </label>
             <span className="text-[10px] text-[var(--text-muted)]">
-              Вложения уйдут в карточку Kaiten (можно вставить через Ctrl+V)
+              {isKanbanMode
+                ? "Вложения сохраняются в наряд и канбан CRM (можно вставить через Ctrl+V)"
+                : "Вложения уйдут в карточку Kaiten (можно вставить через Ctrl+V)"}
             </span>
           </div>
           <button
@@ -533,7 +671,7 @@ export function OrderListKaitenChatModal({
             onClick={() => void sendComment()}
             className="mt-2 w-full rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
           >
-            {posting ? "Отправка…" : "Отправить в Kaiten"}
+            {posting ? "Отправка…" : isKanbanMode ? "Отправить в канбан" : "Отправить в Kaiten"}
           </button>
         </div>
       </div>

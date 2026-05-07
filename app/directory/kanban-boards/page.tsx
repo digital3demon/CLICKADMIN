@@ -1,16 +1,18 @@
 import Link from "next/link";
 import type { UserRole } from "@prisma/client";
-import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { DirectoryKanbanBoardsClient } from "@/components/directory/DirectoryKanbanBoardsClient";
 import { normalizeTelegramBotUsername } from "@/lib/telegram-bot-username";
+import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 
 export const dynamic = "force-dynamic";
 
 export default async function DirectoryKanbanBoardsPage() {
-  const session = await getSessionFromCookies();
+  const { session, access } = await getSessionWithModuleAccess();
   const isDemo = Boolean(session?.demo);
   const role: UserRole = session?.role ?? "USER";
+  const canEditKanbanCardTypes =
+    session?.role === "OWNER" || access?.CONFIG_KANBAN_CARD_TYPES === true;
   const telegramBotUsername = normalizeTelegramBotUsername(
     process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME,
   );
@@ -22,6 +24,7 @@ export default async function DirectoryKanbanBoardsPage() {
       <DirectoryKanbanBoardsClient
         isDemo={isDemo}
         sessionRole={role}
+        canEditKanbanCardTypes={canEditKanbanCardTypes}
         telegramBotUsername={telegramBotUsername}
       />
       <p className="mt-8 text-sm">

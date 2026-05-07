@@ -55,7 +55,7 @@ export default async function OrderEditPage({
       : tabQ === "documents" || tabQ === "docs" || tabQ === "edo"
         ? "Документооборот"
         : tabQ === "kaiten" || tabQ === "kanban"
-          ? "Кайтен"
+          ? "Канбан/Кайтен"
           : undefined;
 
   const session = await getSessionFromCookies();
@@ -190,10 +190,9 @@ export default async function OrderEditPage({
     : [];
 
   const siteOrigin = await getSiteOrigin();
-  const kanbanAbs =
-    isDemoMode && siteOrigin
-      ? `${siteOrigin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(order.id)}`
-      : null;
+  const kanbanAbs = siteOrigin
+    ? `${siteOrigin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(order.id)}`
+    : null;
 
   const invParsed = invoiceParsedSnapshotForOrderEdit(order);
 
@@ -329,14 +328,12 @@ export default async function OrderEditPage({
   const canAcceptChatCorrections =
     session != null && canAcceptOrderChatCorrections(session.role);
 
-  const boardTabLabel: "Канбан" | "Кайтен" = isDemoMode ? "Канбан" : "Кайтен";
-
   return (
     <OrderEditForm
       initial={initial}
       initialActiveTab={initialActiveTab}
       isDemoMode={isDemoMode}
-      boardTabLabel={boardTabLabel}
+      kanbanCardUrl={kanbanAbs}
       demoKanbanCardTypes={demoKanbanCardTypes}
       canAcceptChatCorrections={canAcceptChatCorrections}
       orderPageFrame={{

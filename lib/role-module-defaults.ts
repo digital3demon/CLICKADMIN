@@ -29,6 +29,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CONFIG_PRICING_CORRECTION",
   "CONFIG_WAREHOUSE",
   "CONFIG_KANBAN_BOARDS",
+  "CONFIG_KANBAN_CARD_TYPES",
   "CONFIG_KAITEN",
   "CONFIG_COURIERS",
   "CONFIG_ORDERS_IMPORT_EXPORT",
@@ -59,6 +60,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CONFIG_PRICING_CORRECTION: "Конфиг: коррекция актуального прайса",
   CONFIG_WAREHOUSE: "Конфиг: склад",
   CONFIG_KANBAN_BOARDS: "Конфиг: доски канбана",
+  CONFIG_KANBAN_CARD_TYPES: "Конфиг: типы карточек канбана",
   CONFIG_KAITEN: "Конфиг: Kaiten",
   CONFIG_COURIERS: "Конфиг: курьеры",
   CONFIG_ORDERS_IMPORT_EXPORT: "Конфиг: экспорт / импорт работ",
@@ -133,6 +135,7 @@ export function defaultModuleAllowed(
     case "CONFIG_PRICING":
     case "CONFIG_WAREHOUSE":
     case "CONFIG_KANBAN_BOARDS":
+    case "CONFIG_KANBAN_CARD_TYPES":
     case "CONFIG_KAITEN":
     case "CONFIG_COURIERS":
     case "CONFIG_ORDERS_IMPORT_EXPORT":

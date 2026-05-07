@@ -717,6 +717,12 @@ export function BoardCanvas({
   const [laneOffsets, setLaneOffsets] = useState<Record<string, LaneOffset>>({});
   const [dragLaneId, setDragLaneId] = useState<string | null>(null);
   const laneOffsetsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const laneDragRafRef = useRef<number | null>(null);
+  const laneDragPendingPointRef = useRef<{
+    laneId: string;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
   const laneDragRef = useRef<{
     laneId: string;
     startClientX: number;
@@ -817,18 +823,33 @@ export function BoardCanvas({
       };
       setDragLaneId(laneId);
       const onMove = (ev: PointerEvent) => {
-        const drag = laneDragRef.current;
-        if (!drag || drag.laneId !== laneId) return;
-        const dx = ev.clientX - drag.startClientX;
-        const dy = ev.clientY - drag.startClientY;
-        setLaneOffsets((prev) => ({
-          ...prev,
-          [laneId]: { x: drag.startX + dx, y: drag.startY + dy },
-        }));
+        laneDragPendingPointRef.current = {
+          laneId,
+          clientX: ev.clientX,
+          clientY: ev.clientY,
+        };
+        if (laneDragRafRef.current != null) return;
+        laneDragRafRef.current = window.requestAnimationFrame(() => {
+          laneDragRafRef.current = null;
+          const drag = laneDragRef.current;
+          const pending = laneDragPendingPointRef.current;
+          if (!drag || !pending || drag.laneId !== laneId || pending.laneId !== laneId) return;
+          const dx = pending.clientX - drag.startClientX;
+          const dy = pending.clientY - drag.startClientY;
+          setLaneOffsets((prev) => ({
+            ...prev,
+            [laneId]: { x: drag.startX + dx, y: drag.startY + dy },
+          }));
+        });
       };
       const onUp = () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+        if (laneDragRafRef.current != null) {
+          window.cancelAnimationFrame(laneDragRafRef.current);
+          laneDragRafRef.current = null;
+        }
+        laneDragPendingPointRef.current = null;
         laneDragRef.current = null;
         setDragLaneId((current) => (current === laneId ? null : current));
       };
@@ -837,6 +858,15 @@ export function BoardCanvas({
     },
     [aggregateLayoutLocked, laneOffsets],
   );
+
+  useEffect(() => {
+    return () => {
+      if (laneDragRafRef.current != null) {
+        window.cancelAnimationFrame(laneDragRafRef.current);
+        laneDragRafRef.current = null;
+      }
+    };
+  }, []);
 
   /**
    * На границах колонок closestCorners часто "дёргает" цель.

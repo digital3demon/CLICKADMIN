@@ -6,7 +6,7 @@ import type {
   KanbanAutomationRule,
 } from "@/lib/kanban/types";
 import { createEmptyAutomationRule } from "@/lib/kanban/automations";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { mergeKanbanPickerUsers, pickerRowLabel } from "./KanbanPersonAvatar";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 import { IconPlus, IconTrash } from "./kanban-icons";
@@ -175,7 +175,7 @@ function KanbanActionEditor({
   );
 }
 
-export function KanbanAutomationsForm({
+function KanbanAutomationsFormImpl({
   board,
   boards,
   rules,
@@ -411,3 +411,5 @@ export function KanbanAutomationsForm({
     </div>
   );
 }
+
+export const KanbanAutomationsForm = memo(KanbanAutomationsFormImpl);

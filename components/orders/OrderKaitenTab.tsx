@@ -97,6 +97,7 @@ export function OrderKaitenTab({
   orderId,
   kaitenCardId,
   kaitenCardUrl,
+  kanbanCardUrl = null,
   initialTrackLane,
   initialKaitenBlocked,
   initialKaitenBlockReason,
@@ -107,6 +108,7 @@ export function OrderKaitenTab({
   orderId: string;
   kaitenCardId: number | null;
   kaitenCardUrl: string | null;
+  kanbanCardUrl?: string | null;
   initialTrackLane: KaitenTrackLane | null;
   initialKaitenBlocked?: boolean;
   initialKaitenBlockReason?: string | null;
@@ -626,11 +628,20 @@ export function OrderKaitenTab({
     return (
       <div className="max-w-xl space-y-4 text-sm">
         <p className="text-[var(--text-secondary)]">
-          В CRM не сохранён id карточки Kaiten, поэтому эта вкладка пуста, хотя в Kaiten
-          карточка может уже существовать. Типично так бывает, если API при создании
-          вернул id в нестандартном формате (для новых нарядов учтено) или карточку
-          перенесли/создали только в Kaiten.
+          Карточка в Kaiten пока не привязана. Работа продолжается через карточку в
+          канбане CRM, а здесь можно создать новую карточку Kaiten или привязать
+          существующую.
         </p>
+        {kanbanCardUrl ? (
+          <a
+            href={kanbanCardUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block text-sm font-medium text-[var(--sidebar-blue)] underline hover:no-underline"
+          >
+            Открыть карточку в канбане CRM →
+          </a>
+        ) : null}
         {kaitenSyncError ? (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-950 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-100">
             <p className="font-medium">Записанная ошибка синхронизации</p>
