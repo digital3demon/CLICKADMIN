@@ -164,6 +164,7 @@ export function OrderKaitenTab({
   const [createBusy, setCreateBusy] = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkIdDraft, setLinkIdDraft] = useState("");
+  const [createTitleDraft, setCreateTitleDraft] = useState("");
   const [manualKaitenError, setManualKaitenError] = useState<string | null>(null);
 
   const [kaitenTypeOptions, setKaitenTypeOptions] = useState<KaitenCardTypeOpt[]>(
@@ -583,6 +584,7 @@ export function OrderKaitenTab({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "create",
+            title: createTitleDraft.trim() || undefined,
             kaitenTrackLane: trackLane ?? undefined,
             kaitenCardTypeId: String(createKaitenCardTypeId).trim() || null,
             columnId:
@@ -634,8 +636,8 @@ export function OrderKaitenTab({
       <div className="space-y-6">
         <p className="text-xs text-[var(--text-muted)]">
           Карточка в Kaiten пока не привязана. Работа продолжается через карточку в
-          канбане CRM. Ниже — тот же рабочий layout блоков: чат, блокировка и
-          панель привязки.
+          канбане CRM. Правый блок ниже работает как центр настройки шапки/доски
+          для Kanban/Kaiten, а создание/привязка Kaiten вынесены отдельно под ним.
         </p>
         {kanbanCardUrl ? (
           <a
@@ -683,7 +685,7 @@ export function OrderKaitenTab({
 
           <div className={`order-3 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>
             <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-              Шапка и положение на доске
+              Шапка и положение на доске (Канбан / Kaiten)
             </h3>
             {kaitenDecideLater ? (
               <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
@@ -695,10 +697,10 @@ export function OrderKaitenTab({
               <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
                 Заголовок карточки
                 <input
-                  disabled
-                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] opacity-75"
-                  value="Заголовок появится после создания карточки"
-                  readOnly
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
+                  value={createTitleDraft}
+                  placeholder="Заголовок для карточки"
+                  onChange={(e) => setCreateTitleDraft(e.target.value)}
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
@@ -762,52 +764,6 @@ export function OrderKaitenTab({
                 {noCardBoardError}
               </p>
             ) : null}
-            <button
-              type="button"
-              disabled={!canCreateFromCrm || createBusy}
-              onClick={() => void runCreate()}
-              className={
-                canCreateFromCrm
-                  ? "mt-3 rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  : "mt-3 rounded-md border border-[var(--border-default)] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--panel-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-              }
-            >
-              {createBusy ? "Создаём…" : "Создать карточку в Kaiten / канбан"}
-            </button>
-            {!hasKaitenCreateFields ? (
-              <p className="mt-2 text-xs text-[var(--text-muted)]">
-                Укажите тип карточки, пространство и колонку выше — тогда кнопка станет
-                зелёной.
-              </p>
-            ) : null}
-            <div className="mt-3 border-t border-[var(--border-subtle)] pt-3">
-              <p className="mb-2 text-xs text-[var(--text-secondary)]">
-                Карточка уже есть в Kaiten — укажите числовой id (например{" "}
-                <code className="rounded bg-[var(--code-bg)] px-1">…/card/12345</code>).
-              </p>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="id карточки"
-                  value={linkIdDraft}
-                  onChange={(e) => setLinkIdDraft(e.target.value)}
-                  className="w-full min-w-0 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 py-1.5 text-sm sm:max-w-[12rem]"
-                />
-                <button
-                  type="button"
-                  disabled={linkBusy}
-                  onClick={() => void runLink()}
-                  className="rounded-md border border-[var(--border-default)] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--panel-hover)] disabled:opacity-50"
-                >
-                  {linkBusy ? "Привязка…" : "Привязать"}
-                </button>
-              </div>
-            </div>
-            {manualKaitenError ? (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{manualKaitenError}</p>
-            ) : null}
           </div>
 
           <div className={KAITEN_TAB_CHAT_PANEL_CLASS}>
@@ -837,6 +793,60 @@ export function OrderKaitenTab({
               Отправить в Kaiten
             </button>
           </div>
+        </div>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+            Создание карточки в Kaiten
+          </h3>
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">
+            Использует параметры из правого блока: заголовок, тип, пространство и колонку.
+          </p>
+          <button
+            type="button"
+            disabled={!canCreateFromCrm || createBusy}
+            onClick={() => void runCreate()}
+            className={
+              canCreateFromCrm
+                ? "mt-3 rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                : "mt-3 rounded-md border border-[var(--border-default)] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--panel-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            }
+          >
+            {createBusy ? "Создаём…" : "Создать карточку в Kaiten / канбан"}
+          </button>
+          {!hasKaitenCreateFields ? (
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
+              Укажите тип карточки, пространство и колонку выше — тогда кнопка станет
+              зелёной.
+            </p>
+          ) : null}
+          <div className="mt-3 border-t border-[var(--border-subtle)] pt-3">
+            <p className="mb-2 text-xs text-[var(--text-secondary)]">
+              Карточка уже есть в Kaiten — укажите числовой id (например{" "}
+              <code className="rounded bg-[var(--code-bg)] px-1">…/card/12345</code>).
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="id карточки"
+                value={linkIdDraft}
+                onChange={(e) => setLinkIdDraft(e.target.value)}
+                className="w-full min-w-0 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 py-1.5 text-sm sm:max-w-[12rem]"
+              />
+              <button
+                type="button"
+                disabled={linkBusy}
+                onClick={() => void runLink()}
+                className="rounded-md border border-[var(--border-default)] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--panel-hover)] disabled:opacity-50"
+              >
+                {linkBusy ? "Привязка…" : "Привязать"}
+              </button>
+            </div>
+          </div>
+          {manualKaitenError ? (
+            <p className="mt-2 text-sm text-red-600 dark:text-red-400">{manualKaitenError}</p>
+          ) : null}
         </div>
       </div>
     );

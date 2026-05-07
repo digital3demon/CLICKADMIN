@@ -40,6 +40,7 @@ import { PrismaDataLoadErrorCallout } from "@/components/layout/PrismaDataLoadEr
 import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
 import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
+import { orderPathById } from "@/lib/order-public-ref";
 export const dynamic = "force-dynamic";
 
 /** Контент списка на всю ширину рабочей области (таблица сама делит колонки). */
@@ -700,7 +701,7 @@ export default async function OrdersPage({
                   </td>
                   <td className="min-w-0 whitespace-nowrap px-1.5 py-1.5 align-middle font-mono font-medium text-[var(--app-text)] sm:px-2 sm:py-2">
                     <Link
-                      href={`/orders/${o.id}`}
+                      href={orderPathById(o.id)}
                       className="text-[var(--sidebar-blue)] hover:underline"
                       title={`${o.orderNumber} — открыть наряд`}
                     >

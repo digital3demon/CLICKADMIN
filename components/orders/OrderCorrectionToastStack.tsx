@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
+import { orderPathById } from "@/lib/order-public-ref";
 
 const STORAGE_KEY = "orderToastDismissedV1";
 
@@ -234,7 +235,7 @@ export function OrderCorrectionToastStack() {
         {correctionVisible.map((r) => (
           <div key={`c-${r.id}`} className={correctionCardShell}>
             <Link
-              href={`/orders/${r.orderId}`}
+              href={orderPathById(r.orderId)}
               onClick={() => dismissOne("correction", r.id)}
               className="min-w-0 flex-1 text-left leading-snug text-amber-950 hover:underline dark:text-amber-50"
             >
@@ -263,7 +264,7 @@ export function OrderCorrectionToastStack() {
         {prostheticsVisible.map((r) => (
           <div key={`p-${r.id}`} className={prostheticsCardShell}>
             <Link
-              href={`/orders/${r.orderId}`}
+              href={orderPathById(r.orderId)}
               onClick={() => dismissOne("prosthetics", r.id)}
               className="min-w-0 flex-1 text-left leading-snug text-sky-950 hover:underline dark:text-sky-50"
             >

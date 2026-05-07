@@ -81,21 +81,6 @@ import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 
-type BoardLaneColumnParts = {
-  laneName: string;
-  stageName: string;
-};
-
-function splitBoardLaneColumnTitle(title: string): BoardLaneColumnParts | null {
-  const raw = String(title || "").trim();
-  const splitIx = raw.indexOf("·");
-  if (splitIx <= 0) return null;
-  const laneName = raw.slice(0, splitIx).trim();
-  const stageName = raw.slice(splitIx + 1).trim();
-  if (!laneName || !stageName) return null;
-  return { laneName, stageName };
-}
-
 function columnMatchesStage(columnTitle: string, stageTitle: string): boolean {
   const col = String(columnTitle || "").trim().toLowerCase();
   const stage = String(stageTitle || "").trim().toLowerCase();
@@ -175,6 +160,8 @@ function cardFileExtensionLabel(fileName: string, mime: string): string {
 type KanbanCardModalProps = {
   cardId: string | null;
   board: KanbanBoard;
+  /** Все доски приложения для поиска дочерних production-карточек родителя. */
+  allBoards?: KanbanBoard[];
   /** Подпись текущего пользователя для журнала активности. */
   activityActorLabel?: string;
   onClose: () => void;
@@ -212,6 +199,7 @@ type ManualRouteDraftRow = {
 export function KanbanCardModal({
   cardId,
   board,
+  allBoards,
   activityActorLabel,
   onClose,
   onApply,
@@ -347,15 +335,13 @@ export function KanbanCardModal({
       productionSettingsForCard.unmatchedLaneId,
     ],
   );
-  const laneTransfer = useMemo(() => {
+  const columnTransfer = useMemo(() => {
     if (!cardId || !found || !onMoveToColumn) return null;
-    const columns: Array<{ id: string; title: string; laneName: string }> = [];
+    const columns: Array<{ id: string; title: string }> = [];
     for (const col of board.columns) {
-      const parts = splitBoardLaneColumnTitle(col.title);
       columns.push({
         id: col.id,
         title: col.title,
-        laneName: parts?.laneName || "Доска",
       });
     }
     if (columns.length < 2) return null;
@@ -931,11 +917,13 @@ export function KanbanCardModal({
 
   const cardImageFiles = (card.files || []).filter((f) => isCardFileImage(f));
   const cardPdfFiles = (card.files || []).filter((f) => isPdfMime(f.mime || "", f.name));
+  const childLookupBoards = allBoards && allBoards.length > 0 ? allBoards : [board];
   const childStatusRows = (card.childCardIds || [])
     .map((childId) => {
-      for (const col of board.columns) {
-        const child = col.cards.find((x) => x.id === childId);
-        if (child) {
+      for (const candidateBoard of childLookupBoards) {
+        for (const col of candidateBoard.columns) {
+          const child = col.cards.find((x) => x.id === childId);
+          if (!child) continue;
           const checklist = child.productionChecklist || [];
           const done = checklist.filter((x) => x.completed).length;
           return {
@@ -1515,37 +1503,33 @@ export function KanbanCardModal({
                       </option>
                     ))}
                   </select>
-                  {laneTransfer ? (
-                    <div className="mt-2">
-                      <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
-                        Перенос по доске
-                      </div>
-                      <select
-                        className={baseInput}
-                        value={laneTransfer.currentColumnId}
-                        onChange={(e) => {
-                          const targetColumnId = e.target.value;
-                          if (targetColumnId === laneTransfer.currentColumnId) return;
-                          if (!cardId || !onMoveToColumn) return;
-                          onMoveToColumn(cardId, targetColumnId);
-                        }}
-                      >
-                        {laneTransfer.columns.map((col) => (
-                          <option key={col.id} value={col.id}>
-                            {col.title}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : null}
                 </div>
                 <div>
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                     Столбец
                   </div>
-                  <div className={`${baseInput} min-h-[2.25rem] truncate`}>
-                    {currentColumnTitle}
-                  </div>
+                  {columnTransfer ? (
+                    <select
+                      className={baseInput}
+                      value={columnTransfer.currentColumnId}
+                      onChange={(e) => {
+                        const targetColumnId = e.target.value;
+                        if (targetColumnId === columnTransfer.currentColumnId) return;
+                        if (!cardId || !onMoveToColumn) return;
+                        onMoveToColumn(cardId, targetColumnId);
+                      }}
+                    >
+                      {columnTransfer.columns.map((col) => (
+                        <option key={col.id} value={col.id}>
+                          {col.title}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className={`${baseInput} min-h-[2.25rem] truncate`}>
+                      {currentColumnTitle}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
@@ -1974,6 +1958,9 @@ export function KanbanCardModal({
                           >
                             {row.isLive ? row.columnTitle : `Архив (${row.columnTitle})`}
                           </span>
+                        </div>
+                        <div className="mb-1 text-[0.68rem] text-[var(--kaiten-modal-muted)]">
+                          Колонка дочерней карточки: {row.columnTitle}
                         </div>
                         {row.checklist.length === 0 ? (
                           <div className="text-[0.72rem] text-[var(--kaiten-modal-muted)]">

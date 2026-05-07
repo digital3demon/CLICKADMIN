@@ -8,6 +8,7 @@ import {
   LAB_WORK_STATUS_ORDER,
   type LabWorkStatus,
 } from "@/lib/lab-work-status";
+import { orderPathById } from "@/lib/order-public-ref";
 
 function moneyRu(n: number): string {
   return new Intl.NumberFormat("ru-RU", {
@@ -717,7 +718,7 @@ export function FinancePanel({
                         <td className="px-3 py-2 font-medium">
                           <div className="flex items-center gap-1">
                             <Link
-                              href={`/orders/${row.orderId}`}
+                              href={orderPathById(row.orderId)}
                               className="text-[var(--sidebar-blue)] hover:underline"
                             >
                               {row.orderNumber}
@@ -981,7 +982,7 @@ export function FinancePanel({
                         >
                           <td className="px-3 py-2 font-medium">
                             <Link
-                              href={`/orders/${o.id}`}
+                              href={orderPathById(o.id)}
                               className="text-[var(--sidebar-blue)] hover:underline"
                             >
                               {o.orderNumber}

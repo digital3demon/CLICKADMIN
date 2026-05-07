@@ -340,6 +340,16 @@ export function OrderConstructionsEditor({
 
   const onPickPrice = useCallback(
     (row: PriceListPickRow) => {
+      const pickedId = row.id.trim();
+      const existingIdx = value.findIndex(
+        (line) =>
+          line.kind === "priceList" &&
+          String(line.priceListItemId || "").trim() === pickedId,
+      );
+      if (existingIdx >= 0) {
+        onChange(value.filter((_, idx) => idx !== existingIdx));
+        return;
+      }
       const line = emptyLine("priceList");
       line.priceListItemId = row.id;
       line.priceListCode = row.code;

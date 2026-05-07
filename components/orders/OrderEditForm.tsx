@@ -123,6 +123,7 @@ import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-cl
 import { CORRECTION_PRICE_ITEM_CODE } from "@/lib/pricing/correction-price-item";
 import { fetchCorrectionPriceListMeta } from "@/lib/pricing/fetch-correction-price-list-meta";
 import { normalizeProductionCalendarCountry } from "@/lib/production-calendar";
+import { orderPathById } from "@/lib/order-public-ref";
 
 type CourierOption = { id: string; name: string };
 
@@ -2995,7 +2996,7 @@ export function OrderEditForm({
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
           <span className="font-medium">Продолжение работы: </span>
           <Link
-            href={`/orders/${initial.continuesFromOrder.id}`}
+            href={orderPathById(initial.continuesFromOrder.id)}
             className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
           >
             наряд {initial.continuesFromOrder.orderNumber}

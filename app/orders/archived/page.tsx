@@ -6,6 +6,7 @@ import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { purgeArchivedOrdersForTenant } from "@/lib/purge-archived-orders";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
+import { orderPathById } from "@/lib/order-public-ref";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +93,7 @@ export default async function OrdersArchivedPage() {
                   >
                     <td className="px-3 py-2">
                       <Link
-                        href={`/orders/${o.id}`}
+                        href={orderPathById(o.id)}
                         className="font-medium text-[var(--sidebar-blue)] hover:underline"
                       >
                         {o.orderNumber}

@@ -119,6 +119,7 @@ import {
 } from "@/lib/crm-upload-limits";
 import { enqueueOrderAttachmentFiles } from "@/lib/order-attachment-background-queue";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
+import { orderPathById } from "@/lib/order-public-ref";
 
 type DoctorRow = {
   id: string;
@@ -892,7 +893,10 @@ export function NewOrderForm({
       return;
     }
     if (isTestOrder) {
-      void performSave({ kaitenDecideLater: true, createKanbanWithoutKaiten: false });
+      // Для тестового наряда тоже показываем preflight:
+      // пользователь выбирает сценарий создания карточки в CRM-канбане.
+      setContinuationChoice(null);
+      setKaitenModalOpen(true);
       return;
     }
 
@@ -1347,7 +1351,7 @@ export function NewOrderForm({
               <span className="font-semibold">Продолжение работы: </span>
               наряд{" "}
               <Link
-                href={`/orders/${continuationChoice.id}`}
+                href={orderPathById(continuationChoice.id)}
                 prefetch={false}
                 className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
               >

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { STOCK_MOVEMENT_KIND_LABELS } from "@/lib/inventory/stock-movement-kind-labels";
+import { orderPathById } from "@/lib/order-public-ref";
 import {
   PrefixSearchCombobox,
   type PrefixComboboxOption,
@@ -874,7 +875,7 @@ export function InventoryWarehouseClient() {
                     <td className="py-2 pr-2">
                       {m.order ? (
                         <Link
-                          href={`/orders/${m.order.id}`}
+                          href={orderPathById(m.order.id)}
                           className="text-[var(--sidebar-blue)] hover:underline"
                         >
                           {m.order.orderNumber}

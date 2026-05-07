@@ -117,10 +117,14 @@ export function PriceListPickModal({
   const pick = useCallback(
     (it: PriceListPickRow) => {
       onPick(it);
-      setPickedCount((n) => n + 1);
       setPickedIds((prev) => {
         const next = new Set(prev);
-        next.add(it.id);
+        if (next.has(it.id)) {
+          next.delete(it.id);
+        } else {
+          next.add(it.id);
+        }
+        setPickedCount(next.size);
         return next;
       });
       if (!keepOpenOnPick) onClose();

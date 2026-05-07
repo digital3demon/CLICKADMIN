@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
+import { orderPathById } from "@/lib/order-public-ref";
 
 export function ArchivedOrderRestoreButton({
   orderId,
@@ -27,7 +28,7 @@ export function ArchivedOrderRestoreButton({
         setErr(j.error ?? "Не удалось восстановить");
         return;
       }
-      router.push(`/orders/${orderId}`);
+      router.push(orderPathById(orderId));
       router.refresh();
     } catch {
       setErr("Сеть или сервер недоступны");

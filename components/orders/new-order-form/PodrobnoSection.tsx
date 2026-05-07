@@ -81,6 +81,16 @@ export function PodrobnoSection({
 
   const onPickPrice = useCallback(
     (row: PriceListPickRow) => {
+      const pickedId = row.id.trim();
+      const existingIdx = lines.findIndex(
+        (line) =>
+          line.kind === "priceList" &&
+          String(line.priceListItemId || "").trim() === pickedId,
+      );
+      if (existingIdx >= 0) {
+        onLinesChange(lines.filter((_, idx) => idx !== existingIdx));
+        return;
+      }
       const rowName = row.name.trim();
       const label = rowName.startsWith(NEW_ORDER_POSITION_PREFIX)
         ? rowName

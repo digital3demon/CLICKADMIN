@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
+import { orderPathById } from "@/lib/order-public-ref";
 
 function targetInsideInteractive(target: EventTarget | null) {
   if (target == null || !(target instanceof Node)) return false;
@@ -31,7 +32,7 @@ export function OrdersListTableRow({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const href = `/orders/${orderId}`;
+  const href = orderPathById(orderId);
 
   const go = (e: MouseEvent<HTMLTableRowElement>) => {
     if (e.button !== 0) return;

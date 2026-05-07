@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { orderPathById } from "@/lib/order-public-ref";
 export const dynamic = "force-dynamic";
 
 const ORDER_KIND_RU: Record<string, string> = {
@@ -166,7 +167,7 @@ export default async function OrdersHistoryPage() {
                       </td>
                       <td className="min-w-0 px-2 py-2 sm:px-3 sm:py-2.5 text-[var(--app-text)]">
                         <Link
-                          href={`/orders/${item.row.order.id}`}
+                          href={orderPathById(item.row.order.id)}
                           className="block truncate font-mono font-medium text-[var(--sidebar-blue)] hover:underline"
                           title={`Наряд ${item.row.order.orderNumber}`}
                         >
@@ -200,7 +201,7 @@ export default async function OrdersHistoryPage() {
                       </td>
                       <td className="min-w-0 whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         <Link
-                          href={`/orders/${item.row.order.id}?tab=history`}
+                          href={`${orderPathById(item.row.order.id)}?tab=history`}
                           className="text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
                         >
                           Открыть

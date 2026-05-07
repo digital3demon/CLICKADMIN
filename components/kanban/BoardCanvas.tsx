@@ -601,7 +601,18 @@ type LaneOffset = {
   y: number;
 };
 
-const LANE_LAYOUT_STORAGE_PREFIX = "kanban-lane-layout-v1:";
+const LANE_LAYOUT_STORAGE_PREFIX = "kanban-lane-layout-v2:";
+const PRODUCTION_BOARD_ID = "kanban-board-production";
+
+type LaneLayoutStorage = {
+  scope: "user" | "tenant";
+  key: string;
+};
+
+function isProductionBoard(board: KanbanBoard): boolean {
+  const title = String(board.title || "").trim().toLowerCase();
+  return board.id === PRODUCTION_BOARD_ID || title === "производство";
+}
 
 function laneTitleFromColumnTitle(columnTitle: string): string | null {
   const parts = String(columnTitle || "").split("·");
@@ -644,6 +655,22 @@ function normalizeLaneOffsets(
     next[key] = { x, y };
   }
   return next;
+}
+
+function laneOffsetsEqual(
+  left: Record<string, LaneOffset>,
+  right: Record<string, LaneOffset>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  for (const key of leftKeys) {
+    const a = left[key];
+    const b = right[key];
+    if (!a || !b) return false;
+    if (a.x !== b.x || a.y !== b.y) return false;
+  }
+  return true;
 }
 
 function DraggableLaneSection({
@@ -715,6 +742,7 @@ export function BoardCanvas({
   const laneGroups = useMemo(() => buildLaneGroups(board.columns), [board.columns]);
   const laneLayoutEnabled = laneGroups.length > 0 && laneGroups.some((lane) => lane.columnIds.length > 1);
   const [laneOffsets, setLaneOffsets] = useState<Record<string, LaneOffset>>({});
+  const [laneLayoutLoaded, setLaneLayoutLoaded] = useState(false);
   const [dragLaneId, setDragLaneId] = useState<string | null>(null);
   const laneOffsetsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const laneDragRafRef = useRef<number | null>(null);
@@ -746,30 +774,53 @@ export function BoardCanvas({
     }),
   );
 
+  const laneLayoutStorage = useMemo<LaneLayoutStorage>(() => {
+    if (isProductionBoard(board)) {
+      return {
+        scope: "tenant",
+        key: `${LANE_LAYOUT_STORAGE_PREFIX}${PRODUCTION_BOARD_ID}`,
+      };
+    }
+    return {
+      scope: "user",
+      key: `${LANE_LAYOUT_STORAGE_PREFIX}${board.id}`,
+    };
+  }, [board]);
+
   useEffect(() => {
     if (!laneLayoutEnabled) {
       setLaneOffsets({});
+      setLaneLayoutLoaded(false);
       return;
     }
+    setLaneLayoutLoaded(false);
     let cancelled = false;
     void (async () => {
       try {
-        const key = `${LANE_LAYOUT_STORAGE_PREFIX}${board.id}`;
-        const raw = await readClientState<unknown>("user", key);
+        const raw = await readClientState<unknown>(laneLayoutStorage.scope, laneLayoutStorage.key);
         if (cancelled || raw == null) {
-          if (!cancelled) setLaneOffsets({});
+          if (!cancelled) {
+            setLaneOffsets({});
+            setLaneLayoutLoaded(true);
+          }
           return;
         }
         const next = normalizeLaneOffsets(raw);
-        if (!cancelled) setLaneOffsets(next);
+        if (!cancelled) {
+          setLaneOffsets(next);
+          setLaneLayoutLoaded(true);
+        }
       } catch {
-        if (!cancelled) setLaneOffsets({});
+        if (!cancelled) {
+          setLaneOffsets({});
+          setLaneLayoutLoaded(true);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [board.id, laneLayoutEnabled]);
+  }, [laneLayoutEnabled, laneLayoutStorage.key, laneLayoutStorage.scope]);
 
   useEffect(() => {
     if (!laneLayoutEnabled) return;
@@ -792,13 +843,12 @@ export function BoardCanvas({
   }, [laneGroups, laneLayoutEnabled]);
 
   useEffect(() => {
-    if (!laneLayoutEnabled) return;
+    if (!laneLayoutEnabled || !laneLayoutLoaded) return;
     if (laneOffsetsSaveTimerRef.current) {
       clearTimeout(laneOffsetsSaveTimerRef.current);
     }
-    const key = `${LANE_LAYOUT_STORAGE_PREFIX}${board.id}`;
     laneOffsetsSaveTimerRef.current = setTimeout(() => {
-      void writeClientState("user", key, laneOffsets);
+      void writeClientState(laneLayoutStorage.scope, laneLayoutStorage.key, laneOffsets);
     }, 250);
     return () => {
       if (laneOffsetsSaveTimerRef.current) {
@@ -806,7 +856,47 @@ export function BoardCanvas({
         laneOffsetsSaveTimerRef.current = null;
       }
     };
-  }, [board.id, laneOffsets, laneLayoutEnabled]);
+  }, [
+    laneOffsets,
+    laneLayoutEnabled,
+    laneLayoutLoaded,
+    laneLayoutStorage.key,
+    laneLayoutStorage.scope,
+  ]);
+
+  useEffect(() => {
+    if (
+      !laneLayoutEnabled ||
+      !laneLayoutLoaded ||
+      laneLayoutStorage.scope !== "tenant"
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const pull = async () => {
+      if (cancelled || laneDragRef.current) return;
+      const raw = await readClientState<unknown>(laneLayoutStorage.scope, laneLayoutStorage.key);
+      if (cancelled || raw == null) return;
+      const next = normalizeLaneOffsets(raw);
+      setLaneOffsets((prev) => (laneOffsetsEqual(prev, next) ? prev : next));
+    };
+    const onVisibleOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      void pull();
+    };
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void pull();
+    }, 4000);
+    document.addEventListener("visibilitychange", onVisibleOrFocus);
+    window.addEventListener("focus", onVisibleOrFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibleOrFocus);
+      window.removeEventListener("focus", onVisibleOrFocus);
+    };
+  }, [laneLayoutEnabled, laneLayoutLoaded, laneLayoutStorage.key, laneLayoutStorage.scope]);
 
   const handleLanePointerDown = useCallback(
     (laneId: string, e: ReactPointerEvent<HTMLButtonElement>) => {
@@ -1151,7 +1241,7 @@ export function BoardCanvas({
     >
       <div
         ref={horizontalScrollRef}
-        className="relative z-0 flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain p-2 [-webkit-overflow-scrolling:touch] sm:p-4"
+        className="relative z-0 flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain p-2 [-webkit-overflow-scrolling:touch] sm:p-4"
       >
         <div className="flex w-max min-w-0 shrink-0 items-start gap-2 sm:gap-3">
           <SortableContext
@@ -1159,7 +1249,7 @@ export function BoardCanvas({
             strategy={horizontalListSortingStrategy}
           >
             {laneLayoutEnabled ? (
-              <div className="flex items-start gap-2 sm:gap-3">
+              <div className="flex flex-col items-start gap-2 sm:gap-3">
                 {laneGroups.map((lane) => (
                   <DraggableLaneSection
                     key={lane.id}

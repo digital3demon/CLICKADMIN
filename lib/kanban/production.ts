@@ -3,6 +3,7 @@ import { archiveCardByIdOnBoard, createCard, findCard, generateId, pushActivity 
 import type { CardFile, KanbanBoard, KanbanCard, ProductionChecklistItem } from "./types";
 
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+const ARCHIVE_3D_FALLBACK_EXTENSIONS = [".stl", ".ply", ".obj"] as const;
 
 function normalizeKey(value: string): string {
   return String(value || "").trim().toLowerCase();
@@ -224,6 +225,122 @@ export function syncParentProductionChecklistSnapshot(
   upsertParentChecklistSnapshot(parent, child, childLoc.col.title);
 }
 
+type ChildCardLocation = {
+  card: KanbanCard;
+  columnTitle: string;
+};
+
+function buildChildLookupById(boards: KanbanBoard[]): Map<string, ChildCardLocation> {
+  const index = new Map<string, ChildCardLocation>();
+  for (const board of boards) {
+    for (const col of board.columns) {
+      for (const card of col.cards) {
+        index.set(card.id, { card, columnTitle: col.title });
+      }
+    }
+  }
+  return index;
+}
+
+function isSameChecklistSnapshot(
+  left: ProductionChecklistItem[] | undefined,
+  right: ProductionChecklistItem[] | undefined,
+): boolean {
+  const a = left || [];
+  const b = right || [];
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const aa = a[i];
+    const bb = b[i];
+    if (!aa || !bb) return false;
+    if (
+      aa.id !== bb.id ||
+      aa.text !== bb.text ||
+      aa.completed !== bb.completed ||
+      (aa.completedAt || null) !== (bb.completedAt || null) ||
+      (aa.sourceFileId || null) !== (bb.sourceFileId || null) ||
+      (aa.sourceFileName || null) !== (bb.sourceFileName || null) ||
+      aa.fromArchive !== bb.fromArchive ||
+      (aa.archiveEntryName || null) !== (bb.archiveEntryName || null)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Синхронизирует read-only чеклисты родителя с живыми дочерними карточками
+ * по всем доскам (нужно, когда parent/child находятся в разных board).
+ */
+export function syncProductionChecklistSnapshotsAcrossBoards(boards: KanbanBoard[]): number {
+  if (!boards.length) return 0;
+  const childLookup = buildChildLookupById(boards);
+  const now = new Date().toISOString();
+  let touched = 0;
+  for (const board of boards) {
+    for (const col of board.columns) {
+      for (const parent of col.cards) {
+        if (parent.parentCardId) continue;
+        const childIds = parent.childCardIds || [];
+        const existing = parent.productionChecklistSnapshots || [];
+        if (!childIds.length && !existing.length) continue;
+        const existingById = new Map(existing.map((row) => [row.childCardId, row]));
+        const liveIds = new Set<string>();
+        const nextSnapshots: typeof existing = [];
+        for (const childId of childIds) {
+          const loc = childLookup.get(childId);
+          if (!loc || loc.card.parentCardId !== parent.id) continue;
+          const liveChecklist = cloneProductionChecklist(loc.card.productionChecklist);
+          const prev = existingById.get(childId);
+          const changed =
+            !prev ||
+            prev.childTitle !== loc.card.title ||
+            (prev.laneId || "") !== (loc.card.productionLaneId || "") ||
+            (prev.columnTitle || "") !== loc.columnTitle ||
+            !isSameChecklistSnapshot(prev.checklist, liveChecklist);
+          nextSnapshots.push({
+            childCardId: loc.card.id,
+            childTitle: loc.card.title,
+            laneId: loc.card.productionLaneId,
+            columnTitle: loc.columnTitle,
+            updatedAt: changed ? now : (prev?.updatedAt ?? now),
+            checklist: liveChecklist,
+          });
+          liveIds.add(childId);
+          if (changed) touched += 1;
+        }
+        for (const row of existing) {
+          if (liveIds.has(row.childCardId)) continue;
+          nextSnapshots.push(row);
+        }
+        const sizeChanged = nextSnapshots.length !== existing.length;
+        const orderChanged = !sizeChanged
+          ? nextSnapshots.some((row, idx) => row.childCardId !== existing[idx]?.childCardId)
+          : true;
+        const contentChanged = !sizeChanged
+          ? nextSnapshots.some((row, idx) => {
+              const prev = existing[idx];
+              if (!prev) return true;
+              return (
+                row.childTitle !== prev.childTitle ||
+                (row.laneId || "") !== (prev.laneId || "") ||
+                (row.columnTitle || "") !== (prev.columnTitle || "") ||
+                (row.updatedAt || "") !== (prev.updatedAt || "") ||
+                !isSameChecklistSnapshot(row.checklist, prev.checklist)
+              );
+            })
+          : true;
+        if (sizeChanged || orderChanged || contentChanged) {
+          parent.productionChecklistSnapshots = nextSnapshots;
+          parent.updatedAt = now;
+        }
+      }
+    }
+  }
+  return touched;
+}
+
 function upsertChildCardForLane(input: {
   board: KanbanBoard;
   parent: KanbanCard;
@@ -395,14 +512,25 @@ export async function expandProductionChecklistFromArchives(
   const settings = normalizeProductionSettings(board);
   const child = cardById(board, childCardId);
   if (!child) return;
+  const redoBySourceFileId = new Set(
+    (child.productionChecklist || [])
+      .filter(
+        (row) =>
+          String(row.text || "").trim().toLowerCase().startsWith("переделать:") &&
+          String(row.sourceFileId || "").trim(),
+      )
+      .map((row) => String(row.sourceFileId || "").trim()),
+  );
   const next: ProductionChecklistItem[] = [];
   for (const f of child.files || []) {
+    const markAsRedo = redoBySourceFileId.has(String(f.id || "").trim());
+    const withRedoPrefix = (text: string) => (markAsRedo ? `Переделать: ${text}` : text);
     const lower = normalizeKey(f.name);
     const looksZip = lower.endsWith(".zip") || (f.mime || "").toLowerCase().includes("zip");
     if (!looksZip) {
       next.push({
         id: generateId("pchk"),
-        text: f.name,
+        text: withRedoPrefix(f.name),
         completed: false,
         completedAt: null,
         sourceFileId: f.id,
@@ -414,15 +542,23 @@ export async function expandProductionChecklistFromArchives(
     try {
       const buf = await readCardFileBuffer(f);
       const zip = await JSZip.loadAsync(buf);
-      const names = Object.values(zip.files)
+      let names = Object.values(zip.files)
         .filter((entry) => !entry.dir)
         .map((entry) => entry.name)
         .filter((name) => Boolean(name) && is3dObjectPath(name, settings.archive3dExtensions));
+      if (names.length === 0) {
+        // Если пользователь случайно сузил список расширений в настройках,
+        // всё равно подхватываем базовые 3D-форматы.
+        names = Object.values(zip.files)
+          .filter((entry) => !entry.dir)
+          .map((entry) => entry.name)
+          .filter((name) => Boolean(name) && is3dObjectPath(name, [...ARCHIVE_3D_FALLBACK_EXTENSIONS]));
+      }
       if (names.length === 0) continue;
       for (const name of names) {
         next.push({
           id: generateId("pchk"),
-          text: name,
+          text: withRedoPrefix(name),
           completed: false,
           completedAt: null,
           sourceFileId: f.id,

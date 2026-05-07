@@ -10,6 +10,7 @@ import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { clampOrdersPageSize } from "@/lib/orders-list-cursor";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
+import { orderPathById } from "@/lib/order-public-ref";
 
 const TAGS_PAGE_SIZE = clampOrdersPageSize(null);
 
@@ -213,7 +214,7 @@ export function ShipmentsOrdersTable({
                   </td>
                   <td className="min-w-0 whitespace-nowrap px-2 py-2 align-middle font-mono font-medium text-[var(--app-text)] print:px-1.5">
                     <Link
-                      href={`/orders/${o.id}`}
+                      href={orderPathById(o.id)}
                       className="text-[var(--sidebar-blue)] hover:underline"
                       title={`${o.orderNumber} — открыть наряд`}
                     >

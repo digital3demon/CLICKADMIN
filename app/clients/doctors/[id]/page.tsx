@@ -23,6 +23,7 @@ import {
   type LabWorkStatus,
 } from "@/lib/lab-work-status";
 import { getPrisma } from "@/lib/get-prisma";
+import { orderPathById } from "@/lib/order-public-ref";
 const ORDERS_PREVIEW = 100;
 
 function firstSearchParam(
@@ -541,7 +542,7 @@ export default async function DoctorCardPage({
                       >
                         <td className="px-3 py-2.5 font-mono font-medium text-[var(--app-text)]">
                           <Link
-                            href={`/orders/${o.id}`}
+                            href={orderPathById(o.id)}
                             className="text-[var(--sidebar-blue)] hover:underline"
                           >
                             {o.orderNumber}

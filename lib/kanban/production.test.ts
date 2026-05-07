@@ -7,6 +7,7 @@ import {
   expandProductionChecklistFromArchives,
   moveParentToAssemblyIfReady,
   parentCanMoveToAssembly,
+  syncProductionChecklistSnapshotsAcrossBoards,
   syncProductionChildrenForParent,
 } from "./production";
 import type { KanbanBoard } from "./types";
@@ -218,6 +219,40 @@ describe("kanban production checklist from archives", () => {
     expect(list[0]?.text).toBe("b.mesh");
   });
 
+  it("falls back to base 3d extensions when settings list is too narrow", async () => {
+    const board = makeBoard();
+    board.productionSettings = {
+      ...defaultProductionSettings(),
+      archive3dExtensions: [".mesh"],
+    };
+    const zip = new JSZip();
+    zip.file("fallback-model.stl", "ok");
+    zip.file("readme.txt", "ignore");
+    const buffer = await zip.generateAsync({ type: "uint8array" });
+    const dataUrl = `data:application/zip;base64,${Buffer.from(buffer).toString("base64")}`;
+    const child = createCard({
+      id: "c-child-2b",
+      title: "Child 2b",
+      parentCardId: "p10b",
+      files: [
+        {
+          id: "zip2b",
+          name: "архив-fallback.zip",
+          mime: "application/zip",
+          size: buffer.byteLength,
+          dataUrl,
+          addedAt: new Date().toISOString(),
+          addedByUserId: "u1",
+        },
+      ],
+    });
+    board.columns[2]?.cards.push(child);
+    await expandProductionChecklistFromArchives(board, child.id);
+    const list = child.productionChecklist || [];
+    expect(list.length).toBe(1);
+    expect(list[0]?.text).toBe("fallback-model.stl");
+  });
+
   it("does not fallback to archive filename when no 3d entries found", async () => {
     const board = makeBoard();
     const zip = new JSZip();
@@ -244,6 +279,49 @@ describe("kanban production checklist from archives", () => {
     await expandProductionChecklistFromArchives(board, child.id);
     const list = child.productionChecklist || [];
     expect(list.length).toBe(0);
+  });
+
+  it("keeps 'Переделать:' prefix for expanded archive entries in redo cycle", async () => {
+    const board = makeBoard();
+    const zip = new JSZip();
+    zip.file("redo-part-a.stl", "demo");
+    zip.file("redo-part-b.stl", "demo");
+    const buffer = await zip.generateAsync({ type: "uint8array" });
+    const dataUrl = `data:application/zip;base64,${Buffer.from(buffer).toString("base64")}`;
+    const child = createCard({
+      id: "c-child-redo-zip",
+      title: "Child redo zip",
+      parentCardId: "p-redo-zip",
+      files: [
+        {
+          id: "zip-redo",
+          name: "redo-archive.zip",
+          mime: "application/zip",
+          size: buffer.byteLength,
+          dataUrl,
+          addedAt: new Date().toISOString(),
+          addedByUserId: "u1",
+        },
+      ],
+      productionChecklist: [
+        {
+          id: "chk-redo-zip",
+          text: "Переделать: redo-archive.zip",
+          completed: false,
+          completedAt: null,
+          sourceFileId: "zip-redo",
+          sourceFileName: "redo-archive.zip",
+          fromArchive: false,
+        },
+      ],
+    });
+    board.columns[2]?.cards.push(child);
+    await expandProductionChecklistFromArchives(board, child.id);
+    const list = child.productionChecklist || [];
+    expect(list.length).toBe(2);
+    expect(list.every((x) => x.text.startsWith("Переделать: "))).toBe(true);
+    expect(list.some((x) => x.text === "Переделать: redo-part-a.stl")).toBe(true);
+    expect(list.some((x) => x.text === "Переделать: redo-part-b.stl")).toBe(true);
   });
 });
 
@@ -317,5 +395,65 @@ describe("kanban production auto-archive delay", () => {
     expect((parent.childCardIds || []).includes(child.id)).toBe(false);
     expect((parent.productionChecklistSnapshots || []).length).toBe(1);
     expect(parent.productionChecklistSnapshots?.[0]?.checklist?.[0]?.text).toBe("model.stl");
+  });
+});
+
+describe("cross-board production checklist sync", () => {
+  it("keeps parent read-only snapshots synced when child lives on another board", () => {
+    const parentBoard = makeBoard();
+    const productionBoard = makeBoard();
+    parentBoard.id = "b-parent";
+    parentBoard.title = "Parent board";
+    productionBoard.id = "b-production";
+    productionBoard.title = "Production board";
+
+    const parent = createCard({
+      id: "p-cross",
+      title: "Parent cross",
+      childCardIds: ["ch-cross"],
+    });
+    const child = createCard({
+      id: "ch-cross",
+      title: "Child cross",
+      parentCardId: parent.id,
+      productionLaneId: "lane_mill",
+      productionChecklist: [
+        {
+          id: "chk-cross-1",
+          text: "tooth-1.stl",
+          completed: false,
+          completedAt: null,
+          sourceFileId: "f-cross-1",
+          sourceFileName: "tooth-1.stl",
+          fromArchive: false,
+        },
+      ],
+    });
+
+    parentBoard.columns[1]?.cards.push(parent);
+    productionBoard.columns[4]?.cards.push(child);
+
+    const touched1 = syncProductionChecklistSnapshotsAcrossBoards([parentBoard, productionBoard]);
+    expect(touched1).toBe(1);
+    expect(parent.productionChecklistSnapshots?.length).toBe(1);
+    expect(parent.productionChecklistSnapshots?.[0]?.checklist?.[0]?.text).toBe("tooth-1.stl");
+    expect(parent.productionChecklistSnapshots?.[0]?.checklist?.[0]?.completed).toBe(false);
+
+    child.productionChecklist = [
+      {
+        id: "chk-cross-1",
+        text: "tooth-1.stl",
+        completed: true,
+        completedAt: new Date().toISOString(),
+        sourceFileId: "f-cross-1",
+        sourceFileName: "tooth-1.stl",
+        fromArchive: false,
+      },
+    ];
+
+    const touched2 = syncProductionChecklistSnapshotsAcrossBoards([parentBoard, productionBoard]);
+    expect(touched2).toBe(1);
+    expect(parent.productionChecklistSnapshots?.[0]?.checklist?.[0]?.completed).toBe(true);
+    expect(Boolean(parent.productionChecklistSnapshots?.[0]?.checklist?.[0]?.completedAt)).toBe(true);
   });
 });

@@ -7,6 +7,7 @@ import { USER_ROLE_LABELS } from "@/lib/user-role-labels";
 import { profileAvatarEmoji } from "@/lib/profile-avatar-presets";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
+import { orderPathById } from "@/lib/order-public-ref";
 import type { UserRole } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -101,7 +102,7 @@ export default async function UserProfileViewPage({
     ...orderRows.map((r) => ({
       key: `o-${r.id}`,
       at: r.createdAt,
-      href: `/orders/${r.order.id}`,
+      href: orderPathById(r.order.id),
       title: `Наряд ${r.order.orderNumber}`,
       summary: r.summary,
       kind: r.kind,

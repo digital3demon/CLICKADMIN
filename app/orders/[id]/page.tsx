@@ -25,6 +25,7 @@ import { resolveRegisteredByLabelForDisplay } from "@/lib/registered-by-label-di
 import { fetchWorkspaceActivePriceListName } from "@/lib/order-price-list-from-contractors";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
+import { decodeOrderPublicRef } from "@/lib/order-public-ref";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,9 @@ export default async function OrderEditPage({
   searchParams,
 }: PageProps) {
   const resolved = params != null ? await params : null;
-  const id = resolved?.id?.trim() ?? "";
-  if (!id) notFound();
+  const rawParam = resolved?.id?.trim() ?? "";
+  if (!rawParam) notFound();
+  const resolvedOrderId = decodeOrderPublicRef(rawParam) ?? rawParam;
 
   const sp = searchParams != null ? await searchParams : {};
   const tabQ = firstQuery(sp.tab);
@@ -74,7 +76,7 @@ export default async function OrderEditPage({
     order = await ordersPrisma.order.findFirst({
       where: {
         AND: [
-          { id, tenantId },
+          { id: resolvedOrderId, tenantId },
           orderTestVisibilityWhere({
             viewerRole: session?.role ?? null,
             viewerUserId: session?.sub ?? null,

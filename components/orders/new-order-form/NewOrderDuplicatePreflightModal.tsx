@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, type MouseEvent } from "react";
 import type { DuplicatePreflightMatch } from "@/lib/order-duplicate-preflight";
+import { orderPathById } from "@/lib/order-public-ref";
 
 export type ContinuationParent = { id: string; orderNumber: string };
 
@@ -96,7 +97,7 @@ export function NewOrderDuplicatePreflightModal({
                 >
                   <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                     <Link
-                      href={`/orders/${m.id}`}
+                      href={orderPathById(m.id)}
                       prefetch={false}
                       className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
                       onClick={onPlainOrderLinkClick(onClose)}
@@ -156,7 +157,7 @@ export function NewOrderDuplicatePreflightModal({
             <p className="mt-2 text-sm leading-relaxed text-[var(--text-body)]">
               Наряд{" "}
               <Link
-                href={`/orders/${gate.parent.id}`}
+                href={orderPathById(gate.parent.id)}
                 prefetch={false}
                 className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
                 onClick={onPlainOrderLinkClick(onClose)}

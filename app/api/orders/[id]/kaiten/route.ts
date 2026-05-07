@@ -760,11 +760,16 @@ export async function POST(
 
     const b = body as {
       action: "create";
+      title?: string;
       kaitenTrackLane?: KaitenTrackLane;
       kaitenCardTypeId?: string | null;
       kaitenCardTypeName?: string | null;
       columnId?: number;
     };
+    const createTitle =
+      typeof b.title === "string" && b.title.trim().length > 0
+        ? b.title.trim().slice(0, 500)
+        : null;
 
     const data: Prisma.OrderUpdateInput = {};
     if (b.kaitenTrackLane != null) {
@@ -893,6 +898,20 @@ export async function POST(
       columnId: b.columnId,
     });
     if (result.ok) {
+      if (createTitle && result.kaitenCardId) {
+        const auth = getKaitenRestAuth();
+        if (auth) {
+          const titlePatch = await kaitenPatchCard(
+            auth,
+            result.kaitenCardId,
+            { title: createTitle },
+            { burst: true } as const,
+          );
+          if (!titlePatch.ok) {
+            console.warn("[kaiten POST create] title patch failed", titlePatch.error);
+          }
+        }
+      }
       invalidateKaitenSnapshotCache(idTrim);
       try {
         await syncUnpushedOrderAttachmentsToKaiten(idTrim, ordersPrisma);
