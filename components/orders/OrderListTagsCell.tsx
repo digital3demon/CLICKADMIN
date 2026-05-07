@@ -262,6 +262,24 @@ function paymentPillClass(paymentValue: string): string {
   return "border-rose-300 bg-rose-50 text-rose-950 dark:border-rose-700/70 dark:bg-rose-950/40 dark:text-rose-100";
 }
 
+function kanbanColumnLabelForNoKaitenPill(
+  demoKanbanColumn: string | null | undefined,
+  demoCardTypeName: string | null | undefined,
+): string | null {
+  const raw = String(demoKanbanColumn || "").trim();
+  if (!raw) return null;
+  const ru =
+    raw === "NEW"
+      ? "Новые"
+      : raw === "IN_PROGRESS"
+        ? "В работе"
+        : raw === "DONE"
+          ? "Готово"
+          : raw;
+  const typeName = String(demoCardTypeName || "").trim();
+  return typeName ? `${ru} · ${typeName}` : ru;
+}
+
 export function OrderListTagsCell({
   orderId,
   pageSize,
@@ -295,6 +313,11 @@ export function OrderListTagsCell({
     demoKanbanColumn,
     demoCardTypeName,
   });
+  const hasKaitenColumnLabel = String(kaitenColumnTitle || "").trim().length > 0;
+  const showNoKaitenPill = !hasKaitenColumnLabel && kaitenCardId == null;
+  const noKaitenKanbanStatus = showNoKaitenPill
+    ? kanbanColumnLabelForNoKaitenPill(demoKanbanColumn, demoCardTypeName)
+    : null;
   const kaitenColTrimmed = kaitenColumnTitle?.trim() ?? "";
   const kaitenFilterKey =
     kaitenColTrimmed.length > 0
@@ -634,7 +657,19 @@ export function OrderListTagsCell({
             LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
           }`}
         >
-          {kaitenLabel}
+          {noKaitenKanbanStatus ? (
+            <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
+              <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
+              <span
+                className="truncate text-[9px] font-medium opacity-90 sm:text-[10px]"
+                title={noKaitenKanbanStatus}
+              >
+                {noKaitenKanbanStatus}
+              </span>
+            </span>
+          ) : (
+            kaitenLabel
+          )}
         </Link>
       ) : (
         <span
@@ -643,7 +678,19 @@ export function OrderListTagsCell({
             LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
           }`}
         >
-          {kaitenLabel}
+          {noKaitenKanbanStatus ? (
+            <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
+              <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
+              <span
+                className="truncate text-[9px] font-medium opacity-90 sm:text-[10px]"
+                title={noKaitenKanbanStatus}
+              >
+                {noKaitenKanbanStatus}
+              </span>
+            </span>
+          ) : (
+            kaitenLabel
+          )}
         </span>
       ),
     });

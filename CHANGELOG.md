@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-08
+
+- Reordered sidebar blocks so `Мессенджеры` appears above `Обратите внимание`.
+- Updated order list Kaiten pill: when a card is not in Kaiten but exists in CRM Kanban, the pill now shows a small second line with the current Kanban column/type status.
+
 ## 2026-05-07
 
 - Added bidirectional CRM Kanban ↔ Kaiten chat sync with dedupe/anti-loop and unified comment contract (`source`, `externalCommentId`, `externalParentId`, `syncStatus`, `syncedAt`).

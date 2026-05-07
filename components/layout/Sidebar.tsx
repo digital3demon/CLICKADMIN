@@ -217,8 +217,8 @@ export function Sidebar() {
         {sessionUser &&
         isKanbanOnlyUser(sessionUser.role, sessionUser.moduleAccess ?? undefined) ? null : (
           <>
-            <SidebarAttention />
             <SidebarMessengers />
+            <SidebarAttention />
             <SidebarDrafts />
           </>
         )}
