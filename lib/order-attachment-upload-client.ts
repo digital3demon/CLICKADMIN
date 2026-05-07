@@ -137,8 +137,11 @@ export async function postOrderAttachmentWithRetries(
         }
         return { ok: true, data };
       }
-      lastError =
-        errStr || detailsStr || `Ошибка загрузки (${res.status})`;
+      if (errStr && detailsStr && /^не удалось сохранить файл$/i.test(errStr)) {
+        lastError = `${errStr}: ${detailsStr}`;
+      } else {
+        lastError = errStr || detailsStr || `Ошибка загрузки (${res.status})`;
+      }
       if (!isRetryableAttachmentUploadHttpStatus(res.status)) {
         return { ok: false, error: lastError };
       }

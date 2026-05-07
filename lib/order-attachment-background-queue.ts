@@ -55,6 +55,14 @@ function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function uploadFingerprint(input: {
+  fileName: string;
+  size: number;
+  lastModified: number;
+}): string {
+  return `${input.fileName}::${input.size}::${input.lastModified}`;
+}
+
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
@@ -325,21 +333,31 @@ export async function enqueueOrderAttachmentFiles(params: {
   orderNumber: string | null | undefined;
   files: File[];
 }): Promise<number> {
-  const rows: QueuedUploadRow[] = params.files.map((file) => ({
-    id: uid("q"),
-    orderId: params.orderId,
-    orderNumber: params.orderNumber?.trim() || params.orderId,
-    fileName: file.name || "file",
-    mimeType: file.type || "application/octet-stream",
-    size: file.size || 0,
-    lastModified: file.lastModified || Date.now(),
-    blob: file,
-    createdAt: Date.now(),
-    attempts: 0,
-    failed: false,
-    lastError: null,
-    fallbackTried: false,
-  }));
+  const existing = await txGetByOrder(params.orderId);
+  const existingFp = new Set(existing.map((row) => uploadFingerprint(row)));
+  const rows: QueuedUploadRow[] = [];
+  for (const file of params.files) {
+    const row: QueuedUploadRow = {
+      id: uid("q"),
+      orderId: params.orderId,
+      orderNumber: params.orderNumber?.trim() || params.orderId,
+      fileName: file.name || "file",
+      mimeType: file.type || "application/octet-stream",
+      size: file.size || 0,
+      lastModified: file.lastModified || Date.now(),
+      blob: file,
+      createdAt: Date.now(),
+      attempts: 0,
+      failed: false,
+      lastError: null,
+      fallbackTried: false,
+    };
+    const fp = uploadFingerprint(row);
+    if (existingFp.has(fp)) continue;
+    existingFp.add(fp);
+    rows.push(row);
+  }
+  if (rows.length === 0) return 0;
   await txPutMany(rows);
   kickOrderAttachmentBackgroundProcessor();
   return rows.length;

@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminMessengerTenantSettings } from "@/components/directory/AdminMessengerTenantSettings";
 import { LabDueSlotsTenantSettings } from "@/components/directory/LabDueSlotsTenantSettings";
+import { OrderArchiveRetentionTenantSettings } from "@/components/directory/OrderArchiveRetentionTenantSettings";
 import { KanbanAutomationsForm } from "@/components/kanban/KanbanAutomationsForm";
 import { KanbanBoardSettingsForm } from "@/components/kanban/KanbanBoardSettingsForm";
 import { KanbanCrmUsersProvider } from "@/components/kanban/kanban-crm-users-context";
@@ -286,6 +287,9 @@ export function DirectoryKanbanBoardsClient({
       <div className="space-y-8">
         {!isDemo ? (
           <LabDueSlotsTenantSettings canEdit={canEditKanbanAdminTag} />
+        ) : null}
+        {!isDemo ? (
+          <OrderArchiveRetentionTenantSettings canEdit={canEditKanbanAdminTag} />
         ) : null}
         {!isDemo ? (
           <AdminMessengerTenantSettings

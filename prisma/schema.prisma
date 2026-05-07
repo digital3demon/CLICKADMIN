@@ -76,6 +76,8 @@ model Tenant {
   labDueHmSlots         Json?
   /// Страна производственного календаря для автосроков по прайсу (рабочие дни).
   productionCalendarCountry ProductionCalendarCountry @default(RU)
+  /// Срок хранения архивных заказов до безвозвратного удаления (дней).
+  orderArchiveRetentionDays Int @default(30)
   /// Опция «Канбан» (доска в CRM), отдельно от тарифа
   addonKanban           Boolean          @default(false)
   /// Общий Telegram-аккаунт администраторов (не привязан к пользователю CRM). Уникален по всем тенантам.

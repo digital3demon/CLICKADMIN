@@ -1,17 +1,26 @@
 import Link from "next/link";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { ArchivedOrderRestoreButton } from "@/components/orders/ArchivedOrderRestoreButton";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { purgeArchivedOrdersForTenant } from "@/lib/purge-archived-orders";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrdersArchivedPage() {
+  const session = await getSessionFromCookies();
+  if (!session) {
+    return null;
+  }
+  const tenantId = await requireSessionTenantId(session);
   const [ordersPrisma, clientsPrisma] = await Promise.all([
     getOrdersPrisma(),
     getClientsPrisma(),
   ]);
+  await purgeArchivedOrdersForTenant(ordersPrisma, tenantId);
   const rows = await ordersPrisma.order.findMany({
-    where: { archivedAt: { not: null } },
+    where: { tenantId, archivedAt: { not: null } },
     orderBy: [{ archivedAt: "desc" }, { createdAt: "desc" }],
     take: 500,
     select: {

@@ -1,0 +1,2 @@
+ALTER TABLE "Tenant"
+ADD COLUMN "orderArchiveRetentionDays" INTEGER NOT NULL DEFAULT 30;

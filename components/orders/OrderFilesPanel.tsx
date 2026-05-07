@@ -137,17 +137,21 @@ export function OrderFilesPanel({
         return;
       }
       try {
-        await enqueueOrderAttachmentFiles({
+        const enqueued = await enqueueOrderAttachmentFiles({
           orderId,
           orderNumber: orderNumber ?? orderId,
           files: arr,
         });
         await refreshQueueList();
-        setUploadWarn(
-          arr.length === 1
-            ? "Файл поставлен в очередь загрузки."
-            : `Файлы поставлены в очередь загрузки (${arr.length}).`,
-        );
+        if (enqueued > 0) {
+          setUploadWarn(
+            enqueued === 1
+              ? "Файл поставлен в очередь загрузки."
+              : `Файлы поставлены в очередь загрузки (${enqueued}).`,
+          );
+        } else {
+          setUploadWarn("Такой файл уже есть в очереди загрузки.");
+        }
       } catch (e) {
         setLoadError(e instanceof Error ? e.message : "Ошибка загрузки");
       } finally {

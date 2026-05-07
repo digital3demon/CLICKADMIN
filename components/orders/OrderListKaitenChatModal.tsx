@@ -244,16 +244,20 @@ export function OrderListKaitenChatModal({
       });
       setUploading(true);
       try {
-        await enqueueOrderAttachmentFiles({
+        const enqueued = await enqueueOrderAttachmentFiles({
           orderId,
           orderNumber,
           files: arr,
         });
-        setUploadOk(
-          arr.length === 1
-            ? "Файл поставлен в очередь загрузки (CRM/Kaiten)."
-            : `Файлы поставлены в очередь загрузки (${arr.length}) (CRM/Kaiten).`,
-        );
+        if (enqueued > 0) {
+          setUploadOk(
+            enqueued === 1
+              ? "Файл поставлен в очередь загрузки (CRM/Kaiten)."
+              : `Файлы поставлены в очередь загрузки (${enqueued}) (CRM/Kaiten).`,
+          );
+        } else {
+          setUploadOk("Такой файл уже есть в очереди загрузки.");
+        }
       } catch (e) {
         setUploadError(e instanceof Error ? e.message : "Ошибка загрузки файлов");
       } finally {
@@ -269,6 +273,7 @@ export function OrderListKaitenChatModal({
       const files = e.clipboardData?.files;
       if (!files || files.length === 0) return;
       e.preventDefault();
+      e.stopPropagation();
       void uploadFiles(files);
     },
     [loadError, loading, uploading, uploadFiles],
