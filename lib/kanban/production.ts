@@ -44,6 +44,8 @@ function is3dObjectPath(name: string, extensions: string[]): boolean {
 export function defaultProductionSettings(): NonNullable<KanbanBoard["productionSettings"]> {
   return {
     enabled: true,
+    /** Пустая строка — на клиенте подставляется дефолт clickpr. */
+    productionMentionTag: "",
     triggerColumnTitle: "Производство",
     parentDoneColumnTitle: "Сборка",
     childTodoColumnTitle: "К исполнению",
@@ -73,6 +75,11 @@ export function normalizeProductionSettings(
     }))
     .filter((lane) => lane.id && lane.name);
   const merged = { ...def, ...(raw || {}), lanes: lanes.length ? lanes : def.lanes };
+  if (typeof merged.productionMentionTag === "string") {
+    merged.productionMentionTag = merged.productionMentionTag.trim();
+  } else {
+    merged.productionMentionTag = "";
+  }
   if (!merged.lanes.some((x) => x.id === merged.unmatchedLaneId)) {
     merged.lanes.push({ id: merged.unmatchedLaneId, name: "Не распределено", keywords: [] });
   }
@@ -133,7 +140,7 @@ function upsertChildCardForLane(input: {
   files: CardFile[];
   settings: NonNullable<KanbanBoard["productionSettings"]>;
   activityActorLabel?: string;
-}): string {
+}): { id: string; created: boolean } {
   const { board, parent, laneId, laneName, files, settings, activityActorLabel } = input;
   const existing = board.columns
     .flatMap((col) => col.cards)
@@ -142,10 +149,10 @@ function upsertChildCardForLane(input: {
     existing.files = files.map((f) => ({ ...f }));
     existing.productionChecklist = buildInitialChecklist(files);
     existing.updatedAt = new Date().toISOString();
-    return existing.id;
+    return { id: existing.id, created: false };
   }
   const todoCol = colByLaneAndStage(board, laneName, settings.childTodoColumnTitle);
-  if (!todoCol) return "";
+  if (!todoCol) return { id: "", created: false };
   const child = createCard({
     title: `${parent.title} · ${laneName}`,
     description: `Производственная карточка для направления «${laneName}».`,
@@ -165,19 +172,24 @@ function upsertChildCardForLane(input: {
     board,
     activityActorLabel,
   );
-  return child.id;
+  return { id: child.id, created: true };
 }
+
+export type SyncProductionChildrenResult = {
+  childIds: string[];
+  newlyCreated: Array<{ childId: string; laneName: string }>;
+};
 
 export function syncProductionChildrenForParent(
   board: KanbanBoard,
   parentCardId: string,
   activityActorLabel?: string,
   parentCard?: KanbanCard,
-): string[] {
+): SyncProductionChildrenResult {
   const settings = normalizeProductionSettings(board);
-  if (!settings.enabled) return [];
+  if (!settings.enabled) return { childIds: [], newlyCreated: [] };
   const parent = parentCard ?? cardById(board, parentCardId);
-  if (!parent || parent.parentCardId) return [];
+  if (!parent || parent.parentCardId) return { childIds: [], newlyCreated: [] };
   const grouped = new Map<string, CardFile[]>();
   for (const f of parent.files || []) {
     const laneId = resolveLaneForFileName(f.name, settings);
@@ -185,11 +197,12 @@ export function syncProductionChildrenForParent(
     list.push(f);
     grouped.set(laneId, list);
   }
-  if (grouped.size === 0) return [];
+  if (grouped.size === 0) return { childIds: [], newlyCreated: [] };
   const childIds: string[] = [];
+  const newlyCreated: Array<{ childId: string; laneName: string }> = [];
   for (const [laneId, files] of grouped.entries()) {
     const laneName = settings.lanes.find((x) => x.id === laneId)?.name ?? laneId;
-    const childId = upsertChildCardForLane({
+    const up = upsertChildCardForLane({
       board,
       parent,
       laneId,
@@ -198,13 +211,16 @@ export function syncProductionChildrenForParent(
       settings,
       activityActorLabel,
     });
-    if (childId) childIds.push(childId);
+    if (up.id) {
+      childIds.push(up.id);
+      if (up.created) newlyCreated.push({ childId: up.id, laneName });
+    }
   }
   if (childIds.length) {
     parent.childCardIds = childIds;
     parent.productionReadyAt = null;
   }
-  return childIds;
+  return { childIds, newlyCreated };
 }
 
 async function readCardFileBuffer(file: CardFile): Promise<ArrayBuffer> {
@@ -307,15 +323,20 @@ export function moveParentToAssemblyIfReady(
 ): boolean {
   const settings = normalizeProductionSettings(board);
   if (!parentCanMoveToAssembly(board, parentCardId)) return false;
-  const parent = cardById(board, parentCardId);
+  const parentLoc = findCard(board, parentCardId);
   const assembly = colByTitle(board, settings.parentDoneColumnTitle);
-  const production = colByTitle(board, settings.triggerColumnTitle);
-  if (!parent || !assembly || !production) return false;
-  if (assembly.cards.some((c) => c.id === parent.id)) return false;
-  production.cards = production.cards.filter((c) => c.id !== parent.id);
-  assembly.cards.unshift(parent);
-  parent.lastMovedAt = new Date().toISOString();
-  pushActivity(parent, `Перемещена в «${assembly.title}»`, board.users[0]?.id, board, activityActorLabel);
+  if (!parentLoc || !assembly) return false;
+  if (parentLoc.col.id === assembly.id) return false;
+  parentLoc.col.cards = parentLoc.col.cards.filter((c) => c.id !== parentLoc.card.id);
+  assembly.cards.unshift(parentLoc.card);
+  parentLoc.card.lastMovedAt = new Date().toISOString();
+  pushActivity(
+    parentLoc.card,
+    `Перемещена в «${assembly.title}»`,
+    board.users[0]?.id,
+    board,
+    activityActorLabel,
+  );
   return true;
 }
 

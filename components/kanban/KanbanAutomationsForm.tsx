@@ -13,7 +13,9 @@ import { IconPlus, IconTrash } from "./kanban-icons";
 
 type Props = {
   board: KanbanBoard;
-  onPatchBoard: (fn: (b: KanbanBoard) => void) => void;
+  boards: KanbanBoard[];
+  rules: KanbanAutomationRule[];
+  onPatchRules: (fn: (rules: KanbanAutomationRule[]) => void) => void;
 };
 
 const ACTION_TYPES: { id: KanbanAutomationAction["type"]; label: string }[] = [
@@ -173,40 +175,41 @@ function KanbanActionEditor({
   );
 }
 
-export function KanbanAutomationsForm({ board, onPatchBoard }: Props) {
-  const rules = board.automations || [];
-  const cols = board.columns || [];
-  const types = board.cardTypes || [];
+export function KanbanAutomationsForm({
+  board,
+  boards,
+  rules,
+  onPatchRules,
+}: Props) {
+  const resolveRuleBoard = (rule: KanbanAutomationRule) =>
+    boards.find((b) => b.id === rule.boardId) || board;
 
   const updateRule = (ruleId: string, patch: Partial<KanbanAutomationRule>) => {
-    onPatchBoard((b) => {
-      const list = b.automations || [];
+    onPatchRules((list) => {
       const r = list.find((x) => x.id === ruleId);
-      if (!r) return;
-      Object.assign(r, patch);
+      if (r) Object.assign(r, patch);
     });
   };
 
   const removeRule = (ruleId: string) => {
-    onPatchBoard((b) => {
-      b.automations = (b.automations || []).filter((x) => x.id !== ruleId);
+    onPatchRules((list) => {
+      const ix = list.findIndex((x) => x.id === ruleId);
+      if (ix >= 0) list.splice(ix, 1);
     });
   };
 
   const addRule = () => {
-    onPatchBoard((b) => {
-      if (!b.automations) b.automations = [];
-      b.automations.push(createEmptyAutomationRule(b));
+    onPatchRules((list) => {
+      list.push(createEmptyAutomationRule(board));
     });
   };
 
   return (
     <div className="space-y-4">
       <p className="m-0 text-sm text-[var(--text-secondary)]">
-        Правила выполняются при переносе карточки между колонками или при создании карточки в колонке.
-        Условия: колонка (и при переносе — опционально «из какой колонки»), опционально фильтр по типу
-        карточки.         Действия выполняются по порядку; «Перенести в колонку» может запустить другие правила
-        для новой колонки (ограничение глубины — 8 шагов).
+        Глобальные правила для всех досок. В блоке «Когда» выбирается доска, событие и условия
+        (колонка, «из колонки», тип карточки). В блоке «Тогда» можно добавить несколько действий;
+        они выполняются по порядку.
       </p>
 
       {rules.length === 0 ? (
@@ -219,6 +222,12 @@ export function KanbanAutomationsForm({ board, onPatchBoard }: Props) {
             key={rule.id}
             className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm"
           >
+            {(() => {
+              const ruleBoard = resolveRuleBoard(rule);
+              const cols = ruleBoard.columns || [];
+              const types = ruleBoard.cardTypes || [];
+              return (
+                <>
             <div className="flex flex-wrap items-center gap-3">
               <label className="inline-flex items-center gap-2 text-sm">
                 <input
@@ -249,7 +258,21 @@ export function KanbanAutomationsForm({ board, onPatchBoard }: Props) {
               </button>
             </div>
 
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <label className="flex flex-col gap-1 text-[0.65rem] font-medium uppercase text-[var(--text-muted)]">
+                Доска
+                <select
+                  className="rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-2 text-sm"
+                  value={rule.boardId}
+                  onChange={(e) => updateRule(rule.id, { boardId: e.target.value })}
+                >
+                  {boards.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="flex flex-col gap-1 text-[0.65rem] font-medium uppercase text-[var(--text-muted)]">
                 Когда
                 <select
@@ -328,12 +351,13 @@ export function KanbanAutomationsForm({ board, onPatchBoard }: Props) {
                 {(rule.actions ?? []).map((act, ix) => (
                   <li key={ix} className="flex flex-wrap items-start gap-2">
                     <KanbanActionEditor
-                      board={board}
+                      board={ruleBoard}
                       action={act}
                       onChange={(next) => {
-                        onPatchBoard((b) => {
-                          const r = (b.automations || []).find((x) => x.id === rule.id);
-                          if (!r?.actions) return;
+                        onPatchRules((list) => {
+                          const r = list.find((x) => x.id === rule.id);
+                          if (!r) return;
+                          if (!r.actions) r.actions = [];
                           r.actions[ix] = next;
                         });
                       }}
@@ -343,8 +367,8 @@ export function KanbanAutomationsForm({ board, onPatchBoard }: Props) {
                       className="mt-6 rounded p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
                       title="Убрать действие"
                       onClick={() => {
-                        onPatchBoard((b) => {
-                          const r = (b.automations || []).find((x) => x.id === rule.id);
+                        onPatchRules((list) => {
+                          const r = list.find((x) => x.id === rule.id);
                           if (!r?.actions) return;
                           r.actions.splice(ix, 1);
                         });
@@ -359,17 +383,20 @@ export function KanbanAutomationsForm({ board, onPatchBoard }: Props) {
                 type="button"
                 className="mt-2 inline-flex items-center gap-1 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-1.5 text-xs font-medium hover:bg-[var(--surface-hover)]"
                 onClick={() => {
-                  onPatchBoard((b) => {
-                    const r = (b.automations || []).find((x) => x.id === rule.id);
+                  onPatchRules((list) => {
+                    const r = list.find((x) => x.id === rule.id);
                     if (!r) return;
                     if (!r.actions) r.actions = [];
-                    r.actions.push(newAction(b));
+                    r.actions.push(newAction(ruleBoard));
                   });
                 }}
               >
                 <IconPlus /> Действие
               </button>
             </div>
+                </>
+              );
+            })()}
           </li>
         ))}
       </ul>

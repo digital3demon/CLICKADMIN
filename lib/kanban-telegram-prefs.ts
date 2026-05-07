@@ -17,6 +17,10 @@ export const KANBAN_TELEGRAM_PREF_KEYS = [
   "tg_comment_added",
   "tg_description_changed",
   "tg_due_changed",
+  "tg_order_correction_changed",
+  "tg_order_prosthetics_changed",
+  "tg_production_new_card",
+  "tg_production_mentioned",
 ] as const;
 
 export type KanbanTelegramPrefKey = (typeof KANBAN_TELEGRAM_PREF_KEYS)[number];
@@ -60,6 +64,11 @@ export const KANBAN_TELEGRAM_PREF_SECTIONS: Array<{
       "tg_due_changed",
     ],
   },
+  {
+    id: "order",
+    title: "Наряд в CRM",
+    keys: ["tg_order_correction_changed", "tg_order_prosthetics_changed"],
+  },
 ];
 
 export const KANBAN_TELEGRAM_PREF_LABELS: Record<KanbanTelegramPrefKey, string> = {
@@ -76,7 +85,27 @@ export const KANBAN_TELEGRAM_PREF_LABELS: Record<KanbanTelegramPrefKey, string> 
   tg_comment_added: "Добавлен комментарий",
   tg_description_changed: "Изменилось описание",
   tg_due_changed: "Изменился срок выполнения",
+  tg_order_correction_changed:
+    "Корректировки в наряде (направление, причина, оплата)",
+  tg_order_prosthetics_changed: "Протетика в наряде (состав, признак «заказано»)",
+  tg_production_new_card:
+    "Новая карточка на доске Производство (дорожка в тексте)",
+  tg_production_mentioned:
+    "Упоминание группы производства (@тег из настроек доски)",
 };
+
+/** Только для роли «Производство» — переключатели в профиле. */
+export const KANBAN_TELEGRAM_PREF_SECTIONS_PRODUCTION: Array<{
+  id: string;
+  title: string;
+  keys: KanbanTelegramPrefKey[];
+}> = [
+  {
+    id: "production",
+    title: "Производство (канбан CRM)",
+    keys: ["tg_production_new_card", "tg_production_mentioned"],
+  },
+];
 
 function isPrefKey(k: string): k is KanbanTelegramPrefKey {
   return (KANBAN_TELEGRAM_PREF_KEYS as readonly string[]).includes(k);

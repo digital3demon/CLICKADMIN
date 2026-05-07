@@ -10,16 +10,22 @@ import {
   looksLikeTelegramBotUsername,
   normalizeTelegramBotUsername,
 } from "@/lib/telegram-bot-username";
+import {
+  DEFAULT_KANBAN_ADMIN_MENTION_TAG,
+  normalizeKanbanAdminMentionTag,
+} from "@/lib/kanban-admin-mention";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Props = {
   canEdit: boolean;
   telegramBotUsername: string;
+  canEditKanbanAdminTag?: boolean;
 };
 
 export function AdminMessengerTenantSettings({
   canEdit,
   telegramBotUsername,
+  canEditKanbanAdminTag = false,
 }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -35,6 +41,9 @@ export function AdminMessengerTenantSettings({
   const [botFallbackLink, setBotFallbackLink] = useState<string | null>(null);
   const [botFallbackCommand, setBotFallbackCommand] = useState<string | null>(null);
   const [botFallbackBusy, setBotFallbackBusy] = useState(false);
+  const [labTagDraft, setLabTagDraft] = useState(DEFAULT_KANBAN_ADMIN_MENTION_TAG);
+  const [labTagSaving, setLabTagSaving] = useState(false);
+  const [labTagError, setLabTagError] = useState<string | null>(null);
   const widgetMountRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -74,6 +83,58 @@ export function AdminMessengerTenantSettings({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!canEditKanbanAdminTag) return;
+    let cancelled = false;
+    void fetch("/api/auth/session", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then(
+        (j: {
+          user?: unknown;
+          tenant?: { kanbanAdminMentionTag?: string | null };
+        }) => {
+          if (cancelled || !j?.user) return;
+          setLabTagDraft(
+            normalizeKanbanAdminMentionTag(j.tenant?.kanbanAdminMentionTag ?? null),
+          );
+        },
+      )
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canEditKanbanAdminTag]);
+
+  const persistLabTag = async () => {
+    if (!canEditKanbanAdminTag) return;
+    setLabTagSaving(true);
+    setLabTagError(null);
+    try {
+      const trimmed = labTagDraft.trim();
+      const res = await fetch("/api/tenant/kanban-admin-mention-tag", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kanbanAdminMentionTag: trimmed.length === 0 ? null : trimmed,
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        kanbanAdminMentionTag?: string | null;
+      };
+      if (!res.ok) {
+        setLabTagError(j.error ?? "Не сохранено");
+        return;
+      }
+      setLabTagDraft(normalizeKanbanAdminMentionTag(j.kanbanAdminMentionTag ?? null));
+    } catch {
+      setLabTagError("Сеть");
+    } finally {
+      setLabTagSaving(false);
+    }
+  };
 
   const persistPref = async (key: AdminSharedMessengerNotifyKey, value: boolean) => {
     if (!prefs) return;
@@ -360,6 +421,39 @@ export function AdminMessengerTenantSettings({
               </div>
             </>
           )}
+          <div className="border-t border-[var(--card-border)] pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Чат канбана и Kaiten
+            </p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              Общий тег упоминания команды лаборатории. Пусто = стандартный тег
+              «{DEFAULT_KANBAN_ADMIN_MENTION_TAG}».
+            </p>
+            <label className="mt-2 block max-w-md text-sm">
+              <span className="mb-1 block text-[var(--text-secondary)]">
+                Токен без «@» (латиница, 2–32 символа)
+              </span>
+              <input
+                type="text"
+                value={labTagDraft}
+                disabled={!canEditKanbanAdminTag || labTagSaving}
+                onChange={(e) => setLabTagDraft(e.target.value)}
+                onBlur={() => void persistLabTag()}
+                placeholder={DEFAULT_KANBAN_ADMIN_MENTION_TAG}
+                className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 font-mono text-[var(--app-text)] disabled:opacity-60"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            {labTagError ? (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{labTagError}</p>
+            ) : null}
+            {!canEditKanbanAdminTag ? (
+              <p className="mt-2 text-[0.75rem] text-[var(--text-muted)]">
+                Изменить тег могут владелец, старший администратор или администратор.
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </section>

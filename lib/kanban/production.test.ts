@@ -65,8 +65,8 @@ describe("kanban production routing", () => {
       ],
     });
     board.columns[1]?.cards.push(parent);
-    const childIds = syncProductionChildrenForParent(board, parent.id);
-    expect(childIds.length).toBe(3);
+    const syncRes = syncProductionChildrenForParent(board, parent.id);
+    expect(syncRes.childIds.length).toBe(3);
     const childCards = board.columns[2]?.cards ?? [];
     expect(childCards.some((c) => c.productionLaneId === "lane_print")).toBe(true);
     expect(childCards.some((c) => c.productionLaneId === "lane_mill")).toBe(true);
@@ -185,5 +185,18 @@ describe("kanban parent move after children done", () => {
     const moved = moveParentToAssemblyIfReady(board, parent.id);
     expect(moved).toBe(true);
     expect(board.columns[5]?.cards.some((c) => c.id === parent.id)).toBe(true);
+  });
+
+  it("moves parent from lane-prefixed production column", () => {
+    const board = makeBoard();
+    board.columns[1]!.title = "Печать · Производство";
+    const parent = createCard({ id: "p4", title: "Parent 4", childCardIds: ["ch3"] });
+    const child = createCard({ id: "ch3", title: "Child 3", parentCardId: "p4" });
+    board.columns[1]?.cards.push(parent);
+    board.columns[4]?.cards.push(child);
+    const moved = moveParentToAssemblyIfReady(board, parent.id);
+    expect(moved).toBe(true);
+    expect(board.columns[5]?.cards.some((c) => c.id === parent.id)).toBe(true);
+    expect(board.columns[1]?.cards.some((c) => c.id === parent.id)).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ import {
   parseKanbanTelegramPrefKey,
   type KanbanTelegramPrefKey,
 } from "@/lib/kanban-telegram-prefs";
+import type { UserRole } from "@prisma/client";
 import { getPrisma } from "@/lib/get-prisma";
 import {
   notifyKanbanTelegramSubscribers,
@@ -60,6 +61,15 @@ function parseMentionContextPayload(
   };
 }
 
+function parseRecipientRoles(raw: unknown): UserRole[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: UserRole[] = [];
+  for (const x of raw) {
+    if (x === "PRODUCTION") out.push("PRODUCTION");
+  }
+  return out.length ? out : undefined;
+}
+
 export async function POST(req: Request) {
   const session = await getSessionFromCookies();
   if (!session?.sub) {
@@ -88,7 +98,9 @@ export async function POST(req: Request) {
   const kaitenRaw = o.kaitenCardId;
   const skipKaitenDuplicate =
     shouldSkipCrmKanbanTelegram(kaitenRaw as number | null | undefined) &&
-    event !== "tg_mentioned_in_comment";
+    event !== "tg_mentioned_in_comment" &&
+    event !== "tg_production_new_card" &&
+    event !== "tg_production_mentioned";
   if (skipKaitenDuplicate) {
     return NextResponse.json({ ok: true, skipped: "kaiten" });
   }
@@ -99,7 +111,10 @@ export async function POST(req: Request) {
   let effectiveLinesAdmin: string[] | undefined;
   let parseMode: "HTML" | undefined;
 
-  if (mentionCtx && event === "tg_mentioned_in_comment") {
+  if (
+    mentionCtx &&
+    (event === "tg_mentioned_in_comment" || event === "tg_production_mentioned")
+  ) {
     effectiveLines = [buildKanbanMentionInCommentTelegramHtmlLine(mentionCtx)];
     effectiveLinesAdmin = undefined;
     parseMode = "HTML";
@@ -140,6 +155,7 @@ export async function POST(req: Request) {
   const prisma = await getPrisma();
   const actorUserId = session.sub;
   const tenantId = await getTenantIdForSession(session);
+  const recipientRoles = parseRecipientRoles(o.recipientRoles);
 
   try {
     if (targetUserIds.length > 0) {
@@ -152,7 +168,7 @@ export async function POST(req: Request) {
         lines: effectiveLines,
         parseMode,
         linesAdmin: effectiveLinesAdmin,
-        tenantId,
+        tenantId: tenantId ?? undefined,
       });
     } else {
       await notifyKanbanTelegramSubscribers(prisma, {
@@ -162,6 +178,7 @@ export async function POST(req: Request) {
         alsoExcludeUserIds: broadcastExcludeUserIds,
         parseMode,
         linesAdmin: effectiveLinesAdmin,
+        onlyRoles: recipientRoles,
       });
     }
   } catch (e) {

@@ -942,6 +942,13 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
   stripLegacyDemoUsers(board);
   if (!Array.isArray(board.automations)) {
     board.automations = [];
+  } else {
+    board.automations = board.automations
+      .filter((r) => r && typeof r.id === "string")
+      .map((r) => ({
+        ...r,
+        boardId: String(r.boardId || board.id),
+      }));
   }
   board.autoArchiveRules = (board.autoArchiveRules || [])
     .filter((r) => r && typeof r.id === "string")
@@ -1239,7 +1246,7 @@ export function findCardInAppState(
  * «Мои»: участник ИЛИ ответственный ИЛИ наряд CRM без участников/ответственных (общая очередь),
  * либо локальная карточка без наряда, созданная текущим пользователем.
  * «Распределить»: ответственный текущего пользователя ИЛИ наряд без ответственных (очередь раздачи).
- * Карточки без `linkedOrderId` живут только в localStorage автора — другие пользователи их не увидят.
+ * Карточки без `linkedOrderId` привязаны к состоянию автора (user scope) — другие пользователи их не увидят.
  * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
  */
 export function buildKanbanDisplayView(
@@ -1464,7 +1471,7 @@ function resolveBoardForKaitenLane(
 }
 
 /**
- * Одна доска в localStorage → две («Ортопедия» / «Ортодонтия»), карточки по `trackLane`.
+ * Миграция legacy-формата одной доски → две («Ортопедия» / «Ортодонтия»), карточки по `trackLane`.
  */
 export function migrateLegacyKanbanToDualBoards(state: KanbanAppState): void {
   if (state.boards.length !== 1) return;
@@ -1505,6 +1512,15 @@ export function migrateLegacyKanbanToDualBoards(state: KanbanAppState): void {
   }
 }
 
+function shouldMigrateSingleBoardToDual(board: KanbanBoard): boolean {
+  if (board.id === KANBAN_BOARD_ORTHOPEDICS_ID || board.id === KANBAN_BOARD_ORTHODONTICS_ID) {
+    return false;
+  }
+  const hasLaneColumns = board.columns.some((col) => String(col.title || "").includes("·"));
+  if (hasLaneColumns) return false;
+  return true;
+}
+
 function ensureMirroredKanbanBoardsForKaiten(state: KanbanAppState): void {
   const hasOrtho = state.boards.some((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID);
   const hasOdon = state.boards.some((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID);
@@ -1512,7 +1528,7 @@ function ensureMirroredKanbanBoardsForKaiten(state: KanbanAppState): void {
     for (const b of state.boards) normalizeBoardCardTypes(b);
     return;
   }
-  if (state.boards.length === 1) {
+  if (state.boards.length === 1 && shouldMigrateSingleBoardToDual(state.boards[0]!)) {
     migrateLegacyKanbanToDualBoards(state);
     for (const b of state.boards) normalizeBoardCardTypes(b);
     return;

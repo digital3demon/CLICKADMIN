@@ -20,7 +20,11 @@ import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-reques
 import {
   parseMentionUserIdsFromText,
   sanitizeMentionToken,
+  textIncludesMentionToken,
 } from "@/lib/kanban-comment-mentions";
+import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
+import { normalizeProductionMentionTag } from "@/lib/kanban-production-mention-tag";
+import { normalizeProductionSettings } from "@/lib/kanban/production";
 import {
   isKanbanAdminGroupRole,
 } from "@/lib/kanban-admin-mention";
@@ -72,13 +76,6 @@ import {
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
-
-function kanbanCardAbsoluteUrl(cardId: string, boardId: string): string {
-  if (typeof window === "undefined") return "";
-  const basePath = window.location.pathname.split("?")[0] || "/kanban";
-  const q = new URLSearchParams({ card: cardId, board: boardId });
-  return `${window.location.origin}${basePath}?${q.toString()}`;
-}
 
 type BoardLaneColumnParts = {
   laneName: string;
@@ -371,6 +368,16 @@ export function KanbanCardModal({
     [crmList],
   );
 
+  const productionMentionTagResolved = useMemo(() => {
+    const raw = normalizeProductionSettings(board).productionMentionTag ?? "";
+    return normalizeProductionMentionTag(raw || null);
+  }, [board]);
+
+  const productionUserIds = useMemo(
+    () => crmList.filter((u) => u.role === "PRODUCTION").map((u) => u.id),
+    [crmList],
+  );
+
   if (!cardId || !card) return null;
 
   const blocked = isCardBlocked(card);
@@ -582,10 +589,15 @@ export function KanbanCardModal({
     const mentionedIds = parseMentionUserIdsFromText(trimmed, crmList, {
       adminMentionTag,
       adminUserIds: adminMentionUserIds,
+      productionMentionTag: productionMentionTagResolved,
+      productionUserIds,
     }).filter((id) => id !== actor);
 
+    const hasProductionTag =
+      productionUserIds.length > 0 &&
+      textIncludesMentionToken(trimmed, productionMentionTagResolved);
+
     const fireMentionTelegram = () => {
-      if (!mentionedIds.length) return;
       const actorRow = crmById.get(actor);
       const origin =
         typeof window !== "undefined" ? window.location.origin : "";
@@ -593,23 +605,42 @@ export function KanbanCardModal({
         (card.title || "").trim(),
       );
       const oid = card.linkedOrderId?.trim();
-      postKanbanCrmTelegramNotify({
-        kaitenCardId: card.kaitenCardId,
-        event: "tg_mentioned_in_comment",
-        alternatePrefKeys: ["tg_comment_added"],
-        targetUserIds: mentionedIds,
-        mentionContext: {
-          actorDisplayName: userPersonDisplayName(actorRow ?? {}),
-          actorMentionHandle: actorRow?.mentionHandle ?? null,
-          linkedOrderId: oid ?? null,
-          orderNumberLabel: orderNum || null,
-          kaitenCardId: card.kaitenCardId ?? null,
-          kanbanCardAbsoluteUrl: kanbanCardAbsoluteUrl(cardId, board.id),
-          orderPageAbsoluteUrl: oid
-            ? `${origin}/orders/${encodeURIComponent(oid)}`
-            : null,
-        },
-      });
+      const mentionCtxPayload = {
+        actorDisplayName: userPersonDisplayName(actorRow ?? {}),
+        actorMentionHandle: actorRow?.mentionHandle ?? null,
+        linkedOrderId: oid ?? null,
+        orderNumberLabel: orderNum || null,
+        kaitenCardId: card.kaitenCardId ?? null,
+        kanbanCardAbsoluteUrl: kanbanCardAbsoluteUrl(cardId, board.id),
+        orderPageAbsoluteUrl: oid
+          ? `${origin}/orders/${encodeURIComponent(oid)}`
+          : null,
+      };
+
+      const prodTargets = hasProductionTag
+        ? productionUserIds.filter((id) => id !== actor)
+        : [];
+      const mentionForGeneral = mentionedIds.filter(
+        (id) => !(hasProductionTag && prodTargets.includes(id)),
+      );
+
+      if (prodTargets.length > 0) {
+        postKanbanCrmTelegramNotify({
+          kaitenCardId: card.kaitenCardId,
+          event: "tg_production_mentioned",
+          targetUserIds: prodTargets,
+          mentionContext: mentionCtxPayload,
+        });
+      }
+      if (mentionForGeneral.length > 0) {
+        postKanbanCrmTelegramNotify({
+          kaitenCardId: card.kaitenCardId,
+          event: "tg_mentioned_in_comment",
+          alternatePrefKeys: ["tg_comment_added"],
+          targetUserIds: mentionForGeneral,
+          mentionContext: mentionCtxPayload,
+        });
+      }
     };
 
     const linkedKaiten =
@@ -1668,6 +1699,8 @@ export function KanbanCardModal({
                   board={board}
                   adminMentionTag={adminMentionTag}
                   adminMentionUserIds={adminMentionUserIds}
+                  productionMentionTag={productionMentionTagResolved}
+                  productionUserIds={productionUserIds}
                   onSend={sendComment}
                   onFilesDropped={attachFilesFromChat}
                   onOpenAttachment={openAttachment}
@@ -2041,6 +2074,8 @@ function ChatPanel({
   board,
   adminMentionTag,
   adminMentionUserIds,
+  productionMentionTag,
+  productionUserIds,
   onSend,
   onFilesDropped,
   onOpenAttachment,
@@ -2049,6 +2084,9 @@ function ChatPanel({
   board: KanbanBoard;
   adminMentionTag: string;
   adminMentionUserIds: readonly string[];
+  /** Нормализованный токен (напр. clickpr) для подстановки @ в текст. */
+  productionMentionTag: string;
+  productionUserIds: readonly string[];
   onSend: (t: string) => boolean | Promise<boolean>;
   onFilesDropped: (files: File[]) => void | Promise<void>;
   onOpenAttachment: (f: CardFile) => void;
@@ -2079,7 +2117,7 @@ function ChatPanel({
       board.users,
       board.excludedCrmUserIds,
     );
-    const synthetic: ChatMentionOption[] =
+    const syntheticLab: ChatMentionOption[] =
       adminMentionUserIds.length > 0 && adminMentionTag
         ? [
             {
@@ -2091,6 +2129,19 @@ function ChatPanel({
             },
           ]
         : [];
+    const syntheticProd: ChatMentionOption[] =
+      productionUserIds.length > 0 && productionMentionTag
+        ? [
+            {
+              id: "__kanban_production_team__",
+              label: `Производство (@${productionMentionTag})`,
+              insertText: `@${productionMentionTag}`,
+              searchText:
+                `производство ${productionMentionTag} производственный цех`.toLowerCase(),
+            },
+          ]
+        : [];
+    const synthetic = [...syntheticProd, ...syntheticLab];
     const rest = merged
       .flatMap((row) => {
         if ("role" in row && isKanbanAdminGroupRole(row.role)) {
@@ -2120,6 +2171,8 @@ function ChatPanel({
     board.excludedCrmUserIds,
     adminMentionTag,
     adminMentionUserIds,
+    productionMentionTag,
+    productionUserIds,
   ]);
   const mentionDraft = useMemo(
     () => detectMentionDraft(inp, caretPos),

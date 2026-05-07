@@ -5,6 +5,7 @@ import type { KanbanBoard } from "@/lib/kanban/types";
 import {
   clearKanbanBrowserStorage,
   createInitialBoard,
+  clampArchiveRetentionDays,
   defaultAppState,
   demoKanbanDefaultState,
   generateId,
@@ -84,6 +85,7 @@ export function DirectoryKanbanBoardsClient({
   const [createPrivate, setCreatePrivate] = useState(false);
   const [crmUsers, setCrmUsers] = useState<CrmUserPick[]>([]);
   const [pickedUserIds, setPickedUserIds] = useState<string[]>([]);
+  const [pickExcludeUserId, setPickExcludeUserId] = useState("");
   const archiveSettingsReadyRef = useRef(false);
   const lastArchiveSettingsSigRef = useRef("");
 
@@ -154,7 +156,7 @@ export function DirectoryKanbanBoardsClient({
   }, [appState, isDemo]);
 
   useEffect(() => {
-    if (!canSetPrivateBoards) return;
+    if (isDemo) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -184,9 +186,35 @@ export function DirectoryKanbanBoardsClient({
     return () => {
       cancelled = true;
     };
-  }, [canSetPrivateBoards]);
+  }, [isDemo]);
 
   const board = useMemo(() => getActiveBoard(appState), [appState]);
+  const globalAutomations = useMemo(
+    () => (appState.boards[0]?.automations || []).map((r) => ({ ...r })),
+    [appState.boards],
+  );
+  const cloneGlobalAutomationsForBoard = useCallback(
+    (boardId: string) =>
+      structuredClone(globalAutomations).map((r) => ({
+        ...r,
+        boardId: String(r.boardId || boardId),
+      })),
+    [globalAutomations],
+  );
+  const excludedIds = board.excludedCrmUserIds ?? [];
+  const excludedSet = useMemo(() => new Set(excludedIds), [excludedIds]);
+  const candidatesToExclude = useMemo(
+    () => crmUsers.filter((u) => u?.id && !excludedSet.has(u.id)),
+    [crmUsers, excludedSet],
+  );
+  const retentionYears = useMemo(() => {
+    const raw = (Number.isFinite(board.archiveRetentionDays) ? Number(board.archiveRetentionDays) : 365) / 365;
+    return Math.round(raw * 1000) / 1000;
+  }, [board.archiveRetentionDays]);
+
+  useEffect(() => {
+    setPickExcludeUserId("");
+  }, [board.id]);
 
   const showToast = useCallback((text: string, err?: boolean) => {
     const id = generateId("toast");
@@ -200,6 +228,14 @@ export function DirectoryKanbanBoardsClient({
     setAppState((s) => withActiveBoard(s, fn));
   }, []);
 
+  const applyToAllBoards = useCallback((fn: (b: KanbanBoard) => void) => {
+    setAppState((s) => {
+      const next = structuredClone(s);
+      for (const b of next.boards) fn(b);
+      return next;
+    });
+  }, []);
+
   const patchApp = useCallback((fn: (s: typeof appState) => void) => {
     setAppState((s) => {
       const next = structuredClone(s);
@@ -207,6 +243,23 @@ export function DirectoryKanbanBoardsClient({
       return next;
     });
   }, []);
+
+  const applyGlobalAutomations = useCallback(
+    (fn: (rules: NonNullable<KanbanBoard["automations"]>) => void) => {
+      patchApp((s) => {
+        const seedBoard = s.boards[0];
+        const nextRules = structuredClone(seedBoard?.automations || []);
+        fn(nextRules);
+        for (const b of s.boards) {
+          b.automations = structuredClone(nextRules).map((r) => ({
+            ...r,
+            boardId: String(r.boardId || b.id),
+          }));
+        }
+      });
+    },
+    [patchApp],
+  );
 
   const exportBoard = () => {
     const b = getActiveBoard(appState);
@@ -231,6 +284,7 @@ export function DirectoryKanbanBoardsClient({
         if (!data.id) data.id = generateId("board");
         data.title = data.title || "Импортированная доска";
         migrateBoard(data);
+        data.automations = cloneGlobalAutomationsForBoard(data.id);
         patchApp((s) => {
           s.boards.push(data);
           s.activeBoardId = data.id;
@@ -248,8 +302,8 @@ export function DirectoryKanbanBoardsClient({
   };
 
   const saveNormalized = () => {
-    applyToBoard((b) => normalizeBoardCardTypes(b));
-    showToast("Настройки доски сохранены");
+    applyToAllBoards((b) => normalizeBoardCardTypes(b));
+    showToast("Типы карточек сохранены для всех досок");
   };
 
   const ensureProductionBoardNow = useCallback(() => {
@@ -287,6 +341,7 @@ export function DirectoryKanbanBoardsClient({
           archivedCards: [],
           productionSettings: structuredClone(srcSettings),
         };
+        prod.automations = cloneGlobalAutomationsForBoard(prod.id);
         s.boards.push(prod);
       } else {
         const existing = new Set(prod.columns.map((c) => c.title.trim().toLowerCase()));
@@ -332,6 +387,7 @@ export function DirectoryKanbanBoardsClient({
     nb.title = title;
     nb.isPrivate = createPrivate;
     nb.accessUserIds = createPrivate ? [...pickedUserIds] : [];
+    nb.automations = cloneGlobalAutomationsForBoard(nb.id);
     patchApp((s) => {
       s.boards.push(nb);
       s.activeBoardId = nb.id;
@@ -384,6 +440,7 @@ export function DirectoryKanbanBoardsClient({
           <AdminMessengerTenantSettings
             canEdit={canEditAdminMessenger}
             telegramBotUsername={telegramBotUsername}
+            canEditKanbanAdminTag={canEditKanbanAdminTag}
           />
         ) : null}
         <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
@@ -394,7 +451,7 @@ export function DirectoryKanbanBoardsClient({
             {isDemo ? (
               <>
                 В демо доступна одна доска «Работы»; на ней только карточки нарядов.
-                Данные в браузере (localStorage), как на{" "}
+                Данные сохраняются в хранилище CRM, как на{" "}
                 <Link
                   href="/kanban"
                   className="text-[var(--sidebar-blue)] hover:underline"
@@ -406,7 +463,7 @@ export function DirectoryKanbanBoardsClient({
             ) : (
               <>
                 Выберите активную доску — для неё ниже настраиваются типы карточек и
-                участники. Данные хранятся в браузере (localStorage), как на странице{" "}
+                участники. Данные хранятся в CRM (БД/хранилище), как на странице{" "}
                 <Link
                   href="/kanban"
                   className="text-[var(--sidebar-blue)] hover:underline"
@@ -439,11 +496,6 @@ export function DirectoryKanbanBoardsClient({
                   {b.isPrivate ? (
                     <span className="ml-2 rounded border border-amber-500/40 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
                       Закрытая
-                    </span>
-                  ) : null}
-                  {b.allowProductionRoleAccess ? (
-                    <span className="ml-1 rounded border border-violet-500/40 bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-900 dark:bg-violet-900/30 dark:text-violet-100">
-                      Роль «Производство»
                     </span>
                   ) : null}
                 </button>
@@ -494,21 +546,262 @@ export function DirectoryKanbanBoardsClient({
               </button>
             ) : null}
           </div>
+          <div className="mt-4 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3">
+            <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
+              Режим доски
+            </h3>
+            <label className="inline-flex items-center gap-2 text-sm text-[var(--text-body)]">
+              <input
+                type="checkbox"
+                checked={board.distributeNewOrders !== false}
+                onChange={(e) =>
+                  applyToBoard((b) => {
+                    b.distributeNewOrders = e.target.checked;
+                  })
+                }
+              />
+              Доска для распределения новых заказов
+            </label>
+            <p className="mt-2 text-[0.75rem] text-[var(--text-muted)]">
+              Только отмеченные доски видны в выборе пространства при создании нового наряда.
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-6 border-t border-[var(--card-border)] pt-5 lg:grid-cols-2">
+            <div>
+              <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
+                Исключить пользователей (доска «{board.title}»)
+              </h3>
+              <p className="mb-3 text-[0.8125rem] leading-snug text-[var(--text-muted)]">
+                Эти пользователи не будут доступны в выборе «Ответственные» и «Участники» на текущей доске.
+              </p>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--card-border)] text-left text-[var(--text-muted)]">
+                    <th className="py-2 pr-2">Исключён из списков</th>
+                    <th className="w-12 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {excludedIds.length === 0 ? (
+                    <tr>
+                      <td colSpan={2} className="py-3 text-[var(--text-muted)]">
+                        Никого не исключено.
+                      </td>
+                    </tr>
+                  ) : (
+                    excludedIds.map((uid) => {
+                      const row = crmUsers.find((u) => u.id === uid);
+                      const label = row?.displayName?.trim() || row?.email?.trim() || uid;
+                      return (
+                        <tr key={uid} className="border-b border-[var(--border-subtle)]">
+                          <td className="py-2 pr-2 text-[var(--app-text)]">{label}</td>
+                          <td className="py-2 text-right">
+                            <button
+                              type="button"
+                              className="rounded-md border border-[var(--card-border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)]"
+                              onClick={() =>
+                                applyToBoard((b) => {
+                                  b.excludedCrmUserIds = (b.excludedCrmUserIds || []).filter(
+                                    (x) => x !== uid,
+                                  );
+                                })
+                              }
+                            >
+                              Убрать
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <label className="block min-w-[12rem] flex-1 text-sm">
+                  <span className="mb-1 block text-[var(--text-secondary)]">Добавить в исключения</span>
+                  <select
+                    className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1.5 text-[var(--app-text)]"
+                    value={pickExcludeUserId}
+                    disabled={candidatesToExclude.length === 0}
+                    onChange={(e) => setPickExcludeUserId(e.target.value)}
+                  >
+                    <option value="">
+                      {candidatesToExclude.length === 0
+                        ? "Нет доступных пользователей"
+                        : "Выберите пользователя…"}
+                    </option>
+                    {candidatesToExclude.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.displayName?.trim() || u.email || u.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                  disabled={!pickExcludeUserId.trim()}
+                  onClick={() => {
+                    const id = pickExcludeUserId.trim();
+                    if (!id) return;
+                    applyToBoard((b) => {
+                      const cur = b.excludedCrmUserIds || [];
+                      if (cur.includes(id)) return;
+                      b.excludedCrmUserIds = [...cur, id];
+                    });
+                    setPickExcludeUserId("");
+                  }}
+                >
+                  Исключить
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
+                Автоархивация (доска «{board.title}»)
+              </h3>
+              <p className="mb-3 text-[0.8125rem] leading-snug text-[var(--text-muted)]">
+                Правила автоархивации и срок хранения архива для текущей доски.
+              </p>
+              <label className="mb-3 block max-w-xs text-sm">
+                <span className="mb-1 block text-[var(--text-secondary)]">Хранить в архиве (лет)</span>
+                <input
+                  type="number"
+                  min={1 / 365}
+                  max={30}
+                  step={0.01}
+                  value={retentionYears}
+                  onChange={(e) =>
+                    applyToBoard((b) => {
+                      const y = Number(e.target.value);
+                      if (!Number.isFinite(y)) {
+                        b.archiveRetentionDays = clampArchiveRetentionDays(365);
+                        return;
+                      }
+                      b.archiveRetentionDays = clampArchiveRetentionDays(Math.round(y * 365));
+                    })
+                  }
+                  className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
+                />
+              </label>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--card-border)] text-left text-[var(--text-muted)]">
+                    <th className="py-2 pr-2">Колонка</th>
+                    <th className="w-28 py-2 pr-2">Часов</th>
+                    <th className="w-20 py-2 pr-2">Вкл.</th>
+                    <th className="w-10 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(board.autoArchiveRules || []).map((r) => (
+                    <tr key={r.id} className="border-b border-[var(--border-subtle)]">
+                      <td className="py-2 pr-2">
+                        <select
+                          value={r.columnId}
+                          onChange={(e) =>
+                            applyToBoard((b) => {
+                              const x = (b.autoArchiveRules || []).find((y) => y.id === r.id);
+                              if (x) x.columnId = e.target.value;
+                            })
+                          }
+                          className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
+                        >
+                          {board.columns.map((col) => (
+                            <option key={col.id} value={col.id}>
+                              {col.title}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-2 pr-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={24 * 180}
+                          value={r.idleHours}
+                          onChange={(e) =>
+                            applyToBoard((b) => {
+                              const x = (b.autoArchiveRules || []).find((y) => y.id === r.id);
+                              if (!x) return;
+                              const v = Number(e.target.value);
+                              x.idleHours = Number.isFinite(v)
+                                ? Math.max(1, Math.min(24 * 180, Math.round(v)))
+                                : 24;
+                            })
+                          }
+                          className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
+                        />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <input
+                          type="checkbox"
+                          checked={r.enabled !== false}
+                          onChange={(e) =>
+                            applyToBoard((b) => {
+                              const x = (b.autoArchiveRules || []).find((y) => y.id === r.id);
+                              if (x) x.enabled = e.target.checked;
+                            })
+                          }
+                        />
+                      </td>
+                      <td className="py-2 text-right">
+                        <button
+                          type="button"
+                          className="rounded-md border border-[var(--card-border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)]"
+                          onClick={() =>
+                            applyToBoard((b) => {
+                              b.autoArchiveRules = (b.autoArchiveRules || []).filter(
+                                (x) => x.id !== r.id,
+                              );
+                            })
+                          }
+                        >
+                          Удалить
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button
+                type="button"
+                className="mt-3 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)]"
+                onClick={() =>
+                  applyToBoard((b) => {
+                    const firstColumnId = b.columns[0]?.id ?? "";
+                    if (!firstColumnId) return;
+                    b.autoArchiveRules = b.autoArchiveRules || [];
+                    b.autoArchiveRules.push({
+                      id: generateId("kar"),
+                      enabled: true,
+                      columnId: firstColumnId,
+                      idleHours: 24,
+                    });
+                  })
+                }
+              >
+                + Добавить правило автоархивации
+              </button>
+            </div>
+          </div>
         </section>
 
         <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
           <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">
-            Типы карточек и исключения из списков
+            Типы карточек (общие для всех досок)
           </h2>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Относится к доске «{board.title}». Изменения сохраняются автоматически;
-            кнопка ниже приводит типы к единому виду (цвета и порядок).
+            Изменения типа (название, цвет, пространство по умолчанию) применяются ко всем доскам.
+            Остальные настройки ниже остаются для активной доски «{board.title}».
           </p>
           <div className="mt-6">
             <KanbanBoardSettingsForm
               board={board}
               onPatchBoard={applyToBoard}
-              canEditKanbanAdminTag={canEditKanbanAdminTag}
+              onPatchCardTypes={applyToAllBoards}
               onEnsureProductionBoardNow={ensureProductionBoardNow}
             />
           </div>
@@ -531,11 +824,16 @@ export function DirectoryKanbanBoardsClient({
             Автоматизации
           </h2>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Для активной доски «{board.title}»: если условие выполнено — выполняются действия
-            (перенос, срок, тип, ответственный, комментарий, блокировка). Данные в браузере.
+            Глобальные правила для всех досок. В каждом правиле в блоке «Когда» выбирается доска.
+            В «Тогда» можно добавить несколько действий.
           </p>
           <div className="mt-6">
-            <KanbanAutomationsForm board={board} onPatchBoard={applyToBoard} />
+            <KanbanAutomationsForm
+              board={board}
+              boards={appState.boards}
+              rules={globalAutomations}
+              onPatchRules={applyGlobalAutomations}
+            />
           </div>
         </section>
 

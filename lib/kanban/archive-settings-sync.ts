@@ -4,6 +4,7 @@ import { clampArchiveRetentionDays } from "@/lib/kanban/model";
 export const KANBAN_ARCHIVE_SETTINGS_KEY = "kanbanArchiveSettingsV1";
 
 export type KanbanArchiveBoardSettings = {
+  boardTitle?: string;
   archiveRetentionDays: number;
   autoArchiveRules: KanbanAutoArchiveRule[];
 };
@@ -57,6 +58,7 @@ export function extractKanbanArchiveSettings(
   const boards: Record<string, KanbanArchiveBoardSettings> = {};
   for (const board of state.boards) {
     boards[board.id] = {
+      boardTitle: String(board.title || "").trim(),
       archiveRetentionDays: clampArchiveRetentionDays(board.archiveRetentionDays),
       autoArchiveRules: normalizeRulesForBoard(board, board.autoArchiveRules || []),
     };
@@ -80,8 +82,16 @@ export function applyKanbanArchiveSettings(
   }
   const next = structuredClone(state);
   let changed = false;
+  const normalizedTitleToSettings = new Map<string, KanbanArchiveBoardSettings>();
+  for (const item of Object.values(raw.boards)) {
+    const key = String(item?.boardTitle || "").trim().toLowerCase();
+    if (!key || normalizedTitleToSettings.has(key)) continue;
+    normalizedTitleToSettings.set(key, item);
+  }
   for (const board of next.boards) {
-    const src = raw.boards[board.id];
+    const src =
+      raw.boards[board.id] ??
+      normalizedTitleToSettings.get(String(board.title || "").trim().toLowerCase());
     if (!src) continue;
     const nextRetention = clampArchiveRetentionDays(src.archiveRetentionDays);
     const nextRules = normalizeRulesForBoard(

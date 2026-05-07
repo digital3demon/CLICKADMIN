@@ -35,6 +35,10 @@ const SPACE_OPTIONS: {
 
 type UiCardType = { id: string; name: string; externalTypeId: number };
 
+function normalizeCardTypeName(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 function normalizeHexColor(raw: unknown): string | null {
   const v = String(raw ?? "").trim();
   if (!/^#[0-9a-fA-F]{6}$/.test(v)) return null;
@@ -128,11 +132,15 @@ function boardLaneOptionsBySpaceFromTenantKanbanState(
   return out;
 }
 
-function cardTypeColorsFromTenantKanbanState(raw: unknown): Record<string, string> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+function cardTypeColorsFromTenantKanbanState(raw: unknown): {
+  byId: Record<string, string>;
+  byName: Record<string, string>;
+} {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { byId: {}, byName: {} };
   const state = raw as { boards?: unknown };
-  if (!Array.isArray(state.boards)) return {};
-  const out: Record<string, string> = {};
+  if (!Array.isArray(state.boards)) return { byId: {}, byName: {} };
+  const byId: Record<string, string> = {};
+  const byName: Record<string, string> = {};
   for (const item of state.boards) {
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;
     const board = item as { id?: unknown; cardTypes?: unknown };
@@ -147,12 +155,14 @@ function cardTypeColorsFromTenantKanbanState(raw: unknown): Record<string, strin
     for (const t of board.cardTypes) {
       if (!t || typeof t !== "object" || Array.isArray(t)) continue;
       const typeId = String((t as { id?: unknown }).id ?? "").trim();
+      const typeName = normalizeCardTypeName((t as { name?: unknown }).name);
       const color = normalizeHexColor((t as { color?: unknown }).color);
-      if (!typeId || !color || out[typeId]) continue;
-      out[typeId] = color;
+      if (!color) continue;
+      if (typeId && !byId[typeId]) byId[typeId] = color;
+      if (typeName && !byName[typeName]) byName[typeName] = color;
     }
   }
-  return out;
+  return { byId, byName };
 }
 
 type KaitenPreflightModalProps = {
@@ -250,6 +260,7 @@ export function KaitenPreflightModal({
     Partial<Record<KaitenTrackLane, string[]>>
   >({});
   const [cardTypeColorById, setCardTypeColorById] = useState<Record<string, string>>({});
+  const [cardTypeColorByName, setCardTypeColorByName] = useState<Record<string, string>>({});
   const [boardLaneName, setBoardLaneName] = useState("");
   const [workLabel, setWorkLabel] = useState("");
 
@@ -263,6 +274,7 @@ export function KaitenPreflightModal({
     setDefaultSpaceByCardType({});
     setBoardLaneOptionsBySpace({});
     setCardTypeColorById({});
+    setCardTypeColorByName({});
     setBoardLaneName("");
     setWorkLabel("");
     setLoadError(null);
@@ -296,7 +308,9 @@ export function KaitenPreflightModal({
           setBoardLaneOptionsBySpace(
             boardLaneOptionsBySpaceFromTenantKanbanState(tenantKanbanState),
           );
-          setCardTypeColorById(cardTypeColorsFromTenantKanbanState(tenantKanbanState));
+          const colors = cardTypeColorsFromTenantKanbanState(tenantKanbanState);
+          setCardTypeColorById(colors.byId);
+          setCardTypeColorByName(colors.byName);
           const allowedFromEnv = Array.isArray(data.trackLanes) ? data.trackLanes : [];
           const allowedByDistribution = distribution ?? allowedFromEnv;
           const allowedFinal = allowedFromEnv.filter((lane) =>
@@ -512,7 +526,10 @@ export function KaitenPreflightModal({
                     aria-checked={cardTypeId === o.id}
                     className="flex items-center rounded-lg border px-3 py-2.5 text-left transition-all hover:brightness-[0.98] dark:hover:brightness-110"
                     style={(() => {
-                      const accent = cardTypeColorById[o.id] ?? "#64748b";
+                      const accent =
+                        cardTypeColorById[o.id] ??
+                        cardTypeColorByName[normalizeCardTypeName(o.name)] ??
+                        "#64748b";
                       const selected = cardTypeId === o.id;
                       return {
                         borderColor: selected ? accent : "var(--card-border)",

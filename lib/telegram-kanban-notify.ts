@@ -51,6 +51,8 @@ export async function notifyKanbanTelegramSubscribers(
     parseMode?: "HTML";
     /** Для ADMINISTRATOR / SENIOR_ADMINISTRATOR / MANAGER: две ссылки «карточке» + «заказе» (при наряде). */
     linesAdmin?: string[];
+    /** Если задано — только эти роли (например уведомления производства). */
+    onlyRoles?: UserRole[];
   },
 ): Promise<void> {
   if (opts.skip) return;
@@ -72,6 +74,7 @@ export async function notifyKanbanTelegramSubscribers(
     where: {
       isActive: true,
       telegramId: { not: null },
+      ...(opts.onlyRoles?.length ? { role: { in: opts.onlyRoles } } : {}),
       ...(excludeIds.length ? { NOT: { id: { in: excludeIds } } } : {}),
     },
     select: {
@@ -261,4 +264,35 @@ export async function notifyKanbanTelegramTargetUsers(
       skip: opts.skip,
     });
   }
+}
+
+/** Личные подписчики и общий чат «Мессенджер для админов» — один тип события и те же строки. */
+export async function notifyKanbanTelegramSubscribersAndTenantSharedChat(
+  prisma: PrismaClient,
+  opts: {
+    tenantId: string;
+    event: KanbanTelegramPrefKey;
+    actorUserId: string | null;
+    lines: string[];
+    linesAdmin?: string[];
+    parseMode?: "HTML";
+    skip?: boolean;
+  },
+): Promise<void> {
+  await notifyKanbanTelegramSubscribers(prisma, {
+    event: opts.event,
+    actorUserId: opts.actorUserId,
+    lines: opts.lines,
+    linesAdmin: opts.linesAdmin,
+    parseMode: opts.parseMode,
+    skip: opts.skip,
+  });
+  await notifyTenantAdminSharedTelegramChat(prisma, {
+    tenantId: opts.tenantId,
+    event: opts.event,
+    lines: opts.lines,
+    linesAdmin: opts.linesAdmin,
+    parseMode: opts.parseMode,
+    skip: opts.skip,
+  });
 }

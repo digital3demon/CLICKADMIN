@@ -58,7 +58,10 @@ import {
   type AggregateCardDragArgs,
 } from "@/lib/kanban/aggregate-card-drag";
 import { kanbanLinkedOrdersPullIntervalMs } from "@/lib/kanban-linked-pull-ms";
+import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
+import { postKanbanTelegramNotify } from "@/lib/kanban-crm-telegram-notify-client";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
+import { telegramHtmlLink } from "@/lib/telegram-html";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import {
@@ -105,8 +108,15 @@ function formatActivityActorLabel(u: SessionUserLike | null | undefined): string
   return label === "—" ? undefined : label;
 }
 
+function columnMatchesStage(columnTitle: string, stageTitle: string): boolean {
+  const col = String(columnTitle || "").trim().toLowerCase();
+  const stage = String(stageTitle || "").trim().toLowerCase();
+  if (!col || !stage) return false;
+  return col === stage || col.endsWith(`· ${stage}`);
+}
+
 export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
-  /** null до монтирования: иначе SSR и первый клиентский кадр расходятся (localStorage vs default) → #418 и ломается Sortable. */
+  /** null до монтирования: иначе SSR и первый клиентский кадр расходятся (server state vs default) → #418 и ломается Sortable. */
   const [appState, setAppState] = useState<KanbanAppState | null>(null);
   const appStateRef = useRef<KanbanAppState | null>(null);
   appStateRef.current = appState;
@@ -1126,6 +1136,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     (cardId: string) => {
       let expandBoardId = "";
       let expandChildIds: string[] = [];
+      let notifyCreated: Array<{ childId: string; laneName: string }> = [];
       setAppState((s) => {
         if (!s) return s;
         const next = structuredClone(s);
@@ -1133,28 +1144,49 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         if (!loc) return s;
         if (loc.card.parentCardId) return s;
         const settings = normalizeProductionSettings(loc.board);
-        const inTriggerColumn =
-          loc.col.title.trim().toLowerCase() === settings.triggerColumnTitle.trim().toLowerCase();
+        const inTriggerColumn = columnMatchesStage(
+          loc.col.title,
+          settings.triggerColumnTitle,
+        );
         if (!inTriggerColumn) return s;
         const prodBoard = ensureProductionBoard(next, loc.board);
-        const childIds = syncProductionChildrenForParent(
+        const syncResult = syncProductionChildrenForParent(
           prodBoard,
           cardId,
           activityActorLabel,
           loc.card,
         );
-        if (!childIds.length) return s;
-        loc.card.childCardIds = childIds;
+        notifyCreated = syncResult.newlyCreated;
+        if (!syncResult.childIds.length) return s;
+        loc.card.childCardIds = syncResult.childIds;
         expandBoardId = prodBoard.id;
-        expandChildIds = childIds;
+        expandChildIds = syncResult.childIds;
         return next;
       });
       if (!expandBoardId || expandChildIds.length === 0) return;
       for (const childId of expandChildIds) {
         enrichProductionChecklistForChild(expandBoardId, childId);
       }
+      if (!isDemo && notifyCreated.length > 0) {
+        for (const { childId, laneName } of notifyCreated) {
+          const nextState = appStateRef.current;
+          const pb = nextState?.boards.find((x) => x.id === expandBoardId);
+          const childCard = pb ? findCard(pb, childId)?.card : null;
+          const titleT = (childCard?.title || "").trim() || "Без названия";
+          const url = kanbanCardAbsoluteUrl(childId, expandBoardId);
+          const linkHtml = telegramHtmlLink(url, titleT);
+          postKanbanTelegramNotify({
+            event: "tg_production_new_card",
+            lines: [
+              `Новая карточка производства, дорожка «${laneName}»: ${linkHtml}`,
+            ],
+            parseMode: "HTML",
+            recipientRoles: ["PRODUCTION"],
+          });
+        }
+      }
     },
-    [activityActorLabel, enrichProductionChecklistForChild],
+    [activityActorLabel, enrichProductionChecklistForChild, isDemo],
   );
 
   const ensureProductionBoard = useCallback(
@@ -1401,6 +1433,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 isDemo ? undefined : syncKaitenMirrorAfterKanbanMove
               }
               onCardColumnChanged={({ cardId, toColumnId }) => {
+                let productionTelegramCreates: Array<{
+                  childId: string;
+                  laneName: string;
+                  prodBoardId: string;
+                }> = [];
                 setAppState((s) => {
                   if (!s || isKanbanAggregateBoardId(s.activeBoardId)) return s;
                   const next = structuredClone(s);
@@ -1410,16 +1447,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   if (!toCol) return s;
                   const card = findCard(b, cardId)?.card;
                   if (!card) return s;
-                  if (!card.parentCardId && toCol.title.trim().toLowerCase() === settings.triggerColumnTitle.trim().toLowerCase()) {
+                  if (!card.parentCardId && columnMatchesStage(toCol.title, settings.triggerColumnTitle)) {
                     const prodBoard = ensureProductionBoard(next, b);
-                    const childIds = syncProductionChildrenForParent(
+                    const syncResult = syncProductionChildrenForParent(
                       prodBoard,
                       cardId,
                       activityActorLabel,
                       card,
                     );
-                    card.childCardIds = childIds;
-                    for (const childId of childIds) {
+                    card.childCardIds = syncResult.childIds;
+                    for (const row of syncResult.newlyCreated) {
+                      productionTelegramCreates.push({
+                        childId: row.childId,
+                        laneName: row.laneName,
+                        prodBoardId: prodBoard.id,
+                      });
+                    }
+                    for (const childId of syncResult.childIds) {
                       enrichProductionChecklistForChild(prodBoard.id, childId);
                     }
                   }
@@ -1464,6 +1508,26 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   }
                   return next;
                 });
+                if (!isDemo && productionTelegramCreates.length > 0) {
+                  queueMicrotask(() => {
+                    const st = appStateRef.current;
+                    for (const row of productionTelegramCreates) {
+                      const pb = st?.boards.find((x) => x.id === row.prodBoardId);
+                      const childCard = pb ? findCard(pb, row.childId)?.card : null;
+                      const titleT = (childCard?.title || "").trim() || "Без названия";
+                      const url = kanbanCardAbsoluteUrl(row.childId, row.prodBoardId);
+                      const linkHtml = telegramHtmlLink(url, titleT);
+                      postKanbanTelegramNotify({
+                        event: "tg_production_new_card",
+                        lines: [
+                          `Новая карточка производства, дорожка «${row.laneName}»: ${linkHtml}`,
+                        ],
+                        parseMode: "HTML",
+                        recipientRoles: ["PRODUCTION"],
+                      });
+                    }
+                  });
+                }
               }}
             />
           ) : appState.viewMode === "calendar" ? (

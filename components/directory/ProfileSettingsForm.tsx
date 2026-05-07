@@ -11,6 +11,7 @@ import { CRM_PROFILE_UPDATED_EVENT } from "@/lib/crm-client-events";
 import {
   KANBAN_TELEGRAM_PREF_LABELS,
   KANBAN_TELEGRAM_PREF_SECTIONS,
+  KANBAN_TELEGRAM_PREF_SECTIONS_PRODUCTION,
   type KanbanTelegramPrefKey,
 } from "@/lib/kanban-telegram-prefs";
 import { normalizeTelegramBotUsername } from "@/lib/telegram-bot-username";
@@ -566,6 +567,41 @@ export function ProfileSettingsForm({
                 С сервера сейчас уходит рассылка при сохранении канбана CRM в наряд
                 (колонка и тип карточки). Остальные пункты — по мере подключения.
               </p>
+            </div>
+          ) : telegramLinked && tgPrefs && userRole === "PRODUCTION" ? (
+            <div className="space-y-4 border-t border-[var(--card-border)] pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Личный Telegram: производство
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">
+                Новые карточки на доске «Производство» и упоминания группы через @тег из настроек
+                доски.
+              </p>
+              {KANBAN_TELEGRAM_PREF_SECTIONS_PRODUCTION.map((sec) => (
+                <div key={sec.id}>
+                  <p className="text-xs font-medium text-[var(--text-body)]">{sec.title}</p>
+                  <ul className="mt-2 divide-y divide-[var(--card-border)] rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]">
+                    {sec.keys.map((key) => (
+                      <li
+                        key={key}
+                        className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm"
+                      >
+                        <span className="text-[var(--app-text)]">
+                          {KANBAN_TELEGRAM_PREF_LABELS[key]}
+                        </span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-[var(--input-border)] accent-[var(--sidebar-blue)] disabled:opacity-50"
+                          checked={tgPrefs[key]}
+                          disabled={tgBusy}
+                          onChange={() => void toggleTgPref(key)}
+                          aria-label={KANBAN_TELEGRAM_PREF_LABELS[key]}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           ) : telegramLinked && tgPrefs ? (
             <div className="space-y-2 border-t border-[var(--card-border)] pt-4">

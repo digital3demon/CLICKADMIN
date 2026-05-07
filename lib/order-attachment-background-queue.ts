@@ -29,6 +29,8 @@ const DB_VERSION = 3;
 const STORE = "uploads";
 const IDX_ORDER = "byOrderId";
 const MAX_QUEUE_ATTEMPTS = 3;
+// Держим локальную очередь короткой: старые записи очищаем через 72 часа.
+const STALE_UPLOAD_TTL_MS = 72 * 60 * 60 * 1000;
 
 function resolveOrderProcessConcurrency(): number {
   if (typeof navigator === "undefined") return 4;
@@ -141,6 +143,19 @@ async function txDeleteOne(id: string): Promise<void> {
   });
 }
 
+async function txDeleteMany(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const st = tx.objectStore(STORE);
+    for (const id of ids) st.delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error("IDB deleteMany failed"));
+    tx.onabort = () => reject(tx.error ?? new Error("IDB deleteMany aborted"));
+  });
+}
+
 async function txDeleteByOrder(orderId: string): Promise<void> {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
@@ -159,6 +174,24 @@ async function txDeleteByOrder(orderId: string): Promise<void> {
     tx.onerror = () => reject(tx.error ?? new Error("IDB deleteByOrder tx failed"));
     tx.onabort = () => reject(tx.error ?? new Error("IDB deleteByOrder tx aborted"));
   });
+}
+
+function isExpiredQueuedUpload(row: QueuedUploadRow, nowMs: number): boolean {
+  const createdAt = Number(row.createdAt);
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return true;
+  return nowMs - createdAt > STALE_UPLOAD_TTL_MS;
+}
+
+async function pruneExpiredQueuedUploads(): Promise<number> {
+  const nowMs = Date.now();
+  const rows = await txGetAll(STORE);
+  const staleIds = rows
+    .filter((row) => isExpiredQueuedUpload(row, nowMs))
+    .map((row) => row.id)
+    .filter(Boolean);
+  if (staleIds.length === 0) return 0;
+  await txDeleteMany(staleIds);
+  return staleIds.length;
 }
 
 function ensureOrderTracker(orderId: string, orderNumber: string, total: number): {
@@ -333,6 +366,7 @@ export async function enqueueOrderAttachmentFiles(params: {
   orderNumber: string | null | undefined;
   files: File[];
 }): Promise<number> {
+  await pruneExpiredQueuedUploads();
   const existing = await txGetByOrder(params.orderId);
   const existingFp = new Set(existing.map((row) => uploadFingerprint(row)));
   const rows: QueuedUploadRow[] = [];
@@ -373,6 +407,7 @@ export function kickOrderAttachmentBackgroundProcessor(): void {
     try {
       do {
         processorRequested = false;
+        await pruneExpiredQueuedUploads();
         const rows = await txGetAll(STORE);
         const orderIds = [...new Set(rows.map((r) => r.orderId))];
         for (let i = 0; i < orderIds.length; i += ORDER_PROCESS_CONCURRENCY) {

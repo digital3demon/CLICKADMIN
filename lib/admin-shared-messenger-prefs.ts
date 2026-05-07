@@ -3,6 +3,8 @@ import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
 /** Ключи уведомлений на общий админский Telegram (расширяем по мере задач). */
 export const ADMIN_SHARED_MESSENGER_NOTIFY_KEYS = [
   "tg_mentioned_in_comment",
+  "tg_order_correction_changed",
+  "tg_order_prosthetics_changed",
 ] as const satisfies readonly KanbanTelegramPrefKey[];
 
 export type AdminSharedMessengerNotifyKey =
@@ -13,6 +15,9 @@ export const ADMIN_SHARED_MESSENGER_PREF_LABELS: Record<
   string
 > = {
   tg_mentioned_in_comment: "Упоминания в комментариях (канбан, чат наряда / Kaiten)",
+  tg_order_correction_changed:
+    "Корректировки в наряде (направление, причина, оплата)",
+  tg_order_prosthetics_changed: "Протетика в наряде (состав, признак «заказано»)",
 };
 
 export function mergeAdminSharedMessengerNotifyPrefs(
@@ -20,6 +25,8 @@ export function mergeAdminSharedMessengerNotifyPrefs(
 ): Record<AdminSharedMessengerNotifyKey, boolean> {
   const base: Record<AdminSharedMessengerNotifyKey, boolean> = {
     tg_mentioned_in_comment: true,
+    tg_order_correction_changed: true,
+    tg_order_prosthetics_changed: true,
   };
   if (stored == null || typeof stored !== "object" || Array.isArray(stored)) {
     return base;

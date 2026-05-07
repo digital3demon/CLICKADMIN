@@ -4,7 +4,7 @@ import { KanbanApp } from "@/components/kanban/KanbanApp";
 export const dynamic = "force-dynamic";
 
 /**
- * Канбан-доска встроена в CRM (React + localStorage), без отдельного HTML.
+ * Канбан-доска встроена в CRM (React + server client-state), без отдельного HTML.
  */
 export default async function KanbanPage() {
   const session = await getSessionFromCookies();

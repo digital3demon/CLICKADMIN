@@ -35,6 +35,13 @@ describe("parseMentionUserIdsFromText", () => {
   it("разворачивает общий тег лаборатории в несколько user id", () => {
     const users = [{ id: "x", mentionHandle: "solo" }];
     expect(
+      parseMentionUserIdsFromText("Эй @clickpr для производства", users, {
+        productionMentionTag: "clickpr",
+        productionUserIds: ["prod1", "prod2"],
+      }).sort(),
+    ).toEqual(["prod1", "prod2"].sort());
+
+    expect(
       parseMentionUserIdsFromText("Эй @clicklab и @solo", users, {
         adminMentionTag: "clicklab",
         adminUserIds: ["adm1", "adm2"],

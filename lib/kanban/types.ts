@@ -148,6 +148,8 @@ export type KanbanAutomationRule = {
   id: string;
   enabled: boolean;
   name: string;
+  /** Доска, для которой срабатывает правило (пусто = любая). */
+  boardId: string;
   trigger: KanbanAutomationTrigger;
   /** Колонка, в которую попала карточка (перенос) или где создана */
   columnId: string;
@@ -213,6 +215,8 @@ export type KanbanBoard = {
       name: string;
       keywords: string[];
     }>;
+    /** Токен @упоминания группы «Производство» в чате (по умолчанию clickpr). */
+    productionMentionTag?: string;
   };
 };
 

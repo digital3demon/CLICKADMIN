@@ -29,6 +29,7 @@ export function createEmptyAutomationRule(
     id: generateId("auto"),
     enabled: true,
     name: "Новое правило",
+    boardId: board.id,
     trigger: "card_moved_to_column",
     columnId: colId,
     fromColumnId: "",
@@ -44,6 +45,7 @@ function ruleMatches(
 ): boolean {
   if (!rule.enabled) return false;
   if (rule.trigger !== event.type) return false;
+  if (rule.boardId.trim() && rule.boardId !== board.id) return false;
 
   const card = findCard(board, event.cardId)?.card;
   if (!card) return false;

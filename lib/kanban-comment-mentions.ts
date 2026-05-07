@@ -48,7 +48,22 @@ export type ParseMentionUserIdsOptions = {
   /** Токен без @ (нормализованный), общий для ADMINISTRATOR + SENIOR_ADMINISTRATOR. */
   adminMentionTag?: string;
   adminUserIds?: readonly string[];
+  /** Токен группы «Производство» (настройка доски), все пользователи с ролью PRODUCTION. */
+  productionMentionTag?: string;
+  productionUserIds?: readonly string[];
 };
+
+function escapeRegExpChars(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Есть ли в тексте @token как отдельное упоминание (границы после токена). */
+export function textIncludesMentionToken(text: string, token: string): boolean {
+  const t = sanitizeMentionToken(token).toLowerCase();
+  if (!t) return false;
+  const re = new RegExp(`@(${escapeRegExpChars(t)})(?=$|[^\\p{L}\\p{N}_])`, "giu");
+  return re.test(text);
+}
 
 export function parseMentionUserIdsFromText(
   text: string,
@@ -62,6 +77,12 @@ export function parseMentionUserIdsFromText(
   const adminIds = opts?.adminUserIds?.length
     ? [...new Set(opts.adminUserIds.filter(Boolean))]
     : [];
+  const prodTag = opts?.productionMentionTag
+    ? sanitizeMentionToken(opts.productionMentionTag).toLowerCase()
+    : "";
+  const prodIds = opts?.productionUserIds?.length
+    ? [...new Set(opts.productionUserIds.filter(Boolean))]
+    : [];
   const re = /@([^\s@]+)/gu;
   const out = new Set<string>();
   let m: RegExpExecArray | null;
@@ -71,6 +92,10 @@ export function parseMentionUserIdsFromText(
     const key = sanitizeMentionToken(raw).toLowerCase();
     if (adminTag && key === adminTag) {
       for (const id of adminIds) out.add(id);
+      continue;
+    }
+    if (prodTag && key === prodTag) {
+      for (const id of prodIds) out.add(id);
       continue;
     }
     const id = tokenToId.get(key);
