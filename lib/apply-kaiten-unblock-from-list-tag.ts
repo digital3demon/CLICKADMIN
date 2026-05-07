@@ -57,11 +57,26 @@ export async function applyKaitenUnblockForOrderIfBlocked(
   if (!order) {
     return { kind: "error", message: "Наряд не найден" };
   }
-  if (order.kaitenCardId == null) {
-    return { kind: "skipped", reason: "no_card" };
-  }
   if (!order.kaitenBlocked) {
     return { kind: "skipped", reason: "not_blocked" };
+  }
+  if (order.kaitenCardId == null) {
+    try {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          kaitenBlocked: false,
+          kaitenBlockReason: null,
+        },
+      });
+      void recordOrderRevision(orderId.trim(), { kind: "SAVE" }).catch((revErr) => {
+        console.error("[list-tag crm unblock] revision log", revErr);
+      });
+      return { kind: "done" };
+    } catch (e) {
+      console.error("[list-tag crm unblock] prisma", e);
+      return { kind: "error", message: "Не удалось снять блокировку" };
+    }
   }
 
   const auth = getKaitenRestAuth();

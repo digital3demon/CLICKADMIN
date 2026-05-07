@@ -10,7 +10,7 @@ const LAB_MENTION_ACK_ROLES: UserRole[] = [
 export async function countOrdersWithPendingKaitenLabMentionForUser(
   db: PrismaClient,
   baseWhere: Prisma.OrderWhereInput,
-  _userId?: string,
+  userId?: string,
 ): Promise<number> {
   const candidates = await db.order.findMany({
     where: { AND: [baseWhere, { kaitenChatHasLabMention: true }] },
@@ -18,7 +18,7 @@ export async function countOrdersWithPendingKaitenLabMentionForUser(
   });
   if (candidates.length === 0) return 0;
   const ids = candidates.map((c) => c.id);
-  const acks = await db.orderKaitenLabMentionAck.findMany({
+  const globalAcks = await db.orderKaitenLabMentionAck.findMany({
     where: {
       orderId: { in: ids },
       user: { role: { in: LAB_MENTION_ACK_ROLES } },
@@ -26,10 +26,26 @@ export async function countOrdersWithPendingKaitenLabMentionForUser(
     select: { orderId: true, ackAt: true },
   });
   const ackByOrder = new Map<string, Date>();
-  for (const a of acks) {
+  for (const a of globalAcks) {
     const prev = ackByOrder.get(a.orderId);
     if (!prev || a.ackAt.getTime() > prev.getTime()) {
       ackByOrder.set(a.orderId, a.ackAt);
+    }
+  }
+  const uid = String(userId || "").trim();
+  if (uid) {
+    const ownAcks = await db.orderKaitenLabMentionAck.findMany({
+      where: {
+        orderId: { in: ids },
+        userId: uid,
+      },
+      select: { orderId: true, ackAt: true },
+    });
+    for (const a of ownAcks) {
+      const prev = ackByOrder.get(a.orderId);
+      if (!prev || a.ackAt.getTime() > prev.getTime()) {
+        ackByOrder.set(a.orderId, a.ackAt);
+      }
     }
   }
   let n = 0;

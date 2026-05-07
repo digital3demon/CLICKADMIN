@@ -188,6 +188,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const mirrorSyncInFlightRef = useRef(false);
   const mirrorSyncQueuedRef = useRef(false);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const childChecklistExpandInFlightRef = useRef<Set<string>>(new Set());
   const archiveSettingsReadyRef = useRef(false);
   const lastArchiveSettingsSigRef = useRef("");
   /** Перед первым GET отдаём локальные карточки без наряда на сервер — иначе пустой ответ затрёт их. */
@@ -1247,18 +1248,38 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     [appState, activityActorLabel, isDemo, showToast, syncKaitenMirrorAfterKanbanMove],
   );
 
-  const enrichProductionChecklistForChild = useCallback((boardId: string, childId: string) => {
-    void (async () => {
-      const cur = appStateRef.current;
-      if (!cur) return;
-      const next = structuredClone(cur);
-      const b = next.boards.find((x) => x.id === boardId);
-      if (!b) return;
-      await expandProductionChecklistFromArchives(b, childId);
-      syncProductionChecklistSnapshotsAcrossBoards(next.boards);
-      setAppState(next);
-    })();
+  const enrichProductionChecklistForChild = useCallback(async (boardId: string, childId: string) => {
+    const cur = appStateRef.current;
+    if (!cur) return;
+    const next = structuredClone(cur);
+    const b = next.boards.find((x) => x.id === boardId);
+    if (!b) return;
+    await expandProductionChecklistFromArchives(b, childId);
+    syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+    setAppState(next);
   }, []);
+
+  useEffect(() => {
+    if (!cardModalId || !appState) return;
+    const loc = findCardInAppState(appState, cardModalId);
+    if (!loc) return;
+    const card = loc.card;
+    if (!card.parentCardId) return;
+    const hasZipSource = (card.files || []).some((f) => {
+      const name = String(f.name || "").trim().toLowerCase();
+      const mime = String(f.mime || "").trim().toLowerCase();
+      return name.endsWith(".zip") || mime.includes("zip");
+    });
+    if (!hasZipSource) return;
+    const hasArchiveRows = (card.productionChecklist || []).some((row) => row.fromArchive === true);
+    if (hasArchiveRows) return;
+    const inFlight = childChecklistExpandInFlightRef.current;
+    if (inFlight.has(card.id)) return;
+    inFlight.add(card.id);
+    void enrichProductionChecklistForChild(loc.board.id, card.id).finally(() => {
+      inFlight.delete(card.id);
+    });
+  }, [appState, cardModalId, enrichProductionChecklistForChild]);
 
   const syncParentProductionChildrenAfterFilesAttach = useCallback(
     (cardId: string) => {

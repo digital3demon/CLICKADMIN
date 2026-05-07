@@ -4,8 +4,6 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
-const LAB_MENTION_ACK_ROLES = new Set(["ADMINISTRATOR", "SENIOR_ADMINISTRATOR"]);
-
 /** POST — пользователь открыл чат Kaiten и подтвердил просмотр упоминания лаборатории для этого наряда. */
 export async function POST(
   _req: Request,
@@ -18,9 +16,6 @@ export async function POST(
   const tenantId = await orderTenantIdForSession(session);
   if (!tenantId) {
     return NextResponse.json({ error: "Нет контекста организации" }, { status: 403 });
-  }
-  if (!LAB_MENTION_ACK_ROLES.has(session.role)) {
-    return NextResponse.json({ ok: true, skipped: "role_not_allowed" });
   }
   const { id: orderId } = await ctx.params;
   const oid = orderId?.trim();

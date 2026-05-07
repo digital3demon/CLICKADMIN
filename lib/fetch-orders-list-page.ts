@@ -112,12 +112,12 @@ function toOrderListPageRow(o: OrderListPageRowRaw): OrderListPageRow {
 
 async function hydrateKaitenLabMentionForOrdersList(
   db: PrismaClient,
-  _userId: string | null | undefined,
+  userId: string | null | undefined,
   rows: OrderListPageRow[],
 ): Promise<OrderListPageRow[]> {
   if (rows.length === 0) return rows;
   const ids = rows.map((r) => r.id);
-  const acks = await db.orderKaitenLabMentionAck.findMany({
+  const globalAcks = await db.orderKaitenLabMentionAck.findMany({
     where: {
       orderId: { in: ids },
       user: { role: { in: LAB_MENTION_ACK_ROLES } },
@@ -125,10 +125,23 @@ async function hydrateKaitenLabMentionForOrdersList(
     select: { orderId: true, ackAt: true },
   });
   const ackMap = new Map<string, Date>();
-  for (const a of acks) {
+  for (const a of globalAcks) {
     const prev = ackMap.get(a.orderId);
     if (!prev || a.ackAt.getTime() > prev.getTime()) {
       ackMap.set(a.orderId, a.ackAt);
+    }
+  }
+  const uid = String(userId || "").trim();
+  if (uid) {
+    const ownAcks = await db.orderKaitenLabMentionAck.findMany({
+      where: { orderId: { in: ids }, userId: uid },
+      select: { orderId: true, ackAt: true },
+    });
+    for (const a of ownAcks) {
+      const prev = ackMap.get(a.orderId);
+      if (!prev || a.ackAt.getTime() > prev.getTime()) {
+        ackMap.set(a.orderId, a.ackAt);
+      }
     }
   }
   return rows.map((r) => ({

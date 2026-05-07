@@ -41,6 +41,22 @@ type CommentRow = {
   images?: ChatImage[];
 };
 
+type KanbanRow = {
+  id: string;
+  text: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  rejectedAt: string | null;
+};
+
+type KanbanFeedItem = {
+  id: string;
+  text: string;
+  createdAt: string;
+  source: "correction" | "prosthetics";
+  state: "pending" | "accepted" | "rejected";
+};
+
 type ChatImage = {
   id: string;
   name: string;
@@ -106,7 +122,6 @@ export function OrderKaitenTab({
   initialTrackLane,
   initialKaitenBlocked,
   initialKaitenBlockReason,
-  kaitenDecideLater = false,
   kaitenSyncError = null,
   kaitenCardTypeId = null,
 }: {
@@ -155,6 +170,10 @@ export function OrderKaitenTab({
   const [blockReasonDraft, setBlockReasonDraft] = useState("");
   const [blockBusy, setBlockBusy] = useState(false);
   const [blockError, setBlockError] = useState<string | null>(null);
+  const [noCardBlocked, setNoCardBlocked] = useState(initialKaitenBlocked === true);
+  const [noCardBlockReason, setNoCardBlockReason] = useState<string | null>(
+    initialKaitenBlockReason?.trim() ? initialKaitenBlockReason.trim() : null,
+  );
 
   const [boardOverride, setBoardOverride] = useState<{
     columns: Array<{ id: number; title?: string; name?: string }>;
@@ -166,6 +185,12 @@ export function OrderKaitenTab({
   const [linkIdDraft, setLinkIdDraft] = useState("");
   const [createTitleDraft, setCreateTitleDraft] = useState("");
   const [manualKaitenError, setManualKaitenError] = useState<string | null>(null);
+  const [kanbanFeed, setKanbanFeed] = useState<KanbanFeedItem[]>([]);
+  const [kanbanFeedLoading, setKanbanFeedLoading] = useState(false);
+  const [kanbanFeedError, setKanbanFeedError] = useState<string | null>(null);
+  const [kanbanPostText, setKanbanPostText] = useState("");
+  const [kanbanPosting, setKanbanPosting] = useState(false);
+  const [kanbanPostError, setKanbanPostError] = useState<string | null>(null);
 
   const [kaitenTypeOptions, setKaitenTypeOptions] = useState<KaitenCardTypeOpt[]>(
     [],
@@ -178,6 +203,13 @@ export function OrderKaitenTab({
   useEffect(() => {
     setCreateKaitenCardTypeId(kaitenCardTypeId ?? "");
   }, [kaitenCardTypeId, orderId]);
+
+  useEffect(() => {
+    setNoCardBlocked(initialKaitenBlocked === true);
+    setNoCardBlockReason(
+      initialKaitenBlockReason?.trim() ? initialKaitenBlockReason.trim() : null,
+    );
+  }, [initialKaitenBlocked, initialKaitenBlockReason, orderId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -568,6 +600,107 @@ export function OrderKaitenTab({
     }
   };
 
+  const loadKanbanFeed = useCallback(async () => {
+    setKanbanFeedLoading(true);
+    setKanbanFeedError(null);
+    try {
+      const [corrRes, protRes] = await Promise.all([
+        fetch(`/api/orders/${orderId}/chat-corrections`, {
+          credentials: "include",
+          cache: "no-store",
+        }),
+        fetch(`/api/orders/${orderId}/prosthetics-requests`, {
+          credentials: "include",
+          cache: "no-store",
+        }),
+      ]);
+      const corrData = (await corrRes.json().catch(() => ({}))) as {
+        corrections?: KanbanRow[];
+        error?: string;
+      };
+      const protData = (await protRes.json().catch(() => ({}))) as {
+        requests?: KanbanRow[];
+        error?: string;
+      };
+      if (!corrRes.ok) {
+        setKanbanFeedError(corrData.error ?? "Не удалось загрузить корректировки");
+        setKanbanFeed([]);
+        return;
+      }
+      if (!protRes.ok) {
+        setKanbanFeedError(protData.error ?? "Не удалось загрузить заявки по протетике");
+        setKanbanFeed([]);
+        return;
+      }
+      const corrections = Array.isArray(corrData.corrections)
+        ? corrData.corrections
+        : [];
+      const requests = Array.isArray(protData.requests) ? protData.requests : [];
+      const items: KanbanFeedItem[] = [
+        ...corrections.map((row) => ({
+          id: `corr-${row.id}`,
+          text: row.text,
+          createdAt: row.createdAt,
+          source: "correction" as const,
+          state: (row.rejectedAt
+            ? "rejected"
+            : row.resolvedAt
+              ? "accepted"
+              : "pending") as KanbanFeedItem["state"],
+        })),
+        ...requests.map((row) => ({
+          id: `pros-${row.id}`,
+          text: row.text,
+          createdAt: row.createdAt,
+          source: "prosthetics" as const,
+          state: (row.rejectedAt
+            ? "rejected"
+            : row.resolvedAt
+              ? "accepted"
+              : "pending") as KanbanFeedItem["state"],
+        })),
+      ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      setKanbanFeed(items);
+    } catch {
+      setKanbanFeedError("Сеть недоступна");
+      setKanbanFeed([]);
+    } finally {
+      setKanbanFeedLoading(false);
+    }
+  }, [orderId]);
+
+  const sendKanbanChatMessage = useCallback(async () => {
+    const text = kanbanPostText.trim();
+    if (!text) return;
+    setKanbanPosting(true);
+    setKanbanPostError(null);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/chat-corrections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setKanbanPostError(data.error ?? "Не отправлено");
+        return;
+      }
+      setKanbanPostText("");
+      await loadKanbanFeed();
+      router.refresh();
+    } catch {
+      setKanbanPostError("Сеть недоступна");
+    } finally {
+      setKanbanPosting(false);
+    }
+  }, [kanbanPostText, loadKanbanFeed, orderId, router]);
+
+  useEffect(() => {
+    if (kaitenCardId != null) return;
+    void loadKanbanFeed();
+  }, [kaitenCardId, loadKanbanFeed]);
+
   if (kaitenCardId == null) {
     const hasKaitenCreateFields =
       String(createKaitenCardTypeId).trim() !== "" &&
@@ -632,6 +765,49 @@ export function OrderKaitenTab({
       }
     };
 
+    const setNoCardBlockState = async (blocked: boolean, reason?: string) => {
+      setBlockError(null);
+      setBlockBusy(true);
+      try {
+        const label = blocked ? "Заблокировать карточку" : "Разблокировать карточку";
+        const res = await fetch(`/api/orders/${orderId}/list-tags`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label,
+            ...(blocked ? { blockReason: reason ?? "" } : {}),
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          kaitenBlock?: { kind?: string; message?: string };
+          kaitenUnblock?: { kind?: string; message?: string };
+        };
+        if (!res.ok) {
+          setBlockError(data.error ?? "Не удалось сохранить блокировку");
+          return;
+        }
+        const result = blocked ? data.kaitenBlock : data.kaitenUnblock;
+        if (result?.kind === "error") {
+          setBlockError(result.message ?? "Не удалось сохранить блокировку");
+          return;
+        }
+        setNoCardBlocked(blocked);
+        if (blocked) {
+          const cleaned = String(reason ?? "").trim();
+          setNoCardBlockReason(cleaned || null);
+          setBlockReasonDraft("");
+        } else {
+          setNoCardBlockReason(null);
+        }
+        router.refresh();
+      } catch {
+        setBlockError("Сеть недоступна");
+      } finally {
+        setBlockBusy(false);
+      }
+    };
+
     return (
       <div className="space-y-6">
         <p className="text-xs text-[var(--text-muted)]">
@@ -661,38 +837,62 @@ export function OrderKaitenTab({
         <div className={KAITEN_TAB_GRID_CLASS}>
           <div className={`order-2 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>
             <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-              Блокировка (как в Kaiten)
+              Блокировка карточки
             </h3>
             <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
-              Блокировка станет доступна после привязки карточки к Kaiten.
+              Работает в канбане и во внешней карточке.
             </p>
-            <div className="mt-3 space-y-3">
-              <textarea
-                disabled
-                placeholder="Причина блокировки"
-                className="min-h-[5.5rem] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] placeholder:text-[var(--text-muted)] opacity-75"
-                rows={3}
-              />
-              <button
-                type="button"
-                disabled
-                className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white opacity-50"
-              >
-                Заблокировать в Kaiten
-              </button>
-            </div>
+            {blockError ? (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">{blockError}</p>
+            ) : null}
+            {noCardBlocked ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-sm font-medium text-[var(--text-strong)]">
+                  Карточка сейчас заблокирована
+                </p>
+                {noCardBlockReason ? (
+                  <p className="whitespace-pre-wrap rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-2 text-xs leading-relaxed text-[var(--app-text)]">
+                    {noCardBlockReason}
+                  </p>
+                ) : (
+                  <p className="text-xs text-[var(--text-muted)]">Причина не указана.</p>
+                )}
+                <button
+                  type="button"
+                  disabled={blockBusy}
+                  onClick={() => void setNoCardBlockState(false)}
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50"
+                >
+                  {blockBusy ? "Запрос…" : "Разблокировать карточку"}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                <textarea
+                  placeholder="Причина блокировки"
+                  className="min-h-[5.5rem] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] placeholder:text-[var(--text-muted)]"
+                  rows={3}
+                  value={blockReasonDraft}
+                  onChange={(e) => setBlockReasonDraft(e.target.value)}
+                />
+                <button
+                  type="button"
+                  disabled={blockBusy || !blockReasonDraft.trim()}
+                  onClick={() =>
+                    void setNoCardBlockState(true, blockReasonDraft)
+                  }
+                  className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-600 disabled:opacity-50"
+                >
+                  {blockBusy ? "Запрос…" : "Заблокировать карточку"}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className={`order-3 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>
             <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-              Шапка и положение на доске (Канбан / Kaiten)
+              Шапка и положение на доске
             </h3>
-            {kaitenDecideLater ? (
-              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-                Было отмечено «настроить Kaiten позже» — укажите тип, пространство и
-                колонку ниже и нажмите кнопку.
-              </p>
-            ) : null}
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
                 Заголовок карточки
@@ -704,7 +904,7 @@ export function OrderKaitenTab({
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
-                Тип карточки Kaiten
+                Тип карточки
                 <select
                   className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm"
                   value={String(createKaitenCardTypeId)}
@@ -771,32 +971,67 @@ export function OrderKaitenTab({
               Чат карточки
             </h3>
             <ul className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto lg:max-h-none max-h-[min(50vh,28rem)]">
-              <li className="text-sm text-[var(--text-muted)]">
-                Чат Kaiten появится после привязки карточки.
-              </li>
+              <li className="text-sm text-[var(--text-muted)]">Канбан-чат по наряду.</li>
               <li className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--text-secondary)]">
-                Пока можно использовать чат в карточке канбана CRM.
+                Сообщения отправляются как «Корректировки» в карточку наряда.
               </li>
+              {kanbanFeedLoading ? (
+                <li className="text-xs text-[var(--text-muted)]">Загрузка…</li>
+              ) : null}
+              {!kanbanFeedLoading && kanbanFeed.length === 0 ? (
+                <li className="text-xs text-[var(--text-muted)]">Пока нет сообщений.</li>
+              ) : null}
+              {kanbanFeed.map((item) => (
+                <li
+                  key={item.id}
+                  className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--text-muted)]">
+                    <span className="font-semibold">
+                      {item.source === "correction" ? "Корректировка" : "Протетика"}
+                    </span>
+                    <span>{new Date(item.createdAt).toLocaleString("ru-RU")}</span>
+                    <span>
+                      {item.state === "accepted"
+                        ? "Принято"
+                        : item.state === "rejected"
+                          ? "Отклонено"
+                          : "В работе"}
+                    </span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-text)]">
+                    {item.text}
+                  </p>
+                </li>
+              ))}
             </ul>
+            {kanbanFeedError ? (
+              <p className="mt-1 text-sm text-red-600">{kanbanFeedError}</p>
+            ) : null}
             <div className="relative mt-2">
               <textarea
-                disabled
-                className="min-h-[88px] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] opacity-75"
+                className="min-h-[88px] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
                 placeholder="Новое сообщение…"
+                value={kanbanPostText}
+                onChange={(e) => setKanbanPostText(e.target.value)}
               />
             </div>
+            {kanbanPostError ? (
+              <p className="mt-1 text-sm text-red-600">{kanbanPostError}</p>
+            ) : null}
             <button
               type="button"
-              disabled
-              className="mt-2 rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm font-medium text-[var(--text-strong)] opacity-50"
+              disabled={kanbanPosting || !kanbanPostText.trim()}
+              onClick={() => void sendKanbanChatMessage()}
+              className="mt-2 rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
             >
-              Отправить в Kaiten
+              {kanbanPosting ? "Отправка…" : "Отправить"}
             </button>
           </div>
         </div>
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-4">
           <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-            Создание карточки в Kaiten
+            Создание внешней карточки
           </h3>
           <p className="mt-2 text-xs text-[var(--text-secondary)]">
             Использует параметры из правого блока: заголовок, тип, пространство и колонку.

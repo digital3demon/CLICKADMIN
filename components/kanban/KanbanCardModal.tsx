@@ -1949,18 +1949,8 @@ export function KanbanCardModal({
                         key={`snapshot-${row.id}`}
                         className="rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-2"
                       >
-                        <div className="mb-1 flex items-center justify-between gap-2 text-[0.76rem]">
-                          <div className="min-w-0 truncate text-[var(--kaiten-modal-text)]">
-                            {row.title}
-                          </div>
-                          <span
-                            className={`shrink-0 rounded border px-1.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wide ${childStatusBadge(row.columnTitle)}`}
-                          >
-                            {row.isLive ? row.columnTitle : `Архив (${row.columnTitle})`}
-                          </span>
-                        </div>
-                        <div className="mb-1 text-[0.68rem] text-[var(--kaiten-modal-muted)]">
-                          Колонка дочерней карточки: {row.columnTitle}
+                        <div className="mb-1 min-w-0 truncate text-[0.76rem] text-[var(--kaiten-modal-text)]">
+                          {row.title}
                         </div>
                         {row.checklist.length === 0 ? (
                           <div className="text-[0.72rem] text-[var(--kaiten-modal-muted)]">
