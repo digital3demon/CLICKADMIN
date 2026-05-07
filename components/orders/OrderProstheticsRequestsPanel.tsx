@@ -31,6 +31,16 @@ function orderProstheticsRequestsPollMs(): number {
   return Math.min(Math.max(n, 2000), 30_000);
 }
 
+function parseRetryAfterMs(value: string | null): number {
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+  const asSeconds = Number.parseInt(raw, 10);
+  if (Number.isFinite(asSeconds) && asSeconds > 0) return asSeconds * 1000;
+  const dateMs = Date.parse(raw);
+  if (Number.isFinite(dateMs)) return Math.max(0, dateMs - Date.now());
+  return 0;
+}
+
 export function OrderProstheticsRequestsPanel({
   orderId,
   requests,
@@ -45,6 +55,9 @@ export function OrderProstheticsRequestsPanel({
   const [err, setErr] = useState<string | null>(null);
   const [live, setLive] = useState<OrderProstheticsRequestInitial[]>(requests);
   const lastFpRef = useRef(requestsFingerprint(requests));
+  const pollInFlightRef = useRef(false);
+  const nextPollAllowedAtRef = useRef(0);
+  const pollBackoffMsRef = useRef(0);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
   /** Только при смене наряда — иначе устаревшие props после accept/reject затирали live. */
@@ -60,12 +73,28 @@ export function OrderProstheticsRequestsPanel({
 
     const tick = async () => {
       if (cancelled || document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (pollInFlightRef.current) return;
+      if (nextPollAllowedAtRef.current > now) return;
+      pollInFlightRef.current = true;
       try {
         const res = await fetch(`/api/orders/${orderId}/prosthetics-requests`, {
           credentials: "include",
           cache: "no-store",
         });
-        if (!res.ok || cancelled) return;
+        if (res.status === 429) {
+          const retryMs = Math.max(1000, parseRetryAfterMs(res.headers.get("Retry-After")));
+          nextPollAllowedAtRef.current = Date.now() + retryMs;
+          return;
+        }
+        if (!res.ok || cancelled) {
+          pollBackoffMsRef.current = Math.min(
+            60_000,
+            Math.max(4000, pollBackoffMsRef.current * 2 || 4000),
+          );
+          nextPollAllowedAtRef.current = Date.now() + pollBackoffMsRef.current;
+          return;
+        }
         const j = (await res.json().catch(() => ({}))) as {
           requests?: OrderProstheticsRequestInitial[];
         };
@@ -76,8 +105,16 @@ export function OrderProstheticsRequestsPanel({
           lastFpRef.current = fp;
           setLive(next);
         }
+        pollBackoffMsRef.current = 0;
+        nextPollAllowedAtRef.current = 0;
       } catch {
-        /* ignore */
+        pollBackoffMsRef.current = Math.min(
+          60_000,
+          Math.max(4000, pollBackoffMsRef.current * 2 || 4000),
+        );
+        nextPollAllowedAtRef.current = Date.now() + pollBackoffMsRef.current;
+      } finally {
+        pollInFlightRef.current = false;
       }
     };
 

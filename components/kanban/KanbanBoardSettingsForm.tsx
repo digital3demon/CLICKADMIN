@@ -5,7 +5,7 @@ import {
   DEFAULT_KANBAN_ADMIN_MENTION_TAG,
   normalizeKanbanAdminMentionTag,
 } from "@/lib/kanban-admin-mention";
-import { clampArchiveRetentionDays, generateId } from "@/lib/kanban/model";
+import { clampArchiveRetentionDays, generateId, trackLanes } from "@/lib/kanban/model";
 import { defaultProductionSettings, normalizeProductionSettings } from "@/lib/kanban/production";
 import { useEffect, useMemo, useState } from "react";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
@@ -133,6 +133,22 @@ export function KanbanBoardSettingsForm({
         </label>
         <p className="mt-2 text-[0.75rem] text-[var(--text-muted)]">
           Только отмеченные доски видны в выборе пространства при создании нового наряда.
+        </p>
+        <label className="mt-3 inline-flex items-center gap-2 text-sm text-[var(--text-body)]">
+          <input
+            type="checkbox"
+            checked={board.allowProductionRoleAccess === true}
+            onChange={(e) =>
+              onPatchBoard((b) => {
+                b.allowProductionRoleAccess = e.target.checked;
+              })
+            }
+          />
+          Разрешить роль «Производство» (для закрытой доски)
+        </label>
+        <p className="mt-2 text-[0.75rem] text-[var(--text-muted)]">
+          Если доска закрытая, пользователи роли «Производство» получат доступ без ручного выбора
+          в списке пользователей.
         </p>
       </section>
 
@@ -416,6 +432,7 @@ export function KanbanBoardSettingsForm({
             <tr className="border-b border-[var(--card-border)] text-left text-[var(--text-muted)]">
               <th className="py-2 pr-2">Название</th>
               <th className="py-2 pr-2">Цвет</th>
+              <th className="py-2 pr-2">Пространство по умолчанию</th>
               <th className="w-10 py-2" />
             </tr>
           </thead>
@@ -451,6 +468,26 @@ export function KanbanBoardSettingsForm({
                     }
                     className="h-8 w-14 cursor-pointer rounded border border-[var(--input-border)] bg-[var(--input-bg)]"
                   />
+                </td>
+                <td className="py-2 pr-2">
+                  <select
+                    value={t.defaultTrackLane || ""}
+                    onChange={(e) =>
+                      onPatchBoard((b) => {
+                        const x = (b.cardTypes || []).find((y) => y.id === t.id);
+                        if (!x) return;
+                        x.defaultTrackLane = e.target.value || undefined;
+                      })
+                    }
+                    className="h-8 w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-[var(--app-text)]"
+                  >
+                    <option value="">Не задано</option>
+                    {trackLanes().map((lane) => (
+                      <option key={lane.id} value={lane.id}>
+                        {lane.name}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="py-2 text-right">
                   <button

@@ -10,6 +10,7 @@ import type {
   KanbanFilters,
   CardTypeDef,
 } from "./types";
+import type { UserRole } from "@prisma/client";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
@@ -79,8 +80,10 @@ export function isKanbanAggregateBoardId(id: string): boolean {
 export function canUserAccessBoard(
   board: KanbanBoard,
   userId: string | null | undefined,
+  role?: UserRole | null,
 ): boolean {
   if (board.isPrivate !== true) return true;
+  if (board.allowProductionRoleAccess === true && role === "PRODUCTION") return true;
   const uid = String(userId || "").trim();
   if (!uid) return false;
   return (board.accessUserIds || []).includes(uid);
@@ -284,7 +287,13 @@ export function applyKaitenApiCardTypesToMirrorBoards(
     const b = next.boards.find((x) => x.id === bid);
     if (!b) continue;
     const oldTypes = b.cardTypes ? [...b.cardTypes] : [];
-    b.cardTypes = newTypes.map((t) => ({ ...t }));
+    const oldDefaultLaneById = new Map(
+      oldTypes.map((t) => [t.id, (t.defaultTrackLane || "").trim() || undefined]),
+    );
+    b.cardTypes = newTypes.map((t) => ({
+      ...t,
+      defaultTrackLane: oldDefaultLaneById.get(t.id),
+    }));
     for (const col of b.columns) {
       for (const c of col.cards) {
         if (!c.cardTypeId) continue;
@@ -327,6 +336,7 @@ export function normalizeBoardCardTypes(board: KanbanBoard) {
       if (!t.name || !String(t.name).trim()) {
         t.name = base?.name || "Тип";
       }
+      t.defaultTrackLane = String(t.defaultTrackLane || "").trim() || undefined;
     }
     board.cardTypes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
     return;
@@ -351,6 +361,7 @@ export function normalizeBoardCardTypes(board: KanbanBoard) {
     }
     if (t.sortOrder == null) t.sortOrder = base?.sortOrder ?? 0;
     if (!t.name || !String(t.name).trim()) t.name = base?.name || "Тип";
+    t.defaultTrackLane = String(t.defaultTrackLane || "").trim() || undefined;
   });
   board.cardTypes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 }
@@ -823,6 +834,9 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
     board.distributeNewOrders = defaultDistributeNewOrdersByBoardId(board.id);
   }
   if (typeof board.isPrivate !== "boolean") board.isPrivate = false;
+  if (typeof board.allowProductionRoleAccess !== "boolean") {
+    board.allowProductionRoleAccess = false;
+  }
   if (!Array.isArray(board.accessUserIds)) board.accessUserIds = [];
   if (!Array.isArray(board.autoArchiveRules)) board.autoArchiveRules = [];
   if (!Array.isArray(board.archivedCards)) board.archivedCards = [];
@@ -976,6 +990,7 @@ export function createBoardShell(boardId: string, title: string): KanbanBoard {
     title,
     distributeNewOrders: defaultDistributeNewOrdersByBoardId(boardId),
     isPrivate: false,
+    allowProductionRoleAccess: false,
     accessUserIds: [],
     columns,
     users,
@@ -1229,7 +1244,7 @@ export function findCardInAppState(
  */
 export function buildKanbanDisplayView(
   state: KanbanAppState,
-  opts?: { sessionUserId?: string | null },
+  opts?: { sessionUserId?: string | null; sessionUserRole?: UserRole | null },
 ): {
   displayBoard: KanbanBoard;
   cardHomeBoardId: Map<string, string>;
@@ -1238,8 +1253,9 @@ export function buildKanbanDisplayView(
   const q = (state.search || "").trim().toLowerCase();
   const agg = kanbanAggregateMode(state.activeBoardId);
   const sessionUserId = (opts?.sessionUserId ?? "").trim();
+  const sessionUserRole = opts?.sessionUserRole ?? null;
   const accessibleBoards = state.boards.filter((b) =>
-    canUserAccessBoard(b, sessionUserId || null),
+    canUserAccessBoard(b, sessionUserId || null, sessionUserRole),
   );
 
   const textMatches = (card: KanbanCard) => {
@@ -1269,7 +1285,7 @@ export function buildKanbanDisplayView(
       const seen = new Set<string>();
       const titleNorm = colView.title.trim().toLowerCase();
       for (const home of listKanbanAggregateSourceBoards(state)) {
-        if (!canUserAccessBoard(home, uid || null)) continue;
+        if (!canUserAccessBoard(home, uid || null, sessionUserRole)) continue;
         const colO = home.columns.find(
           (c) => c.title.trim().toLowerCase() === titleNorm,
         );
@@ -1308,7 +1324,9 @@ export function buildKanbanDisplayView(
 
   const active =
     state.boards.find(
-      (b) => b.id === state.activeBoardId && canUserAccessBoard(b, sessionUserId || null),
+      (b) =>
+        b.id === state.activeBoardId &&
+        canUserAccessBoard(b, sessionUserId || null, sessionUserRole),
     ) ??
     accessibleBoards[0] ??
     state.boards[0]!;
@@ -1340,7 +1358,7 @@ export function buildKanbanDisplayView(
     const titleNorm = colView.title.trim().toLowerCase();
     for (const ob of state.boards) {
       if (ob.id === active.id) continue;
-      if (!canUserAccessBoard(ob, sessionUserId || null)) continue;
+      if (!canUserAccessBoard(ob, sessionUserId || null, sessionUserRole)) continue;
       const colO = ob.columns.find(
         (c) => c.title.trim().toLowerCase() === titleNorm,
       );

@@ -80,6 +80,21 @@ function kanbanCardAbsoluteUrl(cardId: string, boardId: string): string {
   return `${window.location.origin}${basePath}?${q.toString()}`;
 }
 
+type BoardLaneColumnParts = {
+  laneName: string;
+  stageName: string;
+};
+
+function splitBoardLaneColumnTitle(title: string): BoardLaneColumnParts | null {
+  const raw = String(title || "").trim();
+  const splitIx = raw.indexOf("·");
+  if (splitIx <= 0) return null;
+  const laneName = raw.slice(0, splitIx).trim();
+  const stageName = raw.slice(splitIx + 1).trim();
+  if (!laneName || !stageName) return null;
+  return { laneName, stageName };
+}
+
 /** Ссылка с подписью «шапка карточки» для Telegram HTML. */
 function kanbanCardLinkHtml(
   cardId: string,
@@ -159,6 +174,7 @@ type KanbanCardModalProps = {
   toast: (msg: string, err?: boolean) => void;
   onMovePrevStage: (id: string) => void;
   onMoveNextStage: (id: string) => void;
+  onMoveToColumn?: (cardId: string, targetColumnId: string) => void;
   /** Копирует в буфер ссылку на карточку (как в меню на доске). */
   onCopyCardLink: (cardId: string) => void;
   /** Если задано — список дорожек вместо ортопедия/ортодонтия (демо: одна доска). */
@@ -175,6 +191,7 @@ type KanbanCardModalProps = {
   canManageAssignees?: boolean;
   canManageParticipants?: boolean;
   onOpenLinkedCard?: (cardId: string) => void;
+  onParentProductionFilesUpdated?: (cardId: string) => void;
 };
 
 export function KanbanCardModal({
@@ -186,6 +203,7 @@ export function KanbanCardModal({
   toast,
   onMovePrevStage,
   onMoveNextStage,
+  onMoveToColumn,
   onCopyCardLink,
   trackLaneOptions,
   trackLaneFieldLabel,
@@ -197,6 +215,7 @@ export function KanbanCardModal({
   canManageAssignees = true,
   canManageParticipants = true,
   onOpenLinkedCard,
+  onParentProductionFilesUpdated,
 }: KanbanCardModalProps) {
   const [rightTab, setRightTab] = useState<"chat" | "act">("chat");
   const [blockPopupOpen, setBlockPopupOpen] = useState(false);
@@ -272,6 +291,26 @@ export function KanbanCardModal({
   const linkedOrderId = card?.linkedOrderId;
   const kaitenCardIdForChat = card?.kaitenCardId;
   const currentColumnTitle = found?.col?.title || "—";
+  const laneTransfer = useMemo(() => {
+    if (!cardId || !found || !onMoveToColumn) return null;
+    const current = splitBoardLaneColumnTitle(found.col.title);
+    if (!current) return null;
+    const lanes = new Set<string>();
+    const targetColumnByLane = new Map<string, string>();
+    for (const col of board.columns) {
+      const parts = splitBoardLaneColumnTitle(col.title);
+      if (!parts) continue;
+      lanes.add(parts.laneName);
+      if (parts.stageName.trim().toLowerCase() !== current.stageName.trim().toLowerCase()) continue;
+      targetColumnByLane.set(parts.laneName, col.id);
+    }
+    if (lanes.size < 2) return null;
+    return {
+      currentLaneName: current.laneName,
+      laneNames: [...lanes],
+      targetColumnByLane,
+    };
+  }, [cardId, found, onMoveToColumn, board.columns]);
   const chatActorUserId =
     (commentAuthorUserId ?? "").trim() || board.users[0]?.id || "";
 
@@ -676,6 +715,7 @@ export function KanbanCardModal({
       Boolean(card.linkedOrderId) &&
       card.kaitenCardId != null &&
       Number.isFinite(card.kaitenCardId);
+    let attachedOkCount = 0;
     for (const file of fileList) {
       try {
         let orderAttId: string | undefined;
@@ -706,9 +746,13 @@ export function KanbanCardModal({
             });
           }
         });
+        attachedOkCount += 1;
       } catch (e) {
         toast(e instanceof Error ? e.message : "Не удалось прочитать файл", true);
       }
+    }
+    if (attachedOkCount > 0 && !card.parentCardId) {
+      onParentProductionFilesUpdated?.(cardId);
     }
   };
 
@@ -1177,6 +1221,34 @@ export function KanbanCardModal({
                       </option>
                     ))}
                   </select>
+                  {laneTransfer ? (
+                    <div className="mt-2">
+                      <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+                        Перенос между дорожками
+                      </div>
+                      <select
+                        className={baseInput}
+                        value={laneTransfer.currentLaneName}
+                        onChange={(e) => {
+                          const laneName = e.target.value;
+                          if (laneName === laneTransfer.currentLaneName) return;
+                          const targetColumnId = laneTransfer.targetColumnByLane.get(laneName);
+                          if (!targetColumnId) {
+                            toast("Для этой дорожки нет подходящего столбца этапа", true);
+                            return;
+                          }
+                          if (!cardId || !onMoveToColumn) return;
+                          onMoveToColumn(cardId, targetColumnId);
+                        }}
+                      >
+                        {laneTransfer.laneNames.map((laneName) => (
+                          <option key={laneName} value={laneName}>
+                            {laneName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
                 </div>
                 <div>
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">

@@ -10,6 +10,8 @@ export type CardTypeDef = {
   name: string;
   sortOrder: number;
   color: string;
+  /** Пространство (дорожка) по умолчанию для нового заказа/карточки. */
+  defaultTrackLane?: string;
 };
 
 export type ChecklistItem = {
@@ -177,6 +179,8 @@ export type KanbanBoard = {
   distributeNewOrders?: boolean;
   /** Закрытая доска: доступ только пользователям из `accessUserIds`. */
   isPrivate?: boolean;
+  /** Разрешить доступ всем пользователям с ролью `PRODUCTION` (актуально для закрытых досок). */
+  allowProductionRoleAccess?: boolean;
   /** Список userId, у кого есть доступ к закрытой доске. */
   accessUserIds?: string[];
   columns: KanbanColumn[];

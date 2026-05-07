@@ -73,6 +73,7 @@ export const ROLES_IN_ACCESS_MATRIX: UserRole[] = [
   "ADMINISTRATOR",
   "SENIOR_ADMINISTRATOR",
   "SENIOR_TECHNICIAN",
+  "PRODUCTION",
   "MANAGER",
   "ACCOUNTANT",
   "FINANCIAL_MANAGER",
@@ -91,6 +92,9 @@ export function defaultModuleAllowed(
     return true;
   }
   if (role === "USER") {
+    return module === "KANBAN";
+  }
+  if (role === "PRODUCTION") {
     return module === "KANBAN";
   }
   if (role === "MANAGER") {

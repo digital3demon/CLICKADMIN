@@ -20,7 +20,10 @@ import {
   closestCenter,
   rectIntersection,
   DndContext,
+  DragOverlay,
+  type DragCancelEvent,
   type DragEndEvent,
+  type DragStartEvent,
   type DraggableSyntheticListeners,
   KeyboardSensor,
   PointerSensor,
@@ -42,6 +45,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -51,6 +55,7 @@ import {
   IconBrick,
   IconClock,
   IconDots,
+  IconGrip,
   IconListCheck,
   IconPen,
   IconPlus,
@@ -476,7 +481,7 @@ function SortableKanbanCard({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.55 : undefined,
+    opacity: isDragging ? 0.08 : undefined,
     ...(dndLocked ? {} : { touchAction: "none" as const }),
   };
 
@@ -506,6 +511,7 @@ function SortableColumnSection({
   visCount,
   totalCount,
   layoutLocked,
+  columnDragDisabled,
 }: {
   col: KanbanBoard["columns"][0];
   children: ReactNode;
@@ -514,9 +520,10 @@ function SortableColumnSection({
   visCount: number;
   totalCount: number;
   layoutLocked?: boolean;
+  columnDragDisabled?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: col.id, disabled: Boolean(layoutLocked) });
+    useSortable({ id: col.id, disabled: Boolean(layoutLocked || columnDragDisabled) });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -524,7 +531,7 @@ function SortableColumnSection({
     ...(!layoutLocked ? { touchAction: "none" as const } : {}),
   };
 
-  const dragProps = layoutLocked ? {} : { ...listeners, ...attributes };
+  const dragProps = layoutLocked || columnDragDisabled ? {} : { ...listeners, ...attributes };
 
   return (
     <section
@@ -581,6 +588,85 @@ function SortableColumnSection({
   );
 }
 
+type LaneGroup = {
+  id: string;
+  title: string;
+  columnIds: string[];
+};
+
+function laneTitleFromColumnTitle(columnTitle: string): string | null {
+  const parts = String(columnTitle || "").split("·");
+  if (parts.length < 2) return null;
+  const left = (parts[0] || "").trim();
+  return left || null;
+}
+
+function buildLaneGroups(columns: KanbanBoard["columns"]): LaneGroup[] {
+  const out: LaneGroup[] = [];
+  for (const col of columns) {
+    const laneTitle = laneTitleFromColumnTitle(col.title);
+    if (!laneTitle) continue;
+    const last = out[out.length - 1];
+    if (last && last.title === laneTitle) {
+      last.columnIds.push(col.id);
+      continue;
+    }
+    out.push({
+      id: `lane::${out.length}::${laneTitle.toLowerCase().replace(/\s+/g, "_")}`,
+      title: laneTitle,
+      columnIds: [col.id],
+    });
+  }
+  return out;
+}
+
+function SortableLaneSection({
+  lane,
+  disabled,
+  children,
+}: {
+  lane: LaneGroup;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: lane.id,
+    disabled: Boolean(disabled),
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 35 : undefined,
+  };
+  const dragProps = disabled ? {} : { ...listeners, ...attributes };
+
+  return (
+    <section
+      ref={setNodeRef}
+      style={style}
+      className="flex shrink-0 flex-col rounded-[10px] border border-[var(--kanban-border)] bg-black/[0.03] p-1.5 dark:bg-white/[0.03]"
+    >
+      <header className="mb-1 flex items-center justify-between gap-2 px-1">
+        <div className="text-[0.72rem] font-semibold uppercase tracking-wide text-[var(--kanban-text)]">
+          {lane.title}
+        </div>
+        <button
+          type="button"
+          className={`inline-flex h-6 w-6 items-center justify-center rounded border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.08] ${
+            disabled ? "cursor-default opacity-50" : "cursor-grab active:cursor-grabbing"
+          }`}
+          title={`Переместить дорожку «${lane.title}»`}
+          onPointerDown={(e) => e.stopPropagation()}
+          {...dragProps}
+        >
+          <IconGrip className="h-3.5 w-3.5" />
+        </button>
+      </header>
+      <div className="flex items-start gap-2 sm:gap-3">{children}</div>
+    </section>
+  );
+}
+
 export function BoardCanvas({
   appState,
   board,
@@ -604,6 +690,10 @@ export function BoardCanvas({
   onCardColumnChanged,
 }: BoardCanvasProps) {
   const columnIds = board.columns.map((c) => c.id);
+  const laneGroups = useMemo(() => buildLaneGroups(board.columns), [board.columns]);
+  const laneIds = laneGroups.map((lane) => lane.id);
+  const laneLayoutEnabled = laneGroups.length > 0 && laneGroups.some((lane) => lane.columnIds.length > 1);
+  const [activeDragCardId, setActiveDragCardId] = useState<string | null>(null);
   /** Горизонтальная полоса колонок: wheel без passive — только горизонтальный жест / Shift+колесо. */
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
 
@@ -696,8 +786,34 @@ export function BoardCanvas({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
+  const activeDragCard = activeDragCardId
+    ? board.columns.flatMap((col) => col.cards).find((card) => card.id === activeDragCardId) ?? null
+    : null;
+  const activeDragCardHomeBoard = activeDragCard ? resolveCardHomeBoard(activeDragCard) : null;
+  const activeDragForeignBoardLabel =
+    activeDragCard && activeDragCardHomeBoard && activeDragCardHomeBoard.id !== appState.activeBoardId
+      ? activeDragCardHomeBoard.title
+      : undefined;
+
+  const onDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const aid = String(event.active.id);
+      if (columnIds.includes(aid) || laneIds.includes(aid)) {
+        setActiveDragCardId(null);
+        return;
+      }
+      setActiveDragCardId(aid);
+    },
+    [columnIds, laneIds],
+  );
+
+  const onDragCancel = useCallback((_event: DragCancelEvent) => {
+    setActiveDragCardId(null);
+  }, []);
+
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
+      setActiveDragCardId(null);
       const { active, over } = event;
       if (!over || active.id === over.id) return;
 
@@ -706,6 +822,30 @@ export function BoardCanvas({
 
       const activeIsColumn = columnIds.includes(aid);
       const overIsColumn = columnIds.includes(oid);
+      const activeIsLane = laneIds.includes(aid);
+      const overIsLane = laneIds.includes(oid);
+
+      if (activeIsLane && overIsLane) {
+        const oldIndex = laneGroups.findIndex((x) => x.id === aid);
+        const newIndex = laneGroups.findIndex((x) => x.id === oid);
+        if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+        onPatchBoard((b) => {
+          const currentGroups = buildLaneGroups(b.columns);
+          const currentOld = currentGroups.findIndex((x) => x.id === aid);
+          const currentNew = currentGroups.findIndex((x) => x.id === oid);
+          if (currentOld < 0 || currentNew < 0 || currentOld === currentNew) return;
+          const moved = arrayMove(currentGroups, currentOld, currentNew);
+          const orderedIds = moved.flatMap((x) => x.columnIds);
+          const byId = new Map(b.columns.map((col) => [col.id, col]));
+          const reordered = orderedIds
+            .map((id) => byId.get(id))
+            .filter((col): col is KanbanBoard["columns"][number] => Boolean(col));
+          if (reordered.length === b.columns.length) {
+            b.columns = reordered;
+          }
+        });
+        return;
+      }
 
       if (activeIsColumn && overIsColumn) {
         if (aggregateLayoutLocked) return;
@@ -718,7 +858,7 @@ export function BoardCanvas({
         return;
       }
 
-      if (activeIsColumn || dndLocked) return;
+      if (activeIsColumn || activeIsLane || dndLocked) return;
 
       const cardId = aid;
       const fromContainer = active.data.current?.sortable?.containerId as
@@ -856,6 +996,8 @@ export function BoardCanvas({
     [
       board.columns,
       columnIds,
+      laneIds,
+      laneGroups,
       appState,
       dndLocked,
       onPatchBoard,
@@ -871,6 +1013,8 @@ export function BoardCanvas({
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}
+      onDragStart={onDragStart}
+      onDragCancel={onDragCancel}
       onDragEnd={onDragEnd}
     >
       <div
@@ -882,71 +1026,153 @@ export function BoardCanvas({
             items={columnIds}
             strategy={horizontalListSortingStrategy}
           >
-            <div className="flex items-start gap-2 sm:gap-3">
-              {board.columns.map((col) => {
-                const vis = visibleCardsInColumn(col, appState, resolveCardHomeBoard);
-                const cardIds = vis.map((c) => c.id);
-                return (
-                  <SortableColumnSection
-                    key={col.id}
-                    col={col}
-                    onRenameColumn={onRenameColumn}
-                    onDeleteColumn={onDeleteColumn}
-                    visCount={vis.length}
-                    totalCount={col.cards.length}
-                    layoutLocked={aggregateLayoutLocked}
-                  >
-                    <SortableContext
-                      id={col.id}
-                      items={cardIds}
-                      strategy={verticalListSortingStrategy}
-                      disabled={dndLocked}
+            {laneLayoutEnabled ? (
+              <SortableContext items={laneIds} strategy={horizontalListSortingStrategy}>
+                <div className="flex items-start gap-2 sm:gap-3">
+                  {laneGroups.map((lane) => (
+                    <SortableLaneSection
+                      key={lane.id}
+                      lane={lane}
+                      disabled={aggregateLayoutLocked}
                     >
-                      <div
-                        className="cards-container flex min-h-[40px] flex-1 flex-col gap-1.5 overflow-y-auto p-1.5 sm:min-h-[48px] sm:gap-2 sm:p-2"
-                        data-column-id={col.id}
+                      {lane.columnIds.map((columnId) => {
+                        const col = board.columns.find((c) => c.id === columnId);
+                        if (!col) return null;
+                        const vis = visibleCardsInColumn(col, appState, resolveCardHomeBoard);
+                        const cardIds = vis.map((c) => c.id);
+                        return (
+                          <SortableColumnSection
+                            key={col.id}
+                            col={col}
+                            onRenameColumn={onRenameColumn}
+                            onDeleteColumn={onDeleteColumn}
+                            visCount={vis.length}
+                            totalCount={col.cards.length}
+                            layoutLocked={aggregateLayoutLocked}
+                            columnDragDisabled
+                          >
+                            <SortableContext
+                              id={col.id}
+                              items={cardIds}
+                              strategy={verticalListSortingStrategy}
+                              disabled={dndLocked}
+                            >
+                              <div
+                                className="cards-container flex min-h-[40px] flex-1 flex-col gap-1.5 overflow-y-auto p-1.5 sm:min-h-[48px] sm:gap-2 sm:p-2"
+                                data-column-id={col.id}
+                                data-lane-id={lane.id}
+                              >
+                                {vis.map((card) => {
+                                  const home = resolveCardHomeBoard(card);
+                                  const foreignBoardLabel =
+                                    (appState.search.trim() || aggregateLayoutLocked) &&
+                                    home.id !== appState.activeBoardId
+                                      ? home.title
+                                      : undefined;
+                                  return (
+                                    <SortableKanbanCard
+                                      key={card.id}
+                                      card={card}
+                                      homeBoard={home}
+                                      foreignBoardLabel={foreignBoardLabel}
+                                      dndLocked={dndLocked}
+                                      onOpenCard={onOpenCard}
+                                      onCopyCardLink={onCopyCardLink}
+                                      onRequestMoveCard={onRequestMoveCard}
+                                      onRequestArchiveCard={onRequestArchiveCard}
+                                      onRequestDeleteCard={onRequestDeleteCard}
+                                      allowMoveToOtherBoard={allowMoveToOtherBoard}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            </SortableContext>
+                            {!aggregateLayoutLocked ? (
+                              <button
+                                type="button"
+                                className="mx-1.5 mb-1.5 rounded-md px-1.5 py-1.5 text-left text-[0.72rem] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.06] sm:mx-2 sm:mb-2 sm:px-2 sm:py-2 sm:text-[0.875rem]"
+                                onClick={() => onAddCard(col.id)}
+                              >
+                                <span className="inline-flex items-center gap-1 sm:gap-2">
+                                  <IconPlus />{" "}
+                                  <span className="max-md:leading-tight">Добавить карточку</span>
+                                </span>
+                              </button>
+                            ) : null}
+                          </SortableColumnSection>
+                        );
+                      })}
+                    </SortableLaneSection>
+                  ))}
+                </div>
+              </SortableContext>
+            ) : (
+              <div className="flex items-start gap-2 sm:gap-3">
+                {board.columns.map((col) => {
+                  const vis = visibleCardsInColumn(col, appState, resolveCardHomeBoard);
+                  const cardIds = vis.map((c) => c.id);
+                  return (
+                    <SortableColumnSection
+                      key={col.id}
+                      col={col}
+                      onRenameColumn={onRenameColumn}
+                      onDeleteColumn={onDeleteColumn}
+                      visCount={vis.length}
+                      totalCount={col.cards.length}
+                      layoutLocked={aggregateLayoutLocked}
+                    >
+                      <SortableContext
+                        id={col.id}
+                        items={cardIds}
+                        strategy={verticalListSortingStrategy}
+                        disabled={dndLocked}
                       >
-                        {vis.map((card) => {
-                          const home = resolveCardHomeBoard(card);
-                          const foreignBoardLabel =
-                            (appState.search.trim() || aggregateLayoutLocked) &&
-                            home.id !== appState.activeBoardId
-                              ? home.title
-                              : undefined;
-                          return (
-                            <SortableKanbanCard
-                              key={card.id}
-                              card={card}
-                              homeBoard={home}
-                              foreignBoardLabel={foreignBoardLabel}
-                              dndLocked={dndLocked}
-                              onOpenCard={onOpenCard}
-                              onCopyCardLink={onCopyCardLink}
-                              onRequestMoveCard={onRequestMoveCard}
-                              onRequestArchiveCard={onRequestArchiveCard}
-                              onRequestDeleteCard={onRequestDeleteCard}
-                              allowMoveToOtherBoard={allowMoveToOtherBoard}
-                            />
-                          );
-                        })}
-                      </div>
-                    </SortableContext>
-                    {!aggregateLayoutLocked ? (
-                      <button
-                        type="button"
-                        className="mx-1.5 mb-1.5 rounded-md px-1.5 py-1.5 text-left text-[0.72rem] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.06] sm:mx-2 sm:mb-2 sm:px-2 sm:py-2 sm:text-[0.875rem]"
-                        onClick={() => onAddCard(col.id)}
-                      >
-                        <span className="inline-flex items-center gap-1 sm:gap-2">
-                          <IconPlus />{" "}
-                          <span className="max-md:leading-tight">Добавить карточку</span>
-                        </span>
-                      </button>
-                    ) : null}
-                  </SortableColumnSection>
-                );
-              })}
-            </div>
+                        <div
+                          className="cards-container flex min-h-[40px] flex-1 flex-col gap-1.5 overflow-y-auto p-1.5 sm:min-h-[48px] sm:gap-2 sm:p-2"
+                          data-column-id={col.id}
+                        >
+                          {vis.map((card) => {
+                            const home = resolveCardHomeBoard(card);
+                            const foreignBoardLabel =
+                              (appState.search.trim() || aggregateLayoutLocked) &&
+                              home.id !== appState.activeBoardId
+                                ? home.title
+                                : undefined;
+                            return (
+                              <SortableKanbanCard
+                                key={card.id}
+                                card={card}
+                                homeBoard={home}
+                                foreignBoardLabel={foreignBoardLabel}
+                                dndLocked={dndLocked}
+                                onOpenCard={onOpenCard}
+                                onCopyCardLink={onCopyCardLink}
+                                onRequestMoveCard={onRequestMoveCard}
+                                onRequestArchiveCard={onRequestArchiveCard}
+                                onRequestDeleteCard={onRequestDeleteCard}
+                                allowMoveToOtherBoard={allowMoveToOtherBoard}
+                              />
+                            );
+                          })}
+                        </div>
+                      </SortableContext>
+                      {!aggregateLayoutLocked ? (
+                        <button
+                          type="button"
+                          className="mx-1.5 mb-1.5 rounded-md px-1.5 py-1.5 text-left text-[0.72rem] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.06] sm:mx-2 sm:mb-2 sm:px-2 sm:py-2 sm:text-[0.875rem]"
+                          onClick={() => onAddCard(col.id)}
+                        >
+                          <span className="inline-flex items-center gap-1 sm:gap-2">
+                            <IconPlus />{" "}
+                            <span className="max-md:leading-tight">Добавить карточку</span>
+                          </span>
+                        </button>
+                      ) : null}
+                    </SortableColumnSection>
+                  );
+                })}
+              </div>
+            )}
           </SortableContext>
           {!aggregateLayoutLocked ? (
             <div className="flex w-[148px] shrink-0 self-start min-[420px]:w-[168px] sm:w-[200px] lg:w-[252px] xl:w-[280px]">
@@ -963,6 +1189,23 @@ export function BoardCanvas({
           ) : null}
         </div>
       </div>
+      <DragOverlay dropAnimation={null}>
+        {activeDragCard && activeDragCardHomeBoard ? (
+          <div className="w-[148px] min-[420px]:w-[168px] sm:w-[200px] lg:w-[252px] xl:w-[280px]">
+            <KanbanCardView
+              card={activeDragCard}
+              homeBoard={activeDragCardHomeBoard}
+              foreignBoardLabel={activeDragForeignBoardLabel}
+              onOpen={() => {}}
+              onCopyLink={() => {}}
+              onMoveCard={() => {}}
+              onArchiveCard={() => {}}
+              onDeleteCard={() => {}}
+              allowMoveToOtherBoard={allowMoveToOtherBoard}
+            />
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import type { KaitenTrackLane } from "@prisma/client";
+import type { KaitenTrackLane, UserRole } from "@prisma/client";
 import type {
   KanbanAppState,
   KanbanArchivedCard,
@@ -83,6 +83,7 @@ type SessionUserLike = {
   id?: string;
   displayName?: string;
   email?: string;
+  role?: UserRole;
   mentionHandle?: string | null;
   avatarPresetId?: string | null;
   moduleAccess?: Partial<
@@ -120,6 +121,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [activityActorLabel, setActivityActorLabel] = useState<string | undefined>(undefined);
   const [kanbanSessionUserId, setKanbanSessionUserId] = useState<string | null>(null);
+  const [kanbanSessionRole, setKanbanSessionRole] = useState<UserRole | null>(null);
   const [kanbanCardPerms, setKanbanCardPerms] = useState({
     editTitle: true,
     editDueDate: true,
@@ -426,6 +428,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         if (cancelled) return;
         setActivityActorLabel(formatActivityActorLabel(j.user));
         setKanbanSessionUserId(j.user?.id?.trim() ? j.user.id : null);
+        setKanbanSessionRole(j.user?.role ?? null);
         const access = j.user?.moduleAccess ?? {};
         setKanbanCardPerms({
           editTitle: access.KANBAN_EDIT_TITLE !== false,
@@ -439,6 +442,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         if (!cancelled) {
           setActivityActorLabel(undefined);
           setKanbanSessionUserId(null);
+          setKanbanSessionRole(null);
           setKanbanCardPerms({
             editTitle: true,
             editDueDate: true,
@@ -461,14 +465,19 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   );
   const visibleBoards = useMemo(() => {
     if (!appState) return [];
-    return appState.boards.filter((b) => canUserAccessBoard(b, kanbanSessionUserId));
-  }, [appState, kanbanSessionUserId]);
+    return appState.boards.filter((b) =>
+      canUserAccessBoard(b, kanbanSessionUserId, kanbanSessionRole),
+    );
+  }, [appState, kanbanSessionUserId, kanbanSessionRole]);
   const searchView = useMemo(
     () =>
       appState
-        ? buildKanbanDisplayView(appState, { sessionUserId: kanbanSessionUserId })
+        ? buildKanbanDisplayView(appState, {
+            sessionUserId: kanbanSessionUserId,
+            sessionUserRole: kanbanSessionRole,
+          })
         : null,
-    [appState, kanbanSessionUserId],
+    [appState, kanbanSessionUserId, kanbanSessionRole],
   );
   const displayBoard = searchView?.displayBoard ?? null;
   const cardHomeBoardId = searchView?.cardHomeBoardId;
@@ -622,7 +631,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         | undefined;
       setAppState((s) => {
         if (!s || !isKanbanAggregateBoardId(s.activeBoardId)) return s;
-        const view = buildKanbanDisplayView(s, { sessionUserId: kanbanSessionUserId });
+        const view = buildKanbanDisplayView(s, {
+          sessionUserId: kanbanSessionUserId,
+          sessionUserRole: kanbanSessionRole,
+        });
         const next = structuredClone(s);
         const sid = kanbanSessionUserId?.trim();
         const activityUserId =
@@ -647,6 +659,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     },
     [
       kanbanSessionUserId,
+      kanbanSessionRole,
       activityActorLabel,
       isDemo,
       syncKaitenMirrorAfterKanbanMove,
@@ -676,15 +689,17 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     if (!appState) return;
     if (isKanbanAggregateBoardId(appState.activeBoardId)) return;
-    if (canUserAccessBoard(getActiveBoard(appState), kanbanSessionUserId)) return;
+    if (canUserAccessBoard(getActiveBoard(appState), kanbanSessionUserId, kanbanSessionRole)) {
+      return;
+    }
     const nextBoardId = appState.boards.find((b) =>
-      canUserAccessBoard(b, kanbanSessionUserId),
+      canUserAccessBoard(b, kanbanSessionUserId, kanbanSessionRole),
     )?.id;
     if (!nextBoardId) return;
     patchApp((s) => {
       s.activeBoardId = nextBoardId;
     });
-  }, [appState, kanbanSessionUserId, patchApp]);
+  }, [appState, kanbanSessionUserId, kanbanSessionRole, patchApp]);
 
   const aggregateView =
     Boolean(appState) && isKanbanAggregateBoardId(appState!.activeBoardId);
@@ -1027,6 +1042,74 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     showToast(`Этап: «${prevTitle}»`);
   };
 
+  const moveCardToColumn = useCallback(
+    (cardId: string, targetColumnId: string) => {
+      if (!appState) return;
+      const found = findCardInAppState(appState, cardId);
+      if (!found) return;
+      const home = found.board;
+      const fromCol = found.col;
+      const targetCol = home.columns.find((c) => c.id === targetColumnId);
+      if (!targetCol || targetCol.id === fromCol.id) return;
+      const linkedSorts = targetCol.cards
+        .filter((c) => c.linkedOrderId)
+        .map((c) => c.kaitenCardSortOrder)
+        .filter((x): x is number => x != null && Number.isFinite(x));
+      const sortOrder = (linkedSorts.length ? Math.max(...linkedSorts) : 0) + 1;
+      const cardSnapshot = found.card;
+      setAppState((s) => {
+        if (!s) return s;
+        const next = structuredClone(s);
+        const b = next.boards.find((x) => x.id === home.id);
+        if (!b) return s;
+        const loc = findCard(b, cardId);
+        if (!loc) return s;
+        const toCol = b.columns.find((c) => c.id === targetColumnId);
+        if (!toCol || toCol.id === loc.col.id) return s;
+        const c = loc.card;
+        loc.col.cards = loc.col.cards.filter((x) => x.id !== cardId);
+        toCol.cards.push(c);
+        const now = new Date().toISOString();
+        c.lastMovedAt = now;
+        c.updatedAt = now;
+        pushActivity(c, `Перемещена в «${toCol.title}»`, b.users[0]?.id, b, activityActorLabel);
+        runKanbanAutomations(
+          b,
+          {
+            type: "card_moved_to_column",
+            cardId,
+            fromColumnId: loc.col.id,
+            toColumnId: toCol.id,
+          },
+          0,
+          activityActorLabel,
+        );
+        if (c.parentCardId) {
+          markProductionChildReadyState(b, cardId);
+          if (parentCanMoveToAssembly(b, c.parentCardId)) {
+            moveParentToAssemblyIfReady(b, c.parentCardId, activityActorLabel);
+          }
+        }
+        return next;
+      });
+      if (
+        !isDemo &&
+        cardSnapshot.linkedOrderId &&
+        typeof cardSnapshot.kaitenCardId === "number" &&
+        Number.isFinite(cardSnapshot.kaitenCardId)
+      ) {
+        void syncKaitenMirrorAfterKanbanMove({
+          orderId: cardSnapshot.linkedOrderId,
+          kaitenCardId: cardSnapshot.kaitenCardId,
+          columnTitle: targetCol.title,
+          sortOrder,
+        });
+      }
+      showToast(`Этап: «${targetCol.title}»`);
+    },
+    [appState, activityActorLabel, isDemo, showToast, syncKaitenMirrorAfterKanbanMove],
+  );
+
   const enrichProductionChecklistForChild = useCallback((boardId: string, childId: string) => {
     void (async () => {
       const cur = appStateRef.current;
@@ -1038,6 +1121,40 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       setAppState(next);
     })();
   }, []);
+
+  const syncParentProductionChildrenAfterFilesAttach = useCallback(
+    (cardId: string) => {
+      let expandBoardId = "";
+      let expandChildIds: string[] = [];
+      setAppState((s) => {
+        if (!s) return s;
+        const next = structuredClone(s);
+        const loc = findCardInAppState(next, cardId);
+        if (!loc) return s;
+        if (loc.card.parentCardId) return s;
+        const settings = normalizeProductionSettings(loc.board);
+        const inTriggerColumn =
+          loc.col.title.trim().toLowerCase() === settings.triggerColumnTitle.trim().toLowerCase();
+        if (!inTriggerColumn) return s;
+        const childIds = syncProductionChildrenForParent(
+          loc.board,
+          cardId,
+          activityActorLabel,
+          loc.card,
+        );
+        if (!childIds.length) return s;
+        loc.card.childCardIds = childIds;
+        expandBoardId = loc.board.id;
+        expandChildIds = childIds;
+        return next;
+      });
+      if (!expandBoardId || expandChildIds.length === 0) return;
+      for (const childId of expandChildIds) {
+        enrichProductionChecklistForChild(expandBoardId, childId);
+      }
+    },
+    [activityActorLabel, enrichProductionChecklistForChild],
+  );
 
   const ensureProductionBoard = useCallback(
     (state: KanbanAppState, sourceBoard: KanbanBoard): KanbanBoard => {
@@ -1058,6 +1175,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         id: generateId("board"),
         title: "Производство",
         isPrivate: false,
+        allowProductionRoleAccess: true,
         accessUserIds: [],
         columns,
         users: structuredClone(sourceBoard.users || []),
@@ -1403,6 +1521,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           moveCardToNextStage(id);
           setCardModalId(id);
         }}
+        onMoveToColumn={(id, targetColumnId) => {
+          moveCardToColumn(id, targetColumnId);
+          setCardModalId(id);
+        }}
         onCopyCardLink={copyCardLink}
         canEditTitle={kanbanCardPerms.editTitle}
         canEditDueDate={kanbanCardPerms.editDueDate}
@@ -1410,6 +1532,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         canManageAssignees={kanbanCardPerms.manageAssignees}
         canManageParticipants={kanbanCardPerms.manageParticipants}
         onOpenLinkedCard={(id) => setCardModalId(id)}
+        onParentProductionFilesUpdated={syncParentProductionChildrenAfterFilesAttach}
         trackLaneOptions={isDemo ? [...demoTrackLanes()] : undefined}
         trackLaneFieldLabel={isDemo ? "Доска" : undefined}
         isDemo={isDemo}
@@ -1443,7 +1566,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 .filter(
                   (b) =>
                     b.id !== appState.activeBoardId &&
-                    canUserAccessBoard(b, kanbanSessionUserId),
+                    canUserAccessBoard(b, kanbanSessionUserId, kanbanSessionRole),
                 )
                 .map((b) => (
                   <option key={b.id} value={b.id}>

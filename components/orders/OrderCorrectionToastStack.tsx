@@ -45,6 +45,16 @@ function pollMs(): number {
   return Math.min(Math.max(n, 2500), 30_000);
 }
 
+function parseRetryAfterMs(value: string | null): number {
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+  const asSeconds = Number.parseInt(raw, 10);
+  if (Number.isFinite(asSeconds) && asSeconds > 0) return asSeconds * 1000;
+  const dateMs = Date.parse(raw);
+  if (Number.isFinite(dateMs)) return Math.max(0, dateMs - Date.now());
+  return 0;
+}
+
 const MAX_VISIBLE = 8;
 
 export function OrderCorrectionToastStack() {
@@ -57,6 +67,9 @@ export function OrderCorrectionToastStack() {
     [],
   );
   const lastFpRef = useRef<string>("");
+  const pollInFlightRef = useRef(false);
+  const nextPollAllowedAtRef = useRef(0);
+  const pollBackoffMsRef = useRef(0);
 
   const mergeDismissed = useCallback((update: (prev: Set<string>) => Set<string>) => {
     setDismissed((prev) => {
@@ -93,6 +106,10 @@ export function OrderCorrectionToastStack() {
     let cancelled = false;
     const tick = async () => {
       if (cancelled || document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (pollInFlightRef.current) return;
+      if (nextPollAllowedAtRef.current > now) return;
+      pollInFlightRef.current = true;
       try {
         const [resCorr, resPro] = await Promise.all([
           fetch("/api/order-chat-corrections/toasts", {
@@ -105,6 +122,14 @@ export function OrderCorrectionToastStack() {
           }),
         ]);
         if (cancelled) return;
+        const retryMs = Math.max(
+          resCorr.status === 429 ? parseRetryAfterMs(resCorr.headers.get("Retry-After")) : 0,
+          resPro.status === 429 ? parseRetryAfterMs(resPro.headers.get("Retry-After")) : 0,
+        );
+        if (retryMs > 0) {
+          nextPollAllowedAtRef.current = Date.now() + Math.max(1000, retryMs);
+          return;
+        }
 
         let corrList: OrderToastRow[] = [];
         if (resCorr.status === 403 || resCorr.status === 401) {
@@ -132,8 +157,16 @@ export function OrderCorrectionToastStack() {
           setCorrections(corrList);
           setProstheticsRequests(proList);
         }
+        pollBackoffMsRef.current = 0;
+        nextPollAllowedAtRef.current = 0;
       } catch {
-        /* ignore */
+        pollBackoffMsRef.current = Math.min(
+          60_000,
+          Math.max(4000, pollBackoffMsRef.current * 2 || 4000),
+        );
+        nextPollAllowedAtRef.current = Date.now() + pollBackoffMsRef.current;
+      } finally {
+        pollInFlightRef.current = false;
       }
     };
     const ms = pollMs();

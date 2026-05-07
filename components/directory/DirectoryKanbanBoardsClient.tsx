@@ -275,6 +275,7 @@ export function DirectoryKanbanBoardsClient({
           id: generateId("board"),
           title: "Производство",
           isPrivate: false,
+          allowProductionRoleAccess: true,
           accessUserIds: [],
           columns: neededTitles.map((title) => ({ id: generateId("col"), title, cards: [] })),
           users: structuredClone(source.users || []),
@@ -438,6 +439,11 @@ export function DirectoryKanbanBoardsClient({
                   {b.isPrivate ? (
                     <span className="ml-2 rounded border border-amber-500/40 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
                       Закрытая
+                    </span>
+                  ) : null}
+                  {b.allowProductionRoleAccess ? (
+                    <span className="ml-1 rounded border border-violet-500/40 bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-900 dark:bg-violet-900/30 dark:text-violet-100">
+                      Роль «Производство»
                     </span>
                   ) : null}
                 </button>

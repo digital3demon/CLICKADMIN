@@ -35,6 +35,126 @@ const SPACE_OPTIONS: {
 
 type UiCardType = { id: string; name: string; externalTypeId: number };
 
+function normalizeHexColor(raw: unknown): string | null {
+  const v = String(raw ?? "").trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(v)) return null;
+  return v;
+}
+
+function colorWithAlpha(hex: string, alpha: number): string {
+  const safeAlpha = Math.max(0, Math.min(1, alpha));
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
+}
+
+function laneNamesFromColumnTitles(rawColumns: unknown): string[] {
+  if (!Array.isArray(rawColumns)) return [];
+  const names = new Set<string>();
+  for (const c of rawColumns) {
+    if (!c || typeof c !== "object" || Array.isArray(c)) continue;
+    const title = String((c as { title?: unknown }).title ?? "").trim();
+    const splitIx = title.indexOf("·");
+    if (splitIx <= 0) continue;
+    const lane = title.slice(0, splitIx).trim();
+    if (lane) names.add(lane);
+  }
+  return [...names];
+}
+
+function defaultSpaceByCardTypeFromTenantKanbanState(
+  raw: unknown,
+): Record<string, KaitenTrackLane> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const state = raw as { boards?: unknown };
+  if (!Array.isArray(state.boards)) return {};
+  const out: Record<string, KaitenTrackLane> = {};
+  for (const item of state.boards) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const board = item as {
+      id?: unknown;
+      cardTypes?: unknown;
+    };
+    const boardId = String(board.id ?? "");
+    const lane =
+      boardId === KANBAN_BOARD_ORTHOPEDICS_ID
+        ? "ORTHOPEDICS"
+        : boardId === KANBAN_BOARD_ORTHODONTICS_ID
+          ? "ORTHODONTICS"
+          : null;
+    if (!lane || !Array.isArray(board.cardTypes)) continue;
+    for (const t of board.cardTypes) {
+      if (!t || typeof t !== "object" || Array.isArray(t)) continue;
+      const typeId = String((t as { id?: unknown }).id ?? "").trim();
+      const typeLane = String((t as { defaultTrackLane?: unknown }).defaultTrackLane ?? "").trim();
+      if (!typeId || (typeLane !== "ORTHOPEDICS" && typeLane !== "ORTHODONTICS" && typeLane !== "TEST")) {
+        continue;
+      }
+      out[typeId] = typeLane as KaitenTrackLane;
+    }
+    for (const t of board.cardTypes) {
+      if (!t || typeof t !== "object" || Array.isArray(t)) continue;
+      const typeId = String((t as { id?: unknown }).id ?? "").trim();
+      if (!typeId || out[typeId]) continue;
+      out[typeId] = lane;
+    }
+  }
+  return out;
+}
+
+function boardLaneOptionsBySpaceFromTenantKanbanState(
+  raw: unknown,
+): Partial<Record<KaitenTrackLane, string[]>> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const state = raw as { boards?: unknown };
+  if (!Array.isArray(state.boards)) return {};
+  const out: Partial<Record<KaitenTrackLane, string[]>> = {};
+  for (const item of state.boards) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const board = item as { id?: unknown; columns?: unknown };
+    const boardId = String(board.id ?? "");
+    const lane =
+      boardId === KANBAN_BOARD_ORTHOPEDICS_ID
+        ? "ORTHOPEDICS"
+        : boardId === KANBAN_BOARD_ORTHODONTICS_ID
+          ? "ORTHODONTICS"
+          : null;
+    if (!lane) continue;
+    const laneNames = laneNamesFromColumnTitles(board.columns);
+    if (laneNames.length > 1) out[lane] = laneNames;
+  }
+  return out;
+}
+
+function cardTypeColorsFromTenantKanbanState(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const state = raw as { boards?: unknown };
+  if (!Array.isArray(state.boards)) return {};
+  const out: Record<string, string> = {};
+  for (const item of state.boards) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const board = item as { id?: unknown; cardTypes?: unknown };
+    const boardId = String(board.id ?? "");
+    if (
+      boardId !== KANBAN_BOARD_ORTHOPEDICS_ID &&
+      boardId !== KANBAN_BOARD_ORTHODONTICS_ID
+    ) {
+      continue;
+    }
+    if (!Array.isArray(board.cardTypes)) continue;
+    for (const t of board.cardTypes) {
+      if (!t || typeof t !== "object" || Array.isArray(t)) continue;
+      const typeId = String((t as { id?: unknown }).id ?? "").trim();
+      const color = normalizeHexColor((t as { color?: unknown }).color);
+      if (!typeId || !color || out[typeId]) continue;
+      out[typeId] = color;
+    }
+  }
+  return out;
+}
+
 type KaitenPreflightModalProps = {
   open: boolean;
   saving: boolean;
@@ -123,6 +243,14 @@ export function KaitenPreflightModal({
   const [distributionLaneAllowlist, setDistributionLaneAllowlist] = useState<
     KaitenTrackLane[] | null
   >(null);
+  const [defaultSpaceByCardType, setDefaultSpaceByCardType] = useState<
+    Record<string, KaitenTrackLane>
+  >({});
+  const [boardLaneOptionsBySpace, setBoardLaneOptionsBySpace] = useState<
+    Partial<Record<KaitenTrackLane, string[]>>
+  >({});
+  const [cardTypeColorById, setCardTypeColorById] = useState<Record<string, string>>({});
+  const [boardLaneName, setBoardLaneName] = useState("");
   const [workLabel, setWorkLabel] = useState("");
 
   useEffect(() => {
@@ -132,6 +260,10 @@ export function KaitenPreflightModal({
     setSpace("ORTHOPEDICS");
     setLaneAllowlist(null);
     setDistributionLaneAllowlist(null);
+    setDefaultSpaceByCardType({});
+    setBoardLaneOptionsBySpace({});
+    setCardTypeColorById({});
+    setBoardLaneName("");
     setWorkLabel("");
     setLoadError(null);
     let cancelled = false;
@@ -149,7 +281,6 @@ export function KaitenPreflightModal({
         if (cancelled) return;
         setCardTypes(data.cardTypes ?? []);
         const firstType = data.cardTypes?.[0]?.id ?? "";
-        setCardTypeId(firstType);
         setLaneAllowlist(
           Array.isArray(data.trackLanes) ? data.trackLanes : [],
         );
@@ -158,9 +289,24 @@ export function KaitenPreflightModal({
           "kanbanAppStateV3",
         );
         if (!cancelled) {
-          setDistributionLaneAllowlist(
-            distributionLanesFromTenantKanbanState(tenantKanbanState),
+          const distribution = distributionLanesFromTenantKanbanState(tenantKanbanState);
+          setDistributionLaneAllowlist(distribution);
+          const defaults = defaultSpaceByCardTypeFromTenantKanbanState(tenantKanbanState);
+          setDefaultSpaceByCardType(defaults);
+          setBoardLaneOptionsBySpace(
+            boardLaneOptionsBySpaceFromTenantKanbanState(tenantKanbanState),
           );
+          setCardTypeColorById(cardTypeColorsFromTenantKanbanState(tenantKanbanState));
+          const allowedFromEnv = Array.isArray(data.trackLanes) ? data.trackLanes : [];
+          const allowedByDistribution = distribution ?? allowedFromEnv;
+          const allowedFinal = allowedFromEnv.filter((lane) =>
+            allowedByDistribution.includes(lane),
+          );
+          const preferredSpace = firstType ? defaults[firstType] : undefined;
+          setCardTypeId(firstType);
+          if (preferredSpace && allowedFinal.includes(preferredSpace)) {
+            setSpace(preferredSpace);
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -191,6 +337,18 @@ export function KaitenPreflightModal({
       setSpace(defaultTrackLane(available));
     }
   }, [spaceOptions, space]);
+
+  const laneOptionsForSelectedSpace = boardLaneOptionsBySpace[space] ?? [];
+
+  useEffect(() => {
+    if (laneOptionsForSelectedSpace.length <= 1) {
+      setBoardLaneName("");
+      return;
+    }
+    if (!laneOptionsForSelectedSpace.includes(boardLaneName)) {
+      setBoardLaneName(laneOptionsForSelectedSpace[0] ?? "");
+    }
+  }, [laneOptionsForSelectedSpace, boardLaneName]);
 
   const kaitenFieldsRequired = !decideLater || kanbanOnly;
 
@@ -345,24 +503,37 @@ export function KaitenPreflightModal({
               <legend className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
                 Тип карточки в Кайтен
               </legend>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Тип карточки в Кайтен">
                 {cardTypes.map((o) => (
-                  <label
+                  <button
+                    type="button"
                     key={o.id}
-                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--card-border)] px-3 py-2.5 hover:bg-[var(--table-row-hover)]"
+                    role="radio"
+                    aria-checked={cardTypeId === o.id}
+                    className="flex items-center rounded-lg border px-3 py-2.5 text-left transition-all hover:brightness-[0.98] dark:hover:brightness-110"
+                    style={(() => {
+                      const accent = cardTypeColorById[o.id] ?? "#64748b";
+                      const selected = cardTypeId === o.id;
+                      return {
+                        borderColor: selected ? accent : "var(--card-border)",
+                        backgroundColor: selected
+                          ? colorWithAlpha(accent, 0.2)
+                          : colorWithAlpha(accent, 0.08),
+                        boxShadow: selected ? `0 0 0 2px ${colorWithAlpha(accent, 0.9)}` : undefined,
+                      };
+                    })()}
+                    onClick={() => {
+                      setCardTypeId(o.id);
+                      const preferred = defaultSpaceByCardType[o.id];
+                      if (!preferred) return;
+                      if (!spaceOptions.some((x) => x.value === preferred)) return;
+                      setSpace(preferred);
+                    }}
                   >
-                    <input
-                      type="radio"
-                      name="kaiten-card-type"
-                      value={o.id}
-                      checked={cardTypeId === o.id}
-                      onChange={() => setCardTypeId(o.id)}
-                      className="shrink-0 text-[var(--sidebar-blue)]"
-                    />
-                    <span className="min-w-0 text-sm text-[var(--text-strong)]">
+                    <span className="min-w-0 text-sm font-medium text-[var(--text-strong)]">
                       {o.name}
                     </span>
-                  </label>
+                  </button>
                 ))}
               </div>
             </fieldset>
@@ -413,6 +584,34 @@ export function KaitenPreflightModal({
                     </label>
                   ))}
                 </div>
+                {laneOptionsForSelectedSpace.length > 1 ? (
+                  <div className="mt-3">
+                    <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                      Дорожка
+                    </div>
+                    <p className="mb-2 text-xs text-[var(--text-muted)]">
+                      Для выбранного пространства доступно несколько дорожек.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {laneOptionsForSelectedSpace.map((laneName) => (
+                        <label
+                          key={laneName}
+                          className="flex min-w-[8.5rem] flex-1 cursor-pointer items-center gap-2 rounded-lg border border-[var(--card-border)] px-3 py-2.5 hover:bg-[var(--table-row-hover)] sm:flex-none"
+                        >
+                          <input
+                            type="radio"
+                            name="kaiten-board-lane"
+                            value={laneName}
+                            checked={boardLaneName === laneName}
+                            onChange={() => setBoardLaneName(laneName)}
+                            className="text-[var(--sidebar-blue)]"
+                          />
+                          <span className="text-sm text-[var(--text-strong)]">{laneName}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </fieldset>
             </div>
           </div>

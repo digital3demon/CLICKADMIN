@@ -55,17 +55,55 @@ export function OrderFilesPanel({
   const [uploadWarn, setUploadWarn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listInFlightRef = useRef(false);
+  const nextListPollAllowedAtRef = useRef(0);
+  const listErrorBackoffMsRef = useRef(0);
+
+  const parseRetryAfterMs = (value: string | null): number => {
+    const raw = String(value || "").trim();
+    if (!raw) return 0;
+    const asSeconds = Number.parseInt(raw, 10);
+    if (Number.isFinite(asSeconds) && asSeconds > 0) {
+      return asSeconds * 1000;
+    }
+    const dateMs = Date.parse(raw);
+    if (Number.isFinite(dateMs)) {
+      return Math.max(0, dateMs - Date.now());
+    }
+    return 0;
+  };
 
   const refreshList = useCallback(async () => {
     if (!orderId) return;
+    const now = Date.now();
+    if (listInFlightRef.current) return;
+    if (nextListPollAllowedAtRef.current > now) return;
+    listInFlightRef.current = true;
     setLoadError(null);
     try {
       const res = await fetch(`/api/orders/${orderId}/attachments`);
-      if (!res.ok) throw new Error("fail");
+      if (!res.ok) {
+        if (res.status === 429) {
+          const retryMs = Math.max(1000, parseRetryAfterMs(res.headers.get("Retry-After")));
+          nextListPollAllowedAtRef.current = Date.now() + retryMs;
+          setLoadError("Сервер временно ограничил запросы к вложениям, пробуем позже…");
+          return;
+        }
+        throw new Error("fail");
+      }
       const data = (await res.json()) as AttachmentMeta[];
       setList(data);
+      listErrorBackoffMsRef.current = 0;
+      nextListPollAllowedAtRef.current = 0;
     } catch {
+      listErrorBackoffMsRef.current = Math.min(
+        60_000,
+        Math.max(4000, listErrorBackoffMsRef.current * 2 || 4000),
+      );
+      nextListPollAllowedAtRef.current = Date.now() + listErrorBackoffMsRef.current;
       setLoadError("Не удалось загрузить список файлов");
+    } finally {
+      listInFlightRef.current = false;
     }
   }, [orderId]);
 
@@ -89,12 +127,15 @@ export function OrderFilesPanel({
 
   useEffect(() => {
     if (!orderId) return;
+    const hasQueue = queued.length > 0;
+    const pollMs = hasQueue || busy ? 7000 : 20_000;
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       void refreshList();
       void refreshQueueList();
-    }, 4000);
+    }, pollMs);
     return () => window.clearInterval(timer);
-  }, [orderId, refreshList, refreshQueueList]);
+  }, [orderId, queued.length, busy, refreshList, refreshQueueList]);
 
   const addPending = useCallback(
     (files: FileList | File[]) => {
