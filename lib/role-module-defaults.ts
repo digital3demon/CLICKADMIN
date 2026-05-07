@@ -29,6 +29,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CONFIG_PRICING_CORRECTION",
   "CONFIG_WAREHOUSE",
   "CONFIG_KANBAN_BOARDS",
+  "CONFIG_KANBAN_PRODUCTION",
   "CONFIG_KANBAN_CARD_TYPES",
   "CONFIG_KAITEN",
   "CONFIG_COURIERS",
@@ -60,6 +61,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CONFIG_PRICING_CORRECTION: "Конфиг: коррекция актуального прайса",
   CONFIG_WAREHOUSE: "Конфиг: склад",
   CONFIG_KANBAN_BOARDS: "Конфиг: доски канбана",
+  CONFIG_KANBAN_PRODUCTION: "Конфиг: канбан — производственный контур",
   CONFIG_KANBAN_CARD_TYPES: "Конфиг: типы карточек канбана",
   CONFIG_KAITEN: "Конфиг: Kaiten",
   CONFIG_COURIERS: "Конфиг: курьеры",
@@ -76,6 +78,7 @@ export const ROLES_IN_ACCESS_MATRIX: UserRole[] = [
   "SENIOR_ADMINISTRATOR",
   "SENIOR_TECHNICIAN",
   "PRODUCTION",
+  "SENIOR_PRODUCTION",
   "MANAGER",
   "ACCOUNTANT",
   "FINANCIAL_MANAGER",
@@ -96,8 +99,8 @@ export function defaultModuleAllowed(
   if (role === "USER") {
     return module === "KANBAN";
   }
-  if (role === "PRODUCTION") {
-    return module === "KANBAN";
+  if (role === "PRODUCTION" || role === "SENIOR_PRODUCTION") {
+    return module === "KANBAN" || module === "CONFIG_KANBAN_PRODUCTION";
   }
   if (role === "MANAGER") {
     return module !== "CONFIG_USER_INVITES";
@@ -135,6 +138,7 @@ export function defaultModuleAllowed(
     case "CONFIG_PRICING":
     case "CONFIG_WAREHOUSE":
     case "CONFIG_KANBAN_BOARDS":
+    case "CONFIG_KANBAN_PRODUCTION":
     case "CONFIG_KANBAN_CARD_TYPES":
     case "CONFIG_KAITEN":
     case "CONFIG_COURIERS":

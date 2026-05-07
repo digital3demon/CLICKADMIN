@@ -39,6 +39,7 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { PrismaDataLoadErrorCallout } from "@/components/layout/PrismaDataLoadErrorCallout";
 import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
 import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
+import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 export const dynamic = "force-dynamic";
 
 /** Контент списка на всю ширину рабочей области (таблица сама делит колонки). */
@@ -130,6 +131,10 @@ export default async function OrdersPage({
   const baseCountParts: Prisma.OrderWhereInput[] = [
     { tenantId: tenantId ?? "__missing_tenant__" },
     { archivedAt: null },
+    orderTestVisibilityWhere({
+      viewerRole: session?.role ?? null,
+      viewerUserId: session?.sub ?? null,
+    }),
   ];
   if (onlyShippedActive) {
     baseCountParts.push({ adminShippedOtpr: true });
@@ -206,6 +211,8 @@ export default async function OrdersPage({
         search: listSearchQ || undefined,
         createdAtRange: createdAtRange ?? undefined,
         ordersListForUserId: session?.sub ?? null,
+        viewerRole: session?.role ?? null,
+        viewerUserId: session?.sub ?? null,
       }),
       getLabDueHmSlotsForTenant(tenantId),
     ]);

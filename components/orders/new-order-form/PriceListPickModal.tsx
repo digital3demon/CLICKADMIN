@@ -21,6 +21,7 @@ type PriceListPickModalProps = {
   clinicId?: string | null;
   doctorId?: string | null;
   title?: string;
+  keepOpenOnPick?: boolean;
   onClose: () => void;
   onPick: (row: PriceListPickRow) => void;
 };
@@ -49,6 +50,7 @@ export function PriceListPickModal({
   clinicId = null,
   doctorId = null,
   title = "Позиция из прайса",
+  keepOpenOnPick = false,
   onClose,
   onPick,
 }: PriceListPickModalProps) {
@@ -61,6 +63,8 @@ export function PriceListPickModal({
   const [newPriceRub, setNewPriceRub] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [pickedCount, setPickedCount] = useState(0);
+  const [pickedIds, setPickedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!open) return;
@@ -71,6 +75,8 @@ export function PriceListPickModal({
     setNewName("");
     setNewDescription("");
     setNewPriceRub("");
+    setPickedCount(0);
+    setPickedIds(new Set());
     let cancelled = false;
     (async () => {
       try {
@@ -111,9 +117,15 @@ export function PriceListPickModal({
   const pick = useCallback(
     (it: PriceListPickRow) => {
       onPick(it);
-      onClose();
+      setPickedCount((n) => n + 1);
+      setPickedIds((prev) => {
+        const next = new Set(prev);
+        next.add(it.id);
+        return next;
+      });
+      if (!keepOpenOnPick) onClose();
     },
-    [onPick, onClose],
+    [onPick, onClose, keepOpenOnPick],
   );
 
   const createAndPick = useCallback(async () => {
@@ -160,13 +172,26 @@ export function PriceListPickModal({
         leadWorkingDays: row.leadWorkingDays,
       };
       onPick(pickRow);
+      setPickedCount((n) => n + 1);
+      setPickedIds((prev) => {
+        const next = new Set(prev);
+        next.add(pickRow.id);
+        return next;
+      });
+      if (keepOpenOnPick) {
+        setCreateOpen(false);
+        setNewName("");
+        setNewDescription("");
+        setNewPriceRub("");
+        return;
+      }
       onClose();
     } catch {
       setCreateError("Сеть недоступна");
     } finally {
       setCreating(false);
     }
-  }, [newDescription, newName, newPriceRub, onClose, onPick]);
+  }, [keepOpenOnPick, newDescription, newName, newPriceRub, onClose, onPick]);
 
   useEffect(() => {
     if (!open) return;
@@ -227,6 +252,12 @@ export function PriceListPickModal({
           onChange={(e) => setSearch(e.target.value)}
           autoFocus
         />
+        {keepOpenOnPick ? (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Мультивыбор включен: нажимайте несколько позиций подряд. Уже добавлено:{" "}
+            <span className="font-semibold text-[var(--text-strong)]">{pickedCount}</span>
+          </p>
+        ) : null}
         <div className="mt-3 flex min-h-0 min-h-[40vh] flex-1 flex-col overflow-hidden">
           {loadError ? (
             <p className="text-sm text-red-600">{loadError}</p>
@@ -237,7 +268,7 @@ export function PriceListPickModal({
                 : "Ничего не найдено"}
             </p>
           ) : (
-            <PriceListTabbedBody items={filtered} onPick={pick} />
+            <PriceListTabbedBody items={filtered} onPick={pick} pickedIds={pickedIds} />
           )}
         </div>
         <div className="mt-4 flex justify-end border-t border-[var(--border-subtle)] pt-3">

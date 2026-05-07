@@ -24,7 +24,11 @@ import {
 } from "@/lib/kanban-comment-mentions";
 import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
 import { normalizeProductionMentionTag } from "@/lib/kanban-production-mention-tag";
-import { normalizeProductionSettings } from "@/lib/kanban/production";
+import {
+  isProductionRoutingCandidateFile,
+  normalizeProductionSettings,
+  syncParentProductionChecklistSnapshot,
+} from "@/lib/kanban/production";
 import {
   isKanbanAdminGroupRole,
 } from "@/lib/kanban-admin-mention";
@@ -90,6 +94,13 @@ function splitBoardLaneColumnTitle(title: string): BoardLaneColumnParts | null {
   const stageName = raw.slice(splitIx + 1).trim();
   if (!laneName || !stageName) return null;
   return { laneName, stageName };
+}
+
+function columnMatchesStage(columnTitle: string, stageTitle: string): boolean {
+  const col = String(columnTitle || "").trim().toLowerCase();
+  const stage = String(stageTitle || "").trim().toLowerCase();
+  if (!col || !stage) return false;
+  return col === stage || col.endsWith(`· ${stage}`);
 }
 
 /** Ссылка с подписью «шапка карточки» для Telegram HTML. */
@@ -191,6 +202,13 @@ type KanbanCardModalProps = {
   onParentProductionFilesUpdated?: (cardId: string) => void;
 };
 
+type ManualRouteDraftRow = {
+  fileIndex: number;
+  fileName: string;
+  laneId: string;
+  skipProduction: boolean;
+};
+
 export function KanbanCardModal({
   cardId,
   board,
@@ -228,6 +246,9 @@ export function KanbanCardModal({
     | { mode: "image"; images: CardFile[]; index: number }
     | { mode: "pdf"; pdfs: CardFile[]; index: number }
   >(null);
+  const [manualRouteOpen, setManualRouteOpen] = useState(false);
+  const [manualRoutePendingFiles, setManualRoutePendingFiles] = useState<File[]>([]);
+  const [manualRouteRows, setManualRouteRows] = useState<ManualRouteDraftRow[]>([]);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const found = cardId ? findCard(board, cardId) : null;
   const card = found?.card;
@@ -270,6 +291,9 @@ export function KanbanCardModal({
     setBlockPopupOpen(false);
     setPickerMode(null);
     setFileViewer(null);
+    setManualRouteOpen(false);
+    setManualRoutePendingFiles([]);
+    setManualRouteRows([]);
   }, [cardId]);
 
   useEffect(() => {
@@ -288,6 +312,41 @@ export function KanbanCardModal({
   const linkedOrderId = card?.linkedOrderId;
   const kaitenCardIdForChat = card?.kaitenCardId;
   const currentColumnTitle = found?.col?.title || "—";
+  const productionSettingsForCard = useMemo(
+    () => normalizeProductionSettings(board),
+    [board],
+  );
+  const canMarkFilesForRedo = useMemo(() => {
+    if (!card || card.parentCardId) return false;
+    const col = String(currentColumnTitle || "").trim().toLowerCase();
+    const assembly = String(productionSettingsForCard.parentDoneColumnTitle || "")
+      .trim()
+      .toLowerCase();
+    if (!col || !assembly) return false;
+    return col === assembly || col.endsWith(`· ${assembly}`);
+  }, [card, currentColumnTitle, productionSettingsForCard.parentDoneColumnTitle]);
+  const parentInProductionColumn = useMemo(() => {
+    if (!card || card.parentCardId) return false;
+    const currentRaw = String(currentColumnTitle || "").trim();
+    return columnMatchesStage(
+      currentRaw,
+      productionSettingsForCard.triggerColumnTitle,
+    );
+  }, [
+    card,
+    currentColumnTitle,
+    productionSettingsForCard.triggerColumnTitle,
+  ]);
+  const manualProductionLanes = useMemo(
+    () =>
+      (productionSettingsForCard.lanes || [])
+        .filter((lane) => lane.id !== productionSettingsForCard.unmatchedLaneId)
+        .map((lane) => ({ id: lane.id, name: lane.name })),
+    [
+      productionSettingsForCard.lanes,
+      productionSettingsForCard.unmatchedLaneId,
+    ],
+  );
   const laneTransfer = useMemo(() => {
     if (!cardId || !found || !onMoveToColumn) return null;
     const columns: Array<{ id: string; title: string; laneName: string }> = [];
@@ -374,7 +433,10 @@ export function KanbanCardModal({
   }, [board]);
 
   const productionUserIds = useMemo(
-    () => crmList.filter((u) => u.role === "PRODUCTION").map((u) => u.id),
+    () =>
+      crmList
+        .filter((u) => u.role === "PRODUCTION" || u.role === "SENIOR_PRODUCTION")
+        .map((u) => u.id),
     [crmList],
   );
 
@@ -571,13 +633,20 @@ export function KanbanCardModal({
           id: generateId("pchk"),
           text: "Новый пункт",
           completed: false,
+          completedAt: null,
           sourceFileId: "manual",
           sourceFileName: "manual",
           fromArchive: false,
         });
+        syncParentProductionChecklistSnapshot(b, fc.card.id);
         return;
       }
-      fc.card.checklist.push({ id: generateId("ch"), text: "Новый пункт", completed: false });
+      fc.card.checklist.push({
+        id: generateId("ch"),
+        text: "Новый пункт",
+        completed: false,
+        completedAt: null,
+      });
     });
   };
 
@@ -734,7 +803,10 @@ export function KanbanCardModal({
     return true;
   };
 
-  const attachFilesFromChat = async (fileList: File[]) => {
+  const persistAttachedFiles = async (
+    fileList: File[],
+    manualByIndex?: Map<number, { laneId: string; skipProduction: boolean }>,
+  ) => {
     if (!fileList.length) return;
     const actor = chatActorUserId || board.users[0]?.id || "";
     const productionOnly = Boolean(card.parentCardId || (card.childCardIds || []).length > 0);
@@ -744,7 +816,7 @@ export function KanbanCardModal({
       card.kaitenCardId != null &&
       Number.isFinite(card.kaitenCardId);
     let attachedOkCount = 0;
-    for (const file of fileList) {
+    for (const [i, file] of fileList.entries()) {
       try {
         let orderAttId: string | undefined;
         if (linked && card.linkedOrderId) {
@@ -757,6 +829,15 @@ export function KanbanCardModal({
         }
         const cf = await readFileAsCardFile(file, actor);
         if (orderAttId) cf.orderAttachmentId = orderAttId;
+        if (manualByIndex) {
+          const manual = manualByIndex.get(i);
+          if (manual) {
+            cf.productionSkip = manual.skipProduction;
+            if (!manual.skipProduction && manual.laneId) {
+              cf.productionLaneId = manual.laneId;
+            }
+          }
+        }
         onApply((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
@@ -784,6 +865,61 @@ export function KanbanCardModal({
     }
   };
 
+  const attachFilesFromChat = async (fileList: File[]) => {
+    if (!fileList.length) return;
+    const shouldPromptManual =
+      productionSettingsForCard.manualRoutingEnabled === true &&
+      parentInProductionColumn &&
+      !card.parentCardId;
+    if (!shouldPromptManual) {
+      await persistAttachedFiles(fileList);
+      return;
+    }
+    const rows: ManualRouteDraftRow[] = [];
+    fileList.forEach((file, index) => {
+      const candidate = isProductionRoutingCandidateFile(
+        file.name,
+        file.type,
+        productionSettingsForCard.archive3dExtensions,
+      );
+      if (!candidate) return;
+      rows.push({
+        fileIndex: index,
+        fileName: file.name,
+        laneId: "",
+        skipProduction: false,
+      });
+    });
+    if (rows.length === 0) {
+      await persistAttachedFiles(fileList);
+      return;
+    }
+    setManualRoutePendingFiles(fileList);
+    setManualRouteRows(rows);
+    setManualRouteOpen(true);
+  };
+
+  const saveManualRouteSelection = async () => {
+    const map = new Map<number, { laneId: string; skipProduction: boolean }>();
+    for (const row of manualRouteRows) {
+      map.set(row.fileIndex, {
+        laneId: row.skipProduction ? "" : row.laneId,
+        skipProduction: row.skipProduction,
+      });
+    }
+    const files = [...manualRoutePendingFiles];
+    setManualRouteOpen(false);
+    setManualRoutePendingFiles([]);
+    setManualRouteRows([]);
+    await persistAttachedFiles(files, map);
+  };
+
+  const cancelManualRouteSelection = () => {
+    setManualRouteOpen(false);
+    setManualRoutePendingFiles([]);
+    setManualRouteRows([]);
+  };
+
   const baseInput =
     "w-full rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)]";
 
@@ -808,12 +944,40 @@ export function KanbanCardModal({
             columnTitle: col.title,
             checklistDone: done,
             checklistTotal: checklist.length,
+            checklist: checklist.map((row) => ({ ...row })),
+            laneId: child.productionLaneId || "",
           };
         }
       }
       return null;
     })
     .filter((x): x is NonNullable<typeof x> => Boolean(x));
+  const parentProductionChecklistRows = !card.parentCardId
+    ? (() => {
+        const liveById = new Map(childStatusRows.map((row) => [row.id, row]));
+        const snapshotRows = card.productionChecklistSnapshots || [];
+        const merged = childStatusRows.map((row) => ({
+          id: row.id,
+          title: row.title,
+          columnTitle: row.columnTitle,
+          checklist: row.checklist,
+          laneId: row.laneId,
+          isLive: true,
+        }));
+        for (const row of snapshotRows) {
+          if (liveById.has(row.childCardId)) continue;
+          merged.push({
+            id: row.childCardId,
+            title: row.childTitle,
+            columnTitle: row.columnTitle || "Архив",
+            checklist: row.checklist || [],
+            laneId: row.laneId || "",
+            isLive: false,
+          });
+        }
+        return merged;
+      })()
+    : [];
   const childStatusBadge = (columnTitle: string): string => {
     const col = columnTitle.trim().toLowerCase();
     if (col === "готово") {
@@ -896,6 +1060,108 @@ export function KanbanCardModal({
                 onClick={confirmBlock}
               >
                 Заблокировать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {manualRouteOpen && (
+        <div
+          className="fixed inset-0 z-[255] flex items-center justify-center bg-black/55 p-4"
+          role="dialog"
+          aria-modal
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) cancelManualRouteSelection();
+          }}
+        >
+          <div
+            className="w-full max-w-3xl rounded-lg border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-4 text-[var(--kaiten-modal-text)] shadow-xl"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3 className="m-0 text-sm font-semibold">Маршрут 3D/архивов</h3>
+            <p className="mt-1 text-[0.75rem] text-[var(--kaiten-modal-muted)]">
+              Выберите дорожку для каждого файла или отметьте «Не в производство».
+            </p>
+            <div className="mt-3 max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+              {manualRouteRows.map((row) => (
+                <div
+                  key={`${row.fileIndex}:${row.fileName}`}
+                  className="rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-2"
+                >
+                  <div className="mb-2 text-[0.78rem] font-medium break-all">
+                    {row.fileName}
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {manualProductionLanes.map((lane) => {
+                      const checked =
+                        row.skipProduction === false && row.laneId === lane.id;
+                      return (
+                        <label
+                          key={lane.id}
+                          className="inline-flex items-center gap-1.5 text-[0.75rem]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setManualRouteRows((prev) =>
+                                prev.map((x) =>
+                                  x.fileIndex !== row.fileIndex
+                                    ? x
+                                    : {
+                                        ...x,
+                                        laneId: e.target.checked ? lane.id : "",
+                                        skipProduction: false,
+                                      },
+                                ),
+                              )
+                            }
+                            className="rounded"
+                          />
+                          {lane.name}
+                        </label>
+                      );
+                    })}
+                    <label className="inline-flex items-center gap-1.5 text-[0.75rem]">
+                      <input
+                        type="checkbox"
+                        checked={row.skipProduction}
+                        onChange={(e) =>
+                          setManualRouteRows((prev) =>
+                            prev.map((x) =>
+                              x.fileIndex !== row.fileIndex
+                                ? x
+                                : {
+                                    ...x,
+                                    skipProduction: e.target.checked,
+                                    laneId: e.target.checked ? "" : x.laneId,
+                                  },
+                            ),
+                          )
+                        }
+                        className="rounded"
+                      />
+                      Не в производство
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-[var(--kaiten-modal-border)] px-3 py-1.5 text-sm"
+                onClick={cancelManualRouteSelection}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-sm font-medium text-white"
+                onClick={() => void saveManualRouteSelection()}
+              >
+                Сохранить
               </button>
             </div>
           </div>
@@ -1532,6 +1798,35 @@ export function KanbanCardModal({
                                 {f.name}
                               </span>
                             </button>
+                            {canMarkFilesForRedo ? (
+                              <label
+                                className="mt-0.5 inline-flex items-center gap-1.5 rounded px-0.5 py-0.5 text-[0.62rem] text-[var(--kaiten-modal-muted)]"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={f.productionRedo === true}
+                                  onChange={(e) =>
+                                    onApply((b) => {
+                                      const fc = findCard(b, cardId);
+                                      if (!fc) return;
+                                      const row = (fc.card.files || []).find((x) => x.id === f.id);
+                                      if (!row) return;
+                                      row.productionRedo = e.target.checked;
+                                      fc.card.updatedAt = new Date().toISOString();
+                                      pushActivity(
+                                        fc.card,
+                                        `${e.target.checked ? "Отмечен" : "Снят"} «переделать»: ${row.name}`,
+                                        b.users[0]?.id,
+                                        b,
+                                        act,
+                                      );
+                                    })
+                                  }
+                                />
+                                Переделать в новом цикле
+                              </label>
+                            ) : null}
                             <button
                               type="button"
                               className="absolute right-5 top-1/2 -translate-y-1/2 rounded bg-[var(--kaiten-modal-bg)]/90 p-0.5 text-[var(--kaiten-modal-muted)] opacity-0 shadow-sm ring-1 ring-[var(--kaiten-modal-border)] transition-opacity hover:text-[var(--kaiten-modal-text)] group-hover:opacity-100"
@@ -1656,6 +1951,66 @@ export function KanbanCardModal({
                       </div>
                     ))}
                   </div>
+                </div>
+              ) : null}
+
+              {!card.parentCardId && parentProductionChecklistRows.length > 0 ? (
+                <div className="mb-3">
+                  <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+                    Чеклисты производства (только чтение)
+                  </div>
+                  <div className="space-y-2">
+                    {parentProductionChecklistRows.map((row) => (
+                      <div
+                        key={`snapshot-${row.id}`}
+                        className="rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-2"
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-2 text-[0.76rem]">
+                          <div className="min-w-0 truncate text-[var(--kaiten-modal-text)]">
+                            {row.title}
+                          </div>
+                          <span
+                            className={`shrink-0 rounded border px-1.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wide ${childStatusBadge(row.columnTitle)}`}
+                          >
+                            {row.isLive ? row.columnTitle : `Архив (${row.columnTitle})`}
+                          </span>
+                        </div>
+                        {row.checklist.length === 0 ? (
+                          <div className="text-[0.72rem] text-[var(--kaiten-modal-muted)]">
+                            Чеклист пуст.
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {row.checklist.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex items-center gap-2 text-[0.74rem] text-[var(--kaiten-modal-text)]"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(item.completed)}
+                                  readOnly
+                                  disabled
+                                  className="h-3.5 w-3.5 accent-[var(--kaiten-accent,#9333ea)]"
+                                />
+                                <span className={item.completed ? "line-through opacity-85" : ""}>
+                                  {item.text}
+                                </span>
+                                {item.completed && item.completedAt ? (
+                                  <span className="ml-auto text-[0.66rem] text-[var(--kaiten-modal-muted)]">
+                                    {formatDateTimeRu(item.completedAt)}
+                                  </span>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[0.65rem] text-[var(--kaiten-modal-muted)]">
+                    Изменения чеклиста доступны только в дочерних карточках производства.
+                  </p>
                 </div>
               ) : null}
 
@@ -2130,7 +2485,7 @@ function ChatPanel({
           ]
         : [];
     const syntheticProd: ChatMentionOption[] =
-      productionUserIds.length > 0 && productionMentionTag
+      productionMentionTag
         ? [
             {
               id: "__kanban_production_team__",
@@ -2598,6 +2953,10 @@ function ChecklistEditor({
                 const it = list.find((x) => x.id === item.id);
                 if (!it) return;
                 it.completed = !it.completed;
+                it.completedAt = it.completed ? new Date().toISOString() : null;
+                if (fc.card.parentCardId) {
+                  syncParentProductionChecklistSnapshot(b, fc.card.id);
+                }
                 pushActivity(fc.card, `Чеклист: ${it.text}`, b.users[0]?.id, b, activityActorLabel);
               })
             }
@@ -2617,9 +2976,17 @@ function ChecklistEditor({
                   : fc.card.checklist || [];
                 const it = list.find((x) => x.id === item.id);
                 if (it) it.text = v;
+                if (fc.card.parentCardId) {
+                  syncParentProductionChecklistSnapshot(b, fc.card.id);
+                }
               });
             }}
           />
+          {item.completed && item.completedAt ? (
+            <span className="shrink-0 text-[0.66rem] text-[var(--kaiten-modal-muted)]">
+              {formatDateTimeRu(item.completedAt)}
+            </span>
+          ) : null}
           <button
             type="button"
             className="text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
@@ -2631,6 +2998,7 @@ function ChecklistEditor({
                   fc.card.productionChecklist = (fc.card.productionChecklist || []).filter(
                     (x) => x.id !== item.id,
                   );
+                  syncParentProductionChecklistSnapshot(b, fc.card.id);
                   return;
                 }
                 fc.card.checklist = (fc.card.checklist || []).filter((x) => x.id !== item.id);

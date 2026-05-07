@@ -18,6 +18,8 @@ export type ChecklistItem = {
   id: string;
   text: string;
   completed: boolean;
+  /** Когда пункт отметили выполненным (null/undefined — не выполнен). */
+  completedAt?: string | null;
 };
 
 export type ProductionChecklistItem = ChecklistItem & {
@@ -41,6 +43,12 @@ export type CardFile = {
   addedByUserId: string;
   /** Если файл загружен как вложение наряда — удаление синхронизируется с Kaiten. */
   orderAttachmentId?: string;
+  /** Родительская карточка в сборке: файл отмечен для нового цикла производства. */
+  productionRedo?: boolean;
+  /** Ручной маршрут в производстве (id дорожки) для этого файла. */
+  productionLaneId?: string;
+  /** Явно не отправлять файл в производство. */
+  productionSkip?: boolean;
 };
 
 export type CardComment = {
@@ -101,6 +109,15 @@ export type KanbanCard = {
   productionLaneId?: string;
   /** Производство: чеклист по файлам/архивам. */
   productionChecklist?: ProductionChecklistItem[];
+  /** Производство: сохранённые чеклисты дочерних карточек в родителе (read-only слепок). */
+  productionChecklistSnapshots?: Array<{
+    childCardId: string;
+    childTitle: string;
+    laneId?: string;
+    columnTitle: string;
+    updatedAt: string;
+    checklist: ProductionChecklistItem[];
+  }>;
   /** Производство: завершена ли работа по карточке (для автоархивации). */
   productionReadyAt?: string | null;
 };
@@ -181,7 +198,7 @@ export type KanbanBoard = {
   distributeNewOrders?: boolean;
   /** Закрытая доска: доступ только пользователям из `accessUserIds`. */
   isPrivate?: boolean;
-  /** Разрешить доступ всем пользователям с ролью `PRODUCTION` (актуально для закрытых досок). */
+  /** Разрешить доступ всем пользователям с ролью `PRODUCTION`/`SENIOR_PRODUCTION` (актуально для закрытых досок). */
   allowProductionRoleAccess?: boolean;
   /** Список userId, у кого есть доступ к закрытой доске. */
   accessUserIds?: string[];
@@ -202,13 +219,15 @@ export type KanbanBoard = {
   /** Настройки производственного контура на доске. */
   productionSettings?: {
     enabled: boolean;
+    /** true: маршрут задаётся руками при загрузке 3D/архивов. */
+    manualRoutingEnabled?: boolean;
     triggerColumnTitle: string;
     parentDoneColumnTitle: string;
     childTodoColumnTitle: string;
     childInProgressColumnTitle: string;
     childDoneColumnTitle: string;
     unmatchedLaneId: string;
-    childAutoArchiveAfterDays: number;
+    childAutoArchiveAfterMinutes: number;
     archive3dExtensions: string[];
     lanes: Array<{
       id: string;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { createCard } from "./model";
 import {
+  autoArchiveReadyProductionChildren,
   defaultProductionSettings,
   expandProductionChecklistFromArchives,
   moveParentToAssemblyIfReady,
@@ -96,6 +97,53 @@ describe("kanban production routing", () => {
       (c) => c.productionLaneId === board.productionSettings?.unmatchedLaneId,
     );
     expect(Boolean(fallback)).toBe(true);
+  });
+
+  it("rework cycle resets done child and rebuilds checklist", () => {
+    const board = makeBoard();
+    const parent = createCard({
+      id: "p-rework",
+      title: "Parent rework",
+      files: [
+        {
+          id: "f-rework",
+          name: "2602-089-Быстрова-Садовникова-сплинт-1.stl",
+          mime: "application/octet-stream",
+          size: 10,
+          dataUrl: "data:application/octet-stream;base64,AA==",
+          addedAt: new Date().toISOString(),
+          addedByUserId: "u1",
+          productionRedo: true,
+        },
+      ],
+    });
+    const child = createCard({
+      id: "ch-rework",
+      title: "Child old",
+      parentCardId: parent.id,
+      productionLaneId: "lane_mill",
+      productionChecklist: [
+        {
+          id: "chk-old",
+          text: "old item",
+          completed: true,
+          sourceFileId: "f-rework",
+          sourceFileName: "2602-089-Быстрова-Садовникова-сплинт-1.stl",
+          fromArchive: false,
+        },
+      ],
+      productionReadyAt: new Date().toISOString(),
+    });
+    board.columns[1]?.cards.push(parent);
+    board.columns[4]?.cards.push(child); // "Готово"
+
+    const res = syncProductionChildrenForParent(board, parent.id);
+    expect(res.childIds).toContain(child.id);
+    expect(board.columns[2]?.cards.some((c) => c.id === child.id)).toBe(true); // moved to todo
+    expect(board.columns[4]?.cards.some((c) => c.id === child.id)).toBe(false);
+    const updated = board.columns.flatMap((c) => c.cards).find((c) => c.id === child.id)!;
+    expect(updated.productionChecklist?.[0]?.text.startsWith("Переделать: ")).toBe(true);
+    expect((parent.files || []).every((f) => f.productionRedo !== true)).toBe(true);
   });
 });
 
@@ -226,5 +274,48 @@ describe("kanban parent move after children done", () => {
     expect(moved).toBe(true);
     expect(board.columns[5]?.cards.some((c) => c.id === parent.id)).toBe(true);
     expect(board.columns[1]?.cards.some((c) => c.id === parent.id)).toBe(false);
+  });
+});
+
+describe("kanban production auto-archive delay", () => {
+  it("archives done child after configured minutes and keeps checklist snapshot in parent", () => {
+    const board = makeBoard();
+    const parent = createCard({
+      id: "p-archive",
+      title: "Parent archive",
+      childCardIds: ["ch-archive"],
+    });
+    const child = createCard({
+      id: "ch-archive",
+      title: "Child archive",
+      parentCardId: parent.id,
+      productionLaneId: "lane_print",
+      productionReadyAt: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+      productionChecklist: [
+        {
+          id: "chk-archive",
+          text: "model.stl",
+          completed: true,
+          completedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+          sourceFileId: "f-archive",
+          sourceFileName: "model.stl",
+          fromArchive: false,
+        },
+      ],
+    });
+    board.productionSettings = {
+      ...defaultProductionSettings(),
+      childAutoArchiveAfterMinutes: 15,
+    };
+    board.columns[4]?.cards.push(child); // Готово
+    board.columns[1]?.cards.push(parent);
+
+    const count = autoArchiveReadyProductionChildren(board);
+
+    expect(count).toBe(1);
+    expect(board.columns[4]?.cards.some((c) => c.id === child.id)).toBe(false);
+    expect((parent.childCardIds || []).includes(child.id)).toBe(false);
+    expect((parent.productionChecklistSnapshots || []).length).toBe(1);
+    expect(parent.productionChecklistSnapshots?.[0]?.checklist?.[0]?.text).toBe("model.stl");
   });
 });

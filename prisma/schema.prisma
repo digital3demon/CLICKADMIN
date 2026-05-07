@@ -453,6 +453,8 @@ enum AppModule {
   CONFIG_PRICING_CORRECTION
   CONFIG_WAREHOUSE
   CONFIG_KANBAN_BOARDS
+  /// Конфиг: производственный контур канбана
+  CONFIG_KANBAN_PRODUCTION
   /// Конфиг: типы карточек встроенного канбана
   CONFIG_KANBAN_CARD_TYPES
   CONFIG_KAITEN
@@ -475,6 +477,7 @@ enum UserRole {
   SENIOR_ADMINISTRATOR
   SENIOR_TECHNICIAN
   PRODUCTION
+  SENIOR_PRODUCTION
   MANAGER
   ACCOUNTANT
   FINANCIAL_MANAGER
@@ -534,6 +537,7 @@ model User {
   orderProstheticsRequestsResolved OrderProstheticsRequest[] @relation("OrderProstheticsRequestResolvedBy")
   orderProstheticsRequestsRejected OrderProstheticsRequest[] @relation("OrderProstheticsRequestRejectedBy")
   orderKaitenLabMentionAcks      OrderKaitenLabMentionAck[]
+  testOrdersOwned                Order[]                     @relation("TestOrderOwner")
   /// Клиентские состояния на уровне пользователя (UI prefs, флаги и т.п.)
   clientState                   UserClientState[]
   deviceSessions                UserDeviceSession[]
@@ -871,6 +875,11 @@ model Order {
   /// Загруженный файл счёта (вкладка счёта / зона загрузки); скачивание счёта из CRM
   invoiceAttachmentId            String?                   @unique
   invoiceAttachment              OrderAttachment?          @relation("InvoiceAttachmentForOrder", fields: [invoiceAttachmentId], references: [id], onDelete: SetNull)
+  /// Тестовый наряд (только для владельца): без стандартного номера и без Kaiten-интеграции.
+  isTestOrder                    Boolean                   @default(false)
+  /// Владелец, создавший тестовый наряд. Только он видит его в списке.
+  testOrderOwnerUserId           String?
+  testOrderOwner                 User?                     @relation("TestOrderOwner", fields: [testOrderOwnerUserId], references: [id], onDelete: SetNull)
   constructions                  OrderConstruction[]
   attachments                    OrderAttachment[]
   revisions                      OrderRevision[]
@@ -899,6 +908,7 @@ model Order {
   @@index([courierDeliveryId])
   @@index([continuesFromOrderId])
   @@index([archivedAt, createdAt])
+  @@index([tenantId, isTestOrder, testOrderOwnerUserId])
 }
 
 /// Пользователь отметил просмотр чата Kaiten при упоминании лаборатории; новый «сигнал» в Order снимает устаревание ack.

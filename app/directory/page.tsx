@@ -20,7 +20,10 @@ export default async function DirectoryHubPage() {
     session != null && canAccessCostingModule(session.role, a ?? undefined);
   const showPrice = a?.CONFIG_PRICING === true;
   const showWhConf = a?.CONFIG_WAREHOUSE === true;
-  const showKanbanBoards = a?.CONFIG_KANBAN_BOARDS === true;
+  const showKanbanBoards =
+    a?.CONFIG_KANBAN_BOARDS === true ||
+    a?.CONFIG_KANBAN_PRODUCTION === true ||
+    a?.CONFIG_KANBAN_CARD_TYPES === true;
   const showKaiten = a?.CONFIG_KAITEN === true;
   const showCouriers = a?.CONFIG_COURIERS === true;
   const showOrdersImportExport = a?.CONFIG_ORDERS_IMPORT_EXPORT === true;

@@ -44,6 +44,7 @@ function is3dObjectPath(name: string, extensions: string[]): boolean {
 export function defaultProductionSettings(): NonNullable<KanbanBoard["productionSettings"]> {
   return {
     enabled: true,
+    manualRoutingEnabled: false,
     /** Пустая строка — на клиенте подставляется дефолт clickpr. */
     productionMentionTag: "",
     triggerColumnTitle: "Производство",
@@ -52,7 +53,7 @@ export function defaultProductionSettings(): NonNullable<KanbanBoard["production
     childInProgressColumnTitle: "В работе",
     childDoneColumnTitle: "Готово",
     unmatchedLaneId: "lane_unsorted",
-    childAutoArchiveAfterDays: 0,
+    childAutoArchiveAfterMinutes: 15,
     archive3dExtensions: [".stl", ".ply", ".obj"],
     lanes: [
       { id: "lane_print", name: "Печать", keywords: ["модель", "модели", "моделька", "штампик", "штампики"] },
@@ -83,8 +84,27 @@ export function normalizeProductionSettings(
   if (!merged.lanes.some((x) => x.id === merged.unmatchedLaneId)) {
     merged.lanes.push({ id: merged.unmatchedLaneId, name: "Не распределено", keywords: [] });
   }
-  const days = Number(merged.childAutoArchiveAfterDays);
-  merged.childAutoArchiveAfterDays = Number.isFinite(days) ? Math.max(0, Math.round(days)) : 0;
+  const rawMinutes = Number(
+    (
+      raw as Partial<{
+        childAutoArchiveAfterMinutes: unknown;
+        childAutoArchiveAfterDays: unknown;
+      }>
+    )?.childAutoArchiveAfterMinutes,
+  );
+  const rawDays = Number(
+    (
+      raw as Partial<{
+        childAutoArchiveAfterDays: unknown;
+      }>
+    )?.childAutoArchiveAfterDays,
+  );
+  const fallbackFromLegacyDays = Number.isFinite(rawDays) ? rawDays * 24 * 60 : NaN;
+  const minutesCandidate = Number.isFinite(rawMinutes) ? rawMinutes : fallbackFromLegacyDays;
+  merged.childAutoArchiveAfterMinutes = Number.isFinite(minutesCandidate)
+    ? Math.max(0, Math.round(minutesCandidate))
+    : def.childAutoArchiveAfterMinutes;
+  merged.manualRoutingEnabled = merged.manualRoutingEnabled === true;
   merged.archive3dExtensions = normalize3dExtensions(merged.archive3dExtensions);
   board.productionSettings = merged;
   return merged;
@@ -99,6 +119,30 @@ function resolveLaneForFileName(
     if ((lane.keywords || []).some((kw) => hasKeywordAtBoundary(fileName, kw))) return lane.id;
   }
   return settings.unmatchedLaneId;
+}
+
+function looksLikeArchive(name: string, mime?: string): boolean {
+  const lower = normalizeKey(name);
+  const extArchive =
+    lower.endsWith(".zip") ||
+    lower.endsWith(".rar") ||
+    lower.endsWith(".7z") ||
+    lower.endsWith(".tar") ||
+    lower.endsWith(".gz") ||
+    lower.endsWith(".tgz");
+  if (extArchive) return true;
+  const m = normalizeKey(String(mime || ""));
+  return m.includes("zip") || m.includes("rar") || m.includes("7z") || m.includes("tar");
+}
+
+export function isProductionRoutingCandidateFile(
+  fileName: string,
+  mime: string | undefined,
+  configured3dExt: string[] | undefined,
+): boolean {
+  const extensions = normalize3dExtensions(configured3dExt);
+  if (is3dObjectPath(fileName, extensions)) return true;
+  return looksLikeArchive(fileName, mime);
 }
 
 function cardById(board: KanbanBoard, cardId: string): KanbanCard | null {
@@ -121,15 +165,63 @@ function colByLaneAndStage(
   return colByTitle(board, stageTitle);
 }
 
-function buildInitialChecklist(files: CardFile[]): ProductionChecklistItem[] {
+function buildInitialChecklist(
+  files: CardFile[],
+  markAsRedo = false,
+): ProductionChecklistItem[] {
   return files.map((f) => ({
     id: generateId("pchk"),
-    text: f.name,
+    text: markAsRedo ? `Переделать: ${f.name}` : f.name,
     completed: false,
+    completedAt: null,
     sourceFileId: f.id,
     sourceFileName: f.name,
     fromArchive: false,
   }));
+}
+
+function cloneProductionChecklist(
+  list: ProductionChecklistItem[] | undefined,
+): ProductionChecklistItem[] {
+  return (list || []).map((item) => ({ ...item }));
+}
+
+function upsertParentChecklistSnapshot(
+  parent: KanbanCard,
+  child: KanbanCard,
+  columnTitle: string,
+): void {
+  const now = new Date().toISOString();
+  const snapshots = parent.productionChecklistSnapshots || [];
+  const snapshot = {
+    childCardId: child.id,
+    childTitle: child.title,
+    laneId: child.productionLaneId,
+    columnTitle,
+    updatedAt: now,
+    checklist: cloneProductionChecklist(child.productionChecklist),
+  };
+  const idx = snapshots.findIndex((row) => row.childCardId === child.id);
+  if (idx >= 0) {
+    snapshots[idx] = snapshot;
+  } else {
+    snapshots.push(snapshot);
+  }
+  parent.productionChecklistSnapshots = snapshots;
+  parent.updatedAt = now;
+}
+
+export function syncParentProductionChecklistSnapshot(
+  board: KanbanBoard,
+  childCardId: string,
+): void {
+  const childLoc = findCard(board, childCardId);
+  if (!childLoc) return;
+  const child = childLoc.card;
+  if (!child.parentCardId) return;
+  const parent = cardById(board, child.parentCardId);
+  if (!parent) return;
+  upsertParentChecklistSnapshot(parent, child, childLoc.col.title);
 }
 
 function upsertChildCardForLane(input: {
@@ -139,26 +231,50 @@ function upsertChildCardForLane(input: {
   laneName: string;
   files: CardFile[];
   settings: NonNullable<KanbanBoard["productionSettings"]>;
+  markAsRedo?: boolean;
   activityActorLabel?: string;
 }): { id: string; created: boolean } {
-  const { board, parent, laneId, laneName, files, settings, activityActorLabel } = input;
+  const {
+    board,
+    parent,
+    laneId,
+    laneName,
+    files,
+    settings,
+    markAsRedo = false,
+    activityActorLabel,
+  } = input;
   const existing = board.columns
     .flatMap((col) => col.cards)
     .find((card) => card.parentCardId === parent.id && card.productionLaneId === laneId);
   if (existing) {
     existing.files = files.map((f) => ({ ...f }));
-    existing.productionChecklist = buildInitialChecklist(files);
+    existing.productionChecklist = buildInitialChecklist(files, markAsRedo);
     existing.updatedAt = new Date().toISOString();
+    if (markAsRedo) {
+      const todoCol = colByLaneAndStage(board, laneName, settings.childTodoColumnTitle);
+      const currentCol = board.columns.find((col) =>
+        col.cards.some((card) => card.id === existing.id),
+      );
+      if (todoCol && currentCol && currentCol.id !== todoCol.id) {
+        currentCol.cards = currentCol.cards.filter((card) => card.id !== existing.id);
+        todoCol.cards.unshift(existing);
+        existing.lastMovedAt = new Date().toISOString();
+      }
+      existing.productionReadyAt = null;
+    }
     return { id: existing.id, created: false };
   }
   const todoCol = colByLaneAndStage(board, laneName, settings.childTodoColumnTitle);
   if (!todoCol) return { id: "", created: false };
   const child = createCard({
     title: `${parent.title} · ${laneName}`,
-    description: `Производственная карточка для направления «${laneName}».`,
+    description: markAsRedo
+      ? `Переделка для направления «${laneName}».`
+      : `Производственная карточка для направления «${laneName}».`,
     createdByUserId: parent.createdByUserId,
     files: files.map((f) => ({ ...f })),
-    productionChecklist: buildInitialChecklist(files),
+    productionChecklist: buildInitialChecklist(files, markAsRedo),
     parentCardId: parent.id,
     productionLaneId: laneId,
     childCardIds: [],
@@ -190,9 +306,27 @@ export function syncProductionChildrenForParent(
   if (!settings.enabled) return { childIds: [], newlyCreated: [] };
   const parent = parentCard ?? cardById(board, parentCardId);
   if (!parent || parent.parentCardId) return { childIds: [], newlyCreated: [] };
+  const redoFiles = (parent.files || []).filter((f) => f.productionRedo === true);
+  const markAsRedo = redoFiles.length > 0;
+  const sourceFiles = markAsRedo ? redoFiles : parent.files || [];
   const grouped = new Map<string, CardFile[]>();
-  for (const f of parent.files || []) {
-    const laneId = resolveLaneForFileName(f.name, settings);
+  for (const f of sourceFiles) {
+    const manualLaneId = String(f.productionLaneId || "").trim();
+    const manualLaneValid =
+      manualLaneId && settings.lanes.some((lane) => lane.id === manualLaneId);
+    if (settings.manualRoutingEnabled === true) {
+      // В режиме "вручную" ключевые слова не участвуют: только явный выбор дорожки.
+      if (f.productionSkip === true) continue;
+      if (!manualLaneValid) continue;
+      const list = grouped.get(manualLaneId) || [];
+      list.push(f);
+      grouped.set(manualLaneId, list);
+      continue;
+    }
+    if (f.productionSkip === true) continue;
+    const laneId = manualLaneValid
+      ? manualLaneId
+      : resolveLaneForFileName(f.name, settings);
     const list = grouped.get(laneId) || [];
     list.push(f);
     grouped.set(laneId, list);
@@ -215,6 +349,7 @@ export function syncProductionChildrenForParent(
       laneName,
       files,
       settings,
+      markAsRedo,
       activityActorLabel,
     });
     if (up.id) {
@@ -225,6 +360,19 @@ export function syncProductionChildrenForParent(
   if (childIds.length) {
     parent.childCardIds = childIds;
     parent.productionReadyAt = null;
+    if (markAsRedo) {
+      const redoIds = new Set(redoFiles.map((f) => f.id));
+      parent.files = (parent.files || []).map((f) =>
+        redoIds.has(f.id) ? { ...f, productionRedo: false } : f,
+      );
+    }
+    const childIdSet = new Set(childIds);
+    parent.productionChecklistSnapshots = (parent.productionChecklistSnapshots || []).filter((row) =>
+      childIdSet.has(row.childCardId),
+    );
+    for (const childId of childIds) {
+      syncParentProductionChecklistSnapshot(board, childId);
+    }
   }
   return { childIds, newlyCreated };
 }
@@ -256,6 +404,7 @@ export async function expandProductionChecklistFromArchives(
         id: generateId("pchk"),
         text: f.name,
         completed: false,
+        completedAt: null,
         sourceFileId: f.id,
         sourceFileName: f.name,
         fromArchive: false,
@@ -275,6 +424,7 @@ export async function expandProductionChecklistFromArchives(
           id: generateId("pchk"),
           text: name,
           completed: false,
+          completedAt: null,
           sourceFileId: f.id,
           sourceFileName: f.name,
           fromArchive: true,
@@ -289,6 +439,7 @@ export async function expandProductionChecklistFromArchives(
   }
   child.productionChecklist = next;
   child.updatedAt = new Date().toISOString();
+  syncParentProductionChecklistSnapshot(board, childCardId);
 }
 
 export function isProductionChildDone(board: KanbanBoard, childCardId: string): boolean {
@@ -307,6 +458,7 @@ export function markProductionChildReadyState(board: KanbanBoard, cardId: string
   const card = cardById(board, cardId);
   if (!card || !card.parentCardId) return;
   card.productionReadyAt = isProductionChildDone(board, cardId) ? new Date().toISOString() : null;
+  syncParentProductionChecklistSnapshot(board, cardId);
 }
 
 export function parentCanMoveToAssembly(board: KanbanBoard, parentCardId: string): boolean {
@@ -354,7 +506,7 @@ export function warnIfChildMovedToDoneWithIncompleteChecklist(
 
 export function autoArchiveReadyProductionChildren(board: KanbanBoard): number {
   const settings = normalizeProductionSettings(board);
-  const days = settings.childAutoArchiveAfterDays;
+  const minutes = settings.childAutoArchiveAfterMinutes;
   let count = 0;
   const now = Date.now();
   for (const col of board.columns) {
@@ -362,9 +514,18 @@ export function autoArchiveReadyProductionChildren(board: KanbanBoard): number {
       if (!card.parentCardId || !card.productionReadyAt) continue;
       const readyAt = new Date(card.productionReadyAt).getTime();
       if (!Number.isFinite(readyAt)) continue;
-      const ageDays = (now - readyAt) / (1000 * 60 * 60 * 24);
-      if (ageDays < days) continue;
-      if (archiveCardByIdOnBoard(board, card.id, "auto")) count += 1;
+      const ageMinutes = (now - readyAt) / (1000 * 60);
+      if (ageMinutes < minutes) continue;
+      const parent = cardById(board, card.parentCardId);
+      if (parent) {
+        upsertParentChecklistSnapshot(parent, card, col.title);
+      }
+      if (archiveCardByIdOnBoard(board, card.id, "auto")) {
+        if (parent) {
+          parent.childCardIds = (parent.childCardIds || []).filter((id) => id !== card.id);
+        }
+        count += 1;
+      }
     }
   }
   return count;

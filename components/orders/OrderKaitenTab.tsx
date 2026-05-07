@@ -24,6 +24,11 @@ const KAITEN_LANE_LABEL: Record<KaitenTrackLane, string> = {
   ORTHODONTICS: "Ортодонтия",
   TEST: "Тест",
 };
+const KAITEN_TAB_GRID_CLASS = "grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-stretch lg:gap-4";
+const KAITEN_TAB_CHAT_PANEL_CLASS =
+  "order-1 flex min-h-[min(50vh,22rem)] flex-col rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 lg:min-h-0 lg:h-full";
+const KAITEN_TAB_SIDE_PANEL_CLASS =
+  "flex min-h-0 flex-col rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-4 lg:h-full";
 
 type KaitenCardTypeOpt = { id: string; name: string; isActive?: boolean };
 
@@ -626,11 +631,11 @@ export function OrderKaitenTab({
     };
 
     return (
-      <div className="max-w-xl space-y-4 text-sm">
-        <p className="text-[var(--text-secondary)]">
+      <div className="space-y-6">
+        <p className="text-xs text-[var(--text-muted)]">
           Карточка в Kaiten пока не привязана. Работа продолжается через карточку в
-          канбане CRM, а здесь можно создать новую карточку Kaiten или привязать
-          существующую.
+          канбане CRM. Ниже — тот же рабочий layout блоков: чат, блокировка и
+          панель привязки.
         </p>
         {kanbanCardUrl ? (
           <a
@@ -650,133 +655,189 @@ export function OrderKaitenTab({
             </p>
           </div>
         ) : null}
-        {kaitenDecideLater ? (
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-            Было отмечено «настроить Kaiten позже» — укажите тип, пространство и
-            колонку ниже и нажмите кнопку: данные запишутся в наряд, карточка
-            уйдёт в выбранное место на доске.
-          </p>
-        ) : null}
 
-        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 space-y-3">
-          <p className="text-xs font-medium text-[var(--text-secondary)]">
-            Создать привязку: тип карточки, пространство и колонка
-          </p>
-          <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">
-            Тип карточки Kaiten
-            <select
-              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm"
-              value={String(createKaitenCardTypeId)}
-              onChange={(e) => setCreateKaitenCardTypeId(e.target.value)}
-            >
-              <option value="">— выберите тип —</option>
-              {kaitenTypeOptions.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">
-            Пространство (доска)
-            <select
-              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm"
-              value={trackLane ?? ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                setTrackLane(v === "" ? null : (v as KaitenTrackLane));
-                setColumnId("");
-              }}
-            >
-              <option value="">— выберите пространство —</option>
-              {KAITEN_LANES.map((lane) => (
-                <option key={lane} value={lane}>
-                  {KAITEN_LANE_LABEL[lane]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">
-            Колонка (этап на доске)
-            <select
-              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm"
-              value={columnId === "" ? "" : String(columnId)}
-              onChange={(e) => {
-                const v = e.target.value;
-                setColumnId(v === "" ? "" : Number(v));
-              }}
-              disabled={trackLane == null || columnOptions.length === 0}
-            >
-              <option value="">
-                {trackLane == null ? "Сначала пространство" : "— выберите колонку —"}
-              </option>
-              {columnOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title || c.name || `Колонка ${c.id}`}
-                </option>
-              ))}
-            </select>
-          </label>
-          {noCardBoardError ? (
-            <p className="text-xs text-amber-700 dark:text-amber-300/90">
-              {noCardBoardError}
+        <div className={KAITEN_TAB_GRID_CLASS}>
+          <div className={`order-2 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+              Блокировка (как в Kaiten)
+            </h3>
+            <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
+              Блокировка станет доступна после привязки карточки к Kaiten.
             </p>
-          ) : null}
-        </div>
+            <div className="mt-3 space-y-3">
+              <textarea
+                disabled
+                placeholder="Причина блокировки"
+                className="min-h-[5.5rem] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] placeholder:text-[var(--text-muted)] opacity-75"
+                rows={3}
+              />
+              <button
+                type="button"
+                disabled
+                className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white opacity-50"
+              >
+                Заблокировать в Kaiten
+              </button>
+            </div>
+          </div>
 
-        <div>
-          <button
-            type="button"
-            disabled={!canCreateFromCrm || createBusy}
-            onClick={() => void runCreate()}
-            className={
-              canCreateFromCrm
-                ? "rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-                : "rounded-md border border-[var(--border-default)] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--panel-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-            }
-          >
-            {createBusy
-              ? "Создаём…"
-              : "Создать карточку в Kaiten / канбан"}
-          </button>
-          {!hasKaitenCreateFields ? (
-            <p className="mt-2 text-xs text-[var(--text-muted)]">
-              Укажите тип карточки, пространство и колонку выше — тогда кнопка станет
-              зелёной.
-            </p>
-          ) : null}
-        </div>
-
-        <div className="border-t border-[var(--border-subtle)] pt-4">
-          <p className="mb-2 text-[var(--text-secondary)]">
-            Карточка уже есть в Kaiten — укажите числовой id (из URL, например{" "}
-            <code className="rounded bg-[var(--code-bg)] px-1">…/card/12345</code>) и
-            привяжите.
-          </p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="id карточки"
-              value={linkIdDraft}
-              onChange={(e) => setLinkIdDraft(e.target.value)}
-              className="w-full min-w-0 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 py-1.5 text-sm sm:max-w-[12rem]"
-            />
+          <div className={`order-3 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+              Шапка и положение на доске
+            </h3>
+            {kaitenDecideLater ? (
+              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+                Было отмечено «настроить Kaiten позже» — укажите тип, пространство и
+                колонку ниже и нажмите кнопку.
+              </p>
+            ) : null}
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
+                Заголовок карточки
+                <input
+                  disabled
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] opacity-75"
+                  value="Заголовок появится после создания карточки"
+                  readOnly
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
+                Тип карточки Kaiten
+                <select
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm"
+                  value={String(createKaitenCardTypeId)}
+                  onChange={(e) => setCreateKaitenCardTypeId(e.target.value)}
+                >
+                  <option value="">— выберите тип —</option>
+                  {kaitenTypeOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">
+                Пространство (доска)
+                <select
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm"
+                  value={trackLane ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setTrackLane(v === "" ? null : (v as KaitenTrackLane));
+                    setColumnId("");
+                  }}
+                >
+                  <option value="">— выберите пространство —</option>
+                  {KAITEN_LANES.map((lane) => (
+                    <option key={lane} value={lane}>
+                      {KAITEN_LANE_LABEL[lane]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">
+                Колонка (этап на доске)
+                <select
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm"
+                  value={columnId === "" ? "" : String(columnId)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setColumnId(v === "" ? "" : Number(v));
+                  }}
+                  disabled={trackLane == null || columnOptions.length === 0}
+                >
+                  <option value="">
+                    {trackLane == null ? "Сначала пространство" : "— выберите колонку —"}
+                  </option>
+                  {columnOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title || c.name || `Колонка ${c.id}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {noCardBoardError ? (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300/90">
+                {noCardBoardError}
+              </p>
+            ) : null}
             <button
               type="button"
-              disabled={linkBusy}
-              onClick={() => void runLink()}
-              className="rounded-md border border-[var(--border-default)] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--panel-hover)] disabled:opacity-50"
+              disabled={!canCreateFromCrm || createBusy}
+              onClick={() => void runCreate()}
+              className={
+                canCreateFromCrm
+                  ? "mt-3 rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  : "mt-3 rounded-md border border-[var(--border-default)] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--panel-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+              }
             >
-              {linkBusy ? "Привязка…" : "Привязать"}
+              {createBusy ? "Создаём…" : "Создать карточку в Kaiten / канбан"}
+            </button>
+            {!hasKaitenCreateFields ? (
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                Укажите тип карточки, пространство и колонку выше — тогда кнопка станет
+                зелёной.
+              </p>
+            ) : null}
+            <div className="mt-3 border-t border-[var(--border-subtle)] pt-3">
+              <p className="mb-2 text-xs text-[var(--text-secondary)]">
+                Карточка уже есть в Kaiten — укажите числовой id (например{" "}
+                <code className="rounded bg-[var(--code-bg)] px-1">…/card/12345</code>).
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="id карточки"
+                  value={linkIdDraft}
+                  onChange={(e) => setLinkIdDraft(e.target.value)}
+                  className="w-full min-w-0 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 py-1.5 text-sm sm:max-w-[12rem]"
+                />
+                <button
+                  type="button"
+                  disabled={linkBusy}
+                  onClick={() => void runLink()}
+                  className="rounded-md border border-[var(--border-default)] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--panel-hover)] disabled:opacity-50"
+                >
+                  {linkBusy ? "Привязка…" : "Привязать"}
+                </button>
+              </div>
+            </div>
+            {manualKaitenError ? (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{manualKaitenError}</p>
+            ) : null}
+          </div>
+
+          <div className={KAITEN_TAB_CHAT_PANEL_CLASS}>
+            <h3 className="shrink-0 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+              Чат карточки
+            </h3>
+            <ul className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto lg:max-h-none max-h-[min(50vh,28rem)]">
+              <li className="text-sm text-[var(--text-muted)]">
+                Чат Kaiten появится после привязки карточки.
+              </li>
+              <li className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                Пока можно использовать чат в карточке канбана CRM.
+              </li>
+            </ul>
+            <div className="relative mt-2">
+              <textarea
+                disabled
+                className="min-h-[88px] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] opacity-75"
+                placeholder="Новое сообщение…"
+              />
+            </div>
+            <button
+              type="button"
+              disabled
+              className="mt-2 rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm font-medium text-[var(--text-strong)] opacity-50"
+            >
+              Отправить в Kaiten
             </button>
           </div>
         </div>
-
-        {manualKaitenError ? (
-          <p className="text-sm text-red-600 dark:text-red-400">{manualKaitenError}</p>
-        ) : null}
       </div>
     );
   }
@@ -913,8 +974,8 @@ export function OrderKaitenTab({
         </a>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-stretch lg:gap-4">
-      <div className="order-2 flex min-h-0 flex-col rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-4 lg:h-full">
+      <div className={KAITEN_TAB_GRID_CLASS}>
+      <div className={`order-2 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>
         <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
           Блокировка (как в Kaiten)
         </h3>
@@ -973,7 +1034,7 @@ export function OrderKaitenTab({
         )}
       </div>
 
-      <div className="order-3 flex min-h-0 flex-col rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-4 lg:h-full">
+      <div className={`order-3 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>
         <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
           Шапка и положение на доске
         </h3>
@@ -1055,7 +1116,7 @@ export function OrderKaitenTab({
         </button>
       </div>
 
-      <div className="order-1 flex min-h-[min(50vh,22rem)] flex-col rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 lg:min-h-0 lg:h-full">
+      <div className={KAITEN_TAB_CHAT_PANEL_CLASS}>
         <h3 className="shrink-0 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
           Чат карточки
         </h3>

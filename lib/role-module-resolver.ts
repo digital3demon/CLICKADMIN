@@ -47,6 +47,13 @@ export function isPathAllowedByModuleAccess(
   pathname: string,
   access: Record<AppModule, boolean>,
 ): boolean {
+  if (pathname === "/directory/kanban-boards" || pathname.startsWith("/directory/kanban-boards/")) {
+    return (
+      access.CONFIG_KANBAN_BOARDS === true ||
+      access.CONFIG_KANBAN_PRODUCTION === true ||
+      access.CONFIG_KANBAN_CARD_TYPES === true
+    );
+  }
   const m = getModuleForPathname(pathname);
   if (m == null) return true;
   return access[m] === true;

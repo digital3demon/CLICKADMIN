@@ -568,7 +568,9 @@ export function ProfileSettingsForm({
                 (колонка и тип карточки). Остальные пункты — по мере подключения.
               </p>
             </div>
-          ) : telegramLinked && tgPrefs && userRole === "PRODUCTION" ? (
+          ) : telegramLinked &&
+            tgPrefs &&
+            (userRole === "PRODUCTION" || userRole === "SENIOR_PRODUCTION") ? (
             <div className="space-y-4 border-t border-[var(--card-border)] pt-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                 Личный Telegram: производство

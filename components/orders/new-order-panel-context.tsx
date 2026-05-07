@@ -46,6 +46,7 @@ type NewOrderPanelContextValue = {
   canOpen: boolean;
   canCreate: boolean;
   createAccessReady: boolean;
+  sessionRole: UserRole | null;
 };
 
 const NewOrderPanelContext = createContext<NewOrderPanelContextValue | null>(
@@ -63,6 +64,7 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
   const [panels, setPanels] = useState<NewOrderPanelItem[]>([]);
   const [canCreate, setCanCreate] = useState(false);
   const [createAccessReady, setCreateAccessReady] = useState(false);
+  const [sessionRole, setSessionRole] = useState<UserRole | null>(null);
   const gettersRef = useRef(new Map<string, PanelSnapshotGetter>());
 
   useEffect(() => {
@@ -78,12 +80,16 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
         };
         if (cancelled) return;
         const role = j.user?.role ?? null;
+        setSessionRole(role);
         const moduleAccess =
           (j.user?.moduleAccess as Partial<Record<AppModule, boolean>> | null | undefined) ??
           null;
         setCanCreate(role ? canCreateOrders(role, moduleAccess) : false);
       } catch {
-        if (!cancelled) setCanCreate(false);
+        if (!cancelled) {
+          setCanCreate(false);
+          setSessionRole(null);
+        }
       } finally {
         if (!cancelled) setCreateAccessReady(true);
       }
@@ -211,6 +217,7 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
       canOpen,
       canCreate,
       createAccessReady,
+      sessionRole,
     }),
     [
       open,
@@ -224,6 +231,7 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
       canOpen,
       canCreate,
       createAccessReady,
+      sessionRole,
     ],
   );
 

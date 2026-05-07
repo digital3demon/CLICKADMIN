@@ -52,8 +52,9 @@ const ORDER_INCLUDE = {} as const;
 type CreatedOrder = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE }>;
 
 export type CreateOrderBody = {
+  isTestOrder?: boolean;
   clinicId?: string | null;
-  doctorId?: string;
+  doctorId?: string | null;
   patientName?: string | null;
   legalEntity?: string | null;
   payment?: string | null;
@@ -132,8 +133,15 @@ function fail(status: number, error: string): CreateOrderResult {
   return { ok: false, status, error };
 }
 
+function buildTestOrderNumber(): string {
+  const now = Date.now().toString(36).toUpperCase();
+  const rnd = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `TEST-${now}-${rnd}`;
+}
+
 export type CreateOrderOptions = {
   tenantId: string;
+  actorUserId?: string | null;
   /** Импорт из Excel: разрешаем исторические даты записи/срока. */
   allowPastDates?: boolean;
 };
@@ -150,9 +158,25 @@ export async function createOrderFromBody(
   opts: CreateOrderOptions,
 ): Promise<CreateOrderResult> {
   const { ordersPrisma, clientsPrisma, pricingPrisma } = db;
-  const { tenantId, allowPastDates = false } = opts;
-  const doctorId = body.doctorId?.trim() ?? "";
-  if (!doctorId) return fail(400, "Укажите врача");
+  const { tenantId, allowPastDates = false, actorUserId = null } = opts;
+  const isTestOrder = body.isTestOrder === true;
+  let doctorId = body.doctorId?.trim() ?? "";
+  if (isTestOrder && !doctorId) {
+    const fallbackDoctor = await clientsPrisma.doctor.findFirst({
+      where: { tenantId, deletedAt: null },
+      orderBy: [{ createdAt: "desc" }],
+      select: { id: true },
+    });
+    doctorId = fallbackDoctor?.id ?? "";
+  }
+  if (!doctorId) {
+    return fail(
+      400,
+      isTestOrder
+        ? "Нет доступного врача для тестового наряда. Добавьте хотя бы одного врача."
+        : "Укажите врача",
+    );
+  }
 
   const rawClinic = body.clinicId;
   const isPrivate =
@@ -243,12 +267,13 @@ export async function createOrderFromBody(
     continuesFromOrderId = rawContinuation;
   }
 
-  const kaitenDecideLater = Boolean(body.kaitenDecideLater);
-  const createKanbanWithoutKaiten =
-    kaitenDecideLater && Boolean(body.createKanbanWithoutKaiten);
+  const kaitenDecideLater = isTestOrder ? true : Boolean(body.kaitenDecideLater);
+  const createKanbanWithoutKaiten = isTestOrder
+    ? true
+    : kaitenDecideLater && Boolean(body.createKanbanWithoutKaiten);
   /** Тип/пространство для Kaiten-синка или только для CRM-канбана при «канбан без Kaiten». */
   const needKaitenPlacementFields =
-    !kaitenDecideLater || createKanbanWithoutKaiten;
+    !isTestOrder && (!kaitenDecideLater || createKanbanWithoutKaiten);
   let kaitenCardTypeId: string | null = null;
   let kaitenTrackLane: KaitenTrackLane | null = null;
   let dueToAdminsAt: Date | null = null;
@@ -294,7 +319,7 @@ export async function createOrderFromBody(
   }
 
   dueToAdminsAt = parseOptionalDateTime(body.dueToAdminsAt);
-  if (!dueToAdminsAt) return fail(400, "Укажите дату записи (Запись)");
+  if (!isTestOrder && !dueToAdminsAt) return fail(400, "Укажите дату записи (Запись)");
   kaitenAdminDueHasTime = body.kaitenAdminDueHasTime !== false;
   const dueToAdminsHasTime = body.dueToAdminsHasTime !== false;
 
@@ -304,13 +329,18 @@ export async function createOrderFromBody(
   if (workReceivedAt && workReceivedAt.getTime() > serverNow.getTime()) {
     return fail(400, "Дата поступления работы не может быть в будущем");
   }
-  if (!allowPastDates && dueDate && dueDate.getTime() < serverNow.getTime()) {
+  if (!isTestOrder && !allowPastDates && dueDate && dueDate.getTime() < serverNow.getTime()) {
     return fail(
       400,
       "Срок лабораторный не может быть в прошлом относительно момента сохранения наряда",
     );
   }
-  if (!allowPastDates && dueToAdminsAt && dueToAdminsAt.getTime() < serverNow.getTime()) {
+  if (
+    !isTestOrder &&
+    !allowPastDates &&
+    dueToAdminsAt &&
+    dueToAdminsAt.getTime() < serverNow.getTime()
+  ) {
     return fail(
       400,
       "Дата записи (Запись) не может быть в прошлом относительно момента сохранения наряда",
@@ -424,11 +454,15 @@ export async function createOrderFromBody(
     correctionReason,
     correctionPaid,
     reworkAtCustomerExpense,
+    isTestOrder,
+    testOrderOwnerUserId: isTestOrder ? actorUserId : null,
   };
 
   let order: CreatedOrder | null = null;
   for (let attempt = 0; attempt < 12; attempt++) {
-    const orderNumber = await computeNextOrderNumber(ordersPrisma, tenantId);
+    const orderNumber = isTestOrder
+      ? buildTestOrderNumber()
+      : await computeNextOrderNumber(ordersPrisma, tenantId);
     try {
       order = await ordersPrisma.order.create({
         data: { ...orderCreateData, orderNumber },
@@ -441,7 +475,14 @@ export async function createOrderFromBody(
     }
   }
 
-  if (!order) return fail(500, "Не удалось выделить уникальный номер наряда");
+  if (!order) {
+    return fail(
+      500,
+      isTestOrder
+        ? "Не удалось создать тестовый наряд"
+        : "Не удалось выделить уникальный номер наряда",
+    );
+  }
 
   const warehouse = await ensureDefaultWarehouse();
   const stockSync = await pricingPrisma.$transaction(async (tx) =>
@@ -459,7 +500,7 @@ export async function createOrderFromBody(
     return fail(400, stockSync.error);
   }
 
-  if (!kaitenDecideLater && kaitenCardTypeId && kaitenTrackLane) {
+  if (!isTestOrder && !kaitenDecideLater && kaitenCardTypeId && kaitenTrackLane) {
     const maxKaitenAttempts = 3;
     for (let attempt = 0; attempt < maxKaitenAttempts; attempt++) {
       let result: Awaited<ReturnType<typeof syncNewOrderToKaiten>>;

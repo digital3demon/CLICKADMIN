@@ -273,14 +273,18 @@ export function KaitenPreflightModal({
     setDistributionLaneAllowlist(null);
     setDefaultSpaceByCardType({});
     setBoardLaneOptionsBySpace({});
-    setCardTypeColorById({});
-    setCardTypeColorByName({});
     setBoardLaneName("");
     setWorkLabel("");
     setLoadError(null);
     let cancelled = false;
     void (async () => {
       try {
+        // Читаем серверный client-state параллельно с API типов,
+        // чтобы не было "серой" перерисовки кнопок с задержкой.
+        const tenantKanbanStatePromise = readClientState<unknown>(
+          "tenant",
+          "kanbanAppStateV3",
+        );
         const res = await fetch("/api/kaiten-ui-options");
         const data = (await res.json()) as {
           cardTypes?: UiCardType[];
@@ -296,10 +300,7 @@ export function KaitenPreflightModal({
         setLaneAllowlist(
           Array.isArray(data.trackLanes) ? data.trackLanes : [],
         );
-        const tenantKanbanState = await readClientState<unknown>(
-          "tenant",
-          "kanbanAppStateV3",
-        );
+        const tenantKanbanState = await tenantKanbanStatePromise;
         if (!cancelled) {
           const distribution = distributionLanesFromTenantKanbanState(tenantKanbanState);
           setDistributionLaneAllowlist(distribution);

@@ -716,6 +716,7 @@ export function OrderConstructionsEditor({
         open={pickOpen}
         clinicId={clinicId}
         doctorId={doctorId}
+        keepOpenOnPick
         onClose={() => setPickOpen(false)}
         onPick={onPickPrice}
         title="Позиция из прайса"

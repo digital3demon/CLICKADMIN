@@ -83,7 +83,12 @@ export function canUserAccessBoard(
   role?: UserRole | null,
 ): boolean {
   if (board.isPrivate !== true) return true;
-  if (board.allowProductionRoleAccess === true && role === "PRODUCTION") return true;
+  if (
+    board.allowProductionRoleAccess === true &&
+    (role === "PRODUCTION" || role === "SENIOR_PRODUCTION")
+  ) {
+    return true;
+  }
   const uid = String(userId || "").trim();
   if (!uid) return false;
   return (board.accessUserIds || []).includes(uid);
@@ -804,7 +809,12 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
     participants: partial.participants || [],
     dueDate: partial.dueDate || "",
     urgent: !!partial.urgent,
-    checklist: partial.checklist || [],
+    checklist: Array.isArray(partial.checklist)
+      ? partial.checklist.map((row) => ({
+          ...row,
+          completedAt: row.completed ? row.completedAt ?? null : null,
+        }))
+      : [],
     files: Array.isArray(partial.files) ? partial.files : [],
     comments: partial.comments || [],
     activity: partial.activity || [],
@@ -821,7 +831,21 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
     childCardIds: Array.isArray(partial.childCardIds) ? partial.childCardIds : [],
     productionLaneId: partial.productionLaneId || undefined,
     productionChecklist: Array.isArray(partial.productionChecklist)
-      ? partial.productionChecklist
+      ? partial.productionChecklist.map((row) => ({
+          ...row,
+          completedAt: row.completed ? row.completedAt ?? null : null,
+        }))
+      : [],
+    productionChecklistSnapshots: Array.isArray(partial.productionChecklistSnapshots)
+      ? partial.productionChecklistSnapshots.map((row) => ({
+          ...row,
+          checklist: Array.isArray(row.checklist)
+            ? row.checklist.map((item) => ({
+                ...item,
+                completedAt: item.completed ? item.completedAt ?? null : null,
+              }))
+            : [],
+        }))
       : [],
     productionReadyAt:
       partial.productionReadyAt === undefined ? null : partial.productionReadyAt,
@@ -849,7 +873,7 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
       childInProgressColumnTitle: "В работе",
       childDoneColumnTitle: "Готово",
       unmatchedLaneId: "lane_unsorted",
-      childAutoArchiveAfterDays: 0,
+      childAutoArchiveAfterMinutes: 15,
       archive3dExtensions: [".stl", ".ply", ".obj"],
       lanes: [
         {
@@ -931,14 +955,51 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
       if (typeof c.urgent !== "boolean") c.urgent = false;
       if (!Array.isArray(c.childCardIds)) c.childCardIds = [];
       if (!Array.isArray(c.productionChecklist)) c.productionChecklist = [];
+      if (!Array.isArray(c.productionChecklistSnapshots)) c.productionChecklistSnapshots = [];
       if (c.productionReadyAt === undefined) c.productionReadyAt = null;
+      c.checklist = (c.checklist || []).map((item) => ({
+        ...item,
+        completedAt: item.completed ? item.completedAt ?? null : null,
+      }));
+      c.productionChecklist = (c.productionChecklist || []).map((item) => ({
+        ...item,
+        completedAt: item.completed ? item.completedAt ?? null : null,
+      }));
+      c.productionChecklistSnapshots = (c.productionChecklistSnapshots || []).map((row) => ({
+        ...row,
+        checklist: (row.checklist || []).map((item) => ({
+          ...item,
+          completedAt: item.completed ? item.completedAt ?? null : null,
+        })),
+      }));
       (c.files || []).forEach((f) => {
         if (!f.addedAt) f.addedAt = c.updatedAt || new Date().toISOString();
         if (!f.addedByUserId && board.users && board.users[0])
           f.addedByUserId = board.users[0].id;
+        if (typeof f.productionRedo !== "boolean") f.productionRedo = false;
       });
     });
   });
+  const legacyDays = Number(
+    (
+      board.productionSettings as Partial<{
+        childAutoArchiveAfterDays: unknown;
+      }>
+    )?.childAutoArchiveAfterDays,
+  );
+  const rawMinutes = Number(
+    (
+      board.productionSettings as Partial<{
+        childAutoArchiveAfterMinutes: unknown;
+      }>
+    )?.childAutoArchiveAfterMinutes,
+  );
+  const nextMinutes = Number.isFinite(rawMinutes)
+    ? rawMinutes
+    : Number.isFinite(legacyDays)
+      ? legacyDays * 24 * 60
+      : 15;
+  board.productionSettings.childAutoArchiveAfterMinutes = Math.max(0, Math.round(nextMinutes));
   stripLegacyDemoUsers(board);
   if (!Array.isArray(board.automations)) {
     board.automations = [];
@@ -1015,7 +1076,7 @@ export function createBoardShell(boardId: string, title: string): KanbanBoard {
       childInProgressColumnTitle: "В работе",
       childDoneColumnTitle: "Готово",
       unmatchedLaneId: "lane_unsorted",
-      childAutoArchiveAfterDays: 0,
+      childAutoArchiveAfterMinutes: 15,
       archive3dExtensions: [".stl", ".ply", ".obj"],
       lanes: [
         {

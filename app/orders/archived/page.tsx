@@ -5,6 +5,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { purgeArchivedOrdersForTenant } from "@/lib/purge-archived-orders";
+import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,15 @@ export default async function OrdersArchivedPage() {
   ]);
   await purgeArchivedOrdersForTenant(ordersPrisma, tenantId);
   const rows = await ordersPrisma.order.findMany({
-    where: { tenantId, archivedAt: { not: null } },
+    where: {
+      AND: [
+        { tenantId, archivedAt: { not: null } },
+        orderTestVisibilityWhere({
+          viewerRole: session.role,
+          viewerUserId: session.sub,
+        }),
+      ],
+    },
     orderBy: [{ archivedAt: "desc" }, { createdAt: "desc" }],
     take: 500,
     select: {

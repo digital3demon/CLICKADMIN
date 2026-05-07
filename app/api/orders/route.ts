@@ -57,6 +57,8 @@ export async function GET(req: Request) {
         search: search || undefined,
         createdAtRange,
         ordersListForUserId: s.sub,
+        viewerRole: s.role,
+        viewerUserId: s.sub,
       });
       return NextResponse.json({ orders, nextCursor });
     } catch (e) {
@@ -90,10 +92,16 @@ export async function POST(req: Request) {
         );
       }
       const body = (await req.json()) as CreateOrderBody;
+      if (body.isTestOrder === true && s.role !== "OWNER") {
+        return NextResponse.json(
+          { error: "Тестовый наряд доступен только владельцу" },
+          { status: 403 },
+        );
+      }
       const result = await createOrderFromBody(
         { ordersPrisma, clientsPrisma, pricingPrisma },
         body,
-        { tenantId },
+        { tenantId, actorUserId: s.sub },
       );
       if (!result.ok) {
         return NextResponse.json(

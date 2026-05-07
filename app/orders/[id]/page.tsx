@@ -24,6 +24,7 @@ import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { resolveRegisteredByLabelForDisplay } from "@/lib/registered-by-label-display";
 import { fetchWorkspaceActivePriceListName } from "@/lib/order-price-list-from-contractors";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
+import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,15 @@ export default async function OrderEditPage({
   let order;
   try {
     order = await ordersPrisma.order.findFirst({
-      where: { id, tenantId },
+      where: {
+        AND: [
+          { id, tenantId },
+          orderTestVisibilityWhere({
+            viewerRole: session?.role ?? null,
+            viewerUserId: session?.sub ?? null,
+          }),
+        ],
+      },
       include: {
         constructions: {
           orderBy: { sortOrder: "asc" },

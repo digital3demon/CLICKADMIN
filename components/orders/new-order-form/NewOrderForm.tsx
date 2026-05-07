@@ -183,7 +183,7 @@ export function NewOrderForm({
   onKaitenCancelCollapse: () => void;
 }) {
   const router = useRouter();
-  const { registerPanelSnapshot } = useNewOrderPanel();
+  const { registerPanelSnapshot, sessionRole } = useNewOrderPanel();
   const [clinics, setClinics] = useState<ClinicRow[]>([]);
   const [privatePracticeDoctors, setPrivatePracticeDoctors] = useState<
     DoctorRow[]
@@ -248,6 +248,7 @@ export function NewOrderForm({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [isTestOrder, setIsTestOrder] = useState(false);
   /** Только max-md: сворачивание пилюль срочности и блоков дат в шапке. */
   const [mobileHeaderDetailsOpen, setMobileHeaderDetailsOpen] = useState(true);
   const [kaitenModalOpen, setKaitenModalOpen] = useState(false);
@@ -263,6 +264,12 @@ export function NewOrderForm({
   const [correctionPaid, setCorrectionPaid] = useState(false);
   const hydratedRef = useRef(false);
   const prevClinicIdForLegalRef = useRef<string | null>(null);
+  const canUseTestOrder = sessionRole === "OWNER";
+
+  useEffect(() => {
+    if (canUseTestOrder) return;
+    setIsTestOrder(false);
+  }, [canUseTestOrder]);
 
   const selectedClinic = useMemo(
     () =>
@@ -872,16 +879,20 @@ export function NewOrderForm({
 
   const requestSave = useCallback(async () => {
     setSaveError(null);
-    if (!doctorId) {
+    if (!isTestOrder && !doctorId) {
       setSaveError("Выберите врача");
       return;
     }
-    if (!patientName.trim()) {
+    if (!isTestOrder && !patientName.trim()) {
       setSaveError("Укажите ФИО пациента");
       return;
     }
-    if (!patientAppointmentLocal.trim()) {
+    if (!isTestOrder && !patientAppointmentLocal.trim()) {
       setSaveError("Укажите дату записи (Запись)");
+      return;
+    }
+    if (isTestOrder) {
+      void performSave({ kaitenDecideLater: true, createKanbanWithoutKaiten: false });
       return;
     }
 
@@ -929,14 +940,21 @@ export function NewOrderForm({
       setContinuationChoice(null);
       setKaitenModalOpen(true);
     }
-  }, [clinicId, doctorId, patientName, patientAppointmentLocal, legalEntity]);
+  }, [
+    clinicId,
+    doctorId,
+    isTestOrder,
+    patientName,
+    patientAppointmentLocal,
+    legalEntity,
+  ]);
 
   const performSave = useCallback(
     async (kaiten: KaitenSavePayload, printAfterSave = false) => {
-      const appointmentIso = localDateTimeToIso(
-        snapDatetimeLocalToDueGrid(patientAppointmentLocal),
-      );
-      if (!appointmentIso) {
+      const appointmentIso = isTestOrder
+        ? null
+        : localDateTimeToIso(snapDatetimeLocalToDueGrid(patientAppointmentLocal));
+      if (!isTestOrder && !appointmentIso) {
         setSaveError("Укажите корректную дату записи (Запись)");
         return;
       }
@@ -961,7 +979,8 @@ export function NewOrderForm({
               clinicId === ORDER_CLINIC_PRIVATE
                 ? null
                 : clinicId.trim() || null,
-            doctorId,
+            doctorId: doctorId.trim() || null,
+            isTestOrder,
             patientName: patientName.trim() || null,
             legalEntity:
               legalEntity === LEGAL_ENTITIES[0] ? null : legalEntity,
@@ -1078,7 +1097,7 @@ export function NewOrderForm({
             }
           })();
         }
-        if (!kaiten.kaitenDecideLater) {
+        if (!isTestOrder && !kaiten.kaitenDecideLater) {
           void (async () => {
             const kRes = await fetch(`/api/orders/${newId}/kaiten`, {
               method: "POST",
@@ -1120,6 +1139,7 @@ export function NewOrderForm({
     [
       clinicId,
       doctorId,
+      isTestOrder,
       patientName,
       legalEntity,
       payment,
@@ -1351,7 +1371,7 @@ export function NewOrderForm({
                 className="min-w-0 flex-1 text-sm font-semibold tabular-nums leading-snug tracking-tight text-[var(--app-text)] sm:flex-none sm:text-xl sm:leading-normal sm:tracking-tight"
                 title="Ожидаемый номер (YYMM-NNN); итоговый при сохранении"
               >
-                Наряд {nextOrderPreview ?? "…"}
+                {isTestOrder ? "Тестовый наряд" : `Наряд ${nextOrderPreview ?? "…"}`}
               </h2>
               <div className="flex shrink-0 items-center gap-0.5 sm:hidden">
                 <button
@@ -1559,6 +1579,17 @@ export function NewOrderForm({
           <p className="text-center text-sm text-red-600 sm:text-left">
             {saveError}
           </p>
+        ) : null}
+        {canUseTestOrder ? (
+          <label className="flex items-center justify-center gap-2 text-xs text-[var(--text-secondary)] sm:justify-start sm:text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-[var(--card-border)]"
+              checked={isTestOrder}
+              onChange={(e) => setIsTestOrder(e.target.checked)}
+            />
+            Тестовый наряд (без номера, без обязательных полей, без Kaiten)
+          </label>
         ) : null}
       </header>
 

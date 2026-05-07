@@ -1193,7 +1193,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               `Новая карточка производства, дорожка «${laneName}»: ${linkHtml}`,
             ],
             parseMode: "HTML",
-            recipientRoles: ["PRODUCTION"],
+            recipientRoles: ["PRODUCTION", "SENIOR_PRODUCTION"],
           });
         }
       }
@@ -1203,12 +1203,33 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   const ensureProductionBoard = useCallback(
     (state: KanbanAppState, sourceBoard: KanbanBoard): KanbanBoard => {
-      const existing = state.boards.find((x) => x.title.trim().toLowerCase() === "производство");
-      if (existing) return existing;
       const sourceSettings = normalizeProductionSettings(sourceBoard);
       const lanes = sourceSettings.lanes.length
         ? sourceSettings.lanes
         : [{ id: "lane_print", name: "Печать", keywords: [] }];
+      const existing = state.boards.find((x) => x.title.trim().toLowerCase() === "производство");
+      if (existing) {
+        const neededTitles: string[] = [];
+        for (const lane of lanes) {
+          neededTitles.push(`${lane.name} · ${sourceSettings.childTodoColumnTitle}`);
+          neededTitles.push(`${lane.name} · ${sourceSettings.childInProgressColumnTitle}`);
+          neededTitles.push(`${lane.name} · ${sourceSettings.childDoneColumnTitle}`);
+        }
+        const existingTitles = new Set(
+          existing.columns.map((col) => String(col.title || "").trim().toLowerCase()),
+        );
+        for (const title of neededTitles) {
+          const key = title.trim().toLowerCase();
+          if (existingTitles.has(key)) continue;
+          existing.columns.push({ id: generateId("col"), title, cards: [] });
+          existingTitles.add(key);
+        }
+        existing.productionSettings = structuredClone(sourceSettings);
+        existing.users = structuredClone(sourceBoard.users || []);
+        existing.cardTypes = structuredClone(sourceBoard.cardTypes || []);
+        existing.excludedCrmUserIds = structuredClone(sourceBoard.excludedCrmUserIds || []);
+        return existing;
+      }
       const mk = (title: string): KanbanColumn => ({ id: generateId("col"), title, cards: [] });
       const columns: KanbanColumn[] = [];
       for (const lane of lanes) {
@@ -1459,26 +1480,6 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   if (!toCol) return s;
                   const card = findCard(b, cardId)?.card;
                   if (!card) return s;
-                  if (!card.parentCardId && columnMatchesStage(toCol.title, settings.triggerColumnTitle)) {
-                    const prodBoard = ensureProductionBoard(next, b);
-                    const syncResult = syncProductionChildrenForParent(
-                      prodBoard,
-                      cardId,
-                      activityActorLabel,
-                      card,
-                    );
-                    card.childCardIds = syncResult.childIds;
-                    for (const row of syncResult.newlyCreated) {
-                      productionTelegramCreates.push({
-                        childId: row.childId,
-                        laneName: row.laneName,
-                        prodBoardId: prodBoard.id,
-                      });
-                    }
-                    for (const childId of syncResult.childIds) {
-                      enrichProductionChecklistForChild(prodBoard.id, childId);
-                    }
-                  }
                   if (card.parentCardId) {
                     const doneRaw = settings.childDoneColumnTitle.trim().toLowerCase();
                     const toRaw = toCol.title.trim().toLowerCase();
@@ -1535,7 +1536,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                           `Новая карточка производства, дорожка «${row.laneName}»: ${linkHtml}`,
                         ],
                         parseMode: "HTML",
-                        recipientRoles: ["PRODUCTION"],
+                        recipientRoles: ["PRODUCTION", "SENIOR_PRODUCTION"],
                       });
                     }
                   });

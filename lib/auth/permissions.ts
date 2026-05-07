@@ -11,7 +11,7 @@ export function isKanbanOnlyUser(
   if (moduleAccess) {
     return moduleAccess.ORDERS !== true && moduleAccess.KANBAN === true;
   }
-  return role === "USER" || role === "PRODUCTION";
+  return role === "USER" || role === "PRODUCTION" || role === "SENIOR_PRODUCTION";
 }
 
 /** Стартовый путь после входа (и подсказка клиенту). */

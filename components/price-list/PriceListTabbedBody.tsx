@@ -97,6 +97,7 @@ function CodeCopyTrigger({
 function PriceTableRows({
   items,
   onPick,
+  pickedIds,
   onDescribeEnter,
   onDescribeMove,
   onDescribeLeave,
@@ -104,6 +105,7 @@ function PriceTableRows({
 }: {
   items: PriceListGroupItem[];
   onPick?: (it: PriceListGroupItem) => void;
+  pickedIds?: ReadonlySet<string>;
   onDescribeEnter: (id: string, text: string, clientX: number, clientY: number) => void;
   onDescribeMove: (id: string, clientX: number, clientY: number) => void;
   onDescribeLeave: () => void;
@@ -114,6 +116,7 @@ function PriceTableRows({
       {items.map((it) => {
         const desc = it.description?.trim() ?? "";
         const hasDesc = desc.length > 0;
+        const picked = pickedIds?.has(it.id) === true;
         const rowClass = `${ROW_GRID} py-1.5 text-sm sm:py-2`;
 
         const cells = (
@@ -126,6 +129,11 @@ function PriceTableRows({
               title={hasDesc ? undefined : it.name}
             >
               {it.name}
+              {picked ? (
+                <span className="ml-2 rounded bg-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900">
+                  Добавлено
+                </span>
+              ) : null}
               {it.isIndividualPrice ? (
                 <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-950">
                   Индивидуальная цена
@@ -169,8 +177,9 @@ function PriceTableRows({
               key={it.id}
               type="button"
               role="row"
-              className={`${rowClass} rounded-md text-left transition-colors hover:bg-[var(--surface-hover)] focus-visible:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-blue)]`}
+              className={`${rowClass} rounded-md text-left transition-colors hover:bg-[var(--surface-hover)] focus-visible:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-blue)] ${picked ? "bg-emerald-50/60 dark:bg-emerald-950/20" : ""}`}
               onClick={() => onPick(it)}
+              title={picked ? "Эта позиция уже добавлена в текущем выборе" : undefined}
               {...handlers}
             >
               {cells}
@@ -197,6 +206,7 @@ function SubsectionBlock({
   subsectionLabel,
   items,
   onPick,
+  pickedIds,
   onDescribeEnter,
   onDescribeMove,
   onDescribeLeave,
@@ -205,6 +215,7 @@ function SubsectionBlock({
   subsectionLabel: string;
   items: PriceListGroupItem[];
   onPick?: (it: PriceListGroupItem) => void;
+  pickedIds?: ReadonlySet<string>;
   onDescribeEnter: (id: string, text: string, clientX: number, clientY: number) => void;
   onDescribeMove: (id: string, clientX: number, clientY: number) => void;
   onDescribeLeave: () => void;
@@ -219,6 +230,7 @@ function SubsectionBlock({
       <PriceTableRows
         items={items}
         onPick={onPick}
+        pickedIds={pickedIds}
         onDescribeEnter={onDescribeEnter}
         onDescribeMove={onDescribeMove}
         onDescribeLeave={onDescribeLeave}
@@ -238,9 +250,11 @@ type TooltipState = {
 export function PriceListTabbedBody({
   items,
   onPick,
+  pickedIds,
 }: {
   items: PriceListGroupItem[];
   onPick?: (it: PriceListGroupItem) => void;
+  pickedIds?: ReadonlySet<string>;
 }) {
   const groups = useMemo(() => groupPriceListItems(items), [items]);
   const [tip, setTip] = useState<TooltipState | null>(null);
@@ -306,6 +320,7 @@ export function PriceListTabbedBody({
                     subsectionLabel={sub.subsectionLabel}
                     items={sub.items}
                     onPick={onPick}
+                    pickedIds={pickedIds}
                     onDescribeEnter={describeEnter}
                     onDescribeMove={describeMove}
                     onDescribeLeave={hideDescribe}

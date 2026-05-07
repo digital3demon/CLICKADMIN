@@ -10,6 +10,7 @@ export function hasDirectorySidebarAccess(
     a.CONFIG_PRICING === true ||
     a.CONFIG_WAREHOUSE === true ||
     a.CONFIG_KANBAN_BOARDS === true ||
+    a.CONFIG_KANBAN_PRODUCTION === true ||
     a.CONFIG_KANBAN_CARD_TYPES === true ||
     a.CONFIG_KAITEN === true ||
     a.CONFIG_COURIERS === true ||

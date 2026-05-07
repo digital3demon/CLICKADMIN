@@ -35,8 +35,8 @@ function KanbanProductionSettingsFormImpl({
   return (
     <div>
       <p className="mb-3 text-[0.8125rem] leading-snug text-[var(--text-muted)]">
-        Автосоздание дочерних карточек при переносе в «Производство», маршрутизация по ключевым
-        словам в именах файлов и автоархивация готовых дочерних.
+        Автосоздание дочерних карточек при загрузке файлов в колонке «Производство»,
+        маршрутизация по ключевым словам или вручную, автоархивация готовых дочерних.
       </p>
       {onEnsureProductionBoardNow ? (
         <div className="mb-3">
@@ -121,16 +121,20 @@ function KanbanProductionSettingsFormImpl({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-[var(--text-secondary)]">Автоархив дочерних после «Готово» (дней)</span>
+          <span className="mb-1 block text-[var(--text-secondary)]">
+            Автоархив дочерних после «Готово» (минут)
+          </span>
           <input
             type="number"
             min={0}
-            value={production.childAutoArchiveAfterDays}
+            value={production.childAutoArchiveAfterMinutes}
             onChange={(e) =>
               onPatchBoard((b) => {
                 const p = normalizeProductionSettings(b);
                 const v = Number(e.target.value);
-                p.childAutoArchiveAfterDays = Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0;
+                p.childAutoArchiveAfterMinutes = Number.isFinite(v)
+                  ? Math.max(0, Math.round(v))
+                  : 0;
               })
             }
             className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
@@ -156,6 +160,22 @@ function KanbanProductionSettingsFormImpl({
             className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
             placeholder="stl, ply, obj"
           />
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm sm:col-span-2">
+          <input
+            type="checkbox"
+            checked={production.manualRoutingEnabled === true}
+            onChange={(e) =>
+              onPatchBoard((b) => {
+                const p = normalizeProductionSettings(b);
+                p.manualRoutingEnabled = e.target.checked;
+              })
+            }
+            className="h-4 w-4 rounded border border-[var(--input-border)]"
+          />
+          <span className="text-[var(--text-secondary)]">
+            Вручную: при загрузке 3D/архивов показывать всплывающее окно выбора дорожки
+          </span>
         </label>
         <label className="text-sm sm:col-span-2">
           <span className="mb-1 block text-[var(--text-secondary)]">

@@ -12,6 +12,7 @@ import {
 } from "@/lib/orders-list-cursor";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
 import { kaitenLabMentionPendingForUser } from "@/lib/order-kaiten-lab-mention-pending";
+import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 
 const LAB_MENTION_ACK_ROLES: UserRole[] = [
   "ADMINISTRATOR",
@@ -378,6 +379,8 @@ export async function fetchOrdersListPage(
     createdAtRange?: { start: Date; endExclusive: Date } | null | undefined;
     /** Для подсветки «Упоминания»: учитываем OrderKaitenLabMentionAck текущего пользователя. */
     ordersListForUserId?: string | null;
+    viewerRole?: UserRole | null;
+    viewerUserId?: string | null;
   },
 ): Promise<{
   orders: OrderListPageRow[];
@@ -409,6 +412,10 @@ export async function fetchOrdersListPage(
   const parts: Prisma.OrderWhereInput[] = [
     { tenantId: opts.tenantId },
     { archivedAt: null },
+    orderTestVisibilityWhere({
+      viewerRole: opts.viewerRole ?? null,
+      viewerUserId: opts.viewerUserId ?? opts.ordersListForUserId ?? null,
+    }),
   ];
   if (parsedTag) {
     if (parsedTag.kind === "orderAttention") {

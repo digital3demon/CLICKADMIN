@@ -48,7 +48,7 @@ export type ParseMentionUserIdsOptions = {
   /** Токен без @ (нормализованный), общий для ADMINISTRATOR + SENIOR_ADMINISTRATOR. */
   adminMentionTag?: string;
   adminUserIds?: readonly string[];
-  /** Токен группы «Производство» (настройка доски), все пользователи с ролью PRODUCTION. */
+  /** Токен группы «Производство» (настройка доски), все пользователи с ролью PRODUCTION/SENIOR_PRODUCTION. */
   productionMentionTag?: string;
   productionUserIds?: readonly string[];
 };

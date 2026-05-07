@@ -72,11 +72,13 @@ export function DirectoryKanbanBoardsClient({
   sessionRole,
   telegramBotUsername = "",
   canEditKanbanCardTypes = true,
+  canEditKanbanProductionContour = true,
 }: {
   isDemo?: boolean;
   sessionRole: UserRole;
   telegramBotUsername?: string;
   canEditKanbanCardTypes?: boolean;
+  canEditKanbanProductionContour?: boolean;
 }) {
   const [appState, setAppState] = useState(() => loadKanbanStateForDirectory(isDemo));
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -831,21 +833,23 @@ export function DirectoryKanbanBoardsClient({
           </div>
         </section>
 
-        <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
-          <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">
-            Производственный контур (доска «{board.title}»)
-          </h2>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Отдельные настройки создания и маршрутизации дочерних производственных карточек.
-          </p>
-          <div className="mt-6">
-            <KanbanProductionSettingsForm
-              board={board}
-              onPatchBoard={applyToBoard}
-              onEnsureProductionBoardNow={ensureProductionBoardNow}
-            />
-          </div>
-        </section>
+        {canEditKanbanProductionContour ? (
+          <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+            <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">
+              Производственный контур (доска «{board.title}»)
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Отдельные настройки создания и маршрутизации дочерних производственных карточек.
+            </p>
+            <div className="mt-6">
+              <KanbanProductionSettingsForm
+                board={board}
+                onPatchBoard={applyToBoard}
+                onEnsureProductionBoardNow={ensureProductionBoardNow}
+              />
+            </div>
+          </section>
+        ) : null}
 
         <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
           <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">

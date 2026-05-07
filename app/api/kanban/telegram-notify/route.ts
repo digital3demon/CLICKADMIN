@@ -66,6 +66,7 @@ function parseRecipientRoles(raw: unknown): UserRole[] | undefined {
   const out: UserRole[] = [];
   for (const x of raw) {
     if (x === "PRODUCTION") out.push("PRODUCTION");
+    if (x === "SENIOR_PRODUCTION") out.push("SENIOR_PRODUCTION");
   }
   return out.length ? out : undefined;
 }
