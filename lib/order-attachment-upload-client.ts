@@ -82,6 +82,8 @@ export async function postOrderAttachmentWithRetries(
   file: File,
   options?: {
     asInvoice?: boolean;
+    /** Только бух-блок: не в общем списке файлов и без Kaiten. */
+    paymentSlip?: boolean;
     signal?: AbortSignal;
     maxAttempts?: number;
   },
@@ -102,6 +104,9 @@ export async function postOrderAttachmentWithRetries(
       };
       if (options?.asInvoice) {
         headers["x-as-invoice"] = "1";
+      }
+      if (options?.paymentSlip) {
+        headers["x-attachment-scope"] = "payment-slip";
       }
       const res = await fetch(`/api/orders/${orderId}/attachments`, {
         method: "POST",

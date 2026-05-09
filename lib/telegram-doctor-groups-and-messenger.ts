@@ -1,6 +1,7 @@
 import "server-only";
 import { DoctorMessengerItemStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getTelegramBotUserIdStr } from "@/lib/telegram-bot-identity";
 import { verifyDoctorTelegramGroupBindToken } from "@/lib/doctor-telegram-group-bind";
 import {
   pickIncomingTextMessage,
@@ -13,23 +14,8 @@ import {
   textIncludesClicklabAdminMention,
 } from "@/lib/telegram-clicklab-admin-mention";
 import { telegramSendMessage } from "@/lib/telegram-send-message";
-
-function asTelegramNumericId(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string") {
-    const t = v.trim();
-    if (!/^-?\d+$/.test(t)) return null;
-    const n = Number(t);
-    if (!Number.isFinite(n) || !Number.isSafeInteger(n)) return null;
-    return n;
-  }
-  return null;
-}
-
-function chatIdString(chat: Record<string, unknown> | undefined): string | null {
-  const id = chat ? asTelegramNumericId(chat.id) : null;
-  return id != null ? String(id) : null;
-}
+import { telegramPeerIdToString } from "@/lib/telegram-json-ids";
+import { replyTelegramGroupChatIdForCrm } from "@/lib/telegram-group-chat-id-reply";
 
 async function reply(botToken: string, chatId: string, text: string): Promise<void> {
   const r = await telegramSendMessage(botToken, chatId, text);
@@ -49,9 +35,8 @@ function bindPayloadFromText(fullText: string, cmd: string): string | null {
 }
 
 /**
- * Группы и супергруппы: привязка чата к врачу по токену и захват @clicklab_admin.
- * Личные чаты не обрабатываются — вернуть false.
- * Для групп после попытки обработки вернуть true (не передавать в общий диалог бота).
+ * Группы и супергруппы: chat id, привязка по токену, @clicklab_admin.
+ * Личные чаты — false.
  */
 export async function tryTelegramDoctorGroupsAndMessenger(
   update: Record<string, unknown>,
@@ -65,8 +50,25 @@ export async function tryTelegramDoctorGroupsAndMessenger(
     chat && typeof chat.type === "string" ? String(chat.type) : "";
   if (chatType !== "group" && chatType !== "supergroup") return false;
 
-  const chatIdStr = chatIdString(chat);
+  const chatIdStr = telegramPeerIdToString(chat?.id);
   if (!chatIdStr) return true;
+
+  const botIdStr = await getTelegramBotUserIdStr(botToken);
+
+  const newMembersRaw = msg.new_chat_members;
+  if (Array.isArray(newMembersRaw) && botIdStr) {
+    for (const raw of newMembersRaw) {
+      if (!raw || typeof raw !== "object") continue;
+      const u = raw as Record<string, unknown>;
+      if (
+        u.is_bot === true &&
+        telegramPeerIdToString(u.id) === botIdStr
+      ) {
+        await replyTelegramGroupChatIdForCrm(botToken, chatIdStr);
+        return true;
+      }
+    }
+  }
 
   const textRaw =
     typeof msg.text === "string"
@@ -74,10 +76,20 @@ export async function tryTelegramDoctorGroupsAndMessenger(
       : typeof msg.caption === "string"
         ? msg.caption
         : "";
-  if (!textRaw.trim()) return true;
+  const textNorm = normalizeBotCommandText(textRaw);
+  const cmd = firstCommandToken(textNorm);
 
-  const text = normalizeBotCommandText(textRaw);
-  const cmd = firstCommandToken(text);
+  if (
+    cmd === "/chatid" ||
+    cmd === "/crmchatid" ||
+    cmd === "/groupid" ||
+    cmd === "/gcid"
+  ) {
+    await replyTelegramGroupChatIdForCrm(botToken, chatIdStr);
+    return true;
+  }
+
+  if (!textRaw.trim()) return true;
 
   const bindPayload = bindPayloadFromText(textRaw, cmd);
   if (bindPayload) {
@@ -161,7 +173,7 @@ export async function tryTelegramDoctorGroupsAndMessenger(
     await reply(
       botToken,
       chatIdStr,
-      "Эта группа не привязана к врачу в CRM. Откройте карточку врача и выполните команду привязки.",
+      "Эта группа не привязана к врачу в CRM. Укажите chat id в карточке врача или отправьте /chatid и добавьте id в CRM.",
     );
     return true;
   }
@@ -171,8 +183,7 @@ export async function tryTelegramDoctorGroupsAndMessenger(
   const after = split?.after ?? "";
 
   const from = msg.from as Record<string, unknown> | undefined;
-  const fromId = from ? asTelegramNumericId(from.id) : null;
-  const fromUserStr = fromId != null ? String(fromId) : null;
+  const fromUserStr = telegramPeerIdToString(from?.id);
   const un =
     from && typeof from.username === "string"
       ? from.username.trim().replace(/^@+/, "")
@@ -205,9 +216,11 @@ export async function tryTelegramDoctorGroupsAndMessenger(
       },
     });
   } catch (e) {
-    const code = e && typeof e === "object" && "code" in e ? (e as { code?: string }).code : "";
+    const code =
+      e && typeof e === "object" && "code" in e
+        ? (e as { code?: string }).code
+        : "";
     if (code === "P2002") {
-      /* дубликат того же сообщения */
       return true;
     }
     console.error("[telegram doctor messenger] create item", e);

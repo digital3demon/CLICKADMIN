@@ -2,7 +2,6 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { telegramIdString } from "@/lib/auth/telegram-widget";
 import { telegramSendMessage } from "@/lib/telegram-send-message";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { DEFAULT_TENANT_SLUG } from "@/lib/tenant-constants";
@@ -17,6 +16,7 @@ import {
 } from "@/lib/telegram-bot-resolve-user";
 import { verifyAdminSharedMessengerBotStartToken } from "@/lib/admin-shared-messenger-bot-link";
 import { verifyDoctorTelegramGroupBindToken } from "@/lib/doctor-telegram-group-bind";
+import { telegramPeerIdToString } from "@/lib/telegram-json-ids";
 
 const LINK_TTL_MS = 15 * 60 * 1000;
 
@@ -121,29 +121,23 @@ async function replyWithRoleKeyboard(
   });
 }
 
-/** id в JSON — число или строка (после прокси/обвязки). */
-function asTelegramNumericId(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string") {
-    const t = v.trim();
-    if (!/^-?\d+$/.test(t)) return null;
-    const n = Number(t);
-    if (!Number.isFinite(n) || !Number.isSafeInteger(n)) return null;
-    return n;
-  }
-  return null;
-}
-
 export async function processTelegramBotUpdate(
   update: Record<string, unknown>,
   botToken: string,
 ): Promise<void> {
   const msg = pickIncomingTextMessage(update);
   if (!msg) {
-    if (typeof update.update_id === "number") {
+    const keys = Object.keys(update);
+    const benignNonMessage =
+      keys.includes("my_chat_member") ||
+      keys.includes("chat_member") ||
+      keys.includes("callback_query") ||
+      keys.includes("pre_checkout_query") ||
+      keys.includes("shipping_query");
+    if (!benignNonMessage && typeof update.update_id === "number") {
       console.warn(
         "[telegram-bot] пропуск update: нет message/edited_message/business_message —",
-        Object.keys(update).join(", "),
+        keys.join(", "),
       );
     }
     return;
@@ -160,25 +154,25 @@ export async function processTelegramBotUpdate(
     return;
   }
 
-  const chatIdNum = chat ? asTelegramNumericId(chat.id) : null;
-  const chatId = chatIdNum != null ? String(chatIdNum) : null;
-  let fromId = from ? asTelegramNumericId(from.id) : null;
+  const chatId =
+    chat != null ? telegramPeerIdToString(chat.id) : null;
   const chatType =
     chat && typeof chat.type === "string" ? String(chat.type) : "";
+  let fromIdStr = from ? telegramPeerIdToString(from.id) : null;
   /* В приватном чате с ботом chat.id совпадает с пользователем; from иногда отсутствует в edge-case API. */
-  if (fromId == null && chatType === "private" && chatIdNum != null) {
-    fromId = chatIdNum;
+  if (fromIdStr == null && chatType === "private" && chatId != null) {
+    fromIdStr = chatId;
   }
-  if (!chatId || fromId == null) {
+  if (!chatId || fromIdStr == null) {
     console.warn("[telegram-bot] пропуск: не удалось определить chatId или user id", {
       chatId,
-      fromId,
+      fromIdStr,
       chatType,
     });
     return;
   }
 
-  const tgUserId = telegramIdString(fromId);
+  const tgUserId = fromIdStr;
   const un = from && typeof from.username === "string" ? from.username.trim() : "";
   const tgUsername = un ? un.replace(/^@+/, "") : null;
 
@@ -285,16 +279,16 @@ export async function processTelegramBotUpdate(
       );
       return;
     }
-    await prisma.telegramBotLinkPending.upsert({
-      where: { telegramUserId: tgUserId },
-      create: { telegramUserId: tgUserId, tenantSlug: slug },
-      update: { tenantSlug: slug },
-    });
     await replyRemoveKeyboard(
       botToken,
       chatId,
       "Привязка к CRM.\n\nОтправьте одним сообщением адрес электронной почты, который вы используете для входа в CRM (как при логине).",
     );
+    await prisma.telegramBotLinkPending.upsert({
+      where: { telegramUserId: tgUserId },
+      create: { telegramUserId: tgUserId, tenantSlug: slug },
+      update: { tenantSlug: slug },
+    });
     return;
   }
 

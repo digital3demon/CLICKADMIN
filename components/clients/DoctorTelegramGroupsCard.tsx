@@ -93,14 +93,22 @@ export function DoctorTelegramGroupsCard({
         Группы Telegram
       </h3>
       <p className="mt-1 text-sm text-[var(--text-secondary)]">
-        Создайте группу в Telegram, добавьте бота лаборатории — бот пришлёт{" "}
-        <span className="font-medium text-[var(--app-text)]">числовой id</span>{" "}
-        этой группы. Вставьте id ниже (можно несколько групп на одного врача).
-        Сообщения с{" "}
+        Создайте группу, добавьте бота — он отправит в группу{" "}
+        <span className="font-medium text-[var(--app-text)]">chat id</span> или
+        ответит на команду{" "}
+        <span className="font-mono text-[var(--app-text)]">/chatid</span> в
+        группе. Вставьте id ниже (несколько групп на одного врача). Если бот не
+        показывает входящие сообщения с текстом: в @BotFather выполните{" "}
+        <span className="font-mono">/setprivacy</span> → Disable (иначе в группе
+        видны не все сообщения).
+      </p>
+      <p className="mt-2 text-sm text-[var(--text-secondary)]">
+        Сообщения с упоминанием{" "}
         <span className="font-medium text-[var(--app-text)]">
           @clicklab_admin
         </span>{" "}
-        попадают в раздел «Мессенджеры».
+        попадают в «Мессенджеры», когда Telegram доставляет их боту (см. режим
+        privacy выше).
       </p>
 
       {error ? (

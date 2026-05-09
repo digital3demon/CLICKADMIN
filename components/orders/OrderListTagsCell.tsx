@@ -50,6 +50,7 @@ import {
   URGENT_MENU_OPTIONS,
   urgentSelectionFromOrder,
 } from "@/lib/order-urgency";
+import { OrderPaymentModalAccountingUpload } from "@/components/orders/OrderPaymentModalAccountingUpload";
 
 type CustomRow = { id: string; label: string };
 
@@ -1190,7 +1191,7 @@ export function OrderListTagsCell({
             role="dialog"
             aria-modal="true"
             aria-label="Статус оплаты"
-            className="w-full max-w-sm rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"
+            className="w-full max-w-md rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-base font-semibold text-[var(--app-text)]">
@@ -1252,6 +1253,11 @@ export function OrderListTagsCell({
                 </>
               )}
             </div>
+
+            <OrderPaymentModalAccountingUpload
+              orderId={orderId}
+              onSaved={() => router.refresh()}
+            />
 
             {paymentPartialPrompt ? (
               <div className="mt-3 rounded-md border border-[var(--card-border)] p-3">

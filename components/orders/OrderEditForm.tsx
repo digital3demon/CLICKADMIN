@@ -77,6 +77,7 @@ import {
 } from "@/components/orders/OrderConstructionsEditor";
 import { OrderProstheticsBlock } from "@/components/orders/OrderProstheticsBlock";
 import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
+import { OrderPaymentSlipsBlock } from "@/components/orders/OrderPaymentSlipsBlock";
 import { PrefixSearchCombobox } from "@/components/ui/PrefixSearchCombobox";
 import type { OrderProstheticsV1 } from "@/lib/order-prosthetics";
 import type { KaitenTrackLane, OrderCorrectionTrack } from "@prisma/client";
@@ -2751,7 +2752,7 @@ export function OrderEditForm({
               <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
                 Выставлено по счёту
               </h3>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)] sm:items-start sm:gap-5">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,11rem)] lg:items-start lg:gap-5">
                 <div className="min-w-0">
                   <label
                     className={labelClass}
@@ -2777,7 +2778,10 @@ export function OrderEditForm({
                     placeholder="Строки из счёта или своя сводка"
                   />
                 </div>
-                <div className="min-w-0 sm:max-w-[12rem]">
+                <div className="min-w-0 lg:max-w-none">
+                  <OrderPaymentSlipsBlock orderId={initial.id} />
+                </div>
+                <div className="min-w-0 lg:max-w-[12rem]">
                   <p className={labelClass}>Сумма по счёту</p>
                   <input
                     type="text"

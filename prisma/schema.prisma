@@ -1052,13 +1052,21 @@ model OrderCustomTag {
   @@index([orderId])
 }
 
+/// Назначение вложения по наряду: общее vs только бух-блок (не показывается в списке файлов, без Kaiten).
+enum OrderAttachmentScope {
+  GENERAL
+  /// Платёжное поручение / скрин оплаты — только документооборот, не смешивать с вложениями канбана.
+  PAYMENT_SLIP
+}
+
 /// Файлы по заказу (в т.ч. выгрузка в Kaiten)
 model OrderAttachment {
-  id                      String    @id @default(cuid())
+  id                      String               @id @default(cuid())
   orderId                 String
-  order                   Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order                   Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
   /// Обратная связь: этот файл выбран как счёт для наряда
-  linkedAsInvoiceForOrder Order?    @relation("InvoiceAttachmentForOrder")
+  linkedAsInvoiceForOrder Order?               @relation("InvoiceAttachmentForOrder")
+  scope                   OrderAttachmentScope @default(GENERAL)
   fileName                String
   mimeType                String
   size                    Int
@@ -1072,6 +1080,7 @@ model OrderAttachment {
   createdAt               DateTime  @default(now())
 
   @@index([orderId])
+  @@index([orderId, scope])
 }
 
 /// Типы работ в конфигурации (коронка, сплинт и т.д.)

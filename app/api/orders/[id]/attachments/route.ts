@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { OrderAttachmentScope, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { extractInvoiceNumberFromPdfBuffer } from "@/lib/extract-invoice-number-from-pdf";
@@ -40,6 +40,7 @@ type ParsedUpload = {
   mimeType: string;
   data: Buffer;
   asInvoiceRaw: string | null;
+  attachmentScopeRaw: string | null;
 };
 
 async function parseRawUpload(
@@ -49,6 +50,7 @@ async function parseRawUpload(
   const fileNameHeader = req.headers.get("x-upload-filename") ?? "";
   const rawMime = req.headers.get("x-upload-mime")?.trim();
   const asInvoiceRaw = req.headers.get("x-as-invoice");
+  const attachmentScopeRaw = req.headers.get("x-attachment-scope");
   let fileName = "file";
   if (fileNameHeader.trim()) {
     try {
@@ -107,6 +109,7 @@ async function parseRawUpload(
     mimeType,
     data: buf,
     asInvoiceRaw,
+    attachmentScopeRaw,
   };
 }
 
@@ -209,12 +212,16 @@ export async function GET(_req: Request, ctx: Ctx) {
         size: true,
         createdAt: true,
         uploadedToKaitenAt: true,
+        scope: true,
       },
     });
     const invId = order.invoiceAttachmentId;
-    return NextResponse.json(
-      invId ? rows.filter((r) => r.id !== invId) : rows,
-    );
+    const visible = rows.filter((r) => {
+      if (r.scope === OrderAttachmentScope.PAYMENT_SLIP) return false;
+      if (invId && r.id === invId) return false;
+      return true;
+    });
+    return NextResponse.json(visible);
   } catch (e) {
     console.error(e);
     return NextResponse.json(
@@ -237,7 +244,7 @@ export async function POST(req: Request, ctx: Ctx) {
       return NextResponse.json(
         {
           error:
-            "Ожидается загрузка как application/octet-stream (сырое тело файла + заголовки x-upload-filename, при необходимости x-as-invoice)",
+            "Ожидается загрузка как application/octet-stream (сырое тело файла + заголовки x-upload-filename, при необходимости x-as-invoice или x-attachment-scope: payment-slip)",
         },
         { status: 415 },
       );
@@ -264,6 +271,34 @@ export async function POST(req: Request, ctx: Ctx) {
       asInvoiceRaw === "1" ||
       asInvoiceRaw === "true" ||
       String(asInvoiceRaw ?? "").toLowerCase() === "on";
+
+    const scopeNorm = String(parsed.attachmentScopeRaw ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, "-");
+    const isPaymentSlipScope = scopeNorm === "payment-slip";
+    const rawScopeTrimmed = String(parsed.attachmentScopeRaw ?? "").trim();
+    if (rawScopeTrimmed !== "" && !isPaymentSlipScope) {
+      return NextResponse.json(
+        {
+          error:
+            'Недопустимый x-attachment-scope. Допускается только "payment-slip".',
+        },
+        { status: 400 },
+      );
+    }
+    if (asInvoice && isPaymentSlipScope) {
+      return NextResponse.json(
+        {
+          error:
+            "Загрузка счёта (x-as-invoice) не сочетается с payment-slip для одного файла",
+        },
+        { status: 400 },
+      );
+    }
+    const attachmentScope = isPaymentSlipScope
+      ? OrderAttachmentScope.PAYMENT_SLIP
+      : OrderAttachmentScope.GENERAL;
 
     const buf = Uint8Array.from(parsed.data);
     const mimeType = parsed.mimeType;
@@ -337,6 +372,7 @@ export async function POST(req: Request, ctx: Ctx) {
           data: {
             id: attachmentId,
             orderId,
+            scope: attachmentScope,
             fileName,
             mimeType,
             size: buf.byteLength,
@@ -399,8 +435,8 @@ export async function POST(req: Request, ctx: Ctx) {
     const deferredKaitenHint = prevInvoiceForKaiten;
     const deferredOrderId = orderId;
     const deferredAttachmentId = row.id;
-    /** Счёт хранится в CRM и не дублируется в Kaiten / канбане. */
-    const deferredSkipKaitenPush = asInvoice;
+    /** Счёт и платёжки хранятся в CRM без дубля в Kaiten / канбане. */
+    const deferredSkipKaitenPush = asInvoice || isPaymentSlipScope;
     const deferredTryPdfInvoice =
       asInvoice &&
       fromName == null &&
