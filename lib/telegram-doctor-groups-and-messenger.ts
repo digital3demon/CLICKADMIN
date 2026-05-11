@@ -24,6 +24,61 @@ async function reply(botToken: string, chatId: string, text: string): Promise<vo
   }
 }
 
+function formatContextLine(username: string | null, text: string): string {
+  const u = username?.trim() ? `@${username.trim()}` : "без username";
+  return `${u}: ${text.trim()}`;
+}
+
+async function updateOpenItemsAfterContext(
+  tenantId: string,
+  chatIdStr: string,
+  currentSeq: number,
+): Promise<void> {
+  const openItems = await prisma.doctorMessengerItem.findMany({
+    where: {
+      tenantId,
+      telegramChatId: chatIdStr,
+      status: DoctorMessengerItemStatus.OPEN,
+    },
+    select: {
+      id: true,
+      telegramMessageId: true,
+      snippetAfter: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 40,
+  });
+
+  for (const item of openItems) {
+    const mentionSeq = Number(item.telegramMessageId);
+    if (!Number.isFinite(mentionSeq) || currentSeq <= mentionSeq) continue;
+
+    const afterRows = await prisma.doctorTelegramMessage.findMany({
+      where: {
+        tenantId,
+        telegramChatId: chatIdStr,
+        messageSeq: { gt: mentionSeq },
+      },
+      orderBy: { messageSeq: "asc" },
+      take: 3,
+      select: {
+        fromTgUsername: true,
+        textFull: true,
+      },
+    });
+
+    const nextSnippet = afterRows
+      .map((r) => formatContextLine(r.fromTgUsername, r.textFull))
+      .join("\n");
+    if (nextSnippet === item.snippetAfter) continue;
+
+    await prisma.doctorMessengerItem.update({
+      where: { id: item.id },
+      data: { snippetAfter: nextSnippet },
+    });
+  }
+}
+
 function bindPayloadFromText(fullText: string, cmd: string): string | null {
   const t = normalizeBotCommandText(fullText);
   if (cmd === "/start") {
@@ -157,8 +212,6 @@ export async function tryTelegramDoctorGroupsAndMessenger(
     return true;
   }
 
-  if (!textIncludesClicklabAdminMention(textRaw)) return true;
-
   const resolvedGroup = await prisma.doctorTelegramGroup.findFirst({
     where: { telegramChatId: chatIdStr },
     select: {
@@ -173,10 +226,6 @@ export async function tryTelegramDoctorGroupsAndMessenger(
     /* Тихо игнорируем в группе: без лишних сообщений, только CRM-поток для привязанных чатов. */
     return true;
   }
-
-  const split = splitAroundClicklabAdmin(textRaw);
-  const before = split?.before ?? "";
-  const after = split?.after ?? "";
 
   const from = msg.from as Record<string, unknown> | undefined;
   const fromUserStr = telegramPeerIdToString(from?.id);
@@ -193,7 +242,76 @@ export async function tryTelegramDoctorGroupsAndMessenger(
         ? Number(midRaw)
         : NaN;
   if (!Number.isFinite(messageIdNum)) return true;
-  const messageIdStr = String(Math.trunc(messageIdNum));
+  const messageSeq = Math.trunc(messageIdNum);
+  const messageIdStr = String(messageSeq);
+
+  await prisma.doctorTelegramMessage.upsert({
+    where: {
+      tenantId_telegramChatId_telegramMessageId: {
+        tenantId: resolvedGroup.tenantId,
+        telegramChatId: chatIdStr,
+        telegramMessageId: messageIdStr,
+      },
+    },
+    create: {
+      tenantId: resolvedGroup.tenantId,
+      doctorId: resolvedGroup.doctorId,
+      doctorTelegramGroupId: resolvedGroup.id,
+      telegramChatId: chatIdStr,
+      telegramMessageId: messageIdStr,
+      messageSeq,
+      fromTgUserId: fromUserStr,
+      fromTgUsername: un || null,
+      textFull: textRaw,
+    },
+    update: {
+      doctorId: resolvedGroup.doctorId,
+      doctorTelegramGroupId: resolvedGroup.id,
+      fromTgUserId: fromUserStr,
+      fromTgUsername: un || null,
+      textFull: textRaw,
+    },
+  });
+
+  if (!textIncludesClicklabAdminMention(textRaw)) {
+    await updateOpenItemsAfterContext(resolvedGroup.tenantId, chatIdStr, messageSeq);
+    return true;
+  }
+
+  const beforeRows = await prisma.doctorTelegramMessage.findMany({
+    where: {
+      tenantId: resolvedGroup.tenantId,
+      telegramChatId: chatIdStr,
+      messageSeq: { lt: messageSeq },
+    },
+    orderBy: { messageSeq: "desc" },
+    take: 3,
+    select: {
+      fromTgUsername: true,
+      textFull: true,
+    },
+  });
+  const before = beforeRows
+    .reverse()
+    .map((r) => formatContextLine(r.fromTgUsername, r.textFull))
+    .join("\n");
+
+  const afterRows = await prisma.doctorTelegramMessage.findMany({
+    where: {
+      tenantId: resolvedGroup.tenantId,
+      telegramChatId: chatIdStr,
+      messageSeq: { gt: messageSeq },
+    },
+    orderBy: { messageSeq: "asc" },
+    take: 3,
+    select: {
+      fromTgUsername: true,
+      textFull: true,
+    },
+  });
+  const after = afterRows
+    .map((r) => formatContextLine(r.fromTgUsername, r.textFull))
+    .join("\n");
 
   try {
     await prisma.doctorMessengerItem.create({
@@ -222,6 +340,8 @@ export async function tryTelegramDoctorGroupsAndMessenger(
     console.error("[telegram doctor messenger] create item", e);
     return true;
   }
+
+  await updateOpenItemsAfterContext(resolvedGroup.tenantId, chatIdStr, messageSeq);
 
   return true;
 }

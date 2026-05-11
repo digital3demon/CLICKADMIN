@@ -111,6 +111,7 @@ model Tenant {
   orderKaitenLabMentionAcks OrderKaitenLabMentionAck[]
   doctorTelegramGroups      DoctorTelegramGroup[]
   doctorMessengerItems      DoctorMessengerItem[]
+  doctorTelegramMessages    DoctorTelegramMessage[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -343,6 +344,7 @@ model Doctor {
   deletedAt                    DateTime?
   telegramGroups               DoctorTelegramGroup[]
   messengerItems               DoctorMessengerItem[]
+  telegramMessages             DoctorTelegramMessage[]
 
   @@index([tenantId])
 }
@@ -361,6 +363,7 @@ model DoctorTelegramGroup {
   createdAt      DateTime @default(now())
 
   messengerItems DoctorMessengerItem[]
+  messages       DoctorTelegramMessage[]
 
   @@unique([tenantId, telegramChatId])
   @@index([doctorId])
@@ -405,6 +408,31 @@ model DoctorMessengerItem {
   @@unique([tenantId, telegramChatId, telegramMessageId])
   @@index([tenantId, status, createdAt])
   @@index([doctorId])
+}
+
+/// Лента сообщений группы врача (для контекста 3 до/3 после в «Мессенджерах»).
+model DoctorTelegramMessage {
+  id                    String             @id @default(cuid())
+  tenantId              String
+  tenant                Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  doctorId              String
+  doctor                Doctor             @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  doctorTelegramGroupId String
+  doctorTelegramGroup   DoctorTelegramGroup @relation(fields: [doctorTelegramGroupId], references: [id], onDelete: Cascade)
+
+  telegramChatId        String
+  telegramMessageId     String
+  messageSeq            Int
+
+  fromTgUserId          String?
+  fromTgUsername        String?
+  textFull              String             @db.Text
+
+  createdAt             DateTime           @default(now())
+
+  @@unique([tenantId, telegramChatId, telegramMessageId])
+  @@index([tenantId, telegramChatId, messageSeq])
+  @@index([doctorTelegramGroupId, messageSeq])
 }
 
 /// Журнал изменений клиник и врачей (контрагенты)
