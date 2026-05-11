@@ -1,26 +1,60 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { CRM_MESSENGER_OPEN_COUNT_CHANGED_EVENT } from "@/lib/crm-client-events";
+
+type SidebarMessengerRow = {
+  id: string;
+  createdAt: string;
+  doctorName: string;
+  preview: string;
+};
 
 export function SidebarMessengers() {
   const [count, setCount] = useState<number | null>(null);
+  const [items, setItems] = useState<SidebarMessengerRow[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const refetchSidebar = useCallback(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/messengers/open-count", { cache: "no-store" });
-        const j = (await res.json()) as { count?: number };
-        if (!cancelled && typeof j.count === "number") setCount(j.count);
+        const res = await fetch("/api/messengers/sidebar-state", { cache: "no-store" });
+        const j = (await res.json()) as {
+          count?: number;
+          items?: SidebarMessengerRow[];
+        };
+        if (typeof j.count === "number") setCount(j.count);
+        setItems(Array.isArray(j.items) ? j.items : []);
       } catch {
-        if (!cancelled) setCount(null);
+        setCount(null);
+        setItems([]);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    refetchSidebar();
+  }, [refetchSidebar]);
+
+  useEffect(() => {
+    const onChanged = () => {
+      refetchSidebar();
+    };
+    const onFocus = () => {
+      refetchSidebar();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refetchSidebar();
+    };
+    window.addEventListener(CRM_MESSENGER_OPEN_COUNT_CHANGED_EVENT, onChanged);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener(CRM_MESSENGER_OPEN_COUNT_CHANGED_EVENT, onChanged);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [refetchSidebar]);
 
   const n = count ?? 0;
 
@@ -31,10 +65,10 @@ export function SidebarMessengers() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--sidebar-text)] opacity-60 shell-short:text-[9px]">
             Мессенджеры
           </p>
-          <p className="mt-2 text-xs leading-snug text-[var(--sidebar-text)] opacity-80 shell-short:mt-1.5 shell-short:text-[11px]">
-            Сообщения с{" "}
-            <span className="font-medium opacity-95">@clicklab_admin</span> из
-            групп врачей.
+          <p className="mt-1.5 text-[11px] leading-snug text-[var(--sidebar-text)] opacity-75 shell-short:mt-1 shell-short:text-[10px]">
+            Упоминания{" "}
+            <span className="font-medium opacity-95">@clicklab_admin</span> в
+            группах врачей — полный текст сообщения.
           </p>
         </div>
         {n > 0 ? (
@@ -43,9 +77,43 @@ export function SidebarMessengers() {
           </span>
         ) : null}
       </div>
+
+      {items.length > 0 ? (
+        <ul className="mt-2.5 space-y-1.5 shell-short:mt-2 shell-short:space-y-1">
+          {items.map((it) => (
+            <li key={it.id}>
+              <Link
+                href={`/messengers#m-${it.id}`}
+                className="block rounded-lg border border-[var(--sidebar-border)] bg-[var(--sidebar-bg)]/40 px-2.5 py-2 transition-colors hover:border-[var(--sidebar-blue)]/50 hover:bg-[var(--surface-subtle)] shell-short:px-2 shell-short:py-1.5"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate text-xs font-semibold text-[var(--sidebar-text)]">
+                    {it.doctorName}
+                  </span>
+                  <time
+                    className="shrink-0 text-[10px] tabular-nums text-[var(--sidebar-text)] opacity-55"
+                    dateTime={it.createdAt}
+                  >
+                    {new Date(it.createdAt).toLocaleString("ru-RU", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </time>
+                </div>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-[var(--sidebar-text)] opacity-85 shell-short:text-[10px]">
+                  {it.preview}
+                </p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       <Link
         href="/messengers"
-        className="mt-3 inline-block text-xs font-medium text-[var(--sidebar-blue)] hover:underline shell-short:mt-2"
+        className="mt-2.5 inline-block text-xs font-medium text-[var(--sidebar-blue)] hover:underline shell-short:mt-2"
       >
         Открыть очередь →
       </Link>

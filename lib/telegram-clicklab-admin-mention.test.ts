@@ -19,4 +19,12 @@ describe("clicklab admin mention", () => {
     expect(sp?.before.trim()).toBe("до");
     expect(sp?.after.trim()).toBe("после");
   });
+
+  it("keeps full message after tag on same line (not only the handle)", () => {
+    const sp = splitAroundClicklabAdmin(
+      `${CLICKLAB_ADMIN_MENTION} проверьте коронку 11 по плану`,
+    );
+    expect(sp?.before).toBe("");
+    expect(sp?.after.trim()).toBe("проверьте коронку 11 по плану");
+  });
 });

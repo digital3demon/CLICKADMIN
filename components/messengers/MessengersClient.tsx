@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CRM_MESSENGER_OPEN_COUNT_CHANGED_EVENT } from "@/lib/crm-client-events";
+import {
+  CLICKLAB_ADMIN_MENTION,
+  splitAroundClicklabAdmin,
+} from "@/lib/telegram-clicklab-admin-mention";
 
 type Item = {
   id: string;
@@ -27,6 +32,7 @@ export function MessengersClient() {
   const [error, setError] = useState<string | null>(null);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const didScrollToHash = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,6 +64,42 @@ export function MessengersClient() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (tab !== "open") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/messengers/mark-viewed", { method: "POST" });
+        if (!cancelled && res.ok) {
+          window.dispatchEvent(new Event(CRM_MESSENGER_OPEN_COUNT_CHANGED_EVENT));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  useEffect(() => {
+    if (loading || items.length === 0) return;
+    if (didScrollToHash.current) return;
+    const hash =
+      typeof window !== "undefined" ? window.location.hash.trim() : "";
+    const m = /^#m-(.+)$/.exec(hash);
+    if (!m?.[1]) return;
+    const id = m[1];
+    if (!items.some((it) => it.id === id)) return;
+    didScrollToHash.current = true;
+    requestAnimationFrame(() => {
+      document.getElementById(`m-${id}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+  }, [loading, items]);
+
   const onReply = async (id: string) => {
     const text = (replyDrafts[id] ?? "").trim();
     if (!text) return;
@@ -81,11 +123,26 @@ export function MessengersClient() {
         return n;
       });
       await load();
+      window.dispatchEvent(new Event(CRM_MESSENGER_OPEN_COUNT_CHANGED_EVENT));
     } catch {
       setError("Сеть недоступна");
     } finally {
       setBusyId(null);
     }
+  };
+
+  const renderMentionMessageBody = (textFull: string) => {
+    const parts = splitAroundClicklabAdmin(textFull);
+    if (!parts) return textFull;
+    return (
+      <>
+        {parts.before}
+        <span className="font-semibold text-[var(--sidebar-blue)]">
+          {CLICKLAB_ADMIN_MENTION}
+        </span>
+        {parts.after}
+      </>
+    );
   };
 
   const onArchive = async (id: string) => {
@@ -102,6 +159,7 @@ export function MessengersClient() {
         return;
       }
       await load();
+      window.dispatchEvent(new Event(CRM_MESSENGER_OPEN_COUNT_CHANGED_EVENT));
     } catch {
       setError("Сеть недоступна");
     } finally {
@@ -164,7 +222,8 @@ export function MessengersClient() {
           {items.map((it) => (
             <li
               key={it.id}
-              className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm"
+              id={`m-${it.id}`}
+              className="scroll-mt-24 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <Link
@@ -186,19 +245,31 @@ export function MessengersClient() {
                 </p>
               ) : null}
 
-              <div className="mt-3 space-y-2 text-sm text-[var(--app-text)]">
-                {it.snippetBefore.trim() ? (
-                  <p className="whitespace-pre-wrap rounded-md bg-black/[0.04] px-2 py-1.5 dark:bg-white/10">
-                    {it.snippetBefore.trim()}
+              <div className="mt-3 space-y-3 text-sm text-[var(--app-text)]">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Текст сообщения (целиком)
                   </p>
-                ) : null}
-                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                  @clicklab_admin
-                </p>
-                {it.snippetAfter.trim() ? (
-                  <p className="whitespace-pre-wrap rounded-md bg-black/[0.04] px-2 py-1.5 dark:bg-white/10">
-                    {it.snippetAfter.trim()}
+                  <p className="mt-1 whitespace-pre-wrap rounded-md bg-black/[0.04] px-2 py-1.5 dark:bg-white/10">
+                    {renderMentionMessageBody(it.textFull)}
                   </p>
+                </div>
+                {it.snippetBefore.trim() || it.snippetAfter.trim() ? (
+                  <div className="space-y-2 border-t border-[var(--border-subtle)] pt-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                      Соседние сообщения в группе (до 3 до и после)
+                    </p>
+                    {it.snippetBefore.trim() ? (
+                      <p className="whitespace-pre-wrap rounded-md bg-black/[0.04] px-2 py-1.5 dark:bg-white/10">
+                        {it.snippetBefore.trim()}
+                      </p>
+                    ) : null}
+                    {it.snippetAfter.trim() ? (
+                      <p className="whitespace-pre-wrap rounded-md bg-black/[0.04] px-2 py-1.5 dark:bg-white/10">
+                        {it.snippetAfter.trim()}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
 

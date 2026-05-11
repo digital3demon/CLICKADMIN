@@ -396,6 +396,8 @@ model DoctorMessengerItem {
 
   status                DoctorMessengerItemStatus @default(OPEN)
   archivedAt            DateTime?
+  /// Просмотрено в CRM (очередь «Мессенджеры»); null — в счётчике непрочитанных.
+  readAt                DateTime?
 
   replyTelegramMessageId String?
   replyText              String?                  @db.Text
@@ -407,6 +409,7 @@ model DoctorMessengerItem {
 
   @@unique([tenantId, telegramChatId, telegramMessageId])
   @@index([tenantId, status, createdAt])
+  @@index([tenantId, status, readAt])
   @@index([doctorId])
 }
 

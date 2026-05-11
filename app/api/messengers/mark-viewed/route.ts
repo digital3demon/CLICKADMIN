@@ -6,27 +6,30 @@ import { getPrisma } from "@/lib/get-prisma";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+/** Все открытые записи очереди помечены просмотренными (бейдж в сайдбаре). */
+export async function POST() {
   const session = await getSessionFromCookies();
   if (!session?.sub || session.demo) {
-    return NextResponse.json({ count: 0, unauthorized: true });
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
 
   let tenantId: string;
   try {
     tenantId = await requireSessionTenantId(session);
   } catch {
-    return NextResponse.json({ count: 0 });
+    return NextResponse.json({ error: "Нет контекста организации" }, { status: 400 });
   }
 
   const prisma = await getPrisma();
-  const count = await prisma.doctorMessengerItem.count({
+  const now = new Date();
+  const result = await prisma.doctorMessengerItem.updateMany({
     where: {
       tenantId,
       status: DoctorMessengerItemStatus.OPEN,
       readAt: null,
     },
+    data: { readAt: now },
   });
 
-  return NextResponse.json({ count });
+  return NextResponse.json({ ok: true, updated: result.count });
 }

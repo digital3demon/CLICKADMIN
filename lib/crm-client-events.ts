@@ -6,3 +6,7 @@ export const CRM_PROFILE_AVATAR_CHANGED_EVENT = CRM_PROFILE_UPDATED_EVENT;
 
 /** Наряд отправлен в архив — канбан сразу перезапрашивает связанные наряды. */
 export const CRM_ORDER_ARCHIVED_EVENT = "crm-order-archived";
+
+/** Очередь «Мессенджеры» изменилась — сайдбар пересчитывает непрочитанные. */
+export const CRM_MESSENGER_OPEN_COUNT_CHANGED_EVENT =
+  "crm-messenger-open-count-changed";
