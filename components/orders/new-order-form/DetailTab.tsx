@@ -517,11 +517,19 @@ export function DetailTab({
       {priceListOpen ? (
         <div
           className="fixed inset-0 z-[120] flex items-center justify-center bg-zinc-900/45 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="price-list-modal-title"
+          role="presentation"
+          onClick={() => {
+            setPriceListOpen(false);
+            setPriceSearch("");
+          }}
         >
-          <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="price-list-modal-title"
+            className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2
               id="price-list-modal-title"
               className="text-base font-semibold text-[var(--app-text)]"
@@ -554,7 +562,8 @@ export function DetailTab({
               <button
                 type="button"
                 className="rounded-md px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setPriceListOpen(false);
                   setPriceSearch("");
                 }}

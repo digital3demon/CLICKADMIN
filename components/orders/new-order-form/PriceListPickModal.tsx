@@ -200,11 +200,13 @@ export function PriceListPickModal({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (createOpen) setCreateOpen(false);
+      else onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, createOpen]);
 
   if (!open) return null;
   if (typeof document === "undefined") return null;
@@ -212,11 +214,19 @@ export function PriceListPickModal({
   const overlay = (
     <div
       className="fixed inset-0 z-[400] flex items-center justify-center bg-zinc-900/45 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="price-pick-modal-title"
+      role="presentation"
+      onClick={() => {
+        if (createOpen) setCreateOpen(false);
+        else onClose();
+      }}
     >
-      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="price-pick-modal-title"
+        className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between gap-3">
           <h2
             id="price-pick-modal-title"
@@ -279,7 +289,10 @@ export function PriceListPickModal({
           <button
             type="button"
             className="rounded-md px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
-            onClick={onClose}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
           >
             Закрыть
           </button>
@@ -290,10 +303,7 @@ export function PriceListPickModal({
         <div
           className="fixed inset-0 z-[410] flex items-center justify-center bg-zinc-900/45 p-4"
           role="presentation"
-          onClick={(e) => {
-            e.stopPropagation();
-            setCreateOpen(false);
-          }}
+          onClick={() => setCreateOpen(false)}
         >
           <div
             role="dialog"
