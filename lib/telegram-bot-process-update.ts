@@ -112,9 +112,10 @@ async function replyWithRoleKeyboard(
   chatId: string,
   text: string,
   role: UserRole,
+  allowGroupKeyboard: boolean,
   opts?: { parseMode?: "HTML" },
 ): Promise<void> {
-  const kb = telegramReplyKeyboardMarkupForRole(role);
+  const kb = allowGroupKeyboard ? telegramReplyKeyboardMarkupForRole(role) : null;
   await reply(botToken, chatId, text, {
     ...opts,
     ...(kb ? { replyMarkup: kb } : {}),
@@ -158,6 +159,7 @@ export async function processTelegramBotUpdate(
     chat != null ? telegramPeerIdToString(chat.id) : null;
   const chatType =
     chat && typeof chat.type === "string" ? String(chat.type) : "";
+  const isPrivateChat = chatType === "private";
   let fromIdStr = from ? telegramPeerIdToString(from.id) : null;
   /* В приватном чате с ботом chat.id совпадает с пользователем; from иногда отсутствует в edge-case API. */
   if (fromIdStr == null && chatType === "private" && chatId != null) {
@@ -179,6 +181,11 @@ export async function processTelegramBotUpdate(
   const menuAsCmd = telegramMenuLabelToCommand(textRaw);
   const text = menuAsCmd ?? normalizeBotCommandText(textRaw);
   const cmd = firstCommandToken(text);
+
+  /* В группах ответы отключены: там работает отдельный обработчик (chat id / @clicklab_admin). */
+  if (!isPrivateChat) {
+    return;
+  }
 
   if (cmd === "/start") {
     const payload = startPayload(text);
@@ -319,18 +326,33 @@ export async function processTelegramBotUpdate(
       role: effectiveRole,
     });
     if (listReply) {
-      await replyWithRoleKeyboard(botToken, chatId, listReply.text, effectiveRole, {
-        parseMode: listReply.parseMode,
-      });
+      if (isPrivateChat) {
+        await replyWithRoleKeyboard(botToken, chatId, listReply.text, effectiveRole, true, {
+          parseMode: listReply.parseMode,
+        });
+      } else {
+        await reply(botToken, chatId, listReply.text, {
+          parseMode: listReply.parseMode,
+        });
+      }
       return;
     }
     if (text.trim().startsWith("/")) {
-      await replyWithRoleKeyboard(
-        botToken,
-        chatId,
-        "Неизвестная команда. Отгрузки: /shiptd /shiptm /shipw. Сроки канбана: /dlinetd /dlinetm /dlinew. Или кнопки ниже.",
-        effectiveRole,
-      );
+      if (isPrivateChat) {
+        await replyWithRoleKeyboard(
+          botToken,
+          chatId,
+          "Неизвестная команда. Отгрузки: /shiptd /shiptm /shipw. Сроки канбана: /dlinetd /dlinetm /dlinew. Или кнопки ниже.",
+          effectiveRole,
+          true,
+        );
+      } else {
+        await reply(
+          botToken,
+          chatId,
+          "Неизвестная команда. В группе кнопки отключены; используйте личный чат с ботом.",
+        );
+      }
       return;
     }
   }
@@ -340,12 +362,21 @@ export async function processTelegramBotUpdate(
   });
   if (!pending) {
     if (effectiveTenantId && effectiveRole) {
-      await replyWithRoleKeyboard(
-        botToken,
-        chatId,
-        "Выберите действие кнопкой ниже или команды: /shiptd /shiptm /shipw /dlinetd /dlinetm /dlinew. Привязка почты: /start.",
-        effectiveRole,
-      );
+      if (isPrivateChat) {
+        await replyWithRoleKeyboard(
+          botToken,
+          chatId,
+          "Выберите действие кнопкой ниже или команды: /shiptd /shiptm /shipw /dlinetd /dlinetm /dlinew. Привязка почты: /start.",
+          effectiveRole,
+          true,
+        );
+      } else {
+        await reply(
+          botToken,
+          chatId,
+          "В группе кнопки отключены. Откройте личный чат с ботом и отправьте /start.",
+        );
+      }
       return;
     }
     await reply(

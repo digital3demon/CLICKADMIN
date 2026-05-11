@@ -79,8 +79,10 @@ export async function POST(req: Request) {
   try {
     await getTelegramBotUserIdStr(token);
     await tryTelegramBotAddedChatIdAnnounce(body, token);
-    await tryTelegramDoctorGroupsAndMessenger(body, token);
-    await processTelegramBotUpdate(body, token);
+    const handledGroup = await tryTelegramDoctorGroupsAndMessenger(body, token);
+    if (!handledGroup) {
+      await processTelegramBotUpdate(body, token);
+    }
   } catch (e) {
     console.error("[telegram webhook]", e);
   }

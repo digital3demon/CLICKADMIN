@@ -170,11 +170,7 @@ export async function tryTelegramDoctorGroupsAndMessenger(
   });
 
   if (!resolvedGroup || resolvedGroup.doctor.deletedAt) {
-    await reply(
-      botToken,
-      chatIdStr,
-      "Эта группа не привязана к врачу в CRM. Укажите chat id в карточке врача или отправьте /chatid и добавьте id в CRM.",
-    );
+    /* Тихо игнорируем в группе: без лишних сообщений, только CRM-поток для привязанных чатов. */
     return true;
   }
 
