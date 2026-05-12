@@ -239,7 +239,7 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
     case "lab":
       return LAB_WORK_STATUS_LABELS[parsed.status];
     case "kaitenColumn":
-      return `Кайтен: ${parsed.title}`;
+      return parsed.title;
     case "prosthetics":
       return "Протетика заказана";
     case "prostheticsPending":
@@ -338,7 +338,7 @@ export function relatedOrdersListTagQuickFilters(
     case "kaitenColumn": {
       const titles = ctx.kaitenColumnAlternates ?? [];
       return titles.map((title) => ({
-        label: `Кайтен: ${title}`,
+        label: title,
         tag: listTagKaitenColumnTitle(title),
       }));
     }

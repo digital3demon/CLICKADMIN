@@ -2,6 +2,7 @@ import "server-only";
 
 import type { PrismaClient } from "@prisma/client";
 import { ORDER_PAYMENT_PAID } from "@/lib/order-clinic-client-fields";
+import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import type { RecentPaidOrderRow } from "@/lib/recent-orders-paid-from-revisions-logic";
 import { lastPaidTransitionAtFromRevisions } from "@/lib/recent-orders-paid-from-revisions-logic";
 
@@ -39,13 +40,32 @@ export async function getRecentOrdersPaidAfterUnpaidOrPartial(
     },
     orderBy: { updatedAt: "desc" },
     take: CANDIDATE_LIMIT,
-    select: { id: true, orderNumber: true },
+    select: {
+      id: true,
+      orderNumber: true,
+      patientName: true,
+      doctor: { select: { fullName: true } },
+    },
   });
 
   if (candidates.length === 0) return [];
 
   const idList = candidates.map((c) => c.id);
-  const numberById = new Map(candidates.map((c) => [c.id, c.orderNumber] as const));
+  const metaById = new Map(
+    candidates.map(
+      (c) =>
+        [
+          c.id,
+          {
+            orderNumber: c.orderNumber,
+            doctorLabel: (c.doctor.fullName ?? "").trim(),
+            patientLabel:
+              personNameSurnameInitials(c.patientName).trim() ||
+              (c.patientName ?? "").trim(),
+          },
+        ] as const,
+    ),
+  );
 
   const revs = await prisma.orderRevision.findMany({
     where: {
@@ -71,12 +91,14 @@ export async function getRecentOrdersPaidAfterUnpaidOrPartial(
     const changedAt = lastPaidTransitionAtFromRevisions(chain);
     if (!changedAt) continue;
     if (changedAt < sinceRecency) continue;
-    const orderNumber = numberById.get(id);
-    if (!orderNumber) continue;
+    const meta = metaById.get(id);
+    if (!meta) continue;
     out.push({
       orderId: id,
-      orderNumber,
+      orderNumber: meta.orderNumber,
       changedAt: changedAt.toISOString(),
+      doctorLabel: meta.doctorLabel,
+      patientLabel: meta.patientLabel,
     });
   }
 

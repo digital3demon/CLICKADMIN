@@ -11,6 +11,8 @@ export type RecentPaidOrderRow = {
   orderNumber: string;
   /** ISO */
   changedAt: string;
+  doctorLabel: string;
+  patientLabel: string;
 };
 
 function paymentFromSnapshot(snapshot: Prisma.JsonValue): string {

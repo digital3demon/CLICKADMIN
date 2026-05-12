@@ -3,6 +3,7 @@ import {
   stickerPublicClientPath,
   stickerPublicHubAbsoluteUrl,
   stickerPublicHubPath,
+  stickerPublicStaffPath,
 } from "@/lib/sticker-public-path";
 
 describe("stickerPublicHubPath", () => {
@@ -14,8 +15,14 @@ describe("stickerPublicHubPath", () => {
 });
 
 describe("stickerPublicClientPath", () => {
-  it("добавляет /client", () => {
+  it("добавляет /client (совместимость, редирект на витрину)", () => {
     expect(stickerPublicClientPath("x", "y")).toBe("/p/t/x/s/y/client");
+  });
+});
+
+describe("stickerPublicStaffPath", () => {
+  it("добавляет /staff", () => {
+    expect(stickerPublicStaffPath("lab", "tok")).toBe("/p/t/lab/s/tok/staff");
   });
 });
 

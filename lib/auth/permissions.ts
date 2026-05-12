@@ -103,3 +103,8 @@ const ORDER_CHAT_CORRECTION_ACCEPT_ROLES: readonly UserRole[] = [
 export function canAcceptOrderChatCorrections(role: UserRole): boolean {
   return ORDER_CHAT_CORRECTION_ACCEPT_ROLES.includes(role);
 }
+
+/** Скрытие строки «Оплаты» в сайдбаре после «прочитано» — только эти роли. */
+export function canDismissSidebarRecentPaidItems(role: UserRole): boolean {
+  return role === "ADMINISTRATOR" || role === "SENIOR_ADMINISTRATOR";
+}
