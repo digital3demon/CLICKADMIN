@@ -35,6 +35,8 @@ export function ShipmentsOrdersTable({
   siteOrigin = null,
   labDueHmSlots,
   showAccountantColumns = false,
+  shipmentsTagFilterContext = null,
+  stickersPrintHref = null,
 }: {
   orders: ShipmentOrderRow[];
   emptyHint: string;
@@ -47,6 +49,14 @@ export function ShipmentsOrdersTable({
   labDueHmSlots: readonly string[];
   /** Доп. колонки «Реквизиты» и «Наше юрлицо» (роль бухгалтер). */
   showAccountantColumns?: boolean;
+  /** Контекст для ссылок фильтра по пилюлям «Отметки» — остаёмся на странице отгрузок. */
+  shipmentsTagFilterContext?: {
+    tab: string;
+    periodFrom: string | null;
+    periodTo: string | null;
+  } | null;
+  /** Ссылка на печать этикеток 58×40 мм (тот же query, что у списка отгрузок). */
+  stickersPrintHref?: string | null;
 }) {
   if (orders.length === 0) {
     return (
@@ -71,9 +81,17 @@ export function ShipmentsOrdersTable({
             {listHeading}
           </p>
         ) : null}
-        <div className="flex flex-col gap-2 border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-2 sm:flex-row sm:items-center md:grid md:grid-cols-[minmax(4.25rem,6rem)_minmax(0,1fr)] md:items-center md:gap-x-2">
-          <div className="flex shrink-0 justify-start">
+        <div className="flex flex-col gap-2 border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-2 sm:flex-row sm:items-center md:grid md:grid-cols-[minmax(10rem,1fr)_minmax(0,1fr)] md:items-center md:gap-x-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-start gap-2">
             <ShipmentsPrintButton />
+            {stickersPrintHref ? (
+              <Link
+                href={stickersPrintHref}
+                className="no-print rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text-strong)] shadow-sm transition-colors hover:bg-[var(--table-row-hover)]"
+              >
+                Печать стикеров
+              </Link>
+            ) : null}
           </div>
           {listHeading && listHeadingScreen ? (
             <p className="min-w-0 text-sm font-medium text-[var(--text-body)] print:mb-2 print:text-base print:font-semibold">
@@ -357,6 +375,7 @@ export function ShipmentsOrdersTable({
                       isUrgent={o.isUrgent}
                       urgentCoefficient={o.urgentCoefficient}
                       customTags={o.listCustomTags}
+                      shipmentsFilterContext={shipmentsTagFilterContext}
                     />
                   </td>
                 </tr>

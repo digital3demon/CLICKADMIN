@@ -9,9 +9,9 @@ import { isKanbanOnlyUser } from "@/lib/auth/permissions";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { brandDisplayFont } from "@/lib/brand-font";
 import { useNewOrderPanel } from "@/components/orders/new-order-panel-context";
-import { SidebarAttention } from "./SidebarAttention";
 import { SidebarDrafts } from "./SidebarDrafts";
 import { SidebarMessengers } from "./SidebarMessengers";
+import { SidebarPayments } from "./SidebarPayments";
 import { SidebarNav } from "./SidebarNav";
 import { isWorkdaySkyWidgetEnabled } from "@/lib/ui-flags";
 import { ThemeToggle } from "./ThemeToggle";
@@ -218,7 +218,7 @@ export function Sidebar() {
         isKanbanOnlyUser(sessionUser.role, sessionUser.moduleAccess ?? undefined) ? null : (
           <>
             <SidebarMessengers />
-            <SidebarAttention />
+            <SidebarPayments />
             <SidebarDrafts />
           </>
         )}

@@ -22,10 +22,10 @@ import {
   humanListTagLabel,
   LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
-  LIST_TAG_PAYMENT_PAID,
-  LIST_TAG_PAYMENT_PARTIAL,
   LIST_TAG_PROSTHETICS_PENDING,
   parseListTagParam,
+  relatedOrdersListTagQuickFilters,
+  listTagParamsEqual,
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
 import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
@@ -192,6 +192,44 @@ export default async function OrdersPage({
       baseCountWhere,
       session?.sub,
     );
+  }
+
+  let kaitenColumnAlternates: string[] = [];
+  let urgentCoefficientsInDb: number[] = [];
+  if (tenantId && activeFilter?.kind === "kaitenColumn") {
+    const rows = await ordersPrisma.order.groupBy({
+      by: ["kaitenColumnTitle"],
+      where: {
+        tenantId,
+        archivedAt: null,
+        AND: [
+          { kaitenColumnTitle: { not: null } },
+          { kaitenColumnTitle: { not: activeFilter.title } },
+        ],
+      },
+      orderBy: { kaitenColumnTitle: "asc" },
+      take: 28,
+    });
+    kaitenColumnAlternates = rows
+      .map((r) => r.kaitenColumnTitle)
+      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      .map((t) => t.trim());
+  }
+  if (tenantId && activeFilter?.kind === "urgent") {
+    const rows = await ordersPrisma.order.groupBy({
+      by: ["urgentCoefficient"],
+      where: {
+        tenantId,
+        archivedAt: null,
+        isUrgent: true,
+        urgentCoefficient: { not: null },
+      },
+      orderBy: { urgentCoefficient: "asc" },
+      take: 30,
+    });
+    urgentCoefficientsInDb = rows
+      .map((r) => r.urgentCoefficient)
+      .filter((c): c is number => typeof c === "number" && Number.isFinite(c));
   }
 
   let orders: Awaited<
@@ -527,42 +565,36 @@ export default async function OrdersPage({
           >
             Показать все заказы
           </Link>
-          <Link
-            href={ordersListHref({
-              limit: pageSize,
-              tag: LIST_TAG_PAYMENT_PAID,
-              hideShipped: hideShippedActive,
-              onlyShipped: onlyShippedActive,
-              q: listSearchQ || undefined,
-              from: fromUrl ?? undefined,
-              to: toUrl ?? undefined,
-            })}
-            className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
-              activeFilter.kind === "paymentPaid"
-                ? "border-sky-500 bg-sky-100 text-sky-950 ring-1 ring-sky-500/50 dark:border-sky-600 dark:bg-sky-900/50 dark:text-sky-50"
-                : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
-            }`}
-          >
-            Показать оплаченные
-          </Link>
-          <Link
-            href={ordersListHref({
-              limit: pageSize,
-              tag: LIST_TAG_PAYMENT_PARTIAL,
-              hideShipped: hideShippedActive,
-              onlyShipped: onlyShippedActive,
-              q: listSearchQ || undefined,
-              from: fromUrl ?? undefined,
-              to: toUrl ?? undefined,
-            })}
-            className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
-              activeFilter.kind === "paymentPartial"
-                ? "border-sky-500 bg-sky-100 text-sky-950 ring-1 ring-sky-500/50 dark:border-sky-600 dark:bg-sky-900/50 dark:text-sky-50"
-                : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
-            }`}
-          >
-            Показать частично оплаченные
-          </Link>
+          {relatedOrdersListTagQuickFilters(activeFilter, {
+            kaitenColumnAlternates,
+            urgentCoefficientsInDb,
+          }).map((opt) => {
+            const optParsed = parseListTagParam(opt.tag);
+            const isActive = Boolean(
+              optParsed && listTagParamsEqual(activeFilter, optParsed),
+            );
+            return (
+            <Link
+              key={opt.tag}
+              href={ordersListHref({
+                limit: pageSize,
+                tag: opt.tag,
+                hideShipped: hideShippedActive,
+                onlyShipped: onlyShippedActive,
+                q: listSearchQ || undefined,
+                from: fromUrl ?? undefined,
+                to: toUrl ?? undefined,
+              })}
+              className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
+                isActive
+                  ? "border-sky-500 bg-sky-100 text-sky-950 ring-1 ring-sky-500/50 dark:border-sky-600 dark:bg-sky-900/50 dark:text-sky-50"
+                  : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+              }`}
+            >
+              {opt.label}
+            </Link>
+            );
+          })}
         </div>
       ) : rawTag ? (
         <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">

@@ -3,11 +3,13 @@ import type { OrderStatus } from "@prisma/client";
 import {
   isLabWorkStatus,
   LAB_WORK_STATUS_LABELS,
+  LAB_WORK_STATUS_ORDER,
   type LabWorkStatus,
 } from "@/lib/lab-work-status";
 import {
   isOrderStatus,
   ORDER_STATUS_LABELS,
+  ORDER_STATUS_ORDER,
 } from "@/lib/order-status-labels";
 import {
   ORDER_PAYMENT_EXPECTED,
@@ -21,6 +23,8 @@ export const LIST_TAG_PROSTHETICS_PENDING = "prosthetics-pending";
 export const LIST_TAG_OTPR = "otpr";
 /** Срочные наряды (`isUrgent`) */
 export const LIST_TAG_URGENT = "urgent";
+/** Срочно без множителя (`urgentCoefficient` = null) */
+export const LIST_TAG_URGENT_NO_COEF = "urgent-nc";
 /** Карточка Kaiten заблокирована (`kaitenBlocked`) */
 export const LIST_TAG_KAITEN_BLOCKED = "kaiten-blocked";
 /** Загружен файл счёта (`invoiceAttachmentId` задан) */
@@ -68,7 +72,9 @@ export type ParsedListTag =
   | { kind: "prosthetics" }
   | { kind: "prostheticsPending" }
   | { kind: "otpr" }
-  | { kind: "urgent" }
+  | { kind: "urgent"; filter: "all" }
+  | { kind: "urgent"; filter: "noCoef" }
+  | { kind: "urgent"; filter: "coef"; coef: number }
   | { kind: "kaitenBlocked" }
   | { kind: "invoice" }
   | { kind: "invoicePrinted" }
@@ -89,6 +95,12 @@ export function listTagKaitenColumnTitle(title: string): string {
   return `k:${encodeURIComponent(s)}`;
 }
 
+/** Фильтр срочных с конкретным коэффициентом (как в карточке «×1.2»). */
+export function listTagUrgentCoefficient(coef: number): string {
+  if (!Number.isFinite(coef) || coef <= 0) return LIST_TAG_URGENT;
+  return `urgent-cf~${coef}`;
+}
+
 /**
  * Значение query-параметра `tag` (уже декодированное приложением один раз).
  */
@@ -100,7 +112,14 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t === LIST_TAG_PROSTHETICS) return { kind: "prosthetics" };
   if (t === LIST_TAG_PROSTHETICS_PENDING) return { kind: "prostheticsPending" };
   if (t === LIST_TAG_OTPR) return { kind: "otpr" };
-  if (t === LIST_TAG_URGENT) return { kind: "urgent" };
+  if (t.startsWith("urgent-cf~")) {
+    const raw = t.slice("urgent-cf~".length).trim().replace(",", ".");
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return { kind: "urgent", filter: "coef", coef: n };
+  }
+  if (t === LIST_TAG_URGENT_NO_COEF) return { kind: "urgent", filter: "noCoef" };
+  if (t === LIST_TAG_URGENT) return { kind: "urgent", filter: "all" };
   if (t === LIST_TAG_KAITEN_BLOCKED) return { kind: "kaitenBlocked" };
   if (t === LIST_TAG_INVOICE) return { kind: "invoice" };
   if (t === LIST_TAG_INVOICE_PRINTED) return { kind: "invoicePrinted" };
@@ -173,7 +192,14 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
     case "otpr":
       return { adminShippedOtpr: true };
     case "urgent":
-      return { isUrgent: true };
+      switch (parsed.filter) {
+        case "all":
+          return { isUrgent: true };
+        case "noCoef":
+          return { isUrgent: true, urgentCoefficient: null };
+        case "coef":
+          return { isUrgent: true, urgentCoefficient: parsed.coef };
+      }
     case "kaitenBlocked":
       return { kaitenBlocked: true };
     case "invoice":
@@ -221,7 +247,16 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
     case "otpr":
       return "Отправлено";
     case "urgent":
-      return "Срочно";
+      switch (parsed.filter) {
+        case "all":
+          return "Срочно";
+        case "noCoef":
+          return "Срочно · без коэффициента";
+        case "coef":
+          return `Срочно · ×${parsed.coef}`;
+        default:
+          return "Срочно";
+      }
     case "kaitenBlocked":
       return "Заблокировано (Kaiten)";
     case "invoice":
@@ -244,5 +279,118 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
       return "Сверка · оплачено";
     case "custom":
       return parsed.label;
+  }
+}
+
+/** Сравнение активного фильтра с ключом ссылки (учёт разного кодирования `k:` в URL). */
+export function listTagParamsEqual(a: ParsedListTag, b: ParsedListTag): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "order" && b.kind === "order") return a.status === b.status;
+  if (a.kind === "lab" && b.kind === "lab") return a.status === b.status;
+  if (a.kind === "kaitenColumn" && b.kind === "kaitenColumn") {
+    return a.title.trim() === b.title.trim();
+  }
+  if (a.kind === "urgent" && b.kind === "urgent") {
+    if (a.filter !== b.filter) return false;
+    if (a.filter === "coef" && b.filter === "coef") return a.coef === b.coef;
+    return true;
+  }
+  if (a.kind === "custom" && b.kind === "custom") return a.label === b.label;
+  return true;
+}
+
+export type RelatedOrdersListTagLink = { label: string; tag: string };
+
+const PAYMENT_QUICK_FILTER_LINKS: RelatedOrdersListTagLink[] = [
+  { label: "Не оплачено", tag: LIST_TAG_PAYMENT_EXPECTED },
+  { label: "Частично оплачено", tag: LIST_TAG_PAYMENT_PARTIAL },
+  { label: "Оплачено", tag: LIST_TAG_PAYMENT_PAID },
+  { label: "Сверка", tag: LIST_TAG_PAYMENT_RECON },
+  { label: "Сверка · оплачено", tag: LIST_TAG_PAYMENT_RECON_PAID },
+];
+
+const DEFAULT_URGENT_COEF_PRESETS = [1.2, 1.5] as const;
+
+/**
+ * Быстрые ссылки под активным фильтром по тегу: «другие состояния» того же типа
+ * (статусы CRM, этапы лаборатории, оплата, срочность, колонки Kaiten и т.д.).
+ */
+export function relatedOrdersListTagQuickFilters(
+  parsed: ParsedListTag,
+  ctx: {
+    /** Другие заголовки колонок Kaiten (кроме текущего), уже обрезанные. */
+    kaitenColumnAlternates?: readonly string[];
+    /** Уникальные коэффициенты срочности в нарядах тенанта (для подсказок фильтра). */
+    urgentCoefficientsInDb?: readonly number[];
+  } = {},
+): RelatedOrdersListTagLink[] {
+  switch (parsed.kind) {
+    case "order":
+      return ORDER_STATUS_ORDER.map((status) => ({
+        label: ORDER_STATUS_LABELS[status],
+        tag: listTagOrderStatus(status),
+      }));
+    case "lab":
+      return LAB_WORK_STATUS_ORDER.map((status) => ({
+        label: LAB_WORK_STATUS_LABELS[status],
+        tag: listTagLabWork(status),
+      }));
+    case "kaitenColumn": {
+      const titles = ctx.kaitenColumnAlternates ?? [];
+      return titles.map((title) => ({
+        label: `Кайтен: ${title}`,
+        tag: listTagKaitenColumnTitle(title),
+      }));
+    }
+    case "urgent": {
+      const fromDb = ctx.urgentCoefficientsInDb ?? [];
+      const merged = Array.from(
+        new Set([...DEFAULT_URGENT_COEF_PRESETS, ...fromDb]),
+      ).sort((a, b) => a - b);
+      const out: RelatedOrdersListTagLink[] = [
+        { label: "Все срочные", tag: LIST_TAG_URGENT },
+        { label: "Без коэффициента", tag: LIST_TAG_URGENT_NO_COEF },
+      ];
+      for (const c of merged) {
+        out.push({ label: `×${c}`, tag: listTagUrgentCoefficient(c) });
+      }
+      return out;
+    }
+    case "paymentExpected":
+    case "paymentPartial":
+    case "paymentPaid":
+    case "paymentReconciliation":
+    case "paymentReconciliationPaid":
+      return [...PAYMENT_QUICK_FILTER_LINKS];
+    case "prosthetics":
+      return [
+        {
+          label: humanListTagLabel({ kind: "prostheticsPending" }),
+          tag: LIST_TAG_PROSTHETICS_PENDING,
+        },
+      ];
+    case "prostheticsPending":
+      return [
+        {
+          label: humanListTagLabel({ kind: "prosthetics" }),
+          tag: LIST_TAG_PROSTHETICS,
+        },
+      ];
+    case "invoice":
+      return [
+        {
+          label: humanListTagLabel({ kind: "invoicePrinted" }),
+          tag: LIST_TAG_INVOICE_PRINTED,
+        },
+      ];
+    case "invoicePrinted":
+      return [
+        {
+          label: humanListTagLabel({ kind: "invoice" }),
+          tag: LIST_TAG_INVOICE,
+        },
+      ];
+    default:
+      return [];
   }
 }

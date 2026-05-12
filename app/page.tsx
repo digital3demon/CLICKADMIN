@@ -1,8 +1,9 @@
+import { AttentionRemindersPanel } from "@/components/layout/AttentionRemindersPanel";
 import { DashboardActions } from "@/components/home/DashboardActions";
 import { getAttentionReminders } from "@/lib/attention-reminders";
 import { getHomeGreetingDisplayName } from "@/lib/home-greeting-name";
 
-/** Стартовое окно: приветствие, быстрые действия (в т.ч. ссылка в «Внимание»), отгрузки, новый заказ. Список напоминаний — в сайдбаре слева. */
+/** Стартовое окно: приветствие, быстрые действия (в т.ч. ссылка в «Внимание»), отгрузки, новый заказ. Список «Обратите внимание» — на этой странице. */
 export default async function HomePage() {
   const [attentionItems, greetingName] = await Promise.all([
     getAttentionReminders(),
@@ -22,6 +23,8 @@ export default async function HomePage() {
         </section>
 
         <DashboardActions attentionCount={attentionItems.length} />
+
+        <AttentionRemindersPanel variant="home" />
       </div>
     </div>
   );

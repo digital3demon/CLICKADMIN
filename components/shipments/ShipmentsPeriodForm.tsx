@@ -8,6 +8,8 @@ export function ShipmentsPeriodForm({
   appliedTo,
   defaultFrom,
   defaultTo,
+  /** Сохранять в URL при «Показать» фильтр по отметке (`tag=`). */
+  preserveListTag = null,
   /** Строка справки про окно срока лаборатории (МСК) — рядом с «Показать», когда список уже загружен. */
   receptionSummary = null,
 }: {
@@ -16,6 +18,7 @@ export function ShipmentsPeriodForm({
   appliedTo: string | null;
   defaultFrom: string;
   defaultTo: string;
+  preserveListTag?: string | null;
   receptionSummary?: string | null;
 }) {
   const router = useRouter();
@@ -34,8 +37,10 @@ export function ShipmentsPeriodForm({
     q.set("tab", "period");
     if (from.trim()) q.set("from", from.trim());
     if (to.trim()) q.set("to", to.trim());
+    const t = preserveListTag?.trim();
+    if (t) q.set("tag", t);
     router.push(`/shipments?${q.toString()}`);
-  }, [from, to, router]);
+  }, [from, to, preserveListTag, router]);
 
   const dateInp =
     "h-9 min-w-0 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:w-[10.5rem] sm:flex-none";

@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AppModule, UserRole } from "@prisma/client";
 import { USER_ROLE_LABELS } from "@/lib/user-role-labels";
-import { ROLES_IN_ACCESS_MATRIX } from "@/lib/role-module-defaults";
+import {
+  isKanbanCardSubmodule,
+  ROLES_IN_ACCESS_MATRIX,
+} from "@/lib/role-module-defaults";
 
 type ModRow = { id: AppModule; label: string };
 
@@ -132,13 +135,21 @@ export function RoleModuleAccessMatrix() {
                 {ROLES_IN_ACCESS_MATRIX.map((r) => {
                   const on = data.effective[r]?.[m.id] === true;
                   const busy = saving === `${r}:${m.id}`;
+                  const kanbanBaseOn = data.effective[r]?.KANBAN === true;
+                  const gatedByKanban =
+                    isKanbanCardSubmodule(m.id) && !kanbanBaseOn;
+                  const cellDisabled = busy || gatedByKanban;
+                  const cellTitle = gatedByKanban
+                    ? "Сначала включите модуль «Канбан» для этой роли."
+                    : undefined;
                   return (
                     <td key={r} className="p-1 text-center align-middle">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 cursor-pointer disabled:cursor-wait"
+                        className="h-4 w-4 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                         checked={on}
-                        disabled={busy}
+                        disabled={cellDisabled}
+                        title={cellTitle}
                         onChange={(e) => {
                           void setCell(r, m.id, e.target.checked);
                         }}

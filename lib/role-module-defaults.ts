@@ -7,6 +7,11 @@ const DEFAULT_ANALYTICS_ROLES: readonly UserRole[] = [
   "FINANCIAL_MANAGER",
 ];
 
+/** Права на действия в карточке CRM-канбана; без базового `KANBAN` в матрице не переключаются отдельно. */
+export function isKanbanCardSubmodule(module: AppModule): boolean {
+  return module.startsWith("KANBAN_");
+}
+
 /** Все модули в одном списке (для UI и сидов). */
 export const ALL_APP_MODULES: AppModule[] = [
   "ORDERS",

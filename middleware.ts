@@ -87,6 +87,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/api/telegram/diagnostic")) return true;
   if (pathname.startsWith("/_next")) return true;
   if (pathname === "/favicon.ico") return true;
+  /** QR с этикетки отгрузки: витрина без входа (клиент) + редиректы для сотрудников. */
+  if (pathname.startsWith("/p/t/")) return true;
   return false;
 }
 

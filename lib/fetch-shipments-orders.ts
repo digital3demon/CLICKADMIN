@@ -2,6 +2,11 @@ import type { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { getClientsPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
 import { formatCounterpartyRequisitesSummary } from "@/lib/format-counterparty-requisites-summary";
+import {
+  listTagWhere,
+  orderAttentionListSupersetWhere,
+  parseListTagParam,
+} from "@/lib/order-list-tag-filter";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
 
 const shipmentOrderSelect = {
@@ -83,19 +88,40 @@ export type ShipmentOrderRow = Omit<
   listPendingProstheticsRequests: boolean;
 };
 
-/** Наряды с непустым dueDate (срок лаборатории) в полуинтервале [start, endExclusive) — МСК-окно отгрузки. */
+/** Наряды с непустым dueDate (срок лаборатории) в полуинтервале [start, endExclusive) — МСК-окно отгрузки; опционально пересечение с фильтром по отметке (`tag=`). */
 export async function fetchShipmentOrdersInDueRange(
   db: PrismaClient,
   tenantId: string,
   start: Date,
   endExclusive: Date,
+  opts?: { listTag?: string | null },
 ) {
+  const tagDecoded =
+    opts?.listTag != null && String(opts.listTag).trim()
+      ? String(opts.listTag).trim()
+      : null;
+  const parsedTag = tagDecoded ? parseListTagParam(tagDecoded) : null;
+
+  const dueRange: Prisma.OrderWhereInput = {
+    tenantId,
+    archivedAt: null,
+    dueDate: { not: null, gte: start, lt: endExclusive },
+  };
+
+  const tagParts: Prisma.OrderWhereInput[] = [];
+  if (parsedTag) {
+    if (parsedTag.kind === "orderAttention") {
+      tagParts.push(orderAttentionListSupersetWhere());
+    } else {
+      tagParts.push(listTagWhere(parsedTag));
+    }
+  }
+
+  const where: Prisma.OrderWhereInput =
+    tagParts.length === 0 ? dueRange : { AND: [dueRange, ...tagParts] };
+
   const rows = await db.order.findMany({
-    where: {
-      tenantId,
-      archivedAt: null,
-      dueDate: { not: null, gte: start, lt: endExclusive },
-    },
+    where,
     orderBy: [{ dueDate: "asc" }, { orderNumber: "asc" }],
     select: shipmentOrderSelect,
   });
@@ -209,7 +235,7 @@ export async function fetchShipmentOrdersInDueRange(
   const constructionTypeById = new Map(constructionTypes.map((x) => [x.id, x]));
   const priceItemById = new Map(priceItems.map((x) => [x.id, x]));
 
-  return rows.map((o): ShipmentOrderRow => {
+  const mapped = rows.map((o): ShipmentOrderRow => {
     const { chatCorrections, prostheticsRequests, constructions, ...rest } = o;
     const hydratedConstructions = constructions.map((c) => ({
       quantity: c.quantity,
@@ -252,4 +278,11 @@ export async function fetchShipmentOrdersInDueRange(
       listPendingProstheticsRequests: (prostheticsRequests?.length ?? 0) > 0,
     };
   });
+
+  if (parsedTag?.kind === "orderAttention") {
+    return mapped.filter(
+      (r) => r.listCompositionMismatch || r.listPendingChatCorrections,
+    );
+  }
+  return mapped;
 }

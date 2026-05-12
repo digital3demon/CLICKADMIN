@@ -835,6 +835,8 @@ model Order {
   tenant                         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   /// Номер наряда: YYMM-NNN (напр. 2601-001)
   orderNumber                    String
+  /// Секрет для QR на этикетке отгрузки: публичная витрина `/p/t/{slug}/s/{token}` (клиент без входа).
+  stickerPublicToken             String?                  @unique
   /// null — наряд от врача как от частного лица
   clinicId                       String?
   clinic                         Clinic?                   @relation(fields: [clinicId], references: [id])

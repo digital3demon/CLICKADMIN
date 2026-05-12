@@ -27,8 +27,10 @@ import {
   LIST_TAG_PROSTHETICS,
   LIST_TAG_PROSTHETICS_PENDING,
   LIST_TAG_URGENT,
+  LIST_TAG_URGENT_NO_COEF,
   listTagCustomLabel,
   listTagKaitenColumnTitle,
+  listTagUrgentCoefficient,
 } from "@/lib/order-list-tag-filter";
 import {
   filterQuickOrderTagSuggestions,
@@ -37,6 +39,7 @@ import {
   type QuickOrderTagSuggestion,
 } from "@/lib/order-list-quick-tag-suggestions";
 import { ordersListHref } from "@/lib/orders-list-query";
+import { shipmentsListHref } from "@/lib/shipments-list-query";
 import {
   isReconciliationPaymentStatus,
   canonicalOrderPayment,
@@ -89,6 +92,12 @@ type Props = {
   periodTo?: string | null;
   /** Жёлтый треугольник «!»: непринятые корректировки «!!!» или расхождение счёта с составом. */
   orderAttentionWarning?: boolean;
+  /** Если задано — ссылки фильтра по пилюлям ведут на «Отгрузки», а не на «Заказы». */
+  shipmentsFilterContext?: {
+    tab: string;
+    periodFrom: string | null;
+    periodTo: string | null;
+  } | null;
 };
 
 const padTable =
@@ -306,6 +315,7 @@ export function OrderListTagsCell({
   periodFrom,
   periodTo,
   orderAttentionWarning = false,
+  shipmentsFilterContext = null,
 }: Props) {
   const router = useRouter();
   const kaitenLabel = kaitenStatusDisplay({
@@ -551,9 +561,17 @@ export function OrderListTagsCell({
     urgentCoefficient,
   );
 
-  const tagCloudItems = useMemo(() => {
-    const href = (innerKey: string) =>
-      tagHref(
+  const filterListHref = useCallback(
+    (innerKey: string) => {
+      if (shipmentsFilterContext) {
+        return shipmentsListHref({
+          tab: shipmentsFilterContext.tab,
+          tag: innerKey,
+          from: shipmentsFilterContext.periodFrom ?? undefined,
+          to: shipmentsFilterContext.periodTo ?? undefined,
+        });
+      }
+      return tagHref(
         pageSize,
         innerKey,
         hideShipped,
@@ -562,6 +580,20 @@ export function OrderListTagsCell({
         periodFrom,
         periodTo,
       );
+    },
+    [
+      shipmentsFilterContext,
+      pageSize,
+      hideShipped,
+      onlyShipped,
+      listSearchQ,
+      periodFrom,
+      periodTo,
+    ],
+  );
+
+  const tagCloudItems = useMemo(() => {
+    const href = filterListHref;
     const items: TagCloudItem[] = [];
 
     if (kaitenBlocked) {
@@ -703,7 +735,11 @@ export function OrderListTagsCell({
         node: (
           <span className="inline-flex items-center gap-0.5">
             <Link
-              href={href(LIST_TAG_URGENT)}
+              href={href(
+                urgentCoefficient != null
+                  ? listTagUrgentCoefficient(urgentCoefficient)
+                  : LIST_TAG_URGENT_NO_COEF,
+              )}
               title="Показать срочные наряды"
               className={`inline-flex items-center rounded-full border border-rose-200 bg-rose-50 font-semibold leading-tight text-rose-950 shadow-sm outline-none focus-visible:outline-none dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-100 ${padTable} sm:leading-tight md:leading-tight`}
             >
@@ -805,7 +841,11 @@ export function OrderListTagsCell({
             <Link
               href={href(paymentFilterTag)}
               className={`min-w-0 max-w-full shrink truncate rounded-full border font-semibold shadow-sm outline-none focus-visible:outline-none ${paymentPillToneClass} ${padTable}`}
-              title="Показать в списке заказы с этим статусом оплаты"
+              title={
+                shipmentsFilterContext
+                  ? "Показать в отгрузках наряды с этим статусом оплаты"
+                  : "Показать в списке заказы с этим статусом оплаты"
+              }
             >
               {paymentPill}
             </Link>
@@ -896,21 +936,14 @@ export function OrderListTagsCell({
     removeTag,
     submitAdd,
     urgentCoefficient,
+    filterListHref,
   ]);
 
   const stripProstheticsPending =
     !prostheticsOrdered && listPendingProstheticsRequests;
   const useLeadingIconStrip =
     orderAttentionWarning || stripProstheticsPending;
-  const prostheticsPendingHref = tagHref(
-    pageSize,
-    LIST_TAG_PROSTHETICS_PENDING,
-    hideShipped,
-    onlyShipped,
-    listSearchQ,
-    periodFrom,
-    periodTo,
-  );
+  const prostheticsPendingHref = filterListHref(LIST_TAG_PROSTHETICS_PENDING);
 
   const blockReasonHit =
     Boolean(kaitenCardId) &&
@@ -961,17 +994,30 @@ export function OrderListTagsCell({
             <div className="flex shrink-0 flex-row flex-nowrap items-start gap-x-1.5 self-start sm:gap-x-2">
               {orderAttentionWarning ? (
                 <Link
-                  href={ordersListHref({
-                    limit: pageSize,
-                    tag: LIST_TAG_ORDER_ATTENTION,
-                    hideShipped: hideShipped === true,
-                    onlyShipped: onlyShipped === true,
-                    q: listSearchQ?.trim() ? listSearchQ.trim() : undefined,
-                    from: periodFrom?.trim() || undefined,
-                    to: periodTo?.trim() || undefined,
-                  })}
+                  href={
+                    shipmentsFilterContext
+                      ? shipmentsListHref({
+                          tab: shipmentsFilterContext.tab,
+                          tag: LIST_TAG_ORDER_ATTENTION,
+                          from: shipmentsFilterContext.periodFrom ?? undefined,
+                          to: shipmentsFilterContext.periodTo ?? undefined,
+                        })
+                      : ordersListHref({
+                          limit: pageSize,
+                          tag: LIST_TAG_ORDER_ATTENTION,
+                          hideShipped: hideShipped === true,
+                          onlyShipped: onlyShipped === true,
+                          q: listSearchQ?.trim() ? listSearchQ.trim() : undefined,
+                          from: periodFrom?.trim() || undefined,
+                          to: periodTo?.trim() || undefined,
+                        })
+                  }
                   className="shrink-0 self-start text-inherit no-underline outline-none focus-visible:outline-none"
-                  title="Показать в списке заказов все наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
+                  title={
+                    shipmentsFilterContext
+                      ? "Показать в отгрузках наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
+                      : "Показать в списке заказов все наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
+                  }
                   aria-label="Фильтр: внимание — корректировки или расхождение сумм"
                 >
                   <span className="flex h-[2.75rem] w-[2.75rem] shrink-0 items-center justify-center rounded-full border border-amber-400/90 bg-amber-100 shadow-sm dark:border-amber-700 dark:bg-amber-950/70 sm:h-[3.25rem] sm:w-[3.25rem]">
@@ -982,7 +1028,11 @@ export function OrderListTagsCell({
               {stripProstheticsPending ? (
                 <Link
                   href={prostheticsPendingHref}
-                  title="Показать наряды с открытыми заявками по протетике из чата («???»)"
+                  title={
+                    shipmentsFilterContext
+                      ? "Показать в отгрузках наряды с открытыми заявками по протетике из чата («???»)"
+                      : "Показать наряды с открытыми заявками по протетике из чата («???»)"
+                  }
                   aria-label="Протетика: заявки из чата"
                   className="shrink-0 self-start text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none"
                 >

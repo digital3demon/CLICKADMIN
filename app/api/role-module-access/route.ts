@@ -6,6 +6,7 @@ import {
   ALL_APP_MODULES,
   APP_MODULE_LABELS,
   defaultModuleAllowed,
+  isKanbanCardSubmodule,
   ROLES_IN_ACCESS_MATRIX,
 } from "@/lib/role-module-defaults";
 import {
@@ -88,6 +89,19 @@ export async function PUT(req: Request) {
   }
   if (!ALL_APP_MODULES.includes(module)) {
     return NextResponse.json({ error: "Некорректный модуль" }, { status: 400 });
+  }
+
+  if (body.allowed && isKanbanCardSubmodule(module)) {
+    const acc = await getEffectiveModuleAccess(tenantId, role);
+    if (!acc.KANBAN) {
+      return NextResponse.json(
+        {
+          error:
+            "Для этой роли выключен модуль «Канбан». Сначала включите его, затем настройте права на карточку.",
+        },
+        { status: 400 },
+      );
+    }
   }
 
   const def = defaultModuleAllowed(role, module);
