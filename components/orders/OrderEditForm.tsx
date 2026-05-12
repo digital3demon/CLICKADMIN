@@ -2646,6 +2646,28 @@ export function OrderEditForm({
           <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
             Счёт, ЭДО и документы
           </h2>
+          {isAccountant ? (
+            <div className="mt-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2.5">
+              <p className="text-[0.65rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                Номер наряда · пациент · врач
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copyInvoiceLabelToClipboard()}
+                  title="Нажмите — скопировать в буфер обмена"
+                  className="max-w-full min-w-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-left font-mono text-sm font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
+                >
+                  {invoiceCopyClipboardText}
+                </button>
+                {invoiceCopyToast ? (
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    {invoiceCopyToast}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
@@ -3061,28 +3083,6 @@ export function OrderEditForm({
           >
             Скрыть
           </button>
-        </div>
-      ) : null}
-      {isAccountant ? (
-        <div className="mb-3 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2.5">
-          <p className="text-[0.65rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-            Номер наряда · пациент · врач
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void copyInvoiceLabelToClipboard()}
-              title="Нажмите — скопировать в буфер обмена"
-              className="max-w-full min-w-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-left font-mono text-sm font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
-            >
-              {invoiceCopyClipboardText}
-            </button>
-            {invoiceCopyToast ? (
-              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                {invoiceCopyToast}
-              </span>
-            ) : null}
-          </div>
         </div>
       ) : null}
     <div className="w-full min-w-0 space-y-4">

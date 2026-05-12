@@ -16,8 +16,8 @@ const DEFAULT_H = 40;
 /** Широкая этикетка: те же поля столбиком на всю ширину (без сжатия врача и пациента в один ряд). */
 const WIDE_ASPECT = 1.32;
 
-/** Логотип для печати — ClickAdmin (лежит в `public/stickers/`). */
-const STICKER_BRAND_LOGO_SRC = "/stickers/clickadmin-logo.png";
+/** Логотип для печати (`public/stickers/clickadmin-sticker-logo.png`). */
+const STICKER_BRAND_LOGO_SRC = "/stickers/clickadmin-sticker-logo.png";
 
 type Props = {
   rows: StickerRow[];
@@ -47,9 +47,12 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         margin: 0 !important;
         padding: 1.6mm 1.8mm !important;
         border: none !important;
-        border-radius: 0 !important;
+        border-radius: 1.2mm !important;
         background: #fff !important;
         color: #000 !important;
+        color-scheme: light !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
         box-shadow: none !important;
         display: flex !important;
         flex-direction: column !important;
@@ -68,6 +71,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         height: var(--sticker-h);
         box-sizing: border-box;
         padding: 1.6mm 1.8mm;
+        border-radius: 1.2mm;
       }
       .sticker-lines {
         flex: 1 1 auto;
@@ -104,10 +108,10 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         flex: 0 0 auto;
         display: flex;
         flex-direction: row;
-        align-items: flex-end;
+        align-items: center;
         justify-content: space-between;
         gap: 1.5mm;
-        margin-top: 0.4mm;
+        margin-top: 0.35mm;
         width: 100%;
       }
       .sticker-footer-qr-col {
@@ -115,17 +119,19 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 0.35mm;
+        justify-content: center;
+        gap: 0.4mm;
+        padding: 0;
       }
       .sticker-qr-wrap {
         flex: 0 0 auto;
-        width: min(13.5mm, calc(var(--sticker-h) * 0.36));
-        height: min(13.5mm, calc(var(--sticker-h) * 0.36));
+        width: min(20.5mm, calc(var(--sticker-h) * 0.54));
+        height: min(20.5mm, calc(var(--sticker-h) * 0.54));
       }
       .sticker-scan-caption {
-        max-width: 16mm;
+        max-width: 22mm;
         text-align: center;
-        font-size: clamp(4.5pt, calc(var(--sticker-h) * 0.125), 5.4pt);
+        font-size: clamp(4.8pt, calc(var(--sticker-h) * 0.13), 5.6pt);
         line-height: 1.08;
         font-weight: 700;
         color: #334155;
@@ -137,8 +143,9 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: flex-end;
-        gap: 0.3mm;
+        justify-content: center;
+        gap: 0.5mm;
+        padding: 0;
       }
       .sticker-made-in {
         font-size: clamp(4.2pt, calc(var(--sticker-h) * 0.11), 5pt);
@@ -147,13 +154,25 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         letter-spacing: 0.06em;
         color: #0f172a;
         text-transform: uppercase;
+        text-align: center;
+        flex: 0 0 auto;
+        width: 100%;
+      }
+      .sticker-brand-logo-wrap {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
       }
       .sticker-brand-logo {
         display: block;
-        height: min(11mm, calc(var(--sticker-h) * 0.3));
+        margin-inline: auto;
+        height: min(13.5mm, calc(var(--sticker-h) * 0.38));
         width: auto;
-        max-width: 100%;
+        max-width: min(28mm, calc(var(--sticker-w) * 0.42));
         object-fit: contain;
+        object-position: center;
       }
     `;
     const wide = `
@@ -176,9 +195,12 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
           height: var(--sticker-h);
           margin-bottom: 10px;
           border: 1px solid #94a3b8;
-          border-radius: 4px;
+          border-radius: 1.2mm;
           background: #fff;
           color: #0f172a;
+          color-scheme: light;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
         }
       }
       ${shared}
@@ -242,8 +264,8 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
                   <img
                     src={r.qrDataUrl}
                     alt=""
-                    width={108}
-                    height={108}
+                    width={320}
+                    height={320}
                     className="h-full w-full object-contain"
                   />
                 </div>
@@ -251,14 +273,16 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
               </div>
               <div className="sticker-footer-brand-col">
                 <div className="sticker-made-in">Сделано в</div>
-                {/* eslint-disable-next-line @next/next/no-img-element -- статичный PNG для печати */}
-                <img
-                  src={STICKER_BRAND_LOGO_SRC}
-                  alt=""
-                  width={200}
-                  height={80}
-                  className="sticker-brand-logo"
-                />
+                <div className="sticker-brand-logo-wrap">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- PNG из public/stickers */}
+                  <img
+                    src={STICKER_BRAND_LOGO_SRC}
+                    alt="КликАдмин"
+                    width={320}
+                    height={120}
+                    className="sticker-brand-logo"
+                  />
+                </div>
               </div>
             </div>
           </div>

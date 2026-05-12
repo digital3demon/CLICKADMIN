@@ -50,7 +50,7 @@ export function ShipmentsStickersPrintToolbar({
     if (r >= 1.32) {
       return "При таком соотношении сторон врач и пациент выводятся в одну строку.";
     }
-    return "Поля столбцом; внизу слева QR и «Отсканируй меня», справа — «Сделано в» и логотип.";
+    return "Внизу слева QR и «Отсканируй меня», справа — «Сделано в» и логотип по центру.";
   }, [widthMm, heightMm]);
 
   const layoutNote = useMemo(() => {

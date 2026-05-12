@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { ActiveUserGate } from "@/components/auth/ActiveUserGate";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppProviders } from "@/components/providers/AppProviders";
@@ -43,10 +42,12 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${fontBody.variable} ${fontDisplay.variable}`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_INLINE_SCRIPT }}
+        />
+      </head>
       <body className={`${fontBody.className} antialiased`}>
-        <Script id="theme-init" strategy="beforeInteractive">
-          {THEME_BOOTSTRAP_INLINE_SCRIPT}
-        </Script>
         <AppProviders>
           <ActiveUserGate />
           <AppShell>{children}</AppShell>

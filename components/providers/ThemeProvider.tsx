@@ -12,6 +12,7 @@ import {
 import {
   computeResolvedDark,
   isThemePreference,
+  readThemePreferenceFromLocalStorage,
   type ThemePreference,
   writeThemePreferenceToLocalStorage,
 } from "@/lib/theme-storage";
@@ -52,11 +53,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         const raw = await readClientState<unknown>("user", "themePreference");
         if (cancelled) return;
         if (typeof raw === "string" && isThemePreference(raw)) {
-          setThemeState(raw);
-          writeThemePreferenceToLocalStorage(raw);
-          const dark = computeResolvedDark(raw, systemPrefersDark());
+          const local = readThemePreferenceFromLocalStorage();
+          const localExplicit =
+            local === "dark" || local === "light" ? local : null;
+          /*
+           * Явный выбор на этом устройстве (localStorage) не затираем устаревшим значением из БД:
+           * иначе после F5 снова светлая тема, если PUT в userClientState не дошёл или в БД «light» по умолчанию.
+           */
+          const effective =
+            localExplicit && localExplicit !== raw ? localExplicit : raw;
+          setThemeState(effective);
+          writeThemePreferenceToLocalStorage(effective);
+          const dark = computeResolvedDark(effective, systemPrefersDark());
           setResolvedDark(dark);
           document.documentElement.classList.toggle("dark", dark);
+          if (localExplicit && localExplicit !== raw) {
+            void writeClientState("user", "themePreference", localExplicit);
+          }
         }
       } catch {
         /* сеть / 401 — оставляем тему из localStorage, не сбрасываем на system */

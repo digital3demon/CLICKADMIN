@@ -110,7 +110,7 @@ export default async function ShipmentsStickersPrintPage({
         ? await QRCode.toDataURL(hubUrl, {
             errorCorrectionLevel: "M",
             margin: 0,
-            width: 160,
+            width: 280,
             color: { dark: "#0f172a", light: "#ffffff" },
           })
         : "";
