@@ -139,10 +139,6 @@ export function SidebarPayments({ sessionRole }: { sessionRole: UserRole | null 
 
       {!collapsed && (
         <>
-          <p className="mt-1.5 text-[11px] leading-snug text-[var(--sidebar-text)] opacity-75 shell-short:mt-1 shell-short:text-[10px]">
-            Зелёный — недавно «Оплачено»; янтарный — недавно «Частично оплачено».
-          </p>
-
           {items.length === 0 ? (
             <p className="mt-2 text-xs leading-snug text-[var(--sidebar-text)] opacity-55 shell-short:mt-1.5 shell-short:text-[11px]">
               Пока нет записей за последние недели.

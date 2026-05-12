@@ -160,6 +160,11 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   overflow-x: clip;
+  /*
+   * Базовый размер как при ~110% зуме браузера: отступы/типографика в rem чуть крупнее,
+   * ширины в % и vw не меняются (без «разъезда» как у zoom на корне).
+   */
+  font-size: 110%;
 }
 
 body {
@@ -353,6 +358,7 @@ body {
 
 @media print {
   html {
+    font-size: 100% !important;
     color-scheme: light !important;
     --app-bg: #ffffff !important;
     --app-text: #18181b !important;

@@ -376,35 +376,38 @@ export function OrderFilesPanel({
             {list.map((a) => (
               <li
                 key={a.id}
-                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                className="flex items-start gap-2 px-3 py-2 text-sm"
               >
-                <a
-                  href={`/api/orders/${orderId}/attachments/${a.id}`}
-                  className="font-medium text-[var(--sidebar-blue)] hover:underline"
-                  download={a.fileName}
-                >
-                  {a.fileName}
-                </a>
-                <span className="text-xs text-[var(--text-muted)]">
-                  {formatSize(a.size)}
-                  <span className="ml-2 text-emerald-700 dark:text-emerald-400">
-                    · в CRM/канбан
-                  </span>
-                  {a.uploadedToKaitenAt ? (
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <a
+                    href={`/api/orders/${orderId}/attachments/${a.id}`}
+                    className="block truncate font-medium text-[var(--sidebar-blue)] hover:underline"
+                    title={a.fileName}
+                    download={a.fileName}
+                  >
+                    {a.fileName}
+                  </a>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    {formatSize(a.size)}
                     <span className="ml-2 text-emerald-700 dark:text-emerald-400">
-                      · в Kaiten
+                      · в CRM/канбан
                     </span>
-                  ) : (
-                    <span className="ml-2 text-amber-700 dark:text-amber-400">
-                      · не в Kaiten
-                    </span>
-                  )}
-                </span>
+                    {a.uploadedToKaitenAt ? (
+                      <span className="ml-2 text-emerald-700 dark:text-emerald-400">
+                        · в Kaiten
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-amber-700 dark:text-amber-400">
+                        · не в Kaiten
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void deleteServer(a.id)}
-                  className="text-xs text-red-600 underline disabled:opacity-50"
+                  className="shrink-0 pt-0.5 text-xs text-red-600 underline disabled:opacity-50"
                 >
                   Удалить
                 </button>
@@ -413,28 +416,33 @@ export function OrderFilesPanel({
             {queued.map((q) => (
               <li
                 key={`queued-${q.id}`}
-                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm opacity-90"
+                className="flex items-start gap-2 px-3 py-2 text-sm opacity-90"
               >
-                <span className="font-medium text-[var(--text-strong)]">
-                  {q.fileName}
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <span
+                    className="block truncate font-medium text-[var(--text-strong)]"
+                    title={q.fileName}
+                  >
+                    {q.fileName}
+                  </span>
                   {q.failed && q.error ? (
-                    <span className="ml-2 text-xs font-normal text-red-600 dark:text-red-400">
-                      ({q.error})
-                    </span>
+                    <p className="break-words text-xs font-normal leading-snug text-red-600 dark:text-red-400">
+                      {q.error}
+                    </p>
                   ) : null}
-                </span>
-                <span className="text-xs text-[var(--text-muted)]">
-                  {formatSize(q.size)}
-                  {q.failed ? (
-                    <span className="ml-2 text-red-700 dark:text-red-400">
-                      · не в CRM/канбан · не в Kaiten · загрузка не удалась
-                    </span>
-                  ) : (
-                    <span className="ml-2 text-amber-700 dark:text-amber-400">
-                      · не в CRM/канбан · не в Kaiten · загружается
-                    </span>
-                  )}
-                </span>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    {formatSize(q.size)}
+                    {q.failed ? (
+                      <span className="ml-2 text-red-700 dark:text-red-400">
+                        · не в CRM/канбан · не в Kaiten · загрузка не удалась
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-amber-700 dark:text-amber-400">
+                        · не в CRM/канбан · не в Kaiten · загружается
+                      </span>
+                    )}
+                  </div>
+                </div>
               </li>
             ))}
           </ul>

@@ -1,6 +1,7 @@
 import type { DemoKanbanColumn } from "@prisma/client";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
+import { isHandedToAdminsKaitenColumnTitle } from "@/lib/sticker-public-client-copy";
 
 export const KANBAN_STATE_KEY = "kanbanAppStateV3" as const;
 
@@ -75,6 +76,44 @@ export function kanbanSnippetForLinkedOrder(
       participants,
       activity,
     };
+  }
+  return null;
+}
+
+/** «Перемещена в «…»» / с опциональным хвостом «(Kaiten)» — кириллические кавычки «». */
+const CRM_KANBAN_MOVE_TO_COLUMN_RE =
+  /Перемещена\s+в\s+«([^»]+)»(?:\s*\([^)]*\))?/u;
+
+/**
+ * Первый момент по журналу карточки CRM-канбана, когда колонка назначения — «сдана админам».
+ * Активность хранится от новых к старым (`unshift`); обход с конца массива = по времени по возрастанию.
+ */
+export function firstHandedToAdminsAtFromLinkedOrderKanbanState(
+  rawState: unknown,
+  orderId: string,
+): string | null {
+  const oid = String(orderId || "").trim();
+  if (!oid) return null;
+  const st = rawState as { boards?: unknown } | null;
+  const boards = st?.boards;
+  if (!Array.isArray(boards)) return null;
+
+  for (const b of boards as KanbanBoard[]) {
+    const card = findCardInBoard(b, oid);
+    if (!card) continue;
+    const act = card.activity || [];
+    for (let i = act.length - 1; i >= 0; i--) {
+      const text = (act[i]?.text || "").trim();
+      const m = text.match(CRM_KANBAN_MOVE_TO_COLUMN_RE);
+      if (!m) continue;
+      const colTitle = (m[1] || "").trim();
+      if (!isHandedToAdminsKaitenColumnTitle(colTitle)) continue;
+      const at = act[i]?.at;
+      if (!at) continue;
+      const d = new Date(at);
+      if (!Number.isNaN(d.getTime())) return d.toISOString();
+    }
+    return null;
   }
   return null;
 }

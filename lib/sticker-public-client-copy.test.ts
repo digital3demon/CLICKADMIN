@@ -16,21 +16,30 @@ describe("isHandedToAdminsKaitenColumnTitle", () => {
 });
 
 describe("stickerRevisionSummaryIsBoardMovement", () => {
-  it("отсекает посторонние сохранения", () => {
+  it("только смена колонки CRM (без синхронизаций и прочего)", () => {
     expect(stickerRevisionSummaryIsBoardMovement("Оплата, Пациент")).toBe(false);
+    expect(stickerRevisionSummaryIsBoardMovement("Синхронизация Кайтен")).toBe(false);
+    expect(
+      stickerRevisionSummaryIsBoardMovement("Тип карточки Кайтен, Синхронизация Кайтен"),
+    ).toBe(false);
     expect(
       stickerRevisionSummaryIsBoardMovement("Колонка Кайтен (CRM), Оплата"),
+    ).toBe(true);
+    expect(
+      stickerRevisionSummaryIsBoardMovement(
+        "Тип карточки Кайтен, Синхронизация Кайтен, Колонка Кайтен (CRM)",
+      ),
     ).toBe(true);
   });
 });
 
 describe("stickerMovementSummaryForPublic", () => {
-  it("оставляет только фрагменты про доску и чистит подписи", () => {
+  it("оставляет только колонку и чистит подписи", () => {
     expect(
       stickerMovementSummaryForPublic(
         "Колонка Кайтен (CRM), Оплата, ID карточки Кайтен",
       ),
-    ).toBe("Колонка, Карточка на доске");
+    ).toBe("Колонка");
   });
 });
 

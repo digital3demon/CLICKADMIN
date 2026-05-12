@@ -100,6 +100,7 @@ import {
   clearOrderEditLayout,
   defaultOrderEditLayout,
   loadOrderEditLayout,
+  orderEditLayoutAccountantDocumentsFirst,
   type OrderEditLayoutV1,
   saveOrderEditLayout,
 } from "@/lib/order-edit-layout-prefs";
@@ -1889,6 +1890,20 @@ export function OrderEditForm({
     [sessionUserId],
   );
 
+  const orderLayoutForPageGrid = useMemo((): OrderEditLayoutV1 => {
+    if (!isAccountant || !orderPageFrame) return orderLayoutPrefs;
+    return {
+      ...orderEditLayoutAccountantDocumentsFirst(),
+      blockColors: orderLayoutPrefs.blockColors,
+    };
+  }, [isAccountant, orderPageFrame, orderLayoutPrefs]);
+
+  useEffect(() => {
+    if (isAccountant && orderLayoutCustomize) {
+      setOrderLayoutCustomize(false);
+    }
+  }, [isAccountant, orderLayoutCustomize]);
+
   const resetOrderLayoutToDefault = useCallback(() => {
     clearOrderEditLayout(sessionUserId);
     const d = defaultOrderEditLayout();
@@ -3200,7 +3215,7 @@ export function OrderEditForm({
 
       {isOrderPageFramed ? (
         <>
-          {orderLayoutCustomize ? (
+          {orderLayoutCustomize && !isAccountant ? (
             <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
               <span className="text-xs text-[var(--text-body)]">
                 Кастомизация раскладки
@@ -3215,9 +3230,9 @@ export function OrderEditForm({
             </div>
           ) : null}
           <OrderEditPageLayoutGrid
-            layout={orderLayoutPrefs}
+            layout={orderLayoutForPageGrid}
             onLayoutChange={persistOrderLayout}
-            customizeMode={orderLayoutCustomize}
+            customizeMode={orderLayoutCustomize && !isAccountant}
             blocks={{
               topCustomer: oeColCustomer,
               topDeadlines: oeColDeadlines,
@@ -3230,10 +3245,12 @@ export function OrderEditForm({
             }}
           />
           <div className="flex justify-end pt-4">
+            {!isAccountant ? (
             <OrderEditCustomizeToggle
               active={orderLayoutCustomize}
               onClick={() => setOrderLayoutCustomize((v) => !v)}
             />
+            ) : null}
           </div>
         </>
       ) : (

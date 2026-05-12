@@ -1,7 +1,10 @@
 /**
  * Публичная витрина по стикеру: без бренда внешней доски в подписях,
- * дата «Готово» = колонка вида «сдана админам».
+ * дата «Готово» = колонка вида «сдана админам» (журнал CRM-канбана и/или поле колонки в ревизиях).
  */
+
+/** Подпись поля колонки в тексте ревизии заказа (значение = колонка CRM, в т.ч. внутренний канбан). */
+export const STICKER_REVISION_COLUMN_MARKER = "Колонка Кайтен (CRM)" as const;
 
 /** Колонка CRM, соответствующая «сдана админам» (регистр и пробелы не важны). */
 export function isHandedToAdminsKaitenColumnTitle(
@@ -12,21 +15,10 @@ export function isHandedToAdminsKaitenColumnTitle(
   return t.includes("сдан") && t.includes("админ");
 }
 
-/** Фрагменты `summary` ревизии, которые считаем «перемещением по доске». */
-const MOVEMENT_SUMMARY_MARKERS = [
-  "Колонка Кайтен (CRM)",
-  "ID карточки Кайтен",
-  "Пространство Кайтен",
-  "Тип карточки Кайтен",
-  "Синхронизация Кайтен",
-  "Текст в шапку Кайтен",
-  "Кайтен позже",
-] as const;
-
 export function stickerRevisionSummaryIsBoardMovement(summary: string): boolean {
   const s = summary.trim();
   if (!s) return false;
-  return MOVEMENT_SUMMARY_MARKERS.some((m) => s.includes(m));
+  return s.includes(STICKER_REVISION_COLUMN_MARKER);
 }
 
 /** Оставить в строке только части про доску и убрать слово «Кайтен» из подписей. */
@@ -35,7 +27,7 @@ export function stickerMovementSummaryForPublic(summary: string): string {
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean)
-    .filter((p) => MOVEMENT_SUMMARY_MARKERS.some((m) => p.includes(m)));
+    .filter((p) => p.includes(STICKER_REVISION_COLUMN_MARKER));
   return parts.map((p) => sanitizeStickerPublicCopy(p)).join(", ");
 }
 

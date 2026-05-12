@@ -13,8 +13,11 @@ export type StickerRow = {
 
 const DEFAULT_W = 58;
 const DEFAULT_H = 40;
-/** Широкая этикетка: врач и пациент в одну линию. */
+/** Широкая этикетка: те же поля столбиком на всю ширину (без сжатия врача и пациента в один ряд). */
 const WIDE_ASPECT = 1.32;
+
+/** Логотип для печати — ClickAdmin (лежит в `public/stickers/`). */
+const STICKER_BRAND_LOGO_SRC = "/stickers/clickadmin-logo.png";
 
 type Props = {
   rows: StickerRow[];
@@ -101,54 +104,60 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         flex: 0 0 auto;
         display: flex;
         flex-direction: row;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 1.2mm;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1.5mm;
         margin-top: 0.4mm;
+        width: 100%;
+      }
+      .sticker-footer-qr-col {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.35mm;
       }
       .sticker-qr-wrap {
         flex: 0 0 auto;
         width: min(13.5mm, calc(var(--sticker-h) * 0.36));
         height: min(13.5mm, calc(var(--sticker-h) * 0.36));
       }
-      .sticker-footer-hint {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: 0.6mm;
+      .sticker-scan-caption {
+        max-width: 16mm;
+        text-align: center;
+        font-size: clamp(4.5pt, calc(var(--sticker-h) * 0.125), 5.4pt);
+        line-height: 1.08;
+        font-weight: 700;
+        color: #334155;
+        letter-spacing: -0.02em;
+      }
+      .sticker-footer-brand-col {
+        flex: 1 1 0;
         min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.3mm;
       }
-      .sticker-arrow-to-qr {
-        flex-shrink: 0;
-        font-size: clamp(6pt, calc(var(--sticker-h) * 0.17), 7.5pt);
+      .sticker-made-in {
+        font-size: clamp(4.2pt, calc(var(--sticker-h) * 0.11), 5pt);
         line-height: 1;
-        color: #64748b;
-        font-weight: 600;
-        padding-bottom: 0.15em;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        color: #0f172a;
+        text-transform: uppercase;
       }
-      .sticker-scan-text {
-        font-size: clamp(5pt, calc(var(--sticker-h) * 0.14), 5.9pt);
-        line-height: 1.12;
-        font-weight: 600;
-        color: #475569;
-        letter-spacing: -0.01em;
+      .sticker-brand-logo {
+        display: block;
+        height: min(11mm, calc(var(--sticker-h) * 0.3));
+        width: auto;
+        max-width: 100%;
+        object-fit: contain;
       }
     `;
     const wide = `
       .sticker-page--wide .sticker-k { flex: 0 0 10mm; font-size: 5.3pt; }
-      .sticker-duplex {
-        display: flex;
-        flex-direction: row;
-        align-items: flex-start;
-        gap: 1.8mm;
-        width: 100%;
-        margin-bottom: 0.35mm;
-      }
-      .sticker-duplex .sticker-line {
-        flex: 1 1 0;
-        min-width: 0;
-        margin-bottom: 0;
-      }
     `;
     return `
       @media print {
@@ -195,80 +204,61 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
             className={`sticker-page${isWide ? " sticker-page--wide" : ""}`}
           >
             <div className="sticker-lines">
-              {isWide ? (
-                <>
-                  <div className="sticker-line sticker-line--full">
-                    <span className="sticker-k">Клиника</span>
-                    <span className="sticker-v" title={r.clinicLine}>
-                      {r.clinicLine}
-                    </span>
-                  </div>
-                  <div className="sticker-duplex">
-                    <div className="sticker-line">
-                      <span className="sticker-k">Доктор</span>
-                      <span className="sticker-v" title={r.doctorLine}>
-                        {r.doctorLine}
-                      </span>
-                    </div>
-                    <div className="sticker-line">
-                      <span className="sticker-k">Пациент</span>
-                      <span className="sticker-v" title={r.patientLine}>
-                        {r.patientLine}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="sticker-line sticker-line--full">
-                    <span className="sticker-k">№ заказа</span>
-                    <span className="sticker-v">{r.orderNumber}</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="sticker-line">
-                    <span className="sticker-k">Клиника</span>
-                    <span className="sticker-v" title={r.clinicLine}>
-                      {r.clinicLine}
-                    </span>
-                  </div>
-                  <div className="sticker-line">
-                    <span className="sticker-k">Доктор</span>
-                    <span className="sticker-v" title={r.doctorLine}>
-                      {r.doctorLine}
-                    </span>
-                  </div>
-                  <div className="sticker-line">
-                    <span className="sticker-k">Пациент</span>
-                    <span className="sticker-v" title={r.patientLine}>
-                      {r.patientLine}
-                    </span>
-                  </div>
-                  <div className="sticker-line">
-                    <span className="sticker-k">№ заказа</span>
-                    <span className="sticker-v">{r.orderNumber}</span>
-                  </div>
-                </>
-              )}
+              <div
+                className={`sticker-line${isWide ? " sticker-line--full" : ""}`}
+              >
+                <span className="sticker-k">Клиника</span>
+                <span className="sticker-v" title={r.clinicLine}>
+                  {r.clinicLine}
+                </span>
+              </div>
+              <div
+                className={`sticker-line${isWide ? " sticker-line--full" : ""}`}
+              >
+                <span className="sticker-k">Доктор</span>
+                <span className="sticker-v" title={r.doctorLine}>
+                  {r.doctorLine}
+                </span>
+              </div>
+              <div
+                className={`sticker-line${isWide ? " sticker-line--full" : ""}`}
+              >
+                <span className="sticker-k">Пациент</span>
+                <span className="sticker-v" title={r.patientLine}>
+                  {r.patientLine}
+                </span>
+              </div>
+              <div
+                className={`sticker-line${isWide ? " sticker-line--full" : ""}`}
+              >
+                <span className="sticker-k">№ заказа</span>
+                <span className="sticker-v">{r.orderNumber}</span>
+              </div>
             </div>
             <div className="sticker-footer">
-              <div className="sticker-qr-wrap">
-                {/* eslint-disable-next-line @next/next/no-img-element -- data: URL от qrcode */}
-                <img
-                  src={r.qrDataUrl}
-                  alt=""
-                  width={108}
-                  height={108}
-                  className="h-full w-full object-contain"
-                />
-              </div>
-              <div className="sticker-footer-hint">
-                <span className="sticker-arrow-to-qr" aria-hidden>
-                  ←
-                </span>
-                <div className="sticker-scan-text">
-                  Отсканируй
-                  <br />
-                  меня!
+              <div className="sticker-footer-qr-col">
+                <div className="sticker-qr-wrap">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- data: URL от qrcode */}
+                  <img
+                    src={r.qrDataUrl}
+                    alt=""
+                    width={108}
+                    height={108}
+                    className="h-full w-full object-contain"
+                  />
                 </div>
+                <div className="sticker-scan-caption">Отсканируй меня</div>
+              </div>
+              <div className="sticker-footer-brand-col">
+                <div className="sticker-made-in">Сделано в</div>
+                {/* eslint-disable-next-line @next/next/no-img-element -- статичный PNG для печати */}
+                <img
+                  src={STICKER_BRAND_LOGO_SRC}
+                  alt=""
+                  width={200}
+                  height={80}
+                  className="sticker-brand-logo"
+                />
               </div>
             </div>
           </div>

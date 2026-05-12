@@ -83,51 +83,6 @@ export default async function StickerPublicHubPage({
           </p>
         </section>
 
-        {data.kanban ? (
-          <section className="mt-5 space-y-2 border-t border-zinc-100 pt-4 text-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Канбан CRM
-            </h2>
-            {data.kanban.boardTitle ? (
-              <p className="text-zinc-700">Доска: {data.kanban.boardTitle}</p>
-            ) : null}
-            {data.kanban.columnTitle ? (
-              <p className="text-zinc-700">Колонка: {data.kanban.columnTitle}</p>
-            ) : null}
-            {data.kanban.assignees.length > 0 ? (
-              <p>
-                <span className="text-zinc-500">Ответственные: </span>
-                <span className="font-medium">{data.kanban.assignees.join(", ")}</span>
-              </p>
-            ) : null}
-            {data.kanban.participants.length > 0 ? (
-              <p>
-                <span className="text-zinc-500">Участники: </span>
-                <span className="font-medium">{data.kanban.participants.join(", ")}</span>
-              </p>
-            ) : null}
-            {data.kanban.activity.length > 0 ? (
-              <div className="mt-2 max-h-56 overflow-y-auto rounded border border-zinc-100 bg-zinc-50/80 p-2 text-xs">
-                {data.kanban.activity.map((a, i) => (
-                  <div
-                    key={`${a.at}-${i}`}
-                    className="mb-1.5 border-b border-zinc-100/80 pb-1.5 last:mb-0 last:border-b-0"
-                  >
-                    <div className="text-zinc-500">
-                      {fmtRu(a.at)} · {a.label}
-                    </div>
-                    <div className="text-zinc-800">{a.text}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-zinc-500">
-                Журнал активности карточки пуст или недоступен.
-              </p>
-            )}
-          </section>
-        ) : null}
-
         <section className="mt-5 border-t border-zinc-100 pt-4 text-sm">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
             История изменений (кратко)

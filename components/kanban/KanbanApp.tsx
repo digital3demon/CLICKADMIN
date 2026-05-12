@@ -1491,11 +1491,22 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   : "border-white/30 text-[var(--kanban-text-muted)] hover:border-white/45 hover:text-[var(--kanban-text)]"
               }`}
               onClick={() => {
-                patchApp((s) => {
-                  if (!visibleBoards.length) return;
-                  s.activeBoardId = KANBAN_BOARD_MY_CARDS_ID;
-                });
-                showToast("Доска: Мои");
+                if (!visibleBoards.length) return;
+                const fallbackId =
+                  visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
+                  visibleBoards[0]!.id;
+                if (appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID) {
+                  patchApp((s) => {
+                    s.activeBoardId = fallbackId;
+                  });
+                  const label = appState.boards.find((x) => x.id === fallbackId)?.title;
+                  showToast(label ? `Доска: ${label}` : "Доска");
+                } else {
+                  patchApp((s) => {
+                    s.activeBoardId = KANBAN_BOARD_MY_CARDS_ID;
+                  });
+                  showToast("Доска: Мои");
+                }
               }}
             >
               Мои
@@ -1508,11 +1519,22 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   : "border-white/30 text-[var(--kanban-text-muted)] hover:border-white/45 hover:text-[var(--kanban-text)]"
               }`}
               onClick={() => {
-                patchApp((s) => {
-                  if (!visibleBoards.length) return;
-                  s.activeBoardId = KANBAN_BOARD_DISTRIBUTE_ID;
-                });
-                showToast("Доска: Ответственный");
+                if (!visibleBoards.length) return;
+                const fallbackId =
+                  visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
+                  visibleBoards[0]!.id;
+                if (appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID) {
+                  patchApp((s) => {
+                    s.activeBoardId = fallbackId;
+                  });
+                  const label = appState.boards.find((x) => x.id === fallbackId)?.title;
+                  showToast(label ? `Доска: ${label}` : "Доска");
+                } else {
+                  patchApp((s) => {
+                    s.activeBoardId = KANBAN_BOARD_DISTRIBUTE_ID;
+                  });
+                  showToast("Доска: Ответственный");
+                }
               }}
             >
               Ответственный
