@@ -908,7 +908,7 @@ model Order {
   /// Текст причины блокировки из Kaiten (красная полоса в Kaiten / подсказка в списке CRM)
   kaitenBlockReason              String?
   /// Момент начала текущей блокировки в Kaiten (если известен из API блокировок / карточки)
-  kaitenBlockedAt                DateTime?
+  kaitenBlockedAt                DateTime?                 @db.Timestamp(3)
   /// В чате карточки Kaiten есть упоминание тега «лаборатория» (Tenant.kanbanAdminMentionTag); обновляется при синхронизации комментариев.
   kaitenChatHasLabMention        Boolean                   @default(false)
   /// Последний «сигнал» для пользовательских подтверждений: новое упоминание в чате после просмотра (сравнивают с OrderKaitenLabMentionAck.ackAt).
