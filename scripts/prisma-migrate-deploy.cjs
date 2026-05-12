@@ -107,6 +107,18 @@ function spawnNodeScript(scriptPath, extraEnv = {}) {
   });
 }
 
+const fixPath = pathToEnsure("prisma-resolve-stuck-kaiten-blocked-at-migration.cjs");
+if (fs.existsSync(fixPath)) {
+  const fixStuck = spawnNodeScript(fixPath);
+  if (fixStuck.status !== 0) {
+    process.exit(fixStuck.status === null ? 1 : fixStuck.status);
+  }
+} else {
+  console.warn(
+    "[migrate] нет prisma-resolve-stuck-kaiten-blocked-at-migration.cjs — пропуск авто-исправления P3009.",
+  );
+}
+
 const r = spawnSync(
   "npx",
   [

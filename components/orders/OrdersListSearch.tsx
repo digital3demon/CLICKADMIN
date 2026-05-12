@@ -31,6 +31,8 @@ export function OrdersListSearch({
 }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
+  const spRef = useRef(sp);
+  spRef.current = sp;
   const [value, setValue] = useState(initialValue);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -38,9 +40,11 @@ export function OrdersListSearch({
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestLoading, setSuggestLoading] = useState(false);
 
+  /** Только при реальном изменении `q` в URL (назад/вперёд, ссылка). Не `[sp]` — объект searchParams часто новый на каждом кадре и затирал ввод до debounce router.replace. */
+  const qParamFromUrl = sp.get("q");
   useEffect(() => {
-    setValue(normalizeOrdersSearchQuery(sp.get("q")));
-  }, [sp]);
+    setValue(normalizeOrdersSearchQuery(qParamFromUrl));
+  }, [qParamFromUrl]);
 
   useEffect(() => {
     const q = normalizeOrdersSearchQuery(value);
@@ -85,8 +89,9 @@ export function OrdersListSearch({
   const flushToUrl = useCallback(
     (nextLocal: string) => {
       const q = normalizeOrdersSearchQuery(nextLocal);
-      const from = sp.get("from")?.trim() || undefined;
-      const to = sp.get("to")?.trim() || undefined;
+      const cur = spRef.current;
+      const from = cur.get("from")?.trim() || undefined;
+      const to = cur.get("to")?.trim() || undefined;
       router.replace(
         ordersListHref({
           limit: pageSize,
@@ -100,20 +105,20 @@ export function OrdersListSearch({
         { scroll: false },
       );
     },
-    [router, pageSize, tag, hideShipped, onlyShipped, sp],
+    [router, pageSize, tag, hideShipped, onlyShipped],
   );
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const fromUrl = normalizeOrdersSearchQuery(sp.get("q"));
+      const fromUrl = normalizeOrdersSearchQuery(spRef.current.get("q"));
       if (normalizeOrdersSearchQuery(value) === fromUrl) return;
       flushToUrl(value);
     }, 320);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [value, sp, flushToUrl]);
+  }, [value, flushToUrl]);
 
   const onClear = () => {
     if (debounceRef.current) {
@@ -123,8 +128,8 @@ export function OrdersListSearch({
     setValue("");
     setSuggestions([]);
     setSuggestOpen(false);
-    const from = sp.get("from")?.trim() || undefined;
-    const to = sp.get("to")?.trim() || undefined;
+    const from = spRef.current.get("from")?.trim() || undefined;
+    const to = spRef.current.get("to")?.trim() || undefined;
     router.replace(
       ordersListHref({
         limit: pageSize,

@@ -25,19 +25,21 @@ export function ClientsListSearch({
 }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
+  const spRef = useRef(sp);
+  spRef.current = sp;
   const param = mode === "clinic" ? "clinicQ" : "doctorQ";
-  const otherParam = mode === "clinic" ? "doctorQ" : "clinicQ";
 
   const [value, setValue] = useState(initialValue);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const paramValueFromUrl = sp.get(param) ?? "";
   useEffect(() => {
-    setValue(sp.get(param) ?? "");
-  }, [sp, param]);
+    setValue(paramValueFromUrl);
+  }, [paramValueFromUrl]);
 
   const flushToUrl = useCallback(
     (nextLocal: string) => {
-      const base = clientsListStateFromSearchParams(sp, mode);
+      const base = clientsListStateFromSearchParams(spRef.current, mode);
       const clinicQ = mode === "clinic" ? nextLocal : base.clinicQ;
       const doctorQ = mode === "doctor" ? nextLocal : base.doctorQ;
       router.replace(
@@ -52,20 +54,20 @@ export function ClientsListSearch({
         { scroll: false },
       );
     },
-    [router, sp, mode],
+    [router, mode],
   );
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const fromUrl = sp.get(param) ?? "";
+      const fromUrl = spRef.current.get(param) ?? "";
       if (value === fromUrl) return;
       flushToUrl(value);
     }, 320);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [value, param, sp, flushToUrl]);
+  }, [value, param, flushToUrl]);
 
   const onClear = () => {
     if (debounceRef.current) {
@@ -73,7 +75,7 @@ export function ClientsListSearch({
       debounceRef.current = null;
     }
     setValue("");
-    const base = clientsListStateFromSearchParams(sp, mode);
+    const base = clientsListStateFromSearchParams(spRef.current, mode);
     const clinicQ = mode === "clinic" ? "" : base.clinicQ;
     const doctorQ = mode === "doctor" ? "" : base.doctorQ;
     router.replace(
