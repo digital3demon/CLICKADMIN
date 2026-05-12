@@ -528,7 +528,9 @@ enum AppModule {
   KANBAN_MANAGE_PARTICIPANTS
   /// Канбан: можно переносить карточку на другую доску
   KANBAN_MOVE_TO_OTHER_BOARD
-  /// Канбан: назначать и менять таймер обратного отсчёта на карточке (старшие роли, не производство)
+  /// Канбан: пункты чеклиста на карточке (CRM, не Kaiten)
+  KANBAN_MANAGE_CHECKLIST
+  /// Канбан: таймер обратного отсчёта на карточке
   KANBAN_MANAGE_TIMER
   /// История изменений по нарядам
   ORDER_HISTORY

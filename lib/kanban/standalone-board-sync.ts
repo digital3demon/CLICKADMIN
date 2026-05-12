@@ -81,8 +81,29 @@ export function applyStandaloneRowsFromServer(
     for (const col of board.columns) {
       const key = `${board.id}\0${col.id}`;
       const linked = col.cards.filter((c) => !isStandaloneCard(c));
+      const prevById = new Map(
+        col.cards.filter(isStandaloneCard).map((c) => [c.id, c] as const),
+      );
       const rowsHere = grouped.get(key) ?? [];
-      const standalone = rowsHere.map((x) => x.payload);
+      const standalone = rowsHere.map((x) => {
+        const prev = prevById.get(x.id);
+        if (!prev) return x.payload;
+        const prevU = Date.parse(prev.updatedAt || "") || 0;
+        const payU = Date.parse(x.payload.updatedAt || "") || 0;
+        const serverTimer =
+          x.payload.timerDurationMs != null &&
+          x.payload.timerDurationMs > 0 &&
+          Boolean(x.payload.timerStartedAt);
+        /** GET часто отстаёт от локального PUT — не затирать таймер свежей локальной карточкой. */
+        if (!serverTimer && prevU > payU) {
+          return {
+            ...x.payload,
+            timerStartedAt: prev.timerStartedAt ?? x.payload.timerStartedAt,
+            timerDurationMs: prev.timerDurationMs ?? x.payload.timerDurationMs,
+          };
+        }
+        return x.payload;
+      });
       col.cards = [...linked, ...standalone];
     }
   }

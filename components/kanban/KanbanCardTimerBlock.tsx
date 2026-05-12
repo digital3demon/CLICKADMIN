@@ -132,7 +132,7 @@ export function KanbanCardTimerBlock({
   };
 
   return (
-    <div className="relative mb-3">
+    <div className="relative mb-3 rounded-lg border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)]/40 px-3 py-2.5">
       <div className="mb-1 flex items-center justify-between gap-2">
         <span className="text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
           Таймер
@@ -157,9 +157,9 @@ export function KanbanCardTimerBlock({
         <div className="min-w-0 flex-1">
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/35 ring-1 ring-[var(--kaiten-modal-border)]">
             <div
-              className="h-full rounded-full transition-[width] duration-300 ease-linear"
+              className="h-full min-w-[2px] rounded-full transition-[width] duration-300 ease-linear"
               style={{
-                width: `${started ? Math.round(ratio * 1000) / 10 : 0}%`,
+                width: `${started ? Math.max(0.5, Math.round(ratio * 1000) / 10) : 0}%`,
                 backgroundImage: KANBAN_TIMER_TRACK_GRADIENT,
                 backgroundSize: "100% 100%",
               }}
@@ -167,6 +167,11 @@ export function KanbanCardTimerBlock({
           </div>
         </div>
       </div>
+      {!canManage ? (
+        <p className="mt-1.5 text-[0.65rem] leading-snug text-[var(--kaiten-modal-muted)]">
+          Назначить таймер могут роли с правом «Канбан: таймеры» (настройки доступа).
+        </p>
+      ) : null}
       {!started && canManage && card.timerDurationMs && card.timerDurationMs >= 60_000 ? (
         <div className="mt-2 flex justify-end">
           <button

@@ -192,6 +192,8 @@ type KanbanCardModalProps = {
   canEditTrack?: boolean;
   canManageAssignees?: boolean;
   canManageParticipants?: boolean;
+  /** Пункты чеклиста на карточке (модуль KANBAN_MANAGE_CHECKLIST). */
+  canManageKanbanChecklist?: boolean;
   /** Назначать таймер на карточке (модуль KANBAN_MANAGE_TIMER). */
   canManageKanbanTimer?: boolean;
   onOpenLinkedCard?: (cardId: string) => void;
@@ -226,6 +228,7 @@ export function KanbanCardModal({
   canEditTrack = true,
   canManageAssignees = true,
   canManageParticipants = true,
+  canManageKanbanChecklist = true,
   canManageKanbanTimer = false,
   onOpenLinkedCard,
   onParentProductionFilesUpdated,
@@ -650,6 +653,7 @@ export function KanbanCardModal({
   };
 
   const addCheckItem = () => {
+    if (!canManageKanbanChecklist) return;
     onApply((b) => {
       const fc = findCard(b, cardId);
       if (!fc) return;
@@ -1962,6 +1966,7 @@ export function KanbanCardModal({
                   <button
                     type="button"
                     className="text-[0.75rem] text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
+                    disabled={!canManageKanbanChecklist}
                     onClick={addCheckItem}
                   >
                     + Пункт
@@ -1972,6 +1977,7 @@ export function KanbanCardModal({
                   cardId={cardId}
                   onApply={onApply}
                   activityActorLabel={act}
+                  canEdit={canManageKanbanChecklist}
                   kaitenLinked={
                     Boolean(
                       card.linkedOrderId &&
@@ -2995,12 +3001,14 @@ function ChecklistEditor({
   cardId,
   onApply,
   activityActorLabel,
+  canEdit,
   kaitenLinked,
 }: {
   card: KanbanCard;
   cardId: string;
   onApply: (fn: (b: KanbanBoard) => void) => void;
   activityActorLabel?: string;
+  canEdit: boolean;
   kaitenLinked?: boolean;
 }) {
   const isProductionChecklist = Boolean(card.parentCardId);
@@ -3035,9 +3043,10 @@ function ChecklistEditor({
         <div key={item.id} className="mb-1 flex items-center gap-2">
           <ChecklistCheckboxWithFirework
             completed={item.completed}
-            disabled={false}
+            disabled={!canEdit}
             onToggle={() =>
               onApply((b) => {
+                if (!canEdit) return;
                 const fc = findCard(b, cardId);
                 if (!fc) return;
                 const list = fc.card.parentCardId
@@ -3056,9 +3065,11 @@ function ChecklistEditor({
           />
           <input
             type="text"
-            className="min-w-0 flex-1 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1.5 py-0.5 text-[0.8125rem] text-[var(--kaiten-modal-text)]"
+            readOnly={!canEdit}
+            className="min-w-0 flex-1 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1.5 py-0.5 text-[0.8125rem] text-[var(--kaiten-modal-text)] read-only:opacity-80"
             defaultValue={item.text}
             onBlur={(e) => {
+              if (!canEdit) return;
               const v = e.target.value;
               if (v === item.text) return;
               onApply((b) => {
@@ -3083,9 +3094,11 @@ function ChecklistEditor({
           {isProductionChecklist ? (
             <button
               type="button"
-              className="shrink-0 rounded border border-rose-500/40 bg-rose-500/15 px-1.5 py-0.5 text-[0.66rem] font-medium text-rose-200 hover:bg-rose-500/25"
+              disabled={!canEdit}
+              className="shrink-0 rounded border border-rose-500/40 bg-rose-500/15 px-1.5 py-0.5 text-[0.66rem] font-medium text-rose-200 hover:bg-rose-500/25 disabled:opacity-40"
               onClick={() =>
                 onApply((b) => {
+                  if (!canEdit) return;
                   const fc = findCard(b, cardId);
                   if (!fc || !fc.card.parentCardId) return;
                   const list = fc.card.productionChecklist || [];
@@ -3117,9 +3130,11 @@ function ChecklistEditor({
           ) : null}
           <button
             type="button"
+            disabled={!canEdit}
             className="text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
             onClick={() =>
               onApply((b) => {
+                if (!canEdit) return;
                 const fc = findCard(b, cardId);
                 if (!fc) return;
                 if (fc.card.parentCardId) {
@@ -3154,6 +3169,12 @@ function ChecklistEditor({
           Чеклист здесь — только в CRM-канбане; нативный чеклист Kaiten в API не
           синхронизируется. Чат, заголовок, описание и файлы (как вложения наряда)
           уходят в Kaiten.
+        </p>
+      ) : null}
+      {!canEdit ? (
+        <p className="mt-2 text-[0.65rem] leading-snug text-[var(--kaiten-modal-muted)]">
+          Редактирование чеклиста отключено: нет права «Канбан: чек-листы» (настройки
+          доступа).
         </p>
       ) : null}
     </div>

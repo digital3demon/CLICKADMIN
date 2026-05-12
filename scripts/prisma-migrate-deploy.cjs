@@ -1,5 +1,7 @@
 /**
  * `prisma migrate deploy` для текущего datasource.
+ * Сначала `prisma generate` (кроме SQLite без WASM — см. ensurePrismaGenerateBeforeStuckScript),
+ * затем авто-resolve зависшей миграции, затем deploy.
  * Важно: вызываем `npx prisma@<версия>`, а не `npx prisma` — иначе npx подтянет Prisma 7+,
  * где datasource `url` в schema.prisma убран (P1012), а проект на Prisma 6.
  */
@@ -91,6 +93,47 @@ function npmInstallPrismaPackages() {
   return ins.status === 0;
 }
 
+/** Нужен до `prisma-resolve-stuck-*` (импорт @prisma/client) и до migrate на CI с PostgreSQL. */
+function runPrismaGenerate() {
+  return spawnSync(
+    "npx",
+    ["-y", prismaSpec, "generate", "--schema=prisma/schema.prisma"],
+    {
+      cwd: bundleRoot,
+      stdio: "inherit",
+      env: process.env,
+      shell: isWin,
+    },
+  );
+}
+
+/**
+ * SQLite без полного WASM в standalone: generate до migrate падает — его делают после migrate + npm install.
+ * Для PostgreSQL generate обязателен до resolve-stuck (PrismaClient).
+ */
+function ensurePrismaGenerateBeforeStuckScript() {
+  if (isSqlite && !prismaSqliteWasmRuntimePresent()) {
+    console.log(
+      "[migrate] pre-migrate: пропуск prisma generate (SQLite без WASM runtime — как раньше, после migrate).",
+    );
+    return;
+  }
+  let gen = runPrismaGenerate();
+  if (gen.status !== 0 && isSqlite) {
+    console.warn(
+      "[migrate] pre-migrate: prisma generate — повтор после npm install prisma.",
+    );
+    if (npmInstallPrismaPackages()) gen = runPrismaGenerate();
+  }
+  if (gen.status !== 0) {
+    console.error(
+      "[migrate] pre-migrate: prisma generate не удался — нужен сгенерированный @prisma/client.",
+    );
+    process.exit(gen.status === null ? 1 : gen.status);
+  }
+  console.log("[migrate] pre-migrate: prisma generate OK");
+}
+
 /** Node с абсолютным --env-file и shell:false — иначе путь с пробелом (кириллица) ломается при shell:true. */
 function spawnNodeScript(scriptPath, extraEnv = {}) {
   const args = [];
@@ -106,6 +149,8 @@ function spawnNodeScript(scriptPath, extraEnv = {}) {
     shell: false,
   });
 }
+
+ensurePrismaGenerateBeforeStuckScript();
 
 const fixPath = pathToEnsure("prisma-resolve-stuck-kaiten-blocked-at-migration.cjs");
 if (fs.existsSync(fixPath)) {
@@ -138,20 +183,6 @@ const r = spawnSync(
 
 if (r.status !== 0) {
   process.exit(r.status === null ? 1 : r.status);
-}
-
-/** Без generate клиент Prisma в node_modules не совпадает с БД после migrate — P2022 и т.п. в UI */
-function runPrismaGenerate() {
-  return spawnSync(
-    "npx",
-    ["-y", prismaSpec, "generate", "--schema=prisma/schema.prisma"],
-    {
-      cwd: bundleRoot,
-      stdio: "inherit",
-      env: process.env,
-      shell: isWin,
-    },
-  );
 }
 
 if (isSqlite && !prismaSqliteWasmRuntimePresent()) {

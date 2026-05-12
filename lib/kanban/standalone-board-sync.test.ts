@@ -58,4 +58,44 @@ describe("standalone-board-sync", () => {
     expect(c0.some((c) => c.id === "k1" && c.linkedOrderId === "ord1")).toBe(true);
     expect(c0.some((c) => c.id === "local1")).toBe(true);
   });
+
+  it("не затирает таймер локальной карточки устаревшим снимком с сервера", () => {
+    const base = structuredClone(defaultAppState()) as KanbanAppState;
+    const ortho = base.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;
+    const col0 = ortho.columns[0]!;
+    const t0 = "2026-01-01T00:00:00.000Z";
+    const t1 = "2026-06-01T12:00:00.000Z";
+    col0.cards = [
+      {
+        ...standaloneStub,
+        id: "t1",
+        updatedAt: t1,
+        timerStartedAt: t0,
+        timerDurationMs: 3_600_000,
+      },
+    ];
+
+    const staleRows = [
+      {
+        id: "t1",
+        boardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+        columnId: col0.id,
+        sortIndex: 0,
+        payload: {
+          ...standaloneStub,
+          id: "t1",
+          title: "С сервера",
+          updatedAt: t0,
+          timerStartedAt: null,
+          timerDurationMs: null,
+        },
+      },
+    ];
+    const next = applyStandaloneRowsFromServer(base, staleRows);
+    const card = next.boards
+      .find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!
+      .columns[0]!.cards.find((c) => c.id === "t1")!;
+    expect(card.timerDurationMs).toBe(3_600_000);
+    expect(card.timerStartedAt).toBe(t0);
+  });
 });

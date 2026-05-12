@@ -33,6 +33,7 @@ export function OrdersListSearch({
   const sp = useSearchParams();
   const spRef = useRef(sp);
   spRef.current = sp;
+  const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(initialValue);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -40,11 +41,18 @@ export function OrdersListSearch({
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestLoading, setSuggestLoading] = useState(false);
 
-  /** Только при реальном изменении `q` в URL (назад/вперёд, ссылка). Не `[sp]` — объект searchParams часто новый на каждом кадре и затирал ввод до debounce router.replace. */
-  const qParamFromUrl = sp.get("q");
+  /**
+   * Снимок всего query: меняется только при реальном изменении URL.
+   * Не используем `sp`/`sp.get("q")` в deps по отдельности — у useSearchParams() часто новая ссылка на каждом рендере.
+   */
+  const urlSearchSnapshot = sp.toString();
   useEffect(() => {
-    setValue(normalizeOrdersSearchQuery(qParamFromUrl));
-  }, [qParamFromUrl]);
+    if (document.activeElement === inputRef.current) return;
+    const fromUrl = normalizeOrdersSearchQuery(
+      new URLSearchParams(urlSearchSnapshot).get("q"),
+    );
+    setValue((prev) => (normalizeOrdersSearchQuery(prev) === fromUrl ? prev : fromUrl));
+  }, [urlSearchSnapshot]);
 
   useEffect(() => {
     const q = normalizeOrdersSearchQuery(value);
@@ -152,6 +160,7 @@ export function OrdersListSearch({
       </label>
       <div className="relative min-w-0 flex-1">
         <input
+          ref={inputRef}
           id="orders-list-search-q"
           type="search"
           className={inputClass}

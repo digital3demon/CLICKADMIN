@@ -32,10 +32,11 @@ export function ClientsListSearch({
   const [value, setValue] = useState(initialValue);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const paramValueFromUrl = sp.get(param) ?? "";
+  const urlSnapshot = sp.toString();
   useEffect(() => {
-    setValue(paramValueFromUrl);
-  }, [paramValueFromUrl]);
+    const snap = new URLSearchParams(urlSnapshot);
+    setValue(snap.get(param) ?? "");
+  }, [urlSnapshot, param]);
 
   const flushToUrl = useCallback(
     (nextLocal: string) => {
