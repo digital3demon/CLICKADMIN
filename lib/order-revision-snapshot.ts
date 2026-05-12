@@ -82,6 +82,8 @@ export type OrderSnapshotV1 = {
     kaitenBlocked?: boolean;
     /** В старых снимках отсутствует */
     kaitenBlockReason?: string | null;
+    /** В старых снимках отсутствует */
+    kaitenBlockedAt?: string | null;
   };
   constructions: Array<{
     category: string;
@@ -171,6 +173,7 @@ export function buildSnapshotFromOrder(
       kaitenColumnTitle: order.kaitenColumnTitle ?? null,
       kaitenBlocked: order.kaitenBlocked,
       kaitenBlockReason: order.kaitenBlockReason ?? null,
+      kaitenBlockedAt: order.kaitenBlockedAt?.toISOString() ?? null,
     },
     constructions: order.constructions.map((c) => ({
       category: c.category,
@@ -393,6 +396,13 @@ export async function applyOrderSnapshot(
             : {}),
           ...("kaitenBlockReason" in o
             ? { kaitenBlockReason: o.kaitenBlockReason ?? null }
+            : {}),
+          ...("kaitenBlockedAt" in o
+            ? {
+                kaitenBlockedAt: o.kaitenBlockedAt
+                  ? new Date(o.kaitenBlockedAt)
+                  : null,
+              }
             : {}),
           constructions: {
             deleteMany: {},

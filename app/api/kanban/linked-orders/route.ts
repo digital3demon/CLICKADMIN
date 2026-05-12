@@ -62,6 +62,7 @@ export async function GET() {
         kaitenCardDescriptionMirror: true,
         kaitenBlocked: true,
         kaitenBlockReason: true,
+        kaitenBlockedAt: true,
         demoKanbanColumn: true,
         clientOrderText: true,
         notes: true,
@@ -162,6 +163,9 @@ export async function GET() {
         kaitenCardDescriptionMirror: o.kaitenCardDescriptionMirror ?? null,
         kaitenBlocked: o.kaitenBlocked,
         kaitenBlockReason: o.kaitenBlockReason,
+        kaitenBlockedAt: o.kaitenBlockedAt
+          ? o.kaitenBlockedAt.toISOString()
+          : null,
         demoKanbanColumn: o.demoKanbanColumn ?? null,
         primaryPriceListItemName:
           o.constructions[0]?.priceListItemId

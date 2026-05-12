@@ -25,6 +25,8 @@ export type KaitenLinkedOrderForKanban = {
   kaitenCardDescriptionMirror: string | null;
   kaitenBlocked: boolean;
   kaitenBlockReason: string | null;
+  /** ISO начала текущей блокировки в Kaiten (если сохранено в CRM) */
+  kaitenBlockedAt: string | null;
   /** Демо / внутренний канбан: NEW | IN_PROGRESS | DONE */
   demoKanbanColumn: string | null;
   /** Первая позиция из прайса (PRICE_LIST) — для типа карточки канбана в демо */

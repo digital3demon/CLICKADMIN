@@ -136,6 +136,9 @@ export type KanbanCard = {
   }>;
   /** Производство: завершена ли работа по карточке (для автоархивации). */
   productionReadyAt?: string | null;
+  /** Обратный отсчёт (ISO): старт и полная длительность в мс; задают пользователи с правом KANBAN_MANAGE_TIMER. */
+  timerStartedAt?: string | null;
+  timerDurationMs?: number | null;
 };
 
 export type KanbanColumn = {

@@ -109,7 +109,8 @@ type SessionUserLike = {
       | "KANBAN_EDIT_TRACK"
       | "KANBAN_MANAGE_ASSIGNEES"
       | "KANBAN_MANAGE_PARTICIPANTS"
-      | "KANBAN_MOVE_TO_OTHER_BOARD",
+      | "KANBAN_MOVE_TO_OTHER_BOARD"
+      | "KANBAN_MANAGE_TIMER",
       boolean
     >
   >;
@@ -180,6 +181,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     manageAssignees: true,
     manageParticipants: true,
     moveToOtherBoard: true,
+    manageKanbanTimer: true,
   });
   const prevModalCardRef = useRef<string | null>(null);
   const kaitenPullOnceRef = useRef(false);
@@ -491,6 +493,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           manageAssignees: access.KANBAN_MANAGE_ASSIGNEES !== false,
           manageParticipants: access.KANBAN_MANAGE_PARTICIPANTS !== false,
           moveToOtherBoard: access.KANBAN_MOVE_TO_OTHER_BOARD !== false,
+          manageKanbanTimer: access.KANBAN_MANAGE_TIMER !== false,
         });
       } catch {
         if (!cancelled) {
@@ -504,6 +507,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             manageAssignees: true,
             manageParticipants: true,
             moveToOtherBoard: true,
+            manageKanbanTimer: true,
           });
         }
       }
@@ -1784,6 +1788,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         canEditTrack={kanbanCardPerms.editTrack}
         canManageAssignees={kanbanCardPerms.manageAssignees}
         canManageParticipants={kanbanCardPerms.manageParticipants}
+        canManageKanbanTimer={kanbanCardPerms.manageKanbanTimer}
         onOpenLinkedCard={(id) => setCardModalId(id)}
         onParentProductionFilesUpdated={syncParentProductionChildrenAfterFilesAttach}
         trackLaneOptions={isDemo ? [...demoTrackLanes()] : undefined}

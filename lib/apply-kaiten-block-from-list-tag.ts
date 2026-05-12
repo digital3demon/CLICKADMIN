@@ -1,6 +1,6 @@
 import { getKaitenEnvConfig } from "@/lib/kaiten-config";
 import {
-  kaitenBlockStateFromCard,
+  kaitenBlockedMetaFromCard,
   normalizeKaitenBlockReasonInput,
 } from "@/lib/kaiten-card-block";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
@@ -76,6 +76,7 @@ export async function applyKaitenBlockForOrderIfUnblocked(
         data: {
           kaitenBlocked: true,
           kaitenBlockReason: normalized,
+          kaitenBlockedAt: new Date(),
         },
       });
       void recordOrderRevision(orderId.trim(), { kind: "SAVE" }).catch((revErr) => {
@@ -141,15 +142,19 @@ export async function applyKaitenBlockForOrderIfUnblocked(
     return { kind: "error", message: "Нет данных карточки после запроса" };
   }
 
-  const fromCard = kaitenBlockStateFromCard(updated.card as Record<string, unknown>);
-  let kaitenBlocked = fromCard.blocked;
-  let kaitenBlockReason = fromCard.reason;
+  const blockMeta = kaitenBlockedMetaFromCard(updated.card as Record<string, unknown>);
+  let kaitenBlocked = blockMeta.blocked;
+  let kaitenBlockReason = blockMeta.reason;
   if (!kaitenBlocked) {
     kaitenBlocked = true;
     kaitenBlockReason = normalized;
   } else if (!kaitenBlockReason) {
     kaitenBlockReason = normalized;
   }
+  const kaitenBlockedAt =
+    blockMeta.blockedAtIso != null
+      ? new Date(blockMeta.blockedAtIso)
+      : new Date();
 
   const boardIdRaw = updated.card.board_id;
   const boardId = typeof boardIdRaw === "number" ? boardIdRaw : null;
@@ -175,6 +180,7 @@ export async function applyKaitenBlockForOrderIfUnblocked(
         ...mirrorFieldsFromKaitenCard(updated.card as Record<string, unknown>),
         kaitenBlocked,
         kaitenBlockReason,
+        kaitenBlockedAt,
       },
     });
     void recordOrderRevision(orderId.trim(), { kind: "SAVE" }).catch((revErr) => {

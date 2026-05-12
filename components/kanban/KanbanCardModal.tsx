@@ -62,6 +62,7 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DeadlineTomorrowHint } from "./DeadlineTomorrowHint";
+import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 import {
   KanbanPersonAvatar,
@@ -191,6 +192,8 @@ type KanbanCardModalProps = {
   canEditTrack?: boolean;
   canManageAssignees?: boolean;
   canManageParticipants?: boolean;
+  /** Назначать таймер на карточке (модуль KANBAN_MANAGE_TIMER). */
+  canManageKanbanTimer?: boolean;
   onOpenLinkedCard?: (cardId: string) => void;
   onParentProductionFilesUpdated?: (cardId: string) => void;
 };
@@ -223,6 +226,7 @@ export function KanbanCardModal({
   canEditTrack = true,
   canManageAssignees = true,
   canManageParticipants = true,
+  canManageKanbanTimer = false,
   onOpenLinkedCard,
   onParentProductionFilesUpdated,
 }: KanbanCardModalProps) {
@@ -1977,6 +1981,14 @@ export function KanbanCardModal({
                   }
                 />
               </div>
+
+              <KanbanCardTimerBlock
+                card={card}
+                cardId={cardId}
+                onApply={onApply}
+                activityActorLabel={act}
+                canManage={canManageKanbanTimer}
+              />
 
               {!card.parentCardId && childStatusRows.length > 0 ? (
                 <div className="mb-3">

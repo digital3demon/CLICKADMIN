@@ -26,7 +26,7 @@ import {
   setKaitenSnapshotCache,
 } from "@/lib/kaiten-snapshot-cache";
 import {
-  kaitenBlockStateFromCard,
+  kaitenBlockedMetaFromCard,
   normalizeKaitenBlockReasonInput,
 } from "@/lib/kaiten-card-block";
 import {
@@ -155,28 +155,40 @@ async function findTenantKaitenCardTypeByIdOrName(
 
 /**
  * Не перезаписывать блокировку в Prisma при PATCH без `blocked`: ответ Kaiten часто без
- * полей блокировки — kaitenBlockStateFromCard тогда даёт false и «снимает» блок в CRM.
+ * полей блокировки — разбор из карточки тогда даёт false и «снимает» блок в CRM.
  * При blocked: true, если в ответе карточки нет признака блока, берём причину из тела запроса.
  */
 function blockFieldsForPrismaAfterPatch(
   body: PatchBody,
   card: Record<string, unknown>,
-): { kaitenBlocked: boolean; kaitenBlockReason: string | null } | null {
+): {
+  kaitenBlocked: boolean;
+  kaitenBlockReason: string | null;
+  kaitenBlockedAt: Date | null;
+} | null {
   if (typeof body.blocked !== "boolean") return null;
   if (!body.blocked) {
-    return { kaitenBlocked: false, kaitenBlockReason: null };
+    return {
+      kaitenBlocked: false,
+      kaitenBlockReason: null,
+      kaitenBlockedAt: null,
+    };
   }
-  const fromCard = kaitenBlockStateFromCard(card);
-  if (fromCard.blocked) {
+  const meta = kaitenBlockedMetaFromCard(card);
+  if (meta.blocked) {
     return {
       kaitenBlocked: true,
-      kaitenBlockReason: fromCard.reason,
+      kaitenBlockReason: meta.reason,
+      kaitenBlockedAt: meta.blockedAtIso
+        ? new Date(meta.blockedAtIso)
+        : new Date(),
     };
   }
   const reason = normalizeKaitenBlockReasonInput(body.blockReason);
   return {
     kaitenBlocked: true,
     kaitenBlockReason: reason,
+    kaitenBlockedAt: new Date(),
   };
 }
 
@@ -618,8 +630,9 @@ export async function GET(
     kaitenImagesFromRecord(cardObj, orderIdTrim, null),
   );
   const columnTitle = kaitenColumnTitleFromBoard(cardObj, cols.columns);
-  const { blocked: kBlocked, reason: kBlockReason } =
-    kaitenBlockStateFromCard(cardObj);
+  const blockMeta = kaitenBlockedMetaFromCard(cardObj);
+  const kBlocked = blockMeta.blocked;
+  const kBlockReason = blockMeta.reason;
 
   const payload = {
     configured: true,
@@ -665,12 +678,19 @@ export async function GET(
       console.error("[kaiten GET] correction sync (deferred)", e);
     }
     try {
+      const blockedAtPatch =
+        !kBlocked
+          ? { kaitenBlockedAt: null as Date | null }
+          : blockMeta.blockedAtIso
+            ? { kaitenBlockedAt: new Date(blockMeta.blockedAtIso) }
+            : {};
       await ordersPrisma.order.update({
         where: { id: orderIdTrim },
         data: {
           kaitenColumnTitle: columnTitle,
           kaitenBlocked: kBlocked,
           kaitenBlockReason: kBlockReason,
+          ...blockedAtPatch,
           ...mirrorFieldsFromKaitenCard(cardObj),
         },
       });
@@ -991,9 +1011,16 @@ export async function POST(
       existing.kaitenTrackLane,
     );
     const columnTitle = kaitenColumnTitleFromBoard(cardObj, cols.columns);
-    const { blocked: kBlocked, reason: kBlockReason } =
-      kaitenBlockStateFromCard(cardObj);
+    const linkBlockMeta = kaitenBlockedMetaFromCard(cardObj);
+    const kBlocked = linkBlockMeta.blocked;
+    const kBlockReason = linkBlockMeta.reason;
     const sort = kaitenSortOrderFromCard(cardObj);
+    const linkBlockedAtPatch =
+      !kBlocked
+        ? { kaitenBlockedAt: null as Date | null }
+        : linkBlockMeta.blockedAtIso
+          ? { kaitenBlockedAt: new Date(linkBlockMeta.blockedAtIso) }
+          : {};
     try {
       await ordersPrisma.order.update({
         where: { id: idTrim },
@@ -1005,6 +1032,7 @@ export async function POST(
           kaitenColumnTitle: columnTitle,
           kaitenBlocked: kBlocked,
           kaitenBlockReason: kBlockReason,
+          ...linkBlockedAtPatch,
           kaitenCardSortOrder: sort,
           ...mirrorFieldsFromKaitenCard(cardObj),
         },
@@ -1398,6 +1426,7 @@ export async function PATCH(
           ? {
               kaitenBlocked: blockRow.kaitenBlocked,
               kaitenBlockReason: blockRow.kaitenBlockReason,
+              kaitenBlockedAt: blockRow.kaitenBlockedAt,
             }
           : {}),
         ...(body.kaitenCardTypeId !== undefined

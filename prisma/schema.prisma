@@ -528,6 +528,8 @@ enum AppModule {
   KANBAN_MANAGE_PARTICIPANTS
   /// Канбан: можно переносить карточку на другую доску
   KANBAN_MOVE_TO_OTHER_BOARD
+  /// Канбан: назначать и менять таймер обратного отсчёта на карточке (старшие роли, не производство)
+  KANBAN_MANAGE_TIMER
   /// История изменений по нарядам
   ORDER_HISTORY
   /// Финансовая аналитика
@@ -903,6 +905,8 @@ model Order {
   kaitenBlocked                  Boolean                   @default(false)
   /// Текст причины блокировки из Kaiten (красная полоса в Kaiten / подсказка в списке CRM)
   kaitenBlockReason              String?
+  /// Момент начала текущей блокировки в Kaiten (если известен из API блокировок / карточки)
+  kaitenBlockedAt                DateTime?
   /// В чате карточки Kaiten есть упоминание тега «лаборатория» (Tenant.kanbanAdminMentionTag); обновляется при синхронизации комментариев.
   kaitenChatHasLabMention        Boolean                   @default(false)
   /// Последний «сигнал» для пользовательских подтверждений: новое упоминание в чате после просмотра (сравнивают с OrderKaitenLabMentionAck.ackAt).

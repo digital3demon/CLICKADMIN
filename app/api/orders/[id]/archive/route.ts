@@ -16,6 +16,7 @@ const CLEAR_BOARD_MIRROR = {
   kaitenCardDescriptionMirror: null,
   kaitenBlocked: false,
   kaitenBlockReason: null,
+  kaitenBlockedAt: null,
   kaitenSyncedAt: null,
   demoKanbanColumn: null,
 } as const;

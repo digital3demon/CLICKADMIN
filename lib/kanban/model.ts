@@ -864,6 +864,10 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
       : [],
     productionReadyAt:
       partial.productionReadyAt === undefined ? null : partial.productionReadyAt,
+    timerStartedAt:
+      partial.timerStartedAt === undefined ? null : partial.timerStartedAt ?? null,
+    timerDurationMs:
+      partial.timerDurationMs === undefined ? null : partial.timerDurationMs ?? null,
   };
 }
 
@@ -1924,6 +1928,18 @@ function resolveLinkedOrderCardTypeId(
   return "";
 }
 
+function linkedOrderKanbanBlockedAtIso(
+  row: KaitenLinkedOrderForKanban,
+  fallbackIso: string,
+): string {
+  if (!row.kaitenBlocked) return "";
+  if (row.kaitenBlockedAt) {
+    const d = new Date(row.kaitenBlockedAt);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return fallbackIso;
+}
+
 /**
  * Подмешивает карточки нарядов на канбан.
  * Демо — только активная доска «Работы».
@@ -1995,11 +2011,8 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         found.card.blocked = !!row.kaitenBlocked;
         found.card.blockReason = (row.kaitenBlockReason || "").trim();
         found.card.kaitenCardSortOrder = row.kaitenCardSortOrder ?? null;
-        if (found.card.blocked && !found.card.blockedAt) {
-          found.card.blockedAt = nowIso;
-        }
+        found.card.blockedAt = linkedOrderKanbanBlockedAtIso(row, nowIso);
         if (!found.card.blocked) {
-          found.card.blockedAt = "";
           found.card.blockedByUserId = "";
         }
         found.card.updatedAt = nowIso;
@@ -2018,7 +2031,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
           trackLane: DEMO_KANBAN_TRACK_LANE_ID,
           blocked: !!row.kaitenBlocked,
           blockReason: (row.kaitenBlockReason || "").trim(),
-          blockedAt: row.kaitenBlocked ? nowIso : "",
+          blockedAt: linkedOrderKanbanBlockedAtIso(row, nowIso),
           blockedByUserId: "",
           activity: [
             {
@@ -2111,11 +2124,8 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       found.card.blocked = !!row.kaitenBlocked;
       found.card.blockReason = (row.kaitenBlockReason || "").trim();
       found.card.kaitenCardSortOrder = row.kaitenCardSortOrder ?? null;
-      if (found.card.blocked && !found.card.blockedAt) {
-        found.card.blockedAt = nowIso;
-      }
+      found.card.blockedAt = linkedOrderKanbanBlockedAtIso(row, nowIso);
       if (!found.card.blocked) {
-        found.card.blockedAt = "";
         found.card.blockedByUserId = "";
       }
       found.card.updatedAt = nowIso;
@@ -2134,7 +2144,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         trackLane: lane,
         blocked: !!row.kaitenBlocked,
         blockReason: (row.kaitenBlockReason || "").trim(),
-        blockedAt: row.kaitenBlocked ? nowIso : "",
+        blockedAt: linkedOrderKanbanBlockedAtIso(row, nowIso),
         blockedByUserId: "",
         activity: [
           {

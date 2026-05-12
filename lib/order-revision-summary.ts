@@ -59,6 +59,7 @@ const KEY_LABELS: Record<string, string> = {
   kaitenColumnTitle: "Колонка Кайтен (CRM)",
   kaitenBlocked: "Блокировка в Кайтен",
   kaitenBlockReason: "Причина блокировки Кайтен",
+  kaitenBlockedAt: "Начало блокировки Кайтен",
 };
 
 export function summarizeOrderRevision(
@@ -110,6 +111,8 @@ export function summarizeOrderRevision(
     kaitenBlocked: "kaitenBlocked" in o ? Boolean(o.kaitenBlocked) : false,
     kaitenBlockReason:
       "kaitenBlockReason" in o ? (o.kaitenBlockReason ?? null) : null,
+    kaitenBlockedAt:
+      "kaitenBlockedAt" in o ? (o.kaitenBlockedAt ?? null) : null,
     shippedDescription:
       "shippedDescription" in o ? (o.shippedDescription ?? null) : null,
     invoiceParsedLines:

@@ -1,30 +1,122 @@
 const MAX_BLOCK_REASON_LEN = 2000;
 
-/**
- * Читает состояние блокировки из ответа GET/PATCH `/cards/{id}` (Kaiten API v1).
- * Поля в разных версиях могут называться по-разному — перебираем варианты.
- */
-function activeBlockerReasonFromCard(card: Record<string, unknown>): string | null {
-  const raw = card.blockers;
-  if (!Array.isArray(raw) || raw.length === 0) return null;
-  for (const row of raw) {
-    if (row == null || typeof row !== "object") continue;
-    const o = row as Record<string, unknown>;
-    if (o.released === true) continue;
-    const r =
-      (typeof o.reason === "string" && o.reason) ||
-      (typeof o.block_reason === "string" && o.block_reason) ||
-      "";
-    const t = r.trim().slice(0, MAX_BLOCK_REASON_LEN);
-    if (t.length > 0) return t;
-    return "";
+function parseTimeMs(value: unknown): number | null {
+  if (typeof value === "string" && value.trim()) {
+    const t = Date.parse(value);
+    if (!Number.isNaN(t)) return t;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value > 1e12) return Math.round(value);
+    if (value > 1e9) return Math.round(value * 1000);
   }
   return null;
 }
 
-export function kaitenBlockStateFromCard(
+function unreleasedBlockers(card: Record<string, unknown>): Record<string, unknown>[] {
+  const raw = card.blockers;
+  if (!Array.isArray(raw)) return [];
+  const out: Record<string, unknown>[] = [];
+  for (const row of raw) {
+    if (row == null || typeof row !== "object") continue;
+    const o = row as Record<string, unknown>;
+    if (o.released === true) continue;
+    out.push(o);
+  }
+  return out;
+}
+
+function blockerReasonTrim(o: Record<string, unknown>): string {
+  const r =
+    (typeof o.reason === "string" && o.reason) ||
+    (typeof o.block_reason === "string" && o.block_reason) ||
+    "";
+  return r.trim();
+}
+
+function blockerTimeMs(o: Record<string, unknown>): number | null {
+  for (const key of [
+    "updated",
+    "updated_at",
+    "created",
+    "created_at",
+    "blocked_at",
+    "start_time",
+    "startTime",
+  ]) {
+    const ms = parseTimeMs(o[key]);
+    if (ms != null) return ms;
+  }
+  return null;
+}
+
+/** Активный блокировщик с максимальным временем; при равенстве — последний в массиве API. */
+function pickLatestActiveBlocker(
+  blockers: Record<string, unknown>[],
+): Record<string, unknown> | null {
+  if (blockers.length === 0) return null;
+  const scored = blockers.map((o, index) => ({
+    o,
+    index,
+    ms: blockerTimeMs(o),
+  }));
+  scored.sort((a, b) => {
+    if (a.ms != null && b.ms != null) return b.ms - a.ms;
+    if (a.ms != null) return -1;
+    if (b.ms != null) return 1;
+    return b.index - a.index;
+  });
+  return scored[0]!.o;
+}
+
+function cardLevelBlockedAtMs(card: Record<string, unknown>): number | null {
+  for (const key of [
+    "blocked_at",
+    "blockedAt",
+    "block_started_at",
+    "blocked_since",
+    "blockedSince",
+  ]) {
+    const ms = parseTimeMs(card[key]);
+    if (ms != null) return ms;
+  }
+  return null;
+}
+
+function resolveBlockedReason(
   card: Record<string, unknown>,
-): { blocked: boolean; reason: string | null } {
+  blockers: Record<string, unknown>[],
+  latest: Record<string, unknown> | null,
+): string {
+  if (latest) {
+    const t = blockerReasonTrim(latest);
+    if (t) return t.slice(0, MAX_BLOCK_REASON_LEN);
+  }
+  const fromCard =
+    (typeof card.block_reason === "string" && card.block_reason.trim()) ||
+    (typeof card.blockReason === "string" && card.blockReason.trim()) ||
+    (typeof card.blocking_reason === "string" && card.blocking_reason.trim()) ||
+    (typeof card.block_comment === "string" && card.block_comment.trim()) ||
+    "";
+  if (fromCard) return fromCard.slice(0, MAX_BLOCK_REASON_LEN);
+  for (const o of blockers) {
+    const t = blockerReasonTrim(o);
+    if (t) return t.slice(0, MAX_BLOCK_REASON_LEN);
+  }
+  return "";
+}
+
+export type KaitenBlockedMeta = {
+  blocked: boolean;
+  reason: string | null;
+  /** ISO UTC, если API отдал время начала блокировки */
+  blockedAtIso: string | null;
+};
+
+/**
+ * Читает блокировку из ответа GET/PATCH `/cards/{id}` (Kaiten API v1).
+ * Сначала активные записи в `blockers` (часто актуальнее, чем верхний `block_reason`).
+ */
+export function kaitenBlockedMetaFromCard(card: Record<string, unknown>): KaitenBlockedMeta {
   const rawBlocked =
     card.blocked ??
     card.is_blocked ??
@@ -36,24 +128,39 @@ export function kaitenBlockStateFromCard(
     rawBlocked === "true" ||
     rawBlocked === "1";
 
-  const fromBlockers = activeBlockerReasonFromCard(card);
-  if (!blocked && fromBlockers !== null) {
+  const blockers = unreleasedBlockers(card);
+  if (!blocked && blockers.length > 0) {
     blocked = true;
   }
 
-  const rawReason =
-    (typeof card.block_reason === "string" && card.block_reason) ||
-    (typeof card.blockReason === "string" && card.blockReason) ||
-    (typeof card.blocking_reason === "string" && card.blocking_reason) ||
-    (typeof card.block_comment === "string" && card.block_comment) ||
-    (fromBlockers !== null ? fromBlockers : "") ||
-    "";
+  const latest = pickLatestActiveBlocker(blockers);
+  const trimmed = resolveBlockedReason(card, blockers, latest).trim();
 
-  const trimmed = rawReason.trim().slice(0, MAX_BLOCK_REASON_LEN);
-  if (!blocked) {
-    return { blocked: false, reason: null };
+  let blockedAtIso: string | null = null;
+  if (latest) {
+    const ms = blockerTimeMs(latest);
+    if (ms != null) blockedAtIso = new Date(ms).toISOString();
   }
-  return { blocked: true, reason: trimmed.length > 0 ? trimmed : null };
+  if (blockedAtIso == null && blocked) {
+    const cardMs = cardLevelBlockedAtMs(card);
+    if (cardMs != null) blockedAtIso = new Date(cardMs).toISOString();
+  }
+
+  if (!blocked) {
+    return { blocked: false, reason: null, blockedAtIso: null };
+  }
+  return {
+    blocked: true,
+    reason: trimmed.length > 0 ? trimmed : null,
+    blockedAtIso,
+  };
+}
+
+export function kaitenBlockStateFromCard(
+  card: Record<string, unknown>,
+): { blocked: boolean; reason: string | null } {
+  const m = kaitenBlockedMetaFromCard(card);
+  return { blocked: m.blocked, reason: m.reason };
 }
 
 export function normalizeKaitenBlockReasonInput(raw: unknown): string | null {

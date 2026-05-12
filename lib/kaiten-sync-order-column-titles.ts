@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { kaitenBlockStateFromCard } from "@/lib/kaiten-card-block";
+import { kaitenBlockedMetaFromCard } from "@/lib/kaiten-card-block";
 import { kaitenColumnTitleFromBoard } from "@/lib/kaiten-column-title";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import {
@@ -69,6 +69,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
       kaitenCardSortOrder: true,
       kaitenBlocked: true,
       kaitenBlockReason: true,
+      kaitenBlockedAt: true,
       kaitenChatHasLabMention: true,
       tenant: { select: { kanbanAdminMentionTag: true } },
     },
@@ -161,14 +162,23 @@ export async function syncKaitenColumnTitlesForOrderIds(
         continue;
       }
       const columnTitle = kaitenColumnTitleFromBoard(cardObj, colList);
-      const { blocked, reason } = kaitenBlockStateFromCard(cardObj);
-      const reasonDb = reason ?? null;
+      const meta = kaitenBlockedMetaFromCard(cardObj);
+      const blocked = meta.blocked;
+      const reasonDb = meta.reason ?? null;
+      const blockedAtNext =
+        meta.blockedAtIso != null ? new Date(meta.blockedAtIso) : null;
       const sortDb =
         "sort_order" in cardObj ? kaitenSortOrderFromCard(cardObj) : undefined;
       const sameTitle = columnTitle === row.kaitenColumnTitle;
+      const sameBlockedAt =
+        (blockedAtNext === null && row.kaitenBlockedAt == null) ||
+        (blockedAtNext != null &&
+          row.kaitenBlockedAt != null &&
+          blockedAtNext.getTime() === row.kaitenBlockedAt.getTime());
       const sameBlock =
         blocked === row.kaitenBlocked &&
-        (reasonDb ?? "") === (row.kaitenBlockReason ?? "");
+        (reasonDb ?? "") === (row.kaitenBlockReason ?? "") &&
+        sameBlockedAt;
       const sameSort =
         sortDb === undefined || sortDb === row.kaitenCardSortOrder;
       if (sameTitle && sameBlock && sameSort) {
@@ -179,12 +189,19 @@ export async function syncKaitenColumnTitlesForOrderIds(
         continue;
       }
       try {
+        const blockedAtData =
+          !blocked
+            ? { kaitenBlockedAt: null as Date | null }
+            : blockedAtNext != null
+              ? { kaitenBlockedAt: blockedAtNext }
+              : {};
         await db.order.update({
           where: { id: row.id },
           data: {
             kaitenColumnTitle: columnTitle,
             kaitenBlocked: blocked,
             kaitenBlockReason: reasonDb,
+            ...blockedAtData,
             ...(sortDb !== undefined ? { kaitenCardSortOrder: sortDb } : {}),
           },
         });

@@ -67,6 +67,7 @@ export async function applyKaitenUnblockForOrderIfBlocked(
         data: {
           kaitenBlocked: false,
           kaitenBlockReason: null,
+          kaitenBlockedAt: null,
         },
       });
       void recordOrderRevision(orderId.trim(), { kind: "SAVE" }).catch((revErr) => {
@@ -157,6 +158,7 @@ export async function applyKaitenUnblockForOrderIfBlocked(
         ...mirrorFieldsFromKaitenCard(updated.card as Record<string, unknown>),
         kaitenBlocked: false,
         kaitenBlockReason: null,
+        kaitenBlockedAt: null,
       },
     });
     void recordOrderRevision(orderId.trim(), { kind: "SAVE" }).catch((revErr) => {

@@ -18,6 +18,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "KANBAN_MANAGE_ASSIGNEES",
   "KANBAN_MANAGE_PARTICIPANTS",
   "KANBAN_MOVE_TO_OTHER_BOARD",
+  "KANBAN_MANAGE_TIMER",
   "ORDER_HISTORY",
   "ANALYTICS",
   "SHIPMENTS",
@@ -50,6 +51,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   KANBAN_MANAGE_ASSIGNEES: "Канбан: менять ответственных",
   KANBAN_MANAGE_PARTICIPANTS: "Канбан: менять участников",
   KANBAN_MOVE_TO_OTHER_BOARD: "Канбан: переносить на другую доску",
+  KANBAN_MANAGE_TIMER: "Канбан: таймер обратного отсчёта на карточке",
   ORDER_HISTORY: "История изменений",
   ANALYTICS: "Аналитика",
   SHIPMENTS: "Отгрузки",
@@ -96,6 +98,12 @@ export function defaultModuleAllowed(
   if (role === "OWNER") {
     return true;
   }
+  if (
+    module === "KANBAN_MANAGE_TIMER" &&
+    (role === "USER" || role === "PRODUCTION" || role === "SENIOR_PRODUCTION")
+  ) {
+    return false;
+  }
   if (role === "USER") {
     return module === "KANBAN";
   }
@@ -106,7 +114,7 @@ export function defaultModuleAllowed(
     return module !== "CONFIG_USER_INVITES";
   }
   if (role === "SENIOR_TECHNICIAN") {
-    return module === "KANBAN";
+    return module === "KANBAN" || module === "KANBAN_MANAGE_TIMER";
   }
 
   const sameAsOrders = (m: AppModule) =>
@@ -128,6 +136,7 @@ export function defaultModuleAllowed(
     case "KANBAN_MANAGE_ASSIGNEES":
     case "KANBAN_MANAGE_PARTICIPANTS":
     case "KANBAN_MOVE_TO_OTHER_BOARD":
+    case "KANBAN_MANAGE_TIMER":
       return true;
     case "ANALYTICS":
       return DEFAULT_ANALYTICS_ROLES.includes(role);
