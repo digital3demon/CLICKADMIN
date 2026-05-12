@@ -675,7 +675,7 @@ export function InventoryWarehouseClient() {
             </label>
           ) : null}
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)] sm:col-span-2 xl:col-span-4">
-            Комментарий
+            Комментарий от админов
             <input
               type="text"
               className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-2 text-sm"

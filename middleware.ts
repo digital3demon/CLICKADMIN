@@ -7,7 +7,10 @@ import {
   SESSION_DEMO_COOKIE_NAME,
   getAuthSecretKey,
 } from "@/lib/auth/jwt";
-import { getModuleForPathname } from "@/lib/role-module-paths";
+import {
+  clientsBranchModuleForMethod,
+  getModuleForPathname,
+} from "@/lib/role-module-paths";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import type { UserRole } from "@prisma/client";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
@@ -487,7 +490,9 @@ export async function middleware(req: NextRequest) {
   if (!session.demo && !isSingleUserPortable() && effectiveTenantId) {
     const access = await getEffectiveModuleAccess(effectiveTenantId, role);
     const mod = getModuleForPathname(pathname);
-    if (mod != null && access[mod] !== true) {
+    const requiredModule =
+      mod === "CLIENTS" ? clientsBranchModuleForMethod(req.method) : mod;
+    if (requiredModule != null && access[requiredModule] !== true) {
       if (pathname.startsWith("/api/")) {
         const out = NextResponse.json(
           { error: "Нет доступа к этому разделу" },

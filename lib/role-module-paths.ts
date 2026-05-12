@@ -1,5 +1,12 @@
 import type { AppModule } from "@prisma/client";
 
+const HTTP_READ_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
+
+/** Для путей с модулем `CLIENTS`: чтение — CLIENTS_VIEW, иначе — CLIENTS_EDIT. */
+export function clientsBranchModuleForMethod(method: string): "CLIENTS_VIEW" | "CLIENTS_EDIT" {
+  return HTTP_READ_METHODS.has(method.toUpperCase()) ? "CLIENTS_VIEW" : "CLIENTS_EDIT";
+}
+
 type Rule = { prefix: string; module: AppModule };
 
 /**
@@ -50,6 +57,7 @@ const RULES: Rule[] = [
   { prefix: "/api/doctors", module: "CLIENTS" },
   { prefix: "/api/contractor", module: "CLIENTS" },
   { prefix: "/api/contractor-revisions", module: "CLIENTS" },
+  { prefix: "/api/contractor-history", module: "CLIENTS" },
   { prefix: "/kanban", module: "KANBAN" },
   { prefix: "/api/kanban", module: "KANBAN" },
   { prefix: "/analytics", module: "ANALYTICS" },

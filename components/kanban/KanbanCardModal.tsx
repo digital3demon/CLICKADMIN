@@ -779,7 +779,7 @@ export function KanbanCardModal({
           const fc = findCard(b, cardId);
           if (!fc) return;
           fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
-          pushActivity(fc.card, "Комментарий", chatActor, b, act);
+          pushActivity(fc.card, "Комментарий от админов", chatActor, b, act);
         });
         return true;
       }
@@ -819,7 +819,7 @@ export function KanbanCardModal({
             const fc = findCard(b, cardId);
             if (!fc) return;
             fc.card.comments = withImagePlaceholders(nextComments, fc.card);
-            pushActivity(fc.card, "Комментарий", actor, b, act);
+            pushActivity(fc.card, "Комментарий от админов", actor, b, act);
           });
           fireMentionTelegram();
           return true;
@@ -843,7 +843,7 @@ export function KanbanCardModal({
         text: trimmed,
         createdAt: new Date().toISOString(),
       });
-      pushActivity(c, "Комментарий", localActor, b, act);
+      pushActivity(c, "Комментарий от админов", localActor, b, act);
     });
     fireMentionTelegram();
     if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
@@ -863,11 +863,11 @@ export function KanbanCardModal({
         kaitenCardId: card.kaitenCardId,
         event: "tg_comment_added",
         parseMode: "HTML",
-        lines: [`${who} оставил(а) комментарий к ${linkHtml}\n«${snippet}»`],
+        lines: [`${who} оставил(а) комментарий от админов к ${linkHtml}\n«${snippet}»`],
         ...(oid
           ? {
               linesAdmin: [
-                `${who} оставил(а) комментарий к ${cardWord} и ${orderWord}\n«${snippet}»`,
+                `${who} оставил(а) комментарий от админов к ${cardWord} и ${orderWord}\n«${snippet}»`,
               ],
             }
           : {}),
@@ -2137,7 +2137,7 @@ export function KanbanCardModal({
                   }`}
                   onClick={() => setRightTab("chat")}
                 >
-                  Чат карточки
+                  Комментарии от админов
                 </button>
                 <button
                   type="button"
@@ -2846,7 +2846,7 @@ function ChatPanel({
           ref={inputRef}
           type="text"
           className="min-w-0 flex-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)] placeholder:text-[var(--kaiten-modal-muted)]"
-          placeholder="Сообщение в чат (в т.ч. обсуждение файлов)…"
+          placeholder="Комментарий от админов в чат (в т.ч. обсуждение файлов)…"
           value={inp}
           onChange={(e) => {
             setInp(e.target.value);

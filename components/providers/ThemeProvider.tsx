@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -45,6 +46,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemePreference>(init.theme);
   const [resolvedDark, setResolvedDark] = useState(init.resolvedDark);
   const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    const dark = computeResolvedDark(theme, systemPrefersDark());
+    setResolvedDark(dark);
+    document.documentElement.classList.toggle("dark", dark);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

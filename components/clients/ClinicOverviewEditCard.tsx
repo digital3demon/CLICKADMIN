@@ -10,6 +10,7 @@ const btnBase =
 
 type Props = {
   clinicId: string;
+  canEditClients: boolean;
   initialName: string;
   initialAddress: string;
   initialNotes: string;
@@ -21,6 +22,7 @@ type Props = {
 
 export function ClinicOverviewEditCard({
   clinicId,
+  canEditClients,
   initialName,
   initialAddress,
   initialNotes,
@@ -64,6 +66,7 @@ export function ClinicOverviewEditCard({
   }, [editing, initialName, initialAddress, initialNotes, initialIsActive]);
 
   const onSave = useCallback(async () => {
+    if (!canEditClients) return;
     const n = name.trim();
     if (!n) {
       setError("Укажите название клиники");
@@ -95,9 +98,10 @@ export function ClinicOverviewEditCard({
     } finally {
       setSaving(false);
     }
-  }, [clinicId, name, address, notes, isActive, router]);
+  }, [clinicId, name, address, notes, isActive, router, canEditClients]);
 
   const onDelete = useCallback(async () => {
+    if (!canEditClients) return;
     const label = name.trim().split("\n")[0] || "клинику";
     const ok = window.confirm(
       `Удалить клинику «${label}»?\n\nЗапись скроется из списков. Восстановить можно в разделе «История и удалённые».`,
@@ -119,7 +123,11 @@ export function ClinicOverviewEditCard({
       setError("Сеть или сервер недоступны");
       setDeleting(false);
     }
-  }, [clinicId, name, router]);
+  }, [clinicId, name, router, canEditClients]);
+
+  useEffect(() => {
+    if (!canEditClients) setEditing(false);
+  }, [canEditClients]);
 
   return (
     <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm lg:col-span-1">
@@ -129,16 +137,30 @@ export function ClinicOverviewEditCard({
         </h2>
         <div className="flex flex-wrap items-center gap-2">
           {!editing ? (
-            <button
-              type="button"
-              className={`${btnBase} bg-[var(--sidebar-blue)] text-white hover:opacity-95`}
-              onClick={() => {
-                setEditing(true);
-                setError(null);
-              }}
-            >
-              Изменить
-            </button>
+            <>
+              <Link
+                href="/clients/history"
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--card-bg)]`}
+              >
+                История
+              </Link>
+              {canEditClients ? (
+                <button
+                  type="button"
+                  className={`${btnBase} bg-[var(--sidebar-blue)] text-white hover:opacity-95`}
+                  onClick={() => {
+                    setEditing(true);
+                    setError(null);
+                  }}
+                >
+                  Изменить
+                </button>
+              ) : (
+                <span className="max-w-[14rem] text-right text-[0.7rem] leading-snug text-[var(--text-muted)]">
+                  Редактирование — только с правом «Клиенты: изменение данных».
+                </span>
+              )}
+            </>
           ) : (
             <>
               <Link

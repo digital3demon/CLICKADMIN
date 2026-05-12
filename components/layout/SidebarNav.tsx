@@ -39,7 +39,7 @@ const baseNavItems: readonly {
   { href: "/analytics", label: "Аналитика", module: "ANALYTICS" },
   { href: "/shipments", label: "Отгрузки", module: "SHIPMENTS" },
   { href: "/warehouse", label: "Склад", module: "WAREHOUSE" },
-  { href: "/clients", label: "Клиенты", module: "CLIENTS" },
+  { href: "/clients", label: "Клиенты", module: "CLIENTS_VIEW" },
   { href: "/directory", label: "Конфигурация", module: "DIRECTORY" },
 ];
 

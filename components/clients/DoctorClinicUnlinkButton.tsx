@@ -8,6 +8,7 @@ type Props = {
   doctorId: string;
   /** Для текста подтверждения: кого отвязываем от текущей карточки */
   counterpartyLabel: string;
+  canEditClients: boolean;
   /** После успешного DELETE (до refresh) — обновить локальный список. */
   onAfterUnlink?: () => void;
 };
@@ -16,10 +17,15 @@ export function DoctorClinicUnlinkButton({
   clinicId,
   doctorId,
   counterpartyLabel,
+  canEditClients,
   onAfterUnlink,
 }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+
+  if (!canEditClients) {
+    return null;
+  }
 
   const onClick = useCallback(async () => {
     const ok = window.confirm(

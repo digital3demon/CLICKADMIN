@@ -6,9 +6,19 @@ import { useState } from "react";
 const btnBase =
   "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm";
 
-type Props = { mode: "clinic" | "doctor" };
+type Props = { mode: "clinic" | "doctor"; canEditClients?: boolean };
 
-export function ClientsAddNewPanel({ mode }: Props) {
+export function ClientsAddNewPanel({
+  mode,
+  canEditClients = false,
+}: Props) {
+  if (!canEditClients) {
+    return (
+      <p className="max-w-xs shrink-0 self-end text-xs leading-snug text-[var(--text-muted)]">
+        Добавление клиник и врачей — только с правом «Клиенты: изменение данных».
+      </p>
+    );
+  }
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);

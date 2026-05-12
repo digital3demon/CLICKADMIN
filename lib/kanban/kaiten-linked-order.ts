@@ -31,7 +31,7 @@ export type KaitenLinkedOrderForKanban = {
   demoKanbanColumn: string | null;
   /** Первая позиция из прайса (PRICE_LIST) — для типа карточки канбана в демо */
   primaryPriceListItemName: string | null;
-  /** Текст заказа от клиента и внутренний комментарий — в описание карточки канбана */
+  /** Текст заказа от клиента и комментарий от админов — в описание карточки канбана */
   clientOrderText: string | null;
   notes: string | null;
   /** Вложения наряда (без счёта-фактуры) — показываются в модалке канбана как «Файлы». */

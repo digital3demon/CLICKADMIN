@@ -16,7 +16,7 @@ function KanbanBoardSettingsFormImpl({
   board,
   onPatchBoard,
   onPatchCardTypes,
-  canEditCardTypes = true,
+  canEditCardTypes = false,
 }: KanbanBoardSettingsFormProps) {
   const patchCardTypes = onPatchCardTypes ?? onPatchBoard;
   const types = board.cardTypes || [];
@@ -50,7 +50,7 @@ function KanbanBoardSettingsFormImpl({
                         if (x) x.name = e.target.value;
                       })
                     }
-                    className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
+                    className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-45"
                   />
                 </td>
                 <td className="py-2 pr-2">
@@ -68,7 +68,7 @@ function KanbanBoardSettingsFormImpl({
                         if (x) x.color = e.target.value;
                       })
                     }
-                    className="h-8 w-14 cursor-pointer rounded border border-[var(--input-border)] bg-[var(--input-bg)]"
+                    className="h-8 w-14 cursor-pointer rounded border border-[var(--input-border)] bg-[var(--input-bg)] disabled:cursor-not-allowed disabled:opacity-45"
                   />
                 </td>
                 <td className="py-2 pr-2">
@@ -82,7 +82,7 @@ function KanbanBoardSettingsFormImpl({
                         x.defaultTrackLane = e.target.value || undefined;
                       })
                     }
-                    className="h-8 w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-[var(--app-text)]"
+                    className="h-8 w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <option value="">Не задано</option>
                     {trackLanes().map((lane) => (
@@ -97,7 +97,7 @@ function KanbanBoardSettingsFormImpl({
                     type="button"
                     title="Удалить тип"
                     disabled={!canEditCardTypes}
-                    className="inline-flex rounded p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                    className="inline-flex rounded p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)]"
                     onClick={() => {
                       let n = 0;
                       board.columns.forEach((col) => {
@@ -133,7 +133,7 @@ function KanbanBoardSettingsFormImpl({
         <button
           type="button"
           disabled={!canEditCardTypes}
-          className="mt-3 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+          className="mt-3 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--surface-subtle)]"
           onClick={() =>
             patchCardTypes((b) => {
               b.cardTypes = b.cardTypes || [];

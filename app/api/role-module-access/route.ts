@@ -90,6 +90,35 @@ export async function PUT(req: Request) {
   if (!ALL_APP_MODULES.includes(module)) {
     return NextResponse.json({ error: "Некорректный модуль" }, { status: 400 });
   }
+  if (module === "CLIENTS") {
+    return NextResponse.json(
+      {
+        error:
+          "Модуль «Клиенты» разделён: настройте «Клиенты: просмотр» и «Клиенты: изменение данных».",
+      },
+      { status: 400 },
+    );
+  }
+
+  const accBefore = await getEffectiveModuleAccess(tenantId, role);
+  if (module === "CLIENTS_EDIT" && body.allowed === true && !accBefore.CLIENTS_VIEW) {
+    return NextResponse.json(
+      {
+        error:
+          "Сначала включите «Клиенты: просмотр» для этой роли.",
+      },
+      { status: 400 },
+    );
+  }
+  if (module === "CLIENTS_VIEW" && body.allowed === false && accBefore.CLIENTS_EDIT) {
+    return NextResponse.json(
+      {
+        error:
+          "Сначала отключите «Клиенты: изменение данных» для этой роли.",
+      },
+      { status: 400 },
+    );
+  }
 
   if (body.allowed && isKanbanCardSubmodule(module)) {
     const acc = await getEffectiveModuleAccess(tenantId, role);

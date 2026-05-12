@@ -17,6 +17,7 @@ import {
   parseDateRangeUTC,
   sumClinicConstructionTotals,
 } from "@/lib/clinic-finance";
+import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getPrisma } from "@/lib/get-prisma";
 import { repairDoctorLinksFromOrders } from "@/lib/repair-clinic-doctor-links";
 import {
@@ -78,6 +79,10 @@ function requisitesInitialFromClinic(clinic: {
 }
 
 export default async function ClientCardPage({ params, searchParams }: PageProps) {
+  const { session, access } = await getSessionWithModuleAccess();
+  const canEditClients =
+    session?.role === "OWNER" || access?.CLIENTS_EDIT === true;
+
   const resolvedParams = params != null ? await params : null;
   const id = resolvedParams?.id?.trim() ?? "";
   if (!id) {
@@ -275,6 +280,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
       {activeTab === "requisites" ? (
         <RequisitesPanel
           clinicId={id}
+          canEditClients={canEditClients}
           initial={requisitesInitialFromClinic(clinic)}
         />
       ) : null}
@@ -289,6 +295,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
         >
           <FinancePanel
             clinicId={id}
+            canEditClients={canEditClients}
             worksWithReconciliation={clinic.worksWithReconciliation === true}
             allTimeTotalRub={allTimeFinance.totalRub}
             allTimeLineCount={allTimeFinance.lineCount}
@@ -309,13 +316,16 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
         </div>
       ) : null}
 
-      {activeTab === "price" ? <ClinicPriceOverridesPanel clinicId={id} /> : null}
+      {activeTab === "price" ? (
+        <ClinicPriceOverridesPanel clinicId={id} canEditClients={canEditClients} />
+      ) : null}
 
       {activeTab === "overview" ? (
         <>
           <div className="grid gap-6 lg:grid-cols-3">
             <ClinicOverviewEditCard
               clinicId={id}
+              canEditClients={canEditClients}
               initialName={clinic.name}
               initialAddress={clinic.address ?? ""}
               initialNotes={clinic.notes ?? ""}
@@ -330,6 +340,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
 
             <ClinicLinkedDoctorsSection
               clinicId={id}
+              canEditClients={canEditClients}
               initialLinks={clinic.doctorLinks}
             />
           </div>
@@ -337,6 +348,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
           <div className="mt-6">
             <ClinicCommercialTermsPanel
               clinicId={id}
+              canEditClients={canEditClients}
               initial={{
                 billingLegalForm:
                   clinic.billingLegalForm === "IP" ||

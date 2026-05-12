@@ -89,6 +89,7 @@ function isKnownLabWorkStatus(value: string): value is LabWorkStatus {
 
 export function FinancePanel({
   clinicId,
+  canEditClients,
   worksWithReconciliation,
   allTimeTotalRub,
   allTimeLineCount,
@@ -100,6 +101,7 @@ export function FinancePanel({
   periodWithoutPrice,
 }: {
   clinicId: string;
+  canEditClients: boolean;
   worksWithReconciliation: boolean;
   allTimeTotalRub: number;
   allTimeLineCount: number;
@@ -147,11 +149,13 @@ export function FinancePanel({
     processedReconSnapshotId.current = rid;
     (async () => {
       try {
-        await fetch(`/api/reconciliation-snapshots/${encodeURIComponent(rid)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dismissed: true }),
-        });
+        if (canEditClients) {
+          await fetch(`/api/reconciliation-snapshots/${encodeURIComponent(rid)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ dismissed: true }),
+          });
+        }
       } catch {
         /* ignore */
       }
@@ -162,7 +166,7 @@ export function FinancePanel({
         scroll: false,
       });
     })();
-  }, [searchParams, router, clinicId]);
+  }, [searchParams, router, clinicId, canEditClients]);
 
   const loadSnapshots = useCallback(async () => {
     if (!worksWithReconciliation) {
@@ -191,6 +195,7 @@ export function FinancePanel({
   }, [loadSnapshots]);
 
   const issueCurrentPeriodSnapshot = useCallback(async () => {
+    if (!canEditClients) return;
     setIssuingSnapshot(true);
     setSnapshotActionError(null);
     try {
@@ -214,10 +219,11 @@ export function FinancePanel({
     } finally {
       setIssuingSnapshot(false);
     }
-  }, [clinicId, from, to, selectedOrderIds, loadSnapshots]);
+  }, [clinicId, from, to, selectedOrderIds, loadSnapshots, canEditClients]);
 
   const setSnapshotPaymentStatus = useCallback(
     async (snapshotId: string, paymentStatus: "UNPAID" | "PAID") => {
+      if (!canEditClients) return;
       setSnapshotActionId(snapshotId);
       setSnapshotActionError(null);
       try {
@@ -239,11 +245,12 @@ export function FinancePanel({
         setSnapshotActionId(null);
       }
     },
-    [loadSnapshots, router],
+    [loadSnapshots, router, canEditClients],
   );
 
   const uploadSnapshotInvoice = useCallback(
     async (snapshotId: string, file: File) => {
+      if (!canEditClients) return;
       setSnapshotActionId(snapshotId);
       setSnapshotActionError(null);
       try {
@@ -265,7 +272,7 @@ export function FinancePanel({
         setSnapshotActionId(null);
       }
     },
-    [loadSnapshots],
+    [loadSnapshots, canEditClients],
   );
 
   const loadPeriodLines = useCallback(async () => {
@@ -382,6 +389,7 @@ export function FinancePanel({
   }, [periodTo]);
 
   const excludeAllInPeriodFromTable = useCallback(async () => {
+    if (!canEditClients) return;
     if (!worksWithReconciliation || !periodEndIsoForShownRange) return;
     const ids = [...new Set(visiblePeriodLines.map((r) => r.orderId))];
     if (ids.length === 0) return;
@@ -426,6 +434,7 @@ export function FinancePanel({
     loadSnapshots,
     loadPeriodLines,
     router,
+    canEditClients,
   ]);
 
   const patchOrderExclusion = useCallback(
@@ -433,6 +442,7 @@ export function FinancePanel({
       orderId: string,
       body: Record<string, unknown>,
     ): Promise<boolean> => {
+      if (!canEditClients) return false;
       setActionOrderId(orderId);
       try {
         const res = await fetch(`/api/orders/${orderId}`, {
@@ -457,7 +467,7 @@ export function FinancePanel({
         setActionOrderId(null);
       }
     },
-    [loadExclusions, loadSnapshots, loadPeriodLines, router],
+    [loadExclusions, loadSnapshots, loadPeriodLines, router, canEditClients],
   );
 
   const hrefBase = `/clients/${clinicId}`;
@@ -550,6 +560,11 @@ export function FinancePanel({
           образца — PDF; Excel — как раньше (в т.ч. лист «Исключено из сверки»,
           если есть такие наряды).
         </p>
+        {!canEditClients ? (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Изменение сверки и статусов оплаты — только с правом «Клиенты: изменение данных».
+          </p>
+        ) : null}
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
             С
@@ -580,7 +595,7 @@ export function FinancePanel({
             <button
               type="button"
               onClick={() => void issueCurrentPeriodSnapshot()}
-              disabled={issuingSnapshot}
+              disabled={issuingSnapshot || !canEditClients}
               className="inline-flex rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-4 py-2 text-sm font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)] disabled:opacity-60"
             >
               {issuingSnapshot ? "Формирование…" : "Выставить в сверку"}
@@ -613,7 +628,7 @@ export function FinancePanel({
             periodEndIsoForShownRange ? (
               <button
                 type="button"
-                disabled={bulkExcluding || periodLinesLoading}
+                disabled={bulkExcluding || periodLinesLoading || !canEditClients}
                 onClick={() => void excludeAllInPeriodFromTable()}
                 className="inline-flex shrink-0 rounded-full border border-amber-300/80 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-500/25 disabled:opacity-50 dark:border-amber-700/80 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/55"
               >
@@ -777,7 +792,7 @@ export function FinancePanel({
                             <div className="flex max-w-[14rem] flex-col gap-1.5 sm:max-w-none sm:flex-row sm:flex-wrap">
                               <button
                                 type="button"
-                                disabled={busy}
+                                disabled={busy || !canEditClients}
                                 title="Исключить наряд из сверки до ручного возврата (все позиции наряда)"
                                 onClick={() => {
                                   const ok = window.confirm(
@@ -796,7 +811,7 @@ export function FinancePanel({
                               <button
                                 type="button"
                                 disabled={
-                                  busy || !periodEndIsoForShownRange
+                                  busy || !periodEndIsoForShownRange || !canEditClients
                                 }
                                 title={
                                   !periodEndIsoForShownRange
@@ -904,7 +919,13 @@ export function FinancePanel({
                           Скачать счёт {s.invoiceNumber?.trim() || ""}
                         </a>
                       ) : (
-                        <label className="shrink-0 cursor-pointer rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)]">
+                        <label
+                          className={
+                            canEditClients
+                              ? "shrink-0 cursor-pointer rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)]"
+                              : "pointer-events-none shrink-0 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)] opacity-45"
+                          }
+                        >
                           Загрузить счёт
                           <input
                             type="file"
@@ -920,7 +941,7 @@ export function FinancePanel({
                       )}
                       <button
                         type="button"
-                        disabled={snapshotActionId === s.id}
+                        disabled={snapshotActionId === s.id || !canEditClients}
                         onClick={() =>
                           void setSnapshotPaymentStatus(
                             s.id,
@@ -1003,7 +1024,7 @@ export function FinancePanel({
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
-                                disabled={busy}
+                                disabled={busy || !canEditClients}
                                 onClick={() =>
                                   void patchOrderExclusion(o.id, {
                                     excludeFromReconciliation: false,
@@ -1015,7 +1036,7 @@ export function FinancePanel({
                               </button>
                               <button
                                 type="button"
-                                disabled={busy || !periodEndIso}
+                                disabled={busy || !periodEndIso || !canEditClients}
                                 title={
                                   !periodEndIso
                                     ? "Нет границы периода"

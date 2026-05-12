@@ -2106,7 +2106,7 @@ function CommentsSection({
       className={`border-t border-[var(--card-border)] pt-3 ${className}`}
     >
       <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)] sm:text-base">
-        Комментарии
+        Комментарии от админов
       </h3>
       <textarea
         ref={textareaRef}
@@ -2114,7 +2114,7 @@ function CommentsSection({
         rows={3}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Текст комментария…"
+        placeholder="Текст комментария от админов…"
       />
     </section>
   );

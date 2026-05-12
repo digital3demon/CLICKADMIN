@@ -2463,7 +2463,7 @@
     seg.className = 'kaiten-seg';
     const tabChat = document.createElement('button');
     tabChat.type = 'button';
-    tabChat.textContent = 'Комментарии';
+    tabChat.textContent = 'Комментарии от админов';
     tabChat.className = 'is-on';
     const tabAct = document.createElement('button');
     tabAct.type = 'button';
@@ -2490,7 +2490,7 @@
     chatInpRow.className = 'kaiten-chat-inp';
     const inpC = document.createElement('input');
     inpC.type = 'text';
-    inpC.placeholder = 'Написать комментарий…';
+    inpC.placeholder = 'Написать комментарий от админов…';
     inpC.disabled = blocked;
     const btnC = document.createElement('button');
     btnC.type = 'button';
@@ -2508,7 +2508,7 @@
         text: t,
         createdAt: new Date().toISOString()
       });
-      pushActivity(card, 'Комментарий', board.users[0].id);
+      pushActivity(card, 'Комментарий от админов', board.users[0].id);
       inpC.value = '';
       saveBoard(board);
       openCardModal(card.id);

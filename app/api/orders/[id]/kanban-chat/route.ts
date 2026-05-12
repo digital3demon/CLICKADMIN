@@ -315,11 +315,17 @@ export async function POST(
         (c) => String(c.id || "").trim() === retryCommentId,
       );
       if (existingIndex < 0) {
-        return NextResponse.json({ error: "Комментарий для повтора не найден" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Комментарий от админов для повтора не найден" },
+          { status: 404 },
+        );
       }
       const existing = normalizeCardComment(card.comments![existingIndex]!);
       if (existing.source !== "CRM") {
-        return NextResponse.json({ error: "Можно повторить только CRM-комментарий" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Повторить можно только CRM-комментарий от админов" },
+          { status: 400 },
+        );
       }
       existing.syncStatus = "retried";
       const synced = await syncCrmCommentToKaiten(card, existing);
@@ -386,7 +392,7 @@ export async function POST(
   }
 
   return NextResponse.json(
-    { error: "Не удалось сохранить комментарий из-за конкурентного обновления" },
+    { error: "Не удалось сохранить комментарий от админов из-за конкурентного обновления" },
     { status: 409 },
   );
 }

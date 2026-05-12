@@ -149,7 +149,7 @@ export function sanitizeLabelForCrmKaitenComment(raw: string): string {
 }
 
 /**
- * Комментарий, уходящий в Kaiten из CRM: первая строка фиксирует автора в CRM,
+ * Текст комментария от админов, уходящий в Kaiten из CRM: первая строка фиксирует автора в CRM,
  * т.к. в Kaiten автором будет пользователь API-токена, а не сотрудник из сессии.
  */
 export function buildKaitenCommentTextWithCrmAuthor(label: string, body: string): string {

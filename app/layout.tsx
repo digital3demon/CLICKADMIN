@@ -1,10 +1,15 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { ActiveUserGate } from "@/components/auth/ActiveUserGate";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { fontBody, fontDisplay } from "@/lib/app-fonts";
-import { THEME_BOOTSTRAP_INLINE_SCRIPT } from "@/lib/theme-storage";
+import {
+  isThemePreference,
+  THEME_BOOTSTRAP_INLINE_SCRIPT,
+  THEME_COOKIE_KEY,
+} from "@/lib/theme-storage";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,16 +36,27 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const themeCookie = cookieStore.get(THEME_COOKIE_KEY)?.value ?? null;
+  const serverDark = isThemePreference(themeCookie) && themeCookie === "dark";
+  const htmlClassName = [
+    fontBody.variable,
+    fontDisplay.variable,
+    serverDark ? "dark" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <html
       lang="ru"
       suppressHydrationWarning
-      className={`${fontBody.variable} ${fontDisplay.variable}`}
+      className={htmlClassName}
     >
       <head>
         <script

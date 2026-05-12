@@ -16,9 +16,11 @@ const btnBase =
 
 export function RequisitesPanel({
   clinicId,
+  canEditClients,
   initial,
 }: {
   clinicId: string;
+  canEditClients: boolean;
   initial: RequisitesFormState;
 }) {
   const router = useRouter();
@@ -32,6 +34,10 @@ export function RequisitesPanel({
     if (!editing) setValues(initial);
   }, [initialKey, editing, initial]);
 
+  useEffect(() => {
+    if (!canEditClients) setEditing(false);
+  }, [canEditClients]);
+
   const copyText = useMemo(() => buildClinicRequisitesCopyText(values), [values]);
 
   const onCopy = useCallback(async () => {
@@ -44,6 +50,7 @@ export function RequisitesPanel({
   }, [copyText]);
 
   const onSave = async () => {
+    if (!canEditClients) return;
     setSaving(true);
     setError(null);
     try {
@@ -116,16 +123,22 @@ export function RequisitesPanel({
             Скопировать
           </button>
           {!editing ? (
-            <button
-              type="button"
-              className={`${btnBase} bg-[var(--sidebar-blue)] text-white hover:opacity-95`}
-              onClick={() => {
-                setEditing(true);
-                setError(null);
-              }}
-            >
-              Изменить
-            </button>
+            canEditClients ? (
+              <button
+                type="button"
+                className={`${btnBase} bg-[var(--sidebar-blue)] text-white hover:opacity-95`}
+                onClick={() => {
+                  setEditing(true);
+                  setError(null);
+                }}
+              >
+                Изменить
+              </button>
+            ) : (
+              <span className="max-w-[12rem] text-right text-[0.7rem] leading-snug text-[var(--text-muted)]">
+                Редактирование — только с правом «Клиенты: изменение данных».
+              </span>
+            )
           ) : (
             <>
               <button

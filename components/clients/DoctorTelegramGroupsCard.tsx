@@ -15,9 +15,11 @@ export type DoctorTelegramGroupRow = {
 export function DoctorTelegramGroupsCard({
   doctorId,
   groups,
+  canEditClients,
 }: {
   doctorId: string;
   groups: DoctorTelegramGroupRow[];
+  canEditClients: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -26,6 +28,7 @@ export function DoctorTelegramGroupsCard({
   const [labelInput, setLabelInput] = useState("");
 
   const onAddManual = useCallback(async () => {
+    if (!canEditClients) return;
     const chatId = chatIdInput.trim().replace(/\s+/g, "");
     if (!chatId) {
       setError("Введите chat id группы.");
@@ -56,10 +59,11 @@ export function DoctorTelegramGroupsCard({
     } finally {
       setBusy(false);
     }
-  }, [doctorId, labelInput, chatIdInput, router]);
+  }, [doctorId, labelInput, chatIdInput, router, canEditClients]);
 
   const onRemove = useCallback(
     async (groupId: string) => {
+      if (!canEditClients) return;
       const ok = window.confirm("Отвязать эту группу от врача в CRM?");
       if (!ok) return;
       setBusy(true);
@@ -84,7 +88,7 @@ export function DoctorTelegramGroupsCard({
         setBusy(false);
       }
     },
-    [doctorId, router],
+    [doctorId, router, canEditClients],
   );
 
   return (
@@ -117,39 +121,45 @@ export function DoctorTelegramGroupsCard({
         </p>
       ) : null}
 
-      <div className="mt-4 flex flex-col gap-3 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] p-3 sm:flex-row sm:flex-wrap sm:items-end">
-        <div className="min-w-0 flex-1 sm:max-w-xs">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            Chat id группы
-          </label>
-          <input
-            className="mt-1 w-full rounded-md border border-[var(--input-border)] px-2 py-1.5 font-mono text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
-            placeholder="-1001234567890"
-            value={chatIdInput}
-            onChange={(e) => setChatIdInput(e.target.value)}
-            autoComplete="off"
-          />
+      {canEditClients ? (
+        <div className="mt-4 flex flex-col gap-3 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] p-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="min-w-0 flex-1 sm:max-w-xs">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Chat id группы
+            </label>
+            <input
+              className="mt-1 w-full rounded-md border border-[var(--input-border)] px-2 py-1.5 font-mono text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
+              placeholder="-1001234567890"
+              value={chatIdInput}
+              onChange={(e) => setChatIdInput(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+          <div className="min-w-0 flex-1 sm:max-w-xs">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Подпись (необязательно)
+            </label>
+            <input
+              className="mt-1 w-full rounded-md border border-[var(--input-border)] px-2 py-1.5 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
+              placeholder="Напр. «Клиника …», «Общий чат»"
+              value={labelInput}
+              onChange={(e) => setLabelInput(e.target.value)}
+            />
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            className={`${btnBase} shrink-0 bg-[var(--sidebar-blue)] text-white hover:opacity-95 disabled:opacity-50`}
+            onClick={() => void onAddManual()}
+          >
+            {busy ? "…" : "Добавить"}
+          </button>
         </div>
-        <div className="min-w-0 flex-1 sm:max-w-xs">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            Подпись (необязательно)
-          </label>
-          <input
-            className="mt-1 w-full rounded-md border border-[var(--input-border)] px-2 py-1.5 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
-            placeholder="Напр. «Клиника …», «Общий чат»"
-            value={labelInput}
-            onChange={(e) => setLabelInput(e.target.value)}
-          />
-        </div>
-        <button
-          type="button"
-          disabled={busy}
-          className={`${btnBase} shrink-0 bg-[var(--sidebar-blue)] text-white hover:opacity-95 disabled:opacity-50`}
-          onClick={() => void onAddManual()}
-        >
-          {busy ? "…" : "Добавить"}
-        </button>
-      </div>
+      ) : (
+        <p className="mt-3 text-xs text-[var(--text-muted)]">
+          Привязка групп — только с правом «Клиенты: изменение данных».
+        </p>
+      )}
 
       {groups.length > 0 ? (
         <ul className="mt-4 space-y-2">
@@ -166,14 +176,16 @@ export function DoctorTelegramGroupsCard({
                   id {g.telegramChatId}
                 </span>
               </span>
-              <button
-                type="button"
-                disabled={busy}
-                className={`${btnBase} border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--card-bg)] disabled:opacity-50`}
-                onClick={() => void onRemove(g.id)}
-              >
-                Отвязать
-              </button>
+              {canEditClients ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className={`${btnBase} border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--card-bg)] disabled:opacity-50`}
+                  onClick={() => void onRemove(g.id)}
+                >
+                  Отвязать
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>

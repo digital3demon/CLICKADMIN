@@ -80,10 +80,12 @@ const btnBase =
 
 export function DoctorProfilePanel({
   doctorId,
+  canEditClients,
   initial,
   telegramGroups = [],
 }: {
   doctorId: string;
+  canEditClients: boolean;
   initial: DoctorProfileFormState;
   telegramGroups?: DoctorTelegramGroupRow[];
 }) {
@@ -99,6 +101,10 @@ export function DoctorProfilePanel({
     if (!editing) setValues(initial);
   }, [initialKey, editing, initial]);
 
+  useEffect(() => {
+    if (!canEditClients) setEditing(false);
+  }, [canEditClients]);
+
   const copyText = useMemo(() => buildDoctorCopyText(values), [values]);
 
   const onCopy = useCallback(async () => {
@@ -111,6 +117,7 @@ export function DoctorProfilePanel({
   }, [copyText]);
 
   const onSave = async () => {
+    if (!canEditClients) return;
     setSaving(true);
     setError(null);
     try {
@@ -189,6 +196,7 @@ export function DoctorProfilePanel({
   };
 
   const onDelete = useCallback(async () => {
+    if (!canEditClients) return;
     const label = values.fullName.trim() || "врача";
     const ok = window.confirm(
       `Удалить врача «${label}» из конфигурации?\n\nЗапись скроется из списков. Восстановить можно в разделе «История и удалённые».`,
@@ -212,7 +220,7 @@ export function DoctorProfilePanel({
       setError("Сеть или сервер недоступны");
       setDeleting(false);
     }
-  }, [doctorId, values.fullName, router]);
+  }, [doctorId, values.fullName, router, canEditClients]);
 
   const displayBirthday =
     values.birthday.trim() && /^\d{4}-\d{2}-\d{2}$/.test(values.birthday.trim())
@@ -238,16 +246,22 @@ export function DoctorProfilePanel({
             Скопировать
           </button>
           {!editing ? (
-            <button
-              type="button"
-              className={`${btnBase} bg-[var(--sidebar-blue)] text-white hover:opacity-95`}
-              onClick={() => {
-                setEditing(true);
-                setError(null);
-              }}
-            >
-              Изменить
-            </button>
+            canEditClients ? (
+              <button
+                type="button"
+                className={`${btnBase} bg-[var(--sidebar-blue)] text-white hover:opacity-95`}
+                onClick={() => {
+                  setEditing(true);
+                  setError(null);
+                }}
+              >
+                Изменить
+              </button>
+            ) : (
+              <span className="max-w-[12rem] text-right text-[0.7rem] leading-snug text-[var(--text-muted)]">
+                Редактирование — только с правом «Клиенты: изменение данных».
+              </span>
+            )
           ) : (
             <>
               <Link
@@ -683,7 +697,11 @@ export function DoctorProfilePanel({
         </div>
       </dl>
 
-      <DoctorTelegramGroupsCard doctorId={doctorId} groups={telegramGroups} />
+      <DoctorTelegramGroupsCard
+        doctorId={doctorId}
+        groups={telegramGroups}
+        canEditClients={canEditClients}
+      />
     </section>
   );
 }

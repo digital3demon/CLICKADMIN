@@ -1,4 +1,5 @@
 export const THEME_STORAGE_KEY = "click-admin-theme" as const;
+export const THEME_COOKIE_KEY = "click-admin-theme" as const;
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -23,6 +24,13 @@ export function writeThemePreferenceToLocalStorage(pref: ThemePreference): void 
   } catch {
     /* приватный режим / запрет storage */
   }
+  try {
+    document.cookie = `${THEME_COOKIE_KEY}=${encodeURIComponent(
+      pref,
+    )}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  } catch {
+    /* браузер запретил cookie */
+  }
 }
 
 export function computeResolvedDark(
@@ -34,7 +42,9 @@ export function computeResolvedDark(
   return systemIsDark;
 }
 
-/** Скрипт для `next/script` strategy="beforeInteractive" — синхронно до первой отрисовки. */
+/** Скрипт для ранней установки темы — синхронно до первой отрисовки. */
 export const THEME_BOOTSTRAP_INLINE_SCRIPT = `(function(){try{var k=${JSON.stringify(
   THEME_STORAGE_KEY,
-)};var v=localStorage.getItem(k);var d;if(v==="dark")d=!0;else if(v==="light")d=!1;else d=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",d);}catch(e){}})();`;
+)};var ck=${JSON.stringify(
+  THEME_COOKIE_KEY,
+)};var v=localStorage.getItem(k);if(v!=="dark"&&v!=="light"&&v!=="system"){var m=document.cookie.match(new RegExp("(?:^|; )"+ck.replace(/[.$?*|{}()\\[\\]\\\\\\/\\+^]/g,"\\\\$&")+"=([^;]*)"));v=m?decodeURIComponent(m[1]):null;}var d;if(v==="dark")d=!0;else if(v==="light")d=!1;else d=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",d);}catch(e){}})();`;

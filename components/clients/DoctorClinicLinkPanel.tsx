@@ -22,6 +22,7 @@ type ClinicRow = {
 
 type Props = {
   doctorId: string;
+  canEditClients: boolean;
   linkedClinicIds: string[];
   /** Если задан — список обновляется локально, без router.refresh (надёжнее в App Router). */
   onClinicLinked?: (clinic: {
@@ -33,6 +34,7 @@ type Props = {
 
 export function DoctorClinicLinkPanel({
   doctorId,
+  canEditClients,
   linkedClinicIds,
   onClinicLinked,
 }: Props) {
@@ -138,6 +140,14 @@ export function DoctorClinicLinkPanel({
       setSaving(false);
     }
   }, [doctorId, mode, name, address, clinicId, router, onClinicLinked]);
+
+  if (!canEditClients) {
+    return (
+      <span className="max-w-[14rem] text-right text-[0.7rem] leading-snug text-[var(--text-muted)]">
+        Добавление клиник — только с правом «Клиенты: изменение данных».
+      </span>
+    );
+  }
 
   return (
     <>

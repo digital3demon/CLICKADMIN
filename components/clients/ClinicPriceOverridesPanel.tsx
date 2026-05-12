@@ -53,7 +53,13 @@ function discountLabel(basePriceRub: number, individualPriceRub: number): string
   return `+${p}%`;
 }
 
-export function ClinicPriceOverridesPanel({ clinicId }: { clinicId: string }) {
+export function ClinicPriceOverridesPanel({
+  clinicId,
+  canEditClients,
+}: {
+  clinicId: string;
+  canEditClients: boolean;
+}) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +125,7 @@ export function ClinicPriceOverridesPanel({ clinicId }: { clinicId: string }) {
   }, [allItems, pickSearch]);
 
   const openPicker = () => {
+    if (!canEditClients) return;
     setPickedIds(new Set(selectedIdSet));
     setPickSearch("");
     setPickOpen(true);
@@ -133,10 +140,12 @@ export function ClinicPriceOverridesPanel({ clinicId }: { clinicId: string }) {
   };
 
   const removeRow = (rowId: string) => {
+    if (!canEditClients) return;
     setRows((prev) => prev.filter((x) => x.priceListItemId !== rowId));
   };
 
   const applyPicked = () => {
+    if (!canEditClients) return;
     const nextRows: SelectedRow[] = [...rows];
     const nextSet = new Set(nextRows.map((r) => r.priceListItemId));
 
@@ -160,6 +169,7 @@ export function ClinicPriceOverridesPanel({ clinicId }: { clinicId: string }) {
   };
 
   const save = async () => {
+    if (!canEditClients) return;
     setSaving(true);
     setError(null);
     setOkText(null);
@@ -205,15 +215,16 @@ export function ClinicPriceOverridesPanel({ clinicId }: { clinicId: string }) {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className="rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] transition-colors hover:border-[var(--input-border)] hover:bg-[var(--card-bg)] sm:text-sm"
+            disabled={!canEditClients}
+            className="rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] transition-colors hover:border-[var(--input-border)] hover:bg-[var(--card-bg)] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"
             onClick={openPicker}
           >
             Выбрать позиции
           </button>
           <button
             type="button"
-            disabled={saving}
-            className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 sm:text-sm"
+            disabled={saving || !canEditClients}
+            className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"
             onClick={() => void save()}
           >
             {saving ? "Сохраняю..." : "Сохранить"}
@@ -226,6 +237,11 @@ export function ClinicPriceOverridesPanel({ clinicId }: { clinicId: string }) {
         индивидуальную цену. Скидка считается автоматически как разница между базовой
         и индивидуальной ценой.
       </p>
+      {!canEditClients ? (
+        <p className="mt-2 text-xs text-[var(--text-muted)]">
+          Изменение — только с правом «Клиенты: изменение данных».
+        </p>
+      ) : null}
 
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       {okText ? <p className="mt-3 text-sm text-emerald-700">{okText}</p> : null}
@@ -263,6 +279,7 @@ export function ClinicPriceOverridesPanel({ clinicId }: { clinicId: string }) {
                       type="number"
                       min={0}
                       step={1}
+                      disabled={!canEditClients}
                       value={row.individualPriceRub}
                       onChange={(e) => {
                         updateRowPrice(
@@ -270,7 +287,7 @@ export function ClinicPriceOverridesPanel({ clinicId }: { clinicId: string }) {
                           normalizePrice(e.target.value),
                         );
                       }}
-                      className="w-28 rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-right text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
+                      className="w-28 rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-right text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:cursor-not-allowed disabled:opacity-45"
                     />
                   </td>
                   <td className="px-3 py-2 text-right text-[var(--text-strong)]">
@@ -279,7 +296,8 @@ export function ClinicPriceOverridesPanel({ clinicId }: { clinicId: string }) {
                   <td className="px-3 py-2 text-center">
                     <button
                       type="button"
-                      className="text-xs text-red-600 underline hover:no-underline"
+                      disabled={!canEditClients}
+                      className="text-xs text-red-600 underline hover:no-underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
                       onClick={() => removeRow(row.priceListItemId)}
                     >
                       Удалить

@@ -8,7 +8,7 @@ const KEY_LABELS: Record<string, string> = {
   dueDate: "Срок лабораторный",
   dueToAdminsAt: "Дата приёма пациента",
   status: "Статус заказа",
-  notes: "Комментарий",
+  notes: "Комментарий от админов",
   clientOrderText: "Заказ от клиента",
   isUrgent: "Срочность",
   urgentCoefficient: "Коэф. срочности",

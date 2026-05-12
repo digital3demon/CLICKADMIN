@@ -103,7 +103,7 @@ export const ORDER_IMPORT_EXPORT_HEADERS = [
   "Зашла",
   "Оформ",
   "Заказ, расшифровка",
-  "Комментарий",
+  "Комментарий от админов",
   "Что еще есть к работе",
   "Дата",
   "Прием",
@@ -135,7 +135,12 @@ const HEADER_ALIASES: Record<HeaderKey, string[]> = {
   Зашла: ["зашла"],
   Оформ: ["оформ"],
   "Заказ, расшифровка": ["заказ, расшифровка", "заказ расшифровка"],
-  Комментарий: ["комментарий", "комментарии"],
+  "Комментарий от админов": [
+    "комментарий",
+    "комментарии",
+    "комментарий от админов",
+    "комментарии от админов",
+  ],
   "Что еще есть к работе": [
     "что еще есть к работе",
     "что ещё есть к работе",
@@ -600,7 +605,7 @@ export async function parseWorkbookImportRows(buffer: Uint8Array): Promise<{
     const prostheticsText = cellToString(getCell(row, "Протетика"));
     const registeredByText = cellToString(getCell(row, "Занес"));
     const createdAtText = cellToString(getCell(row, "Оформ"));
-    const notes = cellToString(getCell(row, "Комментарий"));
+    const notes = cellToString(getCell(row, "Комментарий от админов"));
     const clientOrderText = cellToString(getCell(row, "Заказ, расшифровка"));
     const additionalSourceNotesText = cellToString(getCell(row, "Что еще есть к работе"));
     const dueDateText = cellToString(getCell(row, "Дата"));

@@ -15,6 +15,8 @@ export default async function DirectoryKanbanBoardsPage() {
     session?.role === "OWNER" || access?.CONFIG_KANBAN_CARD_TYPES === true;
   const canEditKanbanProductionContour =
     session?.role === "OWNER" || access?.CONFIG_KANBAN_PRODUCTION === true;
+  const canEditKanbanBoards =
+    session?.role === "OWNER" || access?.CONFIG_KANBAN_BOARDS === true;
   const telegramBotUsername = normalizeTelegramBotUsername(
     process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME,
   );
@@ -28,6 +30,7 @@ export default async function DirectoryKanbanBoardsPage() {
         sessionRole={role}
         canEditKanbanCardTypes={canEditKanbanCardTypes}
         canEditKanbanProductionContour={canEditKanbanProductionContour}
+        canEditKanbanBoards={canEditKanbanBoards}
         telegramBotUsername={telegramBotUsername}
       />
       <p className="mt-8 text-sm">

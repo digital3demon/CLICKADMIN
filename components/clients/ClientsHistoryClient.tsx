@@ -92,7 +92,11 @@ function kindLabelRu(k: string): string {
   }
 }
 
-export function ClientsHistoryClient() {
+export function ClientsHistoryClient({
+  canEditClients,
+}: {
+  canEditClients: boolean;
+}) {
   const [revisions, setRevisions] = useState<RevisionRow[]>([]);
   const [deletedClinics, setDeletedClinics] = useState<DeletedClinic[]>([]);
   const [deletedDoctors, setDeletedDoctors] = useState<DeletedDoctor[]>([]);
@@ -132,6 +136,7 @@ export function ClientsHistoryClient() {
   }, [load]);
 
   const restoreClinic = async (id: string) => {
+    if (!canEditClients) return;
     setBusyId(`c-${id}`);
     try {
       const res = await fetch(`/api/clinics/${id}/restore`, { method: "POST" });
@@ -148,6 +153,7 @@ export function ClientsHistoryClient() {
   };
 
   const restoreDoctor = async (id: string) => {
+    if (!canEditClients) return;
     setBusyId(`d-${id}`);
     try {
       const res = await fetch(`/api/doctors/${id}/restore`, { method: "POST" });
@@ -176,6 +182,11 @@ export function ClientsHistoryClient() {
         <p className="mt-1 text-sm text-[var(--text-secondary)]">
           Восстановление вернёт клинику или врача в списки и формы нарядов.
         </p>
+        {!canEditClients ? (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Восстановление — только с правом «Клиенты: изменение данных».
+          </p>
+        ) : null}
 
         <div className="mt-4 grid gap-6 lg:grid-cols-2">
           <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
@@ -196,8 +207,8 @@ export function ClientsHistoryClient() {
                     </span>
                     <button
                       type="button"
-                      disabled={busyId === `c-${c.id}`}
-                      className="shrink-0 rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                      disabled={busyId === `c-${c.id}` || !canEditClients}
+                      className="shrink-0 rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"
                       onClick={() => void restoreClinic(c.id)}
                     >
                       {busyId === `c-${c.id}` ? "…" : "Восстановить"}
@@ -222,8 +233,8 @@ export function ClientsHistoryClient() {
                     <span className="text-sm text-[var(--text-strong)]">{d.fullName}</span>
                     <button
                       type="button"
-                      disabled={busyId === `d-${d.id}`}
-                      className="shrink-0 rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                      disabled={busyId === `d-${d.id}` || !canEditClients}
+                      className="shrink-0 rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"
                       onClick={() => void restoreDoctor(d.id)}
                     >
                       {busyId === `d-${d.id}` ? "…" : "Восстановить"}

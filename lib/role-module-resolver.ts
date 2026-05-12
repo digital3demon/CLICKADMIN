@@ -5,7 +5,7 @@ import {
   ALL_APP_MODULES,
   defaultModuleAllowed,
 } from "@/lib/role-module-defaults";
-import { getModuleForPathname } from "@/lib/role-module-paths";
+import { clientsBranchModuleForMethod, getModuleForPathname } from "@/lib/role-module-paths";
 
 /**
  * Эффективный набор флагов по модулям: переопределения в БД или дефолт из
@@ -30,7 +30,15 @@ export async function getEffectiveModuleAccess(
   const fromDb = new Map(rows.map((r) => [r.module, r.allowed]));
   const out = {} as Record<AppModule, boolean>;
   for (const m of ALL_APP_MODULES) {
-    out[m] = fromDb.has(m) ? fromDb.get(m)! : defaultModuleAllowed(role, m);
+    let v = fromDb.has(m) ? fromDb.get(m)! : defaultModuleAllowed(role, m);
+    if (
+      (m === "CLIENTS_VIEW" || m === "CLIENTS_EDIT") &&
+      !fromDb.has(m) &&
+      fromDb.has("CLIENTS")
+    ) {
+      v = fromDb.get("CLIENTS")!;
+    }
+    out[m] = v;
   }
   return out;
 }
@@ -46,6 +54,7 @@ export function moduleAccessForResponse(
 export function isPathAllowedByModuleAccess(
   pathname: string,
   access: Record<AppModule, boolean>,
+  method?: string,
 ): boolean {
   if (pathname === "/directory/kanban-boards" || pathname.startsWith("/directory/kanban-boards/")) {
     return (
@@ -56,5 +65,7 @@ export function isPathAllowedByModuleAccess(
   }
   const m = getModuleForPathname(pathname);
   if (m == null) return true;
-  return access[m] === true;
+  const need =
+    m === "CLIENTS" ? clientsBranchModuleForMethod(method ?? "GET") : m;
+  return access[need] === true;
 }

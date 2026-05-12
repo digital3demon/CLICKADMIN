@@ -11,6 +11,7 @@ type DoctorRow = { id: string; fullName: string };
 
 type Props = {
   clinicId: string;
+  canEditClients: boolean;
   /** id врачей, уже связанных с этой клиникой (в т.ч. скрытых в списке из‑за deleted) */
   linkedDoctorIds: string[];
   onDoctorLinked?: (doctor: { id: string; fullName: string }) => void;
@@ -18,6 +19,7 @@ type Props = {
 
 export function ClinicDoctorLinkPanel({
   clinicId,
+  canEditClients,
   linkedDoctorIds,
   onDoctorLinked,
 }: Props) {
@@ -113,6 +115,14 @@ export function ClinicDoctorLinkPanel({
       setSaving(false);
     }
   }, [clinicId, mode, fullName, doctorId, router, onDoctorLinked]);
+
+  if (!canEditClients) {
+    return (
+      <span className="max-w-[14rem] text-right text-[0.7rem] leading-snug text-[var(--text-muted)]">
+        Добавление врачей — только с правом «Клиенты: изменение данных».
+      </span>
+    );
+  }
 
   return (
     <>

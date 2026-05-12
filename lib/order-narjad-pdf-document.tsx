@@ -153,7 +153,7 @@ export function OrderNarjadPdfDocument({
               <Text style={styles.sectionText}>{clientBlock}</Text>
             </View>
             <View style={styles.blockBox}>
-              <Text style={styles.sectionLabel}>Комментарии</Text>
+              <Text style={styles.sectionLabel}>Комментарии от админов</Text>
               <Text style={styles.sectionText}>{notesBlock}</Text>
             </View>
           </View>

@@ -99,7 +99,7 @@ export function LabDueSlotsTenantSettings({
               Производственный календарь (страна)
             </label>
             <select
-              className={`${inp} max-w-xs`}
+              className={`${inp} max-w-xs disabled:cursor-not-allowed disabled:opacity-45`}
               disabled={!canEdit || saving}
               value={country}
               onChange={(e) =>
@@ -124,7 +124,7 @@ export function LabDueSlotsTenantSettings({
                 <input
                   type="time"
                   step={60}
-                  className={inp}
+                  className={`${inp} disabled:cursor-not-allowed disabled:opacity-45`}
                   disabled={!canEdit || saving}
                   value={hm}
                   onChange={(e) => {
@@ -153,7 +153,7 @@ export function LabDueSlotsTenantSettings({
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--surface-subtle)]"
                 disabled={saving || slots.length >= 24}
                 onClick={() => setSlots((prev) => [...prev, "12:00"])}
               >
@@ -161,7 +161,7 @@ export function LabDueSlotsTenantSettings({
               </button>
               <button
                 type="button"
-                className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-95 disabled:opacity-50"
+                className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-95 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40"
                 disabled={saving}
                 onClick={() => void save()}
               >

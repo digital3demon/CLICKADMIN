@@ -71,14 +71,17 @@ export function DirectoryKanbanBoardsClient({
   isDemo = false,
   sessionRole,
   telegramBotUsername = "",
-  canEditKanbanCardTypes = true,
-  canEditKanbanProductionContour = true,
+  canEditKanbanCardTypes = false,
+  canEditKanbanProductionContour = false,
+  canEditKanbanBoards = false,
 }: {
   isDemo?: boolean;
   sessionRole: UserRole;
   telegramBotUsername?: string;
   canEditKanbanCardTypes?: boolean;
   canEditKanbanProductionContour?: boolean;
+  /** Доски, исключения, автоархив, резервная копия, автоматизации (модуль CONFIG_KANBAN_BOARDS или владелец). */
+  canEditKanbanBoards?: boolean;
 }) {
   const [appState, setAppState] = useState(() => loadKanbanStateForDirectory(isDemo));
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -410,6 +413,7 @@ export function DirectoryKanbanBoardsClient({
   }, [patchApp, showToast]);
 
   const openCreateModal = () => {
+    if (!canEditKanbanBoards) return;
     setCreateTitle(`Доска ${appState.boards.length + 1}`);
     setCreatePrivate(false);
     setPickedUserIds([]);
@@ -417,6 +421,7 @@ export function DirectoryKanbanBoardsClient({
   };
 
   const createBoard = () => {
+    if (!canEditKanbanBoards) return;
     const title = createTitle.trim();
     if (!title) {
       showToast("Введите название доски", true);
@@ -521,28 +526,46 @@ export function DirectoryKanbanBoardsClient({
           <ul className="mt-4 max-h-[220px] list-none space-y-1 overflow-y-auto p-0">
             {appState.boards.map((b) => (
               <li key={b.id}>
-                <button
-                  type="button"
-                  className={`flex w-full max-w-lg items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm ${
-                    b.id === appState.activeBoardId
-                      ? "bg-[color-mix(in_srgb,var(--sidebar-blue)_12%,transparent)] font-semibold text-[var(--app-text)]"
-                      : "text-[var(--app-text)] hover:bg-[var(--surface-hover)]"
-                  }`}
-                  onClick={() => {
-                    patchApp((s) => {
-                      s.activeBoardId = b.id;
-                    });
-                    showToast(`Активная доска: ${b.title}`);
-                  }}
-                >
-                  <IconBoard aria-hidden />
-                  {b.title}
-                  {b.isPrivate ? (
-                    <span className="ml-2 rounded border border-amber-500/40 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
-                      Закрытая
-                    </span>
-                  ) : null}
-                </button>
+                {canEditKanbanBoards ? (
+                  <button
+                    type="button"
+                    className={`flex w-full max-w-lg items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm ${
+                      b.id === appState.activeBoardId
+                        ? "bg-[color-mix(in_srgb,var(--sidebar-blue)_12%,transparent)] font-semibold text-[var(--app-text)]"
+                        : "text-[var(--app-text)] hover:bg-[var(--surface-hover)]"
+                    }`}
+                    onClick={() => {
+                      patchApp((s) => {
+                        s.activeBoardId = b.id;
+                      });
+                      showToast(`Активная доска: ${b.title}`);
+                    }}
+                  >
+                    <IconBoard aria-hidden />
+                    {b.title}
+                    {b.isPrivate ? (
+                      <span className="ml-2 rounded border border-amber-500/40 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+                        Закрытая
+                      </span>
+                    ) : null}
+                  </button>
+                ) : (
+                  <div
+                    className={`flex w-full max-w-lg items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm ${
+                      b.id === appState.activeBoardId
+                        ? "bg-[color-mix(in_srgb,var(--sidebar-blue)_12%,transparent)] font-semibold text-[var(--app-text)]"
+                        : "text-[var(--text-muted)]"
+                    }`}
+                  >
+                    <IconBoard aria-hidden />
+                    {b.title}
+                    {b.isPrivate ? (
+                      <span className="ml-2 rounded border border-amber-500/40 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+                        Закрытая
+                      </span>
+                    ) : null}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -550,7 +573,8 @@ export function DirectoryKanbanBoardsClient({
             {!isDemo ? (
               <button
                 type="button"
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
+                disabled={!canEditKanbanBoards}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--surface-subtle)]"
                 onClick={openCreateModal}
               >
                 <IconPlus /> Новая доска
@@ -559,7 +583,8 @@ export function DirectoryKanbanBoardsClient({
             {!isDemo ? (
               <button
                 type="button"
-                className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
+                disabled={!canEditKanbanBoards}
+                className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--surface-subtle)]"
                 onClick={() => {
                   const t = window.prompt("Название доски:", board.title);
                   if (t === null) return;
@@ -577,19 +602,27 @@ export function DirectoryKanbanBoardsClient({
             {!isDemo ? (
               <button
                 type="button"
-                className="rounded-md border border-red-300/70 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100 dark:border-red-800/70 dark:bg-red-950/25 dark:text-red-300 dark:hover:bg-red-950/40"
+                disabled={!canEditKanbanBoards || appState.boards.length <= 1}
+                className="rounded-md border border-red-300/70 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-800/70 dark:bg-red-950/25 dark:text-red-300 dark:hover:bg-red-950/40"
                 onClick={deleteActiveBoard}
-                disabled={appState.boards.length <= 1}
                 title={
-                  appState.boards.length <= 1
-                    ? "Нельзя удалить последнюю доску"
-                    : "Удалить активную доску"
+                  !canEditKanbanBoards
+                    ? "Нет доступа к изменению досок"
+                    : appState.boards.length <= 1
+                      ? "Нельзя удалить последнюю доску"
+                      : "Удалить активную доску"
                 }
               >
                 Удалить доску
               </button>
             ) : null}
           </div>
+          {!isDemo && !canEditKanbanBoards ? (
+            <p className="mt-2 max-w-xl text-xs text-[var(--text-muted)]">
+              Изменение досок, режима распределения, исключений пользователей и автоархива — только с правом
+              «Конфиг: доски канбана» или для владельца организации.
+            </p>
+          ) : null}
           <div className="mt-4 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3">
             <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
               Режим доски
@@ -597,6 +630,7 @@ export function DirectoryKanbanBoardsClient({
             <label className="inline-flex items-center gap-2 text-sm text-[var(--text-body)]">
               <input
                 type="checkbox"
+                disabled={!canEditKanbanBoards}
                 checked={board.distributeNewOrders !== false}
                 onChange={(e) =>
                   applyToBoard((b) => {
@@ -643,7 +677,8 @@ export function DirectoryKanbanBoardsClient({
                           <td className="py-2 text-right">
                             <button
                               type="button"
-                              className="rounded-md border border-[var(--card-border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)]"
+                              disabled={!canEditKanbanBoards}
+                              className="rounded-md border border-[var(--card-border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-40 disabled:hover:bg-transparent"
                               onClick={() =>
                                 applyToBoard((b) => {
                                   b.excludedCrmUserIds = (b.excludedCrmUserIds || []).filter(
@@ -665,9 +700,9 @@ export function DirectoryKanbanBoardsClient({
                 <label className="block min-w-[12rem] flex-1 text-sm">
                   <span className="mb-1 block text-[var(--text-secondary)]">Добавить в исключения</span>
                   <select
-                    className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1.5 text-[var(--app-text)]"
+                    className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1.5 text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-45"
                     value={pickExcludeUserId}
-                    disabled={candidatesToExclude.length === 0}
+                    disabled={!canEditKanbanBoards || candidatesToExclude.length === 0}
                     onChange={(e) => setPickExcludeUserId(e.target.value)}
                   >
                     <option value="">
@@ -684,8 +719,8 @@ export function DirectoryKanbanBoardsClient({
                 </label>
                 <button
                   type="button"
-                  className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:opacity-50"
-                  disabled={!pickExcludeUserId.trim()}
+                  disabled={!canEditKanbanBoards || !pickExcludeUserId.trim()}
+                  className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--surface-subtle)]"
                   onClick={() => {
                     const id = pickExcludeUserId.trim();
                     if (!id) return;
@@ -716,6 +751,7 @@ export function DirectoryKanbanBoardsClient({
                   min={1 / 365}
                   max={30}
                   step={0.01}
+                  disabled={!canEditKanbanBoards}
                   value={retentionYears}
                   onChange={(e) =>
                     applyToBoard((b) => {
@@ -727,7 +763,7 @@ export function DirectoryKanbanBoardsClient({
                       b.archiveRetentionDays = clampArchiveRetentionDays(Math.round(y * 365));
                     })
                   }
-                  className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)]"
+                  className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-45"
                 />
               </label>
               <table className="w-full border-collapse text-sm">
@@ -745,13 +781,14 @@ export function DirectoryKanbanBoardsClient({
                       <td className="py-2 pr-2">
                         <select
                           value={r.columnId}
+                          disabled={!canEditKanbanBoards}
                           onChange={(e) =>
                             applyToBoard((b) => {
                               const x = (b.autoArchiveRules || []).find((y) => y.id === r.id);
                               if (x) x.columnId = e.target.value;
                             })
                           }
-                          className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
+                          className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 disabled:cursor-not-allowed disabled:opacity-45"
                         >
                           {board.columns.map((col) => (
                             <option key={col.id} value={col.id}>
@@ -765,6 +802,7 @@ export function DirectoryKanbanBoardsClient({
                           type="number"
                           min={1}
                           max={24 * 180}
+                          disabled={!canEditKanbanBoards}
                           value={r.idleHours}
                           onChange={(e) =>
                             applyToBoard((b) => {
@@ -776,12 +814,13 @@ export function DirectoryKanbanBoardsClient({
                                 : 24;
                             })
                           }
-                          className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
+                          className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 disabled:cursor-not-allowed disabled:opacity-45"
                         />
                       </td>
                       <td className="py-2 pr-2">
                         <input
                           type="checkbox"
+                          disabled={!canEditKanbanBoards}
                           checked={r.enabled !== false}
                           onChange={(e) =>
                             applyToBoard((b) => {
@@ -794,7 +833,8 @@ export function DirectoryKanbanBoardsClient({
                       <td className="py-2 text-right">
                         <button
                           type="button"
-                          className="rounded-md border border-[var(--card-border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)]"
+                          disabled={!canEditKanbanBoards}
+                          className="rounded-md border border-[var(--card-border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-40 disabled:hover:bg-transparent"
                           onClick={() =>
                             applyToBoard((b) => {
                               b.autoArchiveRules = (b.autoArchiveRules || []).filter(
@@ -812,7 +852,8 @@ export function DirectoryKanbanBoardsClient({
               </table>
               <button
                 type="button"
-                className="mt-3 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)]"
+                disabled={!canEditKanbanBoards}
+                className="mt-3 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--surface-subtle)]"
                 onClick={() =>
                   applyToBoard((b) => {
                     const firstColumnId = b.columns[0]?.id ?? "";
@@ -871,7 +912,7 @@ export function DirectoryKanbanBoardsClient({
             <button
               type="button"
               disabled={!canEditKanbanCardTypes}
-              className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-95"
+              className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-95 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40"
               onClick={saveNormalized}
             >
               Сохранить порядок типов
@@ -890,14 +931,22 @@ export function DirectoryKanbanBoardsClient({
             Глобальные правила для всех досок. В каждом правиле в блоке «Когда» выбирается доска.
             В «Тогда» можно добавить несколько действий.
           </p>
-          <div className="mt-6">
+          {!canEditKanbanBoards ? (
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
+              Редактирование автоматизаций — только с правом «Конфиг: доски канбана» или для владельца.
+            </p>
+          ) : null}
+          <fieldset
+            disabled={!canEditKanbanBoards}
+            className="mt-6 min-w-0 border-0 p-0 disabled:pointer-events-none disabled:opacity-45"
+          >
             <KanbanAutomationsForm
               board={board}
               boards={appState.boards}
               rules={globalAutomations}
               onPatchRules={applyGlobalAutomations}
             />
-          </div>
+          </fieldset>
         </section>
 
         <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
@@ -907,10 +956,16 @@ export function DirectoryKanbanBoardsClient({
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             Экспорт и импорт JSON относятся к <strong>активной</strong> доске.
           </p>
+          {!canEditKanbanBoards ? (
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
+              Экспорт и импорт — только с правом «Конфиг: доски канбана» или для владельца.
+            </p>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
-              className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
+              disabled={!canEditKanbanBoards}
+              className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--surface-subtle)]"
               onClick={exportBoard}
             >
               Экспорт JSON (текущая доска)
@@ -919,7 +974,8 @@ export function DirectoryKanbanBoardsClient({
               <>
                 <button
                   type="button"
-                  className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
+                  disabled={!canEditKanbanBoards}
+                  className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--surface-subtle)]"
                   onClick={() => importRef.current?.click()}
                 >
                   Импорт JSON
@@ -929,6 +985,7 @@ export function DirectoryKanbanBoardsClient({
                   type="file"
                   accept="application/json,.json"
                   className="hidden"
+                  disabled={!canEditKanbanBoards}
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     e.target.value = "";
@@ -1028,7 +1085,8 @@ export function DirectoryKanbanBoardsClient({
               </button>
               <button
                 type="button"
-                className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-95"
+                disabled={!canEditKanbanBoards}
+                className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-95 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40"
                 onClick={createBoard}
               >
                 Создать

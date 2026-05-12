@@ -23,6 +23,7 @@ import {
   type LabWorkStatus,
 } from "@/lib/lab-work-status";
 import { getPrisma } from "@/lib/get-prisma";
+import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { orderPathById } from "@/lib/order-public-ref";
 const ORDERS_PREVIEW = 100;
 
@@ -98,6 +99,10 @@ export default async function DoctorCardPage({
   const resolvedParams = params != null ? await params : null;
   const id = resolvedParams?.id?.trim() ?? "";
   if (!id) notFound();
+
+  const { session, access } = await getSessionWithModuleAccess();
+  const canEditClients =
+    session?.role === "OWNER" || access?.CLIENTS_EDIT === true;
 
   let query: Record<string, string | string[] | undefined> = {};
   if (searchParams != null) {
@@ -281,6 +286,7 @@ export default async function DoctorCardPage({
         <div className="space-y-8">
           <DoctorProfilePanel
             doctorId={id}
+            canEditClients={canEditClients}
             initial={profileInitialFromDoctor(doctor)}
             telegramGroups={doctor.telegramGroups}
           />
@@ -306,12 +312,14 @@ export default async function DoctorCardPage({
               </p>
               <RequisitesPanel
                 clinicId={doctor.ipClinicAsSource.id}
+                canEditClients={canEditClients}
                 initial={requisitesFormStateFromClinic(
                   doctor.ipClinicAsSource,
                 )}
               />
               <ClinicCommercialTermsPanel
                 clinicId={doctor.ipClinicAsSource.id}
+                canEditClients={canEditClients}
                 initial={{
                   billingLegalForm:
                     doctor.ipClinicAsSource.billingLegalForm === "IP" ||
@@ -346,6 +354,7 @@ export default async function DoctorCardPage({
       {activeTab === "finance" && financeRange ? (
         <DoctorFinancePanel
           doctorId={id}
+          canEditClients={canEditClients}
           allTimeTotalRub={allTimeFinance.totalRub}
           allTimeLineCount={allTimeFinance.lineCount}
           allTimeWithoutPrice={allTimeFinance.linesWithoutPrice}
@@ -372,13 +381,15 @@ export default async function DoctorCardPage({
                 <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
                   Контакты
                 </h2>
-                <Link
-                  href={`/clients/doctors/${id}?tab=requisites`}
-                  scroll={false}
-                  className="rounded-full bg-[var(--sidebar-blue)] px-3 py-1 text-xs font-semibold text-white hover:opacity-95 sm:text-sm"
-                >
-                  Изменить
-                </Link>
+                {canEditClients ? (
+                  <Link
+                    href={`/clients/doctors/${id}?tab=requisites`}
+                    scroll={false}
+                    className="rounded-full bg-[var(--sidebar-blue)] px-3 py-1 text-xs font-semibold text-white hover:opacity-95 sm:text-sm"
+                  >
+                    Изменить
+                  </Link>
+                ) : null}
               </div>
               <dl className="mt-4 space-y-3 text-sm">
                 <div>
@@ -502,6 +513,7 @@ export default async function DoctorCardPage({
 
             <DoctorLinkedClinicsSection
               doctorId={id}
+              canEditClients={canEditClients}
               initialLinks={doctor.clinicLinks}
             />
           </div>

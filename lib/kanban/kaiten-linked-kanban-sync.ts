@@ -88,7 +88,7 @@ export async function postOrderKaitenComment(
     });
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) {
-      return { ok: false, error: data.error ?? "Комментарий не отправлен в Kaiten" };
+      return { ok: false, error: data.error ?? "Комментарий от админов не отправлен в Kaiten" };
     }
     return { ok: true };
   } catch {

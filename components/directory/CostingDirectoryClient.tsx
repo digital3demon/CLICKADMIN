@@ -1101,7 +1101,7 @@ export function CostingDirectoryClient() {
                       value={newPriceDescription}
                       onChange={(e) => setNewPriceDescription(e.target.value)}
                       className="mt-1 w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5 text-sm"
-                      placeholder="Комментарий к позиции"
+                      placeholder="Комментарий от админов к позиции"
                     />
                   </label>
                 </div>

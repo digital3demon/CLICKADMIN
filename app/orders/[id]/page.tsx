@@ -18,7 +18,7 @@ import {
 } from "@/lib/get-domain-prisma";
 import { normalizeLegacyLabWorkStatus } from "@/lib/lab-work-status";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
-import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { invoiceParsedSnapshotForOrderEdit } from "@/lib/order-invoice-initial-for-edit";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { resolveRegisteredByLabelForDisplay } from "@/lib/registered-by-label-display";
@@ -61,7 +61,7 @@ export default async function OrderEditPage({
           ? "Канбан/Кайтен"
           : undefined;
 
-  const session = await getSessionFromCookies();
+  const { session, access } = await getSessionWithModuleAccess();
   const tenantId = await orderTenantIdForSession(session);
   if (!tenantId) notFound();
   const isDemoMode = Boolean(session?.demo);
@@ -338,6 +338,8 @@ export default async function OrderEditPage({
 
   const canAcceptChatCorrections =
     session != null && canAcceptOrderChatCorrections(session.role);
+  const canEditClients =
+    session?.role === "OWNER" || access?.CLIENTS_EDIT === true;
 
   return (
     <OrderEditForm
@@ -347,6 +349,7 @@ export default async function OrderEditPage({
       kanbanCardUrl={kanbanAbs}
       demoKanbanCardTypes={demoKanbanCardTypes}
       canAcceptChatCorrections={canAcceptChatCorrections}
+      canEditClients={canEditClients}
       viewerRole={session?.role ?? null}
       orderPageFrame={{
         title: `Наряд ${order.orderNumber}`,

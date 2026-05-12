@@ -151,12 +151,15 @@ function OrderInvoiceFileDrop({
   onDone,
   onFail,
   className,
+  disabled = false,
 }: {
   orderId: string;
   onDone: (result?: InvoiceAttachmentUploadOk) => void | Promise<void>;
   onFail: (msg: string) => void;
   /** Доп. классы корневого блока (например ширина на вкладке). */
   className?: string;
+  /** Вне `<form>`: не наследует `disabled` от `fieldset`, передавать явно. */
+  disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -165,6 +168,7 @@ function OrderInvoiceFileDrop({
 
   const upload = useCallback(
     async (files: FileList | File[]) => {
+      if (disabled) return;
       const arr = Array.from(files).filter(
         (f) => f.size > 0 && f.size <= CRM_UPLOAD_MAX_BYTES,
       );
@@ -229,23 +233,29 @@ function OrderInvoiceFileDrop({
         setBusy(false);
       }
     },
-    [orderId, onDone, onFail],
+    [orderId, onDone, onFail, disabled],
   );
 
   return (
     <div className="min-w-0 space-y-1.5">
     <div
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
       role="group"
       aria-label="Загрузка файла счёта"
-      title="Клик — выбрать файл; перетащите файл сюда; при фокусе — Ctrl+V из буфера"
+      title={
+        disabled
+          ? "Нет права на изменение данных клиентов"
+          : "Клик — выбрать файл; перетащите файл сюда; при фокусе — Ctrl+V из буфера"
+      }
       onKeyDown={(e) => {
+        if (disabled) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           inputRef.current?.click();
         }
       }}
       onPaste={(e) => {
+        if (disabled) return;
         const fl = e.clipboardData?.files;
         if (fl?.length) {
           e.preventDefault();
@@ -253,22 +263,28 @@ function OrderInvoiceFileDrop({
         }
       }}
       onDragOver={(e) => {
+        if (disabled) return;
         e.preventDefault();
         e.stopPropagation();
       }}
       onDrop={(e) => {
+        if (disabled) return;
         e.preventDefault();
         e.stopPropagation();
         const fl = e.dataTransfer?.files;
         if (fl?.length) void upload(fl);
       }}
       onClick={() => {
-        if (!busy) inputRef.current?.click();
+        if (disabled || busy) return;
+        inputRef.current?.click();
       }}
-      className={
+      className={[
+        disabled ? "pointer-events-none cursor-not-allowed opacity-50" : null,
         className ??
-        "max-w-[11rem] cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-center text-[10px] font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:max-w-[13rem] sm:text-xs"
-      }
+          "max-w-[11rem] cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-center text-[10px] font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:max-w-[13rem] sm:text-xs",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <input
         ref={inputRef}
@@ -381,7 +397,7 @@ const editColWrap =
   "min-w-0 space-y-0 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] p-2.5 sm:p-3";
 /** То же для верхней четырёхколоночной сетки: выравнивание по высоте строки. */
 const editMainCol = `${editColWrap} flex min-h-0 flex-col xl:h-full`;
-/** Заказ от клиента / комментарий: без xl:h-full — иначе колонка тянется за соседями и авт высота textarea ломается. */
+/** Заказ от клиента / комментарий от админов: без xl:h-full — иначе колонка тянется за соседями и авт высота textarea ломается. */
 const editNotesCol = `${editColWrap} flex min-h-0 w-full flex-col`;
 const editClientOrderMaxHeight = 240;
 const editNotesMaxHeight = 160;
@@ -540,8 +556,8 @@ export function OrderEditForm({
   isDemoMode = false,
   demoKanbanCardTypes = [],
   canAcceptChatCorrections = false,
+  canEditClients = true,
   viewerRole = null,
-  /** Ссылка на карточку наряда в CRM канбане (fallback, если нет Kaiten-карточки). */
   kanbanCardUrl = null,
   orderPageFrame,
 }: {
@@ -551,6 +567,8 @@ export function OrderEditForm({
   demoKanbanCardTypes?: Array<{ id: string; name: string }>;
   /** Принять корректировки из чата (роль админ / ст. админ / фин. менеджер). */
   canAcceptChatCorrections?: boolean;
+  /** Правка счёта и клиентских полей на вкладке документооборота наряда. */
+  canEditClients?: boolean;
   /** Роль текущего пользователя (для раскладки «строка в буфер» на вкладке счёта). */
   viewerRole?: UserRole | null;
   kanbanCardUrl?: string | null;
@@ -621,6 +639,22 @@ export function OrderEditForm({
   );
   const [doctorId, setDoctorId] = useState(initial.doctorId);
   const [patientName, setPatientName] = useState(initial.patientName ?? "");
+  /** По умолчанию поля заказчика заблокированы — снимается кнопкой «Изменить». */
+  const [customerEditClinic, setCustomerEditClinic] = useState(false);
+  const [customerEditDoctor, setCustomerEditDoctor] = useState(false);
+  const [customerEditPatient, setCustomerEditPatient] = useState(false);
+
+  useEffect(() => {
+    setCustomerEditClinic(false);
+    setCustomerEditDoctor(false);
+    setCustomerEditPatient(false);
+  }, [
+    initial.id,
+    initial.clinicId,
+    initial.doctorId,
+    initial.patientName,
+  ]);
+
   const [notes, setNotes] = useState(initial.notes ?? "");
   const [clientOrderText, setClientOrderText] = useState(
     initial.clientOrderText ?? "",
@@ -1959,30 +1993,53 @@ export function OrderEditForm({
         </h3>
         <div className="space-y-2">
           <div>
-            <label className={labelClass} htmlFor="oe-clinic">
-              Клиника
-            </label>
+            <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
+              <label className={labelClass} htmlFor="oe-clinic">
+                Клиника
+              </label>
+              {!customerEditClinic ? (
+                <button
+                  type="button"
+                  className="shrink-0 text-xs font-medium text-[var(--sidebar-blue)] underline decoration-[var(--sidebar-blue)]/40 underline-offset-2 hover:no-underline sm:text-sm"
+                  onClick={() => setCustomerEditClinic(true)}
+                >
+                  Изменить
+                </button>
+              ) : null}
+            </div>
             <PrefixSearchCombobox
               id="oe-clinic"
               className={comboboxClass}
               options={clinicComboboxOptions}
               value={clinicId}
               onChange={onClinicChange}
+              disabled={!customerEditClinic}
               placeholder="Название клиники, ООО или юр. наименование…"
               emptyOptionLabel="Выбрать"
             />
           </div>
           <div>
-            <label className={labelClass} htmlFor="oe-doctor">
-              Врач
-            </label>
+            <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
+              <label className={labelClass} htmlFor="oe-doctor">
+                Врач
+              </label>
+              {!customerEditDoctor ? (
+                <button
+                  type="button"
+                  className="shrink-0 text-xs font-medium text-[var(--sidebar-blue)] underline decoration-[var(--sidebar-blue)]/40 underline-offset-2 hover:no-underline sm:text-sm"
+                  onClick={() => setCustomerEditDoctor(true)}
+                >
+                  Изменить
+                </button>
+              ) : null}
+            </div>
             <PrefixSearchCombobox
               id="oe-doctor"
               className={comboboxClass}
               options={doctorComboboxOptions}
               value={doctorId}
               onChange={setDoctorId}
-              disabled={clinicId === ""}
+              disabled={clinicId === "" || !customerEditDoctor}
               placeholder={
                 clinicId === ""
                   ? "Сначала выберите клинику"
@@ -1999,13 +2056,25 @@ export function OrderEditForm({
         </h3>
         <div className="space-y-2">
           <div>
-            <label className={labelClass} htmlFor="oe-patient">
-              ФИО пациента
-            </label>
+            <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
+              <label className={labelClass} htmlFor="oe-patient">
+                ФИО пациента
+              </label>
+              {!customerEditPatient ? (
+                <button
+                  type="button"
+                  className="shrink-0 text-xs font-medium text-[var(--sidebar-blue)] underline decoration-[var(--sidebar-blue)]/40 underline-offset-2 hover:no-underline sm:text-sm"
+                  onClick={() => setCustomerEditPatient(true)}
+                >
+                  Изменить
+                </button>
+              ) : null}
+            </div>
             <input
               id="oe-patient"
               type="text"
-              className={inputClass}
+              readOnly={!customerEditPatient}
+              className={`${inputClass}${!customerEditPatient ? " cursor-default bg-[var(--surface-muted)]" : ""}`}
               value={patientName}
               onChange={(e) => setPatientName(e.target.value)}
             />
@@ -2428,7 +2497,7 @@ export function OrderEditForm({
       </div>
       <div className="mt-3 flex shrink-0 flex-col border-t border-[var(--card-border)] pt-3">
         <h3 className="shrink-0 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
-          Комментарий
+          Комментарий от админов
         </h3>
         <textarea
           ref={notesTextareaRef}
@@ -2437,7 +2506,7 @@ export function OrderEditForm({
           rows={3}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Внутренние пометки…"
+          placeholder="Текст комментария от админов…"
         />
       </div>
     </div>
@@ -2646,29 +2715,30 @@ export function OrderEditForm({
           <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
             Счёт, ЭДО и документы
           </h2>
-          {isAccountant ? (
-            <div className="mt-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2.5">
-              <p className="text-[0.65rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                Номер наряда · пациент · врач
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void copyInvoiceLabelToClipboard()}
-                  title="Нажмите — скопировать в буфер обмена"
-                  className="max-w-full min-w-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-left font-mono text-sm font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
-                >
-                  {invoiceCopyClipboardText}
-                </button>
-                {invoiceCopyToast ? (
-                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                    {invoiceCopyToast}
-                  </span>
-                ) : null}
-              </div>
+          <div className="mt-3 flex min-w-0 flex-wrap items-start gap-x-3 gap-y-2">
+            <div className="flex min-w-0 flex-1 basis-full flex-col gap-0.5 sm:basis-[min(100%,22rem)] sm:flex-1 lg:max-w-xl">
+              <button
+                type="button"
+                onClick={() => void copyInvoiceLabelToClipboard()}
+                title="Нажмите — скопировать в буфер обмена"
+                className="max-w-full min-w-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+              >
+                {invoiceCopyClipboardText}
+              </button>
+              {invoiceCopyToast ? (
+                <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                  {invoiceCopyToast}
+                </span>
+              ) : null}
             </div>
-          ) : null}
-          <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
+          </div>
+          <fieldset
+            disabled={!canEditClients}
+            className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
+          >
+          <div
+            className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6"
+          >
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
                 <button
@@ -2711,23 +2781,6 @@ export function OrderEditForm({
                   />
                   <span>Счёт выставлен</span>
                 </label>
-                {!isAccountant ? (
-                  <div className="flex min-w-0 flex-1 basis-full flex-col gap-0.5 sm:basis-[min(100%,22rem)] sm:flex-1 lg:max-w-xl">
-                    <button
-                      type="button"
-                      onClick={() => void copyInvoiceLabelToClipboard()}
-                      title="Нажмите — скопировать в буфер обмена"
-                      className="max-w-full min-w-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
-                    >
-                      {invoiceCopyClipboardText}
-                    </button>
-                    {invoiceCopyToast ? (
-                      <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                        {invoiceCopyToast}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
               </div>
               <div>
                 <label className={labelClass} htmlFor="oe-invoice-number">
@@ -2750,6 +2803,7 @@ export function OrderEditForm({
                 </p>
                 <OrderInvoiceFileDrop
                   orderId={initial.id}
+                  disabled={!canEditClients}
                   onDone={async (res) => {
                     setError(null);
                     setOk(true);
@@ -2942,6 +2996,7 @@ export function OrderEditForm({
             </div>
             <div className="hidden min-w-0 lg:block" aria-hidden />
           </div>
+          </fieldset>
         </div>
       ) : activeTab === "Канбан/Кайтен" ? (
         <div className={editColWrap}>
@@ -3207,7 +3262,7 @@ export function OrderEditForm({
           ) : (
             <p className="text-xs leading-snug text-red-200/85">
               Причина не сохранена в CRM — откройте вкладку «Кайтен» и обновите
-              данные или посмотрите комментарий в самой Kaiten.
+              данные или проверьте карточку в самой Kaiten.
             </p>
           )}
         </div>

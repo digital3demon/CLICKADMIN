@@ -13,6 +13,7 @@ function moneyRu(n: number): string {
 
 export function DoctorFinancePanel({
   doctorId,
+  canEditClients,
   allTimeTotalRub,
   allTimeLineCount,
   allTimeWithoutPrice,
@@ -23,6 +24,7 @@ export function DoctorFinancePanel({
   periodWithoutPrice,
 }: {
   doctorId: string;
+  canEditClients: boolean;
   allTimeTotalRub: number;
   allTimeLineCount: number;
   allTimeWithoutPrice: number;
@@ -77,6 +79,11 @@ export function DoctorFinancePanel({
           нарядам): количество × цена за единицу. Если цена не указана, в сумму
           позиция не входит (0 ₽).
         </p>
+        {!canEditClients ? (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Изменение сверки и статусов — только с правом «Клиенты: изменение данных».
+          </p>
+        ) : null}
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-3">
             <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">

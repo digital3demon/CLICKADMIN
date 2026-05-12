@@ -23,7 +23,7 @@ const ACTION_TYPES: { id: KanbanAutomationAction["type"]; label: string }[] = [
   { id: "add_assignee", label: "Добавить ответственного" },
   { id: "set_due_in_days", label: "Срок через N дней" },
   { id: "clear_due", label: "Сбросить срок" },
-  { id: "add_comment", label: "Комментарий в чат" },
+  { id: "add_comment", label: "Комментарий от админов в чат" },
   { id: "set_card_type", label: "Установить тип карточки" },
   { id: "block", label: "Заблокировать (причина)" },
 ];
@@ -139,7 +139,7 @@ function KanbanActionEditor({
             className="rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm"
             value={action.text}
             onChange={(e) => onChange({ ...action, text: e.target.value })}
-            placeholder="Текст комментария"
+            placeholder="Текст комментария от админов"
           />
         </label>
       ) : null}

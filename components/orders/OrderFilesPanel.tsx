@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CRM_UPLOAD_MAX_BYTES,
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
@@ -31,6 +32,150 @@ function formatSize(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Превью в списке: по MIME или расширению (HEIC в браузере может не отрисоваться). */
+function isOrderAttachmentImage(mimeType: string, fileName: string): boolean {
+  const t = (mimeType || "").trim().toLowerCase();
+  if (t.startsWith("image/")) return true;
+  const n = (fileName || "").trim();
+  return /\.(jpe?g|png|gif|webp|bmp|tif|tiff|heic|heif)$/i.test(n);
+}
+
+type OrderImageViewerItem = { id: string; fileName: string; url: string };
+type OrderImageViewerState = { images: OrderImageViewerItem[]; index: number };
+
+function OrderAttachmentThumbButton({
+  href,
+  fileName,
+  onOpen,
+}: {
+  href: string;
+  fileName: string;
+  onOpen: () => void;
+}) {
+  const [broken, setBroken] = useState(false);
+  if (broken) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--card-border)] bg-[var(--surface-muted)] text-[0.65rem] leading-tight text-[var(--text-muted)] sm:h-12 sm:w-12"
+        title={`Просмотр: ${fileName}`}
+        aria-label={`Просмотр: ${fileName}`}
+      >
+        …
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group relative mt-0.5 shrink-0 overflow-hidden rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] shadow-sm outline-none ring-offset-2 ring-offset-[var(--card-bg)] focus-visible:ring-2 focus-visible:ring-[var(--sidebar-blue)]"
+      aria-label={`Просмотр: ${fileName}`}
+      title="Просмотр"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={href}
+        alt=""
+        loading="lazy"
+        className="h-11 w-11 object-cover sm:h-12 sm:w-12"
+        onError={() => setBroken(true)}
+      />
+    </button>
+  );
+}
+
+function OrderAttachmentsImageViewerOverlay({
+  state,
+  onClose,
+  onPrev,
+  onNext,
+}: {
+  state: OrderImageViewerState;
+  onClose: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const current = state.images[state.index];
+  if (!current) return null;
+  const count = state.images.length;
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-3 sm:p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Просмотр изображения"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="relative w-full max-w-3xl rounded-xl border border-white/10 bg-zinc-950 shadow-2xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2 text-white">
+          <p
+            className="min-w-0 truncate text-xs font-medium sm:text-sm"
+            title={current.fileName}
+          >
+            {current.fileName}
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href={current.url}
+              download={current.fileName}
+              className="rounded-md border border-white/20 px-2 py-1 text-[11px] text-white/90 hover:bg-white/10 sm:text-xs"
+            >
+              Скачать
+            </a>
+            {count > 1 ? (
+              <span className="tabular-nums text-[11px] text-white/60">
+                {state.index + 1}/{count}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="rounded-md bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20 sm:text-xs"
+              onClick={onClose}
+            >
+              Закрыть
+            </button>
+          </div>
+        </header>
+        <div className="relative flex min-h-[12rem] items-center justify-center p-2 sm:min-h-[16rem] sm:p-4">
+          {count > 1 ? (
+            <>
+              <button
+                type="button"
+                className="absolute left-1 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-lg text-white hover:bg-black/70 sm:left-2"
+                aria-label="Предыдущее"
+                onClick={onPrev}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="absolute right-1 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-lg text-white hover:bg-black/70 sm:right-2"
+                aria-label="Следующее"
+                onClick={onNext}
+              >
+                ›
+              </button>
+            </>
+          ) : null}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={current.url}
+            alt={current.fileName}
+            className="max-h-[min(70vh,620px)] max-w-full rounded-md object-contain"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function OrderFilesPanel({
   orderId,
   orderNumber,
@@ -54,6 +199,9 @@ export function OrderFilesPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [uploadWarn, setUploadWarn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [imageViewer, setImageViewer] = useState<OrderImageViewerState | null>(
+    null,
+  );
   const inputRef = useRef<HTMLInputElement>(null);
   const listInFlightRef = useRef(false);
   const nextListPollAllowedAtRef = useRef(0);
@@ -289,6 +437,65 @@ export function OrderFilesPanel({
     [orderId, refreshList, refreshQueueList, onServerListChange],
   );
 
+  const imageAttachments = useMemo(() => {
+    if (!orderId) return [];
+    return list.filter((a) =>
+      isOrderAttachmentImage(a.mimeType, a.fileName),
+    );
+  }, [list, orderId]);
+
+  const openImageViewer = useCallback(
+    (attachmentId: string) => {
+      if (!orderId) return;
+      const images: OrderImageViewerItem[] = imageAttachments.map((a) => ({
+        id: a.id,
+        fileName: a.fileName,
+        url: `/api/orders/${orderId}/attachments/${a.id}`,
+      }));
+      const index = images.findIndex((x) => x.id === attachmentId);
+      if (index < 0) return;
+      setImageViewer({ images, index });
+    },
+    [orderId, imageAttachments],
+  );
+
+  useEffect(() => {
+    if (!imageViewer) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setImageViewer(null);
+        return;
+      }
+      if (imageViewer.images.length < 2) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setImageViewer((s) =>
+          s
+            ? {
+                ...s,
+                index:
+                  (s.index - 1 + s.images.length) % s.images.length,
+              }
+            : s,
+        );
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setImageViewer((s) =>
+          s
+            ? {
+                ...s,
+                index: (s.index + 1) % s.images.length,
+              }
+            : s,
+        );
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [imageViewer]);
+
   return (
     <div className="space-y-4">
       <div
@@ -373,46 +580,57 @@ export function OrderFilesPanel({
             Файлы в наряде
           </h3>
           <ul className="mt-2 divide-y divide-[var(--card-border)] rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
-            {list.map((a) => (
-              <li
-                key={a.id}
-                className="flex items-start gap-2 px-3 py-2 text-sm"
-              >
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <a
-                    href={`/api/orders/${orderId}/attachments/${a.id}`}
-                    className="block truncate font-medium text-[var(--sidebar-blue)] hover:underline"
-                    title={a.fileName}
-                    download={a.fileName}
-                  >
-                    {a.fileName}
-                  </a>
-                  <div className="text-xs text-[var(--text-muted)]">
-                    {formatSize(a.size)}
-                    <span className="ml-2 text-emerald-700 dark:text-emerald-400">
-                      · в CRM/канбан
-                    </span>
-                    {a.uploadedToKaitenAt ? (
-                      <span className="ml-2 text-emerald-700 dark:text-emerald-400">
-                        · в Kaiten
-                      </span>
-                    ) : (
-                      <span className="ml-2 text-amber-700 dark:text-amber-400">
-                        · не в Kaiten
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void deleteServer(a.id)}
-                  className="shrink-0 pt-0.5 text-xs text-red-600 underline disabled:opacity-50"
+            {list.map((a) => {
+              const thumb = isOrderAttachmentImage(a.mimeType, a.fileName);
+              const href = `/api/orders/${orderId}/attachments/${a.id}`;
+              return (
+                <li
+                  key={a.id}
+                  className="flex items-start gap-2 px-3 py-2 text-sm"
                 >
-                  Удалить
-                </button>
-              </li>
-            ))}
+                  {thumb ? (
+                    <OrderAttachmentThumbButton
+                      href={href}
+                      fileName={a.fileName}
+                      onOpen={() => openImageViewer(a.id)}
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <a
+                      href={href}
+                      className="block truncate font-medium text-[var(--sidebar-blue)] hover:underline"
+                      title={a.fileName}
+                      download={a.fileName}
+                    >
+                      {a.fileName}
+                    </a>
+                    <div className="text-xs text-[var(--text-muted)]">
+                      {formatSize(a.size)}
+                      <span className="ml-2 text-emerald-700 dark:text-emerald-400">
+                        · в CRM/канбан
+                      </span>
+                      {a.uploadedToKaitenAt ? (
+                        <span className="ml-2 text-emerald-700 dark:text-emerald-400">
+                          · в Kaiten
+                        </span>
+                      ) : (
+                        <span className="ml-2 text-amber-700 dark:text-amber-400">
+                          · не в Kaiten
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void deleteServer(a.id)}
+                    className="shrink-0 pt-0.5 text-xs text-red-600 underline disabled:opacity-50"
+                  >
+                    Удалить
+                  </button>
+                </li>
+              );
+            })}
             {queued.map((q) => (
               <li
                 key={`queued-${q.id}`}
@@ -452,6 +670,38 @@ export function OrderFilesPanel({
       {orderId && list.length === 0 && queued.length === 0 && !loadError ? (
         <p className="text-sm text-[var(--text-muted)]">Пока нет прикреплённых файлов.</p>
       ) : null}
+
+      {imageViewer && typeof document !== "undefined"
+        ? createPortal(
+            <OrderAttachmentsImageViewerOverlay
+              state={imageViewer}
+              onClose={() => setImageViewer(null)}
+              onPrev={() =>
+                setImageViewer((s) =>
+                  s && s.images.length > 1
+                    ? {
+                        ...s,
+                        index:
+                          (s.index - 1 + s.images.length) %
+                          s.images.length,
+                      }
+                    : s,
+                )
+              }
+              onNext={() =>
+                setImageViewer((s) =>
+                  s && s.images.length > 1
+                    ? {
+                        ...s,
+                        index: (s.index + 1) % s.images.length,
+                      }
+                    : s,
+                )
+              }
+            />,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -29,6 +29,7 @@ import {
   normalizeProstheticsInput,
   prostheticsFromDb,
   prostheticsToJson,
+  type OrderProstheticsV1,
 } from "@/lib/order-prosthetics";
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import { syncOrderProstheticsStockTx } from "@/lib/sync-order-prosthetics-stock";
@@ -1049,12 +1050,34 @@ export async function PATCH(
 
   const prostheticsSync = body.prosthetics !== undefined;
   let warehouseId: string | null = null;
+  let prevProsthetics: OrderProstheticsV1 | null = null;
+  let nextProsthetics: OrderProstheticsV1 | null = null;
   if (prostheticsSync) {
     const wh = await ensureDefaultWarehouse();
     warehouseId = wh.id;
+    prevProsthetics = prostheticsFromDb(existing.prosthetics);
+    nextProsthetics = normalizeProstheticsInput(body.prosthetics);
   }
 
+  let prostheticsStockApplied = false;
+  let orderSaved = false;
   try {
+    if (prostheticsSync && warehouseId) {
+      const syncRes = await pricingPrisma.$transaction((tx) =>
+        syncOrderProstheticsStockTx(
+          tx,
+          orderId,
+          warehouseId,
+          prevProsthetics,
+          nextProsthetics,
+        ),
+      );
+      if (!syncRes.ok) {
+        return NextResponse.json({ error: syncRes.error }, { status: 400 });
+      }
+      prostheticsStockApplied = true;
+    }
+
     const order = await savePatchedOrder(ordersPrisma, {
       orderId,
       scalarData,
@@ -1074,23 +1097,7 @@ export async function PATCH(
         },
       },
     });
-
-    if (prostheticsSync && warehouseId) {
-      const prevProsthetics = prostheticsFromDb(existing.prosthetics);
-      const nextProsthetics = normalizeProstheticsInput(body.prosthetics);
-      const syncRes = await pricingPrisma.$transaction((tx) =>
-        syncOrderProstheticsStockTx(
-          tx,
-          orderId,
-          warehouseId,
-          prevProsthetics,
-          nextProsthetics,
-        ),
-      );
-      if (!syncRes.ok) {
-        console.error("[PATCH order] stock sync", syncRes.error);
-      }
-    }
+    orderSaved = true;
 
     try {
       await recordOrderRevision(orderId, { kind: "SAVE" });
@@ -1257,6 +1264,24 @@ export async function PATCH(
       kaitenTitleSyncError: null,
     });
   } catch (e) {
+    if (prostheticsStockApplied && !orderSaved && warehouseId) {
+      try {
+        const rollback = await pricingPrisma.$transaction((tx) =>
+          syncOrderProstheticsStockTx(
+            tx,
+            orderId,
+            warehouseId,
+            nextProsthetics,
+            prevProsthetics,
+          ),
+        );
+        if (!rollback.ok) {
+          console.error("[PATCH order] stock rollback", rollback.error);
+        }
+      } catch (rollbackErr) {
+        console.error("[PATCH order] stock rollback", rollbackErr);
+      }
+    }
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       const meta = e.meta as { target?: string[] } | undefined;
       const t = meta?.target?.join(", ") ?? "";

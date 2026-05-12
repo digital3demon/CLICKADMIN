@@ -1763,7 +1763,7 @@ function linkedOrderKanbanDescription(
   const client = row.clientOrderText?.trim();
   const notes = row.notes?.trim();
   if (client) blocks.push(`Заказ от клиента:\n${client}`);
-  if (notes) blocks.push(`Комментарий:\n${notes}`);
+  if (notes) blocks.push(`Комментарий от админов:\n${notes}`);
   const tail = demo
     ? row.kaitenCardId != null
       ? `Также в Kaiten: #${row.kaitenCardId}`

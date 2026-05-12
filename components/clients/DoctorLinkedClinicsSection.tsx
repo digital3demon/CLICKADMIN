@@ -25,9 +25,11 @@ function isDeleted(
 
 export function DoctorLinkedClinicsSection({
   doctorId,
+  canEditClients,
   initialLinks,
 }: {
   doctorId: string;
+  canEditClients: boolean;
   initialLinks: DoctorClinicLinkInitial[];
 }) {
   const [links, setLinks] = useState<DoctorClinicLinkInitial[]>(initialLinks);
@@ -75,6 +77,7 @@ export function DoctorLinkedClinicsSection({
         </h2>
         <DoctorClinicLinkPanel
           doctorId={doctorId}
+          canEditClients={canEditClients}
           linkedClinicIds={links.map((l) => l.clinicId)}
           onClinicLinked={onClinicLinked}
         />
@@ -108,6 +111,7 @@ export function DoctorLinkedClinicsSection({
                 clinicId={l.clinic.id}
                 doctorId={doctorId}
                 counterpartyLabel={l.clinic.name}
+                canEditClients={canEditClients}
                 onAfterUnlink={() => onClinicUnlinked(l.clinic.id)}
               />
             </li>

@@ -24,6 +24,7 @@ import {
   parseClientsListUrlQuery,
   type ClientsListUrlState,
 } from "@/lib/clients-list-search";
+import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getPrisma } from "@/lib/get-prisma";
 import { repairDoctorLinksFromOrders } from "@/lib/repair-clinic-doctor-links";
 
@@ -50,6 +51,10 @@ type PageProps = {
 };
 
 export default async function ClientsPage({ searchParams }: PageProps) {
+  const { session, access } = await getSessionWithModuleAccess();
+  const canEditClients =
+    session?.role === "OWNER" || access?.CLIENTS_EDIT === true;
+
   let query: Record<string, string | string[] | undefined> = {};
   if (searchParams != null) {
     const resolved = await searchParams;
@@ -211,7 +216,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                 )}
               />
             </Suspense>
-            <ClientsAddNewPanel mode="clinic" />
+            <ClientsAddNewPanel mode="clinic" canEditClients={canEditClients} />
           </div>
           <div className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm">
             <table className="w-full min-w-[1000px] border-collapse text-left text-sm">
@@ -447,7 +452,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
               className="min-w-0 flex-1 sm:max-w-md"
             />
           </Suspense>
-          <ClientsAddNewPanel mode="doctor" />
+          <ClientsAddNewPanel mode="doctor" canEditClients={canEditClients} />
         </div>
         <div className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm">
           <table className="w-full min-w-[960px] border-collapse text-left text-sm">

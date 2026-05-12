@@ -19,7 +19,7 @@ async function fetchFirstLaneId(
   return typeof id === "number" ? id : null;
 }
 
-/** Описание карточки Kaiten: заказ от клиента и комментарий наряда (раздельные блоки). */
+/** Описание карточки Kaiten: заказ от клиента и комментарий от админов (раздельные блоки). */
 export function buildKaitenCardDescription(
   clientOrderText: string | null,
   notes: string | null,
@@ -31,7 +31,7 @@ export function buildKaitenCardDescription(
     parts.push(`Заказ от клиента:\n${client}`);
   }
   if (comm) {
-    parts.push(`Комментарий:\n${comm}`);
+    parts.push(`Комментарий от админов:\n${comm}`);
   }
   return parts.join("\n\n");
 }

@@ -29,7 +29,8 @@ export const ALL_APP_MODULES: AppModule[] = [
   "ANALYTICS",
   "SHIPMENTS",
   "WAREHOUSE",
-  "CLIENTS",
+  "CLIENTS_VIEW",
+  "CLIENTS_EDIT",
   "ATTENTION",
   "DIRECTORY",
   "CONFIG_PRICING",
@@ -63,7 +64,9 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   ANALYTICS: "Аналитика",
   SHIPMENTS: "Отгрузки",
   WAREHOUSE: "Склад (раздел)",
-  CLIENTS: "Клиенты",
+  CLIENTS: "Клиенты (устар., не настраивать)",
+  CLIENTS_VIEW: "Клиенты: просмотр",
+  CLIENTS_EDIT: "Клиенты: изменение данных",
   ATTENTION: "Внимание / напоминания",
   DIRECTORY: "Конфигурация (хаб)",
   CONFIG_PRICING: "Конфиг: прайс",
@@ -159,6 +162,8 @@ export function defaultModuleAllowed(
     case "SHIPMENTS":
     case "WAREHOUSE":
     case "CLIENTS":
+    case "CLIENTS_VIEW":
+    case "CLIENTS_EDIT":
     case "DIRECTORY":
     case "CONFIG_PRICING":
     case "CONFIG_WAREHOUSE":

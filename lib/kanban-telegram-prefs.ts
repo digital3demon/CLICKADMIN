@@ -75,14 +75,14 @@ export const KANBAN_TELEGRAM_PREF_LABELS: Record<KanbanTelegramPrefKey, string> 
   tg_person_added_to_card: "Вас добавили в карточку",
   tg_person_assigned_responsible: "Вас назначили ответственным в карточке",
   tg_person_removed_from_card: "Вы были исключены из карточки",
-  tg_mentioned_in_comment: "Вас упомянули в комментарии",
+  tg_mentioned_in_comment: "Вас упомянули в комментарии от админов",
   tg_checklist_assigned_responsible:
     "Вас назначили ответственным в пункте чек-листа",
   tg_deadline_reminder: "Напоминание о сроке",
   tg_kanban_crm_sync: "Изменения с канбана CRM (колонка / тип карточки)",
   tg_block_added: "Добавлена блокировка",
   tg_card_unblocked: "Карточка разблокирована",
-  tg_comment_added: "Добавлен комментарий",
+  tg_comment_added: "Добавлен комментарий от админов",
   tg_description_changed: "Изменилось описание",
   tg_due_changed: "Изменился срок выполнения",
   tg_order_correction_changed:

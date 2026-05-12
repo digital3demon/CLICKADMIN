@@ -72,9 +72,11 @@ function pickContractNumberFromFields(fields: ContractDraftValues[]): string {
 
 export function ClinicCommercialTermsPanel({
   clinicId,
+  canEditClients,
   initial,
 }: {
   clinicId: string;
+  canEditClients: boolean;
   initial: ClinicCommercialInitial;
 }) {
   const router = useRouter();
@@ -96,7 +98,12 @@ export function ClinicCommercialTermsPanel({
     setHasContractDoc(initial.hasContractDoc);
   }, [initialKey, editing, initial]);
 
+  useEffect(() => {
+    if (!canEditClients) setEditing(false);
+  }, [canEditClients]);
+
   const openCreateContract = async () => {
+    if (!canEditClients) return;
     setContractBusy(true);
     setContractError(null);
     setContractSuccess(null);
@@ -131,6 +138,7 @@ export function ClinicCommercialTermsPanel({
   };
 
   const saveGeneratedContract = async () => {
+    if (!canEditClients) return;
     setContractBusy(true);
     setContractError(null);
     setContractSuccess(null);
@@ -172,6 +180,7 @@ export function ClinicCommercialTermsPanel({
   };
 
   const onUploadContract = async (e: ChangeEvent<HTMLInputElement>) => {
+    if (!canEditClients) return;
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
@@ -208,6 +217,7 @@ export function ClinicCommercialTermsPanel({
   };
 
   const onSave = async () => {
+    if (!canEditClients) return;
     setSaving(true);
     setError(null);
     try {
@@ -288,16 +298,22 @@ export function ClinicCommercialTermsPanel({
             </a>
           ) : null}
           {!editing ? (
-            <button
-              type="button"
-              className={`${btnBase} bg-[var(--sidebar-blue)] text-white hover:opacity-95`}
-              onClick={() => {
-                setEditing(true);
-                setError(null);
-              }}
-            >
-              Изменить
-            </button>
+            canEditClients ? (
+              <button
+                type="button"
+                className={`${btnBase} bg-[var(--sidebar-blue)] text-white hover:opacity-95`}
+                onClick={() => {
+                  setEditing(true);
+                  setError(null);
+                }}
+              >
+                Изменить
+              </button>
+            ) : (
+              <span className="max-w-[12rem] text-right text-[0.7rem] leading-snug text-[var(--text-muted)]">
+                Редактирование — только с правом «Клиенты: изменение данных».
+              </span>
+            )
           ) : (
             <>
               <button
@@ -554,7 +570,7 @@ export function ClinicCommercialTermsPanel({
                 <div className="flex flex-wrap gap-2 sm:justify-end">
                   <button
                     type="button"
-                    disabled={contractBusy}
+                    disabled={contractBusy || !canEditClients}
                     className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] hover:bg-[var(--table-row-hover)] disabled:opacity-50`}
                     onClick={() => void openCreateContract()}
                   >
@@ -562,7 +578,7 @@ export function ClinicCommercialTermsPanel({
                   </button>
                   <button
                     type="button"
-                    disabled={contractBusy}
+                    disabled={contractBusy || !canEditClients}
                     className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] hover:bg-[var(--table-row-hover)] disabled:opacity-50`}
                     onClick={() => fileInputRef.current?.click()}
                   >
@@ -571,6 +587,7 @@ export function ClinicCommercialTermsPanel({
                   <input
                     ref={fileInputRef}
                     type="file"
+                    disabled={!canEditClients}
                     accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     className="hidden"
                     onChange={(e) => void onUploadContract(e)}
