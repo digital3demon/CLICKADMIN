@@ -196,9 +196,14 @@ type KanbanCardModalProps = {
   canManageKanbanChecklist?: boolean;
   /** Назначать таймер на карточке (модуль KANBAN_MANAGE_TIMER). */
   canManageKanbanTimer?: boolean;
+  /** Блокировка / снятие блокировки: ответственные и участники карточки либо администратор CRM. */
+  canManageKanbanBlock?: boolean;
   onOpenLinkedCard?: (cardId: string) => void;
   onParentProductionFilesUpdated?: (cardId: string) => void;
 };
+
+const KANBAN_BLOCK_PERM_HINT =
+  "Блокировку могут менять ответственные и участники карточки или администратор";
 
 type ManualRouteDraftRow = {
   fileIndex: number;
@@ -230,6 +235,7 @@ export function KanbanCardModal({
   canManageParticipants = true,
   canManageKanbanChecklist = true,
   canManageKanbanTimer = false,
+  canManageKanbanBlock = false,
   onOpenLinkedCard,
   onParentProductionFilesUpdated,
 }: KanbanCardModalProps) {
@@ -488,11 +494,16 @@ export function KanbanCardModal({
     : "Карточка уже в последнем столбце";
 
   const openBlockPopup = () => {
+    if (!canManageKanbanBlock) {
+      toast(KANBAN_BLOCK_PERM_HINT, true);
+      return;
+    }
     setBlockReasonDraft("");
     setBlockPopupOpen(true);
   };
 
   const confirmBlock = () => {
+    if (!canManageKanbanBlock) return;
     onApply((b) => {
       const fc = findCard(b, cardId);
       if (!fc) return;
@@ -1131,9 +1142,10 @@ export function KanbanCardModal({
               >
                 Отмена
               </button>
-              <button
-                type="button"
-                className="rounded-md bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800"
+            <button
+              type="button"
+              disabled={!canManageKanbanBlock}
+              className="rounded-md bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"
                 onClick={confirmBlock}
               >
                 Заблокировать
@@ -1338,14 +1350,17 @@ export function KanbanCardModal({
             </div>
             <button
               type="button"
-              className="shrink-0 self-center rounded-md bg-white/15 px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-white/25"
-              onClick={() =>
+              disabled={!canManageKanbanBlock}
+              title={canManageKanbanBlock ? undefined : KANBAN_BLOCK_PERM_HINT}
+              className="shrink-0 self-center rounded-md bg-white/15 px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                if (!canManageKanbanBlock) return;
                 onApply((b) => {
                   const fc = findCard(b, cardId);
                   if (!fc) return;
                   performUnblock(fc.card, b, act);
-                })
-              }
+                });
+              }}
             >
               Снять блокировку
             </button>
@@ -1440,9 +1455,20 @@ export function KanbanCardModal({
           <div className="flex w-full min-w-0 flex-wrap items-center gap-2 border-b border-[var(--kaiten-modal-border)] px-3 py-2.5">
             <button
               type="button"
-              title={blocked ? "Снять блокировку" : "Заблокировать карточку"}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
+              title={
+                canManageKanbanBlock
+                  ? blocked
+                    ? "Снять блокировку"
+                    : "Заблокировать карточку"
+                  : KANBAN_BLOCK_PERM_HINT
+              }
+              disabled={!canManageKanbanBlock}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:cursor-not-allowed disabled:opacity-40"
               onClick={() => {
+                if (!canManageKanbanBlock) {
+                  toast(KANBAN_BLOCK_PERM_HINT, true);
+                  return;
+                }
                 if (blocked) {
                   onApply((b) => {
                     const fc = findCard(b, cardId);
@@ -1994,6 +2020,7 @@ export function KanbanCardModal({
                 onApply={onApply}
                 activityActorLabel={act}
                 canManage={canManageKanbanTimer}
+                sessionUserId={commentAuthorUserId ?? null}
               />
 
               {!card.parentCardId && childStatusRows.length > 0 ? (

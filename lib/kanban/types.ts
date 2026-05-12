@@ -139,6 +139,8 @@ export type KanbanCard = {
   /** Обратный отсчёт (ISO): старт и полная длительность в мс; задают пользователи с правом KANBAN_MANAGE_TIMER. */
   timerStartedAt?: string | null;
   timerDurationMs?: number | null;
+  /** Заморозка отображения: ISO момент «оставить таймер» — полоса и остаток не тикают, цвет по доле на этот момент. */
+  timerFrozenAt?: string | null;
 };
 
 export type KanbanColumn = {

@@ -841,11 +841,11 @@ model Order {
   doctorId                       String
   doctor                         Doctor                    @relation(fields: [doctorId], references: [id])
   patientName                    String?
-  /// Дата приёма пациента (отгрузки; при создании/редактировании совпадает с dueToAdminsAt)
+  /// Дата приёма пациента (при создании/редактировании совпадает с dueToAdminsAt)
   appointmentDate                DateTime?
-  /// Срок лабораторный (шапка Kaiten / канбан / печать)
+  /// Срок лабораторный (шапка Kaiten / канбан / печать / отгрузки по окну МСК)
   dueDate                        DateTime?
-  /// Дата приёма пациента (в CRM и отгрузках; синхронно с appointmentDate при сохранении)
+  /// Дата приёма пациента в CRM; синхронно с appointmentDate при сохранении
   dueToAdminsAt                  DateTime?
   /// Когда работа поступила в лабораторию; null — считать моментом занесения наряда (createdAt)
   workReceivedAt                 DateTime?

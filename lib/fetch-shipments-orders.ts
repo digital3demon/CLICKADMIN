@@ -1,12 +1,14 @@
 import type { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { getClientsPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
+import { formatCounterpartyRequisitesSummary } from "@/lib/format-counterparty-requisites-summary";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
 
 const shipmentOrderSelect = {
   id: true,
   orderNumber: true,
   patientName: true,
+  legalEntity: true,
   appointmentDate: true,
   workReceivedAt: true,
   dueToAdminsAt: true,
@@ -65,6 +67,8 @@ export type ShipmentOrderRow = Omit<
   "constructions" | "chatCorrections" | "prostheticsRequests" | "clinicId" | "doctorId" | "kaitenCardTypeId"
 > & {
   clinic: { id: string; name: string; address: string | null } | null;
+  /** Реквизиты плательщика: клиника или зеркало ИП врача (для бухгалтерии в отгрузках). */
+  counterpartyRequisitesText: string | null;
   doctor: { id: string; fullName: string };
   kaitenCardType: { name: string } | null;
   constructions: Array<{
@@ -79,7 +83,7 @@ export type ShipmentOrderRow = Omit<
   listPendingProstheticsRequests: boolean;
 };
 
-/** Наряды с непустым appointmentDate в полуинтервале [start, endExclusive) (МСК-окно отгрузки). */
+/** Наряды с непустым dueDate (срок лаборатории) в полуинтервале [start, endExclusive) — МСК-окно отгрузки. */
 export async function fetchShipmentOrdersInDueRange(
   db: PrismaClient,
   tenantId: string,
@@ -90,15 +94,18 @@ export async function fetchShipmentOrdersInDueRange(
     where: {
       tenantId,
       archivedAt: null,
-      appointmentDate: { not: null, gte: start, lt: endExclusive },
+      dueDate: { not: null, gte: start, lt: endExclusive },
     },
-    orderBy: [{ appointmentDate: "asc" }, { orderNumber: "asc" }],
+    orderBy: [{ dueDate: "asc" }, { orderNumber: "asc" }],
     select: shipmentOrderSelect,
   });
   const clientsPrisma = await getClientsPrisma();
   const pricingPrisma = await getPricingPrisma();
   const doctorIds = Array.from(new Set(rows.map((x) => x.doctorId)));
   const clinicIds = Array.from(new Set(rows.map((x) => x.clinicId).filter(Boolean))) as string[];
+  const doctorIdsForPrivateRequisites = Array.from(
+    new Set(rows.filter((x) => !x.clinicId).map((x) => x.doctorId)),
+  );
   const cardTypeIds = Array.from(new Set(rows.map((x) => x.kaitenCardTypeId).filter(Boolean))) as string[];
   const constructionTypeIds = Array.from(
     new Set(rows.flatMap((x) => x.constructions.map((c) => c.constructionTypeId)).filter(Boolean)),
@@ -106,15 +113,44 @@ export async function fetchShipmentOrdersInDueRange(
   const priceListItemIds = Array.from(
     new Set(rows.flatMap((x) => x.constructions.map((c) => c.priceListItemId)).filter(Boolean)),
   ) as string[];
-  const [doctors, clinics, cardTypes, constructionTypes, priceItems] = await Promise.all([
+  const requisiteClinicSelect = {
+    id: true,
+    name: true,
+    address: true,
+    legalFullName: true,
+    inn: true,
+    kpp: true,
+    ogrn: true,
+    bankName: true,
+    bik: true,
+    settlementAccount: true,
+    correspondentAccount: true,
+  } as const;
+
+  const [doctors, clinics, doctorsIpRequisites, cardTypes, constructionTypes, priceItems] =
+    await Promise.all([
     clientsPrisma.doctor.findMany({
       where: { id: { in: doctorIds } },
       select: { id: true, fullName: true },
     }),
     clinicIds.length
       ? clientsPrisma.clinic.findMany({
-          where: { id: { in: clinicIds } },
-          select: { id: true, name: true, address: true },
+          where: { id: { in: clinicIds }, deletedAt: null },
+          select: requisiteClinicSelect,
+        })
+      : Promise.resolve([]),
+    doctorIdsForPrivateRequisites.length
+      ? clientsPrisma.doctor.findMany({
+          where: { id: { in: doctorIdsForPrivateRequisites } },
+          select: {
+            id: true,
+            ipClinicAsSource: {
+              select: {
+                ...requisiteClinicSelect,
+                deletedAt: true,
+              },
+            },
+          },
         })
       : Promise.resolve([]),
     cardTypeIds.length
@@ -137,7 +173,38 @@ export async function fetchShipmentOrdersInDueRange(
       : Promise.resolve([]),
   ]);
   const doctorById = new Map(doctors.map((x) => [x.id, x]));
-  const clinicById = new Map(clinics.map((x) => [x.id, x]));
+  const privateReqByDoctorId = new Map(
+    doctorsIpRequisites.map((d) => {
+      const ip = d.ipClinicAsSource;
+      if (!ip || ip.deletedAt != null) {
+        return [d.id, null] as const;
+      }
+      const { deletedAt: _del, ...req } = ip;
+      return [d.id, formatCounterpartyRequisitesSummary(req)] as const;
+    }),
+  );
+  const clinicById = new Map(
+    clinics.map((x) => {
+      const { legalFullName, inn, kpp, ogrn, bankName, bik, settlementAccount, correspondentAccount, ...pub } =
+        x;
+      return [
+        x.id,
+        {
+          ...pub,
+          counterpartyRequisitesText: formatCounterpartyRequisitesSummary({
+            legalFullName,
+            inn,
+            kpp,
+            ogrn,
+            bankName,
+            bik,
+            settlementAccount,
+            correspondentAccount,
+          }),
+        },
+      ] as const;
+    }),
+  );
   const cardTypeById = new Map(cardTypes.map((x) => [x.id, x]));
   const constructionTypeById = new Map(constructionTypes.map((x) => [x.id, x]));
   const priceItemById = new Map(priceItems.map((x) => [x.id, x]));
@@ -155,9 +222,16 @@ export async function fetchShipmentOrdersInDueRange(
         ? (priceItemById.get(c.priceListItemId) ?? null)
         : null,
     }));
+    const clinFull = o.clinicId ? clinicById.get(o.clinicId) : undefined;
+    const counterpartyRequisitesText =
+      clinFull?.counterpartyRequisitesText ??
+      (!o.clinicId ? (privateReqByDoctorId.get(o.doctorId) ?? null) : null);
     return {
       ...rest,
-      clinic: o.clinicId ? (clinicById.get(o.clinicId) ?? null) : null,
+      clinic: clinFull
+        ? { id: clinFull.id, name: clinFull.name, address: clinFull.address }
+        : null,
+      counterpartyRequisitesText,
       doctor: doctorById.get(o.doctorId) ?? { id: o.doctorId, fullName: "—" },
       kaitenCardType: o.kaitenCardTypeId
         ? ((cardTypeById.get(o.kaitenCardTypeId) ?? null) as { name: string } | null)

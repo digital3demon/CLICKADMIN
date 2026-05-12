@@ -100,6 +100,7 @@ export function applyStandaloneRowsFromServer(
             ...x.payload,
             timerStartedAt: prev.timerStartedAt ?? x.payload.timerStartedAt,
             timerDurationMs: prev.timerDurationMs ?? x.payload.timerDurationMs,
+            timerFrozenAt: prev.timerFrozenAt ?? x.payload.timerFrozenAt,
           };
         }
         return x.payload;

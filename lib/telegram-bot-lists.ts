@@ -222,7 +222,7 @@ export async function tryTelegramBotListCommand(opts: {
       const b = moscowShipmentInclusiveRangeBoundsUtc(todayYmd, fri);
       start = b.start;
       endExclusive = b.endExclusive;
-      header = `Отгрузки до конца рабочей недели (${todayYmd} … ${fri}, окна приёма как на странице «Отгрузки»)`;
+      header = `Отгрузки до конца рабочей недели (${todayYmd} … ${fri}, окна срока лаборатории как на странице «Отгрузки»)`;
     }
 
     const rows = await fetchShipmentOrdersInDueRange(

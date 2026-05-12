@@ -22,6 +22,8 @@ import {
   humanListTagLabel,
   LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
+  LIST_TAG_PAYMENT_PAID,
+  LIST_TAG_PAYMENT_PARTIAL,
   LIST_TAG_PROSTHETICS_PENDING,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
@@ -524,6 +526,42 @@ export default async function OrdersPage({
             className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
           >
             Показать все заказы
+          </Link>
+          <Link
+            href={ordersListHref({
+              limit: pageSize,
+              tag: LIST_TAG_PAYMENT_PAID,
+              hideShipped: hideShippedActive,
+              onlyShipped: onlyShippedActive,
+              q: listSearchQ || undefined,
+              from: fromUrl ?? undefined,
+              to: toUrl ?? undefined,
+            })}
+            className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
+              activeFilter.kind === "paymentPaid"
+                ? "border-sky-500 bg-sky-100 text-sky-950 ring-1 ring-sky-500/50 dark:border-sky-600 dark:bg-sky-900/50 dark:text-sky-50"
+                : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+            }`}
+          >
+            Показать оплаченные
+          </Link>
+          <Link
+            href={ordersListHref({
+              limit: pageSize,
+              tag: LIST_TAG_PAYMENT_PARTIAL,
+              hideShipped: hideShippedActive,
+              onlyShipped: onlyShippedActive,
+              q: listSearchQ || undefined,
+              from: fromUrl ?? undefined,
+              to: toUrl ?? undefined,
+            })}
+            className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
+              activeFilter.kind === "paymentPartial"
+                ? "border-sky-500 bg-sky-100 text-sky-950 ring-1 ring-sky-500/50 dark:border-sky-600 dark:bg-sky-900/50 dark:text-sky-50"
+                : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+            }`}
+          >
+            Показать частично оплаченные
           </Link>
         </div>
       ) : rawTag ? (

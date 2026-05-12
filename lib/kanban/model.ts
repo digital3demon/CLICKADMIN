@@ -868,6 +868,8 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
       partial.timerStartedAt === undefined ? null : partial.timerStartedAt ?? null,
     timerDurationMs:
       partial.timerDurationMs === undefined ? null : partial.timerDurationMs ?? null,
+    timerFrozenAt:
+      partial.timerFrozenAt === undefined ? null : partial.timerFrozenAt ?? null,
   };
 }
 
@@ -1540,6 +1542,17 @@ export function findLinkedCardOnBoard(
   return null;
 }
 
+function findLinkedOrderCardAnywhere(
+  state: KanbanAppState,
+  orderId: string,
+): { board: KanbanBoard; col: KanbanColumn; card: KanbanCard } | null {
+  for (const b of state.boards) {
+    const hit = findLinkedCardOnBoard(b, orderId);
+    if (hit) return { board: b, col: hit.col, card: hit.card };
+  }
+  return null;
+}
+
 function removeLinkedOrderCardFromBoard(board: KanbanBoard, orderId: string): void {
   for (const col of board.columns) {
     col.cards = col.cards.filter((c) => c.linkedOrderId !== orderId);
@@ -2064,6 +2077,8 @@ export function mergeKaitenLinkedOrdersIntoAppState(
     const targetBoard = resolveBoardForKaitenLane(next, row.kaitenTrackLane);
     if (!targetBoard || !targetBoard.columns.length) continue;
     if (isLinkedOrderArchivedOnBoard(targetBoard, row.id)) continue;
+    const reuseFromOtherBoard = findLinkedOrderCardAnywhere(next, row.id);
+    const reuseCard = reuseFromOtherBoard?.card ?? null;
     for (const b of next.boards) {
       if (b.id !== targetBoard.id) {
         removeLinkedOrderCardFromBoard(b, row.id);
@@ -2106,30 +2121,41 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       row.kaitenColumnTitle,
     );
     const found = findLinkedCardOnBoard(targetBoard, row.id);
+    let foundEff = found;
+    if (!foundEff && reuseCard && reuseCard.linkedOrderId === row.id) {
+      targetCol.cards.unshift(reuseCard);
+      foundEff = findLinkedCardOnBoard(targetBoard, row.id);
+    }
     const nowIso = new Date().toISOString();
-    if (found) {
+    if (foundEff) {
       const hasKaiten =
         row.kaitenCardId != null && Number.isFinite(row.kaitenCardId);
-      if (hasKaiten && found.col.id !== targetCol.id) {
-        moveLinkedCardToColumn(found.card, found.col, targetCol);
+      if (hasKaiten && foundEff.col.id !== targetCol.id) {
+        pushActivity(
+          foundEff.card,
+          `Перемещена в «${targetCol.title}» (Kaiten)`,
+          targetBoard.users[0]?.id,
+          targetBoard,
+        );
+        moveLinkedCardToColumn(foundEff.card, foundEff.col, targetCol);
       }
-      found.card.title = title;
-      found.card.description = desc;
-      found.card.kaitenCardId = row.kaitenCardId ?? null;
-      found.card.linkedOrderId = row.id;
-      found.card.dueDate = dueStr;
-      found.card.urgent = row.isUrgent;
-      found.card.cardTypeId = fallbackTypeId;
-      found.card.trackLane = lane;
-      found.card.blocked = !!row.kaitenBlocked;
-      found.card.blockReason = (row.kaitenBlockReason || "").trim();
-      found.card.kaitenCardSortOrder = row.kaitenCardSortOrder ?? null;
-      found.card.blockedAt = linkedOrderKanbanBlockedAtIso(row, nowIso);
-      if (!found.card.blocked) {
-        found.card.blockedByUserId = "";
+      foundEff.card.title = title;
+      foundEff.card.description = desc;
+      foundEff.card.kaitenCardId = row.kaitenCardId ?? null;
+      foundEff.card.linkedOrderId = row.id;
+      foundEff.card.dueDate = dueStr;
+      foundEff.card.urgent = row.isUrgent;
+      foundEff.card.cardTypeId = fallbackTypeId;
+      foundEff.card.trackLane = lane;
+      foundEff.card.blocked = !!row.kaitenBlocked;
+      foundEff.card.blockReason = (row.kaitenBlockReason || "").trim();
+      foundEff.card.kaitenCardSortOrder = row.kaitenCardSortOrder ?? null;
+      foundEff.card.blockedAt = linkedOrderKanbanBlockedAtIso(row, nowIso);
+      if (!foundEff.card.blocked) {
+        foundEff.card.blockedByUserId = "";
       }
-      found.card.updatedAt = nowIso;
-      mergeOrderAttachmentsIntoLinkedCard(found.card, row.id, row);
+      foundEff.card.updatedAt = nowIso;
+      mergeOrderAttachmentsIntoLinkedCard(foundEff.card, row.id, row);
     } else {
       const card = createCard({
         id: cardDbId,

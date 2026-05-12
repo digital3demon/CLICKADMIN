@@ -1,3 +1,14 @@
+/** Для отображения: при заморозке считаем время «на момент freeze», иначе текущее. */
+export function kanbanCardTimerDisplayNowMs(
+  timerFrozenAt: string | null | undefined,
+  nowMs: number,
+): number {
+  if (!timerFrozenAt) return nowMs;
+  const t = Date.parse(timerFrozenAt);
+  if (!Number.isFinite(t)) return nowMs;
+  return t;
+}
+
 /** Доля прошедшего времени от старта таймера [0, 1]. */
 export function kanbanCardTimerElapsedRatio(
   timerStartedAt: string | null | undefined,
@@ -56,6 +67,10 @@ export function formatKanbanTimerCountdown(remainingMs: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/** CSS linear-gradient для полосы (зелёный → жёлтый → красный). */
-export const KANBAN_TIMER_TRACK_GRADIENT =
-  "linear-gradient(90deg, rgb(34 197 94), rgb(234 179 8), rgb(239 68 68))";
+/** Сплошной цвет полосы: первые 1/3 интервала — зелёный, до 2/3 — жёлтый, далее — красный. */
+export function kanbanCardTimerTrackFillColor(elapsedRatio: number): string {
+  const r = Math.min(1, Math.max(0, elapsedRatio));
+  if (r < 1 / 3) return "rgb(34 197 94)";
+  if (r < 2 / 3) return "rgb(234 179 8)";
+  return "rgb(239 68 68)";
+}

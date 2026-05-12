@@ -64,6 +64,8 @@ export default async function ShipmentsPage({
 
   const labDueHmSlots = await getLabDueHmSlotsForTenant(tenantId);
 
+  const showAccountantShipmentColumns = session?.role === "ACCOUNTANT";
+
   const todayYmd = moscowTodayYmd();
   const defaultFrom = addCalendarDaysYmd(todayYmd, -7);
   const defaultTo = todayYmd;
@@ -72,7 +74,7 @@ export default async function ShipmentsPage({
   const toRaw = parseYmdOrNull(sp.to ?? null);
 
   const description =
-    "Наряды по дате приёма пациента. Для выбранного дня D (МСК) в список попадают приёмы с D 00:00 до (D+1) 12:00 — например, «Сегодня» включает сегодня и завтра до полудня. Таблица как на странице «Заказы»: отметки и колонка Kaiten обновляются в фоне.";
+    "Наряды по сроку лаборатории (колонка «Лаборатория»), не по записи пациента. Для выбранного дня D (МСК) в список попадают наряды, у которых срок лаборатории попадает в окно D 00:00 — (D+1) 12:00; например, «Сегодня» включает сегодня и завтра до полудня. Таблица как на странице «Заказы»: отметки и колонка Kaiten обновляются в фоне.";
 
   if (tab === "today") {
     const { start, endExclusive } = moscowShipmentDayBoundsUtc(todayYmd);
@@ -96,11 +98,12 @@ export default async function ShipmentsPage({
           />
           <ShipmentsOrdersTable
             orders={orders}
-            emptyHint="В окне отгрузки на сегодня нет нарядов с указанной датой приёма пациента."
-            listHeading={`Приём пациента (МСК), окно ${todayYmd} 00:00 — ${addCalendarDaysYmd(todayYmd, 1)} 12:00 · нарядов: ${orders.length}`}
+            emptyHint="В окне отгрузки на сегодня нет нарядов с указанным сроком лаборатории в этом интервале."
+            listHeading={`Срок лаборатории (МСК), окно ${todayYmd} 00:00 — ${addCalendarDaysYmd(todayYmd, 1)} 12:00 · нарядов: ${orders.length}`}
             isDemo={isDemo}
             siteOrigin={siteOrigin}
             labDueHmSlots={labDueHmSlots}
+            showAccountantColumns={showAccountantShipmentColumns}
           />
         </div>
       </ModuleFrame>
@@ -130,11 +133,12 @@ export default async function ShipmentsPage({
           />
           <ShipmentsOrdersTable
             orders={orders}
-            emptyHint="В окне отгрузки на завтра нет нарядов с указанной датой приёма пациента."
-            listHeading={`Приём пациента (МСК), окно ${ymd} 00:00 — ${addCalendarDaysYmd(ymd, 1)} 12:00 · нарядов: ${orders.length}`}
+            emptyHint="В окне отгрузки на завтра нет нарядов с указанным сроком лаборатории в этом интервале."
+            listHeading={`Срок лаборатории (МСК), окно ${ymd} 00:00 — ${addCalendarDaysYmd(ymd, 1)} 12:00 · нарядов: ${orders.length}`}
             isDemo={isDemo}
             siteOrigin={siteOrigin}
             labDueHmSlots={labDueHmSlots}
+            showAccountantColumns={showAccountantShipmentColumns}
           />
         </div>
       </ModuleFrame>
@@ -190,7 +194,7 @@ export default async function ShipmentsPage({
             defaultTo={defaultTo}
             receptionSummary={
               showTable
-                ? `Приём пациента (МСК), окна от ${fromRaw!} до ${addCalendarDaysYmd(toRaw!, 1)} 12:00 · нарядов: ${orders.length}`
+                ? `Срок лаборатории (МСК), окна от ${fromRaw!} до ${addCalendarDaysYmd(toRaw!, 1)} 12:00 · нарядов: ${orders.length}`
                 : null
             }
           />
@@ -221,12 +225,13 @@ export default async function ShipmentsPage({
         {showTable ? (
           <ShipmentsOrdersTable
             orders={orders}
-            emptyHint="За выбранный период нет нарядов с указанной датой приёма пациента в соответствующих окнах отгрузки."
-            listHeading={`Приём пациента (МСК), окна от ${fromRaw!} до ${addCalendarDaysYmd(toRaw!, 1)} 12:00 · нарядов: ${orders.length}`}
+            emptyHint="За выбранный период нет нарядов с указанным сроком лаборатории в соответствующих окнах отгрузки."
+            listHeading={`Срок лаборатории (МСК), окна от ${fromRaw!} до ${addCalendarDaysYmd(toRaw!, 1)} 12:00 · нарядов: ${orders.length}`}
             listHeadingScreen={false}
             isDemo={isDemo}
             siteOrigin={siteOrigin}
             labDueHmSlots={labDueHmSlots}
+            showAccountantColumns={showAccountantShipmentColumns}
           />
         ) : null}
       </div>

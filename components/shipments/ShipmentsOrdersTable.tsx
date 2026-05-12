@@ -34,6 +34,7 @@ export function ShipmentsOrdersTable({
   isDemo = false,
   siteOrigin = null,
   labDueHmSlots,
+  showAccountantColumns = false,
 }: {
   orders: ShipmentOrderRow[];
   emptyHint: string;
@@ -44,6 +45,8 @@ export function ShipmentsOrdersTable({
   isDemo?: boolean;
   siteOrigin?: string | null;
   labDueHmSlots: readonly string[];
+  /** Доп. колонки «Реквизиты» и «Наше юрлицо» (роль бухгалтер). */
+  showAccountantColumns?: boolean;
 }) {
   if (orders.length === 0) {
     return (
@@ -137,6 +140,22 @@ export function ShipmentsOrdersTable({
               >
                 Запись
               </th>
+              {showAccountantColumns ? (
+                <>
+                  <th
+                    className="min-w-[14rem] max-w-[22rem] px-2 py-2 text-center align-top normal-case print:max-w-none print:px-1.5"
+                    title="ИНН, КПП, банк, р/с и др. по карточке клиники или ИП врача"
+                  >
+                    Реквизиты
+                  </th>
+                  <th
+                    className="min-w-[10rem] max-w-[14rem] px-2 py-2 text-center align-top normal-case print:max-w-none print:px-1.5"
+                    title="С какого юрлица лаборатории ведётся наряд (поле в наряде)"
+                  >
+                    Наше юрлицо
+                  </th>
+                </>
+              ) : null}
               <th
                 className="min-w-[11rem] whitespace-nowrap px-2 py-2 text-center align-top normal-case print:px-1.5"
                 title="Отметки: как на странице «Заказы»"
@@ -290,6 +309,28 @@ export function ShipmentsOrdersTable({
                       createdAtIso={o.createdAt.toISOString()}
                     />
                   </td>
+                  {showAccountantColumns ? (
+                    <>
+                      <td className="min-w-[14rem] max-w-[22rem] whitespace-pre-wrap px-2 py-2 align-top text-left text-[11px] leading-snug text-[var(--text-body)] print:max-w-none print:px-1.5 print:text-[10px]">
+                        {o.counterpartyRequisitesText?.trim() ? (
+                          <span className="block hyphens-auto break-words">
+                            {o.counterpartyRequisitesText.trim()}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--text-muted)]">—</span>
+                        )}
+                      </td>
+                      <td className="min-w-[10rem] max-w-[14rem] whitespace-pre-wrap px-2 py-2 align-top text-left text-[11px] leading-snug text-[var(--text-body)] print:max-w-none print:px-1.5 print:text-[10px]">
+                        {o.legalEntity?.trim() ? (
+                          <span className="block hyphens-auto break-words">
+                            {o.legalEntity.trim()}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--text-muted)]">—</span>
+                        )}
+                      </td>
+                    </>
+                  ) : null}
                   <td className="min-w-[11rem] px-2 py-2 align-top print:px-1.5">
                     <OrderListTagsCell
                       orderId={o.id}

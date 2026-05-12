@@ -61,6 +61,7 @@ import {
 import { kanbanLinkedOrdersPullIntervalMs } from "@/lib/kanban-linked-pull-ms";
 import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
 import { kanbanCardIdFromSearchParams } from "@/lib/kanban-order-card-url";
+import { canUserManageKanbanBlockForCard } from "@/lib/kanban-block-permissions";
 import { postKanbanTelegramNotify } from "@/lib/kanban-crm-telegram-notify-client";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
 import { telegramHtmlLink } from "@/lib/telegram-html";
@@ -560,6 +561,22 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     if (!cardModalId) return board;
     return findCardInAppState(appState, cardModalId)?.board ?? board;
   }, [cardModalId, appState, board]);
+
+  const modalCardForBlockPerm = useMemo(() => {
+    if (!appState || !cardModalId) return null;
+    return findCardInAppState(appState, cardModalId)?.card ?? null;
+  }, [appState, cardModalId]);
+
+  const canManageKanbanBlock = useMemo(() => {
+    if (isDemo) return true;
+    if (!modalCardForBlockPerm) return false;
+    return canUserManageKanbanBlockForCard(
+      kanbanSessionUserId,
+      kanbanSessionRole,
+      modalCardForBlockPerm,
+    );
+  }, [isDemo, modalCardForBlockPerm, kanbanSessionUserId, kanbanSessionRole]);
+
   const archivedCards = useMemo<KanbanArchivedCard[]>(() => {
     if (!board) return [];
     return [...(board.archivedCards || [])].sort((a, b) =>
@@ -1794,6 +1811,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         canManageParticipants={kanbanCardPerms.manageParticipants}
         canManageKanbanChecklist={kanbanCardPerms.manageKanbanChecklist}
         canManageKanbanTimer={kanbanCardPerms.manageKanbanTimer}
+        canManageKanbanBlock={canManageKanbanBlock}
         onOpenLinkedCard={(id) => setCardModalId(id)}
         onParentProductionFilesUpdated={syncParentProductionChildrenAfterFilesAttach}
         trackLaneOptions={isDemo ? [...demoTrackLanes()] : undefined}

@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import {
   formatKanbanTimerCountdown,
+  kanbanCardTimerDisplayNowMs,
   kanbanCardTimerElapsedRatio,
   kanbanCardTimerRemainingMs,
-  KANBAN_TIMER_TRACK_GRADIENT,
+  kanbanCardTimerTrackFillColor,
 } from "@/lib/kanban/kanban-card-timer";
 import { findCard, pushActivity } from "@/lib/kanban/model";
 
@@ -38,12 +39,15 @@ export function KanbanCardTimerBlock({
   onApply,
   activityActorLabel,
   canManage,
+  sessionUserId,
 }: {
   card: KanbanCard;
   cardId: string;
   onApply: (fn: (b: KanbanBoard) => void) => void;
   activityActorLabel?: string;
   canManage: boolean;
+  /** Текущий пользователь CRM — для «Оставить таймер» как участник/ответственный. */
+  sessionUserId?: string | null;
 }) {
   const act = (activityActorLabel ?? "").trim() || undefined;
   const [now, setNow] = useState(() => Date.now());
@@ -58,15 +62,39 @@ export function KanbanCardTimerBlock({
   }, []);
 
   const started = Boolean(card.timerStartedAt && card.timerDurationMs && card.timerDurationMs > 0);
+  const displayNow = useMemo(
+    () => kanbanCardTimerDisplayNowMs(card.timerFrozenAt, now),
+    [card.timerFrozenAt, now],
+  );
   const ratio = useMemo(
-    () => kanbanCardTimerElapsedRatio(card.timerStartedAt, card.timerDurationMs, now),
-    [card.timerStartedAt, card.timerDurationMs, now],
+    () =>
+      kanbanCardTimerElapsedRatio(
+        card.timerStartedAt,
+        card.timerDurationMs,
+        displayNow,
+      ),
+    [card.timerStartedAt, card.timerDurationMs, displayNow],
   );
   const remaining = useMemo(
-    () => kanbanCardTimerRemainingMs(card.timerStartedAt, card.timerDurationMs, now),
-    [card.timerStartedAt, card.timerDurationMs, now],
+    () =>
+      kanbanCardTimerRemainingMs(
+        card.timerStartedAt,
+        card.timerDurationMs,
+        displayNow,
+      ),
+    [card.timerStartedAt, card.timerDurationMs, displayNow],
   );
   const label = formatKanbanTimerCountdown(remaining);
+  const fillColor = kanbanCardTimerTrackFillColor(ratio);
+
+  const uid = String(sessionUserId || "").trim();
+  const canFreezeTimer = useMemo(() => {
+    if (!started || !uid) return canManage;
+    const a = card.assignees || [];
+    const p = card.participants || [];
+    if (a.includes(uid) || p.includes(uid)) return true;
+    return canManage;
+  }, [started, uid, card.assignees, card.participants, canManage]);
 
   const openSettings = () => {
     const p = durationPartsFromMs(card.timerDurationMs);
@@ -90,6 +118,7 @@ export function KanbanCardTimerBlock({
       const fc = findCard(b, cardId);
       if (!fc) return;
       fc.card.timerDurationMs = ms;
+      fc.card.timerFrozenAt = null;
       if (opts.start) {
         fc.card.timerStartedAt = new Date().toISOString();
         pushActivity(
@@ -111,6 +140,7 @@ export function KanbanCardTimerBlock({
       if (!fc) return;
       fc.card.timerStartedAt = null;
       fc.card.timerDurationMs = null;
+      fc.card.timerFrozenAt = null;
       fc.card.updatedAt = new Date().toISOString();
       pushActivity(fc.card, "Таймер сброшен", b.users[0]?.id, b, act);
     });
@@ -126,8 +156,29 @@ export function KanbanCardTimerBlock({
       const fc = findCard(b, cardId);
       if (!fc) return;
       fc.card.timerStartedAt = new Date().toISOString();
+      fc.card.timerFrozenAt = null;
       fc.card.updatedAt = new Date().toISOString();
       pushActivity(fc.card, "Таймер запущен", b.users[0]?.id, b, act);
+    });
+  };
+
+  const freezeTimer = () => {
+    onApply((b) => {
+      const fc = findCard(b, cardId);
+      if (!fc) return;
+      fc.card.timerFrozenAt = new Date().toISOString();
+      fc.card.updatedAt = new Date().toISOString();
+      pushActivity(fc.card, "Таймер оставлен (заморозка отображения)", b.users[0]?.id, b, act);
+    });
+  };
+
+  const resumeTimer = () => {
+    onApply((b) => {
+      const fc = findCard(b, cardId);
+      if (!fc) return;
+      fc.card.timerFrozenAt = null;
+      fc.card.updatedAt = new Date().toISOString();
+      pushActivity(fc.card, "Таймер снова в отсчёте", b.users[0]?.id, b, act);
     });
   };
 
@@ -150,18 +201,23 @@ export function KanbanCardTimerBlock({
       <div className="flex items-center gap-3">
         <span
           className="min-w-[5.5rem] font-mono text-[0.95rem] font-semibold tabular-nums text-[var(--kaiten-modal-text)]"
-          title={started ? "Осталось до конца интервала" : "Таймер не запущен"}
+          title={
+            started
+              ? card.timerFrozenAt
+                ? "Заморозка: остаток и цвет зафиксированы на момент «Оставить таймер»"
+                : "Осталось до конца интервала"
+              : "Таймер не запущен"
+          }
         >
           {started ? label : "—"}
         </span>
         <div className="min-w-0 flex-1">
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/35 ring-1 ring-[var(--kaiten-modal-border)]">
             <div
-              className="h-full min-w-[2px] rounded-full transition-[width] duration-300 ease-linear"
+              className="h-full min-w-[2px] rounded-full transition-[width,background-color] duration-300 ease-linear"
               style={{
                 width: `${started ? Math.max(0.5, Math.round(ratio * 1000) / 10) : 0}%`,
-                backgroundImage: KANBAN_TIMER_TRACK_GRADIENT,
-                backgroundSize: "100% 100%",
+                backgroundColor: started ? fillColor : "transparent",
               }}
             />
           </div>
@@ -181,6 +237,27 @@ export function KanbanCardTimerBlock({
           >
             Запустить отсчёт
           </button>
+        </div>
+      ) : null}
+      {started && canFreezeTimer ? (
+        <div className="mt-2 flex flex-wrap justify-end gap-2">
+          {!card.timerFrozenAt ? (
+            <button
+              type="button"
+              className="text-[0.72rem] font-medium text-[var(--kaiten-modal-muted)] underline-offset-2 hover:text-[var(--kaiten-modal-text)] hover:underline"
+              onClick={() => freezeTimer()}
+            >
+              Оставить таймер
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="text-[0.72rem] font-medium text-[var(--kaiten-accent,#9333ea)] underline-offset-2 hover:underline"
+              onClick={() => resumeTimer()}
+            >
+              Продолжить отсчёт
+            </button>
+          )}
         </div>
       ) : null}
 
