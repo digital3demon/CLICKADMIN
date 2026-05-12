@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { fontBody, fontDisplay } from "@/lib/app-fonts";
+import { THEME_BOOTSTRAP_INLINE_SCRIPT } from "@/lib/theme-storage";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -36,8 +37,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const themeInit = `(function(){try{var dark=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",dark);}catch(e){}})();`;
-
   return (
     <html
       lang="ru"
@@ -46,7 +45,7 @@ export default function RootLayout({
     >
       <body className={`${fontBody.className} antialiased`}>
         <Script id="theme-init" strategy="beforeInteractive">
-          {themeInit}
+          {THEME_BOOTSTRAP_INLINE_SCRIPT}
         </Script>
         <AppProviders>
           <ActiveUserGate />

@@ -10,6 +10,7 @@ import {
   isStrictPaidPayment,
   isUnpaidOrPartialPayment,
   lastPaidTransitionAtFromRevisions,
+  lastPartialTransitionAtFromRevisions,
 } from "@/lib/recent-orders-paid-from-revisions-logic";
 
 function snap(payment: string | null): Prisma.JsonValue {
@@ -62,5 +63,39 @@ describe("recent-orders-paid-from-revisions", () => {
   it("isStrictPaidPayment only exact Оплачено", () => {
     expect(isStrictPaidPayment(ORDER_PAYMENT_PAID)).toBe(true);
     expect(isStrictPaidPayment(" Сверка-ОПЛАЧЕНО ")).toBe(false);
+  });
+
+  it("detects unpaid → partial on consecutive revisions", () => {
+    const t0 = new Date("2026-02-01T10:00:00.000Z");
+    const t1 = new Date("2026-02-01T11:00:00.000Z");
+    const chain = [
+      { createdAt: t0, snapshot: snap(ORDER_PAYMENT_NOT_PAID) },
+      { createdAt: t1, snapshot: snap(ORDER_PAYMENT_PARTIAL) },
+    ];
+    expect(lastPartialTransitionAtFromRevisions(chain)).toEqual(t1);
+  });
+
+  it("detects paid → partial (кириллица как в БД)", () => {
+    const t0 = new Date("2026-02-10T08:00:00.000Z");
+    const t1 = new Date("2026-02-10T09:00:00.000Z");
+    const chain = [
+      { createdAt: t0, snapshot: snap(ORDER_PAYMENT_PAID) },
+      { createdAt: t1, snapshot: snap(ORDER_PAYMENT_PARTIAL) },
+    ];
+    expect(lastPartialTransitionAtFromRevisions(chain)).toEqual(t1);
+  });
+
+  it("uses last partial transition when toggled", () => {
+    const t0 = new Date("2026-01-01T10:00:00.000Z");
+    const t1 = new Date("2026-01-02T10:00:00.000Z");
+    const t2 = new Date("2026-01-03T10:00:00.000Z");
+    const t3 = new Date("2026-01-04T10:00:00.000Z");
+    const chain = [
+      { createdAt: t0, snapshot: snap(ORDER_PAYMENT_NOT_PAID) },
+      { createdAt: t1, snapshot: snap(ORDER_PAYMENT_PARTIAL) },
+      { createdAt: t2, snapshot: snap(ORDER_PAYMENT_PAID) },
+      { createdAt: t3, snapshot: snap(ORDER_PAYMENT_PARTIAL) },
+    ];
+    expect(lastPartialTransitionAtFromRevisions(chain)).toEqual(t3);
   });
 });

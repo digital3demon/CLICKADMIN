@@ -13,7 +13,7 @@ import {
   notifyKanbanTelegramSubscribersAndTenantSharedChat,
 } from "@/lib/telegram-kanban-notify";
 import { telegramHtmlLink } from "@/lib/telegram-html";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   getClientsPrisma,
   getOrdersPrisma,
@@ -1098,164 +1098,163 @@ export async function PATCH(
       console.error("[PATCH order] revision log", e);
     }
 
-    try {
-      const base = crmPublicBaseUrl();
-      const rel = kanbanOrderDeepLinkPath(orderId);
-      const cardUrl = `${base}${rel}`;
-      const orderPageUrl = `${base}/orders/${encodeURIComponent(orderId)}`;
-      const linkLabel =
-        order.kaitenCardTitleMirror?.trim() || `Наряд №${order.orderNumber}`;
-      const linkHtml = telegramHtmlLink(cardUrl, linkLabel);
-      const cardWord = telegramHtmlLink(cardUrl, "карточке");
-      const orderWord = telegramHtmlLink(orderPageUrl, "заказе");
-
-      const touchedCorrection =
-        body.correctionTrack !== undefined ||
-        body.correctionReason !== undefined ||
-        body.correctionPaid !== undefined;
-      const correctionChanged =
-        touchedCorrection &&
-        (existing.correctionTrack !== order.correctionTrack ||
-          (existing.correctionReason ?? "") !== (order.correctionReason ?? "") ||
-          existing.correctionPaid !== order.correctionPaid);
-
-      if (correctionChanged) {
-        const corrParts: string[] = [];
-        if (order.correctionTrack) {
-          corrParts.push(
-            `направление — ${ORDER_CORRECTION_TRACK_LABELS[order.correctionTrack]}`,
-          );
-        } else {
-          corrParts.push("направление не задано");
-        }
-        corrParts.push(
-          order.correctionPaid ? "за счёт клиента: да" : "за счёт клиента: нет",
-        );
-        const reason = (order.correctionReason ?? "").trim();
-        if (reason) {
-          corrParts.push(
-            reason.length > 120
-              ? `причина: ${reason.slice(0, 117)}…`
-              : `причина: ${reason}`,
-          );
-        }
-        const detail = corrParts.join("; ");
-        await notifyKanbanTelegramSubscribersAndTenantSharedChat(clientsPrisma, {
-          tenantId,
-          event: "tg_order_correction_changed",
-          actorUserId: session?.sub ?? null,
-          lines: [`В ${linkHtml} обновлены корректировки: ${detail}`],
-          linesAdmin: [
-            `В ${cardWord} и ${orderWord} обновлены корректировки: ${detail}`,
-          ],
-          parseMode: "HTML",
-        });
-      }
-
-      const touchedProstheticsOrdered = body.prostheticsOrdered !== undefined;
-      const touchedProstheticsJson = body.prosthetics !== undefined;
-      const prevP = prostheticsFromDb(existing.prosthetics);
-      const nextP = prostheticsFromDb(order.prosthetics);
-      const prostheticsJsonChanged =
-        touchedProstheticsJson &&
-        JSON.stringify(prevP) !== JSON.stringify(nextP);
-      const prostheticsOrderedChanged =
-        touchedProstheticsOrdered &&
-        existing.prostheticsOrdered !== order.prostheticsOrdered;
-
-      if (prostheticsJsonChanged || prostheticsOrderedChanged) {
-        const pParts: string[] = [];
-        if (prostheticsOrderedChanged) {
-          pParts.push(
-            order.prostheticsOrdered
-              ? "отмечено «заказ протетики»"
-              : "снято «заказ протетики»",
-          );
-        }
-        if (prostheticsJsonChanged) {
-          pParts.push("изменён состав протетики (клиент / склад)");
-        }
-        const detail = pParts.join("; ");
-        await notifyKanbanTelegramSubscribersAndTenantSharedChat(clientsPrisma, {
-          tenantId,
-          event: "tg_order_prosthetics_changed",
-          actorUserId: session?.sub ?? null,
-          lines: [`В ${linkHtml} обновлена протетика: ${detail}`],
-          linesAdmin: [
-            `В ${cardWord} и ${orderWord} обновлена протетика: ${detail}`,
-          ],
-          parseMode: "HTML",
-        });
-      }
-    } catch (e) {
-      console.error("[PATCH order] telegram order fields notify", e);
-    }
-
+    const touchedKaitenHead = KAITEN_HEAD_PATCH_FIELDS.some(
+      (k) => body[k] !== undefined,
+    );
     const touchedCrmKanbanFields =
       body.demoKanbanColumn !== undefined || body.kaitenCardTypeId !== undefined;
-    if (touchedCrmKanbanFields) {
+
+    after(async () => {
       try {
         const base = crmPublicBaseUrl();
         const rel = kanbanOrderDeepLinkPath(orderId);
         const cardUrl = `${base}${rel}`;
+        const orderPageUrl = `${base}/orders/${encodeURIComponent(orderId)}`;
         const linkLabel =
           order.kaitenCardTitleMirror?.trim() || `Наряд №${order.orderNumber}`;
         const linkHtml = telegramHtmlLink(cardUrl, linkLabel);
-        const details: string[] = [];
-        if (body.demoKanbanColumn !== undefined) {
-          details.push(`колонка — ${demoKanbanColumnLine(order.demoKanbanColumn)}`);
-        }
-        if (body.kaitenCardTypeId !== undefined) {
-          details.push(
-            order.kaitenCardTypeId
-              ? "тип карточки задан"
-              : "тип карточки сброшен",
-          );
-        }
-        const orderPageUrl = `${base}/orders/${encodeURIComponent(orderId)}`;
         const cardWord = telegramHtmlLink(cardUrl, "карточке");
         const orderWord = telegramHtmlLink(orderPageUrl, "заказе");
-        const lines = [`В ${linkHtml} обновлено: ${details.join("; ")}`];
-        const linesAdmin = [
-          `В ${cardWord} и ${orderWord} обновлено: ${details.join("; ")}`,
-        ];
-        await notifyKanbanTelegramSubscribers(clientsPrisma, {
-          event: "tg_kanban_crm_sync",
-          actorUserId: session?.sub ?? null,
-          lines,
-          linesAdmin,
-          parseMode: "HTML",
-        });
-      } catch (e) {
-        console.error("[PATCH order] telegram kanban notify", e);
-      }
-    }
 
-    let kaitenTitleSyncError: string | null = null;
-    const touchedKaitenHead = KAITEN_HEAD_PATCH_FIELDS.some(
-      (k) => body[k] !== undefined,
-    );
-    if (touchedKaitenHead) {
-      try {
-        if (session?.demo) {
-          await refreshOrderKaitenHeadMirrors(orderId);
-        } else {
-          const push = await pushKaitenCardTitleForOrderIfLinked(orderId);
-          if (!push.ok) {
-            kaitenTitleSyncError = push.error;
-            console.error("[PATCH order] Kaiten head sync", push.error);
+        const touchedCorrection =
+          body.correctionTrack !== undefined ||
+          body.correctionReason !== undefined ||
+          body.correctionPaid !== undefined;
+        const correctionChanged =
+          touchedCorrection &&
+          (existing.correctionTrack !== order.correctionTrack ||
+            (existing.correctionReason ?? "") !== (order.correctionReason ?? "") ||
+            existing.correctionPaid !== order.correctionPaid);
+
+        if (correctionChanged) {
+          const corrParts: string[] = [];
+          if (order.correctionTrack) {
+            corrParts.push(
+              `направление — ${ORDER_CORRECTION_TRACK_LABELS[order.correctionTrack]}`,
+            );
+          } else {
+            corrParts.push("направление не задано");
           }
+          corrParts.push(
+            order.correctionPaid ? "за счёт клиента: да" : "за счёт клиента: нет",
+          );
+          const reason = (order.correctionReason ?? "").trim();
+          if (reason) {
+            corrParts.push(
+              reason.length > 120
+                ? `причина: ${reason.slice(0, 117)}…`
+                : `причина: ${reason}`,
+            );
+          }
+          const detail = corrParts.join("; ");
+          await notifyKanbanTelegramSubscribersAndTenantSharedChat(clientsPrisma, {
+            tenantId,
+            event: "tg_order_correction_changed",
+            actorUserId: session?.sub ?? null,
+            lines: [`В ${linkHtml} обновлены корректировки: ${detail}`],
+            linesAdmin: [
+              `В ${cardWord} и ${orderWord} обновлены корректировки: ${detail}`,
+            ],
+            parseMode: "HTML",
+          });
+        }
+
+        const touchedProstheticsOrdered = body.prostheticsOrdered !== undefined;
+        const touchedProstheticsJson = body.prosthetics !== undefined;
+        const prevP = prostheticsFromDb(existing.prosthetics);
+        const nextP = prostheticsFromDb(order.prosthetics);
+        const prostheticsJsonChanged =
+          touchedProstheticsJson &&
+          JSON.stringify(prevP) !== JSON.stringify(nextP);
+        const prostheticsOrderedChanged =
+          touchedProstheticsOrdered &&
+          existing.prostheticsOrdered !== order.prostheticsOrdered;
+
+        if (prostheticsJsonChanged || prostheticsOrderedChanged) {
+          const pParts: string[] = [];
+          if (prostheticsOrderedChanged) {
+            pParts.push(
+              order.prostheticsOrdered
+                ? "отмечено «заказ протетики»"
+                : "снято «заказ протетики»",
+            );
+          }
+          if (prostheticsJsonChanged) {
+            pParts.push("изменён состав протетики (клиент / склад)");
+          }
+          const detail = pParts.join("; ");
+          await notifyKanbanTelegramSubscribersAndTenantSharedChat(clientsPrisma, {
+            tenantId,
+            event: "tg_order_prosthetics_changed",
+            actorUserId: session?.sub ?? null,
+            lines: [`В ${linkHtml} обновлена протетика: ${detail}`],
+            linesAdmin: [
+              `В ${cardWord} и ${orderWord} обновлена протетика: ${detail}`,
+            ],
+            parseMode: "HTML",
+          });
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        kaitenTitleSyncError = msg;
-        console.error("[PATCH order] Kaiten head / mirrors sync", e);
+        console.error("[PATCH order] telegram order fields notify", e);
       }
-    }
+
+      if (touchedCrmKanbanFields) {
+        try {
+          const base = crmPublicBaseUrl();
+          const rel = kanbanOrderDeepLinkPath(orderId);
+          const cardUrl = `${base}${rel}`;
+          const linkLabel =
+            order.kaitenCardTitleMirror?.trim() || `Наряд №${order.orderNumber}`;
+          const linkHtml = telegramHtmlLink(cardUrl, linkLabel);
+          const details: string[] = [];
+          if (body.demoKanbanColumn !== undefined) {
+            details.push(`колонка — ${demoKanbanColumnLine(order.demoKanbanColumn)}`);
+          }
+          if (body.kaitenCardTypeId !== undefined) {
+            details.push(
+              order.kaitenCardTypeId
+                ? "тип карточки задан"
+                : "тип карточки сброшен",
+            );
+          }
+          const orderPageUrl = `${base}/orders/${encodeURIComponent(orderId)}`;
+          const cardWord = telegramHtmlLink(cardUrl, "карточке");
+          const orderWord = telegramHtmlLink(orderPageUrl, "заказе");
+          const lines = [`В ${linkHtml} обновлено: ${details.join("; ")}`];
+          const linesAdmin = [
+            `В ${cardWord} и ${orderWord} обновлено: ${details.join("; ")}`,
+          ];
+          await notifyKanbanTelegramSubscribers(clientsPrisma, {
+            event: "tg_kanban_crm_sync",
+            actorUserId: session?.sub ?? null,
+            lines,
+            linesAdmin,
+            parseMode: "HTML",
+          });
+        } catch (e) {
+          console.error("[PATCH order] telegram kanban notify", e);
+        }
+      }
+
+      if (touchedKaitenHead) {
+        try {
+          if (session?.demo) {
+            await refreshOrderKaitenHeadMirrors(orderId);
+          } else {
+            const push = await pushKaitenCardTitleForOrderIfLinked(orderId);
+            if (!push.ok) {
+              console.error("[PATCH order] Kaiten head sync", push.error);
+            }
+          }
+        } catch (e) {
+          console.error("[PATCH order] Kaiten head / mirrors sync", e);
+        }
+      }
+    });
 
     return NextResponse.json({
       ...(await hydrateOrderResponse(order, clientsPrisma, pricingPrisma)),
-      kaitenTitleSyncError,
+      kaitenTitleSyncError: null,
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {

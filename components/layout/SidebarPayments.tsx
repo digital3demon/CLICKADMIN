@@ -14,6 +14,7 @@ type Row = {
   changedAt: string;
   doctorLabel: string;
   patientLabel: string;
+  paymentKind: "paid" | "partial";
 };
 
 function ChevronIcon({ collapsed }: { collapsed: boolean }) {
@@ -69,7 +70,13 @@ export function SidebarPayments({ sessionRole }: { sessionRole: UserRole | null 
           return;
         }
         const j = (await res.json()) as { items?: Row[] };
-        setItems(Array.isArray(j.items) ? j.items : []);
+        const raw = Array.isArray(j.items) ? j.items : [];
+        setItems(
+          raw.map((r) => ({
+            ...r,
+            paymentKind: r.paymentKind === "partial" ? "partial" : "paid",
+          })),
+        );
       } catch {
         setItems([]);
       }
@@ -133,7 +140,7 @@ export function SidebarPayments({ sessionRole }: { sessionRole: UserRole | null 
       {!collapsed && (
         <>
           <p className="mt-1.5 text-[11px] leading-snug text-[var(--sidebar-text)] opacity-75 shell-short:mt-1 shell-short:text-[10px]">
-            Недавно отмечено «Оплачено» после «Не оплачено» или «Частично оплачено».
+            Зелёный — недавно «Оплачено»; янтарный — недавно «Частично оплачено».
           </p>
 
           {items.length === 0 ? (
@@ -143,41 +150,49 @@ export function SidebarPayments({ sessionRole }: { sessionRole: UserRole | null 
           ) : (
             <ul className="mt-2.5 space-y-1.5 shell-short:mt-2 shell-short:space-y-1">
               {items.map((it) => {
-                const subline = [it.doctorLabel, it.patientLabel].filter(Boolean).join(" · ");
+                const names = [it.patientLabel, it.doctorLabel]
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+                  .join(" ");
+                const isPaid = it.paymentKind === "paid";
+                const cardTone = isPaid
+                  ? "border-l-emerald-500/85 bg-emerald-500/[0.07]"
+                  : "border-l-amber-500/85 bg-amber-500/[0.08]";
                 return (
-                  <li key={`${it.orderId}-${it.changedAt}`}>
-                    <div className="rounded-lg border border-[var(--sidebar-border)] bg-[var(--sidebar-bg)]/40 px-2.5 py-2 shell-short:px-2 shell-short:py-1.5">
-                      <div className="flex items-start justify-between gap-2">
+                  <li key={`${it.orderId}-${it.changedAt}-${it.paymentKind}`}>
+                    <div
+                      className={`rounded-lg border border-[var(--sidebar-border)] border-l-[3px] ${cardTone} px-2.5 py-2 shell-short:px-2 shell-short:py-1.5`}
+                    >
+                      <div className="flex min-w-0 items-center gap-1.5">
                         <button
                           type="button"
-                          className="min-w-0 flex-1 text-left transition-colors hover:text-emerald-400/90"
+                          className="flex min-w-0 flex-1 items-baseline gap-1 overflow-hidden rounded px-0.5 text-left transition-colors hover:bg-black/10 dark:hover:bg-white/[0.06]"
                           onClick={() => {
                             router.push(ordersListHref({ q: it.orderNumber }));
                           }}
+                          title={`${it.orderNumber} ${names}`.trim()}
                         >
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="min-w-0 truncate font-mono text-xs font-semibold tabular-nums text-[var(--sidebar-text-strong)]">
-                              {it.orderNumber}
+                          <span className="shrink-0 font-mono text-[11px] font-bold tabular-nums leading-none text-[var(--sidebar-text-strong)] shell-short:text-[10px]">
+                            {it.orderNumber}
+                          </span>
+                          {names ? (
+                            <span className="min-w-0 truncate text-[10px] font-medium leading-tight text-[var(--sidebar-text)] opacity-80 shell-short:text-[9px]">
+                              {names}
                             </span>
-                            <time
-                              className="shrink-0 text-[10px] tabular-nums text-[var(--sidebar-text)] opacity-55"
-                              dateTime={it.changedAt}
-                            >
-                              {new Date(it.changedAt).toLocaleString("ru-RU", {
-                                day: "2-digit",
-                                month: "2-digit",
-                                year: "2-digit",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </time>
-                          </div>
-                          {subline ? (
-                            <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-[var(--sidebar-text)] opacity-65">
-                              {subline}
-                            </p>
                           ) : null}
                         </button>
+                        <time
+                          className="shrink-0 self-baseline text-[9px] tabular-nums leading-none text-[var(--sidebar-text)] opacity-50 shell-short:text-[8.5px]"
+                          dateTime={it.changedAt}
+                        >
+                          {new Date(it.changedAt).toLocaleString("ru-RU", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </time>
                       </div>
                       {canDismiss ? (
                         <button

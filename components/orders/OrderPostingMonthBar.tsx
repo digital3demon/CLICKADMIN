@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 
 type SettingsPayload = {
@@ -8,7 +9,12 @@ type SettingsPayload = {
   nextOrderNumber: string;
 };
 
-export function OrderPostingMonthBar() {
+type Props = {
+  /** Кнопки фильтра по отгрузке — в одну строку с «Старт нового месяца». */
+  toolbarEnd?: ReactNode;
+};
+
+export function OrderPostingMonthBar({ toolbarEnd }: Props) {
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -196,7 +202,7 @@ export function OrderPostingMonthBar() {
           <p className="mt-2 text-sm text-red-600">{error}</p>
         ) : null}
       </div>
-      <div className="flex shrink-0 flex-wrap gap-2.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-2.5">
         <button
           type="button"
           disabled={busy}
@@ -213,6 +219,7 @@ export function OrderPostingMonthBar() {
         >
           Старт нового месяца
         </button>
+        {toolbarEnd}
       </div>
       </div>
 

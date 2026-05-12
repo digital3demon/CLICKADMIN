@@ -347,6 +347,7 @@ export default async function OrderEditPage({
       kanbanCardUrl={kanbanAbs}
       demoKanbanCardTypes={demoKanbanCardTypes}
       canAcceptChatCorrections={canAcceptChatCorrections}
+      viewerRole={session?.role ?? null}
       orderPageFrame={{
         title: `Наряд ${order.orderNumber}`,
       }}

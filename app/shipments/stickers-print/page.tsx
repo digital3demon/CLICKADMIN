@@ -1,12 +1,9 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import QRCode from "qrcode";
-import { ShipmentsStickersPrintButton } from "@/components/shipments/ShipmentsStickersPrintButton";
-import {
-  ShipmentsStickersSheet,
-  type StickerRow,
-} from "@/components/shipments/ShipmentsStickersSheet";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
+import { ShipmentsStickersPrintToolbar } from "@/components/shipments/ShipmentsStickersPrintToolbar";
+import type { StickerRow } from "@/components/shipments/ShipmentsStickersSheet";
 import { ensureStickerPublicTokensForOrders } from "@/lib/order-sticker-token";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { publicOriginFromHeaders } from "@/lib/public-origin-from-headers";
@@ -144,23 +141,15 @@ export default async function ShipmentsStickersPrintPage({
 
   return (
     <ModuleFrame
-      title="Этикетки отгрузки 58×40 мм"
-      description="Макет под термопринтер. В системном диалоге печати выберите принтер этикеток и масштаб 100 %."
+      title="Этикетки отгрузки"
+      description="Макет под термопринтер: по умолчанию 58×40 мм; можно задать другой размер. В диалоге печати выберите принтер этикеток и масштаб 100 %."
     >
       <style>{`
         @media print {
           header.module-frame-header { display: none !important; }
         }
       `}</style>
-      <div className="no-print mb-4 flex flex-wrap items-center gap-3">
-        <Link
-          href={back}
-          className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
-        >
-          ← К отгрузкам
-        </Link>
-        <ShipmentsStickersPrintButton />
-      </div>
+      <ShipmentsStickersPrintToolbar rows={rows} backHref={back} />
       {!originForQr ? (
         <p className="no-print mb-3 max-w-xl text-xs text-amber-800">
           Не удалось определить публичный адрес сайта для QR: задайте{" "}
@@ -169,7 +158,6 @@ export default async function ShipmentsStickersPrintPage({
           сканирование с телефона не сработает.
         </p>
       ) : null}
-      <ShipmentsStickersSheet rows={rows} />
     </ModuleFrame>
   );
 }

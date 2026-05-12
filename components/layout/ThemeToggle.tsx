@@ -20,6 +20,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
       onClick={cycleTheme}
       title={label}
       aria-label={label}
+      suppressHydrationWarning
       className={`flex shrink-0 items-center justify-center rounded-md border border-zinc-300/90 bg-zinc-100 text-zinc-800 shadow-sm transition-colors hover:bg-zinc-200 dark:border-zinc-500 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 dark:shadow-none ${box}`}
     >
       {resolvedDark ? <IconMoon size={compact ? 14 : 16} /> : <IconSun size={compact ? 14 : 16} />}

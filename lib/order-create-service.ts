@@ -12,7 +12,6 @@ import { buildConstructionCreatesFromInput } from "@/lib/order-construction-inpu
 import { ensureDoctorClinicLink } from "@/lib/ensure-doctor-clinic-link";
 import { isLabWorkStatus, LAB_WORK_STATUS_DEFAULT } from "@/lib/lab-work-status";
 import { isAllowedUrgentCoefficient } from "@/lib/order-urgency";
-import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import {
   computeNextOrderNumber,
@@ -128,6 +127,20 @@ export type CreateOrderBody = {
 export type CreateOrderResult =
   | { ok: true; order: CreatedOrder }
   | { ok: false; status: number; error: string };
+
+/** После успешного create в CRM: отложенный sync с Kaiten (см. POST /api/orders + after). */
+export function shouldScheduleKaitenSyncAfterOrderCreate(
+  body: CreateOrderBody,
+): boolean {
+  const isTestOrder = body.isTestOrder === true;
+  const kaitenDecideLater = isTestOrder ? true : Boolean(body.kaitenDecideLater);
+  return (
+    !isTestOrder &&
+    !kaitenDecideLater &&
+    Boolean(String(body.kaitenCardTypeId ?? "").trim()) &&
+    Boolean(String(body.kaitenTrackLane ?? "").trim())
+  );
+}
 
 function fail(status: number, error: string): CreateOrderResult {
   return { ok: false, status, error };
@@ -498,32 +511,6 @@ export async function createOrderFromBody(
       );
     }
     return fail(400, stockSync.error);
-  }
-
-  if (!isTestOrder && !kaitenDecideLater && kaitenCardTypeId && kaitenTrackLane) {
-    const maxKaitenAttempts = 3;
-    for (let attempt = 0; attempt < maxKaitenAttempts; attempt++) {
-      let result: Awaited<ReturnType<typeof syncNewOrderToKaiten>>;
-      try {
-        result = await syncNewOrderToKaiten(order.id);
-      } catch (e) {
-        logger.error(
-          { err: e, msg: "kaiten_sync_after_create", attempt },
-          "createOrderFromBody",
-        );
-        if (attempt === maxKaitenAttempts - 1) break;
-        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-        continue;
-      }
-      if (result.ok) break;
-      logger.info(
-        { msg: "kaiten_sync_returned_error", attempt, err: result.error },
-        "createOrderFromBody",
-      );
-      if (attempt < maxKaitenAttempts - 1) {
-        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-      }
-    }
   }
 
   try {

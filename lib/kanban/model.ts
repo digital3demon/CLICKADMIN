@@ -59,11 +59,13 @@ function defaultDistributeNewOrdersByBoardId(boardId: string): boolean {
 
 /**
  * Виртуальные доски: только представление, карточки остаются на дорожках «Ортопедия» / «Ортодонтия».
- * «Мои» — карточки, где пользователь в **участниках** (`participants`); «Распределить» — где он **ответственный** (`assignees`).
+ * «Мои» — участник или ответственный (или своя локальная карточка без наряда).
+ * «Ответственный» — только карточки, где пользователь в ответственных (`assignees`).
  */
 export const KANBAN_BOARD_MY_CARDS_ID = "kanban_board_my_cards";
 export const KANBAN_BOARD_DISTRIBUTE_ID = "kanban_board_distribute";
 
+/** Режим виртуальной доски: `distribute` в коде = доска «Ответственный» в UI. */
 export type KanbanAggregateMode = "my" | "distribute";
 
 export function kanbanAggregateMode(activeBoardId: string): KanbanAggregateMode | null {
@@ -101,7 +103,7 @@ export function getKanbanLayoutTemplateBoard(state: KanbanAppState): KanbanBoard
   );
 }
 
-/** Откуда собирать карточки на «Мои» / «Распределить» (зеркала Kaiten или одна демо-доска). */
+/** Откуда собирать карточки на «Мои» / «Ответственный» (зеркала Kaiten или одна демо-доска). */
 export function listKanbanAggregateSourceBoards(state: KanbanAppState): KanbanBoard[] {
   const mirrors = state.boards.filter(
     (b) =>
@@ -1276,7 +1278,7 @@ export function getActiveBoard(state: KanbanAppState): KanbanBoard {
     return { ...t, id: KANBAN_BOARD_MY_CARDS_ID, title: "Мои" };
   }
   if (state.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID) {
-    return { ...t, id: KANBAN_BOARD_DISTRIBUTE_ID, title: "Распределить" };
+    return { ...t, id: KANBAN_BOARD_DISTRIBUTE_ID, title: "Ответственный" };
   }
   return t;
 }
@@ -1340,11 +1342,10 @@ export function findCardInAppState(
 }
 
 /**
- * Вид доски для рендера: поиск по всем дорожкам, виртуальные «Мои» / «Распределить».
- * «Мои»: участник ИЛИ ответственный ИЛИ наряд CRM без участников/ответственных (общая очередь),
- * либо локальная карточка без наряда, созданная текущим пользователем.
- * «Распределить»: ответственный текущего пользователя ИЛИ наряд без ответственных (очередь раздачи).
- * Карточки без `linkedOrderId` привязаны к состоянию автора (user scope) — другие пользователи их не увидят.
+ * Вид доски для рендера: поиск по всем дорожкам, виртуальные «Мои» / «Ответственный».
+ * «Мои»: участник или ответственный текущего пользователя; либо локальная карточка без наряда,
+ * созданная им (остальные пользователи такие карточки не видят в своём «Мои»).
+ * «Ответственный»: только карточки, где пользователь в списке ответственных.
  * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
  */
 export function buildKanbanDisplayView(
@@ -1381,7 +1382,7 @@ export function buildKanbanDisplayView(
       getKanbanLayoutTemplateBoard(state);
     const displayBoard = structuredClone(template);
     displayBoard.id = state.activeBoardId;
-    displayBoard.title = agg === "my" ? "Мои" : "Распределить";
+    displayBoard.title = agg === "my" ? "Мои" : "Ответственный";
     displayBoard.automations = [];
     const uid = sessionUserId;
 
@@ -1404,16 +1405,13 @@ export function buildKanbanDisplayView(
           if (agg === "my") {
             const inParts = participants.includes(uid);
             const inAssign = assignees.includes(uid);
-            const teamLinkedQueue =
-              linked && participants.length === 0 && assignees.length === 0;
             const ownLocal =
               !linked &&
               Boolean(card.createdByUserId?.trim()) &&
               card.createdByUserId === uid;
-            if (!inParts && !inAssign && !teamLinkedQueue && !ownLocal) continue;
+            if (!inParts && !inAssign && !ownLocal) continue;
           } else {
-            const unassignedLinked = linked && assignees.length === 0;
-            if (!assignees.includes(uid) && !unassignedLinked) continue;
+            if (!assignees.includes(uid)) continue;
           }
           if (q && !textMatches(card)) continue;
           if (!passesFiltersWithoutSearchText(card, home)) continue;

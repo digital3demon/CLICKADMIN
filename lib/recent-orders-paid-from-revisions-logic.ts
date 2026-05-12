@@ -13,6 +13,8 @@ export type RecentPaidOrderRow = {
   changedAt: string;
   doctorLabel: string;
   patientLabel: string;
+  /** «Оплачено» — зелёная метка в сайдбаре; «Частично оплачено» — янтарная. */
+  paymentKind: "paid" | "partial";
 };
 
 function paymentFromSnapshot(snapshot: Prisma.JsonValue): string {
@@ -40,6 +42,10 @@ export function isStrictPaidPayment(value: string | null | undefined): boolean {
   return (value ?? "").trim() === ORDER_PAYMENT_PAID;
 }
 
+export function isStrictPartialPayment(value: string | null | undefined): boolean {
+  return (value ?? "").trim() === ORDER_PAYMENT_PARTIAL;
+}
+
 /**
  * Последний переход в журнале версий: с «Не оплачено»/«Частично оплачено» на «Оплачено».
  * Сравниваются подряд идущие снимки в `revisionsAsc` (по времени создания).
@@ -53,6 +59,24 @@ export function lastPaidTransitionAtFromRevisions(
     const prevPay = paymentFromSnapshot(revisionsAsc[i - 1]!.snapshot);
     const nextPay = paymentFromSnapshot(revisionsAsc[i]!.snapshot);
     if (isUnpaidOrPartialPayment(prevPay) && isStrictPaidPayment(nextPay)) {
+      last = revisionsAsc[i]!.createdAt;
+    }
+  }
+  return last;
+}
+
+/**
+ * Последний переход на «Частично оплачено» (предыдущий снимок — любой статус, кроме частичной оплаты).
+ */
+export function lastPartialTransitionAtFromRevisions(
+  revisionsAsc: Array<{ createdAt: Date; snapshot: Prisma.JsonValue }>,
+): Date | null {
+  if (revisionsAsc.length < 2) return null;
+  let last: Date | null = null;
+  for (let i = 1; i < revisionsAsc.length; i++) {
+    const prevPay = paymentFromSnapshot(revisionsAsc[i - 1]!.snapshot);
+    const nextPay = paymentFromSnapshot(revisionsAsc[i]!.snapshot);
+    if (!isStrictPartialPayment(prevPay) && isStrictPartialPayment(nextPay)) {
       last = revisionsAsc[i]!.createdAt;
     }
   }

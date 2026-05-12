@@ -1101,27 +1101,6 @@ export function NewOrderForm({
             }
           })();
         }
-        if (!isTestOrder && !kaiten.kaitenDecideLater) {
-          void (async () => {
-            const kRes = await fetch(`/api/orders/${newId}/kaiten`, {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "create" }),
-            });
-            const kData = (await kRes.json().catch(() => ({}))) as {
-              error?: string;
-              ok?: boolean;
-            };
-            if (!kRes.ok) {
-              const msg =
-                typeof kData.error === "string"
-                  ? kData.error
-                  : "Не удалось создать карточку Kaiten. Наряд уже сохранён в CRM.";
-              void writeClientState("user", `kaitenNewOrderWarn:${newId}`, msg);
-            }
-          })();
-        }
         if (printAfterSave) {
           void printOrderNarjadPdf(newId).catch(() => {
             /* наряд уже сохранён */

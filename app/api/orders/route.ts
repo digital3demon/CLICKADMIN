@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   getClientsPrisma,
   getOrdersPrisma,
@@ -10,9 +10,13 @@ import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
 import { normalizeOrdersSearchQuery } from "@/lib/orders-list-query";
 import { withApiTiming } from "@/lib/server/api-timing";
 import { logger } from "@/lib/server/logger";
+import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
+import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
+import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
 import {
   createOrderFromBody,
   type CreateOrderBody,
+  shouldScheduleKaitenSyncAfterOrderCreate,
 } from "@/lib/order-create-service";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
@@ -108,6 +112,52 @@ export async function POST(req: Request) {
           { error: result.error },
           { status: result.status },
         );
+      }
+      const orderId = result.order.id;
+      if (shouldScheduleKaitenSyncAfterOrderCreate(body)) {
+        after(async () => {
+          const maxKaitenAttempts = 3;
+          for (let attempt = 0; attempt < maxKaitenAttempts; attempt++) {
+            let syncResult: Awaited<ReturnType<typeof syncNewOrderToKaiten>>;
+            try {
+              syncResult = await syncNewOrderToKaiten(orderId);
+            } catch (e) {
+              logger.error(
+                { err: e, msg: "kaiten_sync_after_create_deferred", attempt },
+                "POST /api/orders",
+              );
+              if (attempt === maxKaitenAttempts - 1) break;
+              await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+              continue;
+            }
+            if (syncResult.ok) {
+              invalidateKaitenSnapshotCache(orderId);
+              try {
+                await syncUnpushedOrderAttachmentsToKaiten(
+                  orderId,
+                  ordersPrisma,
+                );
+              } catch (e) {
+                logger.error(
+                  { err: e, msg: "order_attachments_kaiten_after_create" },
+                  "POST /api/orders",
+                );
+              }
+              break;
+            }
+            logger.info(
+              {
+                msg: "kaiten_sync_after_create_deferred",
+                attempt,
+                err: syncResult.error,
+              },
+              "POST /api/orders",
+            );
+            if (attempt < maxKaitenAttempts - 1) {
+              await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+            }
+          }
+        });
       }
       return NextResponse.json(result.order);
     } catch (e) {

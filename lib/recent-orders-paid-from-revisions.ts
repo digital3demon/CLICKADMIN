@@ -1,10 +1,13 @@
 import "server-only";
 
 import type { PrismaClient } from "@prisma/client";
-import { ORDER_PAYMENT_PAID } from "@/lib/order-clinic-client-fields";
+import { ORDER_PAYMENT_PAID, ORDER_PAYMENT_PARTIAL } from "@/lib/order-clinic-client-fields";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import type { RecentPaidOrderRow } from "@/lib/recent-orders-paid-from-revisions-logic";
-import { lastPaidTransitionAtFromRevisions } from "@/lib/recent-orders-paid-from-revisions-logic";
+import {
+  lastPaidTransitionAtFromRevisions,
+  lastPartialTransitionAtFromRevisions,
+} from "@/lib/recent-orders-paid-from-revisions-logic";
 
 export type { RecentPaidOrderRow } from "@/lib/recent-orders-paid-from-revisions-logic";
 
@@ -21,8 +24,8 @@ const RESULT_LIMIT = 12;
 const RECENCY_DAYS = 60;
 
 /**
- * Наряды, у которых в снимках версий зафиксирован переход на «Оплачено» с неоплач./частично.
- * Только текущее `Order.payment === Оплачено`; сортировка по времени этого перехода.
+ * Наряды с недавним переходом на «Оплачено» (с неоплач./частично) или на «Частично оплачено»
+ * (с любого статуса, кроме уже частичной оплаты). Текущий `Order.payment` должен совпадать с видом строки.
  */
 export async function getRecentOrdersPaidAfterUnpaidOrPartial(
   prisma: PrismaClient,
@@ -35,7 +38,7 @@ export async function getRecentOrdersPaidAfterUnpaidOrPartial(
     where: {
       tenantId,
       archivedAt: null,
-      payment: ORDER_PAYMENT_PAID,
+      payment: { in: [ORDER_PAYMENT_PAID, ORDER_PAYMENT_PARTIAL] },
       updatedAt: { gte: sinceRecency },
     },
     orderBy: { updatedAt: "desc" },
@@ -43,6 +46,7 @@ export async function getRecentOrdersPaidAfterUnpaidOrPartial(
     select: {
       id: true,
       orderNumber: true,
+      payment: true,
       patientName: true,
       doctor: { select: { fullName: true } },
     },
@@ -57,8 +61,12 @@ export async function getRecentOrdersPaidAfterUnpaidOrPartial(
         [
           c.id,
           {
+            paymentKind:
+              (c.payment ?? "").trim() === ORDER_PAYMENT_PARTIAL ? ("partial" as const) : ("paid" as const),
             orderNumber: c.orderNumber,
-            doctorLabel: (c.doctor.fullName ?? "").trim(),
+            doctorLabel:
+              personNameSurnameInitials(c.doctor.fullName).trim() ||
+              (c.doctor.fullName ?? "").trim(),
             patientLabel:
               personNameSurnameInitials(c.patientName).trim() ||
               (c.patientName ?? "").trim(),
@@ -88,17 +96,21 @@ export async function getRecentOrdersPaidAfterUnpaidOrPartial(
   for (const id of idList) {
     const chain = byOrder.get(id);
     if (!chain || chain.length < 2) continue;
-    const changedAt = lastPaidTransitionAtFromRevisions(chain);
-    if (!changedAt) continue;
-    if (changedAt < sinceRecency) continue;
     const meta = metaById.get(id);
     if (!meta) continue;
+    const changedAt =
+      meta.paymentKind === "paid"
+        ? lastPaidTransitionAtFromRevisions(chain)
+        : lastPartialTransitionAtFromRevisions(chain);
+    if (!changedAt) continue;
+    if (changedAt < sinceRecency) continue;
     out.push({
       orderId: id,
       orderNumber: meta.orderNumber,
       changedAt: changedAt.toISOString(),
       doctorLabel: meta.doctorLabel,
       patientLabel: meta.patientLabel,
+      paymentKind: meta.paymentKind,
     });
   }
 

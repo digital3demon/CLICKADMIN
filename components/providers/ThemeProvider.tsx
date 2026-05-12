@@ -10,9 +10,12 @@ import {
   type ReactNode,
 } from "react";
 import {
+  computeResolvedDark,
   isThemePreference,
   type ThemePreference,
+  writeThemePreferenceToLocalStorage,
 } from "@/lib/theme-storage";
+import { getClientThemeInitialState } from "@/lib/theme-initial-state";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 type ThemeContextValue = {
@@ -29,34 +32,37 @@ function systemPrefersDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-function computeDark(pref: ThemePreference): boolean {
-  if (pref === "dark") return true;
-  if (pref === "light") return false;
-  return systemPrefersDark();
-}
-
 function applyDom(pref: ThemePreference) {
-  document.documentElement.classList.toggle("dark", computeDark(pref));
+  document.documentElement.classList.toggle(
+    "dark",
+    computeResolvedDark(pref, systemPrefersDark()),
+  );
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemePreference>("system");
-  const [resolvedDark, setResolvedDark] = useState(false);
+  const init = getClientThemeInitialState();
+  const [theme, setThemeState] = useState<ThemePreference>(init.theme);
+  const [resolvedDark, setResolvedDark] = useState(init.resolvedDark);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const raw = await readClientState<unknown>("user", "themePreference");
-      if (cancelled) return;
-      const next = isThemePreference(typeof raw === "string" ? raw : null)
-        ? (raw as ThemePreference)
-        : "system";
-      setThemeState(next);
-      const dark = computeDark(next);
-      setResolvedDark(dark);
-      document.documentElement.classList.toggle("dark", dark);
-      setReady(true);
+      try {
+        const raw = await readClientState<unknown>("user", "themePreference");
+        if (cancelled) return;
+        if (typeof raw === "string" && isThemePreference(raw)) {
+          setThemeState(raw);
+          writeThemePreferenceToLocalStorage(raw);
+          const dark = computeResolvedDark(raw, systemPrefersDark());
+          setResolvedDark(dark);
+          document.documentElement.classList.toggle("dark", dark);
+        }
+      } catch {
+        /* сеть / 401 — оставляем тему из localStorage, не сбрасываем на system */
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -66,7 +72,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!ready) return;
     void writeClientState("user", "themePreference", theme);
-    const dark = computeDark(theme);
+    writeThemePreferenceToLocalStorage(theme);
+    const dark = computeResolvedDark(theme, systemPrefersDark());
     setResolvedDark(dark);
     applyDom(theme);
   }, [theme, ready]);
@@ -75,7 +82,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (theme !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => {
-      const dark = computeDark("system");
+      const dark = computeResolvedDark("system", mq.matches);
       setResolvedDark(dark);
       document.documentElement.classList.toggle("dark", dark);
     };
@@ -85,15 +92,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((t: ThemePreference) => {
     setThemeState(t);
-    document.documentElement.classList.toggle("dark", computeDark(t));
+    writeThemePreferenceToLocalStorage(t);
+    document.documentElement.classList.toggle(
+      "dark",
+      computeResolvedDark(t, systemPrefersDark()),
+    );
   }, []);
 
   /** Только светлая ↔ тёмная (без режима «как в системе»). */
   const cycleTheme = useCallback(() => {
     setThemeState((prev) => {
-      const darkNow = computeDark(prev);
+      const darkNow = computeResolvedDark(prev, systemPrefersDark());
       const next: ThemePreference = darkNow ? "light" : "dark";
-      document.documentElement.classList.toggle("dark", computeDark(next));
+      writeThemePreferenceToLocalStorage(next);
+      document.documentElement.classList.toggle(
+        "dark",
+        computeResolvedDark(next, systemPrefersDark()),
+      );
       return next;
     });
   }, []);

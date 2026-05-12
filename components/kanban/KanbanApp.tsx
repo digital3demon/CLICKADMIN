@@ -1512,10 +1512,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   if (!visibleBoards.length) return;
                   s.activeBoardId = KANBAN_BOARD_DISTRIBUTE_ID;
                 });
-                showToast("Доска: Распределить");
+                showToast("Доска: Ответственный");
               }}
             >
-              Распределить
+              Ответственный
             </button>
           </div>
           <div

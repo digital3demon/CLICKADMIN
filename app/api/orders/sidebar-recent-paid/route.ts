@@ -15,7 +15,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** Блок «Оплаты» в сайдбаре: недавние наряды, где оплата сменилась на «Оплачено». */
+/** Блок «Оплаты» в сайдбаре: недавние переходы к «Оплачено» и к «Частично оплачено». */
 export async function GET() {
   const session = await getSessionFromCookies();
   if (!session?.sub || session.demo) {

@@ -12,6 +12,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { UserRole } from "@prisma/client";
+import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import {
   isoToDatetimeLocal,
   localDateTimeToIso,
@@ -537,6 +539,7 @@ export function OrderEditForm({
   isDemoMode = false,
   demoKanbanCardTypes = [],
   canAcceptChatCorrections = false,
+  viewerRole = null,
   /** Ссылка на карточку наряда в CRM канбане (fallback, если нет Kaiten-карточки). */
   kanbanCardUrl = null,
   orderPageFrame,
@@ -547,6 +550,8 @@ export function OrderEditForm({
   demoKanbanCardTypes?: Array<{ id: string; name: string }>;
   /** Принять корректировки из чата (роль админ / ст. админ / фин. менеджер). */
   canAcceptChatCorrections?: boolean;
+  /** Роль текущего пользователя (для раскладки «строка в буфер» на вкладке счёта). */
+  viewerRole?: UserRole | null;
   kanbanCardUrl?: string | null;
   /** Шапка модуля: этап работы, срочность, пилюли-индикаторы и «Сохранить». */
   orderPageFrame?: {
@@ -556,6 +561,7 @@ export function OrderEditForm({
   };
 }) {
   const isOrderPageFramed = orderPageFrame != null;
+  const isAccountant = viewerRole === "ACCOUNTANT";
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<EditTab>(() =>
     normalizeSecondaryTab(initialActiveTab),
@@ -1248,6 +1254,36 @@ export function OrderEditForm({
     if (fromAll) return fromAll;
     return doctorsForClinic.find((d) => d.id === doctorId);
   }, [doctorId, allDoctors, doctorsForClinic]);
+
+  const invoiceCopyClipboardText = useMemo(() => {
+    const num = (orderNumberDraft.trim() || initial.orderNumber).trim();
+    const patRaw = patientName.trim();
+    const pat =
+      personNameSurnameInitials(patRaw || null) || patRaw || "—";
+    const docRaw = selectedDoctor?.fullName?.trim() ?? "";
+    const doc =
+      personNameSurnameInitials(docRaw || null) || docRaw || "—";
+    return [num, pat, doc]
+      .map((s) => String(s).trim())
+      .join(" ");
+  }, [
+    orderNumberDraft,
+    initial.orderNumber,
+    patientName,
+    selectedDoctor,
+  ]);
+
+  const [invoiceCopyToast, setInvoiceCopyToast] = useState<string | null>(null);
+  const copyInvoiceLabelToClipboard = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(invoiceCopyClipboardText);
+      setInvoiceCopyToast("Скопировано");
+      window.setTimeout(() => setInvoiceCopyToast(null), 2000);
+    } catch {
+      setInvoiceCopyToast("Не удалось скопировать");
+      window.setTimeout(() => setInvoiceCopyToast(null), 2500);
+    }
+  }, [invoiceCopyClipboardText]);
 
   const resolvedOrderPriceListKind = useMemo(() => {
     const cid =
@@ -2638,6 +2674,23 @@ export function OrderEditForm({
                   />
                   <span>Счёт выставлен</span>
                 </label>
+                {!isAccountant ? (
+                  <div className="flex min-w-0 flex-1 basis-full flex-col gap-0.5 sm:basis-[min(100%,22rem)] sm:flex-1 lg:max-w-xl">
+                    <button
+                      type="button"
+                      onClick={() => void copyInvoiceLabelToClipboard()}
+                      title="Нажмите — скопировать в буфер обмена"
+                      className="max-w-full min-w-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+                    >
+                      {invoiceCopyClipboardText}
+                    </button>
+                    {invoiceCopyToast ? (
+                      <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                        {invoiceCopyToast}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               <div>
                 <label className={labelClass} htmlFor="oe-invoice-number">
@@ -2993,6 +3046,28 @@ export function OrderEditForm({
           >
             Скрыть
           </button>
+        </div>
+      ) : null}
+      {isAccountant ? (
+        <div className="mb-3 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2.5">
+          <p className="text-[0.65rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+            Номер наряда · пациент · врач
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void copyInvoiceLabelToClipboard()}
+              title="Нажмите — скопировать в буфер обмена"
+              className="max-w-full min-w-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-left font-mono text-sm font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
+            >
+              {invoiceCopyClipboardText}
+            </button>
+            {invoiceCopyToast ? (
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                {invoiceCopyToast}
+              </span>
+            ) : null}
+          </div>
         </div>
       ) : null}
     <div className="w-full min-w-0 space-y-4">

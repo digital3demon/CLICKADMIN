@@ -9,6 +9,7 @@ import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCe
 import { OrdersListKaitenChatShell } from "@/components/orders/OrdersListKaitenChatShell";
 import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
 import { OrderPostingMonthBar } from "@/components/orders/OrderPostingMonthBar";
+import { OrdersListShippedToolbar } from "@/components/orders/OrdersListShippedToolbar";
 import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePref";
 import { OrdersListPeriodForm } from "@/components/orders/OrdersListPeriodForm";
 import { OrdersListSearch } from "@/components/orders/OrdersListSearch";
@@ -301,6 +302,9 @@ export default async function OrdersPage({
     );
   }
 
+  const showOrdersQuickFilterChipsRow =
+    attentionCount > 0 || prostheticsPendingCount > 0 || labMentionCount > 0;
+
   return (
     <ModuleFrame
       title="Заказы"
@@ -322,7 +326,19 @@ export default async function OrdersPage({
         pollingEnabled={!isDemo}
       >
       <div className={ORDERS_LIST_STACK}>
-      <OrderPostingMonthBar />
+      <OrderPostingMonthBar
+        toolbarEnd={
+          <OrdersListShippedToolbar
+            pageSize={pageSize}
+            rawTag={rawTag}
+            listSearchQ={listSearchQ}
+            fromUrl={fromUrl}
+            toUrl={toUrl}
+            onlyShippedActive={onlyShippedActive}
+            hideShippedActive={hideShippedActive}
+          />
+        }
+      />
       {periodError ? (
         <div className="no-print w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
           {periodError} Фильтр по дате не применён.
@@ -365,7 +381,7 @@ export default async function OrdersPage({
               tag={rawTag ?? undefined}
               hideShipped={hideShippedActive}
               onlyShipped={onlyShippedActive}
-              className="w-full min-w-0 lg:flex-1"
+              className="w-full min-w-0 lg:max-w-2xl lg:flex-none"
             />
             <OrdersListPeriodForm
               pageSize={pageSize}
@@ -376,94 +392,9 @@ export default async function OrdersPage({
           </div>
         </div>
       </Suspense>
+      {showOrdersQuickFilterChipsRow ? (
       <div className="no-print w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
         <div className="flex flex-wrap items-center gap-2">
-          {onlyShippedActive ? (
-            <>
-              <Link
-                href={ordersListHref({
-                  limit: pageSize,
-                  tag: rawTag ?? undefined,
-                  q: listSearchQ || undefined,
-                  from: fromUrl ?? undefined,
-                  to: toUrl ?? undefined,
-                })}
-                className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--text-body)] shadow-sm hover:bg-[var(--surface-hover)] sm:px-4 sm:py-2"
-              >
-                Показать все наряды
-              </Link>
-              <Link
-                href={ordersListHref({
-                  limit: pageSize,
-                  tag: rawTag ?? undefined,
-                  hideShipped: true,
-                  q: listSearchQ || undefined,
-                  from: fromUrl ?? undefined,
-                  to: toUrl ?? undefined,
-                })}
-                className="rounded-md border border-emerald-300/70 bg-emerald-100/80 px-3 py-1.5 text-sm font-medium text-emerald-950 shadow-sm hover:bg-emerald-200/90 dark:border-emerald-800/60 dark:bg-emerald-950/50 dark:text-emerald-100 dark:hover:bg-emerald-900/55 sm:px-4 sm:py-2"
-              >
-                Скрыть отгруженные работы
-              </Link>
-            </>
-          ) : hideShippedActive ? (
-            <>
-              <Link
-                href={ordersListHref({
-                  limit: pageSize,
-                  tag: rawTag ?? undefined,
-                  q: listSearchQ || undefined,
-                  from: fromUrl ?? undefined,
-                  to: toUrl ?? undefined,
-                })}
-                className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--text-body)] shadow-sm hover:bg-[var(--surface-hover)] sm:px-4 sm:py-2"
-              >
-                Показать отгруженные
-              </Link>
-              <Link
-                href={ordersListHref({
-                  limit: pageSize,
-                  tag: rawTag ?? undefined,
-                  onlyShipped: true,
-                  q: listSearchQ || undefined,
-                  from: fromUrl ?? undefined,
-                  to: toUrl ?? undefined,
-                })}
-                className="rounded-md border border-sky-300/70 bg-sky-100/80 px-3 py-1.5 text-sm font-medium text-sky-950 shadow-sm hover:bg-sky-200/90 dark:border-sky-800/60 dark:bg-sky-950/50 dark:text-sky-100 dark:hover:bg-sky-900/55 sm:px-4 sm:py-2"
-              >
-                Показать только отгруженные работы
-              </Link>
-            </>
-          ) : (
-            <>
-              <Link
-                href={ordersListHref({
-                  limit: pageSize,
-                  tag: rawTag ?? undefined,
-                  hideShipped: true,
-                  q: listSearchQ || undefined,
-                  from: fromUrl ?? undefined,
-                  to: toUrl ?? undefined,
-                })}
-                className="rounded-md border border-emerald-300/70 bg-emerald-100/80 px-3 py-1.5 text-sm font-medium text-emerald-950 shadow-sm hover:bg-emerald-200/90 dark:border-emerald-800/60 dark:bg-emerald-950/50 dark:text-emerald-100 dark:hover:bg-emerald-900/55 sm:px-4 sm:py-2"
-              >
-                Скрыть отгруженные работы
-              </Link>
-              <Link
-                href={ordersListHref({
-                  limit: pageSize,
-                  tag: rawTag ?? undefined,
-                  onlyShipped: true,
-                  q: listSearchQ || undefined,
-                  from: fromUrl ?? undefined,
-                  to: toUrl ?? undefined,
-                })}
-                className="rounded-md border border-sky-300/70 bg-sky-100/80 px-3 py-1.5 text-sm font-medium text-sky-950 shadow-sm hover:bg-sky-200/90 dark:border-sky-800/60 dark:bg-sky-950/50 dark:text-sky-100 dark:hover:bg-sky-900/55 sm:px-4 sm:py-2"
-              >
-                Показать только отгруженные работы
-              </Link>
-            </>
-          )}
           {attentionCount > 0 ? (
             <Link
               href={ordersListHref({
@@ -544,6 +475,7 @@ export default async function OrdersPage({
           ) : null}
         </div>
       </div>
+      ) : null}
       {activeFilter ? (
         <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/25 sm:px-4 sm:py-2.5 sm:text-base">
           <span className="text-[var(--text-body)]">
