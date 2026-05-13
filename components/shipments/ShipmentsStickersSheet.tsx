@@ -156,12 +156,13 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         flex-direction: row;
         align-items: flex-end;
         gap: 0.25mm;
-        max-height: 13mm;
-        font-size: clamp(6.6pt, calc(var(--sticker-h) * 0.17), 7.8pt);
+        height: min(12.8mm, calc(var(--sticker-h) * 0.32));
+        max-height: min(12.8mm, calc(var(--sticker-h) * 0.32));
+        font-size: clamp(5.2pt, calc(var(--sticker-h) * 0.135), 6.2pt);
         line-height: 1;
         font-weight: 800;
         color: #334155;
-        letter-spacing: -0.055em;
+        letter-spacing: -0.08em;
         white-space: nowrap;
       }
       .sticker-scan-word {

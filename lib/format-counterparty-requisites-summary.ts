@@ -16,6 +16,7 @@ function cleanLegalFullName(value: string | null | undefined): string | null {
   // Служебные пометки из источника реквизитов не являются частью наименования.
   return raw
     .replace(/\s+ООО\s+ЭДО\s+сверка\s*$/iu, "")
+    .replace(/\s+ООО\s+сверка\s+ЭДО\s*$/iu, "")
     .replace(/\s+ООО\s+бум\.?\s*доки\s*$/iu, "")
     .trim();
 }
