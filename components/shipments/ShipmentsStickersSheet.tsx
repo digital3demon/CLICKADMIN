@@ -19,11 +19,25 @@ const WIDE_ASPECT = 1.32;
 /** Логотип для печати (`public/stickers/clickadmin-sticker-logo.png`). */
 const STICKER_BRAND_LOGO_SRC = "/stickers/clickadmin-sticker-logo.png";
 
-function stickerLineFitClass(value: string): string {
-  const length = value.trim().length;
-  if (length >= 34) return " sticker-line--fit-xs";
-  if (length >= 26) return " sticker-line--fit-sm";
-  if (length >= 20) return " sticker-line--fit-left";
+function stickerTextVisualLength(value: string): number {
+  return Array.from(value.trim()).reduce((sum, char) => {
+    if (/\s/u.test(char)) return sum + 0.45;
+    if (/[.,:;№-]/u.test(char)) return sum + 0.35;
+    if (/[ЖШЩЮФЫМД]/iu.test(char)) return sum + 1.18;
+    if (/[А-ЯЁA-Z]/u.test(char)) return sum + 1.08;
+    return sum + 1;
+  }, 0);
+}
+
+function stickerLineFitClass(value: string, kind: "clinic" | "person" = "clinic"): string {
+  const length = stickerTextVisualLength(value);
+  const thresholds =
+    kind === "person"
+      ? { left: 11, sm: 13, xs: 19 }
+      : { left: 14, sm: 18, xs: 24 };
+  if (length >= thresholds.xs) return " sticker-line--fit-xs";
+  if (length >= thresholds.sm) return " sticker-line--fit-sm";
+  if (length >= thresholds.left) return " sticker-line--fit-left";
   return "";
 }
 
@@ -104,6 +118,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         font-size: clamp(7pt, calc(var(--sticker-h) * 0.18), 8.6pt);
         font-weight: 700;
         color: #475569;
+        white-space: nowrap;
       }
       .sticker-line--fit-left .sticker-k { flex-basis: 10.5mm; }
       .sticker-line--fit-sm .sticker-k { flex-basis: 8mm; }
@@ -120,12 +135,19 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         letter-spacing: -0.055em;
       }
       .sticker-line--fit-sm .sticker-v {
-        font-size: clamp(9.6pt, calc(var(--sticker-h) * 0.27), 12.2pt);
+        font-size: clamp(9pt, calc(var(--sticker-h) * 0.255), 11.4pt);
         letter-spacing: -0.065em;
       }
       .sticker-line--fit-xs .sticker-v {
-        font-size: clamp(8pt, calc(var(--sticker-h) * 0.235), 10.4pt);
+        font-size: clamp(7.6pt, calc(var(--sticker-h) * 0.22), 9.8pt);
         letter-spacing: -0.075em;
+      }
+      .sticker-line--order {
+        margin-bottom: 0;
+      }
+      .sticker-line--order .sticker-k {
+        font-size: clamp(6.2pt, calc(var(--sticker-h) * 0.155), 7pt);
+        letter-spacing: -0.06em;
       }
       .sticker-footer {
         flex: 0 0 auto;
@@ -260,7 +282,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
                 </span>
               </div>
               <div
-                className={`sticker-line${isWide ? " sticker-line--full" : ""}${stickerLineFitClass(r.doctorLine)}`}
+                className={`sticker-line${isWide ? " sticker-line--full" : ""}${stickerLineFitClass(r.doctorLine, "person")}`}
               >
                 <span className="sticker-k">Доктор</span>
                 <span className="sticker-v" title={r.doctorLine}>
@@ -268,7 +290,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
                 </span>
               </div>
               <div
-                className={`sticker-line${isWide ? " sticker-line--full" : ""}${stickerLineFitClass(r.patientLine)}`}
+                className={`sticker-line${isWide ? " sticker-line--full" : ""}${stickerLineFitClass(r.patientLine, "person")}`}
               >
                 <span className="sticker-k">Пациент</span>
                 <span className="sticker-v" title={r.patientLine}>
@@ -276,7 +298,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
                 </span>
               </div>
               <div
-                className={`sticker-line${isWide ? " sticker-line--full" : ""}`}
+                className={`sticker-line sticker-line--order${isWide ? " sticker-line--full" : ""}`}
               >
                 <span className="sticker-k">№ заказа</span>
                 <span className="sticker-v">{r.orderNumber}</span>
