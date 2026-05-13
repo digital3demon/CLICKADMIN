@@ -65,7 +65,7 @@ export type FinanceOfficeOrderRow = Omit<
   FinanceOfficeRaw,
   "constructions" | "chatCorrections" | "prostheticsRequests" | "clinicId" | "doctorId"
 > & {
-  clinic: { id: string; name: string; address: string | null } | null;
+  clinic: { id: string; name: string; address: string | null; legalFullName: string | null } | null;
   counterpartyRequisitesText: string | null;
   doctor: { id: string; fullName: string };
   constructions: Array<{
@@ -216,6 +216,7 @@ export async function fetchFinanceOfficeOrders(
         x.id,
         {
           ...pub,
+          legalFullName,
           counterpartyRequisitesText: formatCounterpartyRequisitesSummary({
             legalFullName,
             inn,
@@ -253,7 +254,12 @@ export async function fetchFinanceOfficeOrders(
     return {
       ...rest,
       clinic: clinFull
-        ? { id: clinFull.id, name: clinFull.name, address: clinFull.address }
+        ? {
+            id: clinFull.id,
+            name: clinFull.name,
+            address: clinFull.address,
+            legalFullName: clinFull.legalFullName,
+          }
         : null,
       counterpartyRequisitesText,
       doctor: doctorById.get(o.doctorId) ?? { id: o.doctorId, fullName: "—" },

@@ -14,6 +14,10 @@ import {
 } from "@/lib/pricing/correction-price-item";
 import { analyticsBusinessDayKey } from "@/lib/analytics/range";
 import { reworkSourceItem } from "@/lib/analytics/rework-source-item";
+import {
+  ORDER_PAYMENT_PAID,
+  ORDER_PAYMENT_RECON_PAID,
+} from "@/lib/order-clinic-client-fields";
 
 const PRICE_LIST = "PRICE_LIST" satisfies ConstructionCategory;
 
@@ -57,9 +61,10 @@ export async function loadFinanceReport(from: Date, to: Date) {
 
   const dayKey = analyticsBusinessDayKey;
 
-  const byDay = new Map<string, { revenue: number; orders: number }>();
+  const byDay = new Map<string, { revenue: number; actualRevenue: number; orders: number }>();
 
   let revenueTotal = 0;
+  let actualRevenueTotal = 0;
   let ordersActive = 0;
   let cancelled = 0;
   let correctionOrders = 0;
@@ -90,7 +95,12 @@ export async function loadFinanceReport(from: Date, to: Date) {
       continue;
     }
     const rev = orderRevenueRub(o);
+    const actualRev =
+      o.payment === ORDER_PAYMENT_PAID || o.payment === ORDER_PAYMENT_RECON_PAID
+        ? rev
+        : 0;
     revenueTotal += rev;
+    actualRevenueTotal += actualRev;
     ordersActive += 1;
     if (o.correctionTrack != null) {
       const corrRev = sumCorrectionPriceLinesAllocatedRub({
@@ -136,8 +146,9 @@ export async function loadFinanceReport(from: Date, to: Date) {
       }
     }
     const k = dayKey(o.createdAt);
-    const cur = byDay.get(k) ?? { revenue: 0, orders: 0 };
+    const cur = byDay.get(k) ?? { revenue: 0, actualRevenue: 0, orders: 0 };
     cur.revenue += rev;
+    cur.actualRevenue += actualRev;
     cur.orders += 1;
     byDay.set(k, cur);
   }
@@ -147,6 +158,7 @@ export async function loadFinanceReport(from: Date, to: Date) {
     .map(([date, v]) => ({
       date,
       revenue: Math.round(v.revenue * 100) / 100,
+      actualRevenue: Math.round(v.actualRevenue * 100) / 100,
       orders: v.orders,
     }));
 
@@ -162,6 +174,7 @@ export async function loadFinanceReport(from: Date, to: Date) {
     to: to.toISOString(),
     totals: {
       revenue: Math.round(revenueTotal * 100) / 100,
+      actualRevenue: Math.round(actualRevenueTotal * 100) / 100,
       orders: ordersActive,
       cancelled,
       avgCheck,

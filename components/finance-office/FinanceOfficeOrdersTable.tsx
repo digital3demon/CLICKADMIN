@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
@@ -45,6 +46,7 @@ export function FinanceOfficeOrdersTable({
   periodFrom,
   periodTo,
   q = "",
+  toolbar = null,
 }: {
   orders: FinanceOfficeOrderTableRow[];
   activeTag?: string | null;
@@ -52,6 +54,7 @@ export function FinanceOfficeOrdersTable({
   periodFrom: string | null;
   periodTo: string | null;
   q?: string | null;
+  toolbar?: ReactNode;
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const visibleIds = useMemo(() => orders.map((o) => o.id), [orders]);
@@ -72,23 +75,37 @@ export function FinanceOfficeOrdersTable({
 
   if (orders.length === 0) {
     return (
-      <p className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-6 text-center text-sm text-[var(--text-secondary)]">
-        В ФинОтделе нет нарядов по текущему фильтру.
-      </p>
+      <StickyListChrome
+        className="w-full min-w-0 overflow-y-visible"
+        toolbarClassName="pb-3"
+        toolbar={<div className="space-y-4">{toolbar}</div>}
+      >
+        <p className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-6 text-center text-sm text-[var(--text-secondary)]">
+          В ФинОтделе нет нарядов по текущему фильтру.
+        </p>
+      </StickyListChrome>
     );
   }
 
   return (
-    <div className="w-full min-w-0 overflow-hidden rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm">
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
-        <div className="text-sm font-medium text-[var(--text-body)]">
-          Нарядов: {orders.length} · выбрано: {selected.size}
-          {activeTag ? <span className="ml-2 text-[var(--text-muted)]">Фильтр: {activeTag}</span> : null}
+    <StickyListChrome
+      className="w-full min-w-0 overflow-y-visible"
+      toolbarClassName="pb-3"
+      toolbar={
+        <div className="space-y-4">
+          {toolbar}
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+            <div className="text-sm font-medium text-[var(--text-body)]">
+              Нарядов: {orders.length} · выбрано: {selected.size}
+              {activeTag ? <span className="ml-2 text-[var(--text-muted)]">Фильтр: {activeTag}</span> : null}
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="overflow-x-auto">
+      }
+    >
+      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm xl:overflow-x-visible [-webkit-overflow-scrolling:touch]">
         <table className="w-max min-w-full border-collapse text-left text-sm">
-          <thead>
+          <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <th className="px-2 py-2 text-center normal-case">
                 <div className="flex flex-col items-center gap-1.5">
@@ -203,6 +220,6 @@ export function FinanceOfficeOrdersTable({
           </tbody>
         </table>
       </div>
-    </div>
+    </StickyListChrome>
   );
 }

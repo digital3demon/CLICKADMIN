@@ -24,7 +24,7 @@ type ApplyResult = {
   message: string;
 };
 
-export function FinanceOfficeBankImportPanel() {
+export function FinanceOfficeBankImportPanel({ className = "" }: { className?: string }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -96,7 +96,14 @@ export function FinanceOfficeBankImportPanel() {
   };
 
   return (
-    <section className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+    <section
+      className={[
+        "rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div
         className="rounded-t-lg border-b border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-4"
         onDragOver={(e) => {

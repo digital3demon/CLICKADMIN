@@ -67,6 +67,7 @@ export function AnalyticsPageClient() {
   const [finance, setFinance] = useState<{
     totals: {
       revenue: number;
+      actualRevenue: number;
       orders: number;
       cancelled: number;
       avgCheck: number;
@@ -75,7 +76,7 @@ export function AnalyticsPageClient() {
       reworkOrders: number;
       reworkRevenue: number;
     };
-    series: { date: string; revenue: number; orders: number }[];
+    series: { date: string; revenue: number; actualRevenue: number; orders: number }[];
     reworkTopItems: {
       code: string;
       name: string;
@@ -444,7 +445,8 @@ export function AnalyticsPageClient() {
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-[var(--text-secondary)]">
-              Выручка по строкам состава × коэффициент срочности. Период по дате
+              Выручка по строкам состава × коэффициент срочности. Фактическая
+              выручка — только наряды со статусом оплаты «Оплачено». Период по дате
               создания наряда. Отменённые наряды в сумму не входят. Суммы в блоках
               «Коррекции» и «Переделки» — только по строкам прайса «КП» в составе.
             </p>
@@ -455,13 +457,24 @@ export function AnalyticsPageClient() {
               Выгрузить Excel
             </a>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
             <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                 Выручка
               </p>
               <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--app-text)]">
                 {moneyRub(finance.totals.revenue)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-emerald-300/60 bg-emerald-50/70 p-3 dark:border-emerald-800/60 dark:bg-emerald-950/30">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                Фактическая выручка
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-emerald-950 dark:text-emerald-100">
+                {moneyRub(finance.totals.actualRevenue)}
+              </p>
+              <p className="mt-0.5 text-[9px] leading-tight text-emerald-800/80 dark:text-emerald-200/80">
+                только оплаченные
               </p>
             </div>
             <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
@@ -599,8 +612,12 @@ export function AnalyticsPageClient() {
                   formatter={(v, name) => {
                     const n = typeof v === "number" ? v : Number(v);
                     return [
-                      name === "revenue" ? moneyRub(n) : v,
-                      name === "revenue" ? "Выручка" : "Заказов",
+                      name === "revenue" || name === "actualRevenue" ? moneyRub(n) : v,
+                      name === "revenue"
+                        ? "Выручка"
+                        : name === "actualRevenue"
+                          ? "Фактическая выручка"
+                          : "Заказов",
                     ];
                   }}
                   labelFormatter={(l) => l}
@@ -626,6 +643,16 @@ export function AnalyticsPageClient() {
                   name="Выручка"
                   stroke={CHART_COLORS.primary}
                   strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="actualRevenue"
+                  name="Фактическая выручка"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  strokeDasharray="5 4"
                   dot={false}
                 />
               </ComposedChart>

@@ -49,14 +49,39 @@ function isPaymentMarked(value: unknown): boolean {
   return true;
 }
 
+function hasExplicitNoPaymentMarker(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return /(?:^|[\s;|,])(?:не\s+оплачен[ао]?|не\s+оплачено|нет\s+оплат[ыа]?|без\s+оплат[ыа]?)(?=$|[\s;|,.])/u.test(
+    normalized,
+  );
+}
+
 export function extractOrderNumberFromBankComment(comment: string): string {
   // JS \b не считает кириллицу словесными символами, поэтому используем явные unicode-границы.
   // Сначала ищем новый номер наряда вида 2605-060: он часто стоит внутри длинного
   // банковского комментария рядом с датами, суммами и номерами счетов.
   const dashedMatch = comment.match(/(?:^|[^\p{L}\p{N}])(\d{4}\s*-\s*\d{3})(?=$|[^\p{L}\p{N}])/u);
   if (dashedMatch?.[1]) return dashedMatch[1].replace(/\s*-\s*/g, "-");
-  const match = comment.match(/(?:^|[^\p{L}\p{N}])(\d{3,8})(?=$|[^\p{L}\p{N}])/u);
-  return match?.[1] ?? "";
+  const plainPattern = /(?:^|[^\p{L}\p{N}])(\d{3,8})(?=$|[^\p{L}\p{N}])/gu;
+  for (const match of comment.matchAll(plainPattern)) {
+    const value = match[1];
+    if (!value) continue;
+    const start = (match.index ?? 0) + match[0].lastIndexOf(value);
+    const end = start + value.length;
+    const prev = comment[start - 1] ?? "";
+    const prevPrev = comment[start - 2] ?? "";
+    const next = comment[end] ?? "";
+    const nextNext = comment[end + 1] ?? "";
+    // Не принимаем год/месяц/день из дат вида 05.05.2026 за номер наряда.
+    if (
+      (/[./-]/.test(prev) && /\d/.test(prevPrev)) ||
+      (/[./-]/.test(next) && /\d/.test(nextNext))
+    ) {
+      continue;
+    }
+    return value;
+  }
+  return "";
 }
 
 function excelSerialToDate(serial: number): Date | null {
@@ -190,7 +215,10 @@ export function parseFinanceBankText(text: string): FinanceBankImportParsedRow[]
     const dateMatch = line.match(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/);
     const invoiceNumberRaw = invoiceMatch?.[1] ?? "";
     const invoiceDate = normalizeBankDate(dateMatch?.[1] ?? "");
-    const paid = /оплат|плат[её]ж|зачисл|поступ/i.test(line);
+    // В PDF/скане нет надёжной отдельной колонки «Оплата»: сам импорт уже является
+    // банковской выгрузкой. Поэтому найденную строку считаем платежом, если нет
+    // явного отрицательного маркера; ошибки номера/счёта пользователь исправит вручную.
+    const paid = !hasExplicitNoPaymentMarker(line);
     const errors: string[] = [];
     if (!paid) errors.push("Строка не распознана: нет признака оплаты");
     if (!hasOrder) errors.push("Строка не распознана: невозможно определить номер заказа");

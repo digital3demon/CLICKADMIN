@@ -1,0 +1,205 @@
+import ExcelJS from "exceljs";
+import { NextResponse } from "next/server";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
+import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { fetchFinanceOfficeOrders, type FinanceOfficeOrderRow } from "@/lib/fetch-finance-office-orders";
+import {
+  addCalendarDaysYmd,
+  moscowShipmentDayBoundsUtc,
+  moscowShipmentInclusiveRangeBoundsUtc,
+  moscowTodayYmd,
+  moscowTomorrowYmd,
+  parseYmdOrNull,
+} from "@/lib/shipments-date-range";
+import { parseListTagParam } from "@/lib/order-list-tag-filter";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const MAX_RANGE_DAYS = 366;
+
+function rangeDaySpan(fromYmd: string, toYmd: string): number {
+  const [y1, m1, d1] = fromYmd.split("-").map(Number);
+  const [y2, m2, d2] = toYmd.split("-").map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / (24 * 60 * 60 * 1000));
+}
+
+function parseTab(raw: string | null): "today" | "tomorrow" | "period" {
+  if (raw === "tomorrow" || raw === "period" || raw === "today") return raw;
+  return "today";
+}
+
+function money(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function lineBaseTotal(row: FinanceOfficeOrderRow["constructions"][number]): number {
+  const qty = Number.isFinite(row.quantity) ? row.quantity : 0;
+  const unit = row.unitPrice ?? 0;
+  return qty * unit;
+}
+
+function lineDiscountedTotal(row: FinanceOfficeOrderRow["constructions"][number]): number {
+  const pct = Number.isFinite(row.lineDiscountPercent) ? row.lineDiscountPercent : 0;
+  return lineBaseTotal(row) * (1 - Math.max(0, Math.min(100, pct)) / 100);
+}
+
+function orderTotals(order: FinanceOfficeOrderRow): {
+  total: number;
+  discountLabel: string;
+  discountedTotal: number;
+} {
+  const total = order.constructions.reduce((sum, row) => sum + lineBaseTotal(row), 0);
+  const afterLineDiscounts = order.constructions.reduce((sum, row) => sum + lineDiscountedTotal(row), 0);
+  const orderDiscountPct = Math.max(
+    0,
+    Math.min(100, Number.isFinite(order.compositionDiscountPercent) ? order.compositionDiscountPercent : 0),
+  );
+  const discountedTotal = afterLineDiscounts * (1 - orderDiscountPct / 100);
+  const parts: string[] = [];
+  const lineDiscounts = order.constructions
+    .map((row) => Number(row.lineDiscountPercent) || 0)
+    .filter((pct) => pct > 0);
+  if (lineDiscounts.length > 0) {
+    const uniq = Array.from(new Set(lineDiscounts.map((pct) => `${money(pct)}%`)));
+    parts.push(`позиции: ${uniq.join(", ")}`);
+  }
+  if (orderDiscountPct > 0) parts.push(`общая: ${money(orderDiscountPct)}%`);
+  const discountRub = total - discountedTotal;
+  if (discountRub > 0) parts.push(`-${money(discountRub)} ₽`);
+  return {
+    total: money(total),
+    discountLabel: parts.join("; "),
+    discountedTotal: money(discountedTotal),
+  };
+}
+
+function constructionLabel(row: FinanceOfficeOrderRow["constructions"][number]): string {
+  const code = row.priceListItem?.code?.trim();
+  const name =
+    row.priceListItem?.name?.trim() ||
+    row.constructionType?.name?.trim() ||
+    "Позиция состава";
+  const qty = Number.isFinite(row.quantity) ? row.quantity : 1;
+  const base = code ? `${code} · ${name}` : name;
+  return qty > 1 ? `${base}*${qty}` : base;
+}
+
+export async function GET(req: Request) {
+  const session = await getSessionFromCookies();
+  const tenantId = session ? await getTenantIdForSession(session) : null;
+  if (!tenantId) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+
+  const sp = new URL(req.url).searchParams;
+  const tab = parseTab(sp.get("tab"));
+  const fromRaw = parseYmdOrNull(sp.get("from"));
+  const toRaw = parseYmdOrNull(sp.get("to"));
+  const rawTag = sp.get("tag")?.trim() || null;
+  const parsedTag = rawTag ? parseListTagParam(rawTag) : null;
+  const q = sp.get("q")?.trim() || "";
+
+  let start: Date | null = null;
+  let endExclusive: Date | null = null;
+  let periodLabel = "";
+  if (tab === "today") {
+    const ymd = moscowTodayYmd();
+    const bounds = moscowShipmentDayBoundsUtc(ymd);
+    start = bounds.start;
+    endExclusive = bounds.endExclusive;
+    periodLabel = ymd;
+  } else if (tab === "tomorrow") {
+    const ymd = moscowTomorrowYmd();
+    const bounds = moscowShipmentDayBoundsUtc(ymd);
+    start = bounds.start;
+    endExclusive = bounds.endExclusive;
+    periodLabel = ymd;
+  } else {
+    if (!fromRaw || !toRaw) {
+      return NextResponse.json({ error: "Для периода укажите from и to" }, { status: 400 });
+    }
+    if (fromRaw > toRaw) {
+      return NextResponse.json({ error: "Дата «с» не может быть позже даты «по»" }, { status: 400 });
+    }
+    if (rangeDaySpan(fromRaw, toRaw) > MAX_RANGE_DAYS) {
+      return NextResponse.json({ error: `Максимальный период — ${MAX_RANGE_DAYS} дней` }, { status: 400 });
+    }
+    const bounds = moscowShipmentInclusiveRangeBoundsUtc(fromRaw, toRaw);
+    start = bounds.start;
+    endExclusive = bounds.endExclusive;
+    periodLabel = `${fromRaw}_${toRaw}`;
+  }
+
+  const orders = await fetchFinanceOfficeOrders(await getOrdersPrisma(), tenantId, {
+    listTag: parsedTag ? rawTag : null,
+    search: q,
+    start,
+    endExclusive,
+  });
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "dental-lab-crm";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("ФинОтдел");
+  ws.columns = [
+    { header: "Номер наряда", key: "orderNumber", width: 14 },
+    { header: "ООО клиники", key: "clinicLegalName", width: 32 },
+    { header: "Клиника", key: "clinic", width: 30 },
+    { header: "Доктор", key: "doctor", width: 24 },
+    { header: "Пациент", key: "patient", width: 24 },
+    { header: "Состав заказа", key: "construction", width: 48 },
+    { header: "Сумма общая", key: "total", width: 14 },
+    { header: "Скидка", key: "discount", width: 24 },
+    { header: "Сумма со скидкой", key: "discountedTotal", width: 18 },
+  ];
+
+  ws.getRow(1).font = { bold: true };
+  ws.getRow(1).alignment = { vertical: "middle" };
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+
+  for (const order of orders) {
+    const totals = orderTotals(order);
+    const constructions =
+      order.constructions.length > 0
+        ? order.constructions
+        : [null];
+    for (const construction of constructions) {
+      ws.addRow({
+        orderNumber: order.orderNumber,
+        clinicLegalName: order.clinic?.legalFullName ?? "",
+        clinic: order.clinic?.name ?? "Частное лицо",
+        doctor: order.doctor.fullName,
+        patient: order.patientName ?? "",
+        construction: construction ? constructionLabel(construction) : "",
+        total: totals.total,
+        discount: totals.discountLabel,
+        discountedTotal: totals.discountedTotal,
+      });
+    }
+  }
+
+  for (const row of ws.getRows(2, Math.max(0, ws.rowCount - 1)) ?? []) {
+    row.alignment = { vertical: "top", wrapText: true };
+  }
+  for (const colKey of ["total", "discountedTotal"]) {
+    ws.getColumn(colKey).numFmt = '#,##0.00';
+  }
+  ws.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: ws.columnCount },
+  };
+
+  const buf = await wb.xlsx.writeBuffer();
+  const filename = `finance-office-${periodLabel}.xlsx`;
+  return new NextResponse(buf, {
+    status: 200,
+    headers: {
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+      "Cache-Control": "private, no-store",
+    },
+  });
+}

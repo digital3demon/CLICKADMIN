@@ -82,27 +82,28 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       }
       .sticker-line {
         display: flex;
-        gap: 1mm;
+        gap: 1.15mm;
         align-items: baseline;
-        line-height: 1.12;
-        margin-bottom: 0.65mm;
+        line-height: 1.06;
+        margin-bottom: 0.5mm;
       }
       .sticker-line--full { width: 100%; }
       .sticker-k {
-        flex: 0 0 13mm;
-        font-size: 5.6pt;
-        font-weight: 500;
-        color: #64748b;
+        flex: 0 0 14.5mm;
+        font-size: clamp(6.2pt, calc(var(--sticker-h) * 0.15), 7.2pt);
+        font-weight: 700;
+        color: #475569;
       }
       .sticker-v {
         flex: 1 1 0;
         min-width: 0;
-        font-size: clamp(6.5pt, calc(var(--sticker-h) * 0.19), 8.4pt);
-        font-weight: 700;
+        font-size: clamp(8.8pt, calc(var(--sticker-h) * 0.25), 11pt);
+        font-weight: 800;
         color: #0f172a;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        letter-spacing: -0.035em;
       }
       .sticker-footer {
         flex: 0 0 auto;
@@ -131,7 +132,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-scan-caption {
         max-width: 22mm;
         text-align: center;
-        font-size: clamp(4.8pt, calc(var(--sticker-h) * 0.13), 5.6pt);
+        font-size: clamp(5.4pt, calc(var(--sticker-h) * 0.145), 6.2pt);
         line-height: 1.08;
         font-weight: 700;
         color: #334155;
@@ -165,7 +166,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       }
     `;
     const wide = `
-      .sticker-page--wide .sticker-k { flex: 0 0 10mm; font-size: 5.3pt; }
+      .sticker-page--wide .sticker-k { flex: 0 0 12mm; font-size: 6.4pt; }
     `;
     return `
       @media print {

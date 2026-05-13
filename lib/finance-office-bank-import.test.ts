@@ -4,6 +4,7 @@ import {
   buildFinanceInvoiceNumber,
   extractOrderNumberFromBankComment,
   normalizeFinanceBankApplyRow,
+  parseFinanceBankText,
   parseFinanceBankWorkbook,
 } from "@/lib/finance-office-bank-import";
 
@@ -32,6 +33,11 @@ describe("finance office bank import", () => {
     expect(
       extractOrderNumberFromBankComment("Наряд 2605 - 060 врач Иванов"),
     ).toBe("2605-060");
+  });
+
+  it("does not extract a plain order number from a date year", () => {
+    expect(extractOrderNumberFromBankComment("05.05.2026 Пациент Иванов")).toBe("");
+    expect(extractOrderNumberFromBankComment("Оплата пациент Иванов 3301.")).toBe("3301");
   });
 
   it("parses paid rows and builds invoice caption", () => {
@@ -63,6 +69,19 @@ describe("finance office bank import", () => {
       ]),
     );
     expect(rows[0]!.apply).toBe(false);
+    expect(rows[0]!.paid).toBe(true);
+    expect(rows[0]!.errors.join(" ")).toContain("невозможно определить номер заказа");
+  });
+
+  it("marks OCR/text payment rows as paid even when order is not recognized", () => {
+    const rows = parseFinanceBankText(
+      "05.05.2026 Пациент Иванов счёт без номера заказа",
+    );
+    expect(rows[0]!).toMatchObject({
+      invoiceDate: "05.05.2026",
+      paid: true,
+      apply: false,
+    });
     expect(rows[0]!.errors.join(" ")).toContain("невозможно определить номер заказа");
   });
 

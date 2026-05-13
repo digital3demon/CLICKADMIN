@@ -51,6 +51,7 @@ export async function GET(req: Request) {
     ws.addRow(["Период", fromLabel, "—", toLabel]);
     ws.addRow([]);
     ws.addRow(["Выручка, ₽", data.totals.revenue]);
+    ws.addRow(["Фактическая выручка, ₽ (только оплаченные)", data.totals.actualRevenue]);
     ws.addRow(["Заказов (без отмен)", data.totals.orders]);
     ws.addRow(["Отменённых", data.totals.cancelled]);
     ws.addRow(["Средний чек, ₽", data.totals.avgCheck]);
@@ -100,9 +101,9 @@ export async function GET(req: Request) {
       ws.addRow([row.code, row.name, row.reworkOrders, row.lineCount, row.quantity]);
     }
     ws.addRow([]);
-    ws.addRow(["Дата", "Выручка, ₽", "Заказов"]);
+    ws.addRow(["Дата", "Выручка, ₽", "Фактическая выручка, ₽", "Заказов"]);
     for (const row of data.series) {
-      ws.addRow([row.date, row.revenue, row.orders]);
+      ws.addRow([row.date, row.revenue, row.actualRevenue, row.orders]);
     }
   }
 
