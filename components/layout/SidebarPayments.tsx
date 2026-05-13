@@ -1,6 +1,6 @@
 "use client";
 
-import type { UserRole } from "@prisma/client";
+import type { AppModule, UserRole } from "@prisma/client";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { canDismissSidebarRecentPaidItems } from "@/lib/auth/permissions";
@@ -36,13 +36,20 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-export function SidebarPayments({ sessionRole }: { sessionRole: UserRole | null }) {
+export function SidebarPayments({
+  sessionRole,
+  moduleAccess = null,
+}: {
+  sessionRole: UserRole | null;
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [items, setItems] = useState<Row[] | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const canDismiss =
-    sessionRole != null && canDismissSidebarRecentPaidItems(sessionRole);
+    sessionRole != null &&
+    canDismissSidebarRecentPaidItems(sessionRole, moduleAccess);
 
   useEffect(() => {
     try {
@@ -88,23 +95,32 @@ export function SidebarPayments({ sessionRole }: { sessionRole: UserRole | null 
   }, [load, pathname]);
 
   const markDismissed = useCallback(
-    async (it: Row) => {
-      if (!canDismiss) return;
+    async (it: Row): Promise<boolean> => {
+      if (!canDismiss) return false;
       try {
         const res = await fetch("/api/orders/sidebar-recent-paid", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderId: it.orderId, changedAt: it.changedAt }),
         });
-        if (!res.ok) return;
+        if (!res.ok) return false;
         setItems((prev) =>
           prev == null ? prev : prev.filter((r) => !(r.orderId === it.orderId && r.changedAt === it.changedAt)),
         );
+        return true;
       } catch {
-        /* ignore */
+        return false;
       }
     },
     [canDismiss],
+  );
+
+  const openPaidOrder = useCallback(
+    async (it: Row) => {
+      await markDismissed(it);
+      router.push(ordersListHref({ q: it.orderNumber }));
+    },
+    [markDismissed, router],
   );
 
   if (items === null) {
@@ -163,9 +179,7 @@ export function SidebarPayments({ sessionRole }: { sessionRole: UserRole | null 
                         <button
                           type="button"
                           className="flex min-w-0 flex-1 items-baseline gap-1 overflow-hidden rounded px-0.5 text-left transition-colors hover:bg-black/10 dark:hover:bg-white/[0.06]"
-                          onClick={() => {
-                            router.push(ordersListHref({ q: it.orderNumber }));
-                          }}
+                          onClick={() => void openPaidOrder(it)}
                           title={`${it.orderNumber} ${names}`.trim()}
                         >
                           <span className="shrink-0 font-mono text-[11px] font-bold tabular-nums leading-none text-[var(--sidebar-text-strong)] shell-short:text-[10px]">

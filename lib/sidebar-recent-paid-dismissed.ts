@@ -1,4 +1,4 @@
-/** Ключ в `UserClientState` для скрытых строк блока «Оплаты» (только админы). */
+/** Ключ в `TenantClientState` для скрытых строк блока «Оплаты» (общий прочитанный статус). */
 export const SIDEBAR_RECENT_PAID_DISMISSED_STATE_KEY = "sidebarRecentPaidDismissed";
 
 const MAX_KEYS = 400;

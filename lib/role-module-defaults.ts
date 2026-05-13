@@ -27,6 +27,8 @@ export const ALL_APP_MODULES: AppModule[] = [
   "KANBAN_MANAGE_TIMER",
   "ORDER_HISTORY",
   "ANALYTICS",
+  "SIDEBAR_PAYMENTS",
+  "PAYROLL",
   "SHIPMENTS",
   "WAREHOUSE",
   "CLIENTS_VIEW",
@@ -62,6 +64,8 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   KANBAN_MANAGE_TIMER: "Канбан: таймеры",
   ORDER_HISTORY: "История изменений",
   ANALYTICS: "Аналитика",
+  SIDEBAR_PAYMENTS: "Сайдбар: блок оплат",
+  PAYROLL: "Зарплата",
   SHIPMENTS: "Отгрузки",
   WAREHOUSE: "Склад (раздел)",
   CLIENTS: "Клиенты (устар., не настраивать)",
@@ -115,7 +119,11 @@ export function defaultModuleAllowed(
     return false;
   }
   if (role === "USER") {
-    return module === "KANBAN" || module === "KANBAN_MANAGE_CHECKLIST";
+    return (
+      module === "KANBAN" ||
+      module === "KANBAN_MANAGE_CHECKLIST" ||
+      module === "PAYROLL"
+    );
   }
   if (role === "PRODUCTION" || role === "SENIOR_PRODUCTION") {
     return (
@@ -131,7 +139,8 @@ export function defaultModuleAllowed(
     return (
       module === "KANBAN" ||
       module === "KANBAN_MANAGE_CHECKLIST" ||
-      module === "KANBAN_MANAGE_TIMER"
+      module === "KANBAN_MANAGE_TIMER" ||
+      module === "PAYROLL"
     );
   }
 
@@ -159,6 +168,10 @@ export function defaultModuleAllowed(
       return true;
     case "ANALYTICS":
       return DEFAULT_ANALYTICS_ROLES.includes(role);
+    case "SIDEBAR_PAYMENTS":
+      return true;
+    case "PAYROLL":
+      return false;
     case "SHIPMENTS":
     case "WAREHOUSE":
     case "CLIENTS":

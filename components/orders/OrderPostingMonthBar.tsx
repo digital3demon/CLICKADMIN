@@ -165,9 +165,9 @@ export function OrderPostingMonthBar({ toolbarEnd }: Props) {
   }
 
   return (
-    <div className="flex w-full flex-col overflow-hidden rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-      <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-start sm:gap-5 lg:gap-6">
-      <div className="text-base text-[var(--text-strong)]">
+    <div className="flex w-full min-w-0 flex-col overflow-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+      <div className="flex min-w-0 flex-col gap-3 px-4 py-3.5 xl:flex-row xl:items-center xl:justify-start xl:gap-6">
+      <div className="min-w-0 text-base text-[var(--text-strong)] xl:max-w-[24rem] xl:shrink-0">
         <p className="text-lg font-semibold text-[var(--app-text)]">
           Нумерация нарядов
         </p>
@@ -202,7 +202,7 @@ export function OrderPostingMonthBar({ toolbarEnd }: Props) {
           <p className="mt-2 text-sm text-red-600">{error}</p>
         ) : null}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <button
           type="button"
           disabled={busy}

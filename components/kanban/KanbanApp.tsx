@@ -1810,6 +1810,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         allBoards={appState.boards}
         activityActorLabel={activityActorLabel}
         commentAuthorUserId={kanbanSessionUserId ?? undefined}
+        sessionUserRole={kanbanSessionRole}
         onClose={() => setCardModalId(null)}
         onApply={applyModalBoard}
         toast={showToast}

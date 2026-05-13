@@ -376,21 +376,21 @@ export default async function OrdersPage({
           </div>
         }
       >
-        <div className="no-print w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+        <div className="no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+          <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:gap-4">
             <OrdersListSearch
               initialValue={listSearchQ}
               pageSize={pageSize}
               tag={rawTag ?? undefined}
               hideShipped={hideShippedActive}
               onlyShipped={onlyShippedActive}
-              className="w-full min-w-0 lg:max-w-2xl lg:flex-none"
+              className="w-full min-w-0 xl:max-w-2xl xl:flex-none"
             />
             <OrdersListPeriodForm
               pageSize={pageSize}
               appliedFrom={fromUrl}
               appliedTo={toUrl}
-              className="shrink-0"
+              className="min-w-0"
             />
           </div>
         </div>
@@ -548,9 +548,9 @@ export default async function OrdersPage({
       ) : null}
         </div>}
       >
-      <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
+      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] xl:overflow-x-visible dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
         <table className="w-max min-w-0 border-collapse text-left text-sm">
-          <thead className="sticky top-[var(--sticky-list-toolbar-height,0px)] z-30 print:static">
+          <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30 print:static">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
               <th
                 className="max-md:hidden min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center normal-case sm:px-2 sm:py-2"

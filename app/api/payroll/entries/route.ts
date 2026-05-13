@@ -1,0 +1,235 @@
+import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
+import { getPrisma } from "@/lib/get-prisma";
+import {
+  canReviewPayroll,
+  isPayrollUserRole,
+  parsePayrollWorkKind,
+  payrollAmountForKind,
+  PAYROLL_WORK_KIND_LABELS,
+  normalizePayrollQuantity,
+} from "@/lib/payroll";
+
+export const dynamic = "force-dynamic";
+
+type PostBody = {
+  orderId?: unknown;
+  kanbanCardId?: unknown;
+  priceListItemId?: unknown;
+  kind?: unknown;
+  quantity?: unknown;
+  userId?: unknown;
+};
+
+function parseDateBound(raw: string | null, endExclusive = false): Date | null {
+  const text = (raw ?? "").trim();
+  if (!text) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const d = new Date(`${text}T00:00:00.000Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    if (endExclusive) d.setUTCDate(d.getUTCDate() + 1);
+    return d;
+  }
+  const d = new Date(text);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+const entrySelect = {
+  id: true,
+  orderId: true,
+  kanbanCardId: true,
+  priceListItemId: true,
+  kind: true,
+  quantity: true,
+  amountRub: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+  user: { select: { displayName: true } },
+  order: {
+    select: {
+      orderNumber: true,
+      patientName: true,
+      doctor: { select: { fullName: true } },
+    },
+  },
+  priceListItem: {
+    select: { code: true, name: true, sectionTitle: true, subsectionTitle: true },
+  },
+} satisfies Prisma.PayrollWorkEntrySelect;
+
+type EntryRow = Prisma.PayrollWorkEntryGetPayload<{ select: typeof entrySelect }>;
+
+function entryPayload(row: EntryRow) {
+  return {
+    id: row.id,
+    orderId: row.orderId,
+    kanbanCardId: row.kanbanCardId,
+    priceListItemId: row.priceListItemId,
+    kind: row.kind,
+    kindLabel: PAYROLL_WORK_KIND_LABELS[row.kind],
+    quantity: row.quantity,
+    amountRub: row.amountRub,
+    userId: row.userId,
+    userDisplayName: row.user.displayName,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    orderNumber: row.order.orderNumber,
+    patientName: row.order.patientName ?? "",
+    doctorName: row.order.doctor.fullName,
+    priceCode: row.priceListItem.code,
+    priceName: row.priceListItem.name,
+    sectionTitle: row.priceListItem.sectionTitle,
+    subsectionTitle: row.priceListItem.subsectionTitle,
+  };
+}
+
+export async function GET(req: Request) {
+  const session = await getSessionFromCookies();
+  if (!session?.sub) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+  if (!isPayrollUserRole(session.role)) {
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+  }
+  const tenantId = await requireSessionTenantId(session);
+  const url = new URL(req.url);
+  const requestedUserId = url.searchParams.get("userId")?.trim() ?? "";
+  const orderId = url.searchParams.get("orderId")?.trim() ?? "";
+  const from = parseDateBound(url.searchParams.get("from"));
+  const to = parseDateBound(url.searchParams.get("to"), true);
+  const reviewer = canReviewPayroll(session.role);
+
+  const where: Prisma.PayrollWorkEntryWhereInput = { tenantId };
+  if (orderId) where.orderId = orderId;
+  if (session.role === "USER") {
+    where.userId = session.sub;
+  } else if (requestedUserId) {
+    where.userId = requestedUserId;
+  } else if (!reviewer) {
+    where.userId = session.sub;
+  }
+  if (from || to) {
+    where.createdAt = {
+      ...(from ? { gte: from } : {}),
+      ...(to ? { lt: to } : {}),
+    };
+  }
+
+  const prisma = await getPrisma();
+  const [entries, users] = await Promise.all([
+    prisma.payrollWorkEntry.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 500,
+      select: entrySelect,
+    }),
+    reviewer && url.searchParams.get("includeUsers") === "1"
+      ? prisma.user.findMany({
+          where: { tenantId, role: "USER", isActive: true },
+          orderBy: { displayName: "asc" },
+          select: { id: true, displayName: true, email: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return NextResponse.json(
+    {
+      entries: entries.map(entryPayload),
+      users,
+      totalRub: entries.reduce((sum, row) => sum + row.amountRub, 0),
+    },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
+}
+
+export async function POST(req: Request) {
+  const session = await getSessionFromCookies();
+  if (!session?.sub) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+  if (!isPayrollUserRole(session.role)) {
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+  }
+  const tenantId = await requireSessionTenantId(session);
+  let body: PostBody;
+  try {
+    body = (await req.json()) as PostBody;
+  } catch {
+    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  }
+  const orderId = typeof body.orderId === "string" ? body.orderId.trim() : "";
+  const kanbanCardId =
+    typeof body.kanbanCardId === "string" && body.kanbanCardId.trim()
+      ? body.kanbanCardId.trim()
+      : null;
+  const priceListItemId =
+    typeof body.priceListItemId === "string" ? body.priceListItemId.trim() : "";
+  const kind = parsePayrollWorkKind(body.kind);
+  const requestedUserId = typeof body.userId === "string" ? body.userId.trim() : "";
+  const userId = canReviewPayroll(session.role) && requestedUserId ? requestedUserId : session.sub;
+  const quantity = normalizePayrollQuantity(body.quantity);
+  if (!orderId || !priceListItemId || !kind) {
+    return NextResponse.json(
+      { error: "Ожидаются orderId, priceListItemId и kind" },
+      { status: 400 },
+    );
+  }
+
+  const prisma = await getPrisma();
+  const [order, targetUser, config] = await Promise.all([
+    prisma.order.findFirst({
+      where: { id: orderId, tenantId, archivedAt: null },
+      select: { id: true },
+    }),
+    prisma.user.findFirst({
+      where: { id: userId, tenantId, isActive: true },
+      select: { id: true },
+    }),
+    prisma.payrollPriceItemConfig.findUnique({
+      where: { tenantId_priceListItemId: { tenantId, priceListItemId } },
+    }),
+  ]);
+  if (!order) return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+  if (!targetUser) {
+    return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+  }
+  if (!config) {
+    return NextResponse.json({ error: "Для позиции не настроен ФОТ" }, { status: 400 });
+  }
+  const unitAmountRub = payrollAmountForKind(config, kind);
+  if (!unitAmountRub) {
+    return NextResponse.json({ error: "Для выбранной плашки не задана сумма" }, { status: 400 });
+  }
+  const amountRub = unitAmountRub * quantity;
+
+  const entry = await prisma.payrollWorkEntry.upsert({
+    where: {
+      orderId_priceListItemId_kind_userId: {
+        orderId,
+        priceListItemId,
+        kind,
+        userId,
+      },
+    },
+    create: {
+      tenantId,
+      orderId,
+      kanbanCardId,
+      priceListItemId,
+      kind,
+      quantity,
+      amountRub,
+      userId,
+      updatedByUserId: session.sub,
+    },
+    update: { quantity, amountRub, kanbanCardId, updatedByUserId: session.sub },
+    select: entrySelect,
+  });
+  return NextResponse.json(
+    { ok: true, entry: entryPayload(entry) },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
+}

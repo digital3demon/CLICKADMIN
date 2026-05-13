@@ -15,6 +15,8 @@ type Rule = { prefix: string; module: AppModule };
  */
 const RULES: Rule[] = [
   { prefix: "/directory/users", module: "CONFIG_USERS" },
+  { prefix: "/api/payroll", module: "PAYROLL" },
+  { prefix: "/payroll", module: "PAYROLL" },
   { prefix: "/orders/new", module: "ORDERS_CREATE" },
   { prefix: "/api/orders/reorder-lines", module: "KANBAN_MOVE_TO_OTHER_BOARD" },
   { prefix: "/api/orders/kaiten-due", module: "KANBAN_EDIT_DUE_DATE" },
@@ -22,6 +24,7 @@ const RULES: Rule[] = [
   { prefix: "/api/orders/kaiten-title", module: "KANBAN_EDIT_TITLE" },
   { prefix: "/api/orders/kaiten-assignees", module: "KANBAN_MANAGE_ASSIGNEES" },
   { prefix: "/api/orders/kaiten-participants", module: "KANBAN_MANAGE_PARTICIPANTS" },
+  { prefix: "/api/orders/sidebar-recent-paid", module: "SIDEBAR_PAYMENTS" },
   { prefix: "/api/users/invite", module: "CONFIG_USER_INVITES" },
   { prefix: "/api/users", module: "CONFIG_USERS" },
   { prefix: "/directory/costing", module: "CONFIG_COSTING" },

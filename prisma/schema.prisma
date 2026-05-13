@@ -112,6 +112,8 @@ model Tenant {
   doctorTelegramGroups      DoctorTelegramGroup[]
   doctorMessengerItems      DoctorMessengerItem[]
   doctorTelegramMessages    DoctorTelegramMessage[]
+  payrollPriceItemConfigs   PayrollPriceItemConfig[]
+  payrollWorkEntries        PayrollWorkEntry[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -536,6 +538,10 @@ enum AppModule {
   ORDER_HISTORY
   /// Финансовая аналитика
   ANALYTICS
+  /// Блок «Оплаты» в левом сайдбаре
+  SIDEBAR_PAYMENTS
+  /// Зарплатный блок: сделочные начисления
+  PAYROLL
   /// Отгрузки (даты, вкладки)
   SHIPMENTS
   /// Склад: раздел + API инвентаря
@@ -594,6 +600,13 @@ enum UserDeviceType {
   MOBILE
 }
 
+enum PayrollWorkKind {
+  CAD
+  CAD_SURGERY
+  MANUAL
+  PROCESSING
+}
+
 /// Пользователь: владелец и сотрудники — вход по паролю; до активации хранится inviteCodeHash
 model User {
   id                        String    @id @default(cuid())
@@ -641,6 +654,8 @@ model User {
   orderProstheticsRequestsRejected OrderProstheticsRequest[] @relation("OrderProstheticsRequestRejectedBy")
   orderKaitenLabMentionAcks      OrderKaitenLabMentionAck[]
   testOrdersOwned                Order[]                     @relation("TestOrderOwner")
+  payrollWorkEntries             PayrollWorkEntry[]          @relation("PayrollWorkEntryUser")
+  payrollWorkEntriesUpdated      PayrollWorkEntry[]          @relation("PayrollWorkEntryUpdatedBy")
   /// Клиентские состояния на уровне пользователя (UI prefs, флаги и т.п.)
   clientState                   UserClientState[]
   deviceSessions                UserDeviceSession[]
@@ -1000,6 +1015,7 @@ model Order {
   /// Заявки по протетике из чата (префикс «???»)
   prostheticsRequests            OrderProstheticsRequest[]
   kaitenLabMentionAcks           OrderKaitenLabMentionAck[]
+  payrollWorkEntries             PayrollWorkEntry[]
   /// Мягкое архивирование («удаление»): наряд скрыт из списков и канбана; номер YYMM-NNN снимается (плейхолдер `ARCH:id`), чтобы его можно было выдать другому наряду.
   archivedAt                     DateTime?
   createdAt                      DateTime                  @default(now())
@@ -1428,11 +1444,57 @@ model PriceListItem {
   doctorClinicOverrides DoctorClinicPriceOverride[]
   constructions   OrderConstruction[]
   costingLines    CostingLine[]
+  payrollConfigs  PayrollPriceItemConfig[]
+  payrollWorkEntries PayrollWorkEntry[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@unique([priceListId, code])
   @@index([priceListId, isActive, sortOrder])
+}
+
+model PayrollPriceItemConfig {
+  id              String        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  priceListItemId String
+  priceListItem   PriceListItem @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
+  cadRub          Int?
+  cadSurgeryRub   Int?
+  manualRub       Int?
+  processingRub   Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([tenantId, priceListItemId])
+  @@index([priceListItemId])
+  @@index([tenantId, updatedAt])
+}
+
+model PayrollWorkEntry {
+  id              String          @id @default(cuid())
+  tenantId        String
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId         String
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kanbanCardId    String?
+  priceListItemId String
+  priceListItem   PriceListItem   @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
+  kind            PayrollWorkKind
+  quantity        Int             @default(1)
+  amountRub       Int
+  userId          String
+  user            User            @relation("PayrollWorkEntryUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  updatedByUserId String?
+  updatedByUser   User?           @relation("PayrollWorkEntryUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([orderId, priceListItemId, kind, userId])
+  @@index([tenantId, userId, createdAt])
+  @@index([tenantId, orderId])
+  @@index([priceListItemId])
+  @@index([updatedByUserId])
 }
 
 /// Индивидуальная цена позиции прайса для клиники.

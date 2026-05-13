@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { AppModule, UserRole } from "@prisma/client";
-import { isKanbanOnlyUser } from "@/lib/auth/permissions";
+import {
+  canAccessSidebarPayments,
+  isKanbanOnlyUser,
+} from "@/lib/auth/permissions";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { brandDisplayFont } from "@/lib/brand-font";
 import { useNewOrderPanel } from "@/components/orders/new-order-panel-context";
@@ -218,7 +221,16 @@ export function Sidebar() {
         isKanbanOnlyUser(sessionUser.role, sessionUser.moduleAccess ?? undefined) ? null : (
           <>
             <SidebarMessengers />
-            <SidebarPayments sessionRole={sessionUser?.role ?? null} />
+            {sessionUser &&
+            canAccessSidebarPayments(
+              sessionUser.role,
+              sessionUser.moduleAccess ?? undefined,
+            ) ? (
+              <SidebarPayments
+                sessionRole={sessionUser.role}
+                moduleAccess={sessionUser.moduleAccess}
+              />
+            ) : null}
             <SidebarDrafts />
           </>
         )}

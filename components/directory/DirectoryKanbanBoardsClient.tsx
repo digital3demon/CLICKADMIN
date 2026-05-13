@@ -84,6 +84,7 @@ export function DirectoryKanbanBoardsClient({
   canEditKanbanBoards?: boolean;
 }) {
   const [appState, setAppState] = useState(() => loadKanbanStateForDirectory(isDemo));
+  const [kanbanStateReady, setKanbanStateReady] = useState(isDemo);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirm, setConfirm] = useState<{
     message: string;
@@ -114,6 +115,7 @@ export function DirectoryKanbanBoardsClient({
   const archiveSettingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!kanbanStateReady) return;
     saveKanbanState(appState, isDemo);
     if (kanbanStateSaveTimerRef.current) {
       clearTimeout(kanbanStateSaveTimerRef.current);
@@ -129,7 +131,7 @@ export function DirectoryKanbanBoardsClient({
         clearTimeout(kanbanStateSaveTimerRef.current);
       }
     };
-  }, [appState, isDemo]);
+  }, [appState, isDemo, kanbanStateReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,9 +139,12 @@ export function DirectoryKanbanBoardsClient({
       const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
       const scope = isDemo ? "user" : "tenant";
       const remote = await readClientState<unknown>(scope, key);
-      if (cancelled || !remote || typeof remote !== "object") return;
-      setAppState(remote as ReturnType<typeof loadKanbanStateForDirectory>);
-      saveKanbanState(remote as ReturnType<typeof loadKanbanStateForDirectory>, isDemo);
+      if (cancelled) return;
+      if (remote && typeof remote === "object") {
+        setAppState(remote as ReturnType<typeof loadKanbanStateForDirectory>);
+        saveKanbanState(remote as ReturnType<typeof loadKanbanStateForDirectory>, isDemo);
+      }
+      setKanbanStateReady(true);
     })();
     return () => {
       cancelled = true;

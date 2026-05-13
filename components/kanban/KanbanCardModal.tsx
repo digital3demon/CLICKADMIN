@@ -7,6 +7,7 @@ import type {
   KanbanBoard,
   KanbanCard,
 } from "@/lib/kanban/types";
+import type { UserRole } from "@prisma/client";
 import {
   downloadCardFile,
   isCardFileImage,
@@ -63,6 +64,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DeadlineTomorrowHint } from "./DeadlineTomorrowHint";
 import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
+import { PayrollDonePanel } from "@/components/payroll/PayrollDonePanel";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 import {
   KanbanPersonAvatar,
@@ -187,6 +189,8 @@ type KanbanCardModalProps = {
   isDemo?: boolean;
   /** id пользователя CRM для комментариев в Kaiten (иначе первый участник доски). */
   commentAuthorUserId?: string | null;
+  /** Роль текущего пользователя CRM для зарплатной вкладки. */
+  sessionUserRole?: UserRole | null;
   canEditTitle?: boolean;
   canEditDueDate?: boolean;
   canEditTrack?: boolean;
@@ -228,6 +232,7 @@ export function KanbanCardModal({
   trackLaneFieldLabel,
   isDemo = false,
   commentAuthorUserId,
+  sessionUserRole = null,
   canEditTitle = true,
   canEditDueDate = true,
   canEditTrack = true,
@@ -239,7 +244,7 @@ export function KanbanCardModal({
   onOpenLinkedCard,
   onParentProductionFilesUpdated,
 }: KanbanCardModalProps) {
-  const [rightTab, setRightTab] = useState<"chat" | "act">("chat");
+  const [rightTab, setRightTab] = useState<"done" | "chat" | "act">("chat");
   const [blockPopupOpen, setBlockPopupOpen] = useState(false);
   const [blockReasonDraft, setBlockReasonDraft] = useState("");
   const [pickerMode, setPickerMode] = useState<null | "assign" | "part">(null);
@@ -492,6 +497,10 @@ export function KanbanCardModal({
   const moveNextTitle = nextColumnTitle
     ? `Перенести в "${nextColumnTitle}"`
     : "Карточка уже в последнем столбце";
+  const canUsePayrollDone =
+    sessionUserRole === "USER" ||
+    sessionUserRole === "SENIOR_TECHNICIAN" ||
+    sessionUserRole === "OWNER";
 
   const openBlockPopup = () => {
     if (!canManageKanbanBlock) {
@@ -2128,6 +2137,19 @@ export function KanbanCardModal({
 
             <div className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:border-l sm:border-t-0">
               <div className="flex overflow-hidden rounded-md border border-[var(--kaiten-modal-border)]">
+                {canUsePayrollDone ? (
+                  <button
+                    type="button"
+                    className={`flex-1 px-2 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide ${
+                      rightTab === "done"
+                        ? "bg-[var(--kaiten-modal-control)] text-[var(--kaiten-accent)] shadow-[inset_0_-2px_0_0_var(--kaiten-accent)]"
+                        : "bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-muted)]"
+                    }`}
+                    onClick={() => setRightTab("done")}
+                  >
+                    Что сделано
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={`flex-1 px-2 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide ${
@@ -2151,7 +2173,13 @@ export function KanbanCardModal({
                   Активность
                 </button>
               </div>
-              {rightTab === "chat" ? (
+              {rightTab === "done" ? (
+                <PayrollDonePanel
+                  orderId={card.linkedOrderId ?? null}
+                  kanbanCardId={card.id}
+                  sessionRole={sessionUserRole}
+                />
+              ) : rightTab === "chat" ? (
                 <ChatPanel
                   card={card}
                   board={board}

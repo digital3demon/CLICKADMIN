@@ -107,9 +107,9 @@ export function ShipmentsOrdersTable({
           </>
         }
       >
-        <div className="min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-webkit-overflow-scrolling:touch] print:overflow-visible">
+        <div className="min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] print:overflow-visible">
         <table className="w-max max-w-full min-w-0 border-collapse text-left text-sm print:table-auto">
-          <thead className="sticky top-[var(--sticky-list-toolbar-height,0px)] z-30 print:static">
+          <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30 print:static">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase leading-tight tracking-wide text-[var(--text-secondary)] print:bg-[var(--card-bg)]">
               <th
                 className="max-md:hidden min-w-0 whitespace-nowrap px-2 py-2 text-center normal-case print:hidden"

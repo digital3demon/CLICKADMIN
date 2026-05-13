@@ -92,11 +92,13 @@ function defaultSpaceByCardTypeFromTenantKanbanState(
     for (const t of board.cardTypes) {
       if (!t || typeof t !== "object" || Array.isArray(t)) continue;
       const typeId = String((t as { id?: unknown }).id ?? "").trim();
+      const typeName = normalizeCardTypeName((t as { name?: unknown }).name);
       const typeLane = String((t as { defaultTrackLane?: unknown }).defaultTrackLane ?? "").trim();
       if (!typeId || (typeLane !== "ORTHOPEDICS" && typeLane !== "ORTHODONTICS" && typeLane !== "TEST")) {
         continue;
       }
       out[typeId] = typeLane as KaitenTrackLane;
+      if (typeName) out[`name:${typeName}`] = typeLane as KaitenTrackLane;
     }
     for (const t of board.cardTypes) {
       if (!t || typeof t !== "object" || Array.isArray(t)) continue;
@@ -317,7 +319,10 @@ export function KaitenPreflightModal({
           const allowedFinal = allowedFromEnv.filter((lane) =>
             allowedByDistribution.includes(lane),
           );
-          const preferredSpace = firstType ? defaults[firstType] : undefined;
+          const firstTypeName = normalizeCardTypeName(data.cardTypes?.[0]?.name);
+          const preferredSpace =
+            (firstType ? defaults[firstType] : undefined) ??
+            (firstTypeName ? defaults[`name:${firstTypeName}`] : undefined);
           setCardTypeId(firstType);
           if (preferredSpace && allowedFinal.includes(preferredSpace)) {
             setSpace(preferredSpace);
@@ -344,6 +349,28 @@ export function KaitenPreflightModal({
     }
     return base;
   }, [laneAllowlist, distributionLaneAllowlist]);
+
+  const preferredSpaceForSelectedType = useMemo(() => {
+    const selectedType = cardTypes.find((t) => t.id === cardTypeId);
+    const selectedTypeName = normalizeCardTypeName(selectedType?.name);
+    return (
+      (cardTypeId ? defaultSpaceByCardType[cardTypeId] : undefined) ??
+      (selectedTypeName
+        ? defaultSpaceByCardType[`name:${selectedTypeName}`]
+        : undefined)
+    );
+  }, [cardTypeId, cardTypes, defaultSpaceByCardType]);
+
+  useEffect(() => {
+    if (spaceOptions.length === 0) return;
+    const available = spaceOptions.map((o) => o.value);
+    if (
+      preferredSpaceForSelectedType &&
+      available.includes(preferredSpaceForSelectedType)
+    ) {
+      setSpace(preferredSpaceForSelectedType);
+    }
+  }, [cardTypeId, preferredSpaceForSelectedType, spaceOptions]);
 
   useEffect(() => {
     if (spaceOptions.length === 0) return;

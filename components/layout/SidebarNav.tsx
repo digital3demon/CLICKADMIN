@@ -37,6 +37,7 @@ const baseNavItems: readonly {
   { href: "/kanban", label: "Канбан", module: "KANBAN" },
   { href: "/orders/history", label: "История изменений", module: "ORDER_HISTORY" },
   { href: "/analytics", label: "Аналитика", module: "ANALYTICS" },
+  { href: "/payroll", label: "Зарплата", module: "PAYROLL" },
   { href: "/shipments", label: "Отгрузки", module: "SHIPMENTS" },
   { href: "/warehouse", label: "Склад", module: "WAREHOUSE" },
   { href: "/clients", label: "Клиенты", module: "CLIENTS_VIEW" },
@@ -124,7 +125,9 @@ export function SidebarNav() {
     if (moduleAccess) {
       const a = moduleAccess as Record<AppModule, boolean>;
       if (isKanbanOnlyUser(role, a)) {
-        return baseNavItems.filter((i) => i.href === "/kanban");
+        return baseNavItems.filter(
+          (i) => i.href === "/kanban" || (i.href === "/payroll" && a.PAYROLL === true),
+        );
       }
       return baseNavItems.filter((i) => {
         if (i.href === "/directory") {
@@ -134,7 +137,7 @@ export function SidebarNav() {
       });
     }
     if (isKanbanOnlyUser(role)) {
-      return baseNavItems.filter((i) => i.href === "/kanban");
+      return baseNavItems.filter((i) => i.href === "/kanban" || i.href === "/payroll");
     }
     if (!canAccessFinancialAnalytics(role)) {
       return baseNavItems.filter((i) => i.href !== "/analytics");

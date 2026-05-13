@@ -92,6 +92,18 @@ export function canAccessCostingModule(
   return false;
 }
 
+/** Видимость блока «Оплаты» в левом сайдбаре. */
+export function canAccessSidebarPayments(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (role === "OWNER") return true;
+  if (moduleAccess && typeof moduleAccess.SIDEBAR_PAYMENTS === "boolean") {
+    return moduleAccess.SIDEBAR_PAYMENTS;
+  }
+  return true;
+}
+
 const ORDER_CHAT_CORRECTION_ACCEPT_ROLES: readonly UserRole[] = [
   "OWNER",
   "ADMINISTRATOR",
@@ -104,7 +116,10 @@ export function canAcceptOrderChatCorrections(role: UserRole): boolean {
   return ORDER_CHAT_CORRECTION_ACCEPT_ROLES.includes(role);
 }
 
-/** Скрытие строки «Оплаты» в сайдбаре после «прочитано» — только эти роли. */
-export function canDismissSidebarRecentPaidItems(role: UserRole): boolean {
-  return role === "ADMINISTRATOR" || role === "SENIOR_ADMINISTRATOR";
+/** Скрытие строки «Оплаты» в сайдбаре после «прочитано». */
+export function canDismissSidebarRecentPaidItems(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  return canAccessSidebarPayments(role, moduleAccess);
 }
