@@ -3,6 +3,7 @@
 import {
   buildClientsListUrl,
   clientsListStateFromSearchParams,
+  normalizeClientsSearchQuery,
 } from "@/lib/clients-list-search";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,6 +28,7 @@ export function ClientsListSearch({
   const sp = useSearchParams();
   const spRef = useRef(sp);
   spRef.current = sp;
+  const inputRef = useRef<HTMLInputElement>(null);
   const param = mode === "clinic" ? "clinicQ" : "doctorQ";
 
   const [value, setValue] = useState(initialValue);
@@ -34,15 +36,20 @@ export function ClientsListSearch({
 
   const urlSnapshot = sp.toString();
   useEffect(() => {
+    if (document.activeElement === inputRef.current) return;
     const snap = new URLSearchParams(urlSnapshot);
-    setValue(snap.get(param) ?? "");
+    const fromUrl = normalizeClientsSearchQuery(snap.get(param));
+    setValue((prev) =>
+      normalizeClientsSearchQuery(prev) === fromUrl ? prev : fromUrl,
+    );
   }, [urlSnapshot, param]);
 
   const flushToUrl = useCallback(
     (nextLocal: string) => {
       const base = clientsListStateFromSearchParams(spRef.current, mode);
-      const clinicQ = mode === "clinic" ? nextLocal : base.clinicQ;
-      const doctorQ = mode === "doctor" ? nextLocal : base.doctorQ;
+      const nextQuery = normalizeClientsSearchQuery(nextLocal);
+      const clinicQ = mode === "clinic" ? nextQuery : base.clinicQ;
+      const doctorQ = mode === "doctor" ? nextQuery : base.doctorQ;
       router.replace(
         buildClientsListUrl({
           ...base,
@@ -61,8 +68,8 @@ export function ClientsListSearch({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const fromUrl = spRef.current.get(param) ?? "";
-      if (value === fromUrl) return;
+      const fromUrl = normalizeClientsSearchQuery(spRef.current.get(param));
+      if (normalizeClientsSearchQuery(value) === fromUrl) return;
       flushToUrl(value);
     }, 320);
     return () => {
@@ -98,6 +105,7 @@ export function ClientsListSearch({
         {placeholder}
       </label>
       <input
+        ref={inputRef}
         id={`clients-search-${mode}`}
         type="search"
         className={inputClass}

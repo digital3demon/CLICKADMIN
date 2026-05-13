@@ -27,7 +27,10 @@ import {
 import type { SubscriptionPlan } from "@prisma/client";
 
 function securityHeaders(res: NextResponse) {
-  res.headers.set("X-Frame-Options", "DENY");
+  // Модалки предпросмотра внутри CRM используют iframe с тем же origin.
+  // SAMEORIGIN сохраняет защиту от внешнего встраивания, но не блокирует свои окна.
+  res.headers.set("X-Frame-Options", "SAMEORIGIN");
+  res.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
   res.headers.set("X-Content-Type-Options", "nosniff");
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   res.headers.set(
