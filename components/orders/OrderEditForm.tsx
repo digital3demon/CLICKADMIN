@@ -2000,7 +2000,7 @@ export function OrderEditForm({
               {!customerEditClinic ? (
                 <button
                   type="button"
-                  className="shrink-0 text-xs font-medium text-[var(--sidebar-blue)] underline decoration-[var(--sidebar-blue)]/40 underline-offset-2 hover:no-underline sm:text-sm"
+                  className="shrink-0 text-xs font-medium text-[var(--text-muted)] underline decoration-[var(--text-muted)]/45 underline-offset-2 hover:text-[var(--text-secondary)] hover:no-underline sm:text-sm"
                   onClick={() => setCustomerEditClinic(true)}
                 >
                   Изменить
@@ -2026,7 +2026,7 @@ export function OrderEditForm({
               {!customerEditDoctor ? (
                 <button
                   type="button"
-                  className="shrink-0 text-xs font-medium text-[var(--sidebar-blue)] underline decoration-[var(--sidebar-blue)]/40 underline-offset-2 hover:no-underline sm:text-sm"
+                  className="shrink-0 text-xs font-medium text-[var(--text-muted)] underline decoration-[var(--text-muted)]/45 underline-offset-2 hover:text-[var(--text-secondary)] hover:no-underline sm:text-sm"
                   onClick={() => setCustomerEditDoctor(true)}
                 >
                   Изменить
@@ -2063,7 +2063,7 @@ export function OrderEditForm({
               {!customerEditPatient ? (
                 <button
                   type="button"
-                  className="shrink-0 text-xs font-medium text-[var(--sidebar-blue)] underline decoration-[var(--sidebar-blue)]/40 underline-offset-2 hover:no-underline sm:text-sm"
+                  className="shrink-0 text-xs font-medium text-[var(--text-muted)] underline decoration-[var(--text-muted)]/45 underline-offset-2 hover:text-[var(--text-secondary)] hover:no-underline sm:text-sm"
                   onClick={() => setCustomerEditPatient(true)}
                 >
                   Изменить

@@ -11,6 +11,8 @@ type RouteProps = {
 type PatchBody = {
   code?: string;
   name?: string;
+  sectionTitle?: string | null;
+  subsectionTitle?: string | null;
   priceRub?: number;
   leadWorkingDays?: number | null;
   description?: string | null;
@@ -55,6 +57,18 @@ export async function PATCH(req: Request, { params }: RouteProps) {
       typeof body.description === "string"
         ? body.description.trim() || null
         : null;
+    const sectionTitle =
+      typeof body.sectionTitle === "string"
+        ? body.sectionTitle.trim() || null
+        : body.sectionTitle === null
+          ? null
+          : undefined;
+    const subsectionTitle =
+      typeof body.subsectionTitle === "string"
+        ? body.subsectionTitle.trim() || null
+        : body.subsectionTitle === null
+          ? null
+          : undefined;
 
     if (!code || !name || priceRub == null) {
       return NextResponse.json(
@@ -92,6 +106,8 @@ export async function PATCH(req: Request, { params }: RouteProps) {
       data: {
         code,
         name,
+        ...(sectionTitle !== undefined ? { sectionTitle } : {}),
+        ...(subsectionTitle !== undefined ? { subsectionTitle } : {}),
         priceRub,
         leadWorkingDays,
         description,

@@ -125,8 +125,8 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       }
       .sticker-qr-wrap {
         flex: 0 0 auto;
-        width: min(20.5mm, calc(var(--sticker-h) * 0.54));
-        height: min(20.5mm, calc(var(--sticker-h) * 0.54));
+        width: min(14.5mm, calc(var(--sticker-h) * 0.37));
+        height: min(14.5mm, calc(var(--sticker-h) * 0.37));
       }
       .sticker-scan-caption {
         max-width: 22mm;
@@ -144,19 +144,8 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 0.5mm;
+        gap: 0;
         padding: 0;
-      }
-      .sticker-made-in {
-        font-size: clamp(4.2pt, calc(var(--sticker-h) * 0.11), 5pt);
-        line-height: 1;
-        font-weight: 800;
-        letter-spacing: 0.06em;
-        color: #0f172a;
-        text-transform: uppercase;
-        text-align: center;
-        flex: 0 0 auto;
-        width: 100%;
       }
       .sticker-brand-logo-wrap {
         flex: 0 0 auto;
@@ -168,9 +157,9 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-brand-logo {
         display: block;
         margin-inline: auto;
-        height: min(13.5mm, calc(var(--sticker-h) * 0.38));
+        height: min(17mm, calc(var(--sticker-h) * 0.43));
         width: auto;
-        max-width: min(28mm, calc(var(--sticker-w) * 0.42));
+        max-width: min(35mm, calc(var(--sticker-w) * 0.56));
         object-fit: contain;
         object-position: center;
       }
@@ -272,7 +261,6 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
                 <div className="sticker-scan-caption">Отсканируй меня</div>
               </div>
               <div className="sticker-footer-brand-col">
-                <div className="sticker-made-in">Сделано в</div>
                 <div className="sticker-brand-logo-wrap">
                   {/* eslint-disable-next-line @next/next/no-img-element -- PNG из public/stickers */}
                   <img

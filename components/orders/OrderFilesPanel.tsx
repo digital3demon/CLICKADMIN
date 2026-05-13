@@ -232,9 +232,13 @@ export function OrderFilesPanel({
       const res = await fetch(`/api/orders/${orderId}/attachments`);
       if (!res.ok) {
         if (res.status === 429) {
-          const retryMs = Math.max(1000, parseRetryAfterMs(res.headers.get("Retry-After")));
+          const retryMs = Math.max(
+            30_000,
+            parseRetryAfterMs(res.headers.get("Retry-After")),
+          );
           nextListPollAllowedAtRef.current = Date.now() + retryMs;
-          setLoadError("Сервер временно ограничил запросы к вложениям, пробуем позже…");
+          // Список уже мог быть загружен, поэтому 429 от фонового обновления не показываем как ошибку.
+          setLoadError(null);
           return;
         }
         throw new Error("fail");

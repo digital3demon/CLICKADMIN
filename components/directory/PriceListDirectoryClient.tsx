@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { PriceListTabbedBody } from "@/components/price-list/PriceListTabbedBody";
 import { PriceOverridesManager } from "@/components/directory/PriceOverridesManager";
 
@@ -20,6 +27,8 @@ type ListRow = { id: string; name: string; sortOrder: number; itemCount: number 
 type EditDraft = {
   code: string;
   name: string;
+  sectionTitle: string;
+  subsectionTitle: string;
   description: string;
   priceRub: string;
   leadWorkingDays: string;
@@ -35,6 +44,8 @@ function draftFromRow(row: Row): EditDraft {
   return {
     code: row.code,
     name: row.name,
+    sectionTitle: row.sectionTitle ?? "",
+    subsectionTitle: row.subsectionTitle ?? "",
     description: row.description ?? "",
     priceRub: String(row.priceRub),
     leadWorkingDays:
@@ -53,9 +64,61 @@ function draftChanged(row: Row, draft: EditDraft): boolean {
   return (
     draft.code.trim() !== row.code ||
     draft.name.trim() !== row.name ||
+    draft.sectionTitle.trim() !== (row.sectionTitle ?? "") ||
+    draft.subsectionTitle.trim() !== (row.subsectionTitle ?? "") ||
     draft.description.trim() !== (row.description ?? "") ||
     (normalizeIntText(draft.priceRub) ?? 0) !== row.priceRub ||
     normalizeIntText(draft.leadWorkingDays) !== row.leadWorkingDays
+  );
+}
+
+function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
+  return Array.from(
+    new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, "ru"));
+}
+
+function AutoGrowTextarea({
+  value,
+  onChange,
+  className,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+  placeholder?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  const resize = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+  }, []);
+
+  useLayoutEffect(() => {
+    resize();
+  }, [value, resize]);
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      rows={1}
+      placeholder={placeholder}
+      onChange={(e) => {
+        onChange(e.target.value);
+        requestAnimationFrame(resize);
+      }}
+      className={[
+        "min-h-9 resize-none overflow-y-auto leading-snug",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    />
   );
 }
 
@@ -68,6 +131,8 @@ export function PriceListDirectoryClient() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  const [sectionTitle, setSectionTitle] = useState("");
+  const [subsectionTitle, setSubsectionTitle] = useState("");
   const [priceRub, setPriceRub] = useState("");
   const [lead, setLead] = useState("");
   const [description, setDescription] = useState("");
@@ -209,6 +274,14 @@ export function PriceListDirectoryClient() {
       ),
     [items],
   );
+  const sectionOptions = useMemo(
+    () => uniqueNonEmpty(items.map((it) => it.sectionTitle)),
+    [items],
+  );
+  const subsectionOptions = useMemo(
+    () => uniqueNonEmpty(items.map((it) => it.subsectionTitle)),
+    [items],
+  );
 
   async function addRow(e: React.FormEvent) {
     e.preventDefault();
@@ -224,6 +297,8 @@ export function PriceListDirectoryClient() {
           priceListId: editListId,
           code: code.trim(),
           name: name.trim(),
+          sectionTitle: sectionTitle.trim() || null,
+          subsectionTitle: subsectionTitle.trim() || null,
           priceRub: Number.isFinite(p) ? p : 0,
           leadWorkingDays:
             lead.trim() === ""
@@ -239,6 +314,8 @@ export function PriceListDirectoryClient() {
       }
       setCode("");
       setName("");
+      setSectionTitle("");
+      setSubsectionTitle("");
       setPriceRub("");
       setLead("");
       setDescription("");
@@ -342,6 +419,8 @@ export function PriceListDirectoryClient() {
           name,
           priceRub: price,
           leadWorkingDays,
+          sectionTitle: draft.sectionTitle.trim() || null,
+          subsectionTitle: draft.subsectionTitle.trim() || null,
           description: draft.description.trim() || null,
         }),
       });
@@ -394,6 +473,16 @@ export function PriceListDirectoryClient() {
       {loadError ? (
         <p className="text-sm text-amber-800">{loadError}</p>
       ) : null}
+      <datalist id="price-section-options">
+        {sectionOptions.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+      <datalist id="price-subsection-options">
+        {subsectionOptions.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
 
       <section className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-4">
         <h2 className="text-lg font-semibold text-[var(--app-text)]">Каталоги прайса</h2>
@@ -545,6 +634,30 @@ export function PriceListDirectoryClient() {
             </label>
             <label className="text-sm">
               <span className="text-xs font-semibold uppercase text-[var(--text-muted)]">
+                Раздел
+              </span>
+              <input
+                list="price-section-options"
+                value={sectionTitle}
+                onChange={(e) => setSectionTitle(e.target.value)}
+                placeholder="Например: Основные"
+                className="mt-1 h-9 w-full rounded border border-[var(--input-border)] px-2 text-sm"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-xs font-semibold uppercase text-[var(--text-muted)]">
+                Подраздел
+              </span>
+              <input
+                list="price-subsection-options"
+                value={subsectionTitle}
+                onChange={(e) => setSubsectionTitle(e.target.value)}
+                placeholder="Можно пусто"
+                className="mt-1 h-9 w-full rounded border border-[var(--input-border)] px-2 text-sm"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-xs font-semibold uppercase text-[var(--text-muted)]">
                 Цена, ₽
               </span>
               <input
@@ -572,10 +685,9 @@ export function PriceListDirectoryClient() {
             <span className="text-xs font-semibold uppercase text-[var(--text-muted)]">
               Описание
             </span>
-            <textarea
+            <AutoGrowTextarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
+              onChange={setDescription}
               className="mt-1 w-full rounded border border-[var(--input-border)] px-2 py-1.5 text-sm"
             />
           </label>
@@ -621,11 +733,12 @@ export function PriceListDirectoryClient() {
                 {correctionError ? (
                   <p className="mb-3 text-sm text-red-600">{correctionError}</p>
                 ) : null}
-                <table className="min-w-[980px] w-full border-collapse text-sm">
+                <table className="min-w-[1180px] w-full border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-[var(--card-border)] text-left text-xs uppercase tracking-wide text-[var(--text-muted)]">
                       <th className="px-2 py-2">Код</th>
                       <th className="px-2 py-2">Название</th>
+                      <th className="px-2 py-2">Раздел</th>
                       <th className="px-2 py-2">Описание</th>
                       <th className="px-2 py-2">Цена</th>
                       <th className="px-2 py-2">Срок</th>
@@ -659,20 +772,41 @@ export function PriceListDirectoryClient() {
                               }
                               className="h-9 min-w-[14rem] w-full rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 text-sm"
                             />
-                            <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                              {row.sectionTitle ?? "Без раздела"}
-                              {row.subsectionTitle ? ` · ${row.subsectionTitle}` : ""}
-                            </p>
                           </td>
                           <td className="px-2 py-2">
-                            <textarea
+                            <div className="grid min-w-[13rem] gap-1.5">
+                              <input
+                                list="price-section-options"
+                                value={draft.sectionTitle}
+                                onChange={(e) =>
+                                  updateDraft(row.id, {
+                                    sectionTitle: e.target.value,
+                                  })
+                                }
+                                placeholder="Без раздела"
+                                className="h-9 w-full rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 text-sm"
+                              />
+                              <input
+                                list="price-subsection-options"
+                                value={draft.subsectionTitle}
+                                onChange={(e) =>
+                                  updateDraft(row.id, {
+                                    subsectionTitle: e.target.value,
+                                  })
+                                }
+                                placeholder="Подраздел"
+                                className="h-8 w-full rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 text-xs"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-2 py-2">
+                            <AutoGrowTextarea
                               value={draft.description}
-                              onChange={(e) =>
+                              onChange={(value) =>
                                 updateDraft(row.id, {
-                                  description: e.target.value,
+                                  description: value,
                                 })
                               }
-                              rows={2}
                               className="min-w-[16rem] w-full rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm"
                             />
                           </td>
