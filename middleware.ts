@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { rateLimitAllow } from "@/lib/server/rate-limit-edge";
+import {
+  RATE_LIMIT_AUTH_MAX_PER_WINDOW,
+  RATE_LIMIT_IP_MAX_PER_WINDOW,
+  rateLimitAllow,
+} from "@/lib/server/rate-limit-edge";
 import {
   verifySessionToken,
   SESSION_COOKIE_NAME,
@@ -68,14 +72,32 @@ function redirectPublic(req: NextRequest, pathWithQuery: string): NextResponse {
   return securityHeaders(res);
 }
 
-function clientKey(req: NextRequest): string {
+function shortHash(value: string): string {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 33) ^ value.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function clientLimitIdentity(req: NextRequest): { key: string; maxRequests: number } {
+  const sessionToken =
+    req.cookies.get(SESSION_COOKIE_NAME)?.value ||
+    req.cookies.get(SESSION_DEMO_COOKIE_NAME)?.value ||
+    "";
+  if (sessionToken) {
+    return {
+      key: `session:${shortHash(sessionToken)}`,
+      maxRequests: RATE_LIMIT_AUTH_MAX_PER_WINDOW,
+    };
+  }
   const fwd = req.headers.get("x-forwarded-for");
   const ip =
     fwd?.split(",")[0]?.trim() ||
     req.headers.get("x-real-ip") ||
     req.headers.get("cf-connecting-ip") ||
     "unknown";
-  return ip;
+  return { key: `ip:${ip}`, maxRequests: RATE_LIMIT_IP_MAX_PER_WINDOW };
 }
 
 function isPublicPath(pathname: string): boolean {
@@ -99,6 +121,21 @@ function isPublicPath(pathname: string): boolean {
   return false;
 }
 
+function isRateLimitExemptPath(pathname: string, method: string): boolean {
+  const m = method.toUpperCase();
+  if (pathname.startsWith("/api/telegram/webhook")) return true;
+  if (pathname.startsWith("/api/health")) return true;
+  if (m !== "GET" && m !== "HEAD" && m !== "OPTIONS") return false;
+  return (
+    pathname.startsWith("/api/auth/session") ||
+    pathname.startsWith("/api/client-state") ||
+    pathname.startsWith("/api/attention-reminders") ||
+    pathname.startsWith("/api/order-chat-corrections/toasts") ||
+    pathname.startsWith("/api/order-prosthetics-requests/toasts") ||
+    pathname.startsWith("/api/orders/search-suggest")
+  );
+}
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   securityHeaders(res);
@@ -110,12 +147,9 @@ export async function middleware(req: NextRequest) {
   if (req.nextUrl.pathname.startsWith("/api")) {
     if (process.env.RATE_LIMIT_DISABLED === "1") {
       /* skip */
-    } else if (
-      !req.nextUrl.pathname.startsWith("/api/telegram/webhook") &&
-      !req.nextUrl.pathname.startsWith("/api/health")
-    ) {
-      const key = clientKey(req);
-      if (!rateLimitAllow(key)) {
+    } else if (!isRateLimitExemptPath(req.nextUrl.pathname, req.method)) {
+      const limit = clientLimitIdentity(req);
+      if (!rateLimitAllow(limit.key, limit.maxRequests)) {
         const limited = NextResponse.json(
           { error: "Слишком много запросов. Подождите минуту." },
           { status: 429 },

@@ -9,8 +9,12 @@ const store = new Map<string, Entry>();
 
 /** Окно и лимит можно переопределить через env (для тестов). */
 const WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS) || 60_000;
-const MAX_REQUESTS =
-  Number(process.env.RATE_LIMIT_MAX_PER_WINDOW) || 240;
+export const RATE_LIMIT_AUTH_MAX_PER_WINDOW =
+  Number(process.env.RATE_LIMIT_AUTH_MAX_PER_WINDOW) ||
+  Number(process.env.RATE_LIMIT_MAX_PER_WINDOW) ||
+  5_000;
+export const RATE_LIMIT_IP_MAX_PER_WINDOW =
+  Number(process.env.RATE_LIMIT_IP_MAX_PER_WINDOW) || 300;
 
 let pruneCounter = 0;
 
@@ -23,7 +27,7 @@ function pruneStale(now: number) {
 }
 
 /** true — запрос разрешён, false — 429. */
-export function rateLimitAllow(clientKey: string): boolean {
+export function rateLimitAllow(clientKey: string, maxRequests: number): boolean {
   const now = Date.now();
   pruneStale(now);
   let e = store.get(clientKey);
@@ -31,7 +35,7 @@ export function rateLimitAllow(clientKey: string): boolean {
     store.set(clientKey, { count: 1, windowStart: now });
     return true;
   }
-  if (e.count >= MAX_REQUESTS) return false;
+  if (e.count >= maxRequests) return false;
   e.count += 1;
   return true;
 }
