@@ -40,6 +40,8 @@ export const LIST_TAG_PAYMENT_PARTIAL = "payment-partial";
 export const LIST_TAG_PAYMENT_PAID = "payment-paid";
 export const LIST_TAG_PAYMENT_RECON = "payment-reconciliation";
 export const LIST_TAG_PAYMENT_RECON_PAID = "payment-reconciliation-paid";
+export const LIST_TAG_FINANCE_CALCULATED = "finance-calculated";
+export const LIST_TAG_FINANCE_NOT_CALCULATED = "finance-not-calculated";
 
 /** @deprecated Фильтр по статусу заказа CRM отключён в UI; ключ оставлен для старых ссылок. */
 export function listTagOrderStatus(status: OrderStatus): string {
@@ -85,6 +87,8 @@ export type ParsedListTag =
   | { kind: "paymentPaid" }
   | { kind: "paymentReconciliation" }
   | { kind: "paymentReconciliationPaid" }
+  | { kind: "financeCalculated" }
+  | { kind: "financeNotCalculated" }
   | { kind: "custom"; label: string };
 
 const KAITEN_COLUMN_TAG_MAX_LEN = 500;
@@ -130,6 +134,8 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t === LIST_TAG_PAYMENT_PAID) return { kind: "paymentPaid" };
   if (t === LIST_TAG_PAYMENT_RECON) return { kind: "paymentReconciliation" };
   if (t === LIST_TAG_PAYMENT_RECON_PAID) return { kind: "paymentReconciliationPaid" };
+  if (t === LIST_TAG_FINANCE_CALCULATED) return { kind: "financeCalculated" };
+  if (t === LIST_TAG_FINANCE_NOT_CALCULATED) return { kind: "financeNotCalculated" };
 
   if (t.startsWith("k:")) {
     try {
@@ -223,6 +229,10 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
       return { payment: { in: ["СВЕРКА", "Сверка-НЕ ОПЛАЧЕНО"] } };
     case "paymentReconciliationPaid":
       return { payment: "Сверка-ОПЛАЧЕНО" };
+    case "financeCalculated":
+      return { financeCalculated: true };
+    case "financeNotCalculated":
+      return { financeCalculated: false };
     case "custom":
       return {
         listCustomTags: { some: { label: parsed.label } },
@@ -277,6 +287,10 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
       return "Сверка";
     case "paymentReconciliationPaid":
       return "Сверка · оплачено";
+    case "financeCalculated":
+      return "Просчитано";
+    case "financeNotCalculated":
+      return "Не просчитано";
     case "custom":
       return parsed.label;
   }

@@ -6,7 +6,6 @@ import {
   canReviewPayroll,
   isPayrollUserRole,
   normalizePayrollQuantity,
-  payrollAmountForKind,
 } from "@/lib/payroll";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -31,9 +30,11 @@ async function requireEntryAccess(id: string) {
       id: true,
       userId: true,
       orderId: true,
-      priceListItemId: true,
-      kind: true,
+      payrollConfigId: true,
       quantity: true,
+      payrollConfig: {
+        select: { amountRub: true },
+      },
     },
   });
   if (!entry) {
@@ -56,19 +57,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
   const quantity = normalizePayrollQuantity(body.quantity);
-  const config = await access.prisma.payrollPriceItemConfig.findUnique({
-    where: {
-      tenantId_priceListItemId: {
-        tenantId: access.tenantId,
-        priceListItemId: access.entry.priceListItemId,
-      },
-    },
-  });
-  if (!config) {
-    return NextResponse.json({ error: "Для позиции не настроен ФОТ" }, { status: 400 });
-  }
-  const unitAmountRub = payrollAmountForKind(config, access.entry.kind);
-  if (!unitAmountRub) {
+  const unitAmountRub = access.entry.payrollConfig?.amountRub ?? null;
+  if (!unitAmountRub || unitAmountRub <= 0) {
     return NextResponse.json({ error: "Для выбранной плашки не задана сумма" }, { status: 400 });
   }
   const amountRub = unitAmountRub * quantity;

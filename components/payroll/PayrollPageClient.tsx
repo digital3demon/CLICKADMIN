@@ -11,6 +11,7 @@ type Entry = {
   priceCode: string;
   priceName: string;
   kindLabel: string;
+  configDescription: string;
   quantity: number;
   amountRub: number;
   userDisplayName: string;
@@ -24,9 +25,18 @@ function monthStartYmd(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-function todayYmd(): string {
+function monthEndYmd(): string {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+}
+
+function currentMonthLabel(): string {
+  const text = new Date().toLocaleDateString("ru-RU", {
+    month: "long",
+    year: "numeric",
+  });
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function rub(value: number): string {
@@ -58,8 +68,11 @@ export function PayrollPageClient({
 }) {
   const isSenior = role === "SENIOR_TECHNICIAN" || role === "OWNER";
   const [tab, setTab] = useState<"mine" | "review">("mine");
-  const [from, setFrom] = useState(monthStartYmd);
-  const [to, setTo] = useState(todayYmd);
+  const [period] = useState(() => ({
+    from: monthStartYmd(),
+    to: monthEndYmd(),
+    label: currentMonthLabel(),
+  }));
   const [users, setUsers] = useState<PayrollUser[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -74,8 +87,8 @@ export function PayrollPageClient({
     setError(null);
     try {
       const params = new URLSearchParams();
-      params.set("from", from);
-      params.set("to", to);
+      params.set("from", period.from);
+      params.set("to", period.to);
       if (isSenior) params.set("includeUsers", "1");
       if (targetUserId) params.set("userId", targetUserId);
       const res = await fetch(`/api/payroll/entries?${params.toString()}`, {
@@ -99,7 +112,7 @@ export function PayrollPageClient({
     } finally {
       setLoading(false);
     }
-  }, [from, to, isSenior, targetUserId]);
+  }, [period.from, period.to, isSenior, targetUserId]);
 
   useEffect(() => {
     void load();
@@ -154,28 +167,14 @@ export function PayrollPageClient({
             </select>
           </label>
         ) : null}
-        <label className="text-sm">
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            С
-          </span>
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            По
-          </span>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
-          />
-        </label>
+        <div className="text-sm">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+            Месяц
+          </div>
+          <div className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 font-semibold text-[var(--text-strong)]">
+            {period.label}
+          </div>
+        </div>
         <button
           type="button"
           onClick={() => void load()}
@@ -233,7 +232,10 @@ export function PayrollPageClient({
                   <td className="px-3 py-2">
                     {e.priceCode} · {e.priceName}
                   </td>
-                  <td className="px-3 py-2">{e.kindLabel}</td>
+                  <td className="px-3 py-2">
+                    <div>{e.kindLabel}</div>
+                    <div className="text-xs text-[var(--text-muted)]">{e.configDescription}</div>
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{e.quantity}</td>
                   {isSenior && tab === "review" ? <td className="px-3 py-2">{e.userDisplayName}</td> : null}
                   <td className="whitespace-nowrap px-3 py-2 text-right font-semibold">{rub(e.amountRub)}</td>

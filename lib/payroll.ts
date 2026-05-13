@@ -1,4 +1,4 @@
-import type { PayrollPriceItemConfig, PayrollWorkKind, UserRole } from "@prisma/client";
+import type { PayrollWorkKind, UserRole } from "@prisma/client";
 
 export const PAYROLL_WORK_KIND_VALUES = [
   "CAD",
@@ -33,25 +33,6 @@ export function parsePayrollWorkKind(value: unknown): PayrollWorkKindValue | nul
   return (PAYROLL_WORK_KIND_VALUES as readonly string[]).includes(value)
     ? (value as PayrollWorkKindValue)
     : null;
-}
-
-export function payrollAmountForKind(
-  config: Pick<
-    PayrollPriceItemConfig,
-    "cadRub" | "cadSurgeryRub" | "manualRub" | "processingRub"
-  >,
-  kind: PayrollWorkKindValue,
-): number | null {
-  const raw =
-    kind === "CAD"
-      ? config.cadRub
-      : kind === "CAD_SURGERY"
-        ? config.cadSurgeryRub
-        : kind === "MANUAL"
-          ? config.manualRub
-          : config.processingRub;
-  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return null;
-  return Math.round(raw);
 }
 
 export function normalizePayrollAmount(value: unknown): number | null {

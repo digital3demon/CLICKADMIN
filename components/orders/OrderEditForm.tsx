@@ -496,6 +496,8 @@ export type OrderEditInitial = {
   }>;
   /** Общая скидка на «Состав заказа», % */
   compositionDiscountPercent: number;
+  /** ФинОтдел: состав заказа проверен и просчитан */
+  financeCalculated: boolean;
   prosthetics: OrderProstheticsV1;
   kaitenCardId: number | null;
   /** «Настроить Kaiten позже» при создании */
@@ -876,6 +878,12 @@ export function OrderEditForm({
   useEffect(() => {
     setCompositionDiscountPercent(initial.compositionDiscountPercent ?? 0);
   }, [initial.id, initial.compositionDiscountPercent]);
+  const [financeCalculated, setFinanceCalculated] = useState(
+    initial.financeCalculated === true,
+  );
+  useEffect(() => {
+    setFinanceCalculated(initial.financeCalculated === true);
+  }, [initial.id, initial.financeCalculated]);
 
   const [correctionTrack, setCorrectionTrack] =
     useState<OrderCorrectionTrack | null>(initial.correctionTrack);
@@ -1765,6 +1773,7 @@ export function OrderEditForm({
           additionalSourceNotes: additionalSourceNotes.trim() || null,
           constructions,
           compositionDiscountPercent,
+          financeCalculated,
           prosthetics,
         }),
       });
@@ -1837,6 +1846,7 @@ export function OrderEditForm({
     additionalSourceNotes,
     draftLines,
     compositionDiscountPercent,
+    financeCalculated,
     prosthetics,
     router,
   ]);
@@ -2542,6 +2552,15 @@ export function OrderEditForm({
           Состав заказа
         </h2>
         <div className="flex min-w-0 flex-wrap items-baseline justify-end gap-x-3 gap-y-1">
+          <label className="flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)] sm:text-xs">
+            <span className="whitespace-nowrap">Просчитано</span>
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 rounded border-[var(--card-border)] bg-[var(--card-bg)]"
+              checked={financeCalculated}
+              onChange={(e) => setFinanceCalculated(e.target.checked)}
+            />
+          </label>
           <label className="flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)] sm:text-xs">
             <span className="whitespace-nowrap">Скидка %</span>
             <input

@@ -6,16 +6,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 type PayrollKind = "CAD" | "CAD_SURGERY" | "MANUAL" | "PROCESSING";
 
 type PayrollOption = {
+  payrollConfigId: string;
   priceListItemId: string;
+  kind: PayrollKind;
+  kindLabel: string;
+  amountRub: number;
+  description: string;
   code: string;
   name: string;
   sectionTitle: string | null;
   subsectionTitle: string | null;
-  kinds: Array<{ kind: PayrollKind; label: string; amountRub: number }>;
 };
 
 type PayrollEntry = {
   id: string;
+  payrollConfigId: string | null;
   priceListItemId: string;
   kind: PayrollKind;
   kindLabel: string;
@@ -25,6 +30,7 @@ type PayrollEntry = {
   createdAt: string;
   priceCode: string;
   priceName: string;
+  configDescription: string;
 };
 
 let payrollOptionsCache: PayrollOption[] | null = null;
@@ -101,14 +107,14 @@ export function PayrollDonePanel({
   const [quantityDraft, setQuantityDraft] = useState("1");
   const [entryQuantityDrafts, setEntryQuantityDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [busyKind, setBusyKind] = useState<PayrollKind | null>(null);
+  const [busyConfigId, setBusyConfigId] = useState<string | null>(null);
   const [busyEntryId, setBusyEntryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const isSenior = sessionRole === "SENIOR_TECHNICIAN" || sessionRole === "OWNER";
   const selected = useMemo(
-    () => options.find((x) => x.priceListItemId === selectedId) ?? options[0] ?? null,
+    () => options.find((x) => x.payrollConfigId === selectedId) ?? options[0] ?? null,
     [options, selectedId],
   );
 
@@ -145,9 +151,9 @@ export function PayrollDonePanel({
         Object.fromEntries(nextEntries.map((e) => [e.id, String(e.quantity || 1)])),
       );
       setSelectedId((prev) =>
-        prev && nextOptions.some((x) => x.priceListItemId === prev)
+        prev && nextOptions.some((x) => x.payrollConfigId === prev)
           ? prev
-          : (nextOptions[0]?.priceListItemId ?? ""),
+          : (nextOptions[0]?.payrollConfigId ?? ""),
       );
     } catch (e) {
       const status = (e as Error & { status?: number; retryAfterMs?: number })?.status;
@@ -169,10 +175,10 @@ export function PayrollDonePanel({
     void load();
   }, [load]);
 
-  const addEntry = async (kind: PayrollKind) => {
+  const addEntry = async () => {
     if (!orderId || !selected) return;
     const quantity = Math.max(1, Math.min(999, Number.parseInt(quantityDraft, 10) || 1));
-    setBusyKind(kind);
+    setBusyConfigId(selected.payrollConfigId);
     setError(null);
     try {
       const res = await fetch("/api/payroll/entries", {
@@ -181,8 +187,7 @@ export function PayrollDonePanel({
         body: JSON.stringify({
           orderId,
           kanbanCardId,
-          priceListItemId: selected.priceListItemId,
-          kind,
+          payrollConfigId: selected.payrollConfigId,
           quantity,
         }),
       });
@@ -192,7 +197,7 @@ export function PayrollDonePanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
     } finally {
-      setBusyKind(null);
+      setBusyConfigId(null);
     }
   };
 
@@ -247,10 +252,10 @@ export function PayrollDonePanel({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="border-b border-[var(--kaiten-modal-border)] p-2">
         <label className="block text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
-          Позиция прайса
+          Что сделано
         </label>
         <select
-          value={selected?.priceListItemId ?? ""}
+          value={selected?.payrollConfigId ?? ""}
           onChange={(e) => setSelectedId(e.target.value)}
           disabled={loading || options.length === 0}
           className="mt-1 w-full rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.78rem] text-[var(--kaiten-modal-text)] outline-none"
@@ -259,8 +264,8 @@ export function PayrollDonePanel({
             <option value="">ФОТ не настроен</option>
           ) : (
             options.map((opt) => (
-              <option key={opt.priceListItemId} value={opt.priceListItemId}>
-                {opt.code} · {opt.name}
+              <option key={opt.payrollConfigId} value={opt.payrollConfigId}>
+                {opt.kindLabel} · {opt.description} · {opt.code}
               </option>
             ))
           )}
@@ -279,24 +284,22 @@ export function PayrollDonePanel({
               onChange={(e) => setQuantityDraft(e.target.value)}
               className="mt-1 w-24 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.78rem] text-[var(--kaiten-modal-text)] outline-none"
             />
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              {selected.kinds.map((k) => {
-                const qty = Math.max(1, Math.min(999, Number.parseInt(quantityDraft, 10) || 1));
-                return (
-                  <button
-                    key={k.kind}
-                    type="button"
-                    disabled={busyKind === k.kind}
-                    onClick={() => void addEntry(k.kind)}
-                    className="rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-2 text-left text-[0.72rem] text-[var(--kaiten-modal-text)] hover:border-[var(--kaiten-accent)] disabled:opacity-55"
-                  >
-                    <span className="block font-semibold">{k.label}</span>
-                    <span className="text-[var(--kaiten-modal-muted)]">
-                      {rub(k.amountRub)} × {qty} = {rub(k.amountRub * qty)}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="mt-2 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-2 text-[0.72rem] text-[var(--kaiten-modal-text)]">
+              <div className="font-semibold">{selected.kindLabel} · {selected.description}</div>
+              <div className="mt-0.5 text-[var(--kaiten-modal-muted)]">
+                {selected.code} · {selected.name}
+              </div>
+              <button
+                type="button"
+                disabled={busyConfigId === selected.payrollConfigId}
+                onClick={() => void addEntry()}
+                className="mt-2 w-full rounded-md bg-[var(--kaiten-accent)] px-2 py-1.5 text-center text-[0.72rem] font-semibold text-white hover:opacity-90 disabled:opacity-55"
+              >
+                {(() => {
+                  const qty = Math.max(1, Math.min(999, Number.parseInt(quantityDraft, 10) || 1));
+                  return `Добавить: ${rub(selected.amountRub)} × ${qty} = ${rub(selected.amountRub * qty)}`;
+                })()}
+              </button>
             </div>
           </>
         ) : null}
@@ -338,7 +341,7 @@ export function PayrollDonePanel({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="truncate text-[0.78rem] font-semibold text-[var(--kaiten-modal-text)]">
-                      {e.kindLabel} · {rub(e.amountRub)}
+                      {e.kindLabel} · {e.configDescription} · {rub(e.amountRub)}
                     </div>
                     <div className="mt-1 flex items-center gap-1.5 text-[0.68rem] text-[var(--kaiten-modal-muted)]">
                       <span>Кол-во</span>

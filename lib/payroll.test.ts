@@ -4,7 +4,6 @@ import {
   canReviewPayroll,
   isPayrollUserRole,
   parsePayrollWorkKind,
-  payrollAmountForKind,
   normalizePayrollQuantity,
 } from "@/lib/payroll";
 import { defaultModuleAllowed } from "@/lib/role-module-defaults";
@@ -30,19 +29,6 @@ describe("payroll helpers", () => {
     expect(parsePayrollWorkKind("CAD_SURGERY")).toBe("CAD_SURGERY");
     expect(parsePayrollWorkKind("cad")).toBeNull();
     expect(parsePayrollWorkKind("OTHER")).toBeNull();
-  });
-
-  it("takes amounts from server-side config only", () => {
-    const config = {
-      cadRub: 1000,
-      cadSurgeryRub: 1500,
-      manualRub: null,
-      processingRub: 0,
-    };
-    expect(payrollAmountForKind(config, "CAD")).toBe(1000);
-    expect(payrollAmountForKind(config, "CAD_SURGERY")).toBe(1500);
-    expect(payrollAmountForKind(config, "MANUAL")).toBeNull();
-    expect(payrollAmountForKind(config, "PROCESSING")).toBeNull();
   });
 
   it("normalizes work quantity", () => {

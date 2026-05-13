@@ -542,6 +542,8 @@ enum AppModule {
   SIDEBAR_PAYMENTS
   /// Зарплатный блок: сделочные начисления
   PAYROLL
+  /// ФинОтдел: контроль просчёта, корректировок, протетики и оплат
+  FINANCE_OFFICE
   /// Отгрузки (даты, вкладки)
   SHIPMENTS
   /// Склад: раздел + API инвентаря
@@ -971,6 +973,8 @@ model Order {
   orderPriceListNote             String?
   /// Общая скидка на весь «Состав заказа», % (0–100; применяется к сумме строк после скидок по позициям)
   compositionDiscountPercent     Float                    @default(0)
+  /// ФинОтдел: состав заказа проверен и просчитан
+  financeCalculated              Boolean                  @default(false)
   /// Логическое продолжение другого наряда (после отгрузки / новый этап)
   continuesFromOrderId           String?
   continuesFromOrder             Order?                    @relation("OrderContinuation", fields: [continuesFromOrderId], references: [id], onDelete: SetNull)
@@ -1454,19 +1458,21 @@ model PriceListItem {
 }
 
 model PayrollPriceItemConfig {
-  id              String        @id @default(cuid())
-  tenantId        String
-  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  priceListItemId String
-  priceListItem   PriceListItem @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
-  cadRub          Int?
-  cadSurgeryRub   Int?
-  manualRub       Int?
-  processingRub   Int?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                 String             @id @default(cuid())
+  tenantId           String
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  priceListItemId    String
+  priceListItem      PriceListItem      @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
+  kind               PayrollWorkKind
+  amountRub          Int
+  description        String
+  sortOrder          Int                @default(0)
+  payrollWorkEntries PayrollWorkEntry[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
-  @@unique([tenantId, priceListItemId])
+  @@index([tenantId, priceListItemId])
+  @@index([tenantId, kind])
   @@index([priceListItemId])
   @@index([tenantId, updatedAt])
 }
@@ -1478,6 +1484,8 @@ model PayrollWorkEntry {
   orderId         String
   order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   kanbanCardId    String?
+  payrollConfigId String?
+  payrollConfig   PayrollPriceItemConfig? @relation(fields: [payrollConfigId], references: [id], onDelete: Restrict)
   priceListItemId String
   priceListItem   PriceListItem   @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
   kind            PayrollWorkKind
@@ -1490,9 +1498,10 @@ model PayrollWorkEntry {
   updatedByUserId String?
   updatedByUser   User?           @relation("PayrollWorkEntryUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
-  @@unique([orderId, priceListItemId, kind, userId])
+  @@unique([orderId, payrollConfigId, userId])
   @@index([tenantId, userId, createdAt])
   @@index([tenantId, orderId])
+  @@index([payrollConfigId])
   @@index([priceListItemId])
   @@index([updatedByUserId])
 }

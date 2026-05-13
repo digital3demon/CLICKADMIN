@@ -19,24 +19,20 @@ export async function GET() {
   const rows = await prisma.payrollPriceItemConfig.findMany({
     where: {
       tenantId,
-      OR: [
-        { cadRub: { gt: 0 } },
-        { cadSurgeryRub: { gt: 0 } },
-        { manualRub: { gt: 0 } },
-        { processingRub: { gt: 0 } },
-      ],
+      amountRub: { gt: 0 },
       priceListItem: { isActive: true },
     },
     orderBy: [
+      { sortOrder: "asc" },
       { priceListItem: { sortOrder: "asc" } },
       { priceListItem: { code: "asc" } },
     ],
     select: {
+      id: true,
       priceListItemId: true,
-      cadRub: true,
-      cadSurgeryRub: true,
-      manualRub: true,
-      processingRub: true,
+      kind: true,
+      amountRub: true,
+      description: true,
       priceListItem: {
         select: {
           code: true,
@@ -50,33 +46,16 @@ export async function GET() {
   return NextResponse.json(
     {
       items: rows.map((r) => ({
+        payrollConfigId: r.id,
         priceListItemId: r.priceListItemId,
+        kind: r.kind,
+        kindLabel: PAYROLL_WORK_KIND_LABELS[r.kind],
+        amountRub: r.amountRub,
+        description: r.description,
         code: r.priceListItem.code,
         name: r.priceListItem.name,
         sectionTitle: r.priceListItem.sectionTitle,
         subsectionTitle: r.priceListItem.subsectionTitle,
-        kinds: [
-          r.cadRub && r.cadRub > 0
-            ? { kind: "CAD", label: PAYROLL_WORK_KIND_LABELS.CAD, amountRub: r.cadRub }
-            : null,
-          r.cadSurgeryRub && r.cadSurgeryRub > 0
-            ? {
-                kind: "CAD_SURGERY",
-                label: PAYROLL_WORK_KIND_LABELS.CAD_SURGERY,
-                amountRub: r.cadSurgeryRub,
-              }
-            : null,
-          r.manualRub && r.manualRub > 0
-            ? { kind: "MANUAL", label: PAYROLL_WORK_KIND_LABELS.MANUAL, amountRub: r.manualRub }
-            : null,
-          r.processingRub && r.processingRub > 0
-            ? {
-                kind: "PROCESSING",
-                label: PAYROLL_WORK_KIND_LABELS.PROCESSING,
-                amountRub: r.processingRub,
-              }
-            : null,
-        ].filter(Boolean),
       })),
     },
     { headers: { "Cache-Control": "private, no-store" } },

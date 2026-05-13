@@ -276,6 +276,7 @@ export default async function OrderEditPage({
     hasPhoto: order.hasPhoto,
     additionalSourceNotes: order.additionalSourceNotes,
     compositionDiscountPercent: order.compositionDiscountPercent ?? 0,
+    financeCalculated: order.financeCalculated === true,
     constructions: order.constructions.map((c) => ({
       category: c.category,
       constructionTypeId: c.constructionTypeId,

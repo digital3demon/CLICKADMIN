@@ -159,6 +159,13 @@ export default async function OrdersPage({
   }
   const baseCountWhere =
     baseCountParts.length === 1 ? baseCountParts[0] : { AND: baseCountParts };
+  const statusChipCountParts = baseCountParts.filter(
+    (part) => !("createdAt" in part),
+  );
+  const statusChipCountWhere =
+    statusChipCountParts.length === 1
+      ? statusChipCountParts[0]
+      : { AND: statusChipCountParts };
   /** Непринятые корректировки «!!!» (как колонка списка и формулировка счётчика). */
   const pendingCorrectionsWhere = {
     chatCorrections: {
@@ -176,12 +183,12 @@ export default async function OrdersPage({
     ? await Promise.all([
         ordersPrisma.order.count({
           where: {
-            AND: [baseCountWhere, pendingCorrectionsWhere],
+            AND: [statusChipCountWhere, pendingCorrectionsWhere],
           },
         }),
         ordersPrisma.order.count({
           where: {
-            AND: [baseCountWhere, pendingProstheticsWhere],
+            AND: [statusChipCountWhere, pendingProstheticsWhere],
           },
         }),
       ])
@@ -303,8 +310,12 @@ export default async function OrdersPage({
     );
   }
 
+  const alwaysShowOrderAttentionChips = session?.role === "FINANCIAL_MANAGER";
   const showOrdersQuickFilterChipsRow =
-    attentionCount > 0 || prostheticsPendingCount > 0 || labMentionCount > 0;
+    alwaysShowOrderAttentionChips ||
+    attentionCount > 0 ||
+    prostheticsPendingCount > 0 ||
+    labMentionCount > 0;
 
   return (
     <ModuleFrame
@@ -398,7 +409,7 @@ export default async function OrdersPage({
       {showOrdersQuickFilterChipsRow ? (
       <div className="no-print w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
         <div className="flex flex-wrap items-center gap-2">
-          {attentionCount > 0 ? (
+          {alwaysShowOrderAttentionChips || attentionCount > 0 ? (
             <Link
               href={ordersListHref({
                 limit: pageSize,
@@ -406,8 +417,6 @@ export default async function OrdersPage({
                 hideShipped: hideShippedActive,
                 onlyShipped: onlyShippedActive,
                 q: listSearchQ || undefined,
-                from: fromUrl ?? undefined,
-                to: toUrl ?? undefined,
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "orderAttention"
@@ -424,7 +433,7 @@ export default async function OrdersPage({
               </span>
             </Link>
           ) : null}
-          {prostheticsPendingCount > 0 ? (
+          {alwaysShowOrderAttentionChips || prostheticsPendingCount > 0 ? (
             <Link
               href={ordersListHref({
                 limit: pageSize,
@@ -432,8 +441,6 @@ export default async function OrdersPage({
                 hideShipped: hideShippedActive,
                 onlyShipped: onlyShippedActive,
                 q: listSearchQ || undefined,
-                from: fromUrl ?? undefined,
-                to: toUrl ?? undefined,
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "prostheticsPending"

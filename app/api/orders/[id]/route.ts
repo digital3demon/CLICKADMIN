@@ -179,6 +179,8 @@ type PatchBody = {
   orderPriceListNote?: string | null;
   /** Общая скидка на состав заказа, 0–100 */
   compositionDiscountPercent?: number;
+  /** ФинОтдел: состав заказа проверен и просчитан */
+  financeCalculated?: boolean;
   prostheticsOrdered?: boolean;
   correctionTrack?: string | null;
   correctionReason?: string | null;
@@ -575,6 +577,9 @@ export async function PATCH(
       );
     }
     scalarData.compositionDiscountPercent = Math.round(n * 100) / 100;
+  }
+  if (body.financeCalculated !== undefined) {
+    scalarData.financeCalculated = Boolean(body.financeCalculated);
   }
 
   if (body.status !== undefined) {

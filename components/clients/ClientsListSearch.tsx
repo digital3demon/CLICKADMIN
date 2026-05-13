@@ -38,7 +38,7 @@ export function ClientsListSearch({
   useEffect(() => {
     if (document.activeElement === inputRef.current) return;
     const snap = new URLSearchParams(urlSnapshot);
-    const fromUrl = normalizeClientsSearchQuery(snap.get(param));
+    const fromUrl = normalizeClientsSearchQuery(snap.get(param) ?? undefined);
     setValue((prev) =>
       normalizeClientsSearchQuery(prev) === fromUrl ? prev : fromUrl,
     );
@@ -68,7 +68,7 @@ export function ClientsListSearch({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const fromUrl = normalizeClientsSearchQuery(spRef.current.get(param));
+      const fromUrl = normalizeClientsSearchQuery(spRef.current.get(param) ?? undefined);
       if (normalizeClientsSearchQuery(value) === fromUrl) return;
       flushToUrl(value);
     }, 320);

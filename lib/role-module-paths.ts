@@ -15,6 +15,8 @@ type Rule = { prefix: string; module: AppModule };
  */
 const RULES: Rule[] = [
   { prefix: "/directory/users", module: "CONFIG_USERS" },
+  { prefix: "/api/finance-office", module: "FINANCE_OFFICE" },
+  { prefix: "/finance-office", module: "FINANCE_OFFICE" },
   { prefix: "/api/payroll", module: "PAYROLL" },
   { prefix: "/payroll", module: "PAYROLL" },
   { prefix: "/orders/new", module: "ORDERS_CREATE" },

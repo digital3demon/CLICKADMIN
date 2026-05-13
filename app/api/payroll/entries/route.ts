@@ -6,8 +6,6 @@ import { getPrisma } from "@/lib/get-prisma";
 import {
   canReviewPayroll,
   isPayrollUserRole,
-  parsePayrollWorkKind,
-  payrollAmountForKind,
   PAYROLL_WORK_KIND_LABELS,
   normalizePayrollQuantity,
 } from "@/lib/payroll";
@@ -17,8 +15,7 @@ export const dynamic = "force-dynamic";
 type PostBody = {
   orderId?: unknown;
   kanbanCardId?: unknown;
-  priceListItemId?: unknown;
-  kind?: unknown;
+  payrollConfigId?: unknown;
   quantity?: unknown;
   userId?: unknown;
 };
@@ -40,6 +37,7 @@ const entrySelect = {
   id: true,
   orderId: true,
   kanbanCardId: true,
+  payrollConfigId: true,
   priceListItemId: true,
   kind: true,
   quantity: true,
@@ -58,6 +56,9 @@ const entrySelect = {
   priceListItem: {
     select: { code: true, name: true, sectionTitle: true, subsectionTitle: true },
   },
+  payrollConfig: {
+    select: { description: true },
+  },
 } satisfies Prisma.PayrollWorkEntrySelect;
 
 type EntryRow = Prisma.PayrollWorkEntryGetPayload<{ select: typeof entrySelect }>;
@@ -67,6 +68,7 @@ function entryPayload(row: EntryRow) {
     id: row.id,
     orderId: row.orderId,
     kanbanCardId: row.kanbanCardId,
+    payrollConfigId: row.payrollConfigId,
     priceListItemId: row.priceListItemId,
     kind: row.kind,
     kindLabel: PAYROLL_WORK_KIND_LABELS[row.kind],
@@ -81,6 +83,7 @@ function entryPayload(row: EntryRow) {
     doctorName: row.order.doctor.fullName,
     priceCode: row.priceListItem.code,
     priceName: row.priceListItem.name,
+    configDescription: row.payrollConfig?.description ?? row.priceListItem.name,
     sectionTitle: row.priceListItem.sectionTitle,
     subsectionTitle: row.priceListItem.subsectionTitle,
   };
@@ -165,15 +168,14 @@ export async function POST(req: Request) {
     typeof body.kanbanCardId === "string" && body.kanbanCardId.trim()
       ? body.kanbanCardId.trim()
       : null;
-  const priceListItemId =
-    typeof body.priceListItemId === "string" ? body.priceListItemId.trim() : "";
-  const kind = parsePayrollWorkKind(body.kind);
+  const payrollConfigId =
+    typeof body.payrollConfigId === "string" ? body.payrollConfigId.trim() : "";
   const requestedUserId = typeof body.userId === "string" ? body.userId.trim() : "";
   const userId = canReviewPayroll(session.role) && requestedUserId ? requestedUserId : session.sub;
   const quantity = normalizePayrollQuantity(body.quantity);
-  if (!orderId || !priceListItemId || !kind) {
+  if (!orderId || !payrollConfigId) {
     return NextResponse.json(
-      { error: "Ожидаются orderId, priceListItemId и kind" },
+      { error: "Ожидаются orderId и payrollConfigId" },
       { status: 400 },
     );
   }
@@ -188,8 +190,14 @@ export async function POST(req: Request) {
       where: { id: userId, tenantId, isActive: true },
       select: { id: true },
     }),
-    prisma.payrollPriceItemConfig.findUnique({
-      where: { tenantId_priceListItemId: { tenantId, priceListItemId } },
+    prisma.payrollPriceItemConfig.findFirst({
+      where: { id: payrollConfigId, tenantId },
+      select: {
+        id: true,
+        priceListItemId: true,
+        kind: true,
+        amountRub: true,
+      },
     }),
   ]);
   if (!order) return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
@@ -199,18 +207,16 @@ export async function POST(req: Request) {
   if (!config) {
     return NextResponse.json({ error: "Для позиции не настроен ФОТ" }, { status: 400 });
   }
-  const unitAmountRub = payrollAmountForKind(config, kind);
-  if (!unitAmountRub) {
+  if (config.amountRub <= 0) {
     return NextResponse.json({ error: "Для выбранной плашки не задана сумма" }, { status: 400 });
   }
-  const amountRub = unitAmountRub * quantity;
+  const amountRub = config.amountRub * quantity;
 
   const entry = await prisma.payrollWorkEntry.upsert({
     where: {
-      orderId_priceListItemId_kind_userId: {
+      orderId_payrollConfigId_userId: {
         orderId,
-        priceListItemId,
-        kind,
+        payrollConfigId,
         userId,
       },
     },
@@ -218,8 +224,9 @@ export async function POST(req: Request) {
       tenantId,
       orderId,
       kanbanCardId,
-      priceListItemId,
-      kind,
+      payrollConfigId,
+      priceListItemId: config.priceListItemId,
+      kind: config.kind,
       quantity,
       amountRub,
       userId,
