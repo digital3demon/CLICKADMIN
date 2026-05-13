@@ -25,6 +25,7 @@ import {
   planAllowsShipments,
 } from "@/lib/plan-entitlements";
 import type { SubscriptionPlan } from "@prisma/client";
+import { VIEW_AS_ROLE_COOKIE_NAME, parseViewAsRole } from "@/lib/auth/view-as-role";
 
 function securityHeaders(res: NextResponse) {
   // Модалки предпросмотра внутри CRM используют iframe с тем же origin.
@@ -309,7 +310,12 @@ export async function middleware(req: NextRequest) {
     };
   }
 
-  const role = (activeUserContext?.role ?? session.role) as UserRole;
+  const actualRole = (activeUserContext?.role ?? session.role) as UserRole;
+  const viewAsRole =
+    actualRole === "OWNER"
+      ? parseViewAsRole(req.cookies.get(VIEW_AS_ROLE_COOKIE_NAME)?.value)
+      : null;
+  const role = viewAsRole ?? actualRole;
   const effectiveTenantId = activeUserContext?.tenantId ?? session.tid;
 
   if (!session.demo && !isSingleUserPortable()) {

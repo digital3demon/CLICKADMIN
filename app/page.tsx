@@ -1,13 +1,17 @@
 import { DashboardActions } from "@/components/home/DashboardActions";
+import { OwnerViewAsRoleControl } from "@/components/home/OwnerViewAsRoleControl";
 import { getAttentionReminders } from "@/lib/attention-reminders";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getHomeGreetingDisplayName } from "@/lib/home-greeting-name";
 
 /** Стартовое окно: приветствие, быстрые действия, отгрузки и новый заказ. */
 export default async function HomePage() {
-  const [attentionItems, greetingName] = await Promise.all([
+  const [attentionItems, greetingName, session] = await Promise.all([
     getAttentionReminders(),
     getHomeGreetingDisplayName(),
+    getSessionFromCookies(),
   ]);
+  const actualRole = session?.actualRole ?? session?.role;
 
   return (
     <div className="flex min-h-screen items-center justify-center px-5 py-10 lg:px-8 lg:py-12">
@@ -22,6 +26,9 @@ export default async function HomePage() {
         </section>
 
         <DashboardActions attentionCount={attentionItems.length} />
+        {actualRole === "OWNER" && session ? (
+          <OwnerViewAsRoleControl currentRole={session.role} />
+        ) : null}
       </div>
     </div>
   );

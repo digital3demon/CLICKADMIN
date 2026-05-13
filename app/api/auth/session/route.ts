@@ -64,6 +64,8 @@ export async function GET() {
       email: s.email,
       displayName: displayNameFromDb ?? s.name,
       role: s.role,
+      actualRole: s.actualRole ?? s.role,
+      viewAsRole: s.actualRole ? s.role : null,
       avatarPresetId,
       mentionHandle,
       avatarCustomUploadedAt,

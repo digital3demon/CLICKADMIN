@@ -1,5 +1,7 @@
 import type { NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME, SESSION_DEMO_COOKIE_NAME } from "@/lib/auth/jwt";
+import { VIEW_AS_ROLE_COOKIE_NAME } from "@/lib/auth/view-as-role";
+import type { UserRole } from "@prisma/client";
 
 const WEEK_SEC = 60 * 60 * 24 * 7;
 
@@ -47,6 +49,28 @@ export function setDemoSessionCookie(res: NextResponse, token: string): void {
 export function clearDemoSessionCookie(res: NextResponse): void {
   const secure = useSecureSessionCookie();
   res.cookies.set(SESSION_DEMO_COOKIE_NAME, "", {
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+}
+
+export function setViewAsRoleCookie(res: NextResponse, role: UserRole): void {
+  const secure = useSecureSessionCookie();
+  res.cookies.set(VIEW_AS_ROLE_COOKIE_NAME, role, {
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    path: "/",
+    maxAge: WEEK_SEC,
+  });
+}
+
+export function clearViewAsRoleCookie(res: NextResponse): void {
+  const secure = useSecureSessionCookie();
+  res.cookies.set(VIEW_AS_ROLE_COOKIE_NAME, "", {
     httpOnly: true,
     secure,
     sameSite: "lax",

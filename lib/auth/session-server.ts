@@ -11,6 +11,7 @@ import {
   SINGLE_USER_SESSION,
 } from "@/lib/auth/single-user";
 import { prisma } from "@/lib/prisma";
+import { VIEW_AS_ROLE_COOKIE_NAME, parseViewAsRole } from "@/lib/auth/view-as-role";
 
 export async function getSessionFromCookies(): Promise<SessionClaims | null> {
   try {
@@ -55,10 +56,14 @@ export async function getSessionFromCookies(): Promise<SessionClaims | null> {
     if (!row || row.userId !== m.sub || row.revokedAt != null) return null;
     if (row.expiresAt.getTime() <= Date.now()) return null;
     if (!row.user || row.user.isActive !== true) return null;
+    const actualRole = row.user.role;
+    const viewAsRole =
+      actualRole === "OWNER" ? parseViewAsRole(c.get(VIEW_AS_ROLE_COOKIE_NAME)?.value) : null;
     return {
       sub: row.user.id,
       email: row.user.email,
-      role: row.user.role,
+      role: viewAsRole ?? actualRole,
+      ...(viewAsRole ? { actualRole } : {}),
       name: row.user.displayName,
       sid: m.sid,
       tid: row.user.tenantId,

@@ -11,7 +11,10 @@ export const SESSION_DEMO_COOKIE_NAME = "crm_session_demo";
 export type SessionClaims = {
   sub: string;
   email: string;
+  /** Эффективная роль. Для владельца может быть подменена режимом "Показать CRM как". */
   role: UserRole;
+  /** Реальная роль пользователя, если эффективная роль подменена. */
+  actualRole?: UserRole;
   name: string;
   /** Идентификатор активной сессии (для лимита устройств и принудительного logout). */
   sid?: string;

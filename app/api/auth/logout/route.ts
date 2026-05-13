@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   clearDemoSessionCookie,
   clearSessionCookie,
+  clearViewAsRoleCookie,
 } from "@/lib/auth/session-cookie";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/jwt";
@@ -19,5 +20,6 @@ export async function POST() {
   const res = NextResponse.json({ ok: true });
   clearSessionCookie(res);
   clearDemoSessionCookie(res);
+  clearViewAsRoleCookie(res);
   return res;
 }
