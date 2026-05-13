@@ -21,6 +21,58 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+type QrModel = {
+  modules: {
+    size: number;
+    get: (x: number, y: number) => number;
+  };
+};
+
+function isFinderCell(x: number, y: number, size: number): boolean {
+  const inTop = y >= 0 && y < 7;
+  const inLeft = x >= 0 && x < 7;
+  const inRight = x >= size - 7 && x < size;
+  const inBottom = y >= size - 7 && y < size;
+  return (inTop && inLeft) || (inTop && inRight) || (inBottom && inLeft);
+}
+
+function finderCenter(offsetX: number, offsetY: number, quiet: number): string {
+  const cx = quiet + offsetX + 3.5;
+  const cy = quiet + offsetY + 3.5;
+  return [
+    `<circle cx="${cx}" cy="${cy}" r="3.5" fill="#0f172a"/>`,
+    `<circle cx="${cx}" cy="${cy}" r="2.25" fill="#fff"/>`,
+    `<circle cx="${cx}" cy="${cy}" r="1.25" fill="#0f172a"/>`,
+  ].join("");
+}
+
+function roundedQrDataUrl(text: string): string {
+  const qr = QRCode.create(text, { errorCorrectionLevel: "M" }) as unknown as QrModel;
+  const size = qr.modules.size;
+  const quiet = 1;
+  const viewSize = size + quiet * 2;
+  const parts: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${viewSize} ${viewSize}" shape-rendering="geometricPrecision">`,
+    `<rect width="${viewSize}" height="${viewSize}" fill="#fff"/>`,
+  ];
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      if (qr.modules.get(x, y) !== 1 || isFinderCell(x, y, size)) continue;
+      parts.push(
+        `<rect x="${x + quiet}" y="${y + quiet}" width="1" height="1" rx="0.38" ry="0.38" fill="#0f172a"/>`,
+      );
+    }
+  }
+
+  parts.push(finderCenter(0, 0, quiet));
+  parts.push(finderCenter(size - 7, 0, quiet));
+  parts.push(finderCenter(0, size - 7, quiet));
+  parts.push("</svg>");
+
+  return `data:image/svg+xml;base64,${Buffer.from(parts.join("")).toString("base64")}`;
+}
+
 export default async function ShipmentsStickersPrintPage({
   searchParams,
 }: {
@@ -106,14 +158,7 @@ export default async function ShipmentsStickersPrintPage({
         ? stickerPublicHubAbsoluteUrl(originForQr, tenantSlug, tok)
         : pathOnly;
 
-      const qrDataUrl = tok
-        ? await QRCode.toDataURL(hubUrl, {
-            errorCorrectionLevel: "M",
-            margin: 0,
-            width: 280,
-            color: { dark: "#0f172a", light: "#ffffff" },
-          })
-        : "";
+      const qrDataUrl = tok ? roundedQrDataUrl(hubUrl) : "";
 
       const clinicLine = (o.clinic?.name || "Частная практика").trim() || "—";
       const doctorLine = personNameSurnameInitials(o.doctor.fullName) || o.doctor.fullName.trim();

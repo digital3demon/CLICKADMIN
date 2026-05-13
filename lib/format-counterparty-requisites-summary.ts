@@ -40,3 +40,16 @@ export function formatCounterpartyRequisitesSummary(
   add("К/с", c.correspondentAccount);
   return lines.length > 0 ? lines.join("\n") : null;
 }
+
+/** Короткий вариант для ФинОтдела: только плательщик и ИНН. */
+export function formatCounterpartyRequisitesShortSummary(
+  c: CounterpartyRequisitesFields | null | undefined,
+): string | null {
+  if (!c) return null;
+  const lines: string[] = [];
+  const name = cleanLegalFullName(c.legalFullName);
+  const inn = (c.inn ?? "").trim();
+  if (name) lines.push(`Наименование: ${name}`);
+  if (inn) lines.push(`ИНН: ${inn}`);
+  return lines.length > 0 ? lines.join("\n") : null;
+}

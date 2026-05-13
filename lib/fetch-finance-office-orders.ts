@@ -1,6 +1,8 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { getClientsPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
-import { formatCounterpartyRequisitesSummary } from "@/lib/format-counterparty-requisites-summary";
+import {
+  formatCounterpartyRequisitesShortSummary,
+} from "@/lib/format-counterparty-requisites-summary";
 import {
   listTagWhere,
   orderAttentionListSupersetWhere,
@@ -206,7 +208,7 @@ export async function fetchFinanceOfficeOrders(
       const ip = d.ipClinicAsSource;
       if (!ip || ip.deletedAt != null) return [d.id, null] as const;
       const { deletedAt: _del, ...req } = ip;
-      return [d.id, formatCounterpartyRequisitesSummary(req)] as const;
+      return [d.id, formatCounterpartyRequisitesShortSummary(req)] as const;
     }),
   );
   const clinicById = new Map(
@@ -217,7 +219,7 @@ export async function fetchFinanceOfficeOrders(
         {
           ...pub,
           legalFullName,
-          counterpartyRequisitesText: formatCounterpartyRequisitesSummary({
+          counterpartyRequisitesText: formatCounterpartyRequisitesShortSummary({
             legalFullName,
             inn,
             kpp,

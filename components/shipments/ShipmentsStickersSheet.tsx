@@ -82,61 +82,64 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       }
       .sticker-line {
         display: flex;
-        gap: 1.15mm;
+        gap: 2mm;
         align-items: baseline;
-        line-height: 1.06;
-        margin-bottom: 0.5mm;
+        line-height: 1.02;
+        margin-bottom: 0.35mm;
       }
       .sticker-line--full { width: 100%; }
       .sticker-k {
-        flex: 0 0 14.5mm;
-        font-size: clamp(6.2pt, calc(var(--sticker-h) * 0.15), 7.2pt);
+        flex: 0 0 13.5mm;
+        font-size: clamp(7pt, calc(var(--sticker-h) * 0.18), 8.6pt);
         font-weight: 700;
         color: #475569;
       }
       .sticker-v {
         flex: 1 1 0;
         min-width: 0;
-        font-size: clamp(8.8pt, calc(var(--sticker-h) * 0.25), 11pt);
+        font-size: clamp(11pt, calc(var(--sticker-h) * 0.32), 15pt);
         font-weight: 800;
         color: #0f172a;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        letter-spacing: -0.035em;
+        letter-spacing: -0.055em;
       }
       .sticker-footer {
         flex: 0 0 auto;
         display: flex;
         flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1.5mm;
-        margin-top: 0.35mm;
+        align-items: flex-end;
+        justify-content: flex-start;
+        gap: 2.8mm;
+        margin-top: 0;
         width: 100%;
       }
       .sticker-footer-qr-col {
         flex: 0 0 auto;
         display: flex;
-        flex-direction: column;
-        align-items: center;
+        flex-direction: row;
+        align-items: flex-end;
         justify-content: center;
-        gap: 0.4mm;
+        gap: 0.7mm;
         padding: 0;
       }
       .sticker-qr-wrap {
         flex: 0 0 auto;
-        width: min(14.5mm, calc(var(--sticker-h) * 0.37));
-        height: min(14.5mm, calc(var(--sticker-h) * 0.37));
+        width: min(12.8mm, calc(var(--sticker-h) * 0.32));
+        height: min(12.8mm, calc(var(--sticker-h) * 0.32));
       }
       .sticker-scan-caption {
-        max-width: 22mm;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        max-height: 13mm;
         text-align: center;
-        font-size: clamp(5.4pt, calc(var(--sticker-h) * 0.145), 6.2pt);
-        line-height: 1.08;
-        font-weight: 700;
+        font-size: clamp(6.6pt, calc(var(--sticker-h) * 0.17), 7.8pt);
+        line-height: 1;
+        font-weight: 800;
         color: #334155;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.055em;
+        white-space: nowrap;
       }
       .sticker-footer-brand-col {
         flex: 1 1 0;
@@ -144,7 +147,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-end;
         gap: 0;
         padding: 0;
       }
@@ -158,15 +161,15 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-brand-logo {
         display: block;
         margin-inline: auto;
-        height: min(17mm, calc(var(--sticker-h) * 0.43));
+        height: min(12.5mm, calc(var(--sticker-h) * 0.31));
         width: auto;
-        max-width: min(35mm, calc(var(--sticker-w) * 0.56));
+        max-width: min(27mm, calc(var(--sticker-w) * 0.46));
         object-fit: contain;
         object-position: center;
       }
     `;
     const wide = `
-      .sticker-page--wide .sticker-k { flex: 0 0 12mm; font-size: 6.4pt; }
+      .sticker-page--wide .sticker-k { flex: 0 0 14mm; }
     `;
     return `
       @media print {

@@ -151,117 +151,137 @@ export default async function FinanceOfficePage({
   if (rawTag && !rawTagInvalid) exportParams.set("tag", rawTag);
   if (q) exportParams.set("q", q);
   const exportHref = `/api/finance-office/export?${exportParams.toString()}`;
-  const financeOfficeToolbar = (
-    <>
-      <FinanceOfficeTabNav
-        active={tab}
-        periodFrom={fromRaw}
-        periodTo={toRaw}
-        listTag={rawTagInvalid ? null : rawTag}
-        q={q}
-      />
-      {tab === "period" ? (
-        <FinanceOfficePeriodForm
-          appliedFrom={fromRaw}
-          appliedTo={toRaw}
-          defaultFrom={defaultFrom}
-          defaultTo={defaultTo}
-          preserveListTag={rawTagInvalid ? null : rawTag}
-          q={q}
-          receptionSummary={
-            shouldFetch && rangeSummary
-              ? `${rangeSummary} · нарядов: ${orders.length}`
-              : null
-          }
+  const searchControls = (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <form action="/finance-office" className="flex min-w-[260px] flex-1 gap-2">
+        <input type="hidden" name="tab" value={tab} />
+        {fromRaw ? <input type="hidden" name="from" value={fromRaw} /> : null}
+        {toRaw ? <input type="hidden" name="to" value={toRaw} /> : null}
+        {rawTag && !rawTagInvalid ? <input type="hidden" name="tag" value={rawTag} /> : null}
+        <input
+          name="q"
+          defaultValue={q}
+          placeholder="Поиск по номеру наряда или пациенту"
+          className="min-w-0 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
         />
-      ) : rangeSummary ? (
-        <p className="text-sm font-medium text-[var(--text-body)]">
-          {rangeSummary} · нарядов: {orders.length}
-        </p>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">
-        <form action="/finance-office" className="flex min-w-[260px] flex-1 gap-2">
-          <input type="hidden" name="tab" value={tab} />
-          {fromRaw ? <input type="hidden" name="from" value={fromRaw} /> : null}
-          {toRaw ? <input type="hidden" name="to" value={toRaw} /> : null}
-          {rawTag && !rawTagInvalid ? <input type="hidden" name="tag" value={rawTag} /> : null}
-          <input
-            name="q"
-            defaultValue={q}
-            placeholder="Поиск по номеру наряда или пациенту"
-            className="min-w-0 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
-          />
-          <button
-            type="submit"
-            className="rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
-          >
-            Найти
-          </button>
-        </form>
-        <a
-          href={exportHref}
-          className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/35 dark:text-emerald-100 dark:hover:bg-emerald-950/55"
+        <button
+          type="submit"
+          className="rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
-          Выгрузить
-        </a>
-        {(rawTag || q) ? (
-          <Link
-            href={financeOfficeListHref({
-              tab,
-              from: fromRaw,
-              to: toRaw,
-            })}
-            className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
-          >
-            Сбросить
-          </Link>
+          Найти
+        </button>
+      </form>
+      <a
+        href={exportHref}
+        className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/35 dark:text-emerald-100 dark:hover:bg-emerald-950/55"
+      >
+        Выгрузить
+      </a>
+      {(rawTag || q) ? (
+        <Link
+          href={financeOfficeListHref({
+            tab,
+            from: fromRaw,
+            to: toRaw,
+          })}
+          className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+        >
+          Сбросить
+        </Link>
+      ) : null}
+    </div>
+  );
+  const financeOfficeHeader = (
+    <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-4">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] xl:items-end">
+        <div className="min-w-0 space-y-3">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-[var(--app-text)] lg:text-2xl">
+              ФинОтдел
+            </h1>
+            <p className="mt-2 max-w-4xl text-sm leading-snug text-[var(--text-secondary)]">
+              Контроль просчёта, корректировок, заказа протетики и оплат.
+              Банковская выгрузка сначала показывается построчно для проверки,
+              затем применяется по кнопке «Сохранить».
+            </p>
+          </div>
+          <FinanceOfficeTabNav
+            active={tab}
+            periodFrom={fromRaw}
+            periodTo={toRaw}
+            listTag={rawTagInvalid ? null : rawTag}
+            q={q}
+          />
+          <div className="space-y-2">
+            {tab === "period" ? (
+              <FinanceOfficePeriodForm
+                appliedFrom={fromRaw}
+                appliedTo={toRaw}
+                defaultFrom={defaultFrom}
+                defaultTo={defaultTo}
+                preserveListTag={rawTagInvalid ? null : rawTag}
+                q={q}
+                receptionSummary={
+                  shouldFetch && rangeSummary
+                    ? `${rangeSummary} · нарядов: ${orders.length}`
+                    : null
+                }
+              />
+            ) : rangeSummary ? (
+              <p className="text-sm font-medium text-[var(--text-body)]">
+                {rangeSummary} · нарядов: {orders.length}
+              </p>
+            ) : null}
+            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">
+              {searchControls}
+            </div>
+          </div>
+        </div>
+        <FinanceOfficeBankImportPanel className="w-full xl:self-end" />
+      </div>
+      <div className="mt-3 space-y-2">
+        {rawTagInvalid ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            Параметр фильтра не распознан, показан общий список ФинОтдела.
+          </p>
+        ) : tagLabel ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/25">
+            <span>
+              Фильтр: <strong>{tagLabel}</strong>
+            </span>
+            <Link
+              href={financeOfficeListHref({
+                tab,
+                from: fromRaw,
+                to: toRaw,
+                q,
+              })}
+              className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
+            >
+              Показать все
+            </Link>
+          </div>
+        ) : null}
+        {error ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {error}
+          </p>
+        ) : tab === "period" && !shouldFetch ? (
+          <p className="text-sm text-[var(--text-secondary)]">
+            Укажите даты и нажмите «Показать», чтобы загрузить список ФинОтдела.
+          </p>
         ) : null}
       </div>
-      {rawTagInvalid ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-          Параметр фильтра не распознан, показан общий список ФинОтдела.
-        </p>
-      ) : tagLabel ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/25">
-          <span>
-            Фильтр: <strong>{tagLabel}</strong>
-          </span>
-          <Link
-            href={financeOfficeListHref({
-              tab,
-              from: fromRaw,
-              to: toRaw,
-              q,
-            })}
-            className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
-          >
-            Показать все
-          </Link>
-        </div>
-      ) : null}
-      {error ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          {error}
-        </p>
-      ) : tab === "period" && !shouldFetch ? (
-        <p className="text-sm text-[var(--text-secondary)]">
-          Укажите даты и нажмите «Показать», чтобы загрузить список ФинОтдела.
-        </p>
-      ) : null}
-    </>
+    </section>
   );
 
   return (
     <ModuleFrame
       title="ФинОтдел"
-      description="Контроль просчёта, корректировок, заказа протетики и оплат. Банковская выгрузка сначала показывается построчно для проверки, затем применяется по кнопке «Сохранить»."
-      descriptionClassName="max-w-4xl"
-      rootClassName="[&_.module-frame-header]:z-10"
-      titleRowEnd={
-        <FinanceOfficeBankImportPanel className="w-full max-w-[34rem] lg:w-[34rem]" />
-      }
+      rootClassName="[&_.module-frame-header]:hidden"
     >
       <div className="w-full max-w-full space-y-4">
+        {financeOfficeHeader}
         <FinanceOfficeOrdersTable
           orders={error || (tab === "period" && !shouldFetch) ? [] : orders.map(serializeOrder)}
           activeTag={tagLabel}
@@ -269,7 +289,6 @@ export default async function FinanceOfficePage({
           periodFrom={fromRaw}
           periodTo={toRaw}
           q={q}
-          toolbar={financeOfficeToolbar}
         />
       </div>
     </ModuleFrame>

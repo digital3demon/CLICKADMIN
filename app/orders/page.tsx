@@ -50,8 +50,8 @@ export const dynamic = "force-dynamic";
 /** Контент списка на всю ширину рабочей области (таблица сама делит колонки). */
 const ORDERS_MAIN_LAYOUT = "w-full min-w-0 max-w-full";
 
-/** Вся ширина main: иначе при узком окне таблица с `w-max` не получает горизонтальный скролл. */
-const ORDERS_LIST_STACK = "w-full min-w-0 space-y-4";
+/** Ширина по таблице, но с ограничением viewport: верхние блоки не растягиваются дальше списка. */
+const ORDERS_LIST_STACK = "w-fit max-w-full min-w-0 self-start space-y-4";
 
 /** Меньше внешних полей, чем у стандартного ModuleFrame — ближе к сайдбару. */
 const ORDERS_FRAME_ROOT =
