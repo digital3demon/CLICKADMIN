@@ -89,14 +89,15 @@ export async function POST(req: Request) {
       }
       const tenantId = await requireSessionTenantId(s);
       const moduleAccess = await getEffectiveModuleAccess(s.tid, s.role);
-      if (moduleAccess.ORDERS_CREATE !== true) {
+      const actualRole = s.actualRole ?? s.role;
+      if (actualRole !== "OWNER" && moduleAccess.ORDERS_CREATE !== true) {
         return NextResponse.json(
           { error: "Недостаточно прав для создания заказа" },
           { status: 403 },
         );
       }
       const body = (await req.json()) as CreateOrderBody;
-      if (body.isTestOrder === true && s.role !== "OWNER") {
+      if (body.isTestOrder === true && actualRole !== "OWNER") {
         return NextResponse.json(
           { error: "Тестовый наряд доступен только владельцу" },
           { status: 403 },

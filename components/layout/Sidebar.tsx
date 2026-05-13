@@ -45,6 +45,7 @@ export function Sidebar() {
     email: string;
     displayName: string;
     role: UserRole;
+    actualRole: UserRole;
     avatarPresetId: string | null;
     avatarCustomUploadedAt: string | null;
     moduleAccess: Partial<Record<AppModule, boolean>> | null;
@@ -74,6 +75,7 @@ export function Sidebar() {
         email?: string;
         displayName?: string;
         role?: UserRole;
+        actualRole?: UserRole;
         avatarPresetId?: string | null;
         avatarCustomUploadedAt?: string | null;
         moduleAccess?: Record<string, boolean> | null;
@@ -88,6 +90,7 @@ export function Sidebar() {
         email: u.email,
         displayName: u.displayName,
         role: u.role,
+        actualRole: u.actualRole ?? u.role,
         avatarPresetId: u.avatarPresetId ?? null,
         avatarCustomUploadedAt: u.avatarCustomUploadedAt ?? null,
         moduleAccess: (u.moduleAccess as Partial<Record<AppModule, boolean>> | null) ?? null,
@@ -121,6 +124,11 @@ export function Sidebar() {
     return () =>
       window.removeEventListener(CRM_PROFILE_UPDATED_EVENT, onProfileUpdated);
   }, [loadSessionUser]);
+  const isActualOwner = sessionUser?.actualRole === "OWNER";
+  const isEffectiveKanbanOnly =
+    sessionUser != null &&
+    !isActualOwner &&
+    isKanbanOnlyUser(sessionUser.role, sessionUser.moduleAccess ?? undefined);
 
   const logout = useCallback(async () => {
     try {
@@ -161,19 +169,9 @@ export function Sidebar() {
         ) : null}
 
         <Link
-          href={
-            sessionUser &&
-            isKanbanOnlyUser(sessionUser.role, sessionUser.moduleAccess ?? undefined)
-              ? "/kanban"
-              : "/"
-          }
+          href="/"
           className="relative z-10 mx-auto block w-full min-w-0 max-w-full text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
-          title={
-            sessionUser &&
-            isKanbanOnlyUser(sessionUser.role, sessionUser.moduleAccess ?? undefined)
-              ? "На канбан"
-              : `На стартовый экран · ${APP_DISPLAY_NAME}`
-          }
+          title={`На стартовый экран · ${APP_DISPLAY_NAME}`}
         >
           <span
             className={`relative z-20 block w-full min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[1.35rem] font-light leading-snug tracking-[0.04em] text-[var(--sidebar-text-strong)] shell-short:text-[1.05rem] shell-short:leading-tight shell-short:tracking-[0.02em] [@media(min-width:1024px)_and_(min-height:560px)]:text-[clamp(0.62rem,calc(((100vw/7)-2.75rem)/9),1.12rem)] [@media(min-width:1024px)_and_(min-height:560px)]:leading-tight [@media(min-width:1024px)_and_(min-height:560px)]:tracking-[0.05em] ${brandDisplayFont.className}`}
@@ -183,8 +181,7 @@ export function Sidebar() {
           </span>
         </Link>
 
-        {sessionUser &&
-        isKanbanOnlyUser(sessionUser.role, sessionUser.moduleAccess ?? undefined) ? null : (
+        {isEffectiveKanbanOnly ? null : (
           <button
             type="button"
             disabled={!canOpen}
@@ -217,8 +214,7 @@ export function Sidebar() {
       >
         <SidebarNav />
 
-        {sessionUser &&
-        isKanbanOnlyUser(sessionUser.role, sessionUser.moduleAccess ?? undefined) ? null : (
+        {isEffectiveKanbanOnly ? null : (
           <>
             <SidebarMessengers />
             {sessionUser &&

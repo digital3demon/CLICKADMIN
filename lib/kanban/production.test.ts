@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { createCard } from "./model";
+import {
+  createCard,
+  defaultAppState,
+  ensureProductionBoardInState,
+  KANBAN_BOARD_PRODUCTION_ID,
+  mergeKanbanStatePreservingLocalBoards,
+} from "./model";
 import {
   autoArchiveReadyProductionChildren,
   defaultProductionSettings,
@@ -31,6 +37,31 @@ function makeBoard(): KanbanBoard {
 }
 
 describe("kanban production routing", () => {
+  it("keeps the production board in default and restored state", () => {
+    const state = defaultAppState();
+    expect(state.boards.some((b) => b.id === KANBAN_BOARD_PRODUCTION_ID)).toBe(true);
+
+    state.boards = state.boards.filter((b) => b.id !== KANBAN_BOARD_PRODUCTION_ID);
+    ensureProductionBoardInState(state);
+    const production = state.boards.find((b) => b.id === KANBAN_BOARD_PRODUCTION_ID);
+    expect(production?.title).toBe("Производство");
+    expect(production?.allowProductionRoleAccess).toBe(true);
+  });
+
+  it("does not drop local production cards when remote state has no production board", () => {
+    const local = defaultAppState();
+    const production = local.boards.find((b) => b.id === KANBAN_BOARD_PRODUCTION_ID);
+    expect(production).toBeTruthy();
+    production!.columns[0]!.cards.push(createCard({ id: "prod-card-1", title: "Production card" }));
+
+    const remote = defaultAppState();
+    remote.boards = remote.boards.filter((b) => b.id !== KANBAN_BOARD_PRODUCTION_ID);
+
+    const merged = mergeKanbanStatePreservingLocalBoards(local, remote);
+    const mergedProduction = merged.boards.find((b) => b.id === KANBAN_BOARD_PRODUCTION_ID);
+    expect(mergedProduction?.columns.some((col) => col.cards.some((card) => card.id === "prod-card-1"))).toBe(true);
+  });
+
   it("routes files with cyrillic boundaries into print/mill", () => {
     const board = makeBoard();
     const parent = createCard({

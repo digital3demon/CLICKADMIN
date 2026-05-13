@@ -9,11 +9,14 @@ import {
   clampArchiveRetentionDays,
   defaultAppState,
   demoKanbanDefaultState,
+  ensureProductionBoardInState,
   generateId,
   getActiveBoard,
   isKanbanAggregateBoardId,
+  KANBAN_BOARD_PRODUCTION_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
   loadKanbanState,
+  mergeKanbanStatePreservingLocalBoards,
   migrateBoard,
   normalizeBoardCardTypes,
   normalizeDemoKanbanAppState,
@@ -141,8 +144,11 @@ export function DirectoryKanbanBoardsClient({
       const remote = await readClientState<unknown>(scope, key);
       if (cancelled) return;
       if (remote && typeof remote === "object") {
-        setAppState(remote as ReturnType<typeof loadKanbanStateForDirectory>);
-        saveKanbanState(remote as ReturnType<typeof loadKanbanStateForDirectory>, isDemo);
+        const remoteState = remote as ReturnType<typeof loadKanbanStateForDirectory>;
+        const next = mergeKanbanStatePreservingLocalBoards(appState, remoteState);
+        if (!isDemo) ensureProductionBoardInState(next);
+        setAppState(next);
+        saveKanbanState(next, isDemo);
       }
       setKanbanStateReady(true);
     })();
@@ -373,12 +379,14 @@ export function DirectoryKanbanBoardsClient({
         neededTitles.push(`${lane.name} · ${srcSettings.childInProgressColumnTitle}`);
         neededTitles.push(`${lane.name} · ${srcSettings.childDoneColumnTitle}`);
       }
-      let prod = s.boards.find((b) => b.title.trim().toLowerCase() === "производство");
+      let prod =
+        s.boards.find((b) => b.id === KANBAN_BOARD_PRODUCTION_ID) ??
+        s.boards.find((b) => b.title.trim().toLowerCase() === "производство");
       if (!prod) {
         created = true;
         changed = true;
         prod = {
-          id: generateId("board"),
+          id: KANBAN_BOARD_PRODUCTION_ID,
           title: "Производство",
           isPrivate: false,
           allowProductionRoleAccess: true,
@@ -396,6 +404,10 @@ export function DirectoryKanbanBoardsClient({
         prod.automations = cloneGlobalAutomationsForBoard(prod.id);
         s.boards.push(prod);
       } else {
+        if (prod.id !== KANBAN_BOARD_PRODUCTION_ID) {
+          prod.id = KANBAN_BOARD_PRODUCTION_ID;
+          changed = true;
+        }
         const existing = new Set(prod.columns.map((c) => c.title.trim().toLowerCase()));
         for (const title of neededTitles) {
           const key = title.trim().toLowerCase();

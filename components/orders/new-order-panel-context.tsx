@@ -75,16 +75,20 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
         const j = (await res.json()) as {
           user?: {
             role?: UserRole;
+            actualRole?: UserRole;
             moduleAccess?: Record<string, boolean> | null;
           } | null;
         };
         if (cancelled) return;
         const role = j.user?.role ?? null;
+        const actualRole = j.user?.actualRole ?? role;
         setSessionRole(role);
         const moduleAccess =
           (j.user?.moduleAccess as Partial<Record<AppModule, boolean>> | null | undefined) ??
           null;
-        setCanCreate(role ? canCreateOrders(role, moduleAccess) : false);
+        setCanCreate(
+          actualRole === "OWNER" || (role ? canCreateOrders(role, moduleAccess) : false),
+        );
       } catch {
         if (!cancelled) {
           setCanCreate(false);

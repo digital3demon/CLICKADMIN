@@ -34,6 +34,7 @@ import {
   KANBAN_BOARD_DISTRIBUTE_ID,
   KANBAN_BOARD_MY_CARDS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
+  mergeKanbanStatePreservingLocalBoards,
   withActiveBoard,
 } from "@/lib/kanban/model";
 import {
@@ -135,28 +136,6 @@ const PRODUCTION_BOARD_ID = "kanban-board-production";
 
 function normalizeBoardTitle(title: string | null | undefined): string {
   return String(title || "").trim().toLowerCase();
-}
-
-function mergeRemoteKanbanState(
-  localState: KanbanAppState,
-  remoteState: KanbanAppState,
-): KanbanAppState {
-  const merged = structuredClone(remoteState);
-  const remoteById = new Set(merged.boards.map((b) => b.id));
-  const remoteByTitle = new Set(merged.boards.map((b) => normalizeBoardTitle(b.title)));
-  for (const localBoard of localState.boards) {
-    const titleKey = normalizeBoardTitle(localBoard.title);
-    if (remoteById.has(localBoard.id)) continue;
-    if (titleKey && remoteByTitle.has(titleKey)) continue;
-    merged.boards.push(structuredClone(localBoard));
-    remoteById.add(localBoard.id);
-    if (titleKey) remoteByTitle.add(titleKey);
-  }
-  const hasActiveBoard = merged.boards.some((b) => b.id === merged.activeBoardId);
-  if (!hasActiveBoard && localState.boards.some((b) => b.id === localState.activeBoardId)) {
-    merged.activeBoardId = localState.activeBoardId;
-  }
-  return merged;
 }
 
 export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
@@ -326,7 +305,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         const remoteState = isDemo
           ? normalizeDemoKanbanAppState(remote as KanbanAppState)
           : (remote as KanbanAppState);
-        const merged = mergeRemoteKanbanState(prev, remoteState);
+        const merged = mergeKanbanStatePreservingLocalBoards(prev, remoteState);
         if (currentCard && !findCardInAppState(merged, currentCard)) {
           setCardModalId(null);
         }

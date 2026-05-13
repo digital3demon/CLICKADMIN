@@ -49,6 +49,7 @@ export function trackLanes() {
 /** Доски канбана (не демо): соответствуют дорожкам Kaiten ORTHOPEDICS / ORTHODONTICS. */
 export const KANBAN_BOARD_ORTHOPEDICS_ID = "kanban_board_orthopedics";
 export const KANBAN_BOARD_ORTHODONTICS_ID = "kanban_board_orthodontics";
+export const KANBAN_BOARD_PRODUCTION_ID = "kanban-board-production";
 
 function defaultDistributeNewOrdersByBoardId(boardId: string): boolean {
   return (
@@ -1138,13 +1139,134 @@ export function createInitialBoard(): KanbanBoard {
   return createBoardShell(generateId("board"), "Рабочая доска");
 }
 
+function normalizeBoardTitleForSystemLookup(title: string | null | undefined): string {
+  return String(title || "").trim().toLowerCase();
+}
+
+export function mergeKanbanStatePreservingLocalBoards(
+  localState: KanbanAppState,
+  remoteState: KanbanAppState,
+): KanbanAppState {
+  const merged = structuredClone(remoteState);
+  const remoteById = new Set(merged.boards.map((b) => b.id));
+  const remoteByTitle = new Set(
+    merged.boards.map((b) => normalizeBoardTitleForSystemLookup(b.title)),
+  );
+  for (const localBoard of localState.boards) {
+    const titleKey = normalizeBoardTitleForSystemLookup(localBoard.title);
+    if (remoteById.has(localBoard.id)) continue;
+    if (titleKey && remoteByTitle.has(titleKey)) continue;
+    merged.boards.push(structuredClone(localBoard));
+    remoteById.add(localBoard.id);
+    if (titleKey) remoteByTitle.add(titleKey);
+  }
+  const hasActiveBoard = merged.boards.some((b) => b.id === merged.activeBoardId);
+  if (!hasActiveBoard && localState.boards.some((b) => b.id === localState.activeBoardId)) {
+    merged.activeBoardId = localState.activeBoardId;
+  }
+  return merged;
+}
+
+export function ensureProductionBoardInState(
+  state: KanbanAppState,
+  sourceBoard?: KanbanBoard | null,
+): KanbanBoard {
+  const source =
+    sourceBoard ??
+    state.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID) ??
+    state.boards.find((b) => b.id !== KANBAN_BOARD_PRODUCTION_ID) ??
+    state.boards[0];
+  const sourceSettings = source?.productionSettings ?? createBoardShell("production-template", "Template").productionSettings!;
+  const lanes = sourceSettings.lanes?.length
+    ? sourceSettings.lanes
+    : [{ id: "lane_print", name: "Печать", keywords: [] }];
+  const neededTitles: string[] = [];
+  for (const lane of lanes) {
+    neededTitles.push(`${lane.name} · ${sourceSettings.childTodoColumnTitle}`);
+    neededTitles.push(`${lane.name} · ${sourceSettings.childInProgressColumnTitle}`);
+    neededTitles.push(`${lane.name} · ${sourceSettings.childDoneColumnTitle}`);
+  }
+
+  let board =
+    state.boards.find((b) => b.id === KANBAN_BOARD_PRODUCTION_ID) ??
+    state.boards.find((b) => normalizeBoardTitleForSystemLookup(b.title) === "производство");
+  if (!board) {
+    board = {
+      id: KANBAN_BOARD_PRODUCTION_ID,
+      title: "Производство",
+      isPrivate: false,
+      allowProductionRoleAccess: true,
+      accessUserIds: [],
+      columns: neededTitles.map((title) => ({ id: generateId("col"), title, cards: [] })),
+      users: structuredClone(source?.users || []),
+      excludedCrmUserIds: structuredClone(source?.excludedCrmUserIds || []),
+      cardTypes: structuredClone(source?.cardTypes || cloneDefaultCardTypes()),
+      automations: [],
+      autoArchiveRules: [],
+      archiveRetentionDays: source?.archiveRetentionDays ?? 365,
+      archivedCards: [],
+      productionSettings: structuredClone(sourceSettings),
+    };
+    state.boards.push(board);
+    return board;
+  }
+
+  if (board.id !== KANBAN_BOARD_PRODUCTION_ID) {
+    const oldId = board.id;
+    board.id = KANBAN_BOARD_PRODUCTION_ID;
+    if (state.activeBoardId === oldId) state.activeBoardId = KANBAN_BOARD_PRODUCTION_ID;
+  }
+  board.title = board.title?.trim() || "Производство";
+  board.isPrivate = false;
+  board.allowProductionRoleAccess = true;
+  if (!Array.isArray(board.accessUserIds)) board.accessUserIds = [];
+  if (!Array.isArray(board.columns)) board.columns = [];
+  const existingTitles = new Set(
+    board.columns.map((col) => String(col.title || "").trim().toLowerCase()),
+  );
+  for (const title of neededTitles) {
+    const key = title.trim().toLowerCase();
+    if (existingTitles.has(key)) continue;
+    board.columns.push({ id: generateId("col"), title, cards: [] });
+    existingTitles.add(key);
+  }
+  board.productionSettings = structuredClone(sourceSettings);
+  if (!Array.isArray(board.users)) board.users = structuredClone(source?.users || []);
+  if (!Array.isArray(board.excludedCrmUserIds)) {
+    board.excludedCrmUserIds = structuredClone(source?.excludedCrmUserIds || []);
+  }
+  if (!Array.isArray(board.cardTypes)) board.cardTypes = structuredClone(source?.cardTypes || cloneDefaultCardTypes());
+  if (!Array.isArray(board.automations)) board.automations = [];
+  if (!Array.isArray(board.autoArchiveRules)) board.autoArchiveRules = [];
+  if (!Array.isArray(board.archivedCards)) board.archivedCards = [];
+  board.archiveRetentionDays = board.archiveRetentionDays ?? source?.archiveRetentionDays ?? 365;
+  return board;
+}
+
 export function defaultAppState(): KanbanAppState {
   const ortho = createBoardShell(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
   const odon = createBoardShell(KANBAN_BOARD_ORTHODONTICS_ID, "Ортодонтия");
+  const productionState = {
+    version: 2,
+    boards: [ortho, odon],
+    activeBoardId: ortho.id,
+    search: "",
+    viewMode: "board",
+    calendarMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },
+    filters: {
+      cardTypeId: "",
+      due: "",
+      assigneeUserId: "",
+      participantUserId: "",
+    },
+    filterTemplates: [],
+    hiddenLinkedOrderIds: [],
+  } as KanbanAppState;
+  ensureProductionBoardInState(productionState, ortho);
   const now = new Date();
   return {
     version: 2,
-    boards: [ortho, odon],
+    boards: productionState.boards,
     activeBoardId: ortho.id,
     search: "",
     viewMode: "board",
@@ -1254,6 +1376,7 @@ export function loadKanbanState(isDemo = false): KanbanAppState {
     }
     if (!isDemo) {
       ensureMirroredKanbanBoardsForKaiten(merged);
+      ensureProductionBoardInState(merged);
     }
     return merged;
   } catch {
