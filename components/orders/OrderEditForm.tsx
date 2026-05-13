@@ -3284,21 +3284,42 @@ export function OrderEditForm({
               </button>
             </div>
           ) : null}
-          <OrderEditPageLayoutGrid
-            layout={orderLayoutForPageGrid}
-            onLayoutChange={persistOrderLayout}
-            customizeMode={orderLayoutCustomize && !isAccountant}
-            blocks={{
-              topCustomer: oeColCustomer,
-              topDeadlines: oeColDeadlines,
-              topFiles: oeColFiles,
-              topClientNotes: oeColClientNotes,
-              midConstructions: oeMidConstructions,
-              midCorrections: oeMidCorrections,
-              midProsthetics: oeMidProsthetics,
-              bottomSecondary: oeBottomSecondary,
-            }}
-          />
+          {!isAccountant && !orderLayoutCustomize ? (
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 xl:items-start xl:gap-3">
+              <div className="min-w-0 space-y-3 xl:col-span-6">
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 xl:items-start">
+                  {oeColCustomer}
+                  {oeColDeadlines}
+                </div>
+                {oeMidConstructions}
+                {oeMidCorrections}
+              </div>
+              <div className="min-w-0 space-y-3 xl:col-span-6">
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 xl:items-start">
+                  {oeColFiles}
+                  {oeColClientNotes}
+                </div>
+                {oeMidProsthetics}
+              </div>
+              <div className="min-w-0 xl:col-span-12">{oeBottomSecondary}</div>
+            </div>
+          ) : (
+            <OrderEditPageLayoutGrid
+              layout={orderLayoutForPageGrid}
+              onLayoutChange={persistOrderLayout}
+              customizeMode={orderLayoutCustomize && !isAccountant}
+              blocks={{
+                topCustomer: oeColCustomer,
+                topDeadlines: oeColDeadlines,
+                topFiles: oeColFiles,
+                topClientNotes: oeColClientNotes,
+                midConstructions: oeMidConstructions,
+                midCorrections: oeMidCorrections,
+                midProsthetics: oeMidProsthetics,
+                bottomSecondary: oeBottomSecondary,
+              }}
+            />
+          )}
           <div className="flex justify-end pt-4">
             {!isAccountant ? (
             <OrderEditCustomizeToggle
