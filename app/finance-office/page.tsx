@@ -153,7 +153,6 @@ export default async function FinanceOfficePage({
   const exportHref = `/api/finance-office/export?${exportParams.toString()}`;
   const financeOfficeToolbar = (
     <>
-      <FinanceOfficeBankImportPanel className="ml-auto w-full max-w-[34rem] shadow-sm lg:w-[34rem]" />
       <FinanceOfficeTabNav
         active={tab}
         periodFrom={fromRaw}
@@ -257,6 +256,10 @@ export default async function FinanceOfficePage({
       title="ФинОтдел"
       description="Контроль просчёта, корректировок, заказа протетики и оплат. Банковская выгрузка сначала показывается построчно для проверки, затем применяется по кнопке «Сохранить»."
       descriptionClassName="max-w-4xl"
+      rootClassName="[&_.module-frame-header]:z-10"
+      titleRowEnd={
+        <FinanceOfficeBankImportPanel className="w-full max-w-[34rem] lg:w-[34rem]" />
+      }
     >
       <div className="w-full max-w-full space-y-4">
         <FinanceOfficeOrdersTable

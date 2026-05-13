@@ -95,17 +95,22 @@ export function FinanceOfficeBankImportPanel({ className = "" }: { className?: s
     if (next) void preview(next);
   };
 
+  const onPasteFile = (files: FileList | null) => {
+    const next = files?.[0] ?? null;
+    if (next) onFile(next);
+  };
+
   return (
     <section
       className={[
-        "rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]",
+        "rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm",
         className,
       ]
         .filter(Boolean)
         .join(" ")}
     >
       <div
-        className="rounded-t-lg border-b border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-4"
+        className="rounded-lg bg-[var(--surface-subtle)] p-2.5"
         onDragOver={(e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = "copy";
@@ -114,47 +119,44 @@ export function FinanceOfficeBankImportPanel({ className = "" }: { className?: s
           e.preventDefault();
           onFile(e.dataTransfer.files?.[0] ?? null);
         }}
+        onPaste={(e) => onPasteFile(e.clipboardData.files)}
+        tabIndex={0}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-[var(--text-strong)]">
-              Банковская выгрузка
-            </h2>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">
-              Загрузите Excel. Сначала строки появятся для проверки и исправления,
-              оплата применится только после кнопки «Сохранить».
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".xls,.xlsx,.pdf,image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-            />
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
-            >
-              Выбрать файл
-            </button>
-            {file ? (
+        <div className="rounded-xl border-2 border-dashed border-[var(--card-border)] px-4 py-4 text-center outline-none transition-colors focus-within:border-[var(--sidebar-blue)] focus-within:ring-2 focus-within:ring-[var(--sidebar-blue)]/25">
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".xls,.xlsx,.pdf,image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="rounded-lg bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+            disabled={busy}
+          >
+            {busy ? "Читаю файл…" : "Выбрать файлы · Ctrl+V"}
+          </button>
+          <p className="mt-2 text-xs leading-snug text-[var(--text-muted)]">
+            Перетащите файл в рамку или сфокусируйте её (Tab) и вставьте из буфера
+          </p>
+          {file ? (
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+              <span className="max-w-full truncate text-xs text-[var(--text-muted)]">
+                Файл: {file.name}
+              </span>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void preview()}
-                className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
+                className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
               >
                 Перечитать
               </button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
-        {file ? (
-          <p className="mt-2 text-xs text-[var(--text-muted)]">Файл: {file.name}</p>
-        ) : null}
         {error ? <p className="mt-2 text-sm font-medium text-red-600 dark:text-red-300">{error}</p> : null}
       </div>
 
