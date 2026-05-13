@@ -64,6 +64,7 @@ import {
   IconTrash,
 } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
+import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import type { AggregateCardDragArgs } from "@/lib/kanban/aggregate-card-drag";
 
 type BoardCanvasProps = {
@@ -276,7 +277,7 @@ function KanbanCardView({
                 <span className="text-[var(--kanban-text)]">{foreignBoardLabel}</span>
               </div>
             ) : null}
-            <div className="pl-2.5 pr-10 pb-2.5 pt-0.5 max-md:pl-1.5 max-md:pr-6 max-md:pb-1.5 max-md:pt-0">
+            <div className="pl-2.5 pr-10 pb-2.5 pt-0.5 max-md:pl-1.5 max-md:pr-7 max-md:pb-1.5 max-md:pt-0">
               <div className="text-[0.9375rem] font-semibold leading-snug text-[var(--kanban-text)] max-md:text-[11px] max-md:leading-tight">
                 {card.title}
               </div>
@@ -362,6 +363,11 @@ function KanbanCardView({
               )}
             </div>
           </div>
+          <KanbanTimerIcon
+            card={card}
+            className="pointer-events-none absolute bottom-2 right-2 z-10 max-md:bottom-1.5 max-md:right-1.5"
+            sizeClassName="h-6 w-6 max-md:h-[1.125rem] max-md:w-[1.125rem]"
+          />
           <div
             className="card-more-menu absolute right-0.5 top-0.5 z-10 max-md:right-0 max-md:top-0"
             ref={menuRef}

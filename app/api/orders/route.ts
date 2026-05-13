@@ -115,8 +115,9 @@ export async function POST(req: Request) {
       }
       const orderId = result.order.id;
       if (shouldScheduleKaitenSyncAfterOrderCreate(body)) {
-        after(async () => {
+        const syncKaiten = async (): Promise<string | null> => {
           const maxKaitenAttempts = 3;
+          let lastError: string | null = null;
           for (let attempt = 0; attempt < maxKaitenAttempts; attempt++) {
             let syncResult: Awaited<ReturnType<typeof syncNewOrderToKaiten>>;
             try {
@@ -126,6 +127,7 @@ export async function POST(req: Request) {
                 { err: e, msg: "kaiten_sync_after_create_deferred", attempt },
                 "POST /api/orders",
               );
+              lastError = e instanceof Error ? e.message : String(e);
               if (attempt === maxKaitenAttempts - 1) break;
               await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
               continue;
@@ -143,8 +145,9 @@ export async function POST(req: Request) {
                   "POST /api/orders",
                 );
               }
-              break;
+              return null;
             }
+            lastError = syncResult.error ?? "Не удалось создать карточку Kaiten";
             logger.info(
               {
                 msg: "kaiten_sync_after_create_deferred",
@@ -157,7 +160,20 @@ export async function POST(req: Request) {
               await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
             }
           }
-        });
+          return lastError ?? "Не удалось создать карточку Kaiten";
+        };
+
+        if (body.waitForKaitenBeforePrint === true) {
+          const kaitenPrintSyncError = await syncKaiten();
+          if (kaitenPrintSyncError) {
+            return NextResponse.json({
+              ...result.order,
+              kaitenPrintSyncError,
+            });
+          }
+        } else {
+          after(syncKaiten);
+        }
       }
       return NextResponse.json(result.order);
     } catch (e) {

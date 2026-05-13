@@ -1013,6 +1013,7 @@ export function NewOrderForm({
             dueToAdminsAt: appointmentIso,
             kaitenAdminDueHasTime: !labWholeDay,
             dueToAdminsHasTime: !appointmentWholeDay,
+            waitForKaitenBeforePrint: printAfterSave,
             workReceivedAt: workReceivedLocal.trim()
               ? localDateTimeToIso(
                   snapDatetimeLocalToDueGrid(workReceivedLocal),
@@ -1056,6 +1057,7 @@ export function NewOrderForm({
         const data = (await res.json()) as {
           id?: string;
           orderNumber?: string;
+          kaitenPrintSyncError?: string | null;
           error?: string;
         };
         if (!res.ok) {
@@ -1065,6 +1067,12 @@ export function NewOrderForm({
         const newId = data.id;
         if (!newId) {
           setSaveError("Наряд сохранён, но не получен id заказа");
+          return;
+        }
+        if (printAfterSave && data.kaitenPrintSyncError) {
+          setSaveError(
+            `Наряд сохранён, но карточка Kaiten не создана для печати QR: ${data.kaitenPrintSyncError}`,
+          );
           return;
         }
         if (pendingFiles.length > 0) {

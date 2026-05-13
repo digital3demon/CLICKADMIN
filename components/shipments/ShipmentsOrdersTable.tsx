@@ -5,6 +5,7 @@ import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
 import { ShipmentsPrintButton } from "@/components/shipments/ShipmentsPrintButton";
+import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import type { ShipmentOrderRow } from "@/lib/fetch-shipments-orders";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
@@ -75,7 +76,11 @@ export function ShipmentsOrdersTable({
             .map((o) => o.id)}
         />
       ) : null}
-      <div className="shipments-print-area w-full max-w-full min-w-0 overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm print:max-w-none print:w-full print:overflow-visible print:border-zinc-400 print:shadow-none">
+      <StickyListChrome
+        className="shipments-print-area w-full max-w-full min-w-0 overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm print:max-w-none print:w-full print:overflow-visible print:border-zinc-400 print:shadow-none"
+        toolbarClassName="rounded-t-lg bg-[var(--card-bg)] pb-0 print:static"
+        toolbar={
+          <>
         {listHeading && !listHeadingScreen ? (
           <p className="hidden border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 pb-2 pt-2 text-sm font-semibold text-[var(--text-body)] print:block print:mb-0 print:border-b-0 print:bg-transparent print:px-0 print:pt-0 print:text-base">
             {listHeading}
@@ -99,9 +104,12 @@ export function ShipmentsOrdersTable({
             </p>
           ) : null}
         </div>
+          </>
+        }
+      >
         <div className="min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-webkit-overflow-scrolling:touch] print:overflow-visible">
         <table className="w-max max-w-full min-w-0 border-collapse text-left text-sm print:table-auto">
-          <thead>
+          <thead className="sticky top-[var(--sticky-list-toolbar-height,0px)] z-30 print:static">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase leading-tight tracking-wide text-[var(--text-secondary)] print:bg-[var(--card-bg)]">
               <th
                 className="max-md:hidden min-w-0 whitespace-nowrap px-2 py-2 text-center normal-case print:hidden"
@@ -384,7 +392,7 @@ export function ShipmentsOrdersTable({
           </tbody>
         </table>
         </div>
-      </div>
+      </StickyListChrome>
     </div>
   );
 }

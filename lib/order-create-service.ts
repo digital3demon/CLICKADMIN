@@ -109,6 +109,8 @@ export type CreateOrderBody = {
   createKanbanWithoutKaiten?: boolean;
   kaitenCardTypeId?: string | null;
   kaitenTrackLane?: string;
+  /** Для «сохранить и печать»: дождаться карточки Kaiten до генерации PDF с QR. */
+  waitForKaitenBeforePrint?: boolean;
   kaitenAdminDueHasTime?: boolean;
   /** false — запись «в течение дня», время не принципиально */
   dueToAdminsHasTime?: boolean;

@@ -14,6 +14,7 @@ import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePr
 import { OrdersListPeriodForm } from "@/components/orders/OrdersListPeriodForm";
 import { OrdersListSearch } from "@/components/orders/OrdersListSearch";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
+import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { getSiteOrigin } from "@/lib/site-origin-server";
@@ -325,7 +326,9 @@ export default async function OrdersPage({
           .map((o) => o.id)}
         pollingEnabled={!isDemo}
       >
-      <div className={ORDERS_LIST_STACK}>
+      <StickyListChrome
+        className={ORDERS_LIST_STACK}
+        toolbar={<div className="space-y-4">
       <OrderPostingMonthBar
         toolbarEnd={
           <OrdersListShippedToolbar
@@ -543,9 +546,11 @@ export default async function OrdersPage({
           В списке только наряды с отметкой «Работа отправлена» (отгруженные).
         </div>
       ) : null}
+        </div>}
+      >
       <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
         <table className="w-max min-w-0 border-collapse text-left text-sm">
-          <thead>
+          <thead className="sticky top-[var(--sticky-list-toolbar-height,0px)] z-30 print:static">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
               <th
                 className="max-md:hidden min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center normal-case sm:px-2 sm:py-2"
@@ -873,7 +878,7 @@ export default async function OrdersPage({
           ) : null}
         </div>
       ) : null}
-      </div>
+      </StickyListChrome>
       </OrdersListKaitenChatShell>
       </div>
     </ModuleFrame>

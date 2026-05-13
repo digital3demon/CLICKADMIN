@@ -120,6 +120,11 @@ export default async function ClientsPage({ searchParams }: PageProps) {
           case "name":
             cmp = a.name.localeCompare(b.name, "ru");
             break;
+          case "reconciliation":
+            cmp =
+              Number(a.worksWithReconciliation) -
+              Number(b.worksWithReconciliation);
+            break;
           case "doctors":
             cmp = a._count.doctorLinks - b._count.doctorLinks;
             break;
@@ -173,6 +178,17 @@ export default async function ClientsPage({ searchParams }: PageProps) {
         clinicPageEff,
         (p) => buildClientsListUrl({ ...clinicNavState, clinicPage: p }),
       );
+      const reconciliationDir =
+        listState.clinicSort === "reconciliation" &&
+        listState.clinicDir === "desc"
+          ? "asc"
+          : "desc";
+      const reconciliationSortHref = buildClientsListUrl({
+        ...clinicNavState,
+        clinicSort: "reconciliation",
+        clinicDir: reconciliationDir,
+        clinicPage: 1,
+      });
 
       return (
         <ModuleFrame title="Клиенты">
@@ -225,8 +241,23 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                   <th className="px-3 py-3">Клиника</th>
                   <th className="px-3 py-3">Юр. лицо</th>
                   <th className="px-3 py-3">Адрес</th>
-                  <th className="whitespace-nowrap px-3 py-3" title="Работа по сверке и периодичность">
-                    Сверка
+                  <th
+                    className="whitespace-nowrap px-3 py-3"
+                    title="Работа по сверке и периодичность"
+                  >
+                    <Link
+                      href={reconciliationSortHref}
+                      scroll={false}
+                      className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                      title="Сортировать по сверке"
+                    >
+                      <span>Сверка</span>
+                      {listState.clinicSort === "reconciliation" ? (
+                        <span aria-hidden>
+                          {listState.clinicDir === "desc" ? "↓" : "↑"}
+                        </span>
+                      ) : null}
+                    </Link>
                   </th>
                   <th className="px-3 py-3 text-center">Врачей</th>
                   <th className="px-3 py-3 text-center">Заказов</th>

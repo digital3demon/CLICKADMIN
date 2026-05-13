@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { IconBrick, IconListCheck } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
+import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 const LIST_GRID =
@@ -353,8 +354,13 @@ export function KanbanListView({
                         <div className="text-[0.6rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
                           {ct?.name ?? "—"}
                         </div>
-                        <div className="mt-0.5 text-[0.9rem] font-semibold leading-snug text-[var(--kanban-text)]">
-                          {card.title}
+                        <div className="mt-0.5 flex min-w-0 items-start gap-2 text-[0.9rem] font-semibold leading-snug text-[var(--kanban-text)]">
+                          <span className="min-w-0 flex-1">{card.title}</span>
+                          <KanbanTimerIcon
+                            card={card}
+                            className="mt-0.5"
+                            sizeClassName="h-5 w-5"
+                          />
                         </div>
                         {(appState.search.trim() || isKanbanAggregateBoardId(appState.activeBoardId)) &&
                         homeBoardId !== appState.activeBoardId ? (

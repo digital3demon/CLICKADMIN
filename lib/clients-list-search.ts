@@ -16,7 +16,12 @@ function billingLegalFormSearchBits(
 
 export const CLIENTS_PAGE_SIZE = 15;
 
-export type ClinicSortKey = "name" | "doctors" | "orders" | "turnover";
+export type ClinicSortKey =
+  | "name"
+  | "reconciliation"
+  | "doctors"
+  | "orders"
+  | "turnover";
 
 export type ClientsListUrlState = {
   view: "clinic" | "doctor";
@@ -36,7 +41,14 @@ function firstQuery(
 }
 
 export function parseClinicSort(v: string | undefined | null): ClinicSortKey {
-  if (v === "doctors" || v === "orders" || v === "turnover") return v;
+  if (
+    v === "reconciliation" ||
+    v === "doctors" ||
+    v === "orders" ||
+    v === "turnover"
+  ) {
+    return v;
+  }
   return "name";
 }
 
@@ -124,7 +136,9 @@ export function clinicOrderSelectValue(
 export function parseClinicOrderSelectValue(
   raw: string,
 ): { clinicSort: ClinicSortKey; clinicDir: "asc" | "desc" } | null {
-  const m = /^(name|doctors|orders|turnover):(asc|desc)$/.exec(raw.trim());
+  const m = /^(name|reconciliation|doctors|orders|turnover):(asc|desc)$/.exec(
+    raw.trim(),
+  );
   if (!m) return null;
   return {
     clinicSort: m[1] as ClinicSortKey,
@@ -135,6 +149,8 @@ export function parseClinicOrderSelectValue(
 export const CLINIC_ORDER_OPTIONS: { value: string; label: string }[] = [
   { value: "name:asc", label: "По названию (А → Я)" },
   { value: "name:desc", label: "По названию (Я → А)" },
+  { value: "reconciliation:desc", label: "По сверке (сначала да)" },
+  { value: "reconciliation:asc", label: "По сверке (сначала нет)" },
   { value: "doctors:desc", label: "По числу врачей (сначала больше)" },
   { value: "doctors:asc", label: "По числу врачей (сначала меньше)" },
   { value: "orders:desc", label: "По числу заказов (сначала больше)" },

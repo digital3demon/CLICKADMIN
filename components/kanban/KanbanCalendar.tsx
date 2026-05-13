@@ -7,6 +7,7 @@ import {
   isKanbanAggregateBoardId,
   textOnAccentHex,
 } from "@/lib/kanban/model";
+import { KanbanTimerIcon } from "./KanbanTimerIcon";
 
 type KanbanCalendarProps = {
   appState: KanbanAppState;
@@ -117,8 +118,8 @@ export function KanbanCalendar({
               <div className="text-[0.75rem] font-medium text-[var(--kanban-text)]">
                 {cell.day}
               </div>
-              <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
-                {list.slice(0, 6).map((c) => {
+              <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pr-0.5">
+                {list.map((c) => {
                   const hb = resolveCardHomeBoard(c);
                   const accent = getCardTypeAccent(hb, c.cardTypeId);
                   const fg = textOnAccentHex(accent);
@@ -127,7 +128,7 @@ export function KanbanCalendar({
                     <button
                       key={c.id}
                       type="button"
-                      className="max-w-full break-words rounded border border-black/15 px-1 py-0.5 text-left text-[0.65rem] font-medium leading-snug shadow-sm line-clamp-3 hover:brightness-[1.06] active:brightness-95 dark:border-black/30"
+                      className="relative max-w-full whitespace-normal break-words rounded border border-black/15 px-1 py-0.5 pr-7 text-left text-[0.65rem] font-medium leading-snug shadow-sm hover:brightness-[1.06] active:brightness-95 dark:border-black/30"
                       style={{
                         backgroundColor: accent,
                         color: fg,
@@ -142,14 +143,14 @@ export function KanbanCalendar({
                       onClick={() => onOpenCard(c.id)}
                     >
                       {titleLine}
+                      <KanbanTimerIcon
+                        card={c}
+                        className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2"
+                        sizeClassName="h-5 w-5"
+                      />
                     </button>
                   );
                 })}
-                {list.length > 6 && (
-                  <div className="px-0.5 py-0.5 text-[0.65rem] text-[var(--kanban-text-muted)]">
-                    +{list.length - 6}…
-                  </div>
-                )}
               </div>
             </div>
           );
