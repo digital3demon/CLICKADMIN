@@ -13,7 +13,7 @@ import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 const sizeClass = {
   xs: "h-[18px] w-[18px] text-[0.5rem]",
   sm: "h-6 w-6 text-[0.55rem]",
-  card: "h-[26px] w-[26px] text-[0.65rem] max-md:h-[18px] max-md:w-[18px] max-md:text-[0.5rem]",
+  card: "h-[22px] w-[22px] text-[0.58rem] max-md:h-[18px] max-md:w-[18px] max-md:text-[0.5rem]",
   md: "h-9 w-9 text-[0.65rem]",
   picker: "h-7 w-7 text-[0.6rem]",
 } as const;
@@ -49,12 +49,12 @@ export function KanbanPersonAvatar({
   const ring =
     variant === "assignee"
       ? size === "card"
-        ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-[var(--kanban-card-bg)] max-md:ring-1 max-md:ring-offset-1"
+        ? "ring-1 ring-amber-400 ring-offset-1 ring-offset-[var(--kanban-card-bg)]"
         : size === "sm"
           ? "ring-1 ring-amber-500/80 ring-offset-1 ring-offset-[var(--kanban-card-bg)]"
           : "ring-2 ring-amber-400 ring-offset-2 ring-offset-[var(--kaiten-modal-bg)]"
       : size === "card"
-        ? "border-2 border-dashed border-[var(--kanban-text-muted)] max-md:border"
+        ? "border border-dashed border-[var(--kanban-text-muted)]"
         : "border-2 border-dashed border-[var(--kaiten-modal-muted)]";
 
   const base = `${sizeClass[size]} inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white ${ring} ${className}`.trim();

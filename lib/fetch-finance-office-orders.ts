@@ -12,10 +12,13 @@ const financeOfficeOrderSelect = {
   id: true,
   orderNumber: true,
   patientName: true,
+  createdAt: true,
   legalEntity: true,
   dueDate: true,
   kaitenCardId: true,
   kaitenColumnTitle: true,
+  demoKanbanColumn: true,
+  kaitenCardType: { select: { name: true } },
   prostheticsOrdered: true,
   invoiceAttachmentId: true,
   invoicePrinted: true,
@@ -98,13 +101,26 @@ function financePriority(row: FinanceOfficeOrderRow): number {
 export async function fetchFinanceOfficeOrders(
   db: PrismaClient,
   tenantId: string,
-  opts: { listTag?: string | null; search?: string | null } = {},
+  opts: {
+    listTag?: string | null;
+    search?: string | null;
+    start?: Date | null;
+    endExclusive?: Date | null;
+  } = {},
 ): Promise<FinanceOfficeOrderRow[]> {
   const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
   const parts: Prisma.OrderWhereInput[] = [
     { tenantId, archivedAt: null },
     searchWhere(opts.search ?? ""),
   ];
+  if (opts.start || opts.endExclusive) {
+    parts.push({
+      dueDate: {
+        ...(opts.start ? { gte: opts.start } : {}),
+        ...(opts.endExclusive ? { lt: opts.endExclusive } : {}),
+      },
+    });
+  }
   if (parsedTag) {
     parts.push(
       parsedTag.kind === "orderAttention"

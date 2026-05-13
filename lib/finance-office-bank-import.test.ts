@@ -20,6 +20,20 @@ describe("finance office bank import", () => {
     ).toBe("3301");
   });
 
+  it("extracts dashed order number before other numeric fragments", () => {
+    expect(
+      extractOrderNumberFromBankComment(
+        "11.05.2026 | 0000-000843 | МАРТА ООО | Б/Л 12.05.2026 | Оплачен | 2605-060 | Кириллова Н.Н.",
+      ),
+    ).toBe("2605-060");
+  });
+
+  it("normalizes spaces around dashed order number", () => {
+    expect(
+      extractOrderNumberFromBankComment("Наряд 2605 - 060 врач Иванов"),
+    ).toBe("2605-060");
+  });
+
   it("parses paid rows and builds invoice caption", () => {
     const rows = parseFinanceBankWorkbook(
       workbookBuffer([

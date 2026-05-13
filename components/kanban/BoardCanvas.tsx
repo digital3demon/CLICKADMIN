@@ -108,6 +108,8 @@ type BoardCanvasProps = {
 const CARD_MENU_WIDTH = 220;
 const CARD_MENU_GAP = 4;
 const CARD_MENU_EST_HEIGHT = 150;
+const BOARD_COLUMN_WIDTH_CLASS =
+  "w-[140px] min-[420px]:w-[156px] sm:w-[176px] lg:w-[192px] xl:w-[208px]";
 
 /** Элементы со скроллом выше по дереву — absolute-меню внутри колонки обрезается без портала. */
 function scrollContainerAncestors(start: HTMLElement | null): HTMLElement[] {
@@ -214,7 +216,7 @@ function KanbanCardView({
   const participants = card.participants || [];
 
   let dueClass =
-    "rounded border px-1.5 py-0.5 text-[0.7rem] font-semibold leading-none max-md:px-1 max-md:py-[1px] max-md:text-[0.55rem]";
+    "rounded border px-1 py-0.5 text-[0.62rem] font-semibold leading-none max-md:px-1 max-md:py-[1px] max-md:text-[0.55rem]";
   if (card.dueDate) {
     const cat = dueCategory(card.dueDate);
     if (cat === "overdue")
@@ -234,24 +236,24 @@ function KanbanCardView({
   return (
     <div data-card-id={card.id} className="block w-full min-w-0 shrink-0 touch-pan-y">
       <div
-        className="relative rounded-[11px] p-[3px] max-md:rounded-[7px] max-md:p-[1.5px]"
+        className="relative rounded-[9px] p-[2px] max-md:rounded-[7px] max-md:p-[1.5px]"
         style={typeRing}
       >
         <article
-          className={`relative overflow-visible border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,transform,border-color] dark:border-white/[0.1] rounded-[8px] max-md:rounded-[6px] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] hover:shadow-[var(--kanban-shadow-elevated)]`}
+          className={`relative overflow-visible border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,transform,border-color] dark:border-white/[0.1] rounded-[7px] max-md:rounded-[6px] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] hover:shadow-[var(--kanban-shadow-elevated)]`}
           {...(dragListeners ?? {})}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest(".card-more-menu")) return;
             onOpen();
           }}
         >
-          <div className="overflow-hidden rounded-[8px] max-md:rounded-[6px]">
+          <div className="overflow-hidden rounded-[7px] max-md:rounded-[6px]">
             {blocked && (
               <div
-                className="flex items-start gap-1.5 border-b-2 border-[#7f1d1d] bg-gradient-to-b from-[#dc2626] to-[#b91c1c] py-2 pl-2.5 pr-8 text-[0.7rem] font-bold uppercase leading-snug tracking-wide text-white max-md:gap-1 max-md:py-1 max-md:pl-1.5 max-md:pr-6 max-md:text-[0.58rem] dark:from-[#c02626] dark:to-[#991b1b]"
+                className="flex items-start gap-1 border-b-2 border-[#7f1d1d] bg-gradient-to-b from-[#dc2626] to-[#b91c1c] py-1.5 pl-2 pr-7 text-[0.62rem] font-bold uppercase leading-snug tracking-wide text-white max-md:gap-1 max-md:py-1 max-md:pl-1.5 max-md:pr-6 max-md:text-[0.58rem] dark:from-[#c02626] dark:to-[#991b1b]"
                 title={(card.blockReason || "").trim() || "Карточка остановлена"}
               >
-                <IconBrick className="h-4 w-4 shrink-0 text-white max-md:h-3 max-md:w-3" />
+                <IconBrick className="h-3.5 w-3.5 shrink-0 text-white max-md:h-3 max-md:w-3" />
                 <span className="line-clamp-4 min-w-0 break-words">
                   {(card.blockReason || "").trim() || "Карточка остановлена"}
                 </span>
@@ -259,7 +261,7 @@ function KanbanCardView({
             )}
             {ct && (
               <div
-                className="border-b border-black/[0.08] pb-1 pl-2.5 pr-10 pt-1 text-[0.68rem] font-bold uppercase tracking-wide dark:border-white/[0.1] max-md:px-1.5 max-md:pb-0.5 max-md:pr-7 max-md:pt-0.5 max-md:text-[0.58rem]"
+                className="border-b border-black/[0.08] pb-0.5 pl-2 pr-8 pt-0.5 text-[0.62rem] font-bold uppercase tracking-wide dark:border-white/[0.1] max-md:px-1.5 max-md:pb-0.5 max-md:pr-7 max-md:pt-0.5 max-md:text-[0.58rem]"
                 style={{
                   color: `color-mix(in srgb, ${accent} 72%, var(--kanban-text))`,
                   background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 14%, var(--kanban-card-bg)) 0%, color-mix(in srgb, ${accent} 6%, var(--kanban-card-bg)) 100%)`,
@@ -270,30 +272,30 @@ function KanbanCardView({
             )}
             {foreignBoardLabel ? (
               <div
-                className="border-b border-black/[0.08] px-2.5 py-0.5 text-[0.55rem] font-medium leading-tight text-[var(--kanban-text-muted)] dark:border-white/[0.08] max-md:px-1.5 max-md:py-0.5 max-md:text-[0.5rem]"
+                className="border-b border-black/[0.08] px-2 py-0.5 text-[0.52rem] font-medium leading-tight text-[var(--kanban-text-muted)] dark:border-white/[0.08] max-md:px-1.5 max-md:py-0.5 max-md:text-[0.5rem]"
                 title={`Карточка с доски «${foreignBoardLabel}»`}
               >
                 <span className="opacity-80">Доска:</span>{" "}
                 <span className="text-[var(--kanban-text)]">{foreignBoardLabel}</span>
               </div>
             ) : null}
-            <div className="pl-2.5 pr-10 pb-2.5 pt-0.5 max-md:pl-1.5 max-md:pr-7 max-md:pb-1.5 max-md:pt-0">
-              <div className="text-[0.9375rem] font-semibold leading-snug text-[var(--kanban-text)] max-md:text-[11px] max-md:leading-tight">
+            <div className="pl-2 pr-8 pb-2 pt-0.5 max-md:pl-1.5 max-md:pr-7 max-md:pb-1.5 max-md:pt-0">
+              <div className="text-[0.8125rem] font-semibold leading-tight text-[var(--kanban-text)] max-md:text-[11px] max-md:leading-tight">
                 {card.title}
               </div>
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 max-md:mt-1 max-md:gap-1">
-                <div className="flex flex-wrap items-center gap-1.5 text-[0.75rem] text-[var(--kanban-text-muted)] max-md:gap-1 max-md:text-[0.62rem]">
+              <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 max-md:mt-1 max-md:gap-1">
+                <div className="flex flex-wrap items-center gap-1 text-[0.68rem] text-[var(--kanban-text-muted)] max-md:gap-1 max-md:text-[0.62rem]">
                   {card.dueDate && (
                     <span className={dueClass}>
                       <span className="inline-flex items-center gap-1 max-md:gap-0.5">
-                        <IconClock className="max-md:h-3 max-md:w-3" />
+                        <IconClock className="h-3.5 w-3.5 max-md:h-3 max-md:w-3" />
                         {formatDate(card.dueDate)}
                       </span>
                     </span>
                   )}
                   {urgent && (
                     <span
-                      className="inline-flex shrink-0 items-center rounded-full border border-orange-400/40 bg-gradient-to-b from-orange-500 to-red-600 px-2 py-0.5 text-[0.6rem] font-bold uppercase leading-none tracking-wide text-white shadow-sm max-md:px-1 max-md:py-[1px] max-md:text-[0.5rem]"
+                      className="inline-flex shrink-0 items-center rounded-full border border-orange-400/40 bg-gradient-to-b from-orange-500 to-red-600 px-1.5 py-0.5 text-[0.55rem] font-bold uppercase leading-none tracking-wide text-white shadow-sm max-md:px-1 max-md:py-[1px] max-md:text-[0.5rem]"
                       title="Срочно"
                     >
                       Срочно
@@ -305,7 +307,7 @@ function KanbanCardView({
                       <span>
                         {done}/{cl.length}
                       </span>
-                      <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[var(--kanban-border)] max-md:h-1 max-md:w-9">
+                      <div className="h-1.5 w-10 overflow-hidden rounded-full bg-[var(--kanban-border)] max-md:h-1 max-md:w-9">
                         <div
                           className="h-full rounded-full bg-[var(--kanban-accent)] opacity-85"
                           style={{ width: `${pct}%` }}
@@ -316,7 +318,7 @@ function KanbanCardView({
                 </div>
               </div>
               {(assignees.length > 0 || participants.length > 0) && (
-                <div className="mt-1.5 flex flex-wrap items-center justify-end gap-1 max-md:mt-1">
+                <div className="mt-1 flex flex-wrap items-center justify-end gap-1 max-md:mt-1">
                   {assignees.length > 0 && (
                     <div className="-space-x-1.5 flex" title="Ответственные">
                       {assignees.slice(0, 5).map((uid) => (
@@ -331,14 +333,14 @@ function KanbanCardView({
                         </span>
                       ))}
                       {assignees.length > 5 && (
-                        <span className="ml-1 text-[0.65rem] text-[var(--kanban-text-muted)]">
+                        <span className="ml-0.5 text-[0.6rem] text-[var(--kanban-text-muted)]">
                           +{assignees.length - 5}
                         </span>
                       )}
                     </div>
                   )}
                   {participants.length > 0 && (
-                    <div className="flex border-l border-[var(--kanban-border)] pl-1.5" title="Участники">
+                    <div className="flex border-l border-[var(--kanban-border)] pl-1" title="Участники">
                       <div className="-space-x-1.5 flex">
                         {participants.slice(0, 4).map((uid) => (
                           <span key={uid} className="first:ml-0 opacity-90">
@@ -352,7 +354,7 @@ function KanbanCardView({
                           </span>
                         ))}
                         {participants.length > 4 && (
-                          <span className="ml-1 text-[0.65rem] text-[var(--kanban-text-muted)]">
+                          <span className="ml-0.5 text-[0.6rem] text-[var(--kanban-text-muted)]">
                             +{participants.length - 4}
                           </span>
                         )}
@@ -365,8 +367,8 @@ function KanbanCardView({
           </div>
           <KanbanTimerIcon
             card={card}
-            className="pointer-events-none absolute bottom-2 right-2 z-10 max-md:bottom-1.5 max-md:right-1.5"
-            sizeClassName="h-6 w-6 max-md:h-[1.125rem] max-md:w-[1.125rem]"
+            className="pointer-events-none absolute bottom-1.5 right-1.5 z-10 max-md:bottom-1.5 max-md:right-1.5"
+            sizeClassName="h-5 w-5 max-md:h-[1.125rem] max-md:w-[1.125rem]"
           />
           <div
             className="card-more-menu absolute right-0.5 top-0.5 z-10 max-md:right-0 max-md:top-0"
@@ -375,7 +377,7 @@ function KanbanCardView({
           >
             <button
               type="button"
-              className="rounded-md p-1 text-[var(--kanban-text-muted)] hover:bg-black/10 dark:hover:bg-white/10 max-md:p-0.5"
+              className="rounded-md p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/10 dark:hover:bg-white/10 max-md:p-0.5"
               title="Действия"
               aria-label="Меню карточки"
               onClick={(e) => {
@@ -546,17 +548,17 @@ function SortableColumnSection({
       ref={setNodeRef}
       style={style}
       data-column-id={col.id}
-      className="kanban-column flex max-h-[calc(100dvh-200px)] w-[148px] shrink-0 flex-col rounded-[10px] border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.06] dark:bg-gradient-to-b dark:from-[#2d2d32] dark:to-[#27272a] max-md:max-h-[calc(100dvh-132px)] min-[420px]:w-[168px] sm:w-[200px] lg:w-[252px] xl:w-[280px]"
+      className={`kanban-column flex max-h-[calc(100dvh-184px)] ${BOARD_COLUMN_WIDTH_CLASS} shrink-0 flex-col rounded-[9px] border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.06] dark:bg-gradient-to-b dark:from-[#2d2d32] dark:to-[#27272a] max-md:max-h-[calc(100dvh-132px)]`}
     >
       <header
-        className={`column-header-handle flex flex-col gap-1 border-b border-[var(--kanban-border)] px-2 pb-1.5 pt-2 max-md:gap-0.5 max-md:px-1.5 max-md:pb-1 max-md:pt-1.5 sm:gap-1.5 sm:px-3 sm:pb-2 sm:pt-3 ${
+        className={`column-header-handle flex flex-col gap-0.5 border-b border-[var(--kanban-border)] px-2 pb-1.5 pt-2 max-md:gap-0.5 max-md:px-1.5 max-md:pb-1 max-md:pt-1.5 sm:px-2 sm:pb-1.5 sm:pt-2 ${
           layoutLocked ? "" : "cursor-grab active:cursor-grabbing"
         }`}
         {...dragProps}
       >
-        <div className="flex items-center justify-between gap-1 sm:gap-1.5">
+        <div className="flex items-center justify-between gap-1">
           <div
-            className="min-w-0 flex-1 cursor-default break-words text-[11px] font-semibold leading-tight text-[var(--kanban-text)] sm:text-[0.8125rem] sm:leading-snug"
+            className="min-w-0 flex-1 cursor-default break-words text-[11px] font-semibold leading-tight text-[var(--kanban-text)] sm:text-[0.72rem] sm:leading-tight"
             onDoubleClick={() => {
               if (!layoutLocked) onRenameColumn(col.id);
             }}
@@ -567,7 +569,7 @@ function SortableColumnSection({
             <div className="flex gap-1">
               <button
                 type="button"
-                className="rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] sm:p-1"
+                className="rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]"
                 title="Переименовать"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => onRenameColumn(col.id)}
@@ -576,7 +578,7 @@ function SortableColumnSection({
               </button>
               <button
                 type="button"
-                className="rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] sm:p-1"
+                className="rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]"
                 title="Удалить колонку"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => onDeleteColumn(col.id)}
@@ -586,7 +588,7 @@ function SortableColumnSection({
             </div>
           ) : null}
         </div>
-        <div className="text-[0.62rem] text-[var(--kanban-text-muted)] max-md:leading-tight sm:text-[0.75rem]">
+        <div className="text-[0.58rem] text-[var(--kanban-text-muted)] max-md:leading-tight sm:text-[0.65rem]">
           {visCount}
           {visCount !== totalCount ? ` из ${totalCount}` : ""} карточек
         </div>
@@ -700,24 +702,24 @@ function DraggableLaneSection({
         transform: `translate(${offset.x}px, ${offset.y}px)`,
         zIndex: dragging ? 40 : undefined,
       }}
-      className="flex shrink-0 flex-col rounded-[10px] border border-[var(--kanban-border)] bg-black/[0.03] p-1.5 dark:bg-white/[0.03]"
+      className="flex shrink-0 flex-col rounded-[9px] border border-[var(--kanban-border)] bg-black/[0.03] p-1 dark:bg-white/[0.03]"
     >
-      <header className="mb-1 flex items-center justify-between gap-2 px-1">
-        <div className="text-[0.72rem] font-semibold uppercase tracking-wide text-[var(--kanban-text)]">
+      <header className="mb-1 flex items-center justify-between gap-1.5 px-1">
+        <div className="text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--kanban-text)]">
           {lane.title}
         </div>
         <button
           type="button"
-          className={`inline-flex h-6 w-6 items-center justify-center rounded border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.08] ${
+          className={`inline-flex h-5 w-5 items-center justify-center rounded border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.08] ${
             disabled ? "cursor-default opacity-50" : "cursor-grab active:cursor-grabbing"
           }`}
           title={`Переместить дорожку «${lane.title}»`}
           onPointerDown={(e) => onHandlePointerDown(lane.id, e)}
         >
-          <IconGrip className="h-3.5 w-3.5" />
+          <IconGrip className="h-3 w-3" />
         </button>
       </header>
-      <div className="flex items-start gap-2 sm:gap-3">{children}</div>
+      <div className="flex items-start gap-1.5 sm:gap-2">{children}</div>
     </section>
   );
 }
@@ -1247,15 +1249,15 @@ export function BoardCanvas({
     >
       <div
         ref={horizontalScrollRef}
-        className="relative z-0 flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain p-2 [-webkit-overflow-scrolling:touch] sm:p-4"
+        className="relative z-0 flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain p-1.5 [-webkit-overflow-scrolling:touch] sm:p-2"
       >
-        <div className="flex w-max min-w-0 shrink-0 items-start gap-2 sm:gap-3">
+        <div className="flex w-max min-w-0 shrink-0 items-start gap-1.5 sm:gap-2">
           <SortableContext
             items={columnIds}
             strategy={horizontalListSortingStrategy}
           >
             {laneLayoutEnabled ? (
-              <div className="flex flex-col items-start gap-2 sm:gap-3">
+              <div className="flex flex-col items-start gap-1.5 sm:gap-2">
                 {laneGroups.map((lane) => (
                   <DraggableLaneSection
                     key={lane.id}
@@ -1288,7 +1290,7 @@ export function BoardCanvas({
                             disabled={dndLocked}
                           >
                             <div
-                              className="cards-container flex min-h-[40px] flex-1 flex-col gap-1.5 overflow-y-auto p-1.5 sm:min-h-[48px] sm:gap-2 sm:p-2"
+                              className="cards-container flex min-h-[36px] flex-1 flex-col gap-1.5 overflow-y-auto p-1.5 sm:min-h-[42px] sm:gap-1.5 sm:p-1.5"
                               data-column-id={col.id}
                               data-lane-id={lane.id}
                             >
@@ -1320,10 +1322,10 @@ export function BoardCanvas({
                           {!aggregateLayoutLocked ? (
                             <button
                               type="button"
-                              className="mx-1.5 mb-1.5 rounded-md px-1.5 py-1.5 text-left text-[0.72rem] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.06] sm:mx-2 sm:mb-2 sm:px-2 sm:py-2 sm:text-[0.875rem]"
+                              className="mx-1.5 mb-1.5 rounded-md px-1.5 py-1 text-left text-[0.68rem] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.06] sm:px-1.5 sm:py-1.5 sm:text-[0.75rem]"
                               onClick={() => onAddCard(col.id)}
                             >
-                              <span className="inline-flex items-center gap-1 sm:gap-2">
+                              <span className="inline-flex items-center gap-1">
                                 <IconPlus />{" "}
                                 <span className="max-md:leading-tight">Добавить карточку</span>
                               </span>
@@ -1336,7 +1338,7 @@ export function BoardCanvas({
                 ))}
               </div>
             ) : (
-              <div className="flex items-start gap-2 sm:gap-3">
+              <div className="flex items-start gap-1.5 sm:gap-2">
                 {board.columns.map((col) => {
                   const vis = visibleCardsInColumn(col, appState, resolveCardHomeBoard);
                   const cardIds = vis.map((c) => c.id);
@@ -1357,7 +1359,7 @@ export function BoardCanvas({
                         disabled={dndLocked}
                       >
                         <div
-                          className="cards-container flex min-h-[40px] flex-1 flex-col gap-1.5 overflow-y-auto p-1.5 sm:min-h-[48px] sm:gap-2 sm:p-2"
+                          className="cards-container flex min-h-[36px] flex-1 flex-col gap-1.5 overflow-y-auto p-1.5 sm:min-h-[42px] sm:gap-1.5 sm:p-1.5"
                           data-column-id={col.id}
                         >
                           {vis.map((card) => {
@@ -1388,10 +1390,10 @@ export function BoardCanvas({
                       {!aggregateLayoutLocked ? (
                         <button
                           type="button"
-                          className="mx-1.5 mb-1.5 rounded-md px-1.5 py-1.5 text-left text-[0.72rem] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.06] sm:mx-2 sm:mb-2 sm:px-2 sm:py-2 sm:text-[0.875rem]"
+                          className="mx-1.5 mb-1.5 rounded-md px-1.5 py-1 text-left text-[0.68rem] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.06] sm:px-1.5 sm:py-1.5 sm:text-[0.75rem]"
                           onClick={() => onAddCard(col.id)}
                         >
-                          <span className="inline-flex items-center gap-1 sm:gap-2">
+                          <span className="inline-flex items-center gap-1">
                             <IconPlus />{" "}
                             <span className="max-md:leading-tight">Добавить карточку</span>
                           </span>
@@ -1404,13 +1406,13 @@ export function BoardCanvas({
             )}
           </SortableContext>
           {!aggregateLayoutLocked ? (
-            <div className="flex w-[148px] shrink-0 self-start min-[420px]:w-[168px] sm:w-[200px] lg:w-[252px] xl:w-[280px]">
+            <div className={`flex ${BOARD_COLUMN_WIDTH_CLASS} shrink-0 self-start`}>
               <button
                 type="button"
-                className="w-full rounded-md border-2 border-dashed border-[var(--kanban-border)] bg-black/[0.05] px-1.5 py-2 text-left text-[0.72rem] leading-snug text-[var(--kanban-text-muted)] hover:text-[var(--kanban-text)] dark:bg-white/[0.04] sm:px-2 sm:py-2.5 sm:text-[0.875rem]"
+                className="w-full rounded-md border-2 border-dashed border-[var(--kanban-border)] bg-black/[0.05] px-1.5 py-2 text-left text-[0.72rem] leading-snug text-[var(--kanban-text-muted)] hover:text-[var(--kanban-text)] dark:bg-white/[0.04] sm:px-2 sm:py-2 sm:text-[0.75rem]"
                 onClick={onAddColumn}
               >
-                <span className="inline-flex items-center gap-1 sm:gap-2">
+                <span className="inline-flex items-center gap-1">
                   <IconPlus /> Добавить колонку
                 </span>
               </button>
@@ -1420,7 +1422,7 @@ export function BoardCanvas({
       </div>
       <DragOverlay dropAnimation={null}>
         {activeDragCard && activeDragCardHomeBoard ? (
-          <div className="w-[148px] min-[420px]:w-[168px] sm:w-[200px] lg:w-[252px] xl:w-[280px]">
+          <div className={BOARD_COLUMN_WIDTH_CLASS}>
             <KanbanCardView
               card={activeDragCard}
               homeBoard={activeDragCardHomeBoard}

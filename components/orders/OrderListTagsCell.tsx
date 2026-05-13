@@ -14,6 +14,8 @@ import {
 import { LAB_WORK_STATUS_PILL_STYLES } from "@/lib/lab-work-status";
 import { kaitenStatusDisplay } from "@/lib/kaiten-column-title";
 import {
+  LIST_TAG_FINANCE_CALCULATED,
+  LIST_TAG_FINANCE_NOT_CALCULATED,
   LIST_TAG_INVOICE,
   LIST_TAG_INVOICE_PRINTED,
   LIST_TAG_KAITEN_BLOCKED,
@@ -39,6 +41,7 @@ import {
   type QuickOrderTagSuggestion,
 } from "@/lib/order-list-quick-tag-suggestions";
 import { ordersListHref } from "@/lib/orders-list-query";
+import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import { shipmentsListHref } from "@/lib/shipments-list-query";
 import {
   isReconciliationPaymentStatus,
@@ -98,6 +101,14 @@ type Props = {
     periodFrom: string | null;
     periodTo: string | null;
   } | null;
+  /** Если задано — добавляем статус просчёта и ведём фильтры на «ФинОтдел». */
+  financeOfficeFilterContext?: {
+    tab: string;
+    periodFrom: string | null;
+    periodTo: string | null;
+    q?: string | null;
+  } | null;
+  financeCalculated?: boolean | null;
 };
 
 const padTable =
@@ -316,6 +327,8 @@ export function OrderListTagsCell({
   periodTo,
   orderAttentionWarning = false,
   shipmentsFilterContext = null,
+  financeOfficeFilterContext = null,
+  financeCalculated = null,
 }: Props) {
   const router = useRouter();
   const kaitenLabel = kaitenStatusDisplay({
@@ -563,6 +576,15 @@ export function OrderListTagsCell({
 
   const filterListHref = useCallback(
     (innerKey: string) => {
+      if (financeOfficeFilterContext) {
+        return financeOfficeListHref({
+          tab: financeOfficeFilterContext.tab,
+          tag: innerKey,
+          from: financeOfficeFilterContext.periodFrom ?? undefined,
+          to: financeOfficeFilterContext.periodTo ?? undefined,
+          q: financeOfficeFilterContext.q ?? undefined,
+        });
+      }
       if (shipmentsFilterContext) {
         return shipmentsListHref({
           tab: shipmentsFilterContext.tab,
@@ -582,6 +604,7 @@ export function OrderListTagsCell({
       );
     },
     [
+      financeOfficeFilterContext,
       shipmentsFilterContext,
       pageSize,
       hideShipped,
@@ -727,6 +750,33 @@ export function OrderListTagsCell({
         </span>
       ),
     });
+
+    if (financeOfficeFilterContext && financeCalculated != null) {
+      const financeTag = financeCalculated
+        ? LIST_TAG_FINANCE_CALCULATED
+        : LIST_TAG_FINANCE_NOT_CALCULATED;
+      items.push({
+        key: "finance-calculated",
+        slot: "large",
+        node: (
+          <Link
+            href={href(financeTag)}
+            title={
+              financeCalculated
+                ? "Показать просчитанные наряды"
+                : "Показать непросчитанные наряды"
+            }
+            className={`rounded-full border font-semibold shadow-sm outline-none focus-visible:outline-none ${
+              financeCalculated
+                ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100"
+                : "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100"
+            } ${padTable}`}
+          >
+            {financeCalculated ? "Просчитано" : "Не просчитано"}
+          </Link>
+        ),
+      });
+    }
 
     if (isUrgent) {
       items.push({
@@ -914,6 +964,8 @@ export function OrderListTagsCell({
     adminShippedOtpr,
     busy,
     customTags,
+    financeCalculated,
+    financeOfficeFilterContext,
     hasInvoiceAttachment,
     invoicePrinted,
     isUrgent,

@@ -10,6 +10,16 @@ export type CounterpartyRequisitesFields = {
   correspondentAccount?: string | null;
 };
 
+function cleanLegalFullName(value: string | null | undefined): string | null {
+  const raw = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  // Служебные пометки из источника реквизитов не являются частью наименования.
+  return raw
+    .replace(/\s+ООО\s+ЭДО\s+сверка\s*$/iu, "")
+    .replace(/\s+ООО\s+бум\.?\s*доки\s*$/iu, "")
+    .trim();
+}
+
 /** Многострочный текст для ячейки таблицы (печать и экран). */
 export function formatCounterpartyRequisitesSummary(
   c: CounterpartyRequisitesFields | null | undefined,
@@ -20,7 +30,7 @@ export function formatCounterpartyRequisitesSummary(
     const t = (v ?? "").trim();
     if (t) lines.push(`${labelRu}: ${t}`);
   };
-  add("Наименование", c.legalFullName);
+  add("Наименование", cleanLegalFullName(c.legalFullName));
   add("ИНН", c.inn);
   add("КПП", c.kpp);
   add("ОГРН", c.ogrn);

@@ -51,6 +51,10 @@ function isPaymentMarked(value: unknown): boolean {
 
 export function extractOrderNumberFromBankComment(comment: string): string {
   // JS \b не считает кириллицу словесными символами, поэтому используем явные unicode-границы.
+  // Сначала ищем новый номер наряда вида 2605-060: он часто стоит внутри длинного
+  // банковского комментария рядом с датами, суммами и номерами счетов.
+  const dashedMatch = comment.match(/(?:^|[^\p{L}\p{N}])(\d{4}\s*-\s*\d{3})(?=$|[^\p{L}\p{N}])/u);
+  if (dashedMatch?.[1]) return dashedMatch[1].replace(/\s*-\s*/g, "-");
   const match = comment.match(/(?:^|[^\p{L}\p{N}])(\d{3,8})(?=$|[^\p{L}\p{N}])/u);
   return match?.[1] ?? "";
 }
