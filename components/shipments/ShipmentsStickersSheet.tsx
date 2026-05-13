@@ -19,6 +19,14 @@ const WIDE_ASPECT = 1.32;
 /** Логотип для печати (`public/stickers/clickadmin-sticker-logo.png`). */
 const STICKER_BRAND_LOGO_SRC = "/stickers/clickadmin-sticker-logo.png";
 
+function stickerLineFitClass(value: string): string {
+  const length = value.trim().length;
+  if (length >= 34) return " sticker-line--fit-xs";
+  if (length >= 26) return " sticker-line--fit-sm";
+  if (length >= 20) return " sticker-line--fit-left";
+  return "";
+}
+
 type Props = {
   rows: StickerRow[];
   /** Ширина одной этикетки, мм */
@@ -88,12 +96,18 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         margin-bottom: 0.35mm;
       }
       .sticker-line--full { width: 100%; }
+      .sticker-line--fit-left { gap: 1.1mm; }
+      .sticker-line--fit-sm { gap: 0.7mm; }
+      .sticker-line--fit-xs { gap: 0.45mm; }
       .sticker-k {
         flex: 0 0 13.5mm;
         font-size: clamp(7pt, calc(var(--sticker-h) * 0.18), 8.6pt);
         font-weight: 700;
         color: #475569;
       }
+      .sticker-line--fit-left .sticker-k { flex-basis: 10.5mm; }
+      .sticker-line--fit-sm .sticker-k { flex-basis: 8mm; }
+      .sticker-line--fit-xs .sticker-k { flex-basis: 6.6mm; font-size: clamp(6.1pt, calc(var(--sticker-h) * 0.155), 7.2pt); }
       .sticker-v {
         flex: 1 1 0;
         min-width: 0;
@@ -104,6 +118,14 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         text-overflow: ellipsis;
         white-space: nowrap;
         letter-spacing: -0.055em;
+      }
+      .sticker-line--fit-sm .sticker-v {
+        font-size: clamp(9.6pt, calc(var(--sticker-h) * 0.27), 12.2pt);
+        letter-spacing: -0.065em;
+      }
+      .sticker-line--fit-xs .sticker-v {
+        font-size: clamp(8pt, calc(var(--sticker-h) * 0.235), 10.4pt);
+        letter-spacing: -0.075em;
       }
       .sticker-footer {
         flex: 0 0 auto;
@@ -130,16 +152,22 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         height: min(12.8mm, calc(var(--sticker-h) * 0.32));
       }
       .sticker-scan-caption {
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
+        display: flex;
+        flex-direction: row;
+        align-items: flex-end;
+        gap: 0.25mm;
         max-height: 13mm;
-        text-align: center;
         font-size: clamp(6.6pt, calc(var(--sticker-h) * 0.17), 7.8pt);
         line-height: 1;
         font-weight: 800;
         color: #334155;
         letter-spacing: -0.055em;
         white-space: nowrap;
+      }
+      .sticker-scan-word {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        text-align: center;
       }
       .sticker-footer-brand-col {
         flex: 1 1 0;
@@ -170,6 +198,9 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
     `;
     const wide = `
       .sticker-page--wide .sticker-k { flex: 0 0 14mm; }
+      .sticker-page--wide .sticker-line--fit-left .sticker-k { flex-basis: 11mm; }
+      .sticker-page--wide .sticker-line--fit-sm .sticker-k { flex-basis: 8.5mm; }
+      .sticker-page--wide .sticker-line--fit-xs .sticker-k { flex-basis: 7mm; }
     `;
     return `
       @media print {
@@ -220,7 +251,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
           >
             <div className="sticker-lines">
               <div
-                className={`sticker-line${isWide ? " sticker-line--full" : ""}`}
+                className={`sticker-line${isWide ? " sticker-line--full" : ""}${stickerLineFitClass(r.clinicLine)}`}
               >
                 <span className="sticker-k">Клиника</span>
                 <span className="sticker-v" title={r.clinicLine}>
@@ -228,7 +259,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
                 </span>
               </div>
               <div
-                className={`sticker-line${isWide ? " sticker-line--full" : ""}`}
+                className={`sticker-line${isWide ? " sticker-line--full" : ""}${stickerLineFitClass(r.doctorLine)}`}
               >
                 <span className="sticker-k">Доктор</span>
                 <span className="sticker-v" title={r.doctorLine}>
@@ -236,7 +267,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
                 </span>
               </div>
               <div
-                className={`sticker-line${isWide ? " sticker-line--full" : ""}`}
+                className={`sticker-line${isWide ? " sticker-line--full" : ""}${stickerLineFitClass(r.patientLine)}`}
               >
                 <span className="sticker-k">Пациент</span>
                 <span className="sticker-v" title={r.patientLine}>
@@ -262,7 +293,10 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
                     className="h-full w-full object-contain"
                   />
                 </div>
-                <div className="sticker-scan-caption">Отсканируй меня</div>
+                <div className="sticker-scan-caption">
+                  <span className="sticker-scan-word">Отсканируй</span>
+                  <span className="sticker-scan-word">меня</span>
+                </div>
               </div>
               <div className="sticker-footer-brand-col">
                 <div className="sticker-brand-logo-wrap">

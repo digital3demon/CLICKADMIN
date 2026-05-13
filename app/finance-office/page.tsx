@@ -27,6 +27,7 @@ import {
   moscowTomorrowYmd,
   parseYmdOrNull,
 } from "@/lib/shipments-date-range";
+import { fontDisplay } from "@/lib/app-fonts";
 
 export const dynamic = "force-dynamic";
 
@@ -192,11 +193,11 @@ export default async function FinanceOfficePage({
     </div>
   );
   const financeOfficeHeader = (
-    <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-4">
+    <section>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] xl:items-end">
         <div className="min-w-0 space-y-3">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-[var(--app-text)] lg:text-2xl">
+            <h1 className={`${fontDisplay.className} text-xl font-semibold tracking-tight text-[var(--app-text)] lg:text-2xl`}>
               ФинОтдел
             </h1>
             <p className="mt-2 max-w-4xl text-sm leading-snug text-[var(--text-secondary)]">
