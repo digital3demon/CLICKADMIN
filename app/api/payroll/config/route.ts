@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 type Body = {
   id?: unknown;
   priceListItemId?: unknown;
+  priceListItemIds?: unknown;
   kind?: unknown;
   amountRub?: unknown;
   description?: unknown;
@@ -22,6 +23,17 @@ type Body = {
 
 function trimString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function trimStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((x) => trimString(x))
+        .filter(Boolean),
+    ),
+  );
 }
 
 async function requirePayrollConfigAccess() {
@@ -126,40 +138,53 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const priceListItemId = trimString(body.priceListItemId);
+  const priceListItemIds = trimStringArray(body.priceListItemIds);
+  const fallbackPriceListItemId = trimString(body.priceListItemId);
+  const targetPriceListItemIds =
+    priceListItemIds.length > 0
+      ? priceListItemIds
+      : fallbackPriceListItemId
+        ? [fallbackPriceListItemId]
+        : [];
   const kind = parsePayrollWorkKind(body.kind);
   const amountRub = normalizePayrollAmount(body.amountRub);
   const description = trimString(body.description);
-  if (!priceListItemId || !kind || !amountRub || !description) {
+  if (targetPriceListItemIds.length === 0 || !kind || !amountRub || !description) {
     return NextResponse.json(
       { error: "Укажите позицию прайса, тип, сумму и описание" },
       { status: 400 },
     );
   }
-  const item = await access.prisma.priceListItem.findUnique({
-    where: { id: priceListItemId },
+  const items = await access.prisma.priceListItem.findMany({
+    where: { id: { in: targetPriceListItemIds } },
     select: { id: true },
   });
-  if (!item) {
-    return NextResponse.json({ error: "Позиция прайса не найдена" }, { status: 404 });
+  if (items.length !== targetPriceListItemIds.length) {
+    return NextResponse.json({ error: "Одна или несколько позиций прайса не найдены" }, { status: 404 });
   }
 
   const maxSort = await access.prisma.payrollPriceItemConfig.aggregate({
     where: { tenantId: access.tenantId },
     _max: { sortOrder: true },
   });
-  const config = await access.prisma.payrollPriceItemConfig.create({
-    data: {
-      tenantId: access.tenantId,
-      priceListItemId,
-      kind,
-      amountRub,
-      description,
-      sortOrder: (maxSort._max.sortOrder ?? 0) + 10,
-    },
-    select: configSelect,
-  });
-  return NextResponse.json({ ok: true, config: configPayload(config) });
+  const baseSort = maxSort._max.sortOrder ?? 0;
+  const configs = await access.prisma.$transaction(
+    targetPriceListItemIds.map((priceListItemId, index) =>
+      access.prisma.payrollPriceItemConfig.create({
+        data: {
+          tenantId: access.tenantId,
+          priceListItemId,
+          kind,
+          amountRub,
+          description,
+          sortOrder: baseSort + (index + 1) * 10,
+        },
+        select: configSelect,
+      }),
+    ),
+  );
+  const payload = configs.map(configPayload);
+  return NextResponse.json({ ok: true, config: payload[0] ?? null, configs: payload });
 }
 
 export async function PATCH(req: Request) {

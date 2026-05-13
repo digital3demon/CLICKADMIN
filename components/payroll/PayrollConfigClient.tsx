@@ -26,14 +26,14 @@ type ConfigRow = {
 
 type Draft = {
   id?: string;
-  priceListItemId: string;
+  priceListItemIds: string[];
   kind: PayrollWorkKindValue;
   amountRub: string;
   description: string;
 };
 
 const emptyDraft: Draft = {
-  priceListItemId: "",
+  priceListItemIds: [],
   kind: "CAD",
   amountRub: "",
   description: "",
@@ -42,7 +42,7 @@ const emptyDraft: Draft = {
 function draftFromRow(row: ConfigRow): Draft {
   return {
     id: row.id,
-    priceListItemId: row.priceListItemId,
+    priceListItemIds: [row.priceListItemId],
     kind: row.kind,
     amountRub: String(row.amountRub),
     description: row.description,
@@ -127,18 +127,23 @@ export function PayrollConfigClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: draft.id,
-          priceListItemId: draft.priceListItemId,
+          priceListItemId: draft.id ? draft.priceListItemIds[0] ?? "" : undefined,
+          priceListItemIds: draft.id ? undefined : draft.priceListItemIds,
           kind: draft.kind,
           amountRub,
           description: draft.description.trim(),
         }),
       });
-      const data = (await res.json()) as { config?: ConfigRow; error?: string };
-      if (!res.ok || !data.config) throw new Error(data.error || "Не удалось сохранить");
-      const next = normalizeConfig(data.config);
-      setRows((prev) => (draft.id ? prev.map((r) => (r.id === next.id ? next : r)) : [next, ...prev]));
+      const data = (await res.json()) as { config?: ConfigRow; configs?: ConfigRow[]; error?: string };
+      const created = (Array.isArray(data.configs) ? data.configs : data.config ? [data.config] : []).map(normalizeConfig);
+      if (!res.ok || created.length === 0) throw new Error(data.error || "Не удалось сохранить");
+      setRows((prev) =>
+        draft.id
+          ? prev.map((r) => (r.id === created[0].id ? created[0] : r))
+          : [...created, ...prev],
+      );
       setDraft(null);
-      setOkId(next.id);
+      setOkId(created[0].id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
     } finally {
@@ -186,7 +191,7 @@ export function PayrollConfigClient() {
         />
         <button
           type="button"
-          onClick={() => setDraft({ ...emptyDraft, priceListItemId: priceItems[0]?.id ?? "" })}
+          onClick={() => setDraft({ ...emptyDraft, priceListItemIds: priceItems[0]?.id ? [priceItems[0].id] : [] })}
           className="rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           Добавить
@@ -208,17 +213,37 @@ export function PayrollConfigClient() {
             {draft.id ? "Редактировать строку ФОТ" : "Новая строка ФОТ"}
           </div>
           <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_150px_120px_minmax(220px,1fr)_auto]">
-            <select
-              value={draft.priceListItemId}
-              onChange={(e) => setDraft((prev) => (prev ? { ...prev, priceListItemId: e.target.value } : prev))}
-              className={inputCls}
-            >
-              {priceItems.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {itemLabel(item)}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-0">
+              <select
+                multiple={!draft.id}
+                size={draft.id ? undefined : 6}
+                value={draft.id ? draft.priceListItemIds[0] ?? "" : draft.priceListItemIds}
+                onChange={(e) =>
+                  setDraft((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          priceListItemIds: draft.id
+                            ? [e.target.value]
+                            : Array.from(e.target.selectedOptions, (option) => option.value),
+                        }
+                      : prev,
+                  )
+                }
+                className={`${inputCls} w-full`}
+              >
+                {priceItems.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {itemLabel(item)}
+                  </option>
+                ))}
+              </select>
+              {!draft.id ? (
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  Можно выбрать несколько позиций: Ctrl/Shift + клик.
+                </p>
+              ) : null}
+            </div>
             <select
               value={draft.kind}
               onChange={(e) =>

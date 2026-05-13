@@ -27,6 +27,7 @@ describe("payroll helpers", () => {
   it("parses only supported work kinds", () => {
     expect(parsePayrollWorkKind("CAD")).toBe("CAD");
     expect(parsePayrollWorkKind("CAD_SURGERY")).toBe("CAD_SURGERY");
+    expect(parsePayrollWorkKind("UNCATEGORIZED")).toBe("UNCATEGORIZED");
     expect(parsePayrollWorkKind("cad")).toBeNull();
     expect(parsePayrollWorkKind("OTHER")).toBeNull();
   });

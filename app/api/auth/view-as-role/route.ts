@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     return res;
   }
 
-  const role = roleRaw === "NO_CATEGORY" ? "USER" : parseViewAsRole(roleRaw);
+  const role = parseViewAsRole(roleRaw);
   if (!role) {
     return NextResponse.json({ error: "Некорректная роль" }, { status: 400 });
   }

@@ -5,6 +5,7 @@ export const PAYROLL_WORK_KIND_VALUES = [
   "CAD_SURGERY",
   "MANUAL",
   "PROCESSING",
+  "UNCATEGORIZED",
 ] as const satisfies readonly PayrollWorkKind[];
 
 export type PayrollWorkKindValue = (typeof PAYROLL_WORK_KIND_VALUES)[number];
@@ -14,6 +15,7 @@ export const PAYROLL_WORK_KIND_LABELS: Record<PayrollWorkKindValue, string> = {
   CAD_SURGERY: "CAD Хирургия",
   MANUAL: "Мануал",
   PROCESSING: "Обработка",
+  UNCATEGORIZED: "Без категории",
 };
 
 export function isPayrollUserRole(role: UserRole | null | undefined): boolean {

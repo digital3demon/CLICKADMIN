@@ -5,27 +5,20 @@ import { useState, useTransition } from "react";
 import type { UserRole } from "@prisma/client";
 import { INVITABLE_ROLES, USER_ROLE_LABELS } from "@/lib/user-role-labels";
 
-type ViewAsRoleOptionValue = UserRole | "NO_CATEGORY";
-
-const VIEW_AS_ROLE_OPTIONS: Array<{ value: ViewAsRoleOptionValue; label: string }> = [
-  ...INVITABLE_ROLES.map((role) => ({ value: role, label: USER_ROLE_LABELS[role] })),
-  { value: "NO_CATEGORY", label: "Без категории" },
-];
-
 type Props = {
   currentRole: UserRole;
 };
 
 export function OwnerViewAsRoleControl({ currentRole }: Props) {
   const router = useRouter();
-  const [selectedRole, setSelectedRole] = useState<ViewAsRoleOptionValue>(
+  const [selectedRole, setSelectedRole] = useState<UserRole>(
     currentRole === "OWNER" ? "ADMINISTRATOR" : currentRole,
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const isViewAsActive = currentRole !== "OWNER";
 
-  const applyRole = (role: ViewAsRoleOptionValue) => {
+  const applyRole = (role: UserRole) => {
     setError(null);
     startTransition(async () => {
       const res = await fetch("/api/auth/view-as-role", {
@@ -55,12 +48,12 @@ export function OwnerViewAsRoleControl({ currentRole }: Props) {
         <select
           value={selectedRole}
           disabled={isPending}
-          onChange={(event) => setSelectedRole(event.target.value as ViewAsRoleOptionValue)}
+          onChange={(event) => setSelectedRole(event.target.value as UserRole)}
           className="min-w-0 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none sm:min-w-[15rem]"
         >
-          {VIEW_AS_ROLE_OPTIONS.map((role) => (
-            <option key={`${role.value}:${role.label}`} value={role.value}>
-              {role.label}
+          {INVITABLE_ROLES.map((role) => (
+            <option key={role} value={role}>
+              {USER_ROLE_LABELS[role]}
             </option>
           ))}
         </select>

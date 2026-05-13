@@ -607,6 +607,7 @@ enum PayrollWorkKind {
   CAD_SURGERY
   MANUAL
   PROCESSING
+  UNCATEGORIZED
 }
 
 /// Пользователь: владелец и сотрудники — вход по паролю; до активации хранится inviteCodeHash
