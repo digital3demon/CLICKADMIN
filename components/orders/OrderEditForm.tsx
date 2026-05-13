@@ -3321,10 +3321,10 @@ export function OrderEditForm({
               {oeMidConstructions}
             </div>
             <div className="min-w-0 xl:col-span-6 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-              {oeMidCorrections}
+              {oeMidProsthetics}
             </div>
             <div className="min-w-0 xl:col-span-6 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-              {oeMidProsthetics}
+              {oeMidCorrections}
             </div>
           </div>
         </>

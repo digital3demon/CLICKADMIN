@@ -27,6 +27,46 @@ type PayrollEntry = {
   priceName: string;
 };
 
+let payrollOptionsCache: PayrollOption[] | null = null;
+let payrollOptionsInflight: Promise<PayrollOption[]> | null = null;
+let payrollNextLoadAllowedAt = 0;
+
+function retryAfterMs(value: string | null): number {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  const dateMs = Date.parse(value);
+  return Number.isFinite(dateMs) ? Math.max(0, dateMs - Date.now()) : 0;
+}
+
+async function readJson<T>(res: Response): Promise<T> {
+  return (await res.json().catch(() => ({}))) as T;
+}
+
+async function loadPayrollOptions(): Promise<PayrollOption[]> {
+  if (payrollOptionsCache) return payrollOptionsCache;
+  if (payrollOptionsInflight) return payrollOptionsInflight;
+  payrollOptionsInflight = (async () => {
+    const res = await fetch("/api/payroll/options", { cache: "no-store" });
+    const json = await readJson<{ items?: PayrollOption[]; error?: string }>(res);
+    if (!res.ok) {
+      const err = new Error(json.error || "Не удалось загрузить ФОТ");
+      (err as Error & { status?: number; retryAfterMs?: number }).status = res.status;
+      (err as Error & { status?: number; retryAfterMs?: number }).retryAfterMs = retryAfterMs(
+        res.headers.get("Retry-After"),
+      );
+      throw err;
+    }
+    payrollOptionsCache = Array.isArray(json.items) ? json.items : [];
+    return payrollOptionsCache;
+  })();
+  try {
+    return await payrollOptionsInflight;
+  } finally {
+    payrollOptionsInflight = null;
+  }
+}
+
 function rub(value: number): string {
   return new Intl.NumberFormat("ru-RU", {
     style: "currency",
@@ -64,6 +104,7 @@ export function PayrollDonePanel({
   const [busyKind, setBusyKind] = useState<PayrollKind | null>(null);
   const [busyEntryId, setBusyEntryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const isSenior = sessionRole === "SENIOR_TECHNICIAN" || sessionRole === "OWNER";
   const selected = useMemo(
@@ -73,20 +114,30 @@ export function PayrollDonePanel({
 
   const load = useCallback(async () => {
     if (!orderId) return;
+    if (Date.now() < payrollNextLoadAllowedAt) {
+      setError(null);
+      setNotice("Сервер временно ограничил обновление ФОТ, попробуем чуть позже.");
+      return;
+    }
     setLoading(true);
     setError(null);
+    setNotice(null);
     try {
-      const [optRes, entRes] = await Promise.all([
-        fetch("/api/payroll/options", { cache: "no-store" }),
+      const [nextOptions, entRes] = await Promise.all([
+        loadPayrollOptions(),
         fetch(`/api/payroll/entries?orderId=${encodeURIComponent(orderId)}`, {
           cache: "no-store",
         }),
       ]);
-      const optJson = (await optRes.json()) as { items?: PayrollOption[]; error?: string };
-      const entJson = (await entRes.json()) as { entries?: PayrollEntry[]; error?: string };
-      if (!optRes.ok) throw new Error(optJson.error || "Не удалось загрузить ФОТ");
-      if (!entRes.ok) throw new Error(entJson.error || "Не удалось загрузить начисления");
-      const nextOptions = Array.isArray(optJson.items) ? optJson.items : [];
+      const entJson = await readJson<{ entries?: PayrollEntry[]; error?: string }>(entRes);
+      if (!entRes.ok) {
+        const err = new Error(entJson.error || "Не удалось загрузить начисления");
+        (err as Error & { status?: number; retryAfterMs?: number }).status = entRes.status;
+        (err as Error & { status?: number; retryAfterMs?: number }).retryAfterMs = retryAfterMs(
+          entRes.headers.get("Retry-After"),
+        );
+        throw err;
+      }
       const nextEntries = Array.isArray(entJson.entries) ? entJson.entries : [];
       setOptions(nextOptions);
       setEntries(nextEntries);
@@ -99,6 +150,15 @@ export function PayrollDonePanel({
           : (nextOptions[0]?.priceListItemId ?? ""),
       );
     } catch (e) {
+      const status = (e as Error & { status?: number; retryAfterMs?: number })?.status;
+      if (status === 429) {
+        const retryMs =
+          (e as Error & { retryAfterMs?: number }).retryAfterMs ?? 0;
+        payrollNextLoadAllowedAt = Date.now() + Math.max(30_000, retryMs);
+        setError(null);
+        setNotice("Сервер временно ограничил обновление ФОТ, попробуем чуть позже.");
+        return;
+      }
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
     } finally {
       setLoading(false);
@@ -239,6 +299,11 @@ export function PayrollDonePanel({
               })}
             </div>
           </>
+        ) : null}
+        {notice ? (
+          <p className="mt-2 text-[0.72rem] font-medium text-[var(--kaiten-modal-muted)]">
+            {notice}
+          </p>
         ) : null}
         {error ? (
           <p className="mt-2 text-[0.72rem] font-medium text-red-300">{error}</p>

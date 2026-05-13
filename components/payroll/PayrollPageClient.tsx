@@ -112,7 +112,7 @@ export function PayrollPageClient({
   }, [tab, users, selectedUserId]);
 
   return (
-    <div className="space-y-4">
+    <div className="w-full max-w-6xl space-y-4">
       {isSenior ? (
         <div className="flex flex-wrap gap-2">
           {[

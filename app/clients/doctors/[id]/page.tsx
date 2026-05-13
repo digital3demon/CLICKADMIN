@@ -24,7 +24,7 @@ import {
 } from "@/lib/lab-work-status";
 import { getPrisma } from "@/lib/get-prisma";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
-import { orderPathById } from "@/lib/order-public-ref";
+import { ClientOrderPreviewButton } from "@/components/clients/ClientOrderPreviewButton";
 const ORDERS_PREVIEW = 100;
 
 function firstSearchParam(
@@ -557,13 +557,11 @@ export default async function DoctorCardPage({
                         key={o.id}
                         className="border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--table-row-hover)]"
                       >
-                        <td className="px-3 py-2.5 font-mono font-medium text-[var(--app-text)]">
-                          <Link
-                            href={orderPathById(o.id)}
-                            className="text-[var(--sidebar-blue)] hover:underline"
-                          >
-                            {o.orderNumber}
-                          </Link>
+                        <td className="px-3 py-2.5">
+                          <ClientOrderPreviewButton
+                            orderId={o.id}
+                            orderNumber={o.orderNumber}
+                          />
                         </td>
                         <td className="max-w-[200px] truncate px-3 py-2.5 text-[var(--text-strong)]">
                           {o.clinic ? (

@@ -26,7 +26,7 @@ export type OrderEditLayoutV1 = {
   v: 1;
   row1: OrderEditRowBlock[];
   row2: OrderEditRowBlock[];
-  /** Средний ряд под составом: по умолчанию только «Протетика» на 6 кол. */
+  /** Средний ряд под составом/протетикой: по умолчанию только «Корректировки» на 6 кол. */
   row3: OrderEditRowBlock[];
   /** Нижний ряд (вкладки «Документооборот» и т.д.) — по умолчанию на всю ширину. */
   row4: OrderEditRowBlock[];
@@ -58,14 +58,14 @@ export function orderEditLayoutAccountantDocumentsFirst(): OrderEditLayoutV1 {
     ],
     row3: [
       { id: "midConstructions", span: 6 },
-      { id: "midCorrections", span: 6 },
+      { id: "midProsthetics", span: 6 },
     ],
-    row4: [{ id: "midProsthetics", span: 12 }],
+    row4: [{ id: "midCorrections", span: 12 }],
     blockColors: {},
   };
 }
 
-/** Средний ряд: состав 6 + корректировки 6; протетика под составом (6 кол.); низ на всю ширину. */
+/** Средний ряд: состав 6 + протетика 6; корректировки ниже (6 кол.); низ на всю ширину. */
 export function defaultOrderEditLayout(): OrderEditLayoutV1 {
   return {
     v: 1,
@@ -77,9 +77,9 @@ export function defaultOrderEditLayout(): OrderEditLayoutV1 {
     ],
     row2: [
       { id: "midConstructions", span: 6 },
-      { id: "midCorrections", span: 6 },
+      { id: "midProsthetics", span: 6 },
     ],
-    row3: [{ id: "midProsthetics", span: 6 }],
+    row3: [{ id: "midCorrections", span: 6 }],
     row4: [{ id: "bottomSecondary", span: 12 }],
     blockColors: {},
   };
@@ -118,23 +118,27 @@ function rowSpanSum(row: OrderEditRowBlock[]): number {
   return row.reduce((s, b) => s + b.span, 0);
 }
 
-/** Ряд только с «Протетика» на половину сетки (под «Состав заказа»). */
-function isProstheticsHalfRow(row: OrderEditRowBlock[]): boolean {
+/** Одиночный полуряд для вспомогательного блока под «Состав заказа» / «Протетика». */
+function isSingleHalfRow(row: OrderEditRowBlock[]): boolean {
   return (
     row.length === 1 &&
-    row[0]!.id === "midProsthetics" &&
+    (row[0]!.id === "midProsthetics" || row[0]!.id === "midCorrections") &&
     row[0]!.span === 6 &&
     rowSpanSum(row) === 6
   );
 }
 
 function row3IsValid(row: OrderEditRowBlock[]): boolean {
-  return rowSpanSum(row) === 12 || isProstheticsHalfRow(row);
+  return rowSpanSum(row) === 12 || isSingleHalfRow(row);
 }
 
-/** После rebalanceRow одна «Протетика» получала бы span 12 — возвращаем половину сетки. */
-function fixMonoProstheticsRow3(next: OrderEditLayoutV1): void {
-  if (next.row3.length === 1 && next.row3[0]!.id === "midProsthetics") {
+/** После rebalanceRow одиночный нижний блок получал бы span 12 — возвращаем половину сетки. */
+function fixMonoHalfRow3(next: OrderEditLayoutV1): void {
+  if (
+    next.row3.length === 1 &&
+    (next.row3[0]!.id === "midProsthetics" ||
+      next.row3[0]!.id === "midCorrections")
+  ) {
     next.row3[0] = { ...next.row3[0]!, span: 6 };
   }
 }
@@ -216,7 +220,7 @@ export function rebalanceRow(row: OrderEditRowBlock[]): OrderEditRowBlock[] {
 
 /**
  * Старый JSON (3 ряда): row2 = состав + корр. + протетика, row3 = низ.
- * Новый формат: row2 = состав + корр.; row3 = протетика (6); row4 = низ.
+ * Новый формат: row2 = состав + протетика; row3 = корректировки (6); row4 = низ.
  */
 function migrateLegacyThreeRowLayout(
   r1: OrderEditRowBlock[],
@@ -226,14 +230,41 @@ function migrateLegacyThreeRowLayout(
   if (rowSpanSum(r1) !== 12) return null;
   if (rowSpanSum(r3) !== 12 || r3.length !== 1 || r3[0]!.id !== "bottomSecondary")
     return null;
+  const cons = r2.find((b) => b.id === "midConstructions");
   const pro = r2.find((b) => b.id === "midProsthetics");
-  const rest = r2.filter((b) => b.id !== "midProsthetics");
-  if (!pro || rest.length < 1 || rowSpanSum(r2) !== 12) return null;
-  const row2 = rebalanceRow(rest);
+  const cor = r2.find((b) => b.id === "midCorrections");
+  if (!cons || !pro || !cor || rowSpanSum(r2) !== 12) return null;
   return {
-    row2,
-    row3: [{ id: "midProsthetics", span: 6 }],
+    row2: [
+      { id: "midConstructions", span: 6 },
+      { id: "midProsthetics", span: 6 },
+    ],
+    row3: [{ id: "midCorrections", span: 6 }],
     row4: [{ ...r3[0]! }],
+  };
+}
+
+/** Миграция прежней дефолтной раскладки: вниз уходит «Корректировки», не прайс/протетика. */
+function migrateCorrectionsBelowPriceAndProsthetics(
+  layout: OrderEditLayoutV1,
+): OrderEditLayoutV1 {
+  const isOldDefault =
+    layout.row2.length === 2 &&
+    layout.row2[0]?.id === "midConstructions" &&
+    layout.row2[0]?.span === 6 &&
+    layout.row2[1]?.id === "midCorrections" &&
+    layout.row2[1]?.span === 6 &&
+    layout.row3.length === 1 &&
+    layout.row3[0]?.id === "midProsthetics" &&
+    layout.row3[0]?.span === 6;
+  if (!isOldDefault) return layout;
+  return {
+    ...layout,
+    row2: [
+      { id: "midConstructions", span: 6 },
+      { id: "midProsthetics", span: 6 },
+    ],
+    row3: [{ id: "midCorrections", span: 6 }],
   };
 }
 
@@ -281,7 +312,14 @@ export function normalizeLayout(input: unknown): OrderEditLayoutV1 {
       }
     }
   }
-  return { v: 1, row1: r1, row2: r2, row3: r3, row4: r4, blockColors };
+  return migrateCorrectionsBelowPriceAndProsthetics({
+    v: 1,
+    row1: r1,
+    row2: r2,
+    row3: r3,
+    row4: r4,
+    blockColors,
+  });
 }
 
 export function storageKeyForUser(userId: string | null): string {
@@ -341,7 +379,7 @@ export function reorderWithinRow(
     else row.splice(to, 0, item);
   }
   next[rowKey] = rebalanceRow(row);
-  fixMonoProstheticsRow3(next);
+  fixMonoHalfRow3(next);
   return next;
 }
 
@@ -356,7 +394,7 @@ export function moveBlockToRow(
   if (
     fromRow === "row3" &&
     layout.row3.length === 1 &&
-    draggedId === "midProsthetics"
+    (draggedId === "midProsthetics" || draggedId === "midCorrections")
   ) {
     return layout;
   }
@@ -393,7 +431,7 @@ export function moveBlockToRow(
   }
   next[fromRow] = rebalanceRow(src);
   next[toRow] = rebalanceRow(dst);
-  fixMonoProstheticsRow3(next);
+  fixMonoHalfRow3(next);
   return next;
 }
 
@@ -429,7 +467,7 @@ export function resizeBetweenBlocks(
   if (newLeft + newRight !== left.span + right.span) return layout;
   row[i] = { ...left, span: newLeft };
   row[i + 1] = { ...right, span: newRight };
-  fixMonoProstheticsRow3(next);
+  fixMonoHalfRow3(next);
   return next;
 }
 

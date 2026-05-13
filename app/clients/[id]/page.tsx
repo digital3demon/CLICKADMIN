@@ -6,6 +6,7 @@ import { ClinicCommercialTermsPanel } from "@/components/clients/ClinicCommercia
 import { ClinicOverviewEditCard } from "@/components/clients/ClinicOverviewEditCard";
 import { ClinicPriceOverridesPanel } from "@/components/clients/ClinicPriceOverridesPanel";
 import { ClientCardTabs } from "@/components/clients/ClientCardTabs";
+import { ClientOrderPreviewButton } from "@/components/clients/ClientOrderPreviewButton";
 import { ContractorDeletedNotice } from "@/components/clients/ContractorDeletedNotice";
 import { FinancePanel } from "@/components/clients/FinancePanel";
 import { RequisitesPanel } from "@/components/clients/RequisitesPanel";
@@ -413,8 +414,11 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
                         key={o.id}
                         className="border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--table-row-hover)]"
                       >
-                        <td className="px-3 py-2.5 font-mono font-medium text-[var(--app-text)]">
-                          {o.orderNumber}
+                        <td className="px-3 py-2.5">
+                          <ClientOrderPreviewButton
+                            orderId={o.id}
+                            orderNumber={o.orderNumber}
+                          />
                         </td>
                         <td className="max-w-[180px] truncate px-3 py-2.5 text-[var(--text-strong)]">
                           {o.doctor.fullName}
