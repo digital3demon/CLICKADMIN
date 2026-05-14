@@ -76,7 +76,13 @@ function roundedQrDataUrl(text: string): string {
 export default async function ShipmentsStickersPrintPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; from?: string; to?: string; tag?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    from?: string;
+    to?: string;
+    tag?: string;
+    orderId?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const session = await getSessionFromCookies();

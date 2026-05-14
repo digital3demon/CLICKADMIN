@@ -13,6 +13,7 @@ import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { PrismaDataLoadErrorCallout } from "@/components/layout/PrismaDataLoadErrorCallout";
 import { clinicReconciliationListCell } from "@/lib/clinic-reconciliation-display";
 import { clinicTurnoverTotalsByIds } from "@/lib/clinic-finance";
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 import { displayOrDash, formatBirthdayRu } from "@/lib/format-display";
 import {
   buildClientsListUrl,
@@ -314,6 +315,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                   </tr>
                 ) : (
                   pageClinics.map((c) => {
+                    const legalFullName = cleanLegalFullName(c.legalFullName);
                     const recon = clinicReconciliationListCell(
                       c.worksWithReconciliation,
                       c.reconciliationFrequency,
@@ -343,9 +345,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                       <td className="max-w-[min(22rem,32vw)] min-w-0 px-3 py-2.5 text-[var(--text-body)]">
                         <span
                           className="line-clamp-2 whitespace-pre-line break-words"
-                          title={c.legalFullName?.trim() || undefined}
+                          title={legalFullName || undefined}
                         >
-                          {displayOrDash(c.legalFullName)}
+                          {displayOrDash(legalFullName)}
                         </span>
                       </td>
                       <td className="max-w-[240px] px-3 py-2.5 text-[var(--text-body)]">

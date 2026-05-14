@@ -26,6 +26,7 @@ import {
   normalizeLegacyLabWorkStatus,
   type LabWorkStatus,
 } from "@/lib/lab-work-status";
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 
 const ORDERS_PREVIEW = 100;
 
@@ -81,7 +82,12 @@ function requisitesInitialFromClinic(clinic: {
   const rest = {} as Record<ClinicRequisiteKey, string>;
   for (const { key } of CLINIC_REQUISITE_ROWS) {
     const v = clinic[key];
-    rest[key] = v != null ? String(v) : "";
+    rest[key] =
+      key === "legalFullName"
+        ? (cleanLegalFullName(String(v ?? "")) ?? "")
+        : v != null
+          ? String(v)
+          : "";
   }
   return { ...base, ...rest };
 }

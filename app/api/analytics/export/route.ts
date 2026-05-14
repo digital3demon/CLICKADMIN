@@ -66,6 +66,15 @@ export async function GET(req: Request) {
       data.totals.reworkRevenue,
     ]);
     ws.addRow([]);
+    ws.addRow(["Частники"]);
+    ws.addRow(["Частники, выручка ₽", data.privateClients.revenue]);
+    ws.addRow([
+      "Частники, фактическая выручка ₽ (только оплаченные)",
+      data.privateClients.actualRevenue,
+    ]);
+    ws.addRow(["Частники, заказов", data.privateClients.orders]);
+    ws.addRow(["Частники, средний чек ₽", data.privateClients.avgCheck]);
+    ws.addRow([]);
     if (data.correctionDetail) {
       ws.addRow(["Коррекции: по направлению"]);
       ws.addRow(["Тип", "Нарядов", "Выручка, ₽"]);

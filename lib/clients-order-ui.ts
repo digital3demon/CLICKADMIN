@@ -1,4 +1,5 @@
 import type { BillingLegalForm } from "@prisma/client";
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 
 /** Значение поля «Клиника» в наряде: заказ без привязки к клинике (частная практика). */
 export const ORDER_CLINIC_PRIVATE = "__private__";
@@ -61,7 +62,7 @@ export function clinicComboboxSearchPrefixes(clinic: {
   const parts: string[] = [];
   const ad = clinic.address?.trim();
   if (ad) parts.push(ad);
-  const lf = clinic.legalFullName?.trim();
+  const lf = cleanLegalFullName(clinic.legalFullName);
   if (lf) parts.push(lf);
   const f = clinic.billingLegalForm;
   if (f === "OOO") {

@@ -64,6 +64,7 @@ const fs = require("fs");
 const ExcelJS = require("exceljs");
 const { PrismaClient } = require("@prisma/client");
 const { refineClinicNameAndAddress } = require("./clinic-cleanup-utils.cjs");
+const { extractDocumentWorkflowMarkers } = require("./document-workflow-markers.cjs");
 
 function loadEnvFallback() {
   if (process.env.DATABASE_URL) return;
@@ -542,6 +543,14 @@ function cell(row, idx) {
   return String(v).trim();
 }
 
+function appendUniqueNote(existing, note) {
+  const prev = String(existing ?? "").trim();
+  const next = String(note ?? "").trim();
+  if (!next) return prev;
+  if (prev.toLowerCase().includes(next.toLowerCase())) return prev;
+  return [prev, next].filter(Boolean).join("\n\n");
+}
+
 /** Первая колонка, у которой нормализованный заголовок совпадает с эталоном (важно при дублях «Подписан»). */
 function colIndexNormEqualsInRow(headerRow, canonical) {
   const target = normHeader(canonical);
@@ -828,6 +837,7 @@ async function main() {
       ЭДО: iEdo !== undefined,
       Сверка: iSverka !== undefined,
       Подписан: iPodpisanDogovor !== undefined,
+      "Полное наименование": iLegalFull !== undefined,
       "Не активна": iInactive !== undefined,
       "Активен/Активна": iAktiven !== undefined,
       "Работаем от юр.лица": iWorkingEntity !== undefined,
@@ -837,6 +847,7 @@ async function main() {
       iEdo === undefined &&
       iSverka === undefined &&
       iPodpisanDogovor === undefined &&
+      iLegalFull === undefined &&
       iInactive === undefined &&
       iAktiven === undefined &&
       iWorkingEntity === undefined
@@ -922,6 +933,31 @@ async function main() {
             clinicName.slice(0, 100),
           );
           continue;
+        }
+
+        const legalSyncRaw =
+          iLegalFull !== undefined ? cell(row, iLegalFull) : "";
+        if (legalSyncRaw) {
+          const legalSync = extractDocumentWorkflowMarkers(
+            extractTaxIdsFromLegalBlob(legalSyncRaw).cleaned,
+          );
+          const hasLegalSyncMarker =
+            legalSync.worksWithEdo ||
+            legalSync.worksWithReconciliation ||
+            legalSync.usesPaperDocs;
+          if (hasLegalSyncMarker && legalSync.cleanLegalFullName) {
+            data.legalFullName = legalSync.cleanLegalFullName;
+          }
+          if (bEdo === null && legalSync.worksWithEdo) data.worksWithEdo = true;
+          if (bSverka === null && legalSync.worksWithReconciliation) {
+            data.worksWithReconciliation = true;
+          }
+          if (legalSync.usesPaperDocs) {
+            data.notes = appendUniqueNote(
+              rowClinic.notes,
+              "Документооборот: бумажные документы",
+            );
+          }
         }
 
         const billingForContract =
@@ -1018,7 +1054,8 @@ async function main() {
           }
         }
       }
-      const legalFullName = taxFromLegal.cleaned || "";
+      const legalWorkflow = extractDocumentWorkflowMarkers(taxFromLegal.cleaned);
+      const legalFullName = legalWorkflow.cleanLegalFullName || "";
 
       const noteParts = [];
       for (const ne of refined.notesExtra) {
@@ -1032,6 +1069,9 @@ async function main() {
       const workEnt =
         iWorkingEntity !== undefined ? cell(row, iWorkingEntity) : "";
       if (workEnt) noteParts.push(`Работаем от юр. лица: ${workEnt}`);
+      if (legalWorkflow.usesPaperDocs) {
+        noteParts.push("Документооборот: бумажные документы");
+      }
       const cMail =
         iContractMail !== undefined ? cell(row, iContractMail) : "";
       if (cMail) noteParts.push(`E-mail для договора/прайса: ${cMail}`);
@@ -1059,6 +1099,12 @@ async function main() {
       if (bSverka !== null) patch.worksWithReconciliation = bSverka;
       if (bPodp !== null) patch.contractSigned = bPodp;
       if (bEdo !== null) patch.worksWithEdo = bEdo;
+      if (bSverka === null && legalWorkflow.worksWithReconciliation) {
+        patch.worksWithReconciliation = true;
+      }
+      if (bEdo === null && legalWorkflow.worksWithEdo) {
+        patch.worksWithEdo = true;
+      }
 
       if (legalFullName.trim()) patch.legalFullName = legalFullName.trim();
       if (emailInv) patch.email = emailInv;

@@ -4,6 +4,7 @@ import {
   getPricingPrisma,
 } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { escapeHtml } from "@/lib/html-escape";
 import {
@@ -139,9 +140,10 @@ export async function GET(_req: Request, ctx: Ctx) {
       })
       .join("\n");
 
+    const clinicLegalFullName = cleanLegalFullName(clinic?.legalFullName);
     const clinicBlock = clinic
       ? `<p><strong>Заказчик:</strong> ${escapeHtml(clinic.name)}</p>
-         ${clinic.legalFullName ? `<p>${escapeHtml(clinic.legalFullName)}</p>` : ""}
+         ${clinicLegalFullName ? `<p>${escapeHtml(clinicLegalFullName)}</p>` : ""}
          ${clinic.inn ? `<p>ИНН ${escapeHtml(clinic.inn)}</p>` : ""}`
       : `<p><strong>Заказчик:</strong> частная практика (без клиники)</p>`;
 

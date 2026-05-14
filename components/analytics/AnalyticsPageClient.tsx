@@ -76,6 +76,12 @@ export function AnalyticsPageClient() {
       reworkOrders: number;
       reworkRevenue: number;
     };
+    privateClients: {
+      revenue: number;
+      actualRevenue: number;
+      orders: number;
+      avgCheck: number;
+    };
     series: { date: string; revenue: number; actualRevenue: number; orders: number }[];
     reworkTopItems: {
       code: string;
@@ -528,6 +534,52 @@ export function AnalyticsPageClient() {
               <p className="mt-0.5 text-[9px] leading-tight text-[var(--text-muted)]">
                 по строкам «КП» в составе
               </p>
+            </div>
+          </div>
+          <div className="rounded-lg border border-sky-300/60 bg-sky-50/70 p-3 dark:border-sky-800/60 dark:bg-sky-950/25">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                  Частники
+                </p>
+                <p className="mt-1 text-xs text-sky-900/75 dark:text-sky-100/75">
+                  Наряды без клиники: доктор заказывает как частное лицо.
+                </p>
+              </div>
+              <div className="grid min-w-[min(100%,34rem)] flex-1 gap-3 sm:grid-cols-4">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-sky-900/60 dark:text-sky-100/60">
+                    Выручка
+                  </p>
+                  <p className="mt-1 font-semibold tabular-nums text-sky-950 dark:text-sky-50">
+                    {moneyRub(finance.privateClients.revenue)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-sky-900/60 dark:text-sky-100/60">
+                    Факт
+                  </p>
+                  <p className="mt-1 font-semibold tabular-nums text-sky-950 dark:text-sky-50">
+                    {moneyRub(finance.privateClients.actualRevenue)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-sky-900/60 dark:text-sky-100/60">
+                    Заказов
+                  </p>
+                  <p className="mt-1 font-semibold tabular-nums text-sky-950 dark:text-sky-50">
+                    {finance.privateClients.orders}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-sky-900/60 dark:text-sky-100/60">
+                    Средний чек
+                  </p>
+                  <p className="mt-1 font-semibold tabular-nums text-sky-950 dark:text-sky-50">
+                    {moneyRub(finance.privateClients.avgCheck)}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
           {finance.correctionDetail ? (

@@ -5,6 +5,7 @@ import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
+import { OrderStickerPrintLink } from "@/components/orders/OrderStickerPrintLink";
 import { ShipmentsPrintButton } from "@/components/shipments/ShipmentsPrintButton";
 import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import type { ShipmentOrderRow } from "@/lib/fetch-shipments-orders";
@@ -114,10 +115,10 @@ export function ShipmentsOrdersTable({
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase leading-tight tracking-wide text-[var(--text-secondary)] print:bg-[var(--card-bg)]">
               <th
                 className="max-md:hidden min-w-0 whitespace-nowrap px-2 py-2 text-center normal-case print:hidden"
-                aria-label="Печать PDF и QR"
-                title="Печать PDF наряда и QR на карточку Kaiten"
+                aria-label="Печать наряда, этикетки и QR"
+                title="Печать наряда, этикетки и QR на карточку Kaiten"
               >
-                PDF · QR
+                Печать
               </th>
               <th
                 className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
@@ -222,6 +223,7 @@ export function ShipmentsOrdersTable({
                         variant="icon"
                         title="Печать наряда (PDF) — диалог печати"
                       />
+                      <OrderStickerPrintLink orderId={o.id} />
                       {kaitenUrl ? (
                         <OrderKaitenQrModal
                           url={kaitenUrl}

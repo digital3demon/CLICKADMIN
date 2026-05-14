@@ -71,6 +71,9 @@ export async function loadFinanceReport(from: Date, to: Date) {
   let correctionRevenue = 0;
   let reworkOrders = 0;
   let reworkRevenue = 0;
+  let privateRevenue = 0;
+  let privateActualRevenue = 0;
+  let privateOrders = 0;
   const reworkItems = new Map<
     string,
     {
@@ -102,6 +105,11 @@ export async function loadFinanceReport(from: Date, to: Date) {
     revenueTotal += rev;
     actualRevenueTotal += actualRev;
     ordersActive += 1;
+    if (o.clinicId == null) {
+      privateRevenue += rev;
+      privateActualRevenue += actualRev;
+      privateOrders += 1;
+    }
     if (o.correctionTrack != null) {
       const corrRev = sumCorrectionPriceLinesAllocatedRub({
         isUrgent: o.isUrgent,
@@ -182,6 +190,12 @@ export async function loadFinanceReport(from: Date, to: Date) {
       correctionRevenue: Math.round(correctionRevenue * 100) / 100,
       reworkOrders,
       reworkRevenue: Math.round(reworkRevenue * 100) / 100,
+    },
+    privateClients: {
+      revenue: round2(privateRevenue),
+      actualRevenue: round2(privateActualRevenue),
+      orders: privateOrders,
+      avgCheck: privateOrders > 0 ? round2(privateRevenue / privateOrders) : 0,
     },
     correctionDetail: {
       byTrack: ORDER_CORRECTION_TRACK_VALUES.map((k) => {

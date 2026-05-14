@@ -1,4 +1,9 @@
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
+
+export { cleanLegalFullName };
+
 /** Поля клиники / контрагента для краткой строки «Реквизиты» в списках. */
+
 export type CounterpartyRequisitesFields = {
   legalFullName?: string | null;
   inn?: string | null;
@@ -9,19 +14,6 @@ export type CounterpartyRequisitesFields = {
   settlementAccount?: string | null;
   correspondentAccount?: string | null;
 };
-
-export function cleanLegalFullName(value: string | null | undefined): string | null {
-  const raw = (value ?? "").replace(/\s+/g, " ").trim();
-  if (!raw) return null;
-  // Служебные пометки из источника реквизитов не являются частью наименования.
-  const cleaned = raw
-    .replace(
-      /(?:\s+(?:ООО|ИП)\s+(?:(?:ЭДО|сверка|бум\.?\s*доки)\s*)+)$/giu,
-      "",
-    )
-    .trim();
-  return cleaned || null;
-}
 
 /** Многострочный текст для ячейки таблицы (печать и экран). */
 export function formatCounterpartyRequisitesSummary(

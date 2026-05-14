@@ -7,6 +7,7 @@ import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
+import { OrderStickerPrintLink } from "@/components/orders/OrderStickerPrintLink";
 import { OrdersListKaitenChatShell } from "@/components/orders/OrdersListKaitenChatShell";
 import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
 import { OrderPostingMonthBar } from "@/components/orders/OrderPostingMonthBar";
@@ -79,7 +80,7 @@ function OrdersTableColGroup() {
   return (
     <colgroup>
       <col className="max-md:hidden lg:w-[3%]" />
-      <col className="max-md:hidden lg:w-[4.8%]" />
+      <col className="max-md:hidden lg:w-[5.6%]" />
       <col className="lg:w-[6.8%]" />
       <col className="lg:w-[12.1%]" />
       <col className="lg:w-[11.9%]" />
@@ -107,16 +108,16 @@ function OrdersTableHeaderRow({ isDemo }: { isDemo: boolean }) {
         className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
         aria-label={
           isDemo
-            ? "Печать PDF наряда и QR на карточку канбана"
-            : "Печать PDF наряда и QR на карточку Kaiten"
+            ? "Печать наряда, этикетки и QR на карточку канбана"
+            : "Печать наряда, этикетки и QR на карточку Kaiten"
         }
         title={
           isDemo
-            ? "Печать PDF наряда и QR на карточку канбана"
-            : "Печать PDF наряда и QR на карточку Kaiten"
+            ? "Печать наряда, этикетки и QR на карточку канбана"
+            : "Печать наряда, этикетки и QR на карточку Kaiten"
         }
       >
-        PDF · QR
+        Печать
       </th>
       <th className={ORDERS_TABLE_TH} title="№ наряда">
         № наряда
@@ -714,6 +715,7 @@ export default async function OrdersPage({
                           title="Печать наряда (PDF) — диалог печати"
                         />
                       ) : null}
+                      <OrderStickerPrintLink orderId={o.id} />
                       {kaitenUrl ? (
                         <OrderKaitenQrModal
                           url={kaitenUrl}

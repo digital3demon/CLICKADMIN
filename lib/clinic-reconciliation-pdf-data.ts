@@ -5,6 +5,7 @@ import {
   lineAllocatedTotalRub,
 } from "@/lib/format-order-construction";
 import { formatDateDdMmYyMsk } from "@/lib/clinic-reconciliation-pdf-format";
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 import { orderLinesIncludedInReconciliationExport } from "@/lib/order-reconciliation-export";
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
 
@@ -102,7 +103,7 @@ export async function buildClinicReconciliationPdfPayload(
   }
 
   /** Жёлтая строка: как в Excel-образце — «ООО … ИНН …». */
-  const legal = clinic.legalFullName?.trim() || clinic.name.trim() || "—";
+  const legal = cleanLegalFullName(clinic.legalFullName) || clinic.name.trim() || "—";
   const inn = clinic.inn?.trim();
   const clinicDisplay =
     clinic.name.trim() && clinic.name.trim() !== legal

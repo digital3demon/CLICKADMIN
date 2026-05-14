@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import JSZip from "jszip";
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 
 /**
  * Карта модуля:
@@ -78,7 +79,7 @@ function normalizeText(s: string): string {
 }
 
 function orgShortName(c: ClinicContractSourceData): string {
-  const raw = (c.legalFullName || "").trim();
+  const raw = cleanLegalFullName(c.legalFullName) ?? "";
   if (!raw) return c.name.trim() || "—";
   let x = raw.replace(/^\s*ООО\s+/i, "").trim();
   if (x.startsWith("«") && x.endsWith("»")) {

@@ -1,4 +1,5 @@
 import type { BillingLegalForm } from "@prisma/client";
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 
 /** Нормализация строки поиска (пусто = не фильтровать). */
 export function normalizeClientsSearchQuery(raw: string | undefined): string {
@@ -179,7 +180,7 @@ export function clinicMatchesSearch(
   const hay = [
     c.name,
     c.address,
-    c.legalFullName,
+    cleanLegalFullName(c.legalFullName),
     ...billingLegalFormSearchBits(c.billingLegalForm),
     c.email,
     c.phone,
@@ -224,7 +225,7 @@ export function doctorMatchesSearch(
   const clinics = d.clinicLinks
     .flatMap((l) => {
       const c = l.clinic;
-      const bits = [c.name, c.legalFullName, ...billingLegalFormSearchBits(c.billingLegalForm)];
+      const bits = [c.name, cleanLegalFullName(c.legalFullName), ...billingLegalFormSearchBits(c.billingLegalForm)];
       return bits.filter((x) => x != null && String(x).trim() !== "");
     })
     .join("\n");
