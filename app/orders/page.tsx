@@ -57,8 +57,10 @@ const ORDERS_LIST_STACK = "w-full max-w-full min-w-0 self-start space-y-4";
 /** Меньше внешних полей, чем у стандартного ModuleFrame — ближе к сайдбару. */
 const ORDERS_FRAME_ROOT =
   "!px-2 !pb-6 !pt-4 sm:!px-3 sm:!pb-7 sm:!pt-5 md:!px-4 md:!pb-8 md:!pt-6 lg:!px-4 lg:!pb-9 lg:!pt-7";
-const ORDERS_STICKY_TH =
-  "sticky top-[var(--sticky-list-toolbar-height,0px)] z-30 bg-[var(--surface-subtle)]";
+const ORDERS_STICKY_THEAD =
+  "sticky top-[calc(var(--sticky-list-toolbar-height,0px)-1px)] z-30 bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)]";
+const ORDERS_TABLE_TH =
+  "min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2";
 
 /** Поступление: дата прихода работы; без явной даты — как в наряде: дата занесения в CRM. */
 function formatAdmission(o: {
@@ -574,16 +576,16 @@ export default async function OrdersPage({
             <col className="lg:w-[5.2%]" />
             <col className="lg:w-[16.2%]" />
           </colgroup>
-          <thead>
-            <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
+          <thead className={ORDERS_STICKY_THEAD}>
+            <tr className="border-b border-[var(--card-border)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
               <th
-                className={`${ORDERS_STICKY_TH} max-md:hidden min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center normal-case sm:px-2 sm:py-2`}
+                className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
                 title="Чат карточки в Kaiten"
               >
                 Чат
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} max-md:hidden min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center normal-case sm:px-2 sm:py-2`}
+                className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
                 aria-label={
                   isDemo
                     ? "Печать PDF наряда и QR на карточку канбана"
@@ -598,61 +600,61 @@ export default async function OrdersPage({
                 PDF · QR
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                className={ORDERS_TABLE_TH}
                 title="№ наряда"
               >
                 № наряда
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                className={ORDERS_TABLE_TH}
                 title="Клиника"
               >
                 Клиника
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                className={ORDERS_TABLE_TH}
                 title="Адрес клиники"
               >
                 Адрес
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                className={ORDERS_TABLE_TH}
                 title="Врач"
               >
                 Врач
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                className={ORDERS_TABLE_TH}
                 title="Пациент"
               >
                 Пациент
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                className={ORDERS_TABLE_TH}
                 title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
               >
                 Поступление
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                className={ORDERS_TABLE_TH}
                 title="Срок лабораторный"
               >
                 Лаборатория
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                className={ORDERS_TABLE_TH}
                 title="Запись: дата и время приёма пациента"
               >
                 Запись
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                className={ORDERS_TABLE_TH}
                 title="Отправка работы"
               >
                 Отправка
               </th>
               <th
-                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center align-top normal-case sm:px-2 sm:py-2`}
+                className={`${ORDERS_TABLE_TH} align-top normal-case`}
                 title="Теги: нажмите — фильтр списка; «+» — добавить свой тег к наряду"
               >
                 Отметки
