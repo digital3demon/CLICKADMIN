@@ -114,6 +114,7 @@ model Tenant {
   doctorTelegramMessages    DoctorTelegramMessage[]
   payrollPriceItemConfigs   PayrollPriceItemConfig[]
   payrollWorkEntries        PayrollWorkEntry[]
+  mailMailboxes             MailMailbox[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -544,6 +545,8 @@ enum AppModule {
   PAYROLL
   /// ФинОтдел: контроль просчёта, корректировок, протетики и оплат
   FINANCE_OFFICE
+  /// Почта CRM: общие ящики, письма, вложения и правила обработки
+  MAIL
   /// Отгрузки (даты, вкладки)
   SHIPMENTS
   /// Склад: раздел + API инвентаря
@@ -608,6 +611,22 @@ enum PayrollWorkKind {
   MANUAL
   PROCESSING
   UNCATEGORIZED
+}
+
+enum MailMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MailMessageReadState {
+  UNREAD
+  READ
+}
+
+enum MailLinkedEntityType {
+  ORDER
+  CLINIC
+  DOCTOR
 }
 
 /// Пользователь: владелец и сотрудники — вход по паролю; до активации хранится inviteCodeHash
@@ -729,6 +748,124 @@ model RoleModuleAccess {
 
   @@unique([tenantId, role, module])
   @@index([tenantId, role])
+}
+
+/// Общий почтовый ящик CRM. На первом этапе подключаем Yandex IMAP/SMTP через пароль приложения.
+model MailMailbox {
+  id                    String   @id @default(cuid())
+  tenantId              String
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email                 String
+  displayName           String?
+  imapHost              String   @default("imap.yandex.ru")
+  imapPort              Int      @default(993)
+  imapSecure            Boolean  @default(true)
+  smtpHost              String   @default("smtp.yandex.ru")
+  smtpPort              Int      @default(465)
+  smtpSecure            Boolean  @default(true)
+  encryptedPassword     String?
+  passwordUpdatedAt     DateTime?
+  accessRoles           Json?
+  isActive              Boolean  @default(true)
+  lastSyncAt            DateTime?
+  lastSyncUid           Int?
+  lastSyncError         String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  messages    MailMessage[]
+  rules       MailRule[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, isActive])
+}
+
+/// Локальная копия письма для истории, быстрого поиска и привязок к сущностям CRM.
+model MailMessage {
+  id              String                 @id @default(cuid())
+  tenantId        String
+  mailboxId       String
+  mailbox         MailMailbox            @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  folder          String                 @default("INBOX")
+  uid             Int?
+  messageId       String?
+  direction       MailMessageDirection
+  readState       MailMessageReadState   @default(UNREAD)
+  fromText        String
+  toText          String?
+  ccText          String?
+  bccText         String?
+  subject         String?
+  textBody        String?
+  htmlBody        String?
+  preview         String?
+  labels          Json?
+  assignedUserId  String?
+  isImportant     Boolean                @default(false)
+  crmFolder       String?
+  autoReplySentAt DateTime?
+  sentAt          DateTime?
+  receivedAt      DateTime?
+  rawHeaders      Json?
+  ruleLog         Json?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  attachments MailAttachment[]
+  links       MailMessageLink[]
+
+  @@unique([mailboxId, folder, uid])
+  @@unique([mailboxId, messageId])
+  @@index([tenantId, mailboxId, receivedAt])
+  @@index([tenantId, mailboxId, sentAt])
+  @@index([tenantId, direction])
+}
+
+model MailAttachment {
+  id          String      @id @default(cuid())
+  tenantId    String
+  messageId   String
+  message     MailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileName    String
+  mimeType    String
+  size        Int
+  contentId   String?
+  data        Bytes
+  createdAt   DateTime    @default(now())
+
+  @@index([tenantId, messageId])
+}
+
+model MailMessageLink {
+  id          String               @id @default(cuid())
+  tenantId    String
+  messageId   String
+  message     MailMessage          @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  entityType  MailLinkedEntityType
+  entityId    String
+  note        String?
+  createdByUserId String?
+  createdAt   DateTime             @default(now())
+
+  @@unique([messageId, entityType, entityId])
+  @@index([tenantId, entityType, entityId])
+}
+
+/// Правило обработки конкретного ящика: условия и действия хранятся JSON, UI редактирует безопасный поднабор.
+model MailRule {
+  id          String      @id @default(cuid())
+  tenantId    String
+  mailboxId   String
+  mailbox     MailMailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  name        String
+  isActive    Boolean     @default(true)
+  sortOrder   Int         @default(0)
+  conditions  Json
+  actions     Json
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([tenantId, mailboxId, isActive, sortOrder])
 }
 
 /// Ожидание email в диалоге с ботом при привязке (после /start).

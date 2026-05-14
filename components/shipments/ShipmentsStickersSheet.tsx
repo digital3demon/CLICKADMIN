@@ -67,7 +67,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         height: var(--sticker-h) !important;
         box-sizing: border-box !important;
         margin: 0 !important;
-        padding: 1.6mm 1.8mm !important;
+        padding: 1.2mm 1.4mm !important;
         border: none !important;
         border-radius: 1.2mm !important;
         background: #fff !important;
@@ -76,6 +76,9 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
         box-shadow: none !important;
+        overflow: hidden !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
         display: flex !important;
         flex-direction: column !important;
         justify-content: space-between !important;
@@ -92,8 +95,9 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         width: var(--sticker-w);
         height: var(--sticker-h);
         box-sizing: border-box;
-        padding: 1.6mm 1.8mm;
+        padding: 1.2mm 1.4mm;
         border-radius: 1.2mm;
+        overflow: hidden;
       }
       .sticker-lines {
         flex: 1 1 auto;
@@ -115,7 +119,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-line--fit-xs { gap: 0.45mm; }
       .sticker-k {
         flex: 0 0 13.5mm;
-        font-size: clamp(7pt, calc(var(--sticker-h) * 0.18), 8.6pt);
+        font-size: clamp(6.4pt, calc(var(--sticker-h) * 0.16), 7.6pt);
         font-weight: 700;
         color: #475569;
         white-space: nowrap;
@@ -126,7 +130,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-v {
         flex: 1 1 0;
         min-width: 0;
-        font-size: clamp(11pt, calc(var(--sticker-h) * 0.32), 15pt);
+        font-size: clamp(9.8pt, calc(var(--sticker-h) * 0.27), 13pt);
         font-weight: 800;
         color: #0f172a;
         overflow: hidden;
@@ -135,18 +139,18 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
         letter-spacing: -0.055em;
       }
       .sticker-line--fit-sm .sticker-v {
-        font-size: clamp(9pt, calc(var(--sticker-h) * 0.255), 11.4pt);
+        font-size: clamp(8.4pt, calc(var(--sticker-h) * 0.235), 10.4pt);
         letter-spacing: -0.065em;
       }
       .sticker-line--fit-xs .sticker-v {
-        font-size: clamp(7.6pt, calc(var(--sticker-h) * 0.22), 9.8pt);
+        font-size: clamp(7.2pt, calc(var(--sticker-h) * 0.205), 9pt);
         letter-spacing: -0.075em;
       }
       .sticker-line--order {
         margin-bottom: 0;
       }
       .sticker-line--order .sticker-k {
-        font-size: clamp(6.2pt, calc(var(--sticker-h) * 0.155), 7pt);
+        font-size: clamp(5.8pt, calc(var(--sticker-h) * 0.145), 6.5pt);
         letter-spacing: -0.06em;
       }
       .sticker-footer {
@@ -170,17 +174,17 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       }
       .sticker-qr-wrap {
         flex: 0 0 auto;
-        width: min(12.8mm, calc(var(--sticker-h) * 0.32));
-        height: min(12.8mm, calc(var(--sticker-h) * 0.32));
+        width: min(11.8mm, calc(var(--sticker-h) * 0.29));
+        height: min(11.8mm, calc(var(--sticker-h) * 0.29));
       }
       .sticker-scan-caption {
         display: flex;
         flex-direction: row;
         align-items: flex-end;
         gap: 0.25mm;
-        height: min(12.8mm, calc(var(--sticker-h) * 0.32));
-        max-height: min(12.8mm, calc(var(--sticker-h) * 0.32));
-        font-size: clamp(5.2pt, calc(var(--sticker-h) * 0.135), 6.2pt);
+        height: min(11.8mm, calc(var(--sticker-h) * 0.29));
+        max-height: min(11.8mm, calc(var(--sticker-h) * 0.29));
+        font-size: clamp(4.9pt, calc(var(--sticker-h) * 0.125), 5.8pt);
         line-height: 1;
         font-weight: 800;
         color: #334155;
@@ -212,7 +216,7 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-brand-logo {
         display: block;
         margin-inline: auto;
-        height: min(12.5mm, calc(var(--sticker-h) * 0.31));
+        height: min(11.6mm, calc(var(--sticker-h) * 0.285));
         width: auto;
         max-width: min(27mm, calc(var(--sticker-w) * 0.46));
         object-fit: contain;
@@ -228,12 +232,43 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
     return `
       @media print {
         @page { size: ${w}mm ${h}mm; margin: 0; }
-        html, body { height: auto !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
-        .sticker-root { margin: 0 !important; padding: 0 !important; }
+        html, body {
+          width: ${w}mm !important;
+          min-width: 0 !important;
+          height: auto !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #fff !important;
+          overflow: visible !important;
+        }
+        body * { visibility: hidden !important; }
+        .sticker-root, .sticker-root * { visibility: visible !important; }
+        .sticker-print-frame,
+        .sticker-print-frame > div,
+        main {
+          width: ${w}mm !important;
+          min-width: 0 !important;
+          max-width: ${w}mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
+        .sticker-root {
+          width: ${w}mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
         ${pageBox}
         .sticker-page:not(:last-child) {
           page-break-after: always !important;
           break-after: page !important;
+        }
+        .sticker-page {
+          page-break-before: auto !important;
+          page-break-inside: avoid !important;
+          break-before: auto !important;
+          break-inside: avoid-page !important;
         }
       }
       @media screen {

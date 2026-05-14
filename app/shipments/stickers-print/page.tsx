@@ -197,10 +197,16 @@ export default async function ShipmentsStickersPrintPage({
     <ModuleFrame
       title="Этикетки отгрузки"
       description="Макет под термопринтер. Размер задаётся в Конфигурация → Печать. В диалоге печати выберите принтер этикеток и масштаб 100 %."
+      rootClassName="sticker-print-frame"
     >
       <style>{`
         @media print {
-          header.module-frame-header { display: none !important; }
+          header.module-frame-header,
+          button[aria-controls="app-primary-nav"],
+          aside[aria-label="Основное меню"],
+          .no-print {
+            display: none !important;
+          }
         }
       `}</style>
       <ShipmentsStickersPrintToolbar

@@ -30,6 +30,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "SIDEBAR_PAYMENTS",
   "PAYROLL",
   "FINANCE_OFFICE",
+  "MAIL",
   "SHIPMENTS",
   "WAREHOUSE",
   "CLIENTS_VIEW",
@@ -68,6 +69,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   SIDEBAR_PAYMENTS: "Сайдбар: блок оплат",
   PAYROLL: "Зарплата",
   FINANCE_OFFICE: "ФинОтдел",
+  MAIL: "Почта",
   SHIPMENTS: "Отгрузки",
   WAREHOUSE: "Склад (раздел)",
   CLIENTS: "Клиенты (устар., не настраивать)",
@@ -176,6 +178,8 @@ export function defaultModuleAllowed(
       return false;
     case "FINANCE_OFFICE":
       return role === "ACCOUNTANT" || role === "FINANCIAL_MANAGER";
+    case "MAIL":
+      return (["ADMINISTRATOR", "SENIOR_ADMINISTRATOR", "MANAGER"] as UserRole[]).includes(role);
     case "SHIPMENTS":
     case "WAREHOUSE":
     case "CLIENTS":
