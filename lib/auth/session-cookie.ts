@@ -3,7 +3,7 @@ import { SESSION_COOKIE_NAME, SESSION_DEMO_COOKIE_NAME } from "@/lib/auth/jwt";
 import { VIEW_AS_ROLE_COOKIE_NAME } from "@/lib/auth/view-as-role";
 import type { UserRole } from "@prisma/client";
 
-const WEEK_SEC = 60 * 60 * 24 * 7;
+const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 30;
 
 /** В production по умолчанию Secure (только HTTPS). По HTTP (например, только IP до Certbot) задайте AUTH_COOKIE_SECURE=0. */
 function useSecureSessionCookie(): boolean {
@@ -20,7 +20,7 @@ export function setSessionCookie(res: NextResponse, token: string): void {
     secure,
     sameSite: "lax",
     path: "/",
-    maxAge: WEEK_SEC,
+    maxAge: SESSION_MAX_AGE_SEC,
   });
 }
 
@@ -42,7 +42,7 @@ export function setDemoSessionCookie(res: NextResponse, token: string): void {
     secure,
     sameSite: "lax",
     path: "/",
-    maxAge: WEEK_SEC,
+    maxAge: SESSION_MAX_AGE_SEC,
   });
 }
 
@@ -64,7 +64,7 @@ export function setViewAsRoleCookie(res: NextResponse, role: UserRole): void {
     secure,
     sameSite: "lax",
     path: "/",
-    maxAge: WEEK_SEC,
+    maxAge: SESSION_MAX_AGE_SEC,
   });
 }
 

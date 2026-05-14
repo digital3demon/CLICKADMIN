@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { UserDeviceType } from "@prisma/client";
 
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const MOBILE_RE =
   /\b(android|iphone|ipad|ipod|mobile|windows phone|blackberry|opera mini|iemobile)\b/i;

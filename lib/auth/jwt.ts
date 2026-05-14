@@ -7,6 +7,7 @@ export const SESSION_COOKIE_NAME = "crm_session";
 
 /** HttpOnly-сессия демо: отдельный файл БД и отдельный JWT (не смешивается с боевой сессией). */
 export const SESSION_DEMO_COOKIE_NAME = "crm_session_demo";
+export const SESSION_TTL = "30d";
 
 export type SessionClaims = {
   sub: string;
@@ -56,7 +57,7 @@ export async function signSessionToken(claims: SessionClaims): Promise<string> {
   return new SignJWT(body as JWTPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(SESSION_TTL)
     .sign(secretKey());
 }
 
