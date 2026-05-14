@@ -10,15 +10,17 @@ export type CounterpartyRequisitesFields = {
   correspondentAccount?: string | null;
 };
 
-function cleanLegalFullName(value: string | null | undefined): string | null {
+export function cleanLegalFullName(value: string | null | undefined): string | null {
   const raw = (value ?? "").replace(/\s+/g, " ").trim();
   if (!raw) return null;
   // Служебные пометки из источника реквизитов не являются частью наименования.
-  return raw
-    .replace(/\s+ООО\s+ЭДО\s+сверка\s*$/iu, "")
-    .replace(/\s+ООО\s+сверка\s+ЭДО\s*$/iu, "")
-    .replace(/\s+ООО\s+бум\.?\s*доки\s*$/iu, "")
+  const cleaned = raw
+    .replace(
+      /(?:\s+(?:ООО|ИП)\s+(?:(?:ЭДО|сверка|бум\.?\s*доки)\s*)+)$/giu,
+      "",
+    )
     .trim();
+  return cleaned || null;
 }
 
 /** Многострочный текст для ячейки таблицы (печать и экран). */

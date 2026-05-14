@@ -4,6 +4,8 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { fetchFinanceOfficeOrders, type FinanceOfficeOrderRow } from "@/lib/fetch-finance-office-orders";
+import { cleanLegalFullName } from "@/lib/format-counterparty-requisites-summary";
+import { isReconciliationPaymentStatus } from "@/lib/order-clinic-client-fields";
 import {
   addCalendarDaysYmd,
   moscowShipmentDayBoundsUtc,
@@ -86,9 +88,9 @@ function constructionLabel(row: FinanceOfficeOrderRow["constructions"][number]):
 
 function orderLegalName(order: FinanceOfficeOrderRow): string {
   return (
-    order.clinic?.legalFullName?.trim() ||
+    cleanLegalFullName(order.clinic?.legalFullName) ||
     order.counterpartyRequisitesText?.trim() ||
-    order.legalEntity?.trim() ||
+    cleanLegalFullName(order.legalEntity) ||
     ""
   );
 }
@@ -103,6 +105,10 @@ function lineDiscountLabel(
   if (linePct > 0) parts.push(`${money(linePct)}%`);
   if (orderPct > 0) parts.push(`общая ${money(orderPct)}%`);
   return parts.join("; ");
+}
+
+function isPrivatePersonWithoutDoctorRequisites(order: FinanceOfficeOrderRow): boolean {
+  return !order.clinic && !order.counterpartyRequisitesText?.trim();
 }
 
 export async function GET(req: Request) {
@@ -151,12 +157,16 @@ export async function GET(req: Request) {
     periodLabel = `${fromRaw}_${toRaw}`;
   }
 
-  const orders = await fetchFinanceOfficeOrders(await getOrdersPrisma(), tenantId, {
+  const orders = (await fetchFinanceOfficeOrders(await getOrdersPrisma(), tenantId, {
     listTag: parsedTag ? rawTag : null,
     search: q,
     start,
     endExclusive,
-  });
+  })).filter(
+    (order) =>
+      !isReconciliationPaymentStatus(order.payment) &&
+      !isPrivatePersonWithoutDoctorRequisites(order),
+  );
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "dental-lab-crm";
