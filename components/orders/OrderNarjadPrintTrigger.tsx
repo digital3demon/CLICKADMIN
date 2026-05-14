@@ -24,7 +24,7 @@ function PrintNarjadPdfIcon({ className }: { className?: string }) {
 
 /** Компактная кнопка в строке таблицы заказов (не «вторая галочка» при отправленной работе). */
 const ICON_TABLE_CLASS =
-  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-7 sm:w-7";
+  "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-6 sm:w-6";
 
 type Props = {
   orderId: string;
@@ -58,7 +58,7 @@ export function OrderNarjadPrintTrigger({
       onClick={() => void printOrderNarjadPdf(orderId)}
     >
       {variant === "icon" ? (
-        <PrintNarjadPdfIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        <PrintNarjadPdfIcon className="h-3.5 w-3.5" />
       ) : (
         children
       )}

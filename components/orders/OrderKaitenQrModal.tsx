@@ -69,7 +69,7 @@ export function OrderKaitenQrModal({
   if (!url) return null;
 
   const btnClass = compact
-    ? "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-7 sm:w-7"
+    ? "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-6 sm:w-6"
     : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-sm";
 
   return (
@@ -83,7 +83,7 @@ export function OrderKaitenQrModal({
         onClick={() => setOpen(true)}
       >
         {compact ? (
-          <QrIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <QrIcon className="h-3.5 w-3.5" />
         ) : (
           labelFull
         )}

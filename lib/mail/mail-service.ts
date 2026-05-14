@@ -1,0 +1,527 @@
+import "server-only";
+import { EmailFolderType, type EmailAccount, type PrismaClient } from "@prisma/client";
+import { NextResponse } from "next/server";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
+import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { encryptAppPassword } from "@/lib/mail/encryption";
+import { testImapConnection } from "@/lib/mail/imap-client";
+import { sendSmtpMessage, type MailSendAttachment } from "@/lib/mail/smtp-client";
+import { syncEmailAccount } from "@/lib/mail/mail-sync.service";
+
+export type MailApiContext = {
+  tenantId: string;
+  userId: string;
+  db: PrismaClient;
+};
+
+export type MailApiContextResult =
+  | { ok: true; ctx: MailApiContext }
+  | { ok: false; response: NextResponse };
+
+export type EmailFilter = "all" | "unread" | "attachments" | "flagged";
+
+const SYSTEM_FOLDERS: Array<{
+  imapName: string;
+  displayName: string;
+  type: EmailFolderType;
+  sortOrder: number;
+}> = [
+  { imapName: "INBOX", displayName: "Входящие", type: EmailFolderType.INBOX, sortOrder: 10 },
+  { imapName: "Sent", displayName: "Отправленные", type: EmailFolderType.SENT, sortOrder: 20 },
+  { imapName: "Drafts", displayName: "Черновики", type: EmailFolderType.DRAFTS, sortOrder: 30 },
+  { imapName: "Archive", displayName: "Архив", type: EmailFolderType.ARCHIVE, sortOrder: 40 },
+  { imapName: "Spam", displayName: "Спам", type: EmailFolderType.SPAM, sortOrder: 50 },
+  { imapName: "Trash", displayName: "Корзина", type: EmailFolderType.TRASH, sortOrder: 60 },
+];
+
+export async function getMailApiContext(): Promise<MailApiContextResult> {
+  const session = await getSessionFromCookies();
+  const tenantId = session ? await getTenantIdForSession(session) : null;
+  if (!session?.sub || !tenantId || session.demo) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Требуется вход" }, { status: 401 }),
+    };
+  }
+  return {
+    ok: true,
+    ctx: {
+      tenantId,
+      userId: session.sub,
+      db: (await getOrdersPrisma()) as PrismaClient,
+    },
+  };
+}
+
+export function stringField(value: unknown, max = 2000): string {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+export function previewFromText(text: string, max = 320): string | null {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, max) : null;
+}
+
+export function textFromHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function sanitizeMailHtml(html: string | null): string {
+  if (!html) return "";
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "")
+    .replace(/\s(href|src)\s*=\s*["']javascript:[^"']*["']/gi, "");
+}
+
+function parseRecipientLine(value: string): Array<{ address: string; name: string | null }> {
+  return value
+    .split(/[;,]/)
+    .map((raw) => raw.trim())
+    .filter(Boolean)
+    .map((raw) => {
+      const match = /^(.*?)<([^>]+)>$/.exec(raw);
+      if (!match) return { address: raw, name: null };
+      return {
+        name: match[1]?.trim().replace(/^"|"$/g, "") || null,
+        address: match[2]?.trim() || raw,
+      };
+    });
+}
+
+function bytesForPrisma(value: Buffer): Uint8Array<ArrayBuffer> {
+  const copy = new ArrayBuffer(value.byteLength);
+  const view = new Uint8Array(copy);
+  view.set(value);
+  return view;
+}
+
+async function ensureSystemFolders(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+): Promise<void> {
+  for (const folder of SYSTEM_FOLDERS) {
+    await db.emailFolder.upsert({
+      where: { accountId_imapName: { accountId, imapName: folder.imapName } },
+      create: { tenantId, accountId, ...folder },
+      update: {
+        displayName: folder.displayName,
+        type: folder.type,
+        sortOrder: folder.sortOrder,
+      },
+    });
+  }
+}
+
+async function folderByType(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+  type: EmailFolderType,
+) {
+  const existing = await db.emailFolder.findFirst({
+    where: { tenantId, accountId, type },
+    orderBy: { sortOrder: "asc" },
+  });
+  if (existing) return existing;
+  const fallback = SYSTEM_FOLDERS.find((f) => f.type === type) ?? SYSTEM_FOLDERS[0]!;
+  return db.emailFolder.create({
+    data: { tenantId, accountId, ...fallback },
+  });
+}
+
+export async function refreshFolderCounters(
+  db: PrismaClient,
+  tenantId: string,
+  folderId: string,
+): Promise<void> {
+  const [totalCount, unreadCount] = await Promise.all([
+    db.email.count({ where: { tenantId, folderId } }),
+    db.email.count({ where: { tenantId, folderId, isRead: false } }),
+  ]);
+  await db.emailFolder.update({ where: { id: folderId }, data: { totalCount, unreadCount } });
+}
+
+export async function refreshLabelCounters(
+  db: PrismaClient,
+  tenantId: string,
+  labelId: string,
+): Promise<void> {
+  const [totalCount, unreadCount] = await Promise.all([
+    db.emailLabelAssignment.count({ where: { tenantId, labelId } }),
+    db.emailLabelAssignment.count({
+      where: { tenantId, labelId, email: { isRead: false } },
+    }),
+  ]);
+  await db.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
+}
+
+export async function listEmailAccounts(db: PrismaClient, tenantId: string) {
+  const accounts = await db.emailAccount.findMany({
+    where: { tenantId },
+    orderBy: [{ isActive: "desc" }, { email: "asc" }],
+    include: {
+      folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
+      labels: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+      _count: { select: { emails: true } },
+    },
+  });
+  return accounts.map(({ encryptedAppPassword, ...account }) => ({
+    ...account,
+    hasPassword: Boolean(encryptedAppPassword),
+  }));
+}
+
+export async function upsertEmailAccount(
+  db: PrismaClient,
+  tenantId: string,
+  input: {
+    email: string;
+    displayName?: string | null;
+    appPassword?: string | null;
+  },
+) {
+  const email = input.email.trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    throw new Error("INVALID_EMAIL_ACCOUNT");
+  }
+  const account = await db.emailAccount.upsert({
+    where: { tenantId_email: { tenantId, email } },
+    create: {
+      tenantId,
+      email,
+      displayName: input.displayName || null,
+      encryptedAppPassword: input.appPassword ? encryptAppPassword(input.appPassword) : null,
+      passwordUpdatedAt: input.appPassword ? new Date() : null,
+    },
+    update: {
+      displayName: input.displayName || null,
+      ...(input.appPassword
+        ? {
+            encryptedAppPassword: encryptAppPassword(input.appPassword),
+            passwordUpdatedAt: new Date(),
+          }
+        : {}),
+    },
+  });
+  await ensureSystemFolders(db, tenantId, account.id);
+  return account;
+}
+
+export async function deleteEmailAccount(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+): Promise<void> {
+  await db.emailAccount.deleteMany({ where: { id: accountId, tenantId } });
+}
+
+export async function testEmailAccountConnection(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+): Promise<void> {
+  const account = await db.emailAccount.findFirst({ where: { id: accountId, tenantId } });
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  await testImapConnection(account);
+}
+
+export async function syncAccountNow(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+) {
+  const account = await db.emailAccount.findFirst({ where: { id: accountId, tenantId } });
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  await ensureSystemFolders(db, tenantId, account.id);
+  return syncEmailAccount(db, account);
+}
+
+export async function listEmailFolders(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+) {
+  await ensureSystemFolders(db, tenantId, accountId);
+  return db.emailFolder.findMany({
+    where: { tenantId, accountId },
+    orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }],
+  });
+}
+
+export async function createEmailFolder(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+  displayName: string,
+) {
+  const name = displayName.trim().slice(0, 120);
+  if (!name) throw new Error("EMPTY_FOLDER_NAME");
+  return db.emailFolder.create({
+    data: {
+      tenantId,
+      accountId,
+      imapName: name,
+      displayName: name,
+      type: EmailFolderType.CUSTOM,
+      sortOrder: 200,
+    },
+  });
+}
+
+export async function listEmailLabels(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+) {
+  return db.emailLabel.findMany({
+    where: { tenantId, accountId },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+}
+
+export async function createEmailLabel(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+  input: { name: string; color: string },
+) {
+  const name = input.name.trim().slice(0, 80);
+  if (!name) throw new Error("EMPTY_LABEL_NAME");
+  return db.emailLabel.create({
+    data: {
+      tenantId,
+      accountId,
+      name,
+      color: input.color || "#ffcc00",
+      sortOrder: 100,
+    },
+  });
+}
+
+export async function listEmails(
+  db: PrismaClient,
+  tenantId: string,
+  input: {
+    accountId: string;
+    folderId?: string | null;
+    q?: string | null;
+    filter?: EmailFilter;
+    take?: number;
+  },
+) {
+  const take = Math.min(150, Math.max(1, input.take ?? 80));
+  return db.email.findMany({
+    where: {
+      tenantId,
+      accountId: input.accountId,
+      ...(input.folderId ? { folderId: input.folderId } : {}),
+      ...(input.filter === "unread" ? { isRead: false } : {}),
+      ...(input.filter === "attachments" ? { hasAttachments: true } : {}),
+      ...(input.filter === "flagged" ? { isFlagged: true } : {}),
+      ...(input.q
+        ? {
+            OR: [
+              { subject: { contains: input.q, mode: "insensitive" } },
+              { preview: { contains: input.q, mode: "insensitive" } },
+              { fromName: { contains: input.q, mode: "insensitive" } },
+              { fromAddress: { contains: input.q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ receivedAt: "desc" }, { sentAt: "desc" }, { createdAt: "desc" }],
+    take,
+    include: {
+      folder: true,
+      labelAssignments: { include: { label: true } },
+      _count: { select: { attachments: true } },
+    },
+  });
+}
+
+export async function getEmailDetail(
+  db: PrismaClient,
+  tenantId: string,
+  emailId: string,
+  markRead = true,
+) {
+  const email = await db.email.findFirst({
+    where: { id: emailId, tenantId },
+    include: {
+      account: { select: { id: true, email: true, displayName: true } },
+      folder: true,
+      attachments: {
+        select: { id: true, fileName: true, mimeType: true, size: true, isInline: true },
+      },
+      labelAssignments: { include: { label: true } },
+    },
+  });
+  if (!email) throw new Error("EMAIL_NOT_FOUND");
+  if (markRead && !email.isRead) {
+    await db.email.update({
+      where: { id: email.id },
+      data: { isRead: true, readAt: new Date() },
+    });
+    if (email.folderId) await refreshFolderCounters(db, tenantId, email.folderId);
+  }
+  return { ...email, safeHtmlBody: sanitizeMailHtml(email.htmlBody) };
+}
+
+export async function getEmailAttachment(
+  db: PrismaClient,
+  tenantId: string,
+  emailId: string,
+  attachmentId: string,
+) {
+  const attachment = await db.emailAttachment.findFirst({
+    where: { id: attachmentId, emailId, tenantId },
+  });
+  if (!attachment) throw new Error("EMAIL_ATTACHMENT_NOT_FOUND");
+  return attachment;
+}
+
+export async function bulkEmailAction(
+  db: PrismaClient,
+  tenantId: string,
+  input: {
+    ids: string[];
+    action: "read" | "unread" | "flag" | "unflag" | "archive" | "trash" | "delete" | "move";
+    accountId?: string | null;
+    targetFolderId?: string | null;
+  },
+) {
+  const ids = input.ids.filter(Boolean).slice(0, 500);
+  if (!ids.length) return { updated: 0 };
+  const before = await db.email.findMany({
+    where: { tenantId, id: { in: ids } },
+    select: { id: true, folderId: true, accountId: true },
+  });
+
+  let updated = 0;
+  if (input.action === "delete") {
+    const res = await db.email.deleteMany({ where: { tenantId, id: { in: ids } } });
+    updated = res.count;
+  } else if (input.action === "archive" || input.action === "trash" || input.action === "move") {
+    const accountId = input.accountId || before[0]?.accountId;
+    if (!accountId) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+    const target =
+      input.action === "move" && input.targetFolderId
+        ? await db.emailFolder.findFirst({
+            where: { id: input.targetFolderId, tenantId, accountId },
+          })
+        : await folderByType(
+            db,
+            tenantId,
+            accountId,
+            input.action === "archive" ? EmailFolderType.ARCHIVE : EmailFolderType.TRASH,
+          );
+    if (!target) throw new Error("EMAIL_FOLDER_NOT_FOUND");
+    const res = await db.email.updateMany({
+      where: { tenantId, id: { in: ids } },
+      data: { folderId: target.id },
+    });
+    updated = res.count;
+  } else {
+    const res = await db.email.updateMany({
+      where: { tenantId, id: { in: ids } },
+      data:
+        input.action === "read"
+          ? { isRead: true, readAt: new Date() }
+          : input.action === "unread"
+            ? { isRead: false, readAt: null }
+            : input.action === "flag"
+              ? { isFlagged: true }
+              : { isFlagged: false },
+    });
+    updated = res.count;
+  }
+
+  const folders = new Set(before.map((e) => e.folderId).filter((x): x is string => Boolean(x)));
+  const after = await db.email.findMany({
+    where: { tenantId, id: { in: ids } },
+    select: { folderId: true },
+  });
+  for (const folderId of after.map((e) => e.folderId)) {
+    if (folderId) folders.add(folderId);
+  }
+  await Promise.all([...folders].map((folderId) => refreshFolderCounters(db, tenantId, folderId)));
+  return { updated };
+}
+
+export async function sendEmail(
+  db: PrismaClient,
+  tenantId: string,
+  input: {
+    accountId: string;
+    to: string;
+    cc?: string | null;
+    bcc?: string | null;
+    subject: string;
+    html: string;
+    attachments: MailSendAttachment[];
+  },
+) {
+  const account = await db.emailAccount.findFirst({
+    where: { tenantId, id: input.accountId, isActive: true },
+  });
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  const text = textFromHtml(input.html);
+  const sent = await sendSmtpMessage(account, {
+    to: input.to,
+    cc: input.cc,
+    bcc: input.bcc,
+    subject: input.subject,
+    html: input.html,
+    text,
+    attachments: input.attachments,
+  });
+  const sentFolder = await folderByType(db, tenantId, account.id, EmailFolderType.SENT);
+  const email = await db.email.create({
+    data: {
+      tenantId,
+      accountId: account.id,
+      folderId: sentFolder.id,
+      messageId: sent.messageId,
+      direction: "OUTBOUND",
+      isRead: true,
+      readAt: new Date(),
+      hasAttachments: input.attachments.length > 0,
+      fromName: account.displayName,
+      fromAddress: account.email,
+      to: parseRecipientLine(input.to),
+      cc: input.cc ? parseRecipientLine(input.cc) : undefined,
+      bcc: input.bcc ? parseRecipientLine(input.bcc) : undefined,
+      subject: input.subject,
+      preview: previewFromText(text),
+      textBody: text,
+      htmlBody: input.html,
+      sentAt: new Date(),
+      receivedAt: new Date(),
+      attachments: {
+        create: input.attachments.map((a) => ({
+          tenantId,
+          fileName: a.filename,
+          mimeType: a.contentType,
+          size: a.content.length,
+          data: bytesForPrisma(a.content),
+        })),
+      },
+    },
+  });
+  await refreshFolderCounters(db, tenantId, sentFolder.id);
+  return { email, ...sent };
+}

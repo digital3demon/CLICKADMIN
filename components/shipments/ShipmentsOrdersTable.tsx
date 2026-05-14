@@ -114,7 +114,7 @@ export function ShipmentsOrdersTable({
           <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30 print:static">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase leading-tight tracking-wide text-[var(--text-secondary)] print:bg-[var(--card-bg)]">
               <th
-                className="max-md:hidden min-w-0 whitespace-nowrap px-2 py-2 text-center normal-case print:hidden"
+                className="max-md:hidden min-w-0 whitespace-nowrap px-1 py-2 text-center normal-case print:hidden"
                 aria-label="Печать наряда, этикетки и QR"
                 title="Печать наряда, этикетки и QR на карточку Kaiten"
               >
@@ -216,8 +216,8 @@ export function ShipmentsOrdersTable({
                       : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]"
                   }
                 >
-                  <td className="max-md:hidden min-w-0 px-2 py-2 align-middle print:hidden">
-                    <div className="flex min-w-0 flex-nowrap items-center justify-start gap-0.5 sm:gap-1">
+                  <td className="max-md:hidden min-w-0 px-0.5 py-2 align-middle print:hidden">
+                    <div className="flex min-w-0 flex-nowrap items-center justify-center gap-0">
                       <OrderNarjadPrintTrigger
                         orderId={o.id}
                         variant="icon"
@@ -232,13 +232,13 @@ export function ShipmentsOrdersTable({
                         />
                       ) : o.kaitenCardId != null ? (
                         <span
-                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-7 sm:w-7 sm:text-sm"
+                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
                           title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
                         >
                           ⚠
                         </span>
                       ) : (
-                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-[var(--text-muted)] sm:h-7 sm:w-7">
+                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-muted)] sm:h-6 sm:w-6">
                           —
                         </span>
                       )}

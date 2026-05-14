@@ -1,0 +1,27 @@
+import { NextResponse } from "next/server";
+import { logger } from "@/lib/server/logger";
+
+export function mailErrorResponse(err: unknown, fallback = "Ошибка почты") {
+  const message = err instanceof Error ? err.message : "";
+  const known: Record<string, { status: number; error: string }> = {
+    INVALID_EMAIL_ACCOUNT: { status: 400, error: "Укажите корректный email" },
+    EMAIL_ACCOUNT_NOT_FOUND: { status: 404, error: "Почтовый аккаунт не найден" },
+    EMAIL_FOLDER_NOT_FOUND: { status: 404, error: "Папка не найдена" },
+    EMAIL_NOT_FOUND: { status: 404, error: "Письмо не найдено" },
+    EMAIL_ATTACHMENT_NOT_FOUND: { status: 404, error: "Вложение не найдено" },
+    EMPTY_FOLDER_NAME: { status: 400, error: "Укажите название папки" },
+    EMPTY_LABEL_NAME: { status: 400, error: "Укажите название метки" },
+    MAIL_ACCOUNT_PASSWORD_NOT_CONFIGURED: {
+      status: 400,
+      error: "Для аккаунта не задан пароль приложения Яндекса",
+    },
+  };
+  const mapped = known[message];
+  if (mapped) return NextResponse.json({ error: mapped.error }, { status: mapped.status });
+  logger.error({ err }, fallback);
+  return NextResponse.json({ error: fallback }, { status: 500 });
+}
+
+export function jsonBody(req: Request): Promise<Record<string, unknown>> {
+  return req.json().catch(() => ({}));
+}

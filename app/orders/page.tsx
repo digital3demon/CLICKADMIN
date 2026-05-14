@@ -80,8 +80,8 @@ function OrdersTableColGroup() {
   return (
     <colgroup>
       <col className="max-md:hidden lg:w-[3%]" />
-      <col className="max-md:hidden lg:w-[5.6%]" />
-      <col className="lg:w-[6.8%]" />
+      <col className="max-md:hidden lg:w-[7.2%]" />
+      <col className="lg:w-[6.4%]" />
       <col className="lg:w-[12.1%]" />
       <col className="lg:w-[11.9%]" />
       <col className="lg:w-[8.6%]" />
@@ -90,7 +90,7 @@ function OrdersTableColGroup() {
       <col className="lg:w-[7.8%]" />
       <col className="lg:w-[7.8%]" />
       <col className="lg:w-[5.2%]" />
-      <col className="lg:w-[16.2%]" />
+      <col className="lg:w-[15%]" />
     </colgroup>
   );
 }
@@ -706,8 +706,8 @@ export default async function OrdersPage({
                     orderNumber={o.orderNumber}
                     labMentionHighlight={o.listKaitenLabMentionHighlight}
                   />
-                  <td className="max-md:hidden min-w-0 px-1.5 py-1.5 align-middle sm:px-2 sm:py-2">
-                    <div className="flex min-w-0 flex-nowrap items-center justify-start gap-0.5 sm:gap-1">
+                  <td className="max-md:hidden min-w-0 px-0.5 py-1.5 align-middle sm:px-1 sm:py-2">
+                    <div className="flex min-w-0 flex-nowrap items-center justify-center gap-0">
                       {!workSent ? (
                         <OrderNarjadPrintTrigger
                           orderId={o.id}
@@ -724,13 +724,13 @@ export default async function OrdersPage({
                         />
                       ) : o.kaitenCardId != null ? (
                         <span
-                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-7 sm:w-7 sm:text-sm"
+                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
                           title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
                         >
                           ⚠
                         </span>
                       ) : (
-                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-[var(--text-muted)] sm:h-7 sm:w-7">
+                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-muted)] sm:h-6 sm:w-6">
                           —
                         </span>
                       )}
