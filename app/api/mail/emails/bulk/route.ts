@@ -18,9 +18,9 @@ export async function POST(req: Request) {
     const ids = Array.isArray(body.ids)
       ? body.ids.filter((x): x is string => typeof x === "string")
       : [];
-    const result = await bulkEmailAction(r.ctx.db, r.ctx.tenantId, {
+    const result = await bulkEmailAction(r.ctx.db, r.ctx.tenantId, r.ctx.userId, {
       ids,
-      action: action as Parameters<typeof bulkEmailAction>[2]["action"],
+      action: action as Parameters<typeof bulkEmailAction>[3]["action"],
       accountId: stringField(body.accountId, 200) || null,
       targetFolderId: stringField(body.targetFolderId, 200) || null,
     });

@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
-  const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId);
+  const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId);
   return NextResponse.json({ accounts });
 }
 
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   if (!r.ok) return r.response;
   try {
     const body = await jsonBody(req);
-    const account = await upsertEmailAccount(r.ctx.db, r.ctx.tenantId, {
+    const account = await upsertEmailAccount(r.ctx.db, r.ctx.tenantId, r.ctx.userId, {
       email: stringField(body.email, 320),
       displayName: stringField(body.displayName, 160) || null,
       appPassword: stringField(body.appPassword, 500) || null,

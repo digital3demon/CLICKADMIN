@@ -12,6 +12,15 @@ export type MailFolderType =
   | "ARCHIVE"
   | "CUSTOM";
 
+const SYSTEM_FOLDER_NAMES: Record<Exclude<MailFolderType, "CUSTOM">, string> = {
+  INBOX: "Входящие",
+  SENT: "Отправленные",
+  DRAFTS: "Черновики",
+  SPAM: "Спам",
+  TRASH: "Корзина",
+  ARCHIVE: "Архив",
+};
+
 export type MailFolder = {
   id: string;
   accountId: string;
@@ -22,6 +31,14 @@ export type MailFolder = {
   totalCount: number;
   sortOrder: number;
 };
+
+export function mailFolderDisplayName(folder: Pick<MailFolder, "displayName" | "type">): string {
+  if (folder.type !== "CUSTOM") {
+    return SYSTEM_FOLDER_NAMES[folder.type];
+  }
+
+  return folder.displayName;
+}
 
 export type MailLabel = {
   id: string;

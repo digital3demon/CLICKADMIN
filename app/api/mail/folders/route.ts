@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId")?.trim();
   if (!accountId) return NextResponse.json({ error: "accountId обязателен" }, { status: 400 });
-  const folders = await listEmailFolders(r.ctx.db, r.ctx.tenantId, accountId);
+  const folders = await listEmailFolders(r.ctx.db, r.ctx.tenantId, r.ctx.userId, accountId);
   return NextResponse.json({ folders });
 }
 
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     const body = await jsonBody(req);
     const accountId = stringField(body.accountId, 200);
     const name = stringField(body.name, 120);
-    const folder = await createEmailFolder(r.ctx.db, r.ctx.tenantId, accountId, name);
+    const folder = await createEmailFolder(r.ctx.db, r.ctx.tenantId, r.ctx.userId, accountId, name);
     return NextResponse.json({ folder });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось создать папку");

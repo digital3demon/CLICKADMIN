@@ -14,7 +14,7 @@ export async function GET(
     const { id } = await params;
     const url = new URL(req.url);
     const markRead = url.searchParams.get("markRead") !== "0";
-    const email = await getEmailDetail(r.ctx.db, r.ctx.tenantId, id, markRead);
+    const email = await getEmailDetail(r.ctx.db, r.ctx.tenantId, r.ctx.userId, id, markRead);
     return NextResponse.json({ email });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось открыть письмо");

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { EmailFolderType } from "@prisma/client";
-import { inferFolderType } from "./mail-sync.service";
+import { EmailFolderType, EmailSyncMode } from "@prisma/client";
+import { inferFolderType, shouldSyncFolderForMode } from "./mail-sync.service";
 
 vi.mock("server-only", () => ({}));
 
@@ -12,5 +12,19 @@ describe("inferFolderType", () => {
     expect(inferFolderType("Спам")).toBe(EmailFolderType.SPAM);
     expect(inferFolderType("Корзина")).toBe(EmailFolderType.TRASH);
     expect(inferFolderType("Архив")).toBe(EmailFolderType.ARCHIVE);
+  });
+});
+
+describe("shouldSyncFolderForMode", () => {
+  it("keeps default recent sync focused on incoming mail only", () => {
+    expect(shouldSyncFolderForMode(EmailFolderType.INBOX, EmailSyncMode.RECENT)).toBe(true);
+    expect(shouldSyncFolderForMode(EmailFolderType.SENT, EmailSyncMode.RECENT)).toBe(false);
+    expect(shouldSyncFolderForMode(EmailFolderType.ARCHIVE, EmailSyncMode.RECENT)).toBe(false);
+  });
+
+  it("allows explicit backfill to walk all folders", () => {
+    expect(shouldSyncFolderForMode(EmailFolderType.INBOX, EmailSyncMode.BACKFILL)).toBe(true);
+    expect(shouldSyncFolderForMode(EmailFolderType.SENT, EmailSyncMode.BACKFILL)).toBe(true);
+    expect(shouldSyncFolderForMode(EmailFolderType.ARCHIVE, EmailSyncMode.BACKFILL)).toBe(true);
   });
 });

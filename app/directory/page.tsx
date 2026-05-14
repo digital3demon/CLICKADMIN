@@ -28,6 +28,7 @@ export default async function DirectoryHubPage() {
   const showCouriers = a?.CONFIG_COURIERS === true;
   const showOrdersImportExport = a?.CONFIG_ORDERS_IMPORT_EXPORT === true;
   const showContractTemplate = a?.CONFIG_CONTRACT_TEMPLATE === true;
+  const showMail = a?.MAIL === true;
 
   return (
     <ModuleFrame
@@ -155,6 +156,19 @@ export default async function DirectoryHubPage() {
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
               Загрузка DOCX-шаблона: поля для замены распознаются из красного
               текста в кавычках.
+            </p>
+          </Link>
+        ) : null}
+        {showMail ? (
+          <Link
+            href="/directory/mail"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">
+              Почта
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Подключение аккаунтов Яндекс.Почты и правила обработки входящих писем.
             </p>
           </Link>
         ) : null}

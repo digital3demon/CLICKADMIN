@@ -51,11 +51,7 @@ export function SidebarDrafts() {
           </span>
         ) : null}
       </p>
-      {drafts.length === 0 ? (
-        <p className="mt-2 text-xs leading-snug text-[var(--sidebar-text)] opacity-80 shell-short:mt-1.5 shell-short:text-[11px]">
-          Появятся, если закрыть или свернуть наряд с несохранёнными данными.
-        </p>
-      ) : (
+      {drafts.length === 0 ? null : (
         <ul className="mt-2 flex max-h-40 flex-col gap-1 overflow-y-auto shell-short:mt-1.5 shell-short:max-h-28">
           {drafts.map((d) => (
             <li key={d.id}>

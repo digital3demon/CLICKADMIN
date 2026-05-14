@@ -35,22 +35,19 @@ export function MailViewer({
   const [quickReply, setQuickReply] = useState("");
   if (loading) {
     return (
-      <section className="hidden min-w-0 flex-1 bg-[#f9fafc] p-8 text-sm text-[#7f8796] xl:block">
+      <section className="hidden min-w-0 flex-1 bg-[var(--app-bg)] p-8 text-sm text-[var(--text-muted)] xl:block">
         Открываем письмо...
       </section>
     );
   }
   if (!email) {
     return (
-      <section className="hidden min-w-0 flex-1 items-center justify-center bg-[#f9fafc] p-10 xl:flex">
+      <section className="hidden min-w-0 flex-1 items-center justify-center bg-[var(--app-bg)] p-10 xl:flex">
         <div className="max-w-sm text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-3xl shadow-sm">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-[var(--card-bg)] text-3xl shadow-sm">
             ✉
           </div>
-          <h3 className="text-lg font-semibold text-[#20242b]">Выберите письмо</h3>
-          <p className="mt-2 text-sm leading-6 text-[#7a8292]">
-            Просмотр откроется справа, как в Яндекс Почте. Горячие клавиши: J/K, R, E, Delete.
-          </p>
+          <h3 className="text-lg font-semibold text-[var(--app-text)]">Выберите письмо</h3>
         </div>
       </section>
     );
@@ -58,7 +55,7 @@ export function MailViewer({
 
   const body = email.safeHtmlBody?.trim()
     ? email.safeHtmlBody
-    : `<pre style="white-space:pre-wrap;font:14px/1.6 system-ui;color:#20242b">${(
+    : `<pre style="white-space:pre-wrap;font:14px/1.6 system-ui;color:CanvasText">${(
         email.textBody || ""
       )
         .replaceAll("&", "&amp;")
@@ -66,53 +63,53 @@ export function MailViewer({
         .replaceAll(">", "&gt;")}</pre>`;
 
   return (
-    <section className="min-w-0 flex-1 overflow-auto bg-[#f9fafc]">
-      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-[#e4e8f0] bg-[#f9fafc]/95 px-6 py-3 backdrop-blur">
-        <button className="rounded-xl bg-[#2b7cff] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#176bf2]" onClick={() => onReply("", "reply")}>
+    <section className="min-w-0 flex-1 overflow-auto bg-[var(--app-bg)]">
+      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--app-bg)]/95 px-6 py-3 backdrop-blur">
+        <button className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[var(--sidebar-blue-hover)]" onClick={() => onReply("", "reply")}>
           Ответить
         </button>
-        <button className="rounded-xl border border-[#dfe4ee] bg-white px-3 py-2 text-sm font-medium text-[#424a56] hover:bg-[#f2f5fa]" onClick={() => onReply("", "replyAll")}>
+        <button className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onReply("", "replyAll")}>
           Ответить всем
         </button>
-        <button className="rounded-xl border border-[#dfe4ee] bg-white px-3 py-2 text-sm font-medium text-[#424a56] hover:bg-[#f2f5fa]" onClick={() => onReply("", "forward")}>
+        <button className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onReply("", "forward")}>
           Переслать
         </button>
-        <button className="rounded-xl border border-[#dfe4ee] bg-white px-3 py-2 text-sm font-medium text-[#424a56] hover:bg-[#f2f5fa]" onClick={() => onAction("archive")}>
+        <button className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onAction("archive")}>
           Архив
         </button>
-        <button className="rounded-xl border border-[#ffd5d5] bg-white px-3 py-2 text-sm font-medium text-[#c23232] hover:bg-[#fff3f3]" onClick={() => onAction("trash")}>
+        <button className="rounded-xl border border-red-400/30 bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-500/10 dark:text-red-300" onClick={() => onAction("trash")}>
           Удалить
         </button>
-        <button className="rounded-xl border border-[#dfe4ee] bg-white px-3 py-2 text-sm font-medium text-[#424a56] hover:bg-[#f2f5fa]" onClick={() => onAction(email.isFlagged ? "unflag" : "flag")}>
+        <button className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onAction(email.isFlagged ? "unflag" : "flag")}>
           {email.isFlagged ? "Снять флажок" : "Флажок"}
         </button>
       </div>
 
       <article className="mx-auto max-w-4xl px-6 py-6">
-        <div className="rounded-[28px] bg-white p-7 shadow-sm ring-1 ring-[#e5e9f2]">
-          <h1 className="text-2xl font-semibold tracking-[-0.03em] text-[#15191f]">
+        <div className="rounded-[28px] bg-[var(--card-bg)] p-7 shadow-sm ring-1 ring-[var(--card-border)]">
+          <h1 className="text-2xl font-semibold tracking-[-0.03em] text-[var(--app-text)]">
             {email.subject || "(без темы)"}
           </h1>
-          <div className="mt-5 grid gap-2 text-sm text-[#5f6878]">
+          <div className="mt-5 grid gap-2 text-sm text-[var(--text-secondary)]">
             <div>
-              <span className="mr-2 text-[#9aa2b2]">От кого</span>
-              <span className="font-medium text-[#222831]">
+              <span className="mr-2 text-[var(--text-muted)]">От кого</span>
+              <span className="font-medium text-[var(--app-text)]">
                 {email.fromName || email.fromAddress || "Неизвестно"}
               </span>
               {email.fromAddress ? <span className="ml-2">{email.fromAddress}</span> : null}
             </div>
             <div>
-              <span className="mr-2 text-[#9aa2b2]">Кому</span>
+              <span className="mr-2 text-[var(--text-muted)]">Кому</span>
               <span>{addressLine(email.to)}</span>
             </div>
             {email.cc && email.cc.length ? (
               <div>
-                <span className="mr-2 text-[#9aa2b2]">Копия</span>
+                <span className="mr-2 text-[var(--text-muted)]">Копия</span>
                 <span>{addressLine(email.cc)}</span>
               </div>
             ) : null}
             <div>
-              <span className="mr-2 text-[#9aa2b2]">Дата</span>
+              <span className="mr-2 text-[var(--text-muted)]">Дата</span>
               <span>
                 {new Date(email.receivedAt || email.sentAt || email.createdAt).toLocaleString("ru-RU")}
               </span>
@@ -125,18 +122,18 @@ export function MailViewer({
                 <a
                   key={a.id}
                   href={`/api/mail/emails/${email.id}/attachments/${a.id}`}
-                  className="flex items-center gap-3 rounded-2xl border border-[#e4e8f0] bg-[#fbfcff] p-3 transition hover:border-[#2b7cff]/40 hover:bg-[#f3f7ff]"
+                  className="flex items-center gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 transition hover:border-[var(--sidebar-blue)]/40 hover:bg-[var(--surface-hover)]"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eef4ff] text-xl">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--accent-selection-bg)] text-xl">
                     {a.mimeType.startsWith("image/") ? "▧" : "▤"}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-[#252b34]">
+                    <span className="block truncate text-sm font-semibold text-[var(--app-text)]">
                       {a.fileName}
                     </span>
-                    <span className="text-xs text-[#7b8494]">{sizeLabel(a.size)}</span>
+                    <span className="text-xs text-[var(--text-muted)]">{sizeLabel(a.size)}</span>
                   </span>
-                  <span className="text-sm font-semibold text-[#2b7cff]">Скачать</span>
+                  <span className="text-sm font-semibold text-[var(--sidebar-blue)]">Скачать</span>
                 </a>
               ))}
             </div>
@@ -145,17 +142,17 @@ export function MailViewer({
           <iframe
             title="Тело письма"
             sandbox=""
-            srcDoc={`<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:14px/1.6 Arial,sans-serif;color:#20242b} img{max-width:100%;height:auto} a{color:#176bf2}</style></head><body>${body}</body></html>`}
-            className="mt-7 h-[520px] w-full rounded-2xl border border-[#edf0f6] bg-white"
+            srcDoc={`<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:14px/1.6 Arial,sans-serif;color:CanvasText;background:Canvas} img{max-width:100%;height:auto} a{color:LinkText}</style></head><body>${body}</body></html>`}
+            className="mt-7 h-[520px] w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card-bg)]"
           />
 
-          <div className="mt-6 rounded-2xl border border-[#e2e7f0] bg-[#fbfcff] p-4">
+          <div className="mt-6 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
             <textarea
               value={quickReply}
               onChange={(e) => setQuickReply(e.target.value)}
               rows={4}
               placeholder="Быстрый ответ..."
-              className="w-full resize-none bg-transparent text-sm text-[#20242b] outline-none placeholder:text-[#a1a8b6]"
+              className="w-full resize-none bg-transparent text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
             />
             <div className="mt-3 flex justify-end">
               <button
@@ -165,7 +162,7 @@ export function MailViewer({
                   onReply(`<p>${quickReply.replaceAll("\n", "<br>")}</p>`, "reply");
                   setQuickReply("");
                 }}
-                className="rounded-xl bg-[#2b7cff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#176bf2] disabled:opacity-50"
+                className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
               >
                 Ответить
               </button>

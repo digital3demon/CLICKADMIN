@@ -12,7 +12,7 @@ export async function DELETE(
   if (!r.ok) return r.response;
   try {
     const { id } = await params;
-    await deleteEmailAccount(r.ctx.db, r.ctx.tenantId, id);
+    await deleteEmailAccount(r.ctx.db, r.ctx.tenantId, r.ctx.userId, id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось удалить почтовый аккаунт");

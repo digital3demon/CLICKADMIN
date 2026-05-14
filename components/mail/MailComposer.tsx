@@ -46,7 +46,7 @@ export function MailComposer({
     editorProps: {
       attributes: {
         class:
-          "min-h-[280px] px-5 py-4 text-[15px] leading-7 text-[#20242b] outline-none",
+          "min-h-[280px] px-5 py-4 text-[15px] leading-7 text-[var(--app-text)] outline-none",
       },
     },
   });
@@ -98,7 +98,7 @@ export function MailComposer({
 
   return (
     <div
-      className="fixed inset-0 z-[260] bg-[#101827]/35 backdrop-blur-sm"
+      className="fixed inset-0 z-[260] bg-black/40 backdrop-blur-sm"
       role="presentation"
       onClick={onClose}
     >
@@ -106,64 +106,64 @@ export function MailComposer({
         role="dialog"
         aria-modal="true"
         aria-label="Написать письмо"
-        className="absolute bottom-5 right-5 top-5 flex w-[min(920px,calc(100vw-40px))] flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.30)] ring-1 ring-black/5"
+        className="absolute bottom-5 right-5 top-5 flex w-[min(920px,calc(100vw-40px))] flex-col overflow-hidden rounded-[28px] bg-[var(--card-bg)] text-[var(--app-text)] shadow-[0_24px_80px_rgba(0,0,0,0.30)] ring-1 ring-[var(--card-border)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-[#e9edf4] bg-[#fbfcff] px-5 py-4">
+        <header className="flex items-center justify-between border-b border-[var(--card-border)] bg-[var(--surface-muted)] px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-[#171b22]">Новое письмо</h2>
-            <p className="text-xs text-[#7e8798]">От: {account?.email ?? "аккаунт не выбран"}</p>
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">Новое письмо</h2>
+            <p className="text-xs text-[var(--text-muted)]">От: {account?.email ?? "аккаунт не выбран"}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#7b8495] hover:bg-[#eef2f8]"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
             aria-label="Закрыть"
           >
             ×
           </button>
         </header>
 
-        <div className="border-b border-[#edf0f6] px-5 py-3">
-          <div className="flex items-center gap-3 border-b border-[#eef1f6] py-2">
-            <span className="w-16 text-sm text-[#858e9f]">Кому</span>
+        <div className="border-b border-[var(--border-subtle)] px-5 py-3">
+          <div className="flex items-center gap-3 border-b border-[var(--border-subtle)] py-2">
+            <span className="w-16 text-sm text-[var(--text-muted)]">Кому</span>
             <input
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-sm text-[#20242b] outline-none"
+              className="min-w-0 flex-1 bg-transparent text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
               placeholder="email@example.ru"
             />
-            <button type="button" className="text-xs text-[#2b7cff]" onClick={() => setCcOpen((v) => !v)}>
+            <button type="button" className="text-xs text-[var(--sidebar-blue)]" onClick={() => setCcOpen((v) => !v)}>
               Копия
             </button>
-            <button type="button" className="text-xs text-[#2b7cff]" onClick={() => setBccOpen((v) => !v)}>
+            <button type="button" className="text-xs text-[var(--sidebar-blue)]" onClick={() => setBccOpen((v) => !v)}>
               Скрытая
             </button>
           </div>
           {ccOpen ? (
-            <div className="flex items-center gap-3 border-b border-[#eef1f6] py-2">
-              <span className="w-16 text-sm text-[#858e9f]">Копия</span>
-              <input value={cc} onChange={(e) => setCc(e.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+            <div className="flex items-center gap-3 border-b border-[var(--border-subtle)] py-2">
+              <span className="w-16 text-sm text-[var(--text-muted)]">Копия</span>
+              <input value={cc} onChange={(e) => setCc(e.target.value)} className="min-w-0 flex-1 bg-transparent text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]" />
             </div>
           ) : null}
           {bccOpen ? (
-            <div className="flex items-center gap-3 border-b border-[#eef1f6] py-2">
-              <span className="w-16 text-sm text-[#858e9f]">Скрытая</span>
-              <input value={bcc} onChange={(e) => setBcc(e.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+            <div className="flex items-center gap-3 border-b border-[var(--border-subtle)] py-2">
+              <span className="w-16 text-sm text-[var(--text-muted)]">Скрытая</span>
+              <input value={bcc} onChange={(e) => setBcc(e.target.value)} className="min-w-0 flex-1 bg-transparent text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]" />
             </div>
           ) : null}
           <div className="flex items-center gap-3 py-2">
-            <span className="w-16 text-sm text-[#858e9f]">Тема</span>
+            <span className="w-16 text-sm text-[var(--text-muted)]">Тема</span>
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-sm text-[#20242b] outline-none"
+              className="min-w-0 flex-1 bg-transparent text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
               placeholder="Тема письма"
             />
           </div>
         </div>
 
-        <div className="flex items-center gap-1 border-b border-[#edf0f6] bg-[#fbfcff] px-4 py-2">
+        <div className="flex items-center gap-1 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2">
           {[
             ["bold", "Ж"],
             ["italic", "К"],
@@ -173,7 +173,7 @@ export function MailComposer({
             <button
               key={cmd}
               type="button"
-              className="rounded-lg px-3 py-1.5 text-sm font-semibold text-[#4e5664] hover:bg-[#edf2f9]"
+              className="rounded-lg px-3 py-1.5 text-sm font-semibold text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
               onClick={() => {
                 if (cmd === "bold") editor?.chain().focus().toggleBold().run();
                 if (cmd === "italic") editor?.chain().focus().toggleItalic().run();
@@ -198,10 +198,10 @@ export function MailComposer({
           {files.length > 0 ? (
             <div className="mx-5 mb-5 grid gap-2 sm:grid-cols-2">
               {files.map((file, idx) => (
-                <div key={`${file.name}-${idx}`} className="flex items-center gap-2 rounded-xl border border-[#e3e8f1] bg-[#fbfcff] px-3 py-2 text-sm">
+                <div key={`${file.name}-${idx}`} className="flex items-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm">
                   <span>📎</span>
                   <span className="min-w-0 flex-1 truncate">{file.name}</span>
-                  <button type="button" className="text-[#c23232]" onClick={() => setFiles((prev) => prev.filter((_, i) => i !== idx))}>
+                  <button type="button" className="text-red-600 dark:text-red-300" onClick={() => setFiles((prev) => prev.filter((_, i) => i !== idx))}>
                     ×
                   </button>
                 </div>
@@ -210,16 +210,16 @@ export function MailComposer({
           ) : null}
         </div>
 
-        <footer className="flex flex-wrap items-center gap-2 border-t border-[#e9edf4] bg-[#fbfcff] px-5 py-4">
+        <footer className="flex flex-wrap items-center gap-2 border-t border-[var(--card-border)] bg-[var(--surface-muted)] px-5 py-4">
           <button
             type="button"
             disabled={sending || !to.trim() || !subject.trim() || !editor?.getText().trim()}
             onClick={() => void send()}
-            className="rounded-2xl bg-[#2b7cff] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#176bf2] disabled:opacity-50"
+            className="rounded-2xl bg-[var(--sidebar-blue)] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
           >
             {sending ? "Отправка..." : "Отправить"}
           </button>
-          <label className="cursor-pointer rounded-xl border border-[#dfe4ee] bg-white px-4 py-2 text-sm font-medium text-[#454d59] hover:bg-[#f2f5fa]">
+          <label className="cursor-pointer rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-4 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]">
             Прикрепить
             <input
               type="file"
@@ -228,16 +228,16 @@ export function MailComposer({
               onChange={(e) => setFiles((prev) => [...prev, ...Array.from(e.target.files ?? [])])}
             />
           </label>
-          <button type="button" className="rounded-xl border border-[#dfe4ee] bg-white px-4 py-2 text-sm font-medium text-[#454d59] hover:bg-[#f2f5fa]" onClick={saveDraft}>
+          <button type="button" className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-4 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={saveDraft}>
             Сохранить черновик
           </button>
-          <button type="button" className="rounded-xl border border-[#dfe4ee] bg-white px-4 py-2 text-sm font-medium text-[#454d59] hover:bg-[#f2f5fa]" onClick={() => setStatus("Отложенная отправка будет доступна после настройки расписания.")}>
+          <button type="button" className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-4 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => setStatus("Отложенная отправка будет доступна после настройки расписания.")}>
             Отложить отправку
           </button>
-          <button type="button" className="ml-auto rounded-xl px-4 py-2 text-sm font-medium text-[#7b8495] hover:bg-[#edf2f8]" onClick={onClose}>
+          <button type="button" className="ml-auto rounded-xl px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)]" onClick={onClose}>
             Закрыть
           </button>
-          {status ? <span className="w-full text-xs text-[#687083]">{status}</span> : null}
+          {status ? <span className="w-full text-xs text-[var(--text-secondary)]">{status}</span> : null}
         </footer>
       </section>
     </div>

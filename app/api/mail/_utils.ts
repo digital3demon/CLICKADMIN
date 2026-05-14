@@ -11,6 +11,8 @@ export function mailErrorResponse(err: unknown, fallback = "Ошибка поч�
     EMAIL_ATTACHMENT_NOT_FOUND: { status: 404, error: "Вложение не найдено" },
     EMPTY_FOLDER_NAME: { status: 400, error: "Укажите название папки" },
     EMPTY_LABEL_NAME: { status: 400, error: "Укажите название метки" },
+    EMPTY_RULE_NAME: { status: 400, error: "Укажите название правила" },
+    EMAIL_RULE_NOT_FOUND: { status: 404, error: "Правило не найдено" },
     MAIL_ACCOUNT_PASSWORD_NOT_CONFIGURED: {
       status: 400,
       error: "Для аккаунта не задан пароль приложения Яндекса",

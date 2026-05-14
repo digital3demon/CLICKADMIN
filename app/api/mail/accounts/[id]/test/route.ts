@@ -12,7 +12,7 @@ export async function POST(
   if (!r.ok) return r.response;
   try {
     const { id } = await params;
-    await testEmailAccountConnection(r.ctx.db, r.ctx.tenantId, id);
+    await testEmailAccountConnection(r.ctx.db, r.ctx.tenantId, r.ctx.userId, id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось подключиться к Яндекс.Почте");

@@ -629,6 +629,18 @@ enum EmailFolderType {
   CUSTOM
 }
 
+enum EmailSyncMode {
+  RECENT
+  BACKFILL
+}
+
+enum EmailSyncJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 /// Пользователь: владелец и сотрудники — вход по паролю; до активации хранится inviteCodeHash
 model User {
   id                        String    @id @default(cuid())
@@ -755,6 +767,8 @@ model EmailAccount {
   id                   String   @id @default(cuid())
   tenantId             String
   tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Пользователь, который подключил ящик. Ящики не являются общими по умолчанию.
+  createdByUserId      String?
   email                String
   displayName          String?
   encryptedAppPassword String?
@@ -774,9 +788,12 @@ model EmailAccount {
   folders EmailFolder[]
   labels  EmailLabel[]
   emails  Email[]
+  rules   EmailRule[]
+  syncJobs EmailSyncJob[]
 
-  @@unique([tenantId, email])
+  @@unique([tenantId, createdByUserId, email])
   @@index([tenantId, isActive])
+  @@index([tenantId, createdByUserId, isActive])
 }
 
 /// Папка IMAP/локальная системная папка аккаунта.
@@ -793,6 +810,8 @@ model EmailFolder {
   unreadCount   Int             @default(0)
   totalCount    Int             @default(0)
   lastSyncedUid Int?
+  lastBackfillUid Int?
+  syncLockedAt  DateTime?
   sortOrder     Int             @default(0)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
@@ -841,9 +860,10 @@ model Email {
 
   @@unique([accountId, folderId, uid])
   @@unique([accountId, messageId])
-  @@index([tenantId, accountId, folderId, receivedAt])
-  @@index([tenantId, accountId, isRead, receivedAt])
-  @@index([tenantId, accountId, isFlagged, receivedAt])
+  @@index([tenantId, accountId, folderId, receivedAt, id])
+  @@index([tenantId, accountId, isRead, receivedAt, id])
+  @@index([tenantId, accountId, isFlagged, receivedAt, id])
+  @@index([tenantId, accountId, hasAttachments, receivedAt, id])
   @@index([tenantId, direction])
 }
 
@@ -880,6 +900,23 @@ model EmailLabelAssignment {
   @@index([tenantId, labelId])
 }
 
+/// Правило обработки входящей почты. Условия/действия — JSON-контракт UI; применяется при синхронизации.
+model EmailRule {
+  id          String   @id @default(cuid())
+  tenantId    String
+  accountId   String
+  account     EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name        String
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  conditions  Json
+  actions     Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, accountId, isActive, sortOrder])
+}
+
 model EmailAttachment {
   id          String   @id @default(cuid())
   tenantId    String
@@ -890,10 +927,39 @@ model EmailAttachment {
   size        Int
   contentId   String?
   isInline    Boolean  @default(false)
-  data        Bytes
+  diskRelPath String?
+  checksumSha256 String?
+  data        Bytes?
   createdAt   DateTime @default(now())
 
   @@index([tenantId, emailId])
+}
+
+model EmailSyncJob {
+  id          String             @id @default(cuid())
+  tenantId    String
+  accountId   String
+  account     EmailAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdByUserId String?
+  jobKey      String             @unique
+  mode        EmailSyncMode      @default(RECENT)
+  status      EmailSyncJobStatus @default(QUEUED)
+  attempts    Int                @default(0)
+  maxAttempts Int                @default(3)
+  imported    Int                @default(0)
+  skipped     Int                @default(0)
+  folders     Int                @default(0)
+  lastError   String?
+  stats       Json?
+  queuedAt    DateTime           @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  lockedAt    DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([tenantId, accountId, status, queuedAt])
+  @@index([tenantId, createdByUserId, status, queuedAt])
 }
 
 /// Ожидание email в диалоге с ботом при привязке (после /start).

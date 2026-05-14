@@ -1,15 +1,27 @@
 import "server-only";
-import { EmailFolderType, type EmailAccount, type PrismaClient } from "@prisma/client";
+import {
+  EmailFolderType,
+  EmailSyncMode,
+  type EmailAccount,
+  type EmailRule,
+  type PrismaClient,
+} from "@prisma/client";
 import { simpleParser, type ParsedMail } from "mailparser";
 import { logger } from "@/lib/server/logger";
 import {
   createImapClient,
+  fetchFolderMessagesBefore,
   fetchFolderMessages,
   listImapFolders,
   type ImapFolderInfo,
 } from "@/lib/mail/imap-client";
+import {
+  newMailAttachmentId,
+  writeMailAttachmentBytes,
+} from "@/lib/mail/mail-attachment-storage";
 
-const MAX_MESSAGES_PER_FOLDER = 120;
+const RECENT_MESSAGES_PER_INBOX = 40;
+const BACKFILL_MESSAGES_PER_FOLDER = 120;
 
 function normalizeFolderPath(value: string): string {
   return value.trim().toLowerCase();
@@ -26,6 +38,11 @@ export function inferFolderType(path: string): EmailFolderType {
   }
   if (p.includes("archive") || p.includes("архив")) return EmailFolderType.ARCHIVE;
   return EmailFolderType.CUSTOM;
+}
+
+export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMode): boolean {
+  if (mode === EmailSyncMode.BACKFILL) return true;
+  return type === EmailFolderType.INBOX;
 }
 
 function addressList(value: ParsedMail["from"] | ParsedMail["to"] | ParsedMail["cc"]): Array<{
@@ -63,11 +80,80 @@ function headersToJson(headers: ParsedMail["headers"]): Record<string, string> {
   return out;
 }
 
-function bytesForPrisma(value: Buffer): Uint8Array<ArrayBuffer> {
-  const copy = new ArrayBuffer(value.byteLength);
-  const view = new Uint8Array(copy);
-  view.set(value);
-  return view;
+function stringFromJsonField(value: unknown, key: string): string {
+  if (!value || typeof value !== "object") return "";
+  const raw = (value as Record<string, unknown>)[key];
+  return typeof raw === "string" ? raw.trim().toLowerCase() : "";
+}
+
+function stringArrayFromJsonField(value: unknown, key: string): string[] {
+  if (!value || typeof value !== "object") return [];
+  const raw = (value as Record<string, unknown>)[key];
+  return Array.isArray(raw)
+    ? raw.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function booleanFromJsonField(value: unknown, key: string): boolean {
+  return Boolean(value && typeof value === "object" && (value as Record<string, unknown>)[key] === true);
+}
+
+function nullableStringFromJsonField(value: unknown, key: string): string | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = (value as Record<string, unknown>)[key];
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+
+function ruleMatches(
+  rule: Pick<EmailRule, "conditions">,
+  message: { from: string; subject: string; body: string },
+): boolean {
+  const from = stringFromJsonField(rule.conditions, "from");
+  const subject = stringFromJsonField(rule.conditions, "subject");
+  const body = stringFromJsonField(rule.conditions, "body");
+  if (from && !message.from.toLowerCase().includes(from)) return false;
+  if (subject && !message.subject.toLowerCase().includes(subject)) return false;
+  if (body && !message.body.toLowerCase().includes(body)) return false;
+  return Boolean(from || subject || body);
+}
+
+async function applyIncomingRules(
+  db: PrismaClient,
+  account: Pick<EmailAccount, "id" | "tenantId">,
+  rules: EmailRule[],
+  message: { from: string; subject: string; body: string },
+): Promise<{ isFlagged: boolean; labelIds: string[]; folderId: string | null }> {
+  let isFlagged = false;
+  const labelIds = new Set<string>();
+  let folderId: string | null = null;
+
+  for (const rule of rules) {
+    if (!ruleMatches(rule, message)) continue;
+    isFlagged ||= booleanFromJsonField(rule.actions, "markImportant");
+    for (const labelId of stringArrayFromJsonField(rule.actions, "labelIds")) {
+      labelIds.add(labelId);
+    }
+    folderId = nullableStringFromJsonField(rule.actions, "moveToFolderId") ?? folderId;
+  }
+
+  if (labelIds.size > 0) {
+    const existing = await db.emailLabel.findMany({
+      where: { tenantId: account.tenantId, accountId: account.id, id: { in: [...labelIds] } },
+      select: { id: true },
+    });
+    labelIds.clear();
+    existing.forEach((label) => labelIds.add(label.id));
+  }
+
+  if (folderId) {
+    const folder = await db.emailFolder.findFirst({
+      where: { tenantId: account.tenantId, accountId: account.id, id: folderId },
+      select: { id: true },
+    });
+    folderId = folder?.id ?? null;
+  }
+
+  return { isFlagged, labelIds: [...labelIds], folderId };
 }
 
 async function upsertFolder(
@@ -126,8 +212,10 @@ async function refreshFolderCounters(
 export async function syncEmailAccount(
   db: PrismaClient,
   account: EmailAccount,
+  options: { mode?: EmailSyncMode } = {},
 ): Promise<{ imported: number; skipped: number; folders: number }> {
   const startedAt = Date.now();
+  const mode = options.mode ?? EmailSyncMode.RECENT;
   const client = createImapClient(account);
   let imported = 0;
   let skipped = 0;
@@ -135,16 +223,31 @@ export async function syncEmailAccount(
 
   await client.connect();
   try {
+    const activeRules = await db.emailRule.findMany({
+      where: { tenantId: account.tenantId, accountId: account.id, isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
     const listedFolders = await listImapFolders(client);
     for (const listed of listedFolders) {
       const folder = await upsertFolder(db, account, listed);
       folders += 1;
+      if (!shouldSyncFolderForMode(folder.type, mode)) continue;
       let maxUid = folder.lastSyncedUid ?? 0;
+      let minBackfillUid = folder.lastBackfillUid ?? null;
       let processed = 0;
-      for await (const item of fetchFolderMessages(client, listed.path, maxUid + 1)) {
-        if (processed >= MAX_MESSAGES_PER_FOLDER) break;
+      const maxMessages =
+        mode === EmailSyncMode.BACKFILL
+          ? BACKFILL_MESSAGES_PER_FOLDER
+          : RECENT_MESSAGES_PER_INBOX;
+      const messages =
+        mode === EmailSyncMode.BACKFILL
+          ? fetchFolderMessagesBefore(client, listed.path, folder.lastBackfillUid, maxMessages)
+          : fetchFolderMessages(client, listed.path, maxUid + 1, maxMessages);
+      for await (const item of messages) {
+        if (processed >= maxMessages) break;
         processed += 1;
         maxUid = Math.max(maxUid, item.uid);
+        minBackfillUid = minBackfillUid == null ? item.uid : Math.min(minBackfillUid, item.uid);
 
         const exists = await db.email.findFirst({
           where: {
@@ -163,18 +266,26 @@ export async function syncEmailAccount(
         const parsed = await simpleParser(item.source);
         const from = firstAddress(parsed.from);
         const hasAttachments = parsed.attachments.length > 0;
-        await db.email.create({
+        const ruleResult =
+          folder.type === EmailFolderType.INBOX
+            ? await applyIncomingRules(db, account, activeRules, {
+                from: [from.name, from.address].filter(Boolean).join(" "),
+                subject: parsed.subject ?? "",
+                body: parsed.text ?? "",
+              })
+            : { isFlagged: false, labelIds: [], folderId: null };
+        const email = await db.email.create({
           data: {
             tenantId: account.tenantId,
             accountId: account.id,
-            folderId: folder.id,
+            folderId: ruleResult.folderId ?? folder.id,
             uid: item.uid,
             messageId: parsed.messageId ?? null,
             direction:
               folder.type === EmailFolderType.SENT ? "OUTBOUND" : "INBOUND",
             isRead: item.flags.has("\\Seen"),
             readAt: item.flags.has("\\Seen") ? item.internalDate ?? new Date() : null,
-            isFlagged: item.flags.has("\\Flagged"),
+            isFlagged: item.flags.has("\\Flagged") || ruleResult.isFlagged,
             hasAttachments,
             fromName: from.name,
             fromAddress: from.address,
@@ -188,25 +299,48 @@ export async function syncEmailAccount(
             receivedAt: item.internalDate ?? parsed.date ?? new Date(),
             sentAt: parsed.date ?? null,
             internalDate: item.internalDate,
-            attachments: {
-              create: parsed.attachments.map((a) => ({
+            labelAssignments: {
+              create: ruleResult.labelIds.map((labelId) => ({
                 tenantId: account.tenantId,
-                fileName: a.filename || "attachment",
-                mimeType: a.contentType || "application/octet-stream",
-                size: a.size || a.content.length,
-                contentId: a.contentId ?? null,
-                isInline: Boolean(a.related),
-                data: bytesForPrisma(a.content),
+                labelId,
               })),
             },
           },
         });
+        for (const a of parsed.attachments) {
+          const attachmentId = newMailAttachmentId();
+          const mimeType = a.contentType || "application/octet-stream";
+          const stored = await writeMailAttachmentBytes({
+            tenantId: account.tenantId,
+            emailId: email.id,
+            attachmentId,
+            body: a.content,
+            contentType: mimeType,
+          });
+          await db.emailAttachment.create({
+            data: {
+              id: attachmentId,
+              tenantId: account.tenantId,
+              emailId: email.id,
+              fileName: a.filename || "attachment",
+              mimeType,
+              size: a.size || a.content.length,
+              contentId: a.contentId ?? null,
+              isInline: Boolean(a.related),
+              diskRelPath: stored.diskRelPath,
+              checksumSha256: stored.checksumSha256,
+            },
+          });
+        }
         imported += 1;
       }
 
       await db.emailFolder.update({
         where: { id: folder.id },
-        data: { lastSyncedUid: maxUid || folder.lastSyncedUid },
+        data:
+          mode === EmailSyncMode.BACKFILL
+            ? { lastBackfillUid: minBackfillUid ?? folder.lastBackfillUid }
+            : { lastSyncedUid: maxUid || folder.lastSyncedUid },
       });
       await refreshFolderCounters(db, account.tenantId, folder.id);
     }
@@ -216,7 +350,7 @@ export async function syncEmailAccount(
       data: { lastSyncAt: new Date(), lastSyncError: null },
     });
     logger.info(
-      { accountId: account.id, imported, skipped, folders, elapsedMs: Date.now() - startedAt },
+      { accountId: account.id, mode, imported, skipped, folders, elapsedMs: Date.now() - startedAt },
       "mail sync completed",
     );
     return { imported, skipped, folders };

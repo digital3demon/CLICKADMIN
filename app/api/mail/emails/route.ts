@@ -13,12 +13,13 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId")?.trim();
   if (!accountId) return NextResponse.json({ error: "accountId обязателен" }, { status: 400 });
-  const emails = await listEmails(r.ctx.db, r.ctx.tenantId, {
+  const result = await listEmails(r.ctx.db, r.ctx.tenantId, r.ctx.userId, {
     accountId,
     folderId: url.searchParams.get("folderId")?.trim() || null,
     q: url.searchParams.get("q")?.trim() || null,
     filter: emailFilter(url.searchParams.get("filter")),
     take: Number(url.searchParams.get("take") || 80),
+    cursor: url.searchParams.get("cursor")?.trim() || null,
   });
-  return NextResponse.json({ emails });
+  return NextResponse.json(result);
 }

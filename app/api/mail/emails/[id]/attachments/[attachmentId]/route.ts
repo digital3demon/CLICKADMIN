@@ -11,8 +11,16 @@ export async function GET(
   if (!r.ok) return r.response;
   try {
     const { id, attachmentId } = await params;
-    const attachment = await getEmailAttachment(r.ctx.db, r.ctx.tenantId, id, attachmentId);
-    return new Response(attachment.data, {
+    const attachment = await getEmailAttachment(
+      r.ctx.db,
+      r.ctx.tenantId,
+      r.ctx.userId,
+      id,
+      attachmentId,
+    );
+    const body = new ArrayBuffer(attachment.data.byteLength);
+    new Uint8Array(body).set(attachment.data);
+    return new Response(body, {
       headers: {
         "Content-Type": attachment.mimeType,
         "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(

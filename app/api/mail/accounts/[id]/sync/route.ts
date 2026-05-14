@@ -1,19 +1,32 @@
 import { NextResponse } from "next/server";
-import { mailErrorResponse } from "@/app/api/mail/_utils";
-import { getMailApiContext, syncAccountNow } from "@/lib/mail/mail-service";
+import { EmailSyncMode } from "@prisma/client";
+import { jsonBody, mailErrorResponse } from "@/app/api/mail/_utils";
+import { getMailApiContext, stringField } from "@/lib/mail/mail-service";
+import { enqueueAndRunMailSyncJob } from "@/lib/mail/mail-queue";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
   try {
     const { id } = await params;
-    const result = await syncAccountNow(r.ctx.db, r.ctx.tenantId, id);
-    return NextResponse.json({ ok: true, ...result });
+    const body = await jsonBody(req);
+    const mode = stringField(body.mode, 20) === EmailSyncMode.BACKFILL
+      ? EmailSyncMode.BACKFILL
+      : EmailSyncMode.RECENT;
+    const result = await enqueueAndRunMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, id, mode);
+    return NextResponse.json({
+      ok: true,
+      queued: !result.processed,
+      enqueued: result.enqueued,
+      processed: result.processed,
+      result: result.result,
+      syncJob: result.syncJob,
+    });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось синхронизировать почту");
   }

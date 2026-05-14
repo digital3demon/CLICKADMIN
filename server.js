@@ -7,8 +7,37 @@
  *
  * В Linux-контейнерах HOSTNAME часто = id контейнера; для bind слушаем 0.0.0.0 (см. ниже).
  */
+const crypto = require("node:crypto");
+
 if (process.platform !== "win32") {
   process.env.HOSTNAME = "0.0.0.0";
 }
+
+if (!process.env.INTERNAL_MAIL_SYNC_SECRET) {
+  process.env.INTERNAL_MAIL_SYNC_SECRET = crypto.randomBytes(32).toString("hex");
+}
+
+function startMailBackgroundSync() {
+  if ((process.env.MAIL_BACKGROUND_SYNC ?? "true").trim().toLowerCase() === "false") {
+    return;
+  }
+  const intervalMs = Math.max(
+    15_000,
+    Number(process.env.MAIL_BACKGROUND_SYNC_INTERVAL_MS || 30_000),
+  );
+  const port = process.env.PORT || "3000";
+  const url = `http://127.0.0.1:${port}/api/cron/mail-sync`;
+  const run = () => {
+    fetch(url, {
+      headers: {
+        "x-internal-mail-sync-secret": process.env.INTERNAL_MAIL_SYNC_SECRET,
+      },
+    }).catch(() => undefined);
+  };
+  setTimeout(run, 10_000);
+  setInterval(run, intervalMs);
+}
+
+startMailBackgroundSync();
 
 require("./.next/standalone/server.js");

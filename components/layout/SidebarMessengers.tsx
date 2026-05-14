@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { CRM_MESSENGER_OPEN_COUNT_CHANGED_EVENT } from "@/lib/crm-client-events";
+import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 type SidebarMessengerRow = {
   id: string;
@@ -11,9 +12,12 @@ type SidebarMessengerRow = {
   preview: string;
 };
 
+const SIDEBAR_MESSENGERS_COLLAPSED_KEY = "sidebarMessengersCollapsedV1";
+
 export function SidebarMessengers() {
   const [count, setCount] = useState<number | null>(null);
   const [items, setItems] = useState<SidebarMessengerRow[]>([]);
+  const [collapsed, setCollapsed] = useState(false);
 
   const refetchSidebar = useCallback(() => {
     void (async () => {
@@ -37,6 +41,17 @@ export function SidebarMessengers() {
   }, [refetchSidebar]);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const raw = await readClientState<unknown>("user", SIDEBAR_MESSENGERS_COLLAPSED_KEY);
+      if (!cancelled && typeof raw === "boolean") setCollapsed(raw);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const onChanged = () => {
       refetchSidebar();
     };
@@ -58,27 +73,48 @@ export function SidebarMessengers() {
 
   const n = count ?? 0;
 
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      void writeClientState("user", SIDEBAR_MESSENGERS_COLLAPSED_KEY, next);
+      return next;
+    });
+  };
+
   return (
     <div className="shrink-0 border-t border-[var(--sidebar-border)] px-5 py-3 shell-short:px-4 shell-short:py-2">
-      <div className="flex items-start justify-between gap-2">
+      <button
+        type="button"
+        className="flex w-full items-start justify-between gap-2 text-left"
+        aria-expanded={!collapsed}
+        onClick={toggleCollapsed}
+      >
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--sidebar-text)] opacity-60 shell-short:text-[9px]">
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--sidebar-text)] opacity-60 shell-short:text-[9px]">
             Мессенджеры
+            <span
+              className={`inline-block text-[9px] transition-transform ${collapsed ? "" : "rotate-90"}`}
+              aria-hidden
+            >
+              ›
+            </span>
           </p>
-          <p className="mt-1.5 text-[11px] leading-snug text-[var(--sidebar-text)] opacity-75 shell-short:mt-1 shell-short:text-[10px]">
-            Упоминания{" "}
-            <span className="font-medium opacity-95">@clicklab_admin</span> в
-            группах врачей — полный текст сообщения.
-          </p>
+          {!collapsed ? (
+            <p className="mt-1.5 text-[11px] leading-snug text-[var(--sidebar-text)] opacity-75 shell-short:mt-1 shell-short:text-[10px]">
+              Упоминания{" "}
+              <span className="font-medium opacity-95">@clicklab_admin</span> в
+              группах врачей — полный текст сообщения.
+            </p>
+          ) : null}
         </div>
         {n > 0 ? (
           <span className="inline-flex min-h-5 min-w-[1.75rem] shrink-0 items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-1.5 text-xs font-semibold text-white tabular-nums">
             {n > 99 ? "99+" : n}
           </span>
         ) : null}
-      </div>
+      </button>
 
-      {items.length > 0 ? (
+      {!collapsed && items.length > 0 ? (
         <ul className="mt-2.5 space-y-1.5 shell-short:mt-2 shell-short:space-y-1">
           {items.map((it) => (
             <li key={it.id}>
@@ -111,12 +147,14 @@ export function SidebarMessengers() {
         </ul>
       ) : null}
 
-      <Link
-        href="/messengers"
-        className="mt-2.5 inline-block text-xs font-medium text-[var(--sidebar-blue)] hover:underline shell-short:mt-2"
-      >
-        Открыть очередь →
-      </Link>
+      {!collapsed ? (
+        <Link
+          href="/messengers"
+          className="mt-2.5 inline-block text-xs font-medium text-[var(--sidebar-blue)] hover:underline shell-short:mt-2"
+        >
+          Открыть очередь →
+        </Link>
+      ) : null}
     </div>
   );
 }

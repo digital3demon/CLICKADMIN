@@ -16,14 +16,19 @@ export async function PATCH(
     const displayName = stringField(body.name, 120);
     if (!displayName) return NextResponse.json({ error: "Укажите название папки" }, { status: 400 });
     const updated = await r.ctx.db.emailFolder.updateMany({
-      where: { id, tenantId: r.ctx.tenantId, type: "CUSTOM" },
+      where: {
+        id,
+        tenantId: r.ctx.tenantId,
+        type: "CUSTOM",
+        account: { createdByUserId: r.ctx.userId },
+      },
       data: { displayName },
     });
     if (!updated.count) {
       return NextResponse.json({ error: "Папка не найдена" }, { status: 404 });
     }
     const folder = await r.ctx.db.emailFolder.findFirst({
-      where: { id, tenantId: r.ctx.tenantId },
+      where: { id, tenantId: r.ctx.tenantId, account: { createdByUserId: r.ctx.userId } },
     });
     return NextResponse.json({ folder });
   } catch (err) {
@@ -40,7 +45,12 @@ export async function DELETE(
   try {
     const { id } = await params;
     await r.ctx.db.emailFolder.deleteMany({
-      where: { id, tenantId: r.ctx.tenantId, type: "CUSTOM" },
+      where: {
+        id,
+        tenantId: r.ctx.tenantId,
+        type: "CUSTOM",
+        account: { createdByUserId: r.ctx.userId },
+      },
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { MailComposer } from "@/components/mail/MailComposer";
 import { MailHeader } from "@/components/mail/MailHeader";
@@ -42,11 +42,14 @@ export function MailLayout() {
   const [filter, setFilter] = useState<MailFilter>("all");
   const [search, setSearch] = useState("");
   const [loadingEmails, setLoadingEmails] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("");
+  const syncInFlightRef = useRef(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [composerSeed, setComposerSeed] = useState({ to: "", subject: "", html: "" });
-  const [accountModal, setAccountModal] = useState(false);
   const [error, setError] = useState("");
 
   const activeAccount = useMemo(
@@ -61,29 +64,37 @@ export function MailLayout() {
   const loadAccounts = useCallback(async () => {
     const data = await jsonFetch<{ accounts: MailAccount[] }>("/api/mail/accounts");
     setAccounts(data.accounts);
-    setActiveAccountId((prev) => prev || data.accounts[0]?.id || "");
+    setActiveAccountId((prev) =>
+      prev && data.accounts.some((account) => account.id === prev)
+        ? prev
+        : data.accounts[0]?.id || "",
+    );
   }, []);
 
-  const loadEmails = useCallback(async () => {
+  const loadEmails = useCallback(async (cursor: string | null = null, append = false) => {
     if (!activeAccountId) return;
-    setLoadingEmails(true);
+    if (append) setLoadingMore(true);
+    else setLoadingEmails(true);
     setError("");
     try {
       const params = new URLSearchParams({
         accountId: activeAccountId,
         filter,
-        take: "120",
+        take: "80",
       });
       if (activeFolderId) params.set("folderId", activeFolderId);
       if (search.trim()) params.set("q", search.trim());
-      const data = await jsonFetch<{ emails: MailEmailRow[] }>(
+      if (cursor) params.set("cursor", cursor);
+      const data = await jsonFetch<{ emails: MailEmailRow[]; nextCursor: string | null }>(
         `/api/mail/emails?${params.toString()}`,
       );
-      setEmails(data.emails);
+      setEmails((prev) => (append ? [...prev, ...data.emails] : data.emails));
+      setNextCursor(data.nextCursor);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка загрузки писем");
     } finally {
-      setLoadingEmails(false);
+      if (append) setLoadingMore(false);
+      else setLoadingEmails(false);
     }
   }, [activeAccountId, activeFolderId, filter, search]);
 
@@ -114,8 +125,36 @@ export function MailLayout() {
   }, [activeAccount]);
 
   useEffect(() => {
-    void loadEmails();
+    setNextCursor(null);
+    void loadEmails(null, false);
   }, [loadEmails]);
+
+  useEffect(() => {
+    if (!activeAccountId) return;
+    let cancelled = false;
+    async function loadSyncStatus() {
+      try {
+        const data = await jsonFetch<{
+          jobs: Array<{ status: string; imported: number; skipped: number; lastError: string | null }>;
+        }>(`/api/mail/sync/status?accountId=${encodeURIComponent(activeAccountId)}`);
+        if (cancelled) return;
+        const [latest] = data.jobs;
+        if (!latest) return;
+        if (latest.status === "QUEUED") setSyncStatus("Синхронизация в очереди");
+        else if (latest.status === "RUNNING") setSyncStatus("Загружаем новые письма");
+        else if (latest.status === "FAILED") setSyncStatus(latest.lastError || "Синхронизация завершилась ошибкой");
+        else setSyncStatus(`Синхронизация завершена: ${latest.imported} новых, ${latest.skipped} пропущено`);
+      } catch {
+        /* status is informational */
+      }
+    }
+    void loadSyncStatus();
+    const timer = window.setInterval(() => void loadSyncStatus(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeAccountId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -171,7 +210,7 @@ export function MailLayout() {
       setDetail(null);
     }
     await loadAccounts();
-    await loadEmails();
+    await loadEmails(null, false);
   }
 
   function openReply(mode: "reply" | "replyAll" | "forward", html = "") {
@@ -204,41 +243,44 @@ export function MailLayout() {
     );
   }
 
-  async function saveAccount(form: FormData) {
-    try {
-      await jsonFetch("/api/mail/accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: String(form.get("email") || ""),
-          displayName: String(form.get("displayName") || ""),
-          appPassword: String(form.get("appPassword") || ""),
-        }),
-      });
-      setAccountModal(false);
-      await loadAccounts();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось подключить аккаунт");
-    }
-  }
-
-  async function syncActive() {
+  async function syncActive(options: { quiet?: boolean } = {}) {
     if (!activeAccountId) return;
-    setSyncing(true);
-    setError("");
+    if (syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
+    if (!options.quiet) {
+      setSyncing(true);
+      setError("");
+      setSyncStatus("Проверяем новые письма...");
+    }
     try {
       await jsonFetch(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
       await loadAccounts();
-      await loadEmails();
+      await loadEmails(null, false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка синхронизации");
+      if (!options.quiet) {
+        setError(err instanceof Error ? err.message : "Ошибка синхронизации");
+      }
     } finally {
-      setSyncing(false);
+      syncInFlightRef.current = false;
+      if (!options.quiet) setSyncing(false);
     }
   }
 
+  useEffect(() => {
+    if (!activeAccountId) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void syncActive({ quiet: true });
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [activeAccountId, loadAccounts, loadEmails]);
+
+  function openMailSettings() {
+    window.location.href = "/directory/mail";
+  }
+
   return (
-    <div className="min-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-[#e1e6ef] bg-[#f6f7fb] shadow-sm">
+    <div className="flex h-[100dvh] min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
       <MailHeader
         accounts={accounts}
         activeAccountId={activeAccountId}
@@ -256,37 +298,41 @@ export function MailLayout() {
           setComposerOpen(true);
         }}
         onSync={() => void syncActive()}
-        onConnectAccount={() => setAccountModal(true)}
+        onConnectAccount={openMailSettings}
       />
 
       {error ? (
-        <div className="border-b border-[#ffd3d3] bg-[#fff3f3] px-5 py-2 text-sm text-[#b42323]">
+        <div className="border-b border-red-300/50 bg-red-500/10 px-5 py-2 text-sm text-red-700 dark:text-red-300">
           {error}
+        </div>
+      ) : null}
+      {syncStatus ? (
+        <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-5 py-2 text-sm text-[var(--text-secondary)]">
+          {syncStatus}
         </div>
       ) : null}
 
       {accounts.length === 0 ? (
-        <div className="flex min-h-[560px] items-center justify-center p-8">
-          <div className="max-w-md rounded-[28px] bg-white p-8 text-center shadow-sm ring-1 ring-[#e5e9f2]">
-            <h2 className="text-2xl font-semibold text-[#15191f]">Подключите Яндекс.Почту</h2>
-            <p className="mt-3 text-sm leading-6 text-[#727b8c]">
-              Используется только пароль приложения Яндекса. OAuth2 не нужен.
+        <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+          <div className="max-w-md rounded-[28px] bg-[var(--card-bg)] p-8 text-center shadow-sm ring-1 ring-[var(--card-border)]">
+            <h2 className="text-2xl font-semibold text-[var(--app-text)]">Подключите Яндекс.Почту</h2>
+            <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+              Подключение аккаунтов и правила обработки входящей почты находятся в конфигурации.
             </p>
             <button
               type="button"
-              onClick={() => setAccountModal(true)}
-              className="mt-6 rounded-2xl bg-[#2b7cff] px-6 py-3 text-sm font-semibold text-white hover:bg-[#176bf2]"
+              onClick={openMailSettings}
+              className="mt-6 rounded-2xl bg-[var(--sidebar-blue)] px-6 py-3 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]"
             >
-              Подключить аккаунт
+              Открыть конфигурацию почты
             </button>
           </div>
         </div>
       ) : (
         <DndContext onDragEnd={handleDragEnd}>
-          <div className="flex h-[calc(100vh-190px)] min-h-[620px]">
+          <div className="flex min-h-0 flex-1">
             <MailSidebar
               account={activeAccount}
-              accounts={accounts}
               activeFolderId={activeFolderId}
               labels={activeAccount?.labels ?? []}
               onFolderChange={(id) => {
@@ -313,7 +359,6 @@ export function MailLayout() {
                   body: JSON.stringify({ accountId: activeAccountId, name, color: "#ffcc00" }),
                 }).then(loadAccounts);
               }}
-              onAccountClick={() => setAccountModal(true)}
             />
             <MailList
               folder={activeFolder}
@@ -322,7 +367,12 @@ export function MailLayout() {
               selectedIds={selectedIds}
               filter={filter}
               loading={loadingEmails}
+              hasMore={Boolean(nextCursor)}
+              loadingMore={loadingMore}
               onFilterChange={setFilter}
+              onLoadMore={() => {
+                if (nextCursor) void loadEmails(nextCursor, true);
+              }}
               onOpen={(id) => {
                 setActiveEmailId(id);
                 void loadDetail(id);
@@ -361,37 +411,9 @@ export function MailLayout() {
         onClose={() => setComposerOpen(false)}
         onSent={() => {
           void loadAccounts();
-          void loadEmails();
+          void loadEmails(null, false);
         }}
       />
-
-      {accountModal ? (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-[#101827]/40 p-4 backdrop-blur-sm" role="presentation" onClick={() => setAccountModal(false)}>
-          <form
-            className="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl ring-1 ring-black/5"
-            onClick={(e) => e.stopPropagation()}
-            action={(formData) => void saveAccount(formData)}
-          >
-            <h2 className="text-xl font-semibold text-[#15191f]">Аккаунт Яндекс.Почты</h2>
-            <p className="mt-2 text-sm leading-6 text-[#727b8c]">
-              Введите email и пароль приложения. Пароль будет зашифрован перед сохранением.
-            </p>
-            <div className="mt-5 space-y-3">
-              <input name="email" type="email" required placeholder="name@yandex.ru" className="h-12 w-full rounded-2xl border border-[#dfe4ee] px-4 text-sm outline-none focus:border-[#2b7cff] focus:ring-4 focus:ring-[#2b7cff]/10" />
-              <input name="displayName" placeholder="Имя отправителя" className="h-12 w-full rounded-2xl border border-[#dfe4ee] px-4 text-sm outline-none focus:border-[#2b7cff] focus:ring-4 focus:ring-[#2b7cff]/10" />
-              <input name="appPassword" type="password" required placeholder="Пароль приложения Яндекса" className="h-12 w-full rounded-2xl border border-[#dfe4ee] px-4 text-sm outline-none focus:border-[#2b7cff] focus:ring-4 focus:ring-[#2b7cff]/10" />
-            </div>
-            <div className="mt-6 flex justify-end gap-2">
-              <button type="button" className="rounded-xl px-4 py-2 text-sm text-[#6f7787] hover:bg-[#f1f4f8]" onClick={() => setAccountModal(false)}>
-                Отмена
-              </button>
-              <button type="submit" className="rounded-xl bg-[#2b7cff] px-5 py-2 text-sm font-semibold text-white hover:bg-[#176bf2]">
-                Сохранить
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
     </div>
   );
 }

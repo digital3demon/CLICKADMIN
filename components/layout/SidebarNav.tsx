@@ -9,7 +9,12 @@ import {
   isKanbanOnlyUser,
 } from "@/lib/auth/permissions";
 import { hasDirectorySidebarAccess } from "@/lib/role-module-nav";
-import { readClientState, writeClientState } from "@/lib/client-state-client";
+import {
+  DEFAULT_SIDEBAR_HREF_ORDER,
+  SIDEBAR_NAV_ORDER_KEY,
+  coalesceSidebarNavOrder,
+  normalizeSidebarNavOrder,
+} from "@/lib/sidebar-nav-order";
 
 function isNavActive(pathname: string, href: string): boolean {
   if (href === "/orders") {
@@ -52,23 +57,7 @@ const baseNavItems: readonly {
   { href: "/directory", label: "Конфигурация", module: "DIRECTORY" },
 ];
 
-const DEFAULT_HREF_ORDER = baseNavItems.map((i) => i.href);
-
-const SIDEBAR_NAV_ORDER_KEY = "sidebarNavOrderV1";
-
-function coalesceOrderForVisible(
-  saved: string[],
-  allowedHrefs: Set<string>,
-): string[] {
-  const out: string[] = [];
-  for (const h of saved) {
-    if (allowedHrefs.has(h) && !out.includes(h)) out.push(h);
-  }
-  for (const h of DEFAULT_HREF_ORDER) {
-    if (allowedHrefs.has(h) && !out.includes(h)) out.push(h);
-  }
-  return out;
-}
+const DEFAULT_HREF_ORDER = [...DEFAULT_SIDEBAR_HREF_ORDER];
 
 function moveHref(list: string[], fromHref: string, toHref: string): string[] {
   const from = list.indexOf(fromHref);
@@ -78,6 +67,65 @@ function moveHref(list: string[], fromHref: string, toHref: string): string[] {
   const [removed] = next.splice(from, 1);
   next.splice(to, 0, removed);
   return next;
+}
+
+function readLocalSidebarOrder(): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return normalizeSidebarNavOrder(
+      JSON.parse(window.localStorage.getItem(SIDEBAR_NAV_ORDER_KEY) || "null"),
+    );
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalSidebarOrder(order: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SIDEBAR_NAV_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    /* Браузерный fallback не критичен: основной источник — UserClientState в БД. */
+  }
+}
+
+type SidebarNavOrderResponse = {
+  found?: boolean;
+  order?: unknown;
+};
+
+async function readSidebarOrderFromServer(): Promise<{
+  found: boolean;
+  order: string[] | null;
+} | null> {
+  try {
+    const res = await fetch("/api/me/sidebar-nav-order", {
+      cache: "no-store",
+      credentials: "include",
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as SidebarNavOrderResponse;
+    return {
+      found: json.found === true,
+      order: normalizeSidebarNavOrder(json.order),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writeSidebarOrderToServer(order: string[]): Promise<boolean> {
+  try {
+    const res = await fetch("/api/me/sidebar-nav-order", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 function DragHandleIcon() {
@@ -157,13 +205,25 @@ export function SidebarNav() {
     const allowed = new Set(navItems.map((i) => i.href));
     let cancelled = false;
     void (async () => {
-      const raw = await readClientState<unknown>("user", SIDEBAR_NAV_ORDER_KEY);
+      const local = readLocalSidebarOrder();
+      if (local) {
+        setOrderHrefs(coalesceSidebarNavOrder(local, allowed));
+      }
+      const server = await readSidebarOrderFromServer();
       if (cancelled) return;
-      if (Array.isArray(raw) && raw.every((x) => typeof x === "string")) {
-        setOrderHrefs(coalesceOrderForVisible(raw as string[], allowed));
+      if (server?.found && server.order) {
+        const next = coalesceSidebarNavOrder(server.order, allowed);
+        setOrderHrefs(next);
+        writeLocalSidebarOrder(next);
         return;
       }
-      setOrderHrefs((prev) => coalesceOrderForVisible(prev, allowed));
+      if (local) {
+        const next = coalesceSidebarNavOrder(local, allowed);
+        setOrderHrefs(next);
+        void writeSidebarOrderToServer(next);
+        return;
+      }
+      setOrderHrefs((prev) => coalesceSidebarNavOrder(prev, allowed));
     })();
     return () => {
       cancelled = true;
@@ -174,7 +234,7 @@ export function SidebarNav() {
     const by = new Map<string, (typeof navItems)[number]>(
       navItems.map((i) => [i.href, i]),
     );
-    const hrefs = coalesceOrderForVisible(
+    const hrefs = coalesceSidebarNavOrder(
       orderHrefs,
       new Set(navItems.map((i) => i.href)),
     );
@@ -185,7 +245,8 @@ export function SidebarNav() {
 
   const persistOrder = useCallback((next: string[]) => {
     setOrderHrefs(next);
-    void writeClientState("user", SIDEBAR_NAV_ORDER_KEY, next);
+    writeLocalSidebarOrder(next);
+    void writeSidebarOrderToServer(next);
   }, []);
 
   const onDragStart = useCallback((href: string) => {
@@ -210,7 +271,7 @@ export function SidebarNav() {
       dragHrefRef.current = null;
       if (!from || from === targetHref) return;
       const allowed = new Set(navItems.map((i) => i.href));
-      const base = coalesceOrderForVisible(orderHrefs, allowed);
+      const base = coalesceSidebarNavOrder(orderHrefs, allowed);
       const next = moveHref(base, from, targetHref);
       persistOrder(next);
     },
@@ -244,7 +305,7 @@ export function SidebarNav() {
                   e.dataTransfer.effectAllowed = "move";
                 }}
                 onDragEnd={onDragEnd}
-                className="flex w-9 shrink-0 cursor-grab items-center justify-center border-0 bg-transparent py-3 text-[var(--sidebar-text)] opacity-60 transition-opacity hover:opacity-100 active:cursor-grabbing shell-short:w-7 shell-short:py-2"
+                className="flex w-9 shrink-0 cursor-grab items-center justify-center border-0 bg-transparent py-2 text-[var(--sidebar-text)] opacity-60 transition-opacity hover:opacity-100 active:cursor-grabbing shell-short:w-7 shell-short:py-1.5"
                 title="Перетащите, чтобы изменить порядок в меню"
                 aria-label={`Изменить порядок: ${item.label}`}
               >
@@ -255,8 +316,8 @@ export function SidebarNav() {
                 draggable={false}
                 className={
                   active
-                    ? "relative flex min-w-0 flex-1 items-center justify-center py-3.5 pr-2 text-center text-sm font-semibold text-[var(--sidebar-text-strong)] shell-short:py-2.5 shell-short:text-xs"
-                    : "relative flex min-w-0 flex-1 items-center justify-center py-3.5 pr-2 text-center text-sm font-normal text-[var(--sidebar-text)] transition-colors hover:text-[var(--sidebar-text-strong)] shell-short:py-2.5 shell-short:text-xs"
+                    ? "relative flex min-w-0 flex-1 items-center justify-center py-2.5 pr-2 text-center text-sm font-semibold text-[var(--sidebar-text-strong)] shell-short:py-2 shell-short:text-xs"
+                    : "relative flex min-w-0 flex-1 items-center justify-center py-2.5 pr-2 text-center text-sm font-normal text-[var(--sidebar-text)] transition-colors hover:text-[var(--sidebar-text-strong)] shell-short:py-2 shell-short:text-xs"
                 }
                 aria-current={active ? "page" : undefined}
               >

@@ -26,6 +26,17 @@ export type ImapFetchedMessage = {
   source: Buffer;
 };
 
+export function recentWindowStartUid(
+  requestedStartUid: number,
+  uidNext: number | undefined,
+  maxMessages: number,
+): number {
+  const startUid = Math.max(1, requestedStartUid);
+  if (!uidNext || uidNext <= 1 || maxMessages <= 0) return startUid;
+
+  return Math.max(startUid, Math.max(1, uidNext - maxMessages));
+}
+
 export function createImapClient(account: MailConnectionAccount): ImapFlow {
   if (!account.encryptedAppPassword) {
     throw new Error("MAIL_ACCOUNT_PASSWORD_NOT_CONFIGURED");
@@ -66,15 +77,56 @@ export async function* fetchFolderMessages(
   client: ImapFlow,
   folderPath: string,
   startUid: number,
+  maxMessages: number,
 ): AsyncGenerator<ImapFetchedMessage> {
   const lock = await client.getMailboxLock(folderPath);
   try {
+    const effectiveStartUid = recentWindowStartUid(
+      startUid,
+      client.mailbox ? client.mailbox.uidNext : undefined,
+      maxMessages,
+    );
     for await (const item of client.fetch(
-      `${Math.max(1, startUid)}:*`,
+      `${effectiveStartUid}:*`,
       { uid: true, flags: true, internalDate: true, source: true },
       { uid: true },
     )) {
-      if (!item.uid || item.uid < startUid || !item.source) continue;
+      if (!item.uid || item.uid < effectiveStartUid || !item.source) continue;
+      yield {
+        uid: item.uid,
+        flags: item.flags ?? new Set<string>(),
+        internalDate:
+          item.internalDate instanceof Date
+            ? item.internalDate
+            : item.internalDate
+              ? new Date(item.internalDate)
+              : null,
+        source: Buffer.isBuffer(item.source) ? item.source : Buffer.from(item.source),
+      };
+    }
+  } finally {
+    lock.release();
+  }
+}
+
+export async function* fetchFolderMessagesBefore(
+  client: ImapFlow,
+  folderPath: string,
+  beforeUid: number | null | undefined,
+  maxMessages: number,
+): AsyncGenerator<ImapFetchedMessage> {
+  const lock = await client.getMailboxLock(folderPath);
+  try {
+    const uidNext = client.mailbox ? client.mailbox.uidNext : undefined;
+    const endUid = Math.max(0, (beforeUid && beforeUid > 1 ? beforeUid : uidNext ?? 1) - 1);
+    if (endUid < 1 || maxMessages <= 0) return;
+    const startUid = Math.max(1, endUid - maxMessages + 1);
+    for await (const item of client.fetch(
+      `${startUid}:${endUid}`,
+      { uid: true, flags: true, internalDate: true, source: true },
+      { uid: true },
+    )) {
+      if (!item.uid || item.uid < startUid || item.uid > endUid || !item.source) continue;
       yield {
         uid: item.uid,
         flags: item.flags ?? new Set<string>(),
@@ -132,6 +184,46 @@ export async function setMessageFlagged(
       } else {
         await client.messageFlagsRemove(String(uid), ["\\Flagged"], { uid: true });
       }
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout().catch(() => undefined);
+  }
+}
+
+export async function moveMessage(
+  account: MailConnectionAccount,
+  sourceFolderPath: string,
+  uid: number,
+  destinationFolderPath: string,
+): Promise<number | null> {
+  const client = createImapClient(account);
+  await client.connect();
+  try {
+    const lock = await client.getMailboxLock(sourceFolderPath);
+    try {
+      const result = await client.messageMove(String(uid), destinationFolderPath, { uid: true });
+      return result ? result.uidMap?.get(uid) ?? null : null;
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout().catch(() => undefined);
+  }
+}
+
+export async function deleteMessage(
+  account: MailConnectionAccount,
+  folderPath: string,
+  uid: number,
+): Promise<void> {
+  const client = createImapClient(account);
+  await client.connect();
+  try {
+    const lock = await client.getMailboxLock(folderPath);
+    try {
+      await client.messageDelete(String(uid), { uid: true });
     } finally {
       lock.release();
     }

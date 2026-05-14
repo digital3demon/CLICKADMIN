@@ -37,6 +37,7 @@ const RULES: Rule[] = [
   { prefix: "/directory/orders-import-export", module: "CONFIG_ORDERS_IMPORT_EXPORT" },
   { prefix: "/api/orders/import-export", module: "CONFIG_ORDERS_IMPORT_EXPORT" },
   { prefix: "/directory/contracts", module: "CONFIG_CONTRACT_TEMPLATE" },
+  { prefix: "/directory/mail", module: "MAIL" },
   { prefix: "/directory/warehouse", module: "CONFIG_WAREHOUSE" },
   { prefix: "/directory/kanban-boards", module: "CONFIG_KANBAN_BOARDS" },
   { prefix: "/directory/kaiten", module: "CONFIG_KAITEN" },

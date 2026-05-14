@@ -17,6 +17,7 @@ export function hasDirectorySidebarAccess(
     a.CONFIG_ORDERS_IMPORT_EXPORT === true ||
     a.CONFIG_CONTRACT_TEMPLATE === true ||
     a.CONFIG_COSTING === true ||
+    a.MAIL === true ||
     a.CONFIG_USERS === true
   );
 }
