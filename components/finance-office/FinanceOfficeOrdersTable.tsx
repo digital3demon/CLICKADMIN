@@ -6,6 +6,7 @@ import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
+import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 
 export type FinanceOfficeOrderTableRow = {
@@ -126,15 +127,21 @@ export function FinanceOfficeOrdersTable({
               <th className="px-2 py-2 text-center">Лаборатория</th>
               <th className="min-w-[14rem] px-2 py-2 text-center normal-case">Реквизиты</th>
               <th className="min-w-[10rem] px-2 py-2 text-center normal-case">Наше юрлицо</th>
+              <th className="px-2 py-2 text-center normal-case">Отправка</th>
               <th className="min-w-[14rem] px-2 py-2 text-center normal-case">Отметки</th>
             </tr>
           </thead>
           <tbody>
             {orders.map((o) => {
+              const workSent = o.adminShippedOtpr;
               return (
                 <tr
                   key={o.id}
-                  className="border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]"
+                  className={
+                    workSent
+                      ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
+                      : "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]"
+                  }
                 >
                   <td className="px-2 py-2 text-center">
                     <input
@@ -186,6 +193,12 @@ export function FinanceOfficeOrdersTable({
                   </td>
                   <td className="max-w-[14rem] px-2 py-2 text-xs text-[var(--text-secondary)]">
                     {o.legalEntity || "—"}
+                  </td>
+                  <td
+                    data-shipped-cell
+                    className="px-2 py-2 text-center align-middle"
+                  >
+                    <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
                   <td className="px-2 py-2">
                     <OrderListTagsCell

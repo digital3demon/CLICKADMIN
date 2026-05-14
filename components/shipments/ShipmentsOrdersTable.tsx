@@ -2,6 +2,7 @@ import Link from "next/link";
 import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller";
+import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
 import { ShipmentsPrintButton } from "@/components/shipments/ShipmentsPrintButton";
@@ -113,8 +114,8 @@ export function ShipmentsOrdersTable({
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase leading-tight tracking-wide text-[var(--text-secondary)] print:bg-[var(--card-bg)]">
               <th
                 className="max-md:hidden min-w-0 whitespace-nowrap px-2 py-2 text-center normal-case print:hidden"
-                aria-label="Отметка «Работа отправлена», печать PDF и QR"
-                title="Галочка — работа отправлена; иконки — печать PDF и QR на карточку Kaiten"
+                aria-label="Печать PDF и QR"
+                title="Печать PDF наряда и QR на карточку Kaiten"
               >
                 PDF · QR
               </th>
@@ -183,6 +184,12 @@ export function ShipmentsOrdersTable({
                 </>
               ) : null}
               <th
+                className="min-w-0 whitespace-nowrap px-2 py-2 text-center normal-case print:hidden"
+                title="Отправка работы"
+              >
+                Отправка
+              </th>
+              <th
                 className="min-w-[11rem] whitespace-nowrap px-2 py-2 text-center align-top normal-case print:px-1.5"
                 title="Отметки: как на странице «Заказы»"
               >
@@ -204,39 +211,17 @@ export function ShipmentsOrdersTable({
                   key={o.id}
                   className={
                     workSent
-                      ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 print:border-zinc-400 [&>td:not(:first-child):not(:last-child)]:opacity-[0.28] [&>td:not(:first-child):not(:last-child)]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
+                      ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 print:border-zinc-400 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
                       : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]"
                   }
                 >
                   <td className="max-md:hidden min-w-0 px-2 py-2 align-middle print:hidden">
                     <div className="flex min-w-0 flex-nowrap items-center justify-start gap-0.5 sm:gap-1">
-                      {workSent ? (
-                        <div
-                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm ring-1 ring-emerald-600/25 dark:ring-emerald-400/25 sm:h-7 sm:w-7"
-                          title="Работа отправлена"
-                          aria-label="Работа отправлена"
-                        >
-                          <svg
-                            className="h-3.5 w-3.5 sm:h-4 sm:w-4"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden
-                          >
-                            <path d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      ) : null}
-                      {!workSent ? (
-                        <OrderNarjadPrintTrigger
-                          orderId={o.id}
-                          variant="icon"
-                          title="Печать наряда (PDF) — диалог печати"
-                        />
-                      ) : null}
+                      <OrderNarjadPrintTrigger
+                        orderId={o.id}
+                        variant="icon"
+                        title="Печать наряда (PDF) — диалог печати"
+                      />
                       {kaitenUrl ? (
                         <OrderKaitenQrModal
                           url={kaitenUrl}
@@ -357,6 +342,12 @@ export function ShipmentsOrdersTable({
                       </td>
                     </>
                   ) : null}
+                  <td
+                    data-shipped-cell
+                    className="min-w-0 px-2 py-2 text-center align-middle print:hidden"
+                  >
+                    <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                  </td>
                   <td className="min-w-[11rem] px-2 py-2 align-top print:px-1.5">
                     <OrderListTagsCell
                       orderId={o.id}

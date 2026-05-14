@@ -57,10 +57,10 @@ const ORDERS_LIST_STACK = "w-full max-w-full min-w-0 self-start space-y-4";
 /** Меньше внешних полей, чем у стандартного ModuleFrame — ближе к сайдбару. */
 const ORDERS_FRAME_ROOT =
   "!px-2 !pb-6 !pt-4 sm:!px-3 sm:!pb-7 sm:!pt-5 md:!px-4 md:!pb-8 md:!pt-6 lg:!px-4 lg:!pb-9 lg:!pt-7";
-const ORDERS_STICKY_THEAD =
-  "sticky top-[calc(var(--sticky-list-toolbar-height,0px)-1px)] z-30 bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)]";
 const ORDERS_TABLE_TH =
   "min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2";
+const ORDERS_TABLE_CLASS =
+  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[11px] sm:text-xs lg:min-w-0 lg:text-[13px] 2xl:text-sm";
 
 /** Поступление: дата прихода работы; без явной даты — как в наряде: дата занесения в CRM. */
 function formatAdmission(o: {
@@ -73,6 +73,89 @@ function formatAdmission(o: {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function OrdersTableColGroup() {
+  return (
+    <colgroup>
+      <col className="max-md:hidden lg:w-[3%]" />
+      <col className="max-md:hidden lg:w-[4.8%]" />
+      <col className="lg:w-[6.8%]" />
+      <col className="lg:w-[12.1%]" />
+      <col className="lg:w-[11.9%]" />
+      <col className="lg:w-[8.6%]" />
+      <col className="lg:w-[8.2%]" />
+      <col className="lg:w-[7.6%]" />
+      <col className="lg:w-[7.8%]" />
+      <col className="lg:w-[7.8%]" />
+      <col className="lg:w-[5.2%]" />
+      <col className="lg:w-[16.2%]" />
+    </colgroup>
+  );
+}
+
+function OrdersTableHeaderRow({ isDemo }: { isDemo: boolean }) {
+  return (
+    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
+      <th
+        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
+        title="Чат карточки в Kaiten"
+      >
+        Чат
+      </th>
+      <th
+        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
+        aria-label={
+          isDemo
+            ? "Печать PDF наряда и QR на карточку канбана"
+            : "Печать PDF наряда и QR на карточку Kaiten"
+        }
+        title={
+          isDemo
+            ? "Печать PDF наряда и QR на карточку канбана"
+            : "Печать PDF наряда и QR на карточку Kaiten"
+        }
+      >
+        PDF · QR
+      </th>
+      <th className={ORDERS_TABLE_TH} title="№ наряда">
+        № наряда
+      </th>
+      <th className={ORDERS_TABLE_TH} title="Клиника">
+        Клиника
+      </th>
+      <th className={ORDERS_TABLE_TH} title="Адрес клиники">
+        Адрес
+      </th>
+      <th className={ORDERS_TABLE_TH} title="Врач">
+        Врач
+      </th>
+      <th className={ORDERS_TABLE_TH} title="Пациент">
+        Пациент
+      </th>
+      <th
+        className={ORDERS_TABLE_TH}
+        title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
+      >
+        Поступление
+      </th>
+      <th className={ORDERS_TABLE_TH} title="Срок лабораторный">
+        Лаборатория
+      </th>
+      <th className={ORDERS_TABLE_TH} title="Запись: дата и время приёма пациента">
+        Запись
+      </th>
+      <th className={ORDERS_TABLE_TH} title="Отправка работы">
+        Отправка
+      </th>
+      <th
+        className={`${ORDERS_TABLE_TH} align-top normal-case`}
+        title="Теги: нажмите — фильтр списка; «+» — добавить свой тег к наряду"
+      >
+        Отметки
+      </th>
+    </tr>
+  );
 }
 
 export default async function OrdersPage({
@@ -558,108 +641,21 @@ export default async function OrdersPage({
           В списке только наряды с отметкой «Работа отправлена» (отгруженные).
         </div>
       ) : null}
+      <div className="w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] print:hidden">
+        <table className={ORDERS_TABLE_CLASS} aria-hidden="true">
+          <OrdersTableColGroup />
+          <thead>
+            <OrdersTableHeaderRow isDemo={isDemo} />
+          </thead>
+        </table>
+      </div>
         </div>}
       >
       <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
-        <table className="w-full min-w-[56rem] table-fixed border-collapse text-left text-[11px] sm:text-xs lg:min-w-0 lg:text-[13px] 2xl:text-sm">
-          <colgroup>
-            <col className="max-md:hidden lg:w-[3%]" />
-            <col className="max-md:hidden lg:w-[4.8%]" />
-            <col className="lg:w-[6.8%]" />
-            <col className="lg:w-[12.1%]" />
-            <col className="lg:w-[11.9%]" />
-            <col className="lg:w-[8.6%]" />
-            <col className="lg:w-[8.2%]" />
-            <col className="lg:w-[7.6%]" />
-            <col className="lg:w-[7.8%]" />
-            <col className="lg:w-[7.8%]" />
-            <col className="lg:w-[5.2%]" />
-            <col className="lg:w-[16.2%]" />
-          </colgroup>
-          <thead className={ORDERS_STICKY_THEAD}>
-            <tr className="border-b border-[var(--card-border)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
-              <th
-                className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
-                title="Чат карточки в Kaiten"
-              >
-                Чат
-              </th>
-              <th
-                className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
-                aria-label={
-                  isDemo
-                    ? "Печать PDF наряда и QR на карточку канбана"
-                    : "Печать PDF наряда и QR на карточку Kaiten"
-                }
-                title={
-                  isDemo
-                    ? "Печать PDF наряда и QR на карточку канбана"
-                    : "Печать PDF наряда и QR на карточку Kaiten"
-                }
-              >
-                PDF · QR
-              </th>
-              <th
-                className={ORDERS_TABLE_TH}
-                title="№ наряда"
-              >
-                № наряда
-              </th>
-              <th
-                className={ORDERS_TABLE_TH}
-                title="Клиника"
-              >
-                Клиника
-              </th>
-              <th
-                className={ORDERS_TABLE_TH}
-                title="Адрес клиники"
-              >
-                Адрес
-              </th>
-              <th
-                className={ORDERS_TABLE_TH}
-                title="Врач"
-              >
-                Врач
-              </th>
-              <th
-                className={ORDERS_TABLE_TH}
-                title="Пациент"
-              >
-                Пациент
-              </th>
-              <th
-                className={ORDERS_TABLE_TH}
-                title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
-              >
-                Поступление
-              </th>
-              <th
-                className={ORDERS_TABLE_TH}
-                title="Срок лабораторный"
-              >
-                Лаборатория
-              </th>
-              <th
-                className={ORDERS_TABLE_TH}
-                title="Запись: дата и время приёма пациента"
-              >
-                Запись
-              </th>
-              <th
-                className={ORDERS_TABLE_TH}
-                title="Отправка работы"
-              >
-                Отправка
-              </th>
-              <th
-                className={`${ORDERS_TABLE_TH} align-top normal-case`}
-                title="Теги: нажмите — фильтр списка; «+» — добавить свой тег к наряду"
-              >
-                Отметки
-              </th>
-            </tr>
+        <table className={ORDERS_TABLE_CLASS}>
+          <OrdersTableColGroup />
+          <thead className="sr-only">
+            <OrdersTableHeaderRow isDemo={isDemo} />
           </thead>
           <tbody>
             {orders.length === 0 ? (
