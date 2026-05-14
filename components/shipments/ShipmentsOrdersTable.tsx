@@ -160,7 +160,7 @@ export function ShipmentsOrdersTable({
                 className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
                 title="Срок лабораторный"
               >
-                Лаборатория
+                ЛАБ
               </th>
               <th
                 className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"

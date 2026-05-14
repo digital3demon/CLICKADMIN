@@ -141,7 +141,7 @@ function OrdersTableHeaderRow({ isDemo }: { isDemo: boolean }) {
         Поступление
       </th>
       <th className={ORDERS_TABLE_TH} title="Срок лабораторный">
-        Лаборатория
+        ЛАБ
       </th>
       <th className={ORDERS_TABLE_TH} title="Запись: дата и время приёма пациента">
         Запись

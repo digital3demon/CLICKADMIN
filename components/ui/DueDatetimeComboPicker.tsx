@@ -193,7 +193,7 @@ export function DueDatetimeComboPicker({
   const popoverRef = useRef<HTMLDivElement>(null);
   const timeListRef = useRef<HTMLDivElement>(null);
   const timeOptionRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 280 });
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 280, maxHeight: 420 });
 
   const timeOptions = useMemo(
     () =>
@@ -251,10 +251,18 @@ export function DueDatetimeComboPicker({
     if (left + w > window.innerWidth - pad) {
       left = Math.max(pad, window.innerWidth - pad - w);
     }
+    const popoverHeight = Math.min(420, window.innerHeight - pad * 2);
+    const spaceBelow = window.innerHeight - r.bottom - pad;
+    const spaceAbove = r.top - pad;
+    const opensUp = spaceBelow < popoverHeight && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(240, Math.min(popoverHeight, opensUp ? spaceAbove : spaceBelow));
     setPos({
-      top: r.bottom + 6,
+      top: opensUp
+        ? Math.max(pad, r.top - maxHeight - 6)
+        : Math.min(r.bottom + 6, window.innerHeight - pad - maxHeight),
       left,
       width: w,
+      maxHeight,
     });
   }, []);
 
@@ -401,12 +409,13 @@ export function DueDatetimeComboPicker({
       data-due-datetime-combo-popover=""
       role="dialog"
       aria-label="Выбор даты и времени"
-      className="fixed z-[9999] flex max-h-[min(420px,calc(100vh-24px))] flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl sm:flex-row"
+      className="fixed z-[9999] flex flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl sm:flex-row"
       style={{
         top: pos.top,
         left: pos.left,
         minWidth: Math.min(340, window.innerWidth - 16),
         maxWidth: "min(420px, calc(100vw - 16px))",
+        maxHeight: pos.maxHeight,
       }}
     >
       <div className="min-w-0 flex-1 border-b border-[var(--card-border)] p-3 sm:border-b-0 sm:border-r">
@@ -547,7 +556,7 @@ export function DueDatetimeComboPicker({
       {compact ? (
         <div
           ref={anchorRef}
-          className="inline-flex w-full max-w-full flex-nowrap items-center gap-0.5"
+          className="inline-flex w-full max-w-full flex-nowrap items-stretch gap-0.5"
         >
           {labelInside ? (
             <span className="flex h-9 max-w-[5.25rem] shrink-0 items-center justify-center rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-1.5 py-0.5 text-center text-[8px] font-bold uppercase leading-tight tracking-wide text-[var(--text-muted)] sm:h-10 sm:max-w-[6rem] sm:px-2 sm:text-[9px]">
@@ -556,45 +565,27 @@ export function DueDatetimeComboPicker({
           ) : null}
           <button
             type="button"
-            id={`${triggerId}-date`}
+            id={triggerId}
             disabled={disabled}
             title={combinedTitle || title}
-            aria-label="Дата сдачи"
+            aria-label={ariaLabel ?? "Дата и время сдачи"}
             aria-expanded={open}
             aria-haspopup="dialog"
             onClick={openToggle}
             className={[
-              "flex h-9 min-w-0 flex-1 items-center gap-0.5 px-1 text-xs tabular-nums sm:px-1.5",
+              "flex min-h-[3rem] min-w-0 flex-1 items-center justify-between gap-1 px-1.5 py-1 text-xs tabular-nums sm:min-h-[3.25rem] sm:px-2",
               triggerSurface,
               disabled ? "cursor-not-allowed" : "cursor-pointer",
               showPlaceholder ? "text-[var(--text-placeholder)]" : "text-[var(--app-text)]",
             ].join(" ")}
           >
-            <span className="min-w-0 truncate whitespace-nowrap">
-              {showPlaceholder ? "Дата" : datePart}
-            </span>
-            <span className="shrink-0 text-[var(--text-muted)]" aria-hidden>
-              {open ? "▴" : "▾"}
-            </span>
-          </button>
-          <button
-            type="button"
-            id={`${triggerId}-time`}
-            disabled={disabled}
-            title={combinedTitle || title}
-            aria-label="Время сдачи"
-            aria-expanded={open}
-            aria-haspopup="dialog"
-            onClick={openToggle}
-            className={[
-              "flex h-9 min-w-0 flex-1 items-center gap-0.5 px-1 text-xs tabular-nums sm:px-1.5",
-              triggerSurface,
-              disabled ? "cursor-not-allowed" : "cursor-pointer",
-              showPlaceholder ? "text-[var(--text-placeholder)]" : "text-[var(--app-text)]",
-            ].join(" ")}
-          >
-            <span className="min-w-0 truncate whitespace-nowrap">
-              {showPlaceholder ? "Время" : timePart}
+            <span className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 leading-tight">
+              <span className="whitespace-nowrap">
+                {showPlaceholder ? "Дата" : datePart}
+              </span>
+              <span className="whitespace-nowrap text-[var(--text-secondary)]">
+                {showPlaceholder ? "Время" : timePart}
+              </span>
             </span>
             <span className="shrink-0 text-[var(--text-muted)]" aria-hidden>
               {open ? "▴" : "▾"}
