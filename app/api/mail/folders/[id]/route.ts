@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { jsonBody, mailErrorResponse } from "@/app/api/mail/_utils";
-import { getMailApiContext, stringField } from "@/lib/mail/mail-service";
+import { getMailApiContext, normalizeMailColor, stringField } from "@/lib/mail/mail-service";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,10 @@ export async function PATCH(
     const { id } = await params;
     const body = await jsonBody(req);
     const displayName = stringField(body.name, 120);
-    if (!displayName) return NextResponse.json({ error: "Укажите название папки" }, { status: 400 });
+    const color = normalizeMailColor(body.color, "");
+    if (!displayName && !color) {
+      return NextResponse.json({ error: "Укажите название или цвет папки" }, { status: 400 });
+    }
     const updated = await r.ctx.db.emailFolder.updateMany({
       where: {
         id,
@@ -22,7 +25,10 @@ export async function PATCH(
         type: "CUSTOM",
         account: { createdByUserId: r.ctx.userId },
       },
-      data: { displayName },
+      data: {
+        ...(displayName ? { displayName } : {}),
+        ...(color ? { color } : {}),
+      },
     });
     if (!updated.count) {
       return NextResponse.json({ error: "Папка не найдена" }, { status: 404 });

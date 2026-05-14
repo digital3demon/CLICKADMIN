@@ -20,7 +20,7 @@ import {
   writeMailAttachmentBytes,
 } from "@/lib/mail/mail-attachment-storage";
 
-const RECENT_MESSAGES_PER_INBOX = 40;
+const RECENT_MESSAGES_PER_FOLDER = 40;
 const BACKFILL_MESSAGES_PER_FOLDER = 120;
 
 function normalizeFolderPath(value: string): string {
@@ -41,8 +41,7 @@ export function inferFolderType(path: string): EmailFolderType {
 }
 
 export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMode): boolean {
-  if (mode === EmailSyncMode.BACKFILL) return true;
-  return type === EmailFolderType.INBOX;
+  return Boolean(type || mode);
 }
 
 function addressList(value: ParsedMail["from"] | ParsedMail["to"] | ParsedMail["cc"]): Array<{
@@ -238,7 +237,7 @@ export async function syncEmailAccount(
       const maxMessages =
         mode === EmailSyncMode.BACKFILL
           ? BACKFILL_MESSAGES_PER_FOLDER
-          : RECENT_MESSAGES_PER_INBOX;
+          : RECENT_MESSAGES_PER_FOLDER;
       const messages =
         mode === EmailSyncMode.BACKFILL
           ? fetchFolderMessagesBefore(client, listed.path, folder.lastBackfillUid, maxMessages)

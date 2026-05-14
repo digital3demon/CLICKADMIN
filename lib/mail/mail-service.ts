@@ -52,6 +52,12 @@ const SYSTEM_FOLDERS: Array<{
   { imapName: "Trash", displayName: "Корзина", type: EmailFolderType.TRASH, sortOrder: 60 },
 ];
 
+export function normalizeMailColor(value: unknown, fallback = "#6b7280"): string {
+  if (typeof value !== "string") return fallback;
+  const color = value.trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
+}
+
 function userAccountWhere(tenantId: string, userId: string) {
   return { tenantId, createdByUserId: userId };
 }
@@ -305,6 +311,7 @@ export async function createEmailFolder(
   userId: string,
   accountId: string,
   displayName: string,
+  color = "#6b7280",
 ) {
   await requireUserEmailAccount(db, tenantId, userId, accountId);
   const name = displayName.trim().slice(0, 120);
@@ -315,6 +322,7 @@ export async function createEmailFolder(
       accountId,
       imapName: name,
       displayName: name,
+      color: normalizeMailColor(color),
       type: EmailFolderType.CUSTOM,
       sortOrder: 200,
     },
@@ -546,7 +554,12 @@ export async function getEmailDetail(
       where: { id: email.id },
       data: { isRead: true, readAt: new Date() },
     });
-    if (email.folderId) await refreshFolderCounters(db, tenantId, email.folderId);
+    if (email.folderId) {
+      await db.emailFolder.updateMany({
+        where: { id: email.folderId, unreadCount: { gt: 0 } },
+        data: { unreadCount: { decrement: 1 } },
+      }).catch(() => undefined);
+    }
   }
   return { ...email, safeHtmlBody: sanitizeMailHtml(email.htmlBody) };
 }

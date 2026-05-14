@@ -26,6 +26,7 @@ export type MailFolder = {
   accountId: string;
   imapName: string;
   displayName: string;
+  color: string;
   type: MailFolderType;
   unreadCount: number;
   totalCount: number;

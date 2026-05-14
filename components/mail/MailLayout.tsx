@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { MailComposer } from "@/components/mail/MailComposer";
 import { MailHeader } from "@/components/mail/MailHeader";
@@ -47,7 +47,6 @@ export function MailLayout() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState("");
-  const syncInFlightRef = useRef(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [composerSeed, setComposerSeed] = useState({ to: "", subject: "", html: "" });
   const [error, setError] = useState("");
@@ -98,6 +97,29 @@ export function MailLayout() {
     }
   }, [activeAccountId, activeFolderId, filter, search]);
 
+  const refreshEmailsSilently = useCallback(async () => {
+    if (!activeAccountId) return;
+    try {
+      const params = new URLSearchParams({
+        accountId: activeAccountId,
+        filter,
+        take: "80",
+      });
+      if (activeFolderId) params.set("folderId", activeFolderId);
+      if (search.trim()) params.set("q", search.trim());
+      const data = await jsonFetch<{ emails: MailEmailRow[]; nextCursor: string | null }>(
+        `/api/mail/emails?${params.toString()}`,
+      );
+      setEmails((prev) => {
+        const freshIds = new Set(data.emails.map((email) => email.id));
+        return [...data.emails, ...prev.filter((email) => !freshIds.has(email.id))];
+      });
+      setNextCursor((prev) => prev ?? data.nextCursor);
+    } catch {
+      /* Тихое обновление не должно мешать чтению письма. */
+    }
+  }, [activeAccountId, activeFolderId, filter, search]);
+
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
     setError("");
@@ -128,6 +150,15 @@ export function MailLayout() {
     setNextCursor(null);
     void loadEmails(null, false);
   }, [loadEmails]);
+
+  useEffect(() => {
+    if (!activeAccountId) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void refreshEmailsSilently();
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [activeAccountId, refreshEmailsSilently]);
 
   useEffect(() => {
     if (!activeAccountId) return;
@@ -243,37 +274,21 @@ export function MailLayout() {
     );
   }
 
-  async function syncActive(options: { quiet?: boolean } = {}) {
-    if (!activeAccountId) return;
-    if (syncInFlightRef.current) return;
-    syncInFlightRef.current = true;
-    if (!options.quiet) {
-      setSyncing(true);
-      setError("");
-      setSyncStatus("Проверяем новые письма...");
-    }
+  async function syncActive() {
+    if (!activeAccountId || syncing) return;
+    setSyncing(true);
+    setError("");
+    setSyncStatus("Проверяем новые письма...");
     try {
       await jsonFetch(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
       await loadAccounts();
       await loadEmails(null, false);
     } catch (err) {
-      if (!options.quiet) {
-        setError(err instanceof Error ? err.message : "Ошибка синхронизации");
-      }
+      setError(err instanceof Error ? err.message : "Ошибка синхронизации");
     } finally {
-      syncInFlightRef.current = false;
-      if (!options.quiet) setSyncing(false);
+      setSyncing(false);
     }
   }
-
-  useEffect(() => {
-    if (!activeAccountId) return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void syncActive({ quiet: true });
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [activeAccountId, loadAccounts, loadEmails]);
 
   function openMailSettings() {
     window.location.href = "/directory/mail";

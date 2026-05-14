@@ -26,7 +26,8 @@ export async function POST(req: Request) {
     const body = await jsonBody(req);
     const accountId = stringField(body.accountId, 200);
     const name = stringField(body.name, 120);
-    const folder = await createEmailFolder(r.ctx.db, r.ctx.tenantId, r.ctx.userId, accountId, name);
+    const color = stringField(body.color, 20);
+    const folder = await createEmailFolder(r.ctx.db, r.ctx.tenantId, r.ctx.userId, accountId, name, color);
     return NextResponse.json({ folder });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось создать папку");

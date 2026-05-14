@@ -804,6 +804,7 @@ model EmailFolder {
   account       EmailAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
   imapName      String
   displayName   String
+  color         String          @default("#6b7280")
   type          EmailFolderType @default(CUSTOM)
   delimiter     String?
   parentId      String?

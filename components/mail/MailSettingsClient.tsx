@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { MailAccount } from "@/components/mail/types";
+import type { MailAccount, MailFolder } from "@/components/mail/types";
+import { mailFolderDisplayName } from "@/components/mail/types";
 
 type EmailRule = {
   id: string;
@@ -126,6 +127,63 @@ export function MailSettingsClient() {
     await load();
   }
 
+  async function createFolder(formData: FormData) {
+    if (!activeAccount) return;
+    setError("");
+    setStatus("Создаю папку...");
+    try {
+      await jsonFetch("/api/mail/folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: activeAccount.id,
+          name: String(formData.get("name") || ""),
+          color: String(formData.get("color") || "#6b7280"),
+        }),
+      });
+      setStatus("Папка создана");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось создать папку");
+    }
+  }
+
+  async function updateFolder(formData: FormData) {
+    const folderId = String(formData.get("folderId") || "");
+    if (!folderId) return;
+    setError("");
+    setStatus("Сохраняю папку...");
+    try {
+      await jsonFetch(`/api/mail/folders/${folderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: String(formData.get("name") || ""),
+          color: String(formData.get("color") || "#6b7280"),
+        }),
+      });
+      setStatus("Папка сохранена");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сохранить папку");
+    }
+  }
+
+  async function deleteFolder(folder: MailFolder) {
+    if (!window.confirm(`Удалить папку «${mailFolderDisplayName(folder)}»? Письма останутся в базе без папки.`)) {
+      return;
+    }
+    setError("");
+    setStatus("Удаляю папку...");
+    try {
+      await jsonFetch(`/api/mail/folders/${folder.id}`, { method: "DELETE" });
+      setStatus("Папка удалена");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось удалить папку");
+    }
+  }
+
   return (
     <div className="space-y-6">
       {error ? (
@@ -191,6 +249,98 @@ export function MailSettingsClient() {
             Сохранить
           </button>
         </form>
+      </section>
+
+      <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">Папки</h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              Цвет можно настроить для всех папок. Переименование и удаление доступны для пользовательских папок.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="space-y-3">
+            {activeAccount?.folders.length ? (
+              activeAccount.folders.map((folder) => {
+                const editable = folder.type === "CUSTOM";
+                return (
+                  <form
+                    key={folder.id}
+                    action={(formData) => void updateFolder(formData)}
+                    className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3"
+                  >
+                    <input type="hidden" name="folderId" value={folder.id} />
+                    <span
+                      className="h-3.5 w-3.5 rounded-full ring-2 ring-[var(--card-bg)]"
+                      style={{ backgroundColor: folder.color || "#6b7280" }}
+                    />
+                    <input
+                      name="name"
+                      defaultValue={mailFolderDisplayName(folder)}
+                      disabled={!editable}
+                      className="h-10 min-w-[12rem] flex-1 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none disabled:opacity-70"
+                    />
+                    <input
+                      name="color"
+                      type="color"
+                      defaultValue={folder.color || "#6b7280"}
+                      className="h-10 w-12 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] p-1"
+                      title="Цвет папки"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!editable}
+                      className="rounded-lg border border-[var(--card-border)] px-3 py-2 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Сохранить
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!editable}
+                      onClick={() => void deleteFolder(folder)}
+                      className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-600 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-300"
+                    >
+                      Удалить
+                    </button>
+                  </form>
+                );
+              })
+            ) : (
+              <div className="rounded-xl border border-dashed border-[var(--card-border)] p-6 text-sm text-[var(--text-muted)]">
+                Выберите аккаунт, чтобы настроить папки.
+              </div>
+            )}
+          </div>
+
+          <form action={(formData) => void createFolder(formData)} className="rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
+            <h3 className="text-sm font-semibold text-[var(--app-text)]">Новая папка</h3>
+            <input
+              name="name"
+              required
+              placeholder="Название папки"
+              className="mt-3 h-10 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+            />
+            <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Цвет
+            </label>
+            <input
+              name="color"
+              type="color"
+              defaultValue="#6b7280"
+              className="mt-2 h-10 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] p-1"
+            />
+            <button
+              type="submit"
+              disabled={!activeAccount}
+              className="mt-4 w-full rounded-xl bg-[var(--sidebar-blue)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
+            >
+              Создать папку
+            </button>
+          </form>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">

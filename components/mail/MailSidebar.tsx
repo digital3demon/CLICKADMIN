@@ -35,7 +35,10 @@ function FolderButton({
           : "text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
       } ${isOver ? "ring-2 ring-[var(--sidebar-blue)]/30" : ""}`}
     >
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[var(--card-bg)] text-xs text-[var(--text-muted)] shadow-sm">
+      <span
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs text-white shadow-sm"
+        style={{ backgroundColor: folder.color || "var(--card-bg)" }}
+      >
         {FOLDER_ICONS[folder.type] ?? "•"}
       </span>
       <span className="min-w-0 flex-1 truncate">{mailFolderDisplayName(folder)}</span>
