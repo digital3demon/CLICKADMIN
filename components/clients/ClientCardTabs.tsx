@@ -2,26 +2,37 @@ import Link from "next/link";
 
 type TabId = "overview" | "requisites" | "finance" | "price";
 
-const BASE_ITEMS: { id: Exclude<TabId, "price">; label: string; hrefSuffix: string }[] = [
-  { id: "overview", label: "Обзор", hrefSuffix: "" },
-  { id: "requisites", label: "Реквизиты", hrefSuffix: "?tab=requisites" },
-  { id: "finance", label: "Финансы", hrefSuffix: "?tab=finance" },
+const BASE_ITEMS: { id: Exclude<TabId, "price">; label: string }[] = [
+  { id: "overview", label: "Обзор" },
+  { id: "requisites", label: "Реквизиты" },
+  { id: "finance", label: "Финансы" },
 ];
+
+function tabHref(base: string, tab: TabId, returnTo?: string | null): string {
+  const p = new URLSearchParams();
+  if (tab !== "overview") p.set("tab", tab);
+  if (returnTo) p.set("returnTo", returnTo);
+  const q = p.toString();
+  return q ? `${base}?${q}` : base;
+}
 
 export function ClientCardTabs({
   basePath,
   active,
   showPriceTab = false,
+  returnTo = null,
 }: {
   /** Напр. `/clients/abc` или `/clients/doctors/abc` */
   basePath: string;
   active: TabId;
   /** Вкладка «Прайс» нужна только в карточке клиники */
   showPriceTab?: boolean;
+  /** URL списка, куда ведёт кнопка «Все клиенты/врачи». */
+  returnTo?: string | null;
 }) {
   const base = basePath.replace(/\/$/, "");
   const items = showPriceTab
-    ? [...BASE_ITEMS, { id: "price" as const, label: "Прайс", hrefSuffix: "?tab=price" }]
+    ? [...BASE_ITEMS, { id: "price" as const, label: "Прайс" }]
     : BASE_ITEMS;
 
   return (
@@ -32,7 +43,7 @@ export function ClientCardTabs({
     >
       {items.map((item) => {
         const isActive = item.id === active;
-        const href = `${base}${item.hrefSuffix}`;
+        const href = tabHref(base, item.id, returnTo);
         return (
           <Link
             key={item.id}

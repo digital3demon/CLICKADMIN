@@ -20,7 +20,6 @@ import {
   LIST_TAG_INVOICE_PRINTED,
   LIST_TAG_KAITEN_BLOCKED,
   LIST_TAG_ORDER_ATTENTION,
-  LIST_TAG_OTPR,
   LIST_TAG_PAYMENT_EXPECTED,
   LIST_TAG_PAYMENT_PAID,
   LIST_TAG_PAYMENT_PARTIAL,
@@ -630,24 +629,23 @@ export function OrderListTagsCell({
   const availableMissingTagActions = useMemo(() => {
     const actions: MissingTagAction[] = [];
 
-    if (!adminShippedOtpr) {
+    if (kaitenBlocked) {
       actions.push({
-        id: "mark-shipped",
-        title: "Отправлено",
-        subtitle: "Поставить отметку отгрузки",
-        kind: "patch",
-        patch: { adminShippedOtpr: true },
+        id: "kaiten-unblock",
+        title: "Разблокировать",
+        subtitle: "Снять блокировку без сохранения тега",
+        kind: "listTag",
+        listTagLabel: QUICK_TAG_KAITEN_UNBLOCK_LABEL,
+      });
+    } else if (kaitenCardId) {
+      actions.push({
+        id: "kaiten-block",
+        title: "Заблокировать",
+        subtitle: "Нужно указать причину ниже",
+        kind: "kaitenBlockFlow",
       });
     }
-    if (!invoicePrinted && invoiceAttachmentId) {
-      actions.push({
-        id: "invoice-print",
-        title: "Печать счёта",
-        subtitle: "Откроет печать файла и затем отметит «Счёт распечатан»",
-        kind: "invoicePrint",
-        attachmentId: invoiceAttachmentId,
-      });
-    }
+
     if (!prostheticsOrdered) {
       actions.push({
         id: "prosthetics-ordered",
@@ -655,6 +653,29 @@ export function OrderListTagsCell({
         subtitle: "Поставить отметку по протетике",
         kind: "patch",
         patch: { prostheticsOrdered: true },
+      });
+    }
+
+    for (const opt of URGENT_MENU_OPTIONS) {
+      if (opt.value === urgentSelectionValue) continue;
+      if (opt.value === URGENT_UNSET && !isUrgent) continue;
+      actions.push({
+        id: `urgent-${opt.value}`,
+        title:
+          opt.value === URGENT_UNSET ? "Без срочности" : `Срочность ${opt.label}`,
+        subtitle: "Срочность наряда",
+        kind: "urgent",
+        urgentSelection: opt.value,
+      });
+    }
+
+    if (!invoicePrinted && invoiceAttachmentId) {
+      actions.push({
+        id: "invoice-print",
+        title: "Печать счёта",
+        subtitle: "Откроет печать файла и затем отметит «Счёт распечатан»",
+        kind: "invoicePrint",
+        attachmentId: invoiceAttachmentId,
       });
     }
 
@@ -679,20 +700,6 @@ export function OrderListTagsCell({
         subtitle: "Статус оплаты, можно указать сумму",
         kind: "partialPayment",
       },
-      {
-        id: "payment-recon-unpaid",
-        title: "Сверка · не оплачено",
-        subtitle: "Статус оплаты по сверке",
-        kind: "payment",
-        payment: ORDER_PAYMENT_RECON_UNPAID,
-      },
-      {
-        id: "payment-recon-paid",
-        title: "Сверка · оплачено",
-        subtitle: "Статус оплаты по сверке",
-        kind: "payment",
-        payment: ORDER_PAYMENT_RECON_PAID,
-      },
     ];
     actions.push(
       ...paymentActions.filter((action) => {
@@ -704,39 +711,8 @@ export function OrderListTagsCell({
       }),
     );
 
-    for (const opt of URGENT_MENU_OPTIONS) {
-      if (opt.value === urgentSelectionValue) continue;
-      if (opt.value === URGENT_UNSET && !isUrgent) continue;
-      actions.push({
-        id: `urgent-${opt.value}`,
-        title:
-          opt.value === URGENT_UNSET ? "Без срочности" : `Срочность ${opt.label}`,
-        subtitle: "Срочность наряда",
-        kind: "urgent",
-        urgentSelection: opt.value,
-      });
-    }
-
-    if (kaitenBlocked) {
-      actions.push({
-        id: "kaiten-unblock",
-        title: "Разблокировать в Kaiten",
-        subtitle: "Снять блокировку без сохранения тега",
-        kind: "listTag",
-        listTagLabel: QUICK_TAG_KAITEN_UNBLOCK_LABEL,
-      });
-    } else if (kaitenCardId) {
-      actions.push({
-        id: "kaiten-block",
-        title: "Заблокировать в Kaiten",
-        subtitle: "Нужно указать причину ниже",
-        kind: "kaitenBlockFlow",
-      });
-    }
-
     return actions;
   }, [
-    adminShippedOtpr,
     currentPayment,
     invoiceAttachmentId,
     invoicePrinted,
@@ -917,46 +893,6 @@ export function OrderListTagsCell({
               title="Снять блокировку в Kaiten"
               aria-label="Снять блокировку в Kaiten"
               onClick={() => void submitAdd(QUICK_TAG_KAITEN_UNBLOCK_LABEL)}
-            >
-              ✎
-            </button>
-          </span>
-        ),
-      });
-    }
-
-    if (adminShippedOtpr) {
-      items.push({
-        key: "otpr",
-        slot: "small",
-        node: (
-          <span className="inline-flex items-center gap-0.5">
-            <Link
-              href={href(LIST_TAG_OTPR)}
-              title="Отправлено — показать наряды с этой отметкой"
-              aria-label="Отправлено"
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm outline-none ring-1 ring-emerald-600/25 transition-opacity hover:opacity-90 focus-visible:outline-none dark:ring-emerald-400/25 sm:h-7 sm:w-7"
-            >
-              <svg
-                className="h-3.5 w-3.5 sm:h-[1.125rem] sm:w-[1.125rem]"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M5 13l4 4L19 7" />
-              </svg>
-            </Link>
-            <button
-              type="button"
-              disabled={busy}
-              className={`${TAG_EDIT_BUTTON_CLASS} text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 dark:text-emerald-200 dark:hover:bg-emerald-950/50`}
-              title="Снять отметку «Отправлено»"
-              aria-label="Снять отметку отправлено"
-              onClick={() => void applyQuickPatch({ adminShippedOtpr: false })}
             >
               ✎
             </button>
@@ -1224,7 +1160,6 @@ export function OrderListTagsCell({
 
     return items;
   }, [
-    adminShippedOtpr,
     busy,
     customTags,
     financeCalculated,

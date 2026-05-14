@@ -44,6 +44,11 @@ function moneyRub(n: number): string {
   }).format(x);
 }
 
+function withClientsReturnTo(path: string, returnTo: string): string {
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}returnTo=${encodeURIComponent(returnTo)}`;
+}
+
 export const dynamic = "force-dynamic";
 
 type PageProps = {
@@ -157,6 +162,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
         view: "clinic",
         clinicPage: clinicPageEff,
       };
+      const clinicReturnTo = buildClientsListUrl(clinicNavState);
 
       const prevClinicHref =
         clinicPageEff > 1
@@ -323,7 +329,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                     >
                       <td className="px-3 py-2.5">
                         <Link
-                          href={`/clients/${c.id}`}
+                          href={withClientsReturnTo(`/clients/${c.id}`, clinicReturnTo)}
                           className="font-medium text-[var(--sidebar-blue)] hover:underline"
                         >
                           <span className="whitespace-pre-line">{c.name}</span>
@@ -434,6 +440,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
       view: "doctor",
       doctorPage: doctorPageEff,
     };
+    const doctorReturnTo = buildClientsListUrl(doctorNavState);
 
     const prevDoctorHref =
       doctorPageEff > 1
@@ -541,7 +548,10 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                     >
                       <td className="px-3 py-2.5">
                         <Link
-                          href={`/clients/doctors/${d.id}`}
+                          href={withClientsReturnTo(
+                            `/clients/doctors/${d.id}`,
+                            doctorReturnTo,
+                          )}
                           className="font-medium text-[var(--sidebar-blue)] hover:underline"
                         >
                           {d.fullName}

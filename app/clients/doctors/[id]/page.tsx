@@ -34,6 +34,13 @@ function firstSearchParam(
   return Array.isArray(v) ? v[0] : v;
 }
 
+function safeClientsReturnTo(raw: string | undefined, fallback: string): string {
+  const v = raw?.trim();
+  if (!v) return fallback;
+  if (!v.startsWith("/clients") || v.startsWith("//")) return fallback;
+  return v;
+}
+
 export const dynamic = "force-dynamic";
 
 function labelForLabStatus(status: string): string {
@@ -112,6 +119,10 @@ export default async function DoctorCardPage({
     }
   }
   const tab = firstSearchParam(query.tab);
+  const clientsBackHref = safeClientsReturnTo(
+    firstSearchParam(query.returnTo),
+    "/clients?view=doctor",
+  );
   const activeTab =
     tab === "requisites"
       ? "requisites"
@@ -202,7 +213,7 @@ export default async function DoctorCardPage({
             <code className="rounded bg-amber-100 px-1">npx prisma db push</code>
           </p>
           <Link
-            href="/clients?view=doctor"
+            href={clientsBackHref}
             className="mt-4 inline-block text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
           >
             ← К списку врачей
@@ -222,7 +233,7 @@ export default async function DoctorCardPage({
       >
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <Link
-            href="/clients?view=doctor"
+            href={clientsBackHref}
             className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
           >
             ← Все врачи
@@ -273,14 +284,18 @@ export default async function DoctorCardPage({
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Link
-          href="/clients?view=doctor"
+          href={clientsBackHref}
           className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
         >
           ← Все врачи
         </Link>
       </div>
 
-      <ClientCardTabs basePath={`/clients/doctors/${id}`} active={activeTab} />
+      <ClientCardTabs
+        basePath={`/clients/doctors/${id}`}
+        active={activeTab}
+        returnTo={clientsBackHref}
+      />
 
       {activeTab === "requisites" ? (
         <div className="space-y-8">

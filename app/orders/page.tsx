@@ -6,6 +6,7 @@ import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
+import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrdersListKaitenChatShell } from "@/components/orders/OrdersListKaitenChatShell";
 import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
 import { OrderPostingMonthBar } from "@/components/orders/OrderPostingMonthBar";
@@ -56,6 +57,8 @@ const ORDERS_LIST_STACK = "w-full max-w-full min-w-0 self-start space-y-4";
 /** Меньше внешних полей, чем у стандартного ModuleFrame — ближе к сайдбару. */
 const ORDERS_FRAME_ROOT =
   "!px-2 !pb-6 !pt-4 sm:!px-3 sm:!pb-7 sm:!pt-5 md:!px-4 md:!pb-8 md:!pt-6 lg:!px-4 lg:!pb-9 lg:!pt-7";
+const ORDERS_STICKY_TH =
+  "sticky top-[var(--sticky-list-toolbar-height,0px)] z-30 bg-[var(--surface-subtle)]";
 
 /** Поступление: дата прихода работы; без явной даты — как в наряде: дата занесения в CRM. */
 function formatAdmission(o: {
@@ -558,28 +561,29 @@ export default async function OrdersPage({
       <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
         <table className="w-full min-w-[56rem] table-fixed border-collapse text-left text-[11px] sm:text-xs lg:min-w-0 lg:text-[13px] 2xl:text-sm">
           <colgroup>
-            <col className="max-md:hidden lg:w-[3.2%]" />
-            <col className="max-md:hidden lg:w-[5.2%]" />
-            <col className="lg:w-[7.2%]" />
-            <col className="lg:w-[13.2%]" />
-            <col className="lg:w-[13%]" />
-            <col className="lg:w-[9.4%]" />
-            <col className="lg:w-[9%]" />
+            <col className="max-md:hidden lg:w-[3%]" />
+            <col className="max-md:hidden lg:w-[4.8%]" />
+            <col className="lg:w-[6.8%]" />
+            <col className="lg:w-[12.1%]" />
+            <col className="lg:w-[11.9%]" />
+            <col className="lg:w-[8.6%]" />
             <col className="lg:w-[8.2%]" />
-            <col className="lg:w-[8.5%]" />
-            <col className="lg:w-[8.5%]" />
-            <col className="lg:w-[14.6%]" />
+            <col className="lg:w-[7.6%]" />
+            <col className="lg:w-[7.8%]" />
+            <col className="lg:w-[7.8%]" />
+            <col className="lg:w-[5.2%]" />
+            <col className="lg:w-[16.2%]" />
           </colgroup>
-          <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30 print:static">
+          <thead>
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
               <th
-                className="max-md:hidden min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center normal-case sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} max-md:hidden min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center normal-case sm:px-2 sm:py-2`}
                 title="Чат карточки в Kaiten"
               >
                 Чат
               </th>
               <th
-                className="max-md:hidden min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center normal-case sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} max-md:hidden min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center normal-case sm:px-2 sm:py-2`}
                 aria-label={
                   isDemo
                     ? "Печать PDF наряда и QR на карточку канбана"
@@ -594,55 +598,61 @@ export default async function OrdersPage({
                 PDF · QR
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
                 title="№ наряда"
               >
                 № наряда
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
                 title="Клиника"
               >
                 Клиника
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
                 title="Адрес клиники"
               >
                 Адрес
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
                 title="Врач"
               >
                 Врач
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
                 title="Пациент"
               >
                 Пациент
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
                 title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
               >
                 Поступление
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
                 title="Срок лабораторный"
               >
                 Лаборатория
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
                 title="Запись: дата и время приёма пациента"
               >
                 Запись
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center align-top normal-case sm:px-2 sm:py-2"
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2`}
+                title="Отправка работы"
+              >
+                Отправка
+              </th>
+              <th
+                className={`${ORDERS_STICKY_TH} min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center align-top normal-case sm:px-2 sm:py-2`}
                 title="Теги: нажмите — фильтр списка; «+» — добавить свой тег к наряду"
               >
                 Отметки
@@ -653,7 +663,7 @@ export default async function OrdersPage({
             {orders.length === 0 ? (
               <tr>
                 <td
-                  colSpan={11}
+                  colSpan={12}
                   className="px-4 py-10 text-center text-sm text-[var(--text-muted)]"
                 >
                   {activeFilter
@@ -683,7 +693,7 @@ export default async function OrdersPage({
                   blocked
                     ? "border-b-2 border-red-800/45 bg-gradient-to-r from-red-950/40 via-red-950/25 to-red-900/15 text-[var(--app-text)] dark:border-red-900/60 dark:from-red-950/50 dark:via-red-950/35 dark:to-red-950/20 [&>td:not(:first-child):not(:last-child)]:text-red-950/95 dark:[&>td:not(:first-child):not(:last-child)]:text-red-50/90"
                     : workSent
-                      ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 [&>td:not(:first-child):not(:last-child)]:opacity-[0.28] [&>td:not(:first-child):not(:last-child)]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
+                      ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
                       : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
                 return (
                 <OrdersListTableRow
@@ -803,6 +813,12 @@ export default async function OrdersPage({
                       }
                       createdAtIso={o.createdAt.toISOString()}
                     />
+                  </td>
+                  <td
+                    data-shipped-cell
+                    className="min-w-0 px-1.5 py-1.5 align-middle text-center sm:px-2 sm:py-2"
+                  >
+                    <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
                   <td className="min-w-0 px-1.5 py-1.5 align-top sm:px-2 sm:py-2">
                     <OrderListTagsCell
