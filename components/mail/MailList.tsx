@@ -55,7 +55,7 @@ function MailRow({
   selected: boolean;
   onOpen: () => void;
   onToggleSelect: () => void;
-  onAction: (action: "archive" | "trash" | "flag" | "unflag") => void;
+  onAction: (action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
 }) {
   const sender = senderName(email);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -77,6 +77,26 @@ function MailRow({
       } ${isDragging ? "opacity-60 shadow-lg" : ""}`}
       onClick={onOpen}
     >
+      <button
+        type="button"
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${
+          email.isRead
+            ? "text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)]"
+            : "text-orange-500 hover:bg-orange-500/10"
+        }`}
+        title={email.isRead ? "Пометить непрочитанным" : "Пометить прочитанным"}
+        onClick={(e) => {
+          e.stopPropagation();
+          onAction(email.isRead ? "unread" : "read");
+        }}
+      >
+        <span
+          className={`block h-3.5 w-3.5 rounded-full ${
+            email.isRead ? "border-2 border-current" : "bg-current shadow-[0_0_0_3px_rgba(249,115,22,0.14)]"
+          }`}
+          aria-hidden
+        />
+      </button>
       <div
         className="flex h-full items-center"
         onClick={(e) => {
@@ -202,7 +222,7 @@ export function MailList({
   onSelectAll: () => void;
   onClearSelection: () => void;
   onBulkAction: (action: "read" | "unread" | "archive" | "trash" | "delete") => void;
-  onEmailAction: (id: string, action: "archive" | "trash" | "flag" | "unflag") => void;
+  onEmailAction: (id: string, action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({

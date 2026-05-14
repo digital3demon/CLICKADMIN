@@ -151,13 +151,6 @@ export function MailHeader({
           <span className="hidden sm:inline">Написать</span>
         </button>
 
-        <button
-          type="button"
-          className="hidden h-10 w-10 items-center justify-center rounded-full bg-[var(--card-bg)] text-[var(--text-secondary)] shadow-sm ring-1 ring-[var(--card-border)] transition hover:bg-[var(--surface-hover)] xl:inline-flex"
-          title="Уведомления"
-        >
-          ○
-        </button>
         <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-[var(--sidebar-blue)] text-sm font-bold text-white shadow-sm xl:flex">
           {(active?.displayName || active?.email || "Я").slice(0, 1).toUpperCase()}
         </div>

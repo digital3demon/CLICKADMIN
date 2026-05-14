@@ -230,6 +230,18 @@ export function MailLayout() {
     targetFolderId?: string,
   ) {
     if (!ids.length) return;
+    if (action === "trash" || action === "delete") {
+      const count = ids.length;
+      const message =
+        action === "delete"
+          ? count === 1
+            ? "Удалить письмо безвозвратно?"
+            : `Удалить письма безвозвратно? Количество: ${count}`
+          : count === 1
+            ? "Удалить письмо?"
+            : `Удалить письма? Количество: ${count}`;
+      if (!window.confirm(message)) return;
+    }
     await jsonFetch("/api/mail/emails/bulk", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
