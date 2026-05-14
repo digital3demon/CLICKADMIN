@@ -81,9 +81,28 @@ function constructionLabel(row: FinanceOfficeOrderRow["constructions"][number]):
     row.priceListItem?.name?.trim() ||
     row.constructionType?.name?.trim() ||
     "Позиция состава";
-  const qty = Number.isFinite(row.quantity) ? row.quantity : 1;
-  const base = code ? `${code} · ${name}` : name;
-  return qty > 1 ? `${base}*${qty}` : base;
+  return code ? `${code} - ${name}` : name;
+}
+
+function orderLegalName(order: FinanceOfficeOrderRow): string {
+  return (
+    order.clinic?.legalFullName?.trim() ||
+    order.counterpartyRequisitesText?.trim() ||
+    order.legalEntity?.trim() ||
+    ""
+  );
+}
+
+function lineDiscountLabel(
+  order: FinanceOfficeOrderRow,
+  row: FinanceOfficeOrderRow["constructions"][number],
+): string {
+  const parts: string[] = [];
+  const linePct = Number(row.lineDiscountPercent) || 0;
+  const orderPct = Number(order.compositionDiscountPercent) || 0;
+  if (linePct > 0) parts.push(`${money(linePct)}%`);
+  if (orderPct > 0) parts.push(`общая ${money(orderPct)}%`);
+  return parts.join("; ");
 }
 
 export async function GET(req: Request) {
@@ -145,18 +164,20 @@ export async function GET(req: Request) {
   const ws = wb.addWorksheet("ФинОтдел");
   ws.columns = [
     { header: "Номер наряда", key: "orderNumber", width: 14 },
-    { header: "ООО клиники", key: "clinicLegalName", width: 32 },
-    { header: "Клиника", key: "clinic", width: 30 },
+    { header: "ООО клиники", key: "clinicLegalName", width: 34 },
+    { header: "Клиника", key: "clinic", width: 28 },
     { header: "Доктор", key: "doctor", width: 24 },
     { header: "Пациент", key: "patient", width: 24 },
-    { header: "Состав заказа", key: "construction", width: 48 },
-    { header: "Сумма общая", key: "total", width: 14 },
-    { header: "Скидка", key: "discount", width: 24 },
+    { header: "Состав заказа", key: "construction", width: 56 },
+    { header: "Количество", key: "quantity", width: 12 },
+    { header: "Стоимость", key: "unitPrice", width: 14 },
+    { header: "Сумма", key: "lineTotal", width: 14 },
+    { header: "Скидка", key: "discount", width: 18 },
     { header: "Сумма со скидкой", key: "discountedTotal", width: 18 },
   ];
 
   ws.getRow(1).font = { bold: true };
-  ws.getRow(1).alignment = { vertical: "middle" };
+  ws.getRow(1).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
   ws.views = [{ state: "frozen", ySplit: 1 }];
 
   for (const order of orders) {
@@ -165,27 +186,48 @@ export async function GET(req: Request) {
       order.constructions.length > 0
         ? order.constructions
         : [null];
-    for (const construction of constructions) {
+    constructions.forEach((construction, index) => {
+      const isFirstOrderLine = index === 0;
+      const quantity = construction && Number.isFinite(construction.quantity)
+        ? construction.quantity
+        : null;
+      const unitPrice = construction?.unitPrice ?? null;
+      const lineTotal = construction ? money(lineBaseTotal(construction)) : null;
       ws.addRow({
-        orderNumber: order.orderNumber,
-        clinicLegalName: order.clinic?.legalFullName ?? "",
-        clinic: order.clinic?.name ?? "Частное лицо",
-        doctor: order.doctor.fullName,
-        patient: order.patientName ?? "",
+        orderNumber: isFirstOrderLine ? order.orderNumber : "",
+        clinicLegalName: isFirstOrderLine ? orderLegalName(order) : "",
+        clinic: isFirstOrderLine ? (order.clinic?.name ?? "Частное лицо") : "",
+        doctor: isFirstOrderLine ? order.doctor.fullName : "",
+        patient: isFirstOrderLine ? (order.patientName ?? "") : "",
         construction: construction ? constructionLabel(construction) : "",
-        total: totals.total,
-        discount: totals.discountLabel,
-        discountedTotal: totals.discountedTotal,
+        quantity,
+        unitPrice: unitPrice == null ? null : money(unitPrice),
+        lineTotal,
+        discount: construction ? lineDiscountLabel(order, construction) : totals.discountLabel,
+        discountedTotal: isFirstOrderLine ? totals.discountedTotal : null,
       });
-    }
+    });
   }
 
   for (const row of ws.getRows(2, Math.max(0, ws.rowCount - 1)) ?? []) {
     row.alignment = { vertical: "top", wrapText: true };
   }
-  for (const colKey of ["total", "discountedTotal"]) {
+  for (const colKey of ["unitPrice", "lineTotal", "discountedTotal"]) {
     ws.getColumn(colKey).numFmt = '#,##0.00';
   }
+  for (const colKey of ["quantity", "unitPrice", "lineTotal", "discountedTotal"]) {
+    ws.getColumn(colKey).alignment = { horizontal: "center", vertical: "top" };
+  }
+  ws.eachRow((row) => {
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFBFBFBF" } },
+        left: { style: "thin", color: { argb: "FFBFBFBF" } },
+        bottom: { style: "thin", color: { argb: "FFBFBFBF" } },
+        right: { style: "thin", color: { argb: "FFBFBFBF" } },
+      };
+    });
+  });
   ws.autoFilter = {
     from: { row: 1, column: 1 },
     to: { row: 1, column: ws.columnCount },
