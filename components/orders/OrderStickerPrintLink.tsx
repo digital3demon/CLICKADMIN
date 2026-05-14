@@ -30,7 +30,7 @@ export function OrderStickerPrintLink({
   orderId: string;
   className?: string;
 }) {
-  const href = `/shipments/stickers-print?orderId=${encodeURIComponent(orderId)}`;
+  const href = `/shipments/stickers-print?orderId=${encodeURIComponent(orderId)}&print=1`;
   return (
     <Link
       href={href}

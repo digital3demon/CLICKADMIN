@@ -1,6 +1,20 @@
 "use client";
 
-export function ShipmentsStickersPrintButton() {
+import { useEffect, useRef } from "react";
+
+export function ShipmentsStickersPrintButton({
+  autoPrint = false,
+}: {
+  autoPrint?: boolean;
+}) {
+  const printedRef = useRef(false);
+  useEffect(() => {
+    if (!autoPrint || printedRef.current) return;
+    printedRef.current = true;
+    const t = window.setTimeout(() => window.print(), 250);
+    return () => window.clearTimeout(t);
+  }, [autoPrint]);
+
   return (
     <button
       type="button"

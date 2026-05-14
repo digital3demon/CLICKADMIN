@@ -18,6 +18,7 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSiteOrigin } from "@/lib/site-origin-server";
 import { prisma } from "@/lib/prisma";
+import { getTenantStickerPrintSettings } from "@/lib/sticker-print-settings.server";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,7 @@ export default async function ShipmentsStickersPrintPage({
     to?: string;
     tag?: string;
     orderId?: string;
+    print?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -115,6 +117,7 @@ export default async function ShipmentsStickersPrintPage({
   }
 
   const { orders, error } = await loadOrdersForShipmentsStickersPrint(ordersDb, tenantId, sp);
+  const printSettings = await getTenantStickerPrintSettings(tenantId);
 
   if (error) {
     return (
@@ -193,14 +196,20 @@ export default async function ShipmentsStickersPrintPage({
   return (
     <ModuleFrame
       title="Этикетки отгрузки"
-      description="Макет под термопринтер: по умолчанию 58×40 мм; можно задать другой размер. В диалоге печати выберите принтер этикеток и масштаб 100 %."
+      description="Макет под термопринтер. Размер задаётся в Конфигурация → Печать. В диалоге печати выберите принтер этикеток и масштаб 100 %."
     >
       <style>{`
         @media print {
           header.module-frame-header { display: none !important; }
         }
       `}</style>
-      <ShipmentsStickersPrintToolbar rows={rows} backHref={back} />
+      <ShipmentsStickersPrintToolbar
+        rows={rows}
+        backHref={back}
+        widthMm={printSettings.widthMm}
+        heightMm={printSettings.heightMm}
+        autoPrint={sp.print === "1"}
+      />
       {!originForQr ? (
         <p className="no-print mb-3 max-w-xl text-xs text-amber-800">
           Не удалось определить публичный адрес сайта для QR: задайте{" "}

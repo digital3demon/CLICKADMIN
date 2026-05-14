@@ -131,6 +131,19 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
+        {session ? (
+          <Link
+            href="/directory/print"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">
+              Печать
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Размер этикетки отгрузки под термопринтер и предпросмотр макета.
+            </p>
+          </Link>
+        ) : null}
         {showContractTemplate ? (
           <Link
             href="/directory/contracts"
