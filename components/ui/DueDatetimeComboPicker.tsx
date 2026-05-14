@@ -547,7 +547,7 @@ export function DueDatetimeComboPicker({
       {compact ? (
         <div
           ref={anchorRef}
-          className="inline-flex max-w-full flex-nowrap items-center gap-0.5"
+          className="inline-flex w-full max-w-full flex-nowrap items-center gap-0.5"
         >
           {labelInside ? (
             <span className="flex h-9 max-w-[5.25rem] shrink-0 items-center justify-center rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-1.5 py-0.5 text-center text-[8px] font-bold uppercase leading-tight tracking-wide text-[var(--text-muted)] sm:h-10 sm:max-w-[6rem] sm:px-2 sm:text-[9px]">
@@ -564,13 +564,13 @@ export function DueDatetimeComboPicker({
             aria-haspopup="dialog"
             onClick={openToggle}
             className={[
-              "flex h-9 shrink-0 items-center gap-0.5 px-1.5 text-xs tabular-nums sm:px-2",
+              "flex h-9 min-w-0 flex-1 items-center gap-0.5 px-1 text-xs tabular-nums sm:px-1.5",
               triggerSurface,
               disabled ? "cursor-not-allowed" : "cursor-pointer",
               showPlaceholder ? "text-[var(--text-placeholder)]" : "text-[var(--app-text)]",
             ].join(" ")}
           >
-            <span className="whitespace-nowrap">
+            <span className="min-w-0 truncate whitespace-nowrap">
               {showPlaceholder ? "Дата" : datePart}
             </span>
             <span className="shrink-0 text-[var(--text-muted)]" aria-hidden>
@@ -587,13 +587,13 @@ export function DueDatetimeComboPicker({
             aria-haspopup="dialog"
             onClick={openToggle}
             className={[
-              "flex h-9 shrink-0 items-center gap-0.5 px-1.5 text-xs tabular-nums sm:px-2",
+              "flex h-9 min-w-0 flex-1 items-center gap-0.5 px-1 text-xs tabular-nums sm:px-1.5",
               triggerSurface,
               disabled ? "cursor-not-allowed" : "cursor-pointer",
               showPlaceholder ? "text-[var(--text-placeholder)]" : "text-[var(--app-text)]",
             ].join(" ")}
           >
-            <span className="whitespace-nowrap">
+            <span className="min-w-0 truncate whitespace-nowrap">
               {showPlaceholder ? "Время" : timePart}
             </span>
             <span className="shrink-0 text-[var(--text-muted)]" aria-hidden>

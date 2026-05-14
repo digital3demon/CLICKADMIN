@@ -86,21 +86,6 @@ const URGENT_ROWS: Array<
 
 const OTHER: Array<QuickOrderTagSuggestion & { _keys: string[] }> = [
   {
-    id: "invoice-printed-true",
-    title: "Счёт распечатан",
-    subtitle: "Как кнопка в «Документооборот»",
-    patch: { invoicePrinted: true },
-    _keys: [
-      "счет",
-      "счёт",
-      "распечатан",
-      "распечатанный",
-      "сф",
-      "печать счета",
-      "печать счёта",
-    ],
-  },
-  {
     id: "invoice-printed-false",
     title: "Снять: счёт распечатан",
     subtitle: "Убрать отметку «Счёт распечатан»",

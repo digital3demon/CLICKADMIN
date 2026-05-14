@@ -50,8 +50,8 @@ export const dynamic = "force-dynamic";
 /** Контент списка на всю ширину рабочей области (таблица сама делит колонки). */
 const ORDERS_MAIN_LAYOUT = "w-full min-w-0 max-w-full";
 
-/** Ширина по таблице, но с ограничением viewport: верхние блоки не растягиваются дальше списка. */
-const ORDERS_LIST_STACK = "w-fit max-w-full min-w-0 self-start space-y-4";
+/** Список занимает всю рабочую ширину, чтобы на разных мониторах не гулял масштаб таблицы. */
+const ORDERS_LIST_STACK = "w-full max-w-full min-w-0 self-start space-y-4";
 
 /** Меньше внешних полей, чем у стандартного ModuleFrame — ближе к сайдбару. */
 const ORDERS_FRAME_ROOT =
@@ -555,8 +555,21 @@ export default async function OrdersPage({
       ) : null}
         </div>}
       >
-      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] xl:overflow-x-visible dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
-        <table className="w-max min-w-0 border-collapse text-left text-sm">
+      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
+        <table className="w-full min-w-[56rem] table-fixed border-collapse text-left text-[11px] sm:text-xs lg:min-w-0 lg:text-[13px] 2xl:text-sm">
+          <colgroup>
+            <col className="max-md:hidden lg:w-[3.2%]" />
+            <col className="max-md:hidden lg:w-[5.2%]" />
+            <col className="lg:w-[7.2%]" />
+            <col className="lg:w-[13.2%]" />
+            <col className="lg:w-[13%]" />
+            <col className="lg:w-[9.4%]" />
+            <col className="lg:w-[9%]" />
+            <col className="lg:w-[8.2%]" />
+            <col className="lg:w-[8.5%]" />
+            <col className="lg:w-[8.5%]" />
+            <col className="lg:w-[14.6%]" />
+          </colgroup>
           <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30 print:static">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
               <th
@@ -629,7 +642,7 @@ export default async function OrdersPage({
                 Запись
               </th>
               <th
-                className="min-w-[11rem] whitespace-nowrap px-1.5 py-1.5 text-center align-top normal-case sm:px-2 sm:py-2"
+                className="min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center align-top normal-case sm:px-2 sm:py-2"
                 title="Теги: нажмите — фильтр списка; «+» — добавить свой тег к наряду"
               >
                 Отметки
@@ -722,7 +735,7 @@ export default async function OrdersPage({
                       {o.orderNumber}
                     </Link>
                   </td>
-                  <td className="min-w-0 max-w-[12rem] px-1.5 py-1.5 align-middle text-center text-[var(--text-strong)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-center text-[var(--text-strong)] sm:px-2 sm:py-2">
                     {o.clinic ? (
                       <Link
                         href={`/clients/${o.clinic.id}`}
@@ -737,7 +750,7 @@ export default async function OrdersPage({
                       </span>
                     )}
                   </td>
-                  <td className="min-w-0 max-w-[12rem] px-1.5 py-1.5 align-middle text-center text-[var(--text-body)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-center text-[var(--text-body)] sm:px-2 sm:py-2">
                     {o.clinic?.address?.trim() ? (
                       <span
                         className="block hyphens-auto break-words text-center text-[var(--text-secondary)]"
@@ -749,7 +762,7 @@ export default async function OrdersPage({
                       <span className="block text-center text-[var(--text-muted)]">—</span>
                     )}
                   </td>
-                  <td className="min-w-0 max-w-[10rem] px-1.5 py-1.5 align-middle text-center text-[var(--text-strong)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-center text-[var(--text-strong)] sm:px-2 sm:py-2">
                     <Link
                       href={`/clients/doctors/${o.doctor.id}`}
                       title={o.doctor.fullName}
@@ -759,7 +772,7 @@ export default async function OrdersPage({
                     </Link>
                   </td>
                   <td
-                    className="min-w-0 max-w-[10rem] px-1.5 py-1.5 align-middle text-center text-[var(--text-body)] sm:px-2 sm:py-2"
+                    className="min-w-0 px-1.5 py-1.5 align-middle text-center text-[var(--text-body)] sm:px-2 sm:py-2"
                     title={o.patientName ?? undefined}
                   >
                     <span className="block hyphens-auto break-words text-center">
@@ -791,7 +804,7 @@ export default async function OrdersPage({
                       createdAtIso={o.createdAt.toISOString()}
                     />
                   </td>
-                  <td className="min-w-[11rem] px-1.5 py-1.5 align-top sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1.5 py-1.5 align-top sm:px-2 sm:py-2">
                     <OrderListTagsCell
                       orderId={o.id}
                       pageSize={pageSize}
@@ -811,6 +824,7 @@ export default async function OrdersPage({
                       }
                       invoicePrinted={o.invoicePrinted}
                       hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                      invoiceAttachmentId={o.invoiceAttachmentId}
                       payment={o.payment}
                       paymentPartialRub={o.paymentPartialRub}
                       adminShippedOtpr={o.adminShippedOtpr}

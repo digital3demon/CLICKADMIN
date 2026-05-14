@@ -54,6 +54,7 @@ import {
 } from "@/lib/order-clinic-client-fields";
 import {
   URGENT_MENU_OPTIONS,
+  URGENT_UNSET,
   urgentSelectionFromOrder,
 } from "@/lib/order-urgency";
 import { OrderPaymentModalAccountingUpload } from "@/components/orders/OrderPaymentModalAccountingUpload";
@@ -79,6 +80,8 @@ type Props = {
   invoicePrinted?: boolean;
   /** Загружен файл счёта (вкладка «Документооборот») */
   hasInvoiceAttachment: boolean;
+  /** ID файла счёта; нужен для печати из быстрого действия. */
+  invoiceAttachmentId?: string | null;
   payment: string | null;
   paymentPartialRub: number | null;
   adminShippedOtpr: boolean;
@@ -214,6 +217,55 @@ function OrderAttentionWarningGlyph({ className }: { className: string }) {
 
 type TagCloudItem = { key: string; slot: TagSlotSize; node: ReactNode };
 
+type MissingTagAction =
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "patch";
+      patch: Record<string, unknown>;
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "invoicePrint";
+      attachmentId: string;
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "payment";
+      payment: string;
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "partialPayment";
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "urgent";
+      urgentSelection: string;
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "listTag";
+      listTagLabel: string;
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "kaitenBlockFlow";
+    };
+
 function buildTagRows(items: TagCloudItem[]): TagCloudItem[][] {
   const rows: TagCloudItem[][] = [];
   let current: TagCloudItem[] = [];
@@ -314,6 +366,7 @@ export function OrderListTagsCell({
   listPendingProstheticsRequests = false,
   invoicePrinted = false,
   hasInvoiceAttachment,
+  invoiceAttachmentId = null,
   payment,
   paymentPartialRub,
   adminShippedOtpr,
@@ -572,6 +625,216 @@ export function OrderListTagsCell({
   const urgentSelectionValue = urgentSelectionFromOrder(
     isUrgent,
     urgentCoefficient,
+  );
+
+  const availableMissingTagActions = useMemo(() => {
+    const actions: MissingTagAction[] = [];
+
+    if (!adminShippedOtpr) {
+      actions.push({
+        id: "mark-shipped",
+        title: "Отправлено",
+        subtitle: "Поставить отметку отгрузки",
+        kind: "patch",
+        patch: { adminShippedOtpr: true },
+      });
+    }
+    if (!invoicePrinted && invoiceAttachmentId) {
+      actions.push({
+        id: "invoice-print",
+        title: "Печать счёта",
+        subtitle: "Откроет печать файла и затем отметит «Счёт распечатан»",
+        kind: "invoicePrint",
+        attachmentId: invoiceAttachmentId,
+      });
+    }
+    if (!prostheticsOrdered) {
+      actions.push({
+        id: "prosthetics-ordered",
+        title: "Протетика заказана",
+        subtitle: "Поставить отметку по протетике",
+        kind: "patch",
+        patch: { prostheticsOrdered: true },
+      });
+    }
+
+    const paymentActions: MissingTagAction[] = [
+      {
+        id: "payment-not-paid",
+        title: "Не оплачено",
+        subtitle: "Статус оплаты",
+        kind: "payment",
+        payment: ORDER_PAYMENT_NOT_PAID,
+      },
+      {
+        id: "payment-paid",
+        title: "Оплачено",
+        subtitle: "Статус оплаты",
+        kind: "payment",
+        payment: ORDER_PAYMENT_PAID,
+      },
+      {
+        id: "payment-partial",
+        title: "Частично оплачено",
+        subtitle: "Статус оплаты, можно указать сумму",
+        kind: "partialPayment",
+      },
+      {
+        id: "payment-recon-unpaid",
+        title: "Сверка · не оплачено",
+        subtitle: "Статус оплаты по сверке",
+        kind: "payment",
+        payment: ORDER_PAYMENT_RECON_UNPAID,
+      },
+      {
+        id: "payment-recon-paid",
+        title: "Сверка · оплачено",
+        subtitle: "Статус оплаты по сверке",
+        kind: "payment",
+        payment: ORDER_PAYMENT_RECON_PAID,
+      },
+    ];
+    actions.push(
+      ...paymentActions.filter((action) => {
+        if (action.kind === "partialPayment") {
+          return currentPayment !== ORDER_PAYMENT_PARTIAL;
+        }
+        if (action.kind !== "payment") return true;
+        return action.payment !== currentPayment;
+      }),
+    );
+
+    for (const opt of URGENT_MENU_OPTIONS) {
+      if (opt.value === urgentSelectionValue) continue;
+      if (opt.value === URGENT_UNSET && !isUrgent) continue;
+      actions.push({
+        id: `urgent-${opt.value}`,
+        title:
+          opt.value === URGENT_UNSET ? "Без срочности" : `Срочность ${opt.label}`,
+        subtitle: "Срочность наряда",
+        kind: "urgent",
+        urgentSelection: opt.value,
+      });
+    }
+
+    if (kaitenBlocked) {
+      actions.push({
+        id: "kaiten-unblock",
+        title: "Разблокировать в Kaiten",
+        subtitle: "Снять блокировку без сохранения тега",
+        kind: "listTag",
+        listTagLabel: QUICK_TAG_KAITEN_UNBLOCK_LABEL,
+      });
+    } else if (kaitenCardId) {
+      actions.push({
+        id: "kaiten-block",
+        title: "Заблокировать в Kaiten",
+        subtitle: "Нужно указать причину ниже",
+        kind: "kaitenBlockFlow",
+      });
+    }
+
+    return actions;
+  }, [
+    adminShippedOtpr,
+    currentPayment,
+    invoiceAttachmentId,
+    invoicePrinted,
+    isUrgent,
+    kaitenBlocked,
+    kaitenCardId,
+    prostheticsOrdered,
+    urgentSelectionValue,
+  ]);
+
+  const printInvoiceAndMark = useCallback(
+    async (attachmentId: string) => {
+      const attId = attachmentId.trim();
+      if (!attId) return;
+      setErr(null);
+      const printUrl = `/api/orders/${orderId}/attachments/${attId}?inline=1`;
+
+      await new Promise<void>((resolve) => {
+        const iframe = document.createElement("iframe");
+        let done = false;
+        let fallbackTimer: number | null = null;
+        const cleanup = () => {
+          if (done) return;
+          done = true;
+          if (fallbackTimer) window.clearTimeout(fallbackTimer);
+          window.setTimeout(() => iframe.remove(), 1_000);
+          resolve();
+        };
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "1px";
+        iframe.style.height = "1px";
+        iframe.style.opacity = "0";
+        iframe.style.pointerEvents = "none";
+        iframe.onload = () => {
+          const win = iframe.contentWindow;
+          if (!win) {
+            window.open(printUrl, "_blank", "noopener,noreferrer");
+            cleanup();
+            return;
+          }
+          win.addEventListener("afterprint", cleanup, { once: true });
+          window.addEventListener("afterprint", cleanup, { once: true });
+          fallbackTimer = window.setTimeout(cleanup, 2_000);
+          try {
+            win.focus();
+            win.print();
+          } catch {
+            window.open(printUrl, "_blank", "noopener,noreferrer");
+            cleanup();
+          }
+        };
+        iframe.src = printUrl;
+        document.body.appendChild(iframe);
+      });
+
+      await applyQuickPatch({ invoicePrinted: true });
+    },
+    [applyQuickPatch, orderId],
+  );
+
+  const onMissingTagAction = useCallback(
+    (action: MissingTagAction) => {
+      if (action.kind === "patch") {
+        void applyQuickPatch(action.patch);
+        return;
+      }
+      if (action.kind === "invoicePrint") {
+        void printInvoiceAndMark(action.attachmentId);
+        return;
+      }
+      if (action.kind === "payment") {
+        void applyPaymentPatch(action.payment);
+        return;
+      }
+      if (action.kind === "partialPayment") {
+        setAddOpen(false);
+        setPaymentPartialDraft(
+          paymentPartialRub != null ? String(paymentPartialRub) : "",
+        );
+        setPaymentPartialPrompt(true);
+        setPaymentOpen(true);
+        return;
+      }
+      if (action.kind === "urgent") {
+        void applyQuickPatch({ urgentSelection: action.urgentSelection });
+        return;
+      }
+      if (action.kind === "listTag") {
+        void submitAdd(action.listTagLabel);
+        return;
+      }
+      setNewLabel(QUICK_TAG_KAITEN_BLOCK_LABEL);
+      setBlockReasonDraft("");
+      setErr(null);
+    },
+    [applyPaymentPatch, applyQuickPatch, paymentPartialRub, printInvoiceAndMark, submitAdd],
   );
 
   const filterListHref = useCallback(
@@ -1127,17 +1390,32 @@ export function OrderListTagsCell({
             <p className="text-base font-semibold text-[var(--app-text)]">
               Тег для списка
             </p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Свой тег для фильтра в списке: буквы, цифры, пробелы, «.» «_» «-», без «:». По
-              вводу от 2 символов ниже можно выбрать действие по наряду (срочность, счёт
-              распечатан и т.д.) — без открытия карточки. Для заблокированного наряда введите{" "}
-              <span className="whitespace-nowrap">«разблокировать»</span> и выберите
-              «Разблокировать в Kaiten» или нажмите «Добавить»: тег в список не добавляется,
-              только снятие блокировки в Kaiten. Для наряда с карточкой Kaiten без блокировки:
-              метка <span className="whitespace-nowrap">«заблокировать»</span>, затем укажите
-              причину в поле ниже и «Добавить» — тег не сохраняется, в Kaiten создаётся
-              блокировка с этой причиной.
-            </p>
+            {availableMissingTagActions.length > 0 ? (
+              <div className="mt-3 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] p-2">
+                <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Можно добавить к этому наряду
+                </p>
+                <div className="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto">
+                  {availableMissingTagActions.map((action) => (
+                    <button
+                      key={action.id}
+                      type="button"
+                      disabled={busy}
+                      className="rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1 text-left text-xs font-semibold text-[var(--app-text)] hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] disabled:opacity-40"
+                      title={action.subtitle}
+                      onClick={() => onMissingTagAction(action)}
+                    >
+                      {action.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Все быстрые отметки уже есть у этого наряда. Можно добавить свой тег для
+                фильтра списка.
+              </p>
+            )}
             <input
               type="text"
               value={newLabel}
@@ -1191,13 +1469,6 @@ export function OrderListTagsCell({
                     {s.subtitle ? (
                       <span className="text-xs text-[var(--text-muted)]">
                         {s.subtitle}
-                        {s.id === "invoice-printed-true" && invoicePrinted
-                          ? " Сейчас уже отмечено."
-                          : ""}
-                      </span>
-                    ) : s.id === "invoice-printed-true" && invoicePrinted ? (
-                      <span className="text-xs text-[var(--text-muted)]">
-                        Сейчас уже отмечено.
                       </span>
                     ) : null}
                   </button>

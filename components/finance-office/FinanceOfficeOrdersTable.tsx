@@ -202,6 +202,7 @@ export function FinanceOfficeOrdersTable({
                       listPendingProstheticsRequests={o.listPendingProstheticsRequests}
                       invoicePrinted={o.invoicePrinted}
                       hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                      invoiceAttachmentId={o.invoiceAttachmentId}
                       payment={o.payment}
                       paymentPartialRub={o.paymentPartialRub}
                       adminShippedOtpr={o.adminShippedOtpr}

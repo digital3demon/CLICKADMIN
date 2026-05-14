@@ -139,7 +139,7 @@ export function OrderListDueCell({
         labHmSlots={variant === "lab" ? labHmSlots ?? undefined : undefined}
         aria-label={ariaLab}
         title={titleHint}
-        className="w-max max-w-full"
+        className="w-full max-w-full"
         onChange={(raw) => {
           const snapped =
             raw === ""

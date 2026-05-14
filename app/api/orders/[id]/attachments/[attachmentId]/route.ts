@@ -11,7 +11,7 @@ import { removeAttachmentFromKaitenIfAny } from "@/lib/kaiten-sync";
 
 type Ctx = { params: Promise<{ id: string; attachmentId: string }> };
 
-export async function GET(_req: Request, ctx: Ctx) {
+export async function GET(req: Request, ctx: Ctx) {
   try {
     const { id: orderId, attachmentId } = await ctx.params;
     const prisma = await getOrdersPrisma();
@@ -41,12 +41,14 @@ export async function GET(_req: Request, ctx: Ctx) {
     }
     const buf = await readOrderAttachmentBytes(row);
     const asciiName = row.fileName.replace(/[^\x20-\x7E]/g, "_");
+    const url = new URL(req.url);
+    const inline = url.searchParams.get("inline") === "1";
     return new Response(new Uint8Array(buf), {
       status: 200,
       headers: {
         "Content-Type": row.mimeType || "application/octet-stream",
         "Content-Length": String(buf.length),
-        "Content-Disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(row.fileName)}`,
+        "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(row.fileName)}`,
       },
     });
   } catch (e) {

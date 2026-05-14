@@ -141,6 +141,7 @@ function normalizeBoardTitle(title: string | null | undefined): string {
 export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   /** null до монтирования: иначе SSR и первый клиентский кадр расходятся (server state vs default) → #418 и ломается Sortable. */
   const [appState, setAppState] = useState<KanbanAppState | null>(null);
+  const [kanbanStateReady, setKanbanStateReady] = useState(isDemo);
   const appStateRef = useRef<KanbanAppState | null>(null);
   appStateRef.current = appState;
   const [cardModalId, setCardModalId] = useState<string | null>(null);
@@ -250,7 +251,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo]);
 
   useEffect(() => {
-    if (!appState || isDemo) return;
+    if (!appState || isDemo || !kanbanStateReady) return;
     if (standalonePushTimerRef.current) clearTimeout(standalonePushTimerRef.current);
     standalonePushTimerRef.current = setTimeout(() => {
       standalonePushTimerRef.current = null;
@@ -272,7 +273,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     return () => {
       if (standalonePushTimerRef.current) clearTimeout(standalonePushTimerRef.current);
     };
-  }, [appState, isDemo]);
+  }, [appState, isDemo, kanbanStateReady]);
 
   useEffect(() => {
     const loaded = loadKanbanState(isDemo);
@@ -298,20 +299,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
       const scope = isDemo ? "user" : "tenant";
       const remote = await readClientState<unknown>(scope, key);
-      if (cancelled || !remote || typeof remote !== "object") return;
-      setAppState((prev) => {
-        if (!prev) return prev;
-        const currentCard = cardModalId;
-        const remoteState = isDemo
-          ? normalizeDemoKanbanAppState(remote as KanbanAppState)
-          : (remote as KanbanAppState);
-        const merged = mergeKanbanStatePreservingLocalBoards(prev, remoteState);
-        if (currentCard && !findCardInAppState(merged, currentCard)) {
-          setCardModalId(null);
-        }
-        saveKanbanState(merged, isDemo);
-        return merged;
-      });
+      if (cancelled) return;
+      if (remote && typeof remote === "object") {
+        setAppState((prev) => {
+          if (!prev) return prev;
+          const currentCard = cardModalId;
+          const remoteState = isDemo
+            ? normalizeDemoKanbanAppState(remote as KanbanAppState)
+            : (remote as KanbanAppState);
+          const merged = mergeKanbanStatePreservingLocalBoards(prev, remoteState);
+          if (currentCard && !findCardInAppState(merged, currentCard)) {
+            setCardModalId(null);
+          }
+          saveKanbanState(merged, isDemo);
+          return merged;
+        });
+      }
+      setKanbanStateReady(true);
     })();
     return () => {
       cancelled = true;
@@ -355,7 +359,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo]);
 
   useEffect(() => {
-    if (!appState) return;
+    if (!appState || !kanbanStateReady) return;
     saveKanbanState(appState, isDemo);
     if (kanbanStateSaveTimerRef.current) {
       clearTimeout(kanbanStateSaveTimerRef.current);
@@ -371,19 +375,19 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         clearTimeout(kanbanStateSaveTimerRef.current);
       }
     };
-  }, [appState, isDemo]);
+  }, [appState, isDemo, kanbanStateReady]);
 
   useEffect(() => {
-    if (isDemo || !appState || !archiveSettingsReadyRef.current) return;
+    if (isDemo || !appState || !kanbanStateReady || !archiveSettingsReadyRef.current) return;
     const payload = extractKanbanArchiveSettings(appState);
     const sig = JSON.stringify(payload);
     if (sig === lastArchiveSettingsSigRef.current) return;
     lastArchiveSettingsSigRef.current = sig;
     void writeClientState("tenant", KANBAN_ARCHIVE_SETTINGS_KEY, payload);
-  }, [appState, isDemo]);
+  }, [appState, isDemo, kanbanStateReady]);
 
   useEffect(() => {
-    if (!appState) {
+    if (!appState || !kanbanStateReady) {
       kaitenPullOnceRef.current = false;
       return;
     }
@@ -391,9 +395,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       kaitenPullOnceRef.current = true;
       void syncKanbanMirrorFromApi();
     }
-  }, [appState, syncKanbanMirrorFromApi]);
+  }, [appState, kanbanStateReady, syncKanbanMirrorFromApi]);
 
   useEffect(() => {
+    if (!kanbanStateReady) return;
     const pullIfVisible = () => {
       if (document.visibilityState === "visible") void syncKanbanMirrorFromApi();
     };
@@ -408,9 +413,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       document.removeEventListener("visibilitychange", pullIfVisible);
       window.removeEventListener("focus", pullIfVisible);
     };
-  }, [syncKanbanMirrorFromApi]);
+  }, [kanbanStateReady, syncKanbanMirrorFromApi]);
 
   useEffect(() => {
+    if (!kanbanStateReady) return;
     const onOrderArchived = () => {
       void syncKanbanMirrorFromApi();
     };
@@ -418,7 +424,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     return () => {
       window.removeEventListener(CRM_ORDER_ARCHIVED_EVENT, onOrderArchived);
     };
-  }, [syncKanbanMirrorFromApi]);
+  }, [kanbanStateReady, syncKanbanMirrorFromApi]);
 
   useEffect(() => {
     if (isDemo) return;
