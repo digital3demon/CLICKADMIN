@@ -1425,7 +1425,7 @@ export function NewOrderForm({
             </div>
             <div
               className={[
-                "flex min-w-0 flex-col gap-2 pb-0.5 sm:gap-2.5",
+                "flex min-w-0 flex-col gap-2 pb-0.5 sm:flex-row sm:items-stretch sm:gap-2.5",
                 !mobileHeaderDetailsOpen && "max-md:hidden",
               ]
                 .filter(Boolean)
@@ -1446,7 +1446,7 @@ export function NewOrderForm({
                 Мобильный: три блока дат столбиком без горизонтальной прокрутки.
                 Десктоп: полноразмерные блоки (min-w как у DueDatetimeComboPicker), в ряд без overflow-x.
               */}
-              <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch lg:flex-nowrap lg:gap-3">
+              <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-1 sm:flex-row sm:flex-wrap sm:items-stretch lg:flex-nowrap lg:gap-3">
                 <DueDatetimeComboPicker
                   id={`${titleId}-work-received`}
                   label="Поступление"
@@ -1595,13 +1595,7 @@ export function NewOrderForm({
               <p className="mb-4 text-sm text-red-600">{loadError}</p>
             ) : null}
 
-            <div
-              className={`grid grid-cols-1 gap-0 lg:items-stretch lg:gap-x-0 ${
-                sourceEmails.length
-                  ? "lg:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_34rem]"
-                  : "lg:grid-cols-3"
-              }`}
-            >
+            <div className="grid grid-cols-1 gap-0 lg:grid-cols-3 lg:items-stretch lg:gap-x-0">
               <div className="flex min-h-0 min-w-0 flex-col space-y-0 lg:pr-6">
                 <FormSection
                   title="Заказчик"
@@ -1907,18 +1901,19 @@ export function NewOrderForm({
                   />
                 </section>
               </div>
-              {sourceEmails.length ? (
-                <OrderSourceEmailsPanel
-                  emails={sourceEmails}
-                  onAppend={(email) =>
-                    setClientOrderText((prev) => {
-                      const block = sourceEmailToOrderText(email);
-                      return prev.trim() ? `${prev.trim()}\n\n${block}` : block;
-                    })
-                  }
-                />
-              ) : null}
             </div>
+
+            {sourceEmails.length ? (
+              <OrderSourceEmailsPanel
+                emails={sourceEmails}
+                onAppend={(email) =>
+                  setClientOrderText((prev) => {
+                    const block = sourceEmailToOrderText(email);
+                    return prev.trim() ? `${prev.trim()}\n\n${block}` : block;
+                  })
+                }
+              />
+            ) : null}
 
             <PodrobnoSection
               lines={detailLines}
@@ -1984,9 +1979,11 @@ function OrderSourceEmailsPanel({
 }) {
   const [expandedEmail, setExpandedEmail] = useState<OrderSourceEmail | null>(null);
 
-  return (
-    <aside className="flex min-h-0 min-w-0 flex-col border-t border-[var(--card-border)] pt-4 lg:col-span-3 xl:col-span-1 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
-      <div className="sticky top-[6.5rem] max-h-[calc(92dvh-8rem)] min-h-0 overflow-y-auto rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3">
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <aside className="fixed bottom-1 right-1 top-1 z-[130] flex w-[min(35rem,38vw)] min-w-[24rem] max-w-[42rem] flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 shadow-2xl">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--app-text)] sm:text-base">
@@ -2062,9 +2059,9 @@ function OrderSourceEmailsPanel({
           ))}
         </div>
       </div>
-      {expandedEmail ? (
+      {expandedEmail && typeof document !== "undefined" ? createPortal(
         <div
-          className="fixed inset-0 z-[260] flex items-center justify-center bg-black/55 p-3 sm:p-6"
+          className="fixed inset-0 z-[500] flex items-center justify-center bg-black/65 p-3 sm:p-6"
           role="presentation"
           onClick={() => setExpandedEmail(null)}
         >
@@ -2072,7 +2069,7 @@ function OrderSourceEmailsPanel({
             role="dialog"
             aria-modal="true"
             aria-label="Просмотр письма"
-            className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
+            className="flex h-[min(92dvh,860px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 border-b border-[var(--card-border)] px-5 py-4">
@@ -2132,9 +2129,11 @@ function OrderSourceEmailsPanel({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
-    </aside>
+    </aside>,
+    document.body,
   );
 }
 

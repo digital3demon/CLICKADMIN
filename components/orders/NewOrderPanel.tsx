@@ -124,13 +124,16 @@ export function NewOrderPanel() {
             const hasSourceEmails = Boolean(p.sourceEmails?.length);
             const stageClass = hasSourceEmails ? mailOrderStageClass : mainStageClass;
             const stagePaddingClass = hasSourceEmails
-              ? "p-1 sm:p-1.5"
+              ? "py-1 pl-1 pr-[min(35rem,38vw)] sm:py-1.5 sm:pl-1.5 sm:pr-[min(36rem,38vw)]"
               : "max-md:p-2 md:p-2 sm:p-3";
+            const stageAlignClass = hasSourceEmails
+              ? "items-center justify-start"
+              : "items-center justify-center";
 
             return (
             <motion.div
               key={p.id}
-              className={`fixed inset-y-0 right-0 flex pointer-events-none items-center justify-center ${stagePaddingClass} ${stageClass}`}
+              className={`fixed inset-y-0 right-0 flex pointer-events-none ${stageAlignClass} ${stagePaddingClass} ${stageClass}`}
               style={{ zIndex: z }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -143,7 +146,7 @@ export function NewOrderPanel() {
                 aria-labelledby={titleId}
                 className={`pointer-events-auto flex w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:max-h-[min(92dvh,1180px)] md:rounded-xl ${
                   hasSourceEmails
-                    ? "max-w-[min(99.8vw,1900px)]"
+                    ? "max-w-[min(calc(100vw-36.5rem),1320px)]"
                     : "max-w-[min(99vw,1320px)]"
                 }`}
                 initial={{ opacity: 0, scale: 0.96 }}
