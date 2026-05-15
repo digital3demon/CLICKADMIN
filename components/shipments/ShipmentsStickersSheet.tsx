@@ -35,10 +35,15 @@ function stickerLineFitClass(value: string, kind: "clinic" | "person" = "clinic"
     kind === "person"
       ? { left: 11, sm: 13, xs: 19 }
       : { left: 14, sm: 18, xs: 24 };
+  if (kind === "clinic" && length >= 30) return " sticker-line--clinic-long";
   if (length >= thresholds.xs) return " sticker-line--fit-xs";
   if (length >= thresholds.sm) return " sticker-line--fit-sm";
   if (length >= thresholds.left) return " sticker-line--fit-left";
   return "";
+}
+
+function hasLongClinicLine(value: string): boolean {
+  return stickerTextVisualLength(value) >= 30;
 }
 
 type Props = {
@@ -117,6 +122,11 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-line--fit-left { gap: 1.1mm; }
       .sticker-line--fit-sm { gap: 0.7mm; }
       .sticker-line--fit-xs { gap: 0.45mm; }
+      .sticker-line--clinic-long {
+        gap: 0.8mm;
+        align-items: flex-start;
+        margin-bottom: 0.2mm;
+      }
       .sticker-k {
         flex: 0 0 13.5mm;
         font-size: clamp(6.4pt, calc(var(--sticker-h) * 0.16), 7.6pt);
@@ -127,6 +137,11 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-line--fit-left .sticker-k { flex-basis: 10.5mm; }
       .sticker-line--fit-sm .sticker-k { flex-basis: 8mm; }
       .sticker-line--fit-xs .sticker-k { flex-basis: 6.6mm; font-size: clamp(6.1pt, calc(var(--sticker-h) * 0.155), 7.2pt); }
+      .sticker-line--clinic-long .sticker-k {
+        flex-basis: 12mm;
+        padding-top: 0.3mm;
+        font-size: clamp(5.9pt, calc(var(--sticker-h) * 0.145), 6.8pt);
+      }
       .sticker-v {
         flex: 1 1 0;
         min-width: 0;
@@ -145,6 +160,28 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-line--fit-xs .sticker-v {
         font-size: clamp(7.2pt, calc(var(--sticker-h) * 0.205), 9pt);
         letter-spacing: -0.075em;
+      }
+      .sticker-line--clinic-long .sticker-v {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        white-space: normal;
+        overflow: hidden;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+        line-height: 0.9;
+        font-size: clamp(6.4pt, calc(var(--sticker-h) * 0.17), 7.8pt);
+        letter-spacing: -0.09em;
+      }
+      .sticker-page--long-clinic .sticker-line:not(.sticker-line--clinic-long) {
+        margin-bottom: 0.18mm;
+      }
+      .sticker-page--long-clinic .sticker-line:not(.sticker-line--clinic-long):not(.sticker-line--order) .sticker-k {
+        font-size: clamp(5.8pt, calc(var(--sticker-h) * 0.145), 6.8pt);
+      }
+      .sticker-page--long-clinic .sticker-line:not(.sticker-line--clinic-long):not(.sticker-line--order) .sticker-v {
+        font-size: clamp(8.1pt, calc(var(--sticker-h) * 0.225), 10.4pt);
+        letter-spacing: -0.07em;
       }
       .sticker-line--order {
         margin-bottom: 0;
@@ -174,17 +211,17 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       }
       .sticker-qr-wrap {
         flex: 0 0 auto;
-        width: min(11.8mm, calc(var(--sticker-h) * 0.29));
-        height: min(11.8mm, calc(var(--sticker-h) * 0.29));
+        width: min(14.2mm, calc(var(--sticker-h) * 0.35));
+        height: min(14.2mm, calc(var(--sticker-h) * 0.35));
       }
       .sticker-scan-caption {
         display: flex;
         flex-direction: row;
         align-items: flex-end;
         gap: 0.25mm;
-        height: min(11.8mm, calc(var(--sticker-h) * 0.29));
-        max-height: min(11.8mm, calc(var(--sticker-h) * 0.29));
-        font-size: clamp(4.9pt, calc(var(--sticker-h) * 0.125), 5.8pt);
+        height: min(14.2mm, calc(var(--sticker-h) * 0.35));
+        max-height: min(14.2mm, calc(var(--sticker-h) * 0.35));
+        font-size: clamp(5.2pt, calc(var(--sticker-h) * 0.135), 6.4pt);
         line-height: 1;
         font-weight: 800;
         color: #334155;
@@ -216,9 +253,9 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
       .sticker-brand-logo {
         display: block;
         margin-inline: auto;
-        height: min(11.6mm, calc(var(--sticker-h) * 0.285));
+        height: min(13.9mm, calc(var(--sticker-h) * 0.34));
         width: auto;
-        max-width: min(27mm, calc(var(--sticker-w) * 0.46));
+        max-width: min(31mm, calc(var(--sticker-w) * 0.5));
         object-fit: contain;
         object-position: center;
       }
@@ -302,10 +339,12 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
     <>
       <style key={`${w}-${h}-${isWide ? 1 : 0}`}>{css}</style>
       <div className="sticker-root">
-        {rows.map((r) => (
+        {rows.map((r) => {
+          const longClinic = hasLongClinicLine(r.clinicLine);
+          return (
           <div
             key={r.id}
-            className={`sticker-page${isWide ? " sticker-page--wide" : ""}`}
+            className={`sticker-page${isWide ? " sticker-page--wide" : ""}${longClinic ? " sticker-page--long-clinic" : ""}`}
           >
             <div className="sticker-lines">
               <div
@@ -370,7 +409,8 @@ export function ShipmentsStickersSheet({ rows, widthMm, heightMm }: Props) {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

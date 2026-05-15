@@ -559,7 +559,7 @@ export function DueDatetimeComboPicker({
           className="inline-flex w-full max-w-full flex-nowrap items-stretch gap-0.5"
         >
           {labelInside ? (
-            <span className="flex h-9 max-w-[5.25rem] shrink-0 items-center justify-center rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-1.5 py-0.5 text-center text-[8px] font-bold uppercase leading-tight tracking-wide text-[var(--text-muted)] sm:h-10 sm:max-w-[6rem] sm:px-2 sm:text-[9px]">
+            <span className="flex h-8 max-w-[4.75rem] shrink-0 items-center justify-center rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-1 py-0.5 text-center text-[8px] font-bold uppercase leading-tight tracking-wide text-[var(--text-muted)] sm:h-9 sm:max-w-[5.5rem] sm:px-1.5 sm:text-[8.5px]">
               {label}
             </span>
           ) : null}
@@ -573,13 +573,13 @@ export function DueDatetimeComboPicker({
             aria-haspopup="dialog"
             onClick={openToggle}
             className={[
-              "flex min-h-[3rem] min-w-0 flex-1 items-center justify-between gap-1 px-1.5 py-1 text-xs tabular-nums sm:min-h-[3.25rem] sm:px-2",
+              "flex min-h-[2.35rem] min-w-0 flex-1 items-center justify-between gap-0.5 px-1 py-0.5 text-[11px] tabular-nums sm:min-h-[2.55rem] sm:px-1.5 sm:text-xs",
               triggerSurface,
               disabled ? "cursor-not-allowed" : "cursor-pointer",
               showPlaceholder ? "text-[var(--text-placeholder)]" : "text-[var(--app-text)]",
             ].join(" ")}
           >
-            <span className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 leading-tight">
+            <span className="flex min-w-0 flex-1 flex-col items-start justify-center gap-px leading-tight">
               <span className="whitespace-nowrap">
                 {showPlaceholder ? "Дата" : datePart}
               </span>
@@ -594,7 +594,7 @@ export function DueDatetimeComboPicker({
           {clearable && snappedValue && !disabled ? (
             <button
               type="button"
-              className="flex h-9 w-7 shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+              className="flex h-8 w-6 shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)] sm:h-9"
               aria-label="Очистить дату и время"
               onClick={(e) => {
                 e.preventDefault();

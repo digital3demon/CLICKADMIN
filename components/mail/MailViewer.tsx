@@ -153,7 +153,7 @@ export function MailViewer({
           </div>
         ) : null}
 
-        <div className="px-6 py-6">
+        <div className="max-w-5xl px-6 py-6">
           <iframe
             title="Тело письма"
             sandbox="allow-same-origin allow-popups"

@@ -72,6 +72,7 @@ export function SidebarMessengers() {
   }, [refetchSidebar]);
 
   const n = count ?? 0;
+  const countLabel = n > 99 ? "99+" : String(n);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -107,9 +108,12 @@ export function SidebarMessengers() {
             </p>
           ) : null}
         </div>
-        {n > 0 ? (
-          <span className="inline-flex min-h-5 min-w-[1.75rem] shrink-0 items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-1.5 text-xs font-semibold text-white tabular-nums">
-            {n > 99 ? "99+" : n}
+        {collapsed || n > 0 ? (
+          <span
+            className="inline-flex min-h-5 min-w-[1.75rem] shrink-0 items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-1.5 text-xs font-semibold text-white tabular-nums"
+            title={`Непрочитанных сообщений: ${n}`}
+          >
+            {countLabel}
           </span>
         ) : null}
       </button>

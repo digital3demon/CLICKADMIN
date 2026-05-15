@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppModule, UserRole } from "@prisma/client";
 import {
   canAccessFinancialAnalytics,
@@ -58,6 +58,26 @@ const baseNavItems: readonly {
 ];
 
 const DEFAULT_HREF_ORDER = [...DEFAULT_SIDEBAR_HREF_ORDER];
+
+function moveHref(list: string[], fromHref: string, toHref: string): string[] {
+  const from = list.indexOf(fromHref);
+  const to = list.indexOf(toHref);
+  if (from < 0 || to < 0 || from === to) return list;
+  const next = [...list];
+  const [removed] = next.splice(from, 1);
+  next.splice(to, 0, removed);
+  return next;
+}
+
+function DragHandleIcon() {
+  return (
+    <span className="flex flex-col gap-[3px] py-1" aria-hidden>
+      <span className="block h-px w-3.5 rounded-full bg-current" />
+      <span className="block h-px w-3.5 rounded-full bg-current" />
+      <span className="block h-px w-3.5 rounded-full bg-current" />
+    </span>
+  );
+}
 
 function readLocalSidebarOrder(): string[] | null {
   if (typeof window === "undefined") return null;
@@ -123,6 +143,7 @@ export function SidebarNav() {
   const [role, setRole] = useState<UserRole | null>(null);
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean> | null>(null);
   const [orderHrefs, setOrderHrefs] = useState<string[]>(DEFAULT_HREF_ORDER);
+  const dragHrefRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,6 +240,40 @@ export function SidebarNav() {
       .filter((x): x is (typeof navItems)[number] => x != null);
   }, [navItems, orderHrefs]);
 
+  const persistOrder = useCallback((next: string[]) => {
+    setOrderHrefs(next);
+    writeLocalSidebarOrder(next);
+    void writeSidebarOrderToServer(next);
+  }, []);
+
+  const onDragStart = useCallback((href: string) => {
+    dragHrefRef.current = href;
+  }, []);
+
+  const onDragEnd = useCallback(() => {
+    dragHrefRef.current = null;
+  }, []);
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const onDrop = useCallback(
+    (targetHref: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      const from =
+        dragHrefRef.current ??
+        (e.dataTransfer.getData("text/plain") || null);
+      dragHrefRef.current = null;
+      if (!from || from === targetHref) return;
+      const allowed = new Set(navItems.map((i) => i.href));
+      const base = coalesceSidebarNavOrder(orderHrefs, allowed);
+      persistOrder(moveHref(base, from, targetHref));
+    },
+    [navItems, orderHrefs, persistOrder],
+  );
+
   return (
     <nav
       className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-5 pb-3 pt-5 shell-short:px-4 shell-short:pb-2 shell-short:pt-3"
@@ -231,7 +286,24 @@ export function SidebarNav() {
             <li
               key={item.href}
               className="group flex items-stretch border-b border-[var(--sidebar-border)]/40 last:border-b-0"
+              onDragOver={onDragOver}
+              onDrop={onDrop(item.href)}
             >
+              <button
+                type="button"
+                draggable
+                onDragStart={(e) => {
+                  onDragStart(item.href);
+                  e.dataTransfer.setData("text/plain", item.href);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={onDragEnd}
+                className="flex w-8 shrink-0 cursor-grab items-center justify-center border-0 bg-transparent py-2 text-[var(--sidebar-text)] opacity-55 transition-opacity hover:opacity-100 active:cursor-grabbing shell-short:w-7 shell-short:py-1.5"
+                title="Перетащите, чтобы изменить порядок в меню"
+                aria-label={`Изменить порядок: ${item.label}`}
+              >
+                <DragHandleIcon />
+              </button>
               <Link
                 href={item.href}
                 draggable={false}

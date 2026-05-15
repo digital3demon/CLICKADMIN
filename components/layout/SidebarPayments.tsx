@@ -136,21 +136,34 @@ export function SidebarPayments({
     );
   }
 
+  const eventCount = items.length;
+  const eventCountLabel = eventCount > 99 ? "99+" : String(eventCount);
+
   return (
     <div className="shrink-0 border-t border-[var(--sidebar-border)] px-5 py-3 shell-short:px-4 shell-short:py-2">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--sidebar-text)] opacity-60 shell-short:text-[9px]">
           Оплаты
         </p>
-        <button
-          type="button"
-          className="-mr-1 -mt-0.5 flex shrink-0 rounded p-1 text-[var(--sidebar-text)] hover:bg-[var(--surface-subtle)]"
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Развернуть блок оплат" : "Свернуть блок оплат"}
-          onClick={() => setCollapsedPersist(!collapsed)}
-        >
-          <ChevronIcon collapsed={collapsed} />
-        </button>
+        <div className="-mr-1 -mt-0.5 flex shrink-0 items-center gap-1">
+          {collapsed ? (
+            <span
+              className="inline-flex min-h-5 min-w-[1.75rem] items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-1.5 text-xs font-semibold text-white tabular-nums"
+              title={`Непрочитанных оплат: ${eventCount}`}
+            >
+              {eventCountLabel}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="flex rounded p-1 text-[var(--sidebar-text)] hover:bg-[var(--surface-subtle)]"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Развернуть блок оплат" : "Свернуть блок оплат"}
+            onClick={() => setCollapsedPersist(!collapsed)}
+          >
+            <ChevronIcon collapsed={collapsed} />
+          </button>
+        </div>
       </div>
 
       {!collapsed && (

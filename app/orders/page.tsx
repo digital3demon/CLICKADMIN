@@ -59,9 +59,9 @@ const ORDERS_LIST_STACK = "w-full max-w-full min-w-0 self-start space-y-4";
 const ORDERS_FRAME_ROOT =
   "!px-2 !pb-6 !pt-4 sm:!px-3 sm:!pb-7 sm:!pt-5 md:!px-4 md:!pb-8 md:!pt-6 lg:!px-4 lg:!pb-9 lg:!pt-7";
 const ORDERS_TABLE_TH =
-  "min-w-0 whitespace-nowrap px-1.5 py-1.5 text-center sm:px-2 sm:py-2";
+  "min-w-0 whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
 const ORDERS_TABLE_CLASS =
-  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[11px] sm:text-xs lg:min-w-0 lg:text-[13px] 2xl:text-sm";
+  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] lg:min-w-0 lg:text-xs 2xl:text-[13px]";
 
 /** Поступление: дата прихода работы; без явной даты — как в наряде: дата занесения в CRM. */
 function formatAdmission(o: {
@@ -97,7 +97,7 @@ function OrdersTableColGroup() {
 
 function OrdersTableHeaderRow({ isDemo }: { isDemo: boolean }) {
   return (
-    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-xs md:text-sm">
+    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs">
       <th
         className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
         title="Чат карточки в Kaiten"
@@ -706,7 +706,7 @@ export default async function OrdersPage({
                     orderNumber={o.orderNumber}
                     labMentionHighlight={o.listKaitenLabMentionHighlight}
                   />
-                  <td className="max-md:hidden min-w-0 px-0.5 py-1.5 align-middle sm:px-1 sm:py-2">
+                  <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-0.5 sm:py-1.5">
                     <div className="flex min-w-0 flex-nowrap items-center justify-center gap-0">
                       {!workSent ? (
                         <OrderNarjadPrintTrigger
@@ -736,7 +736,7 @@ export default async function OrdersPage({
                       )}
                     </div>
                   </td>
-                  <td className="min-w-0 whitespace-nowrap px-1.5 py-1.5 align-middle font-mono font-medium text-[var(--app-text)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle font-mono font-medium text-[var(--app-text)] sm:px-1.5 sm:py-1.5">
                     <Link
                       href={orderPathById(o.id)}
                       className="text-[var(--sidebar-blue)] hover:underline"
@@ -745,7 +745,7 @@ export default async function OrdersPage({
                       {o.orderNumber}
                     </Link>
                   </td>
-                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-center text-[var(--text-strong)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
                     {o.clinic ? (
                       <Link
                         href={`/clients/${o.clinic.id}`}
@@ -760,7 +760,7 @@ export default async function OrdersPage({
                       </span>
                     )}
                   </td>
-                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-center text-[var(--text-body)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5">
                     {o.clinic?.address?.trim() ? (
                       <span
                         className="block hyphens-auto break-words text-center text-[var(--text-secondary)]"
@@ -772,7 +772,7 @@ export default async function OrdersPage({
                       <span className="block text-center text-[var(--text-muted)]">—</span>
                     )}
                   </td>
-                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-center text-[var(--text-strong)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
                     <Link
                       href={`/clients/doctors/${o.doctor.id}`}
                       title={o.doctor.fullName}
@@ -782,7 +782,7 @@ export default async function OrdersPage({
                     </Link>
                   </td>
                   <td
-                    className="min-w-0 px-1.5 py-1.5 align-middle text-center text-[var(--text-body)] sm:px-2 sm:py-2"
+                    className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5"
                     title={o.patientName ?? undefined}
                   >
                     <span className="block hyphens-auto break-words text-center">
@@ -791,10 +791,10 @@ export default async function OrdersPage({
                         : "—"}
                     </span>
                   </td>
-                  <td className="min-w-0 whitespace-nowrap px-1.5 py-1.5 align-middle text-center text-sm text-[var(--text-secondary)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle text-center text-[11px] text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5 sm:text-xs">
                     {formatAdmission(o)}
                   </td>
-                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-[var(--text-secondary)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
                     <OrderListDueCell
                       orderId={o.id}
                       dueIso={o.dueDate?.toISOString() ?? null}
@@ -802,7 +802,7 @@ export default async function OrdersPage({
                       labHmSlots={labDueHmSlots}
                     />
                   </td>
-                  <td className="min-w-0 px-1.5 py-1.5 align-middle text-[var(--text-secondary)] sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
                     <OrderListDueCell
                       variant="appointment"
                       orderId={o.id}
@@ -816,11 +816,11 @@ export default async function OrdersPage({
                   </td>
                   <td
                     data-shipped-cell
-                    className="min-w-0 px-1.5 py-1.5 align-middle text-center sm:px-2 sm:py-2"
+                    className="min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5"
                   >
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
-                  <td className="min-w-0 px-1.5 py-1.5 align-top sm:px-2 sm:py-2">
+                  <td className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5">
                     <OrderListTagsCell
                       orderId={o.id}
                       pageSize={pageSize}

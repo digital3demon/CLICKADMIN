@@ -42,10 +42,10 @@ export function MailHeader({
   }, [accountMenuOpen]);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--card-border)] bg-[var(--app-bg)]/95 px-5 py-3 backdrop-blur">
-      <div className="flex items-center gap-4">
-        <div className="flex min-w-[220px] items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--sidebar-blue)] text-lg font-black text-white shadow-sm">
+    <header className="sticky top-0 z-30 border-b border-[var(--card-border)] bg-[var(--app-bg)]/95 px-4 py-2 backdrop-blur">
+      <div className="flex items-center gap-3">
+        <div className="flex min-w-[210px] items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--sidebar-blue)] text-base font-black text-white shadow-sm">
             П
           </div>
           <div className="relative min-w-0" ref={menuRef}>
@@ -120,15 +120,15 @@ export function MailHeader({
           </div>
         </div>
 
-        <label className="relative min-w-0 flex-1">
-          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-placeholder)]">
+        <label className="relative min-w-[16rem] flex-1 xl:max-w-[44rem]">
+          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-placeholder)]">
             ⌕
           </span>
           <input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Поиск в почте"
-            className="h-12 w-full rounded-2xl border border-[var(--input-border)] bg-[var(--input-bg)] px-11 text-[15px] text-[var(--app-text)] shadow-sm outline-none transition placeholder:text-[var(--text-placeholder)] hover:border-[var(--border-strong)] focus:border-[var(--sidebar-blue)] focus:ring-4 focus:ring-[var(--sidebar-blue)]/10"
+            className="h-10 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-10 text-sm text-[var(--app-text)] shadow-sm outline-none transition placeholder:text-[var(--text-placeholder)] hover:border-[var(--border-strong)] focus:border-[var(--sidebar-blue)] focus:ring-2 focus:ring-[var(--sidebar-blue)]/10"
           />
         </label>
 
@@ -136,7 +136,7 @@ export function MailHeader({
           type="button"
           onClick={onSync}
           disabled={syncing || !activeAccountId}
-          className="hidden h-11 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-4 text-sm font-medium text-[var(--text-body)] shadow-sm transition hover:bg-[var(--surface-hover)] disabled:opacity-55 lg:inline-flex lg:items-center"
+          className="hidden h-10 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-4 text-sm font-medium text-[var(--text-body)] shadow-sm transition hover:bg-[var(--surface-hover)] disabled:opacity-55 lg:inline-flex lg:items-center"
         >
           {syncing ? "Обновляем..." : "Обновить"}
         </button>
@@ -145,7 +145,7 @@ export function MailHeader({
           type="button"
           onClick={onCompose}
           disabled={!activeAccountId}
-          className="inline-flex h-12 items-center gap-2 rounded-2xl bg-[var(--sidebar-blue)] px-5 text-sm font-semibold text-white shadow-lg transition hover:bg-[var(--sidebar-blue-hover)] active:scale-[0.99] disabled:opacity-55"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--sidebar-blue)] px-4 text-sm font-semibold text-white shadow-lg transition hover:bg-[var(--sidebar-blue-hover)] active:scale-[0.99] disabled:opacity-55"
         >
           <span className="text-lg leading-none">✎</span>
           <span className="hidden sm:inline">Написать</span>

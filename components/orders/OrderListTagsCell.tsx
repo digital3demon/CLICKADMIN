@@ -114,7 +114,7 @@ type Props = {
 };
 
 const padTable =
-  "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:py-1 sm:text-xs sm:leading-snug md:text-sm";
+  "px-1.5 py-0.5 text-[10px] leading-tight sm:px-2 sm:py-0.5 sm:text-[11px] sm:leading-tight md:text-xs";
 
 /**
  * Облако тегов: адаптивная плотная упаковка без жёстких шаблонов.
@@ -122,10 +122,10 @@ const padTable =
  * с мягкими лимитами через clamp; длинный текст переносится внутри пилюли.
  */
 const TAG_CLOUD_PACK_CLASS =
-  "flex min-h-min w-full min-w-0 flex-wrap content-start items-start gap-x-1.5 gap-y-1.5";
+  "flex min-h-min w-full min-w-0 flex-wrap content-start items-start gap-x-1 gap-y-1";
 
 const TAG_ADD_BUTTON_CLASS =
-  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-sm font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-7 sm:w-7";
+  "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-6 sm:w-6";
 
 /** Длинный текст → слот «огромная» (две колонки сетки, перенос вниз). ~28 ловит длинные кастомные подписи. */
 const TAG_SLOT_HUGE_MIN_CHARS = 28;

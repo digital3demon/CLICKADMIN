@@ -200,14 +200,14 @@ export function ClinicPriceOverridesPanel({
 
   if (loading) {
     return (
-      <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+      <section className="w-full max-w-[36rem] rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
         <p className="text-sm text-[var(--text-secondary)]">Загрузка прайса...</p>
       </section>
     );
   }
 
   return (
-    <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+    <section className="w-full max-w-[36rem] rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
           Индивидуальные цены клиники

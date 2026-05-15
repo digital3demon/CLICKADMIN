@@ -36,11 +36,11 @@ export function OrderListOrderChatCell({
   const adminMentionTag = useKanbanAdminMentionTag();
 
   return (
-    <td className="max-md:hidden min-w-0 px-1.5 py-1.5 align-middle text-center sm:px-2 sm:py-2">
+    <td className="max-md:hidden min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5">
       <>
         <button
           type="button"
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-[var(--table-row-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sidebar-blue)] sm:h-8 sm:w-8 ${
+          className={`inline-flex h-6 w-6 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-[var(--table-row-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sidebar-blue)] sm:h-7 sm:w-7 ${
             labMentionHighlight
               ? "animate-pulse text-amber-500 dark:text-amber-400"
               : "text-[var(--text-secondary)] hover:text-[var(--app-text)]"
@@ -53,7 +53,7 @@ export function OrderListOrderChatCell({
           aria-label="Чат Канбан/Кайтен"
           onClick={() => setOpen(true)}
         >
-          <ChatBubbleIcon className="h-[1.1rem] w-[1.1rem] sm:h-5 sm:w-5" />
+          <ChatBubbleIcon className="h-4 w-4 sm:h-[1.1rem] sm:w-[1.1rem]" />
         </button>
         <OrderListKaitenChatModal
           orderId={orderId}
