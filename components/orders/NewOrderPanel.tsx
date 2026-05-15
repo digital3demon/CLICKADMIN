@@ -34,7 +34,8 @@ const mailOrderStageClass = "left-0";
 const mailOrderLeft = "clamp(1rem, 7vw, 8rem)";
 const mailOrderRight = "clamp(1rem, 7vw, 8rem)";
 const mailOrderGap = "0.75rem";
-const mailSourceWidth = "clamp(24rem, 38vw, 35rem)";
+const mailOrderTop = "max(0.5rem, 3dvh)";
+const mailSourceWidth = "clamp(20rem, 30vw, 28rem)";
 const mailOrderWidth = `min(calc(100vw - ${mailOrderLeft} - ${mailSourceWidth} - ${mailOrderGap} - ${mailOrderRight}), 1320px)`;
 
 export function NewOrderPanel() {
@@ -129,10 +130,10 @@ export function NewOrderPanel() {
             const hasSourceEmails = Boolean(p.sourceEmails?.length);
             const stageClass = hasSourceEmails ? mailOrderStageClass : mainStageClass;
             const stagePaddingClass = hasSourceEmails
-              ? "py-1 sm:py-1.5"
+              ? "pb-1 sm:pb-1.5"
               : "max-md:p-2 md:p-2 sm:p-3";
             const stageAlignClass = hasSourceEmails
-              ? "items-center justify-start"
+              ? "items-start justify-start"
               : "items-center justify-center";
 
             return (
@@ -141,6 +142,7 @@ export function NewOrderPanel() {
               className={`fixed inset-y-0 right-0 flex pointer-events-none ${stageAlignClass} ${stagePaddingClass} ${stageClass}`}
               style={{
                 zIndex: z,
+                paddingTop: hasSourceEmails ? mailOrderTop : undefined,
                 paddingLeft: hasSourceEmails ? mailOrderLeft : undefined,
                 paddingRight: hasSourceEmails
                   ? `calc(${mailSourceWidth} + ${mailOrderGap} + ${mailOrderRight})`

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MailEmailDetail } from "@/components/mail/types";
 
 function addressLine(value: unknown): string {
@@ -35,6 +35,12 @@ export function MailViewer({
   onReply: (html: string, mode: "reply" | "replyAll" | "forward") => void;
 }) {
   const [quickReply, setQuickReply] = useState("");
+  const [bodyFrameHeight, setBodyFrameHeight] = useState(360);
+
+  useEffect(() => {
+    setBodyFrameHeight(360);
+  }, [email?.id]);
+
   if (loading) {
     return (
       <section className="hidden min-w-0 flex-1 bg-[var(--app-bg)] p-8 text-sm text-[var(--text-muted)] xl:block">
@@ -150,9 +156,15 @@ export function MailViewer({
         <div className="px-6 py-6">
           <iframe
             title="Тело письма"
-            sandbox=""
+            sandbox="allow-same-origin allow-popups"
             srcDoc={`<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:14px/1.6 Arial,sans-serif;color:CanvasText;background:Canvas} img{max-width:100%;height:auto} a{color:LinkText}</style></head><body>${body}</body></html>`}
-            className="h-[min(68dvh,760px)] min-h-[520px] w-full border border-[var(--border-subtle)] bg-[var(--card-bg)]"
+            className="w-full border border-[var(--border-subtle)] bg-[var(--card-bg)]"
+            style={{ height: bodyFrameHeight }}
+            onLoad={(event) => {
+              const doc = event.currentTarget.contentDocument;
+              const height = doc?.documentElement.scrollHeight ?? doc?.body.scrollHeight ?? 360;
+              setBodyFrameHeight(Math.max(220, Math.min(height + 8, 1800)));
+            }}
           />
 
           <div className="mt-6 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">

@@ -32,6 +32,7 @@ export type OrderSourceEmail = {
   receivedAt: string | null;
   preview: string | null;
   textBody: string | null;
+  safeHtmlBody?: string | null;
   attachments: Array<{
     id: string;
     fileName: string;

@@ -1970,6 +1970,15 @@ function sourceEmailBody(email: OrderSourceEmail): string {
   return (email.textBody || email.preview || "В письме нет текстового содержимого.").trim();
 }
 
+function sourceEmailHtml(email: OrderSourceEmail): string {
+  const html = email.safeHtmlBody?.trim();
+  if (html) return html;
+  return `<pre style="white-space:pre-wrap;font:14px/1.6 Arial,sans-serif;color:CanvasText;background:Canvas">${sourceEmailBody(email)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")}</pre>`;
+}
+
 function OrderSourceEmailsPanel({
   emails,
   onAppend,
@@ -1984,13 +1993,15 @@ function OrderSourceEmailsPanel({
   const mailOrderLeft = "clamp(1rem, 7vw, 8rem)";
   const mailOrderRight = "clamp(1rem, 7vw, 8rem)";
   const mailOrderGap = "0.75rem";
-  const mailSourceWidth = "clamp(24rem, 38vw, 35rem)";
+  const mailOrderTop = "max(0.5rem, 3dvh)";
+  const mailSourceWidth = "clamp(20rem, 30vw, 28rem)";
   const mailOrderWidth = `min(calc(100vw - ${mailOrderLeft} - ${mailSourceWidth} - ${mailOrderGap} - ${mailOrderRight}), 1320px)`;
 
   return createPortal(
     <aside
-      className="fixed top-[max(0.25rem,4dvh)] z-[130] flex max-h-[min(92dvh,1180px)] flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 shadow-2xl"
+      className="fixed z-[130] flex max-h-[min(92dvh,1180px)] flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 shadow-2xl"
       style={{
+        top: mailOrderTop,
         left: `calc(${mailOrderLeft} + ${mailOrderWidth} + ${mailOrderGap})`,
         width: mailSourceWidth,
       }}
@@ -2108,9 +2119,12 @@ function OrderSourceEmailsPanel({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              <div className="whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-5 text-sm leading-6 text-[var(--text-body)]">
-                {sourceEmailBody(expandedEmail)}
-              </div>
+              <iframe
+                title="Тело письма"
+                sandbox="allow-same-origin allow-popups"
+                srcDoc={`<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:14px/1.6 Arial,sans-serif;color:CanvasText;background:Canvas} img{max-width:100%;height:auto} a{color:LinkText}</style></head><body>${sourceEmailHtml(expandedEmail)}</body></html>`}
+                className="h-full min-h-[520px] w-full border border-[var(--border-subtle)] bg-[var(--card-bg)]"
+              />
               {expandedEmail.attachments.length ? (
                 <div className="mt-4 space-y-2">
                   <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">

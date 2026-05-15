@@ -152,10 +152,15 @@ function inlineCidImages(
   }
   if (byContentId.size === 0) return html;
 
-  return html.replace(/\s(src)\s*=\s*(["'])cid:([^"']+)\2/gi, (match, attr: string, quote: string, rawCid: string) => {
-    const url = byContentId.get(normalizeContentId(rawCid));
-    return url ? ` ${attr}=${quote}${url}${quote}` : match;
-  });
+  return html
+    .replace(/\s(src)\s*=\s*(["'])cid:([^"']+)\2/gi, (match, attr: string, quote: string, rawCid: string) => {
+      const url = byContentId.get(normalizeContentId(rawCid));
+      return url ? ` ${attr}=${quote}${url}${quote}` : match;
+    })
+    .replace(/\s(src)\s*=\s*cid:([^\s>]+)/gi, (match, attr: string, rawCid: string) => {
+      const url = byContentId.get(normalizeContentId(rawCid));
+      return url ? ` ${attr}="${url}"` : match;
+    });
 }
 
 function parseRecipientLine(value: string): Array<{ address: string; name: string | null }> {

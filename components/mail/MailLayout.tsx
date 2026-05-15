@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { MailComposer } from "@/components/mail/MailComposer";
 import { MailHeader } from "@/components/mail/MailHeader";
@@ -37,6 +37,14 @@ function mergeEmailRows(fresh: MailEmailRow[], existing: MailEmailRow[]): MailEm
   return [...fresh, ...existing.filter((email) => !freshIds.has(email.id))];
 }
 
+const MAIL_UI_SCALE = 0.85;
+const MAIL_UI_SCALE_STYLE: CSSProperties & { zoom: number } = {
+  zoom: MAIL_UI_SCALE,
+  width: `${100 / MAIL_UI_SCALE}%`,
+  height: `calc(100dvh / ${MAIL_UI_SCALE})`,
+  minHeight: `calc(100dvh / ${MAIL_UI_SCALE})`,
+};
+
 export function MailLayout() {
   const { open: openNewOrder, canOpen: canOpenNewOrder, canCreate: canCreateOrder } = useNewOrderPanel();
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
@@ -58,6 +66,7 @@ export function MailLayout() {
   const [composerSeed, setComposerSeed] = useState({ to: "", subject: "", html: "" });
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [savingAccount, setSavingAccount] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [error, setError] = useState("");
   const listQueryKeyRef = useRef("");
   const listHasRowsRef = useRef(false);
@@ -388,6 +397,7 @@ export function MailLayout() {
           receivedAt: email.receivedAt ?? email.sentAt ?? email.createdAt,
           preview: email.preview,
           textBody: email.textBody,
+          safeHtmlBody: email.safeHtmlBody,
           attachments: email.attachments.map((attachment) => ({
             id: attachment.id,
             fileName: attachment.fileName,
@@ -410,7 +420,10 @@ export function MailLayout() {
   }
 
   return (
-    <div className="flex h-[100dvh] min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
+    <div
+      className="flex min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]"
+      style={MAIL_UI_SCALE_STYLE}
+    >
       <MailHeader
         accounts={accounts}
         activeAccountId={activeAccountId}
@@ -465,6 +478,8 @@ export function MailLayout() {
               account={activeAccount}
               activeFolderId={activeFolderId}
               labels={activeAccount?.labels ?? []}
+              collapsed={sidebarCollapsed}
+              onCollapsedChange={setSidebarCollapsed}
               onFolderChange={(id) => {
                 setActiveFolderId(id);
                 setActiveEmailId("");
