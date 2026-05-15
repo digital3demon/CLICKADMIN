@@ -1598,7 +1598,7 @@ export function NewOrderForm({
             <div
               className={`grid grid-cols-1 gap-0 lg:items-stretch lg:gap-x-0 ${
                 sourceEmails.length
-                  ? "lg:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_30rem]"
+                  ? "lg:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_34rem]"
                   : "lg:grid-cols-3"
               }`}
             >
@@ -1971,6 +1971,10 @@ function sourceEmailToOrderText(email: OrderSourceEmail): string {
   return lines.join("\n");
 }
 
+function sourceEmailBody(email: OrderSourceEmail): string {
+  return (email.textBody || email.preview || "В письме нет текстового содержимого.").trim();
+}
+
 function OrderSourceEmailsPanel({
   emails,
   onAppend,
@@ -1978,6 +1982,8 @@ function OrderSourceEmailsPanel({
   emails: OrderSourceEmail[];
   onAppend: (email: OrderSourceEmail) => void;
 }) {
+  const [expandedEmail, setExpandedEmail] = useState<OrderSourceEmail | null>(null);
+
   return (
     <aside className="flex min-h-0 min-w-0 flex-col border-t border-[var(--card-border)] pt-4 lg:col-span-3 xl:col-span-1 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
       <div className="sticky top-[6.5rem] max-h-[calc(92dvh-8rem)] min-h-0 overflow-y-auto rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3">
@@ -1986,9 +1992,6 @@ function OrderSourceEmailsPanel({
             <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--app-text)] sm:text-base">
               Письма
             </h3>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              Выбрано для нового заказа: {emails.length}
-            </p>
           </div>
         </div>
         <div className="space-y-3">
@@ -2006,17 +2009,28 @@ function OrderSourceEmailsPanel({
                     {email.subject || "(без темы)"}
                   </h4>
                 </div>
-                {email.receivedAt ? (
-                  <time className="shrink-0 text-[0.68rem] font-medium text-[var(--text-muted)]">
-                    {sourceEmailDate(email.receivedAt)}
-                  </time>
-                ) : null}
+                <div className="flex shrink-0 items-center gap-2">
+                  {email.receivedAt ? (
+                    <time className="text-[0.68rem] font-medium text-[var(--text-muted)]">
+                      {sourceEmailDate(email.receivedAt)}
+                    </time>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                    aria-label="Открыть письмо во всплывающем окне"
+                    title="Открыть письмо во всплывающем окне"
+                    onClick={() => setExpandedEmail(email)}
+                  >
+                    <ExpandIcon className="h-4 w-4" aria-hidden />
+                  </button>
+                </div>
               </div>
               <p className="mt-2 truncate text-xs font-medium text-[var(--text-secondary)]">
                 {sourceEmailSender(email)}
               </p>
               <p className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap rounded-2xl bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)]">
-                {(email.textBody || email.preview || "В письме нет текстового содержимого.").trim()}
+                {sourceEmailBody(email)}
               </p>
               {email.attachments.length ? (
                 <div className="mt-3 space-y-1.5">
@@ -2048,7 +2062,99 @@ function OrderSourceEmailsPanel({
           ))}
         </div>
       </div>
+      {expandedEmail ? (
+        <div
+          className="fixed inset-0 z-[260] flex items-center justify-center bg-black/55 p-3 sm:p-6"
+          role="presentation"
+          onClick={() => setExpandedEmail(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Просмотр письма"
+            className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--card-border)] px-5 py-4">
+              <div className="min-w-0">
+                <div className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                  Письмо
+                </div>
+                <h3 className="mt-1 text-lg font-semibold leading-snug text-[var(--app-text)]">
+                  {expandedEmail.subject || "(без темы)"}
+                </h3>
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                  {sourceEmailSender(expandedEmail)}
+                  {expandedEmail.receivedAt ? ` · ${sourceEmailDate(expandedEmail.receivedAt)}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                aria-label="Закрыть просмотр письма"
+                title="Закрыть"
+                onClick={() => setExpandedEmail(null)}
+              >
+                <CloseIcon className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <div className="whitespace-pre-wrap rounded-2xl bg-[var(--surface-muted)] p-5 text-sm leading-6 text-[var(--text-body)]">
+                {sourceEmailBody(expandedEmail)}
+              </div>
+              {expandedEmail.attachments.length ? (
+                <div className="mt-4 space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Вложения
+                  </div>
+                  {expandedEmail.attachments.map((attachment) => (
+                    <a
+                      key={attachment.id}
+                      href={`/api/mail/emails/${expandedEmail.id}/attachments/${attachment.id}`}
+                      className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-3 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                    >
+                      <span className="min-w-0 truncate">{attachment.fileName}</span>
+                      <span className="shrink-0 text-[var(--text-muted)]">
+                        {sourceFileSize(attachment.size)}
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="border-t border-[var(--card-border)] px-5 py-4">
+              <button
+                type="button"
+                className="w-full rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2.5 text-sm font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)]"
+                onClick={() => onAppend(expandedEmail)}
+              >
+                Добавить текст в заказ
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </aside>
+  );
+}
+
+function ExpandIcon(props: { className?: string; "aria-hidden"?: boolean }) {
+  return (
+    <svg
+      className={props.className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden={props["aria-hidden"]}
+    >
+      <path d="M15 3h6v6" />
+      <path d="M21 3l-7 7" />
+      <path d="M9 21H3v-6" />
+      <path d="M3 21l7-7" />
+    </svg>
   );
 }
 
