@@ -346,9 +346,9 @@ export function MailLayout() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: String(formData.get("email") || ""),
-          displayName: String(formData.get("displayName") || ""),
-          appPassword: String(formData.get("appPassword") || ""),
+          email: String(formData.get("mailAddress") || ""),
+          displayName: "",
+          appPassword: String(formData.get("yandexAppPassword") || ""),
         }),
       });
       await loadAccounts();
@@ -559,9 +559,18 @@ export function MailLayout() {
             role="dialog"
             aria-modal="true"
             aria-label="Добавить почтовый ящик"
+            autoComplete="off"
             className="w-full max-w-md rounded-3xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
+            <input
+              type="text"
+              name="username"
+              autoComplete="username"
+              tabIndex={-1}
+              className="hidden"
+              aria-hidden="true"
+            />
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-[var(--app-text)]">Добавить ящик</h2>
@@ -581,24 +590,20 @@ export function MailLayout() {
             </div>
             <div className="mt-5 space-y-3">
               <input
-                name="email"
+                name="mailAddress"
                 type="email"
                 required
                 placeholder="name@yandex.ru"
+                autoComplete="off"
                 disabled={savingAccount}
                 className="h-12 w-full rounded-2xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)] disabled:opacity-60"
               />
               <input
-                name="displayName"
-                placeholder="Имя отправителя"
-                disabled={savingAccount}
-                className="h-12 w-full rounded-2xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)] disabled:opacity-60"
-              />
-              <input
-                name="appPassword"
+                name="yandexAppPassword"
                 type="password"
                 required
                 placeholder="Пароль приложения"
+                autoComplete="new-password"
                 disabled={savingAccount}
                 className="h-12 w-full rounded-2xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)] disabled:opacity-60"
               />

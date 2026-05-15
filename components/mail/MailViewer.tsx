@@ -152,7 +152,7 @@ export function MailViewer({
             title="Тело письма"
             sandbox=""
             srcDoc={`<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:14px/1.6 Arial,sans-serif;color:CanvasText;background:Canvas} img{max-width:100%;height:auto} a{color:LinkText}</style></head><body>${body}</body></html>`}
-            className="h-[min(68dvh,760px)] min-h-[520px] w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card-bg)]"
+            className="h-[min(68dvh,760px)] min-h-[520px] w-full border border-[var(--border-subtle)] bg-[var(--card-bg)]"
           />
 
           <div className="mt-6 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">

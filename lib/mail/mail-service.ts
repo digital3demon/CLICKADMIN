@@ -126,6 +126,38 @@ export function sanitizeMailHtml(html: string | null): string {
     .replace(/\s(href|src)\s*=\s*["']javascript:[^"']*["']/gi, "");
 }
 
+function normalizeContentId(value: string | null | undefined): string {
+  if (!value) return "";
+  const stripped = value.trim().replace(/^<|>$/g, "");
+  try {
+    return decodeURIComponent(stripped).toLowerCase();
+  } catch {
+    return stripped.toLowerCase();
+  }
+}
+
+function inlineCidImages(
+  html: string,
+  emailId: string,
+  attachments: Array<{ id: string; contentId: string | null; isInline: boolean }>,
+): string {
+  const byContentId = new Map<string, string>();
+  for (const attachment of attachments) {
+    const cid = normalizeContentId(attachment.contentId);
+    if (!cid) continue;
+    byContentId.set(
+      cid,
+      `/api/mail/emails/${encodeURIComponent(emailId)}/attachments/${encodeURIComponent(attachment.id)}?inline=1`,
+    );
+  }
+  if (byContentId.size === 0) return html;
+
+  return html.replace(/\s(src)\s*=\s*(["'])cid:([^"']+)\2/gi, (match, attr: string, quote: string, rawCid: string) => {
+    const url = byContentId.get(normalizeContentId(rawCid));
+    return url ? ` ${attr}=${quote}${url}${quote}` : match;
+  });
+}
+
 function parseRecipientLine(value: string): Array<{ address: string; name: string | null }> {
   return value
     .split(/[;,]/)
@@ -543,7 +575,7 @@ export async function getEmailDetail(
       account: { select: { id: true, email: true, displayName: true } },
       folder: true,
       attachments: {
-        select: { id: true, fileName: true, mimeType: true, size: true, isInline: true },
+        select: { id: true, fileName: true, mimeType: true, size: true, contentId: true, isInline: true },
       },
       labelAssignments: { include: { label: true } },
     },
@@ -561,7 +593,11 @@ export async function getEmailDetail(
       }).catch(() => undefined);
     }
   }
-  return { ...email, safeHtmlBody: sanitizeMailHtml(email.htmlBody) };
+  const sanitizedHtml = sanitizeMailHtml(email.htmlBody);
+  return {
+    ...email,
+    safeHtmlBody: inlineCidImages(sanitizedHtml, email.id, email.attachments),
+  };
 }
 
 export async function getEmailAttachment(

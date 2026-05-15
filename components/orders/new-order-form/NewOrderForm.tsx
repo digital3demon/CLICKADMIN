@@ -2026,7 +2026,7 @@ function OrderSourceEmailsPanel({
               <p className="mt-2 truncate text-xs font-medium text-[var(--text-secondary)]">
                 {sourceEmailSender(email)}
               </p>
-              <p className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap rounded-2xl bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)]">
+              <p className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)]">
                 {sourceEmailBody(email)}
               </p>
               {email.attachments.length ? (
@@ -2096,7 +2096,7 @@ function OrderSourceEmailsPanel({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              <div className="whitespace-pre-wrap rounded-2xl bg-[var(--surface-muted)] p-5 text-sm leading-6 text-[var(--text-body)]">
+              <div className="whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-5 text-sm leading-6 text-[var(--text-body)]">
                 {sourceEmailBody(expandedEmail)}
               </div>
               {expandedEmail.attachments.length ? (
