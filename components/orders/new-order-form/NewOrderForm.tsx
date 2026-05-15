@@ -1598,7 +1598,7 @@ export function NewOrderForm({
             <div
               className={`grid grid-cols-1 gap-0 lg:items-stretch lg:gap-x-0 ${
                 sourceEmails.length
-                  ? "lg:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_21rem]"
+                  ? "lg:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_30rem]"
                   : "lg:grid-cols-3"
               }`}
             >

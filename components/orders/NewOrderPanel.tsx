@@ -27,8 +27,10 @@ const easeSnappy = [0.2, 0.85, 0.25, 1] as const;
 const collapsedStripClass =
   "left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] shell-desktop:left-[calc(100%/7+0.75rem)] shell-desktop:right-3";
 
-/** Модалка и затемнение: на мобилке/низком экране на всю ширину, при shell-desktop — только над 6/7. */
+/** Обычная модалка: на десктопе не перекрывает левое меню CRM. */
 const mainStageClass = "left-0 shell-desktop:left-[calc(100%/7)]";
+/** Заказ из почты занимает весь экран, чтобы справа поместить широкую колонку писем. */
+const mailOrderStageClass = "left-0";
 
 export function NewOrderPanel() {
   const { panels, close, collapse, expand, dismissExpandedPanel } =
@@ -119,11 +121,13 @@ export function NewOrderPanel() {
             const arrayIndex = panels.findIndex((x) => x.id === p.id);
             const titleId = `new-order-panel-title-${p.id}`;
             const z = 100 + arrayIndex;
+            const hasSourceEmails = Boolean(p.sourceEmails?.length);
+            const stageClass = hasSourceEmails ? mailOrderStageClass : mainStageClass;
 
             return (
             <motion.div
               key={p.id}
-              className={`fixed inset-y-0 right-0 flex pointer-events-none max-md:items-center max-md:justify-center max-md:p-2 md:items-center md:justify-center md:p-2 sm:p-3 ${mainStageClass}`}
+              className={`fixed inset-y-0 right-0 flex pointer-events-none max-md:items-center max-md:justify-center max-md:p-2 md:items-center md:justify-center md:p-2 sm:p-3 ${stageClass}`}
               style={{ zIndex: z }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -135,8 +139,8 @@ export function NewOrderPanel() {
                 aria-modal="true"
                 aria-labelledby={titleId}
                 className={`pointer-events-auto flex w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:max-h-[min(92dvh,1180px)] md:rounded-xl ${
-                  p.sourceEmails?.length
-                    ? "max-w-[min(99vw,1540px)]"
+                  hasSourceEmails
+                    ? "max-w-[min(99vw,1780px)]"
                     : "max-w-[min(99vw,1320px)]"
                 }`}
                 initial={{ opacity: 0, scale: 0.96 }}
