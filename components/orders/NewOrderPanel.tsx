@@ -31,6 +31,11 @@ const collapsedStripClass =
 const mainStageClass = "left-0 shell-desktop:left-[calc(100%/7)]";
 /** Заказ из почты занимает весь экран, чтобы справа поместить широкую колонку писем. */
 const mailOrderStageClass = "left-0";
+const mailOrderLeft = "clamp(1rem, 7vw, 8rem)";
+const mailOrderRight = "clamp(1rem, 7vw, 8rem)";
+const mailOrderGap = "0.75rem";
+const mailSourceWidth = "clamp(24rem, 38vw, 35rem)";
+const mailOrderWidth = `min(calc(100vw - ${mailOrderLeft} - ${mailSourceWidth} - ${mailOrderGap} - ${mailOrderRight}), 1320px)`;
 
 export function NewOrderPanel() {
   const { panels, close, collapse, expand, dismissExpandedPanel } =
@@ -124,7 +129,7 @@ export function NewOrderPanel() {
             const hasSourceEmails = Boolean(p.sourceEmails?.length);
             const stageClass = hasSourceEmails ? mailOrderStageClass : mainStageClass;
             const stagePaddingClass = hasSourceEmails
-              ? "py-1 pl-[clamp(1rem,7vw,8rem)] pr-[calc(min(35rem,38vw)+0.75rem)] sm:py-1.5"
+              ? "py-1 sm:py-1.5"
               : "max-md:p-2 md:p-2 sm:p-3";
             const stageAlignClass = hasSourceEmails
               ? "items-center justify-start"
@@ -134,7 +139,13 @@ export function NewOrderPanel() {
             <motion.div
               key={p.id}
               className={`fixed inset-y-0 right-0 flex pointer-events-none ${stageAlignClass} ${stagePaddingClass} ${stageClass}`}
-              style={{ zIndex: z }}
+              style={{
+                zIndex: z,
+                paddingLeft: hasSourceEmails ? mailOrderLeft : undefined,
+                paddingRight: hasSourceEmails
+                  ? `calc(${mailSourceWidth} + ${mailOrderGap} + ${mailOrderRight})`
+                  : undefined,
+              }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -145,10 +156,9 @@ export function NewOrderPanel() {
                 aria-modal="true"
                 aria-labelledby={titleId}
                 className={`pointer-events-auto flex w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:max-h-[min(92dvh,1180px)] md:rounded-xl ${
-                  hasSourceEmails
-                    ? "max-w-[min(calc(100vw-min(35rem,38vw)-clamp(2rem,8vw,9rem)),1320px)]"
-                    : "max-w-[min(99vw,1320px)]"
+                  hasSourceEmails ? "" : "max-w-[min(99vw,1320px)]"
                 }`}
+                style={hasSourceEmails ? { maxWidth: mailOrderWidth } : undefined}
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}

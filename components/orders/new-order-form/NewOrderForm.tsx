@@ -1981,8 +1981,20 @@ function OrderSourceEmailsPanel({
 
   if (typeof document === "undefined") return null;
 
+  const mailOrderLeft = "clamp(1rem, 7vw, 8rem)";
+  const mailOrderRight = "clamp(1rem, 7vw, 8rem)";
+  const mailOrderGap = "0.75rem";
+  const mailSourceWidth = "clamp(24rem, 38vw, 35rem)";
+  const mailOrderWidth = `min(calc(100vw - ${mailOrderLeft} - ${mailSourceWidth} - ${mailOrderGap} - ${mailOrderRight}), 1320px)`;
+
   return createPortal(
-    <aside className="fixed right-[clamp(1rem,7vw,8rem)] top-[max(0.25rem,4dvh)] z-[130] flex max-h-[min(92dvh,1180px)] w-[min(35rem,38vw)] min-w-[24rem] max-w-[42rem] flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 shadow-2xl">
+    <aside
+      className="fixed top-[max(0.25rem,4dvh)] z-[130] flex max-h-[min(92dvh,1180px)] flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 shadow-2xl"
+      style={{
+        left: `calc(${mailOrderLeft} + ${mailOrderWidth} + ${mailOrderGap})`,
+        width: mailSourceWidth,
+      }}
+    >
       <div className="min-h-0 overflow-y-auto">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
