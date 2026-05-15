@@ -121,14 +121,18 @@ async function applyIncomingRules(
   account: Pick<EmailAccount, "id" | "tenantId">,
   rules: EmailRule[],
   message: { from: string; subject: string; body: string },
-): Promise<{ isFlagged: boolean; labelIds: string[]; folderId: string | null }> {
+): Promise<{ isFlagged: boolean; isRead: boolean; labelIds: string[]; folderId: string | null }> {
   let isFlagged = false;
+  let isRead = false;
+  let shouldDelete = false;
   const labelIds = new Set<string>();
   let folderId: string | null = null;
 
   for (const rule of rules) {
     if (!ruleMatches(rule, message)) continue;
     isFlagged ||= booleanFromJsonField(rule.actions, "markImportant");
+    isRead ||= booleanFromJsonField(rule.actions, "markRead");
+    shouldDelete ||= booleanFromJsonField(rule.actions, "delete");
     for (const labelId of stringArrayFromJsonField(rule.actions, "labelIds")) {
       labelIds.add(labelId);
     }
@@ -152,7 +156,15 @@ async function applyIncomingRules(
     folderId = folder?.id ?? null;
   }
 
-  return { isFlagged, labelIds: [...labelIds], folderId };
+  if (shouldDelete) {
+    const trashFolder = await db.emailFolder.findFirst({
+      where: { tenantId: account.tenantId, accountId: account.id, type: EmailFolderType.TRASH },
+      select: { id: true },
+    });
+    folderId = trashFolder?.id ?? folderId;
+  }
+
+  return { isFlagged, isRead, labelIds: [...labelIds], folderId };
 }
 
 async function upsertFolder(
@@ -234,6 +246,7 @@ export async function syncEmailAccount(
       let maxUid = folder.lastSyncedUid ?? 0;
       let minBackfillUid = folder.lastBackfillUid ?? null;
       let processed = 0;
+      const touchedFolderIds = new Set<string>([folder.id]);
       const maxMessages =
         mode === EmailSyncMode.BACKFILL
           ? BACKFILL_MESSAGES_PER_FOLDER
@@ -272,7 +285,8 @@ export async function syncEmailAccount(
                 subject: parsed.subject ?? "",
                 body: parsed.text ?? "",
               })
-            : { isFlagged: false, labelIds: [], folderId: null };
+            : { isFlagged: false, isRead: false, labelIds: [], folderId: null };
+        const isRead = item.flags.has("\\Seen") || ruleResult.isRead;
         const email = await db.email.create({
           data: {
             tenantId: account.tenantId,
@@ -282,8 +296,8 @@ export async function syncEmailAccount(
             messageId: parsed.messageId ?? null,
             direction:
               folder.type === EmailFolderType.SENT ? "OUTBOUND" : "INBOUND",
-            isRead: item.flags.has("\\Seen"),
-            readAt: item.flags.has("\\Seen") ? item.internalDate ?? new Date() : null,
+            isRead,
+            readAt: isRead ? item.internalDate ?? new Date() : null,
             isFlagged: item.flags.has("\\Flagged") || ruleResult.isFlagged,
             hasAttachments,
             fromName: from.name,
@@ -306,6 +320,7 @@ export async function syncEmailAccount(
             },
           },
         });
+        if (ruleResult.folderId) touchedFolderIds.add(ruleResult.folderId);
         for (const a of parsed.attachments) {
           const attachmentId = newMailAttachmentId();
           const mimeType = a.contentType || "application/octet-stream";
@@ -341,7 +356,9 @@ export async function syncEmailAccount(
             ? { lastBackfillUid: minBackfillUid ?? folder.lastBackfillUid }
             : { lastSyncedUid: maxUid || folder.lastSyncedUid },
       });
-      await refreshFolderCounters(db, account.tenantId, folder.id);
+      for (const folderId of touchedFolderIds) {
+        await refreshFolderCounters(db, account.tenantId, folderId);
+      }
     }
 
     await db.emailAccount.update({

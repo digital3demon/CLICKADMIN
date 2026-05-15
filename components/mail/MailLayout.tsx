@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { MailComposer } from "@/components/mail/MailComposer";
 import { MailHeader } from "@/components/mail/MailHeader";
 import { MailList } from "@/components/mail/MailList";
 import { MailSidebar } from "@/components/mail/MailSidebar";
 import { MailViewer } from "@/components/mail/MailViewer";
+import { useNewOrderPanel } from "@/components/orders/new-order-panel-context";
 import type {
   MailAccount,
   MailEmailDetail,
@@ -31,7 +32,13 @@ function inboxFolder(account: MailAccount | null): MailFolder | null {
   );
 }
 
+function mergeEmailRows(fresh: MailEmailRow[], existing: MailEmailRow[]): MailEmailRow[] {
+  const freshIds = new Set(fresh.map((email) => email.id));
+  return [...fresh, ...existing.filter((email) => !freshIds.has(email.id))];
+}
+
 export function MailLayout() {
+  const { open: openNewOrder, canOpen: canOpenNewOrder, canCreate: canCreateOrder } = useNewOrderPanel();
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
   const [activeAccountId, setActiveAccountId] = useState("");
   const [activeFolderId, setActiveFolderId] = useState("");
@@ -50,6 +57,8 @@ export function MailLayout() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [composerSeed, setComposerSeed] = useState({ to: "", subject: "", html: "" });
   const [error, setError] = useState("");
+  const listQueryKeyRef = useRef("");
+  const listHasRowsRef = useRef(false);
 
   const activeAccount = useMemo(
     () => accounts.find((a) => a.id === activeAccountId) ?? null,
@@ -58,6 +67,15 @@ export function MailLayout() {
   const activeFolder = useMemo(
     () => activeAccount?.folders.find((f) => f.id === activeFolderId) ?? null,
     [activeAccount, activeFolderId],
+  );
+  const listQueryKey = useMemo(
+    () => JSON.stringify({
+      accountId: activeAccountId,
+      folderId: activeFolderId,
+      filter,
+      search: search.trim(),
+    }),
+    [activeAccountId, activeFolderId, filter, search],
   );
 
   const loadAccounts = useCallback(async () => {
@@ -72,8 +90,14 @@ export function MailLayout() {
 
   const loadEmails = useCallback(async (cursor: string | null = null, append = false) => {
     if (!activeAccountId) return;
+    const sameQuery = listQueryKeyRef.current === listQueryKey;
+    if (!append && !sameQuery) {
+      listHasRowsRef.current = false;
+      setEmails([]);
+      setNextCursor(null);
+    }
     if (append) setLoadingMore(true);
-    else setLoadingEmails(true);
+    else setLoadingEmails(!listHasRowsRef.current);
     setError("");
     try {
       const params = new URLSearchParams({
@@ -87,7 +111,16 @@ export function MailLayout() {
       const data = await jsonFetch<{ emails: MailEmailRow[]; nextCursor: string | null }>(
         `/api/mail/emails?${params.toString()}`,
       );
-      setEmails((prev) => (append ? [...prev, ...data.emails] : data.emails));
+      listQueryKeyRef.current = listQueryKey;
+      setEmails((prev) => {
+        const next = append
+          ? mergeEmailRows(prev, data.emails)
+          : sameQuery
+            ? mergeEmailRows(data.emails, prev)
+            : data.emails;
+        listHasRowsRef.current = next.length > 0;
+        return next;
+      });
       setNextCursor(data.nextCursor);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка загрузки писем");
@@ -95,7 +128,7 @@ export function MailLayout() {
       if (append) setLoadingMore(false);
       else setLoadingEmails(false);
     }
-  }, [activeAccountId, activeFolderId, filter, search]);
+  }, [activeAccountId, activeFolderId, filter, search, listQueryKey]);
 
   const refreshEmailsSilently = useCallback(async () => {
     if (!activeAccountId) return;
@@ -111,8 +144,9 @@ export function MailLayout() {
         `/api/mail/emails?${params.toString()}`,
       );
       setEmails((prev) => {
-        const freshIds = new Set(data.emails.map((email) => email.id));
-        return [...data.emails, ...prev.filter((email) => !freshIds.has(email.id))];
+        const next = mergeEmailRows(data.emails, prev);
+        listHasRowsRef.current = next.length > 0;
+        return next;
       });
       setNextCursor((prev) => prev ?? data.nextCursor);
     } catch {
@@ -294,7 +328,7 @@ export function MailLayout() {
     try {
       await jsonFetch(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
       await loadAccounts();
-      await loadEmails(null, false);
+      await refreshEmailsSilently();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка синхронизации");
     } finally {
@@ -304,6 +338,49 @@ export function MailLayout() {
 
   function openMailSettings() {
     window.location.href = "/directory/mail";
+  }
+
+  async function createOrderFromSelectedEmails() {
+    const ids = emails.filter((email) => selectedIds.has(email.id)).map((email) => email.id).slice(0, 20);
+    if (!ids.length) return;
+    if (!canCreateOrder) {
+      setError("У вас нет прав на создание заказов");
+      return;
+    }
+    if (!canOpenNewOrder) {
+      setError("Закройте или сверните лишние окна заказов: достигнут лимит открытых заказов");
+      return;
+    }
+    setError("");
+    try {
+      const details = await Promise.all(
+        ids.map((id) =>
+          jsonFetch<{ email: MailEmailDetail }>(`/api/mail/emails/${id}?markRead=0`).then((data) => data.email),
+        ),
+      );
+      const opened = openNewOrder({
+        sourceEmails: details.map((email) => ({
+          id: email.id,
+          subject: email.subject,
+          fromName: email.fromName,
+          fromAddress: email.fromAddress,
+          receivedAt: email.receivedAt ?? email.sentAt ?? email.createdAt,
+          preview: email.preview,
+          textBody: email.textBody,
+          attachments: email.attachments.map((attachment) => ({
+            id: attachment.id,
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType,
+            size: attachment.size,
+          })),
+        })),
+      });
+      if (!opened) {
+        setError("Не удалось открыть окно нового заказа");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось открыть новый заказ из писем");
+    }
   }
 
   return (
@@ -414,6 +491,7 @@ export function MailLayout() {
               }
               onSelectAll={() => setSelectedIds(new Set(emails.map((e) => e.id)))}
               onClearSelection={() => setSelectedIds(new Set())}
+              onCreateOrder={() => void createOrderFromSelectedEmails()}
               onBulkAction={(action) => void bulk(action)}
               onEmailAction={(id, action) => void bulk(action, [id])}
             />

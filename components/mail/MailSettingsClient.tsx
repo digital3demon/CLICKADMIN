@@ -15,6 +15,18 @@ type EmailRule = {
   account?: { email: string; displayName: string | null };
 };
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function stringArrayValue(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, cache: "no-store" });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -22,12 +34,31 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
-function prettyJson(value: unknown): string {
-  try {
-    return JSON.stringify(value ?? {}, null, 2);
-  } catch {
-    return "{}";
-  }
+function ruleSummary(rule: EmailRule, account: MailAccount | null): { conditions: string; actions: string } {
+  const conditions = asRecord(rule.conditions);
+  const actions = asRecord(rule.actions);
+  const conditionParts = [
+    stringValue(conditions.from) ? `От кого содержит «${stringValue(conditions.from)}»` : "",
+    stringValue(conditions.subject) ? `Тема содержит «${stringValue(conditions.subject)}»` : "",
+    stringValue(conditions.body) ? `Текст содержит «${stringValue(conditions.body)}»` : "",
+  ].filter(Boolean);
+  const folderId = stringValue(actions.moveToFolderId);
+  const folder = account?.folders.find((item) => item.id === folderId);
+  const labelIds = stringArrayValue(actions.labelIds);
+  const labelNames = labelIds
+    .map((id) => account?.labels.find((label) => label.id === id)?.name)
+    .filter(Boolean);
+  const actionParts = [
+    actions.delete === true ? "Удалить" : "",
+    actions.markRead === true ? "Пометить прочитанным" : "",
+    actions.markImportant === true ? "Поставить флажок" : "",
+    folder ? `Положить в папку «${mailFolderDisplayName(folder)}»` : "",
+    labelNames.length ? `Поставить метку: ${labelNames.join(", ")}` : "",
+  ].filter(Boolean);
+  return {
+    conditions: conditionParts.length ? conditionParts.join("; ") : "Без условий",
+    actions: actionParts.length ? actionParts.join("; ") : "Без действий",
+  };
 }
 
 export function MailSettingsClient() {
@@ -87,25 +118,46 @@ export function MailSettingsClient() {
     setError("");
     setStatus("Создаю правило...");
     try {
-      const conditionsRaw = String(formData.get("conditions") || "{}");
-      const actionsRaw = String(formData.get("actions") || "{}");
+      const conditions = {
+        from: String(formData.get("conditionFrom") || "").trim(),
+        subject: String(formData.get("conditionSubject") || "").trim(),
+        body: String(formData.get("conditionBody") || "").trim(),
+      };
+      if (!conditions.from && !conditions.subject && !conditions.body) {
+        setError("Добавьте хотя бы одно условие: отправитель, тема или текст письма");
+        setStatus("");
+        return;
+      }
+      const moveToFolderId =
+        formData.get("moveToFolder") === "on"
+          ? String(formData.get("moveToFolderId") || "").trim() || null
+          : null;
+      const labelId =
+        formData.get("setLabel") === "on"
+          ? String(formData.get("labelId") || "").trim()
+          : "";
+      const actions = {
+        delete: formData.get("delete") === "on",
+        markRead: formData.get("markRead") === "on",
+        markImportant: formData.get("markImportant") === "on",
+        moveToFolderId,
+        labelIds: labelId ? [labelId] : [],
+      };
       await jsonFetch("/api/mail/rules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           accountId: activeAccount.id,
           name: String(formData.get("name") || ""),
-          conditions: JSON.parse(conditionsRaw),
-          actions: JSON.parse(actionsRaw),
+          conditions,
+          actions,
         }),
       });
       setStatus("Правило создано");
       await load();
     } catch (err) {
       setError(
-        err instanceof SyntaxError
-          ? "JSON в условиях или действиях заполнен неверно"
-          : err instanceof Error
+        err instanceof Error
             ? err.message
             : "Не удалось создать правило",
       );
@@ -349,88 +401,154 @@ export function MailSettingsClient() {
             Правила обработки входящей почты
           </h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Базовая структура уже хранится в БД. Когда пришлёте скриншоты, перестроим визуальный редактор условий и действий под ваш сценарий.
+            Настройте понятные условия и действия без JSON. Правила применяются к новым письмам при синхронизации.
           </p>
         </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_32rem]">
           <div className="space-y-3">
             {rules.length > 0 ? (
-              rules.map((rule) => (
-                <article
-                  key={rule.id}
-                  className="rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4"
-                >
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h3 className="min-w-0 flex-1 text-sm font-semibold text-[var(--app-text)]">
-                      {rule.name}
-                    </h3>
-                    <span className="rounded-full bg-[var(--accent-selection-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--sidebar-blue)]">
-                      {rule.isActive ? "Активно" : "Выключено"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void toggleRule(rule)}
-                      className="rounded-lg border border-[var(--card-border)] px-3 py-1.5 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-                    >
-                      {rule.isActive ? "Выключить" : "Включить"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void deleteRule(rule)}
-                      className="rounded-lg border border-red-400/30 px-3 py-1.5 text-xs text-red-600 hover:bg-red-500/10 dark:text-red-300"
-                    >
-                      Удалить
-                    </button>
-                  </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <pre className="max-h-48 overflow-auto rounded-lg bg-[var(--card-bg)] p-3 text-xs text-[var(--text-secondary)]">
-                      {prettyJson(rule.conditions)}
-                    </pre>
-                    <pre className="max-h-48 overflow-auto rounded-lg bg-[var(--card-bg)] p-3 text-xs text-[var(--text-secondary)]">
-                      {prettyJson(rule.actions)}
-                    </pre>
-                  </div>
-                </article>
-              ))
+              rules.map((rule) => {
+                const summary = ruleSummary(rule, activeAccount);
+                return (
+                  <article
+                    key={rule.id}
+                    className="rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4"
+                  >
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h3 className="min-w-0 flex-1 text-sm font-semibold text-[var(--app-text)]">
+                        {rule.name}
+                      </h3>
+                      <span className="rounded-full bg-[var(--accent-selection-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--sidebar-blue)]">
+                        {rule.isActive ? "Активно" : "Выключено"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void toggleRule(rule)}
+                        className="rounded-lg border border-[var(--card-border)] px-3 py-1.5 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                      >
+                        {rule.isActive ? "Выключить" : "Включить"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteRule(rule)}
+                        className="rounded-lg border border-red-400/30 px-3 py-1.5 text-xs text-red-600 hover:bg-red-500/10 dark:text-red-300"
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                    <div className="mt-3 space-y-2 text-sm text-[var(--text-secondary)]">
+                      <p>
+                        <span className="font-semibold text-[var(--app-text)]">Если:</span>{" "}
+                        {summary.conditions}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-[var(--app-text)]">То:</span>{" "}
+                        {summary.actions}
+                      </p>
+                    </div>
+                  </article>
+                );
+              })
             ) : (
               <div className="rounded-xl border border-dashed border-[var(--card-border)] p-6 text-sm text-[var(--text-muted)]">
-                Правил пока нет. Создайте черновик правила справа или пришлите скриншоты — соберём визуальный конструктор.
+                Правил пока нет. Создайте первое правило справа: выберите условия и отметьте нужные действия.
               </div>
             )}
           </div>
 
-          <form action={(formData) => void createRule(formData)} className="rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
-            <h3 className="text-sm font-semibold text-[var(--app-text)]">Новое правило</h3>
+          <form action={(formData) => void createRule(formData)} className="rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-5">
+            <h3 className="text-base font-semibold text-[var(--app-text)]">Новое правило</h3>
             <input
               name="name"
               required
               placeholder="Например: Заявки от клиники"
               className="mt-3 h-10 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
             />
-            <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-              Условия (JSON)
-            </label>
-            <textarea
-              name="conditions"
-              rows={7}
-              defaultValue={prettyJson({ from: "", subject: "", body: "" })}
-              className="mt-1 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] p-3 font-mono text-xs text-[var(--app-text)] outline-none"
-            />
-            <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-              Действия (JSON)
-            </label>
-            <textarea
-              name="actions"
-              rows={7}
-              defaultValue={prettyJson({
-                markImportant: false,
-                labelIds: [],
-                moveToFolderId: null,
-                autoReply: null,
-              })}
-              className="mt-1 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] p-3 font-mono text-xs text-[var(--app-text)] outline-none"
-            />
+
+            <div className="mt-5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
+              <h4 className="text-sm font-semibold text-[var(--app-text)]">Если письмо подходит под условия</h4>
+              <div className="mt-3 space-y-3">
+                <label className="grid gap-1 text-xs font-medium text-[var(--text-muted)]">
+                  От кого содержит
+                  <input
+                    name="conditionFrom"
+                    placeholder="clinic@example.ru или Клиника"
+                    className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm font-normal text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-[var(--text-muted)]">
+                  Тема содержит
+                  <input
+                    name="conditionSubject"
+                    placeholder="Счёт, заказ, заявка"
+                    className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm font-normal text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-[var(--text-muted)]">
+                  Текст письма содержит
+                  <input
+                    name="conditionBody"
+                    placeholder="Любая фраза из письма"
+                    className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm font-normal text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
+              <h4 className="text-sm font-semibold text-[var(--app-text)]">Выполнить действия</h4>
+              <div className="mt-3 space-y-3 text-sm text-[var(--text-body)]">
+                <label className="flex items-center gap-3">
+                  <input name="delete" type="checkbox" className="h-4 w-4 rounded border-[var(--input-border)]" />
+                  Удалить письмо
+                </label>
+                <label className="flex items-center gap-3">
+                  <input name="markRead" type="checkbox" className="h-4 w-4 rounded border-[var(--input-border)]" />
+                  Пометить прочитанным
+                </label>
+                <label className="flex items-center gap-3">
+                  <input name="markImportant" type="checkbox" className="h-4 w-4 rounded border-[var(--input-border)]" />
+                  Поставить флажок
+                </label>
+                <label className="grid gap-2 rounded-xl border border-[var(--card-border)] p-3">
+                  <span className="flex items-center gap-3">
+                    <input name="moveToFolder" type="checkbox" className="h-4 w-4 rounded border-[var(--input-border)]" />
+                    Положить в папку
+                  </span>
+                  <select
+                    name="moveToFolderId"
+                    className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
+                    defaultValue=""
+                  >
+                    <option value="">Выберите папку</option>
+                    {activeAccount?.folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {mailFolderDisplayName(folder)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 rounded-xl border border-[var(--card-border)] p-3">
+                  <span className="flex items-center gap-3">
+                    <input name="setLabel" type="checkbox" className="h-4 w-4 rounded border-[var(--input-border)]" />
+                    Поставить метку
+                  </span>
+                  <select
+                    name="labelId"
+                    className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
+                    defaultValue=""
+                  >
+                    <option value="">Выберите метку</option>
+                    {activeAccount?.labels.map((label) => (
+                      <option key={label.id} value={label.id}>
+                        {label.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
             <button
               type="submit"
               disabled={!activeAccount}

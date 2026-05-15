@@ -204,6 +204,7 @@ export function MailList({
   onToggleSelect,
   onSelectAll,
   onClearSelection,
+  onCreateOrder,
   onBulkAction,
   onEmailAction,
 }: {
@@ -221,6 +222,7 @@ export function MailList({
   onToggleSelect: (id: string) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
+  onCreateOrder: () => void;
   onBulkAction: (action: "read" | "unread" | "archive" | "trash" | "delete") => void;
   onEmailAction: (id: string, action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
 }) {
@@ -283,6 +285,9 @@ export function MailList({
       {selectedCount > 0 ? (
         <div className="flex items-center gap-2 border-b border-[var(--card-border)] bg-[var(--accent-selection-bg)] px-4 py-2 text-sm">
           <span className="mr-auto font-semibold text-[var(--sidebar-blue)]">Выбрано: {selectedCount}</span>
+          <button className="rounded-lg bg-[var(--sidebar-blue)] px-3 py-1.5 font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]" onClick={onCreateOrder}>
+            Новый заказ
+          </button>
           <button className="rounded-lg bg-[var(--card-bg)] px-3 py-1.5 hover:bg-[var(--surface-hover)]" onClick={() => onBulkAction("read")}>
             Прочитано
           </button>

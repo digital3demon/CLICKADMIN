@@ -54,7 +54,10 @@ import {
   URGENT_NO_COEF,
   URGENT_UNSET,
 } from "@/lib/order-urgency";
-import { useNewOrderPanel } from "@/components/orders/new-order-panel-context";
+import {
+  useNewOrderPanel,
+  type OrderSourceEmail,
+} from "@/components/orders/new-order-panel-context";
 import { OrderFilesPanel } from "@/components/orders/OrderFilesPanel";
 import type { BridgeLineInput } from "@/lib/detail-lines-to-constructions";
 import { detailLinesAndBridgesToConstructionsJson } from "@/lib/detail-lines-to-constructions";
@@ -170,6 +173,7 @@ export function NewOrderForm({
   panelId,
   titleId,
   initialSnapshot,
+  sourceEmails = [],
   onCollapse,
   onClose,
   onAfterSuccessfulSave,
@@ -178,6 +182,7 @@ export function NewOrderForm({
   panelId: string;
   titleId: string;
   initialSnapshot?: OrderDraftSnapshot | null;
+  sourceEmails?: OrderSourceEmail[];
   onCollapse: () => void;
   onClose: () => void;
   onAfterSuccessfulSave: () => void;
@@ -1590,7 +1595,13 @@ export function NewOrderForm({
               <p className="mb-4 text-sm text-red-600">{loadError}</p>
             ) : null}
 
-            <div className="grid grid-cols-1 gap-0 lg:grid-cols-3 lg:items-stretch lg:gap-x-0">
+            <div
+              className={`grid grid-cols-1 gap-0 lg:items-stretch lg:gap-x-0 ${
+                sourceEmails.length
+                  ? "lg:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_21rem]"
+                  : "lg:grid-cols-3"
+              }`}
+            >
               <div className="flex min-h-0 min-w-0 flex-col space-y-0 lg:pr-6">
                 <FormSection
                   title="Заказчик"
@@ -1896,6 +1907,17 @@ export function NewOrderForm({
                   />
                 </section>
               </div>
+              {sourceEmails.length ? (
+                <OrderSourceEmailsPanel
+                  emails={sourceEmails}
+                  onAppend={(email) =>
+                    setClientOrderText((prev) => {
+                      const block = sourceEmailToOrderText(email);
+                      return prev.trim() ? `${prev.trim()}\n\n${block}` : block;
+                    })
+                  }
+                />
+              ) : null}
             </div>
 
             <PodrobnoSection
@@ -1914,6 +1936,119 @@ export function NewOrderForm({
         </div>
       </div>
     </div>
+  );
+}
+
+function sourceEmailSender(email: OrderSourceEmail): string {
+  return email.fromName || email.fromAddress || "Без отправителя";
+}
+
+function sourceEmailDate(value: string | null): string {
+  if (!value) return "";
+  return new Date(value).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function sourceFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} КБ`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+}
+
+function sourceEmailToOrderText(email: OrderSourceEmail): string {
+  const lines = [
+    `Письмо: ${email.subject || "(без темы)"}`,
+    `От: ${sourceEmailSender(email)}`,
+    email.receivedAt ? `Дата: ${sourceEmailDate(email.receivedAt)}` : "",
+    "",
+    (email.textBody || email.preview || "").trim(),
+  ].filter((line) => line !== "");
+  return lines.join("\n");
+}
+
+function OrderSourceEmailsPanel({
+  emails,
+  onAppend,
+}: {
+  emails: OrderSourceEmail[];
+  onAppend: (email: OrderSourceEmail) => void;
+}) {
+  return (
+    <aside className="flex min-h-0 min-w-0 flex-col border-t border-[var(--card-border)] pt-4 lg:col-span-3 xl:col-span-1 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
+      <div className="sticky top-[6.5rem] max-h-[calc(92dvh-8rem)] min-h-0 overflow-y-auto rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--app-text)] sm:text-base">
+              Письма
+            </h3>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+              Выбрано для нового заказа: {emails.length}
+            </p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {emails.map((email, index) => (
+            <article
+              key={email.id}
+              className="rounded-[1.35rem] border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                    Письмо {index + 1}
+                  </div>
+                  <h4 className="mt-1 line-clamp-2 text-sm font-semibold text-[var(--app-text)]">
+                    {email.subject || "(без темы)"}
+                  </h4>
+                </div>
+                {email.receivedAt ? (
+                  <time className="shrink-0 text-[0.68rem] font-medium text-[var(--text-muted)]">
+                    {sourceEmailDate(email.receivedAt)}
+                  </time>
+                ) : null}
+              </div>
+              <p className="mt-2 truncate text-xs font-medium text-[var(--text-secondary)]">
+                {sourceEmailSender(email)}
+              </p>
+              <p className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap rounded-2xl bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)]">
+                {(email.textBody || email.preview || "В письме нет текстового содержимого.").trim()}
+              </p>
+              {email.attachments.length ? (
+                <div className="mt-3 space-y-1.5">
+                  <div className="text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Вложения
+                  </div>
+                  {email.attachments.map((attachment) => (
+                    <a
+                      key={attachment.id}
+                      href={`/api/mail/emails/${email.id}/attachments/${attachment.id}`}
+                      className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                    >
+                      <span className="min-w-0 truncate">{attachment.fileName}</span>
+                      <span className="shrink-0 text-[var(--text-muted)]">
+                        {sourceFileSize(attachment.size)}
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="mt-3 w-full rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)]"
+                onClick={() => onAppend(email)}
+              >
+                Добавить текст в заказ
+              </button>
+            </article>
+          ))}
+        </div>
+      </div>
+    </aside>
   );
 }
 

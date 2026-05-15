@@ -134,7 +134,11 @@ export function NewOrderPanel() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className="pointer-events-auto flex w-full max-w-[min(99vw,1320px)] min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:max-h-[min(92dvh,1180px)] md:rounded-xl"
+                className={`pointer-events-auto flex w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:max-h-[min(92dvh,1180px)] md:rounded-xl ${
+                  p.sourceEmails?.length
+                    ? "max-w-[min(99vw,1540px)]"
+                    : "max-w-[min(99vw,1320px)]"
+                }`}
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}
@@ -145,6 +149,7 @@ export function NewOrderPanel() {
                   panelId={p.id}
                   titleId={titleId}
                   initialSnapshot={p.initialSnapshot ?? null}
+                  sourceEmails={p.sourceEmails ?? []}
                   onCollapse={() => collapse(p.id)}
                   onClose={() => close(p.id)}
                   onAfterSuccessfulSave={() =>

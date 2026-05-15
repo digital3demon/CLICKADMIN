@@ -24,14 +24,31 @@ export const NEW_ORDER_PANEL_MAX = 5;
 
 export type PanelSnapshotGetter = () => OrderDraftSnapshot;
 
+export type OrderSourceEmail = {
+  id: string;
+  subject: string | null;
+  fromName: string | null;
+  fromAddress: string | null;
+  receivedAt: string | null;
+  preview: string | null;
+  textBody: string | null;
+  attachments: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }>;
+};
+
 export type NewOrderPanelItem = {
   id: string;
   collapsed: boolean;
   initialSnapshot?: OrderDraftSnapshot | null;
+  sourceEmails?: OrderSourceEmail[];
 };
 
 type NewOrderPanelContextValue = {
-  open: () => boolean;
+  open: (options?: { sourceEmails?: OrderSourceEmail[] }) => boolean;
   close: (id: string, options?: { skipDraft?: boolean }) => void;
   collapse: (id: string) => void;
   /** Пустой черновик — закрыть; есть данные — свернуть в полоску (как «Свернуть»). */
@@ -113,7 +130,7 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const open = useCallback(() => {
+  const open = useCallback((options?: { sourceEmails?: OrderSourceEmail[] }) => {
     if (!canCreate) return false;
     let added = false;
     setPanels((prev) => {
@@ -121,7 +138,14 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
         return prev;
       }
       added = true;
-      return [...prev, { id: newId(), collapsed: false }];
+      return [
+        ...prev,
+        {
+          id: newId(),
+          collapsed: false,
+          sourceEmails: options?.sourceEmails?.slice(0, 20),
+        },
+      ];
     });
     return added;
   }, [canCreate]);
