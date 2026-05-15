@@ -124,7 +124,7 @@ export function NewOrderPanel() {
             const hasSourceEmails = Boolean(p.sourceEmails?.length);
             const stageClass = hasSourceEmails ? mailOrderStageClass : mainStageClass;
             const stagePaddingClass = hasSourceEmails
-              ? "py-1 pl-1 pr-[min(35rem,38vw)] sm:py-1.5 sm:pl-1.5 sm:pr-[min(36rem,38vw)]"
+              ? "py-1 pl-[clamp(1rem,7vw,8rem)] pr-[calc(min(35rem,38vw)+0.75rem)] sm:py-1.5"
               : "max-md:p-2 md:p-2 sm:p-3";
             const stageAlignClass = hasSourceEmails
               ? "items-center justify-start"
@@ -146,7 +146,7 @@ export function NewOrderPanel() {
                 aria-labelledby={titleId}
                 className={`pointer-events-auto flex w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:max-h-[min(92dvh,1180px)] md:rounded-xl ${
                   hasSourceEmails
-                    ? "max-w-[min(calc(100vw-36.5rem),1320px)]"
+                    ? "max-w-[min(calc(100vw-min(35rem,38vw)-clamp(2rem,8vw,9rem)),1320px)]"
                     : "max-w-[min(99vw,1320px)]"
                 }`}
                 initial={{ opacity: 0, scale: 0.96 }}

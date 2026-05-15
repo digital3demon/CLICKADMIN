@@ -25,11 +25,13 @@ export function MailViewer({
   email,
   loading,
   onAction,
+  onCreateOrder,
   onReply,
 }: {
   email: MailEmailDetail | null;
   loading: boolean;
   onAction: (action: "archive" | "trash" | "delete" | "unread" | "flag" | "unflag") => void;
+  onCreateOrder: () => void;
   onReply: (html: string, mode: "reply" | "replyAll" | "forward") => void;
 }) {
   const [quickReply, setQuickReply] = useState("");
@@ -63,31 +65,34 @@ export function MailViewer({
         .replaceAll(">", "&gt;")}</pre>`;
 
   return (
-    <section className="min-w-0 flex-1 overflow-auto bg-[var(--app-bg)]">
-      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--app-bg)]/95 px-6 py-3 backdrop-blur">
-        <button className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[var(--sidebar-blue-hover)]" onClick={() => onReply("", "reply")}>
+    <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--card-bg)]">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-5 py-3">
+        <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" onClick={() => onReply("", "reply")}>
           Ответить
         </button>
-        <button className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onReply("", "replyAll")}>
+        <button className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onReply("", "replyAll")}>
           Ответить всем
         </button>
-        <button className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onReply("", "forward")}>
+        <button className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onReply("", "forward")}>
           Переслать
         </button>
-        <button className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onAction("archive")}>
+        <button className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onAction("archive")}>
           Архив
         </button>
-        <button className="rounded-xl border border-red-400/30 bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-500/10 dark:text-red-300" onClick={() => onAction("trash")}>
+        <button className="rounded-lg border border-red-400/30 bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-500/10 dark:text-red-300" onClick={() => onAction("trash")}>
           Удалить
         </button>
-        <button className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onAction(email.isFlagged ? "unflag" : "flag")}>
+        <button className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onAction(email.isFlagged ? "unflag" : "flag")}>
           {email.isFlagged ? "Снять флажок" : "Флажок"}
+        </button>
+        <button className="rounded-lg bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[var(--sidebar-blue-hover)]" onClick={onCreateOrder}>
+          Новый заказ
         </button>
       </div>
 
-      <article className="mx-auto max-w-4xl px-6 py-6">
-        <div className="rounded-[28px] bg-[var(--card-bg)] p-7 shadow-sm ring-1 ring-[var(--card-border)]">
-          <h1 className="text-2xl font-semibold tracking-[-0.03em] text-[var(--app-text)]">
+      <article className="min-h-0 flex-1 overflow-auto">
+        <div className="border-b border-[var(--card-border)] px-6 py-6">
+          <h1 className="text-2xl font-semibold leading-tight tracking-[-0.03em] text-[var(--app-text)]">
             {email.subject || "(без темы)"}
           </h1>
           <div className="mt-5 grid gap-2 text-sm text-[var(--text-secondary)]">
@@ -115,9 +120,11 @@ export function MailViewer({
               </span>
             </div>
           </div>
+        </div>
 
-          {email.attachments.length > 0 ? (
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        {email.attachments.length > 0 ? (
+          <div className="border-b border-[var(--card-border)] px-6 py-4">
+            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
               {email.attachments.map((a) => (
                 <a
                   key={a.id}
@@ -137,13 +144,15 @@ export function MailViewer({
                 </a>
               ))}
             </div>
-          ) : null}
+          </div>
+        ) : null}
 
+        <div className="px-6 py-6">
           <iframe
             title="Тело письма"
             sandbox=""
             srcDoc={`<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:14px/1.6 Arial,sans-serif;color:CanvasText;background:Canvas} img{max-width:100%;height:auto} a{color:LinkText}</style></head><body>${body}</body></html>`}
-            className="mt-7 h-[520px] w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card-bg)]"
+            className="h-[min(68dvh,760px)] min-h-[520px] w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card-bg)]"
           />
 
           <div className="mt-6 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">

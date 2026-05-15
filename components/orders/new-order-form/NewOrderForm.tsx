@@ -1982,7 +1982,7 @@ function OrderSourceEmailsPanel({
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <aside className="fixed right-1 top-[max(0.25rem,4dvh)] z-[130] flex max-h-[min(92dvh,1180px)] w-[min(35rem,38vw)] min-w-[24rem] max-w-[42rem] flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 shadow-2xl">
+    <aside className="fixed right-[clamp(1rem,7vw,8rem)] top-[max(0.25rem,4dvh)] z-[130] flex max-h-[min(92dvh,1180px)] w-[min(35rem,38vw)] min-w-[24rem] max-w-[42rem] flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 shadow-2xl">
       <div className="min-h-0 overflow-y-auto">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>

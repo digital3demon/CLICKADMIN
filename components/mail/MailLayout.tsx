@@ -56,6 +56,8 @@ export function MailLayout() {
   const [syncStatus, setSyncStatus] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [composerSeed, setComposerSeed] = useState({ to: "", subject: "", html: "" });
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [savingAccount, setSavingAccount] = useState(false);
   const [error, setError] = useState("");
   const listQueryKeyRef = useRef("");
   const listHasRowsRef = useRef(false);
@@ -336,12 +338,31 @@ export function MailLayout() {
     }
   }
 
-  function openMailSettings() {
-    window.location.href = "/directory/mail";
+  async function saveAccount(formData: FormData) {
+    setSavingAccount(true);
+    setError("");
+    try {
+      const data = await jsonFetch<{ account: MailAccount }>("/api/mail/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: String(formData.get("email") || ""),
+          displayName: String(formData.get("displayName") || ""),
+          appPassword: String(formData.get("appPassword") || ""),
+        }),
+      });
+      await loadAccounts();
+      setActiveAccountId(data.account.id);
+      setAccountModalOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось добавить ящик");
+    } finally {
+      setSavingAccount(false);
+    }
   }
 
-  async function createOrderFromSelectedEmails() {
-    const ids = emails.filter((email) => selectedIds.has(email.id)).map((email) => email.id).slice(0, 20);
+  async function createOrderFromEmailIds(ids: string[]) {
+    ids = ids.filter(Boolean).slice(0, 20);
     if (!ids.length) return;
     if (!canCreateOrder) {
       setError("У вас нет прав на создание заказов");
@@ -383,6 +404,11 @@ export function MailLayout() {
     }
   }
 
+  async function createOrderFromSelectedEmails() {
+    const ids = emails.filter((email) => selectedIds.has(email.id)).map((email) => email.id);
+    await createOrderFromEmailIds(ids);
+  }
+
   return (
     <div className="flex h-[100dvh] min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
       <MailHeader
@@ -402,7 +428,7 @@ export function MailLayout() {
           setComposerOpen(true);
         }}
         onSync={() => void syncActive()}
-        onConnectAccount={openMailSettings}
+        onConnectAccount={() => setAccountModalOpen(true)}
       />
 
       {error ? (
@@ -425,10 +451,10 @@ export function MailLayout() {
             </p>
             <button
               type="button"
-              onClick={openMailSettings}
+              onClick={() => setAccountModalOpen(true)}
               className="mt-6 rounded-2xl bg-[var(--sidebar-blue)] px-6 py-3 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]"
             >
-              Открыть конфигурацию почты
+              Добавить ящик
             </button>
           </div>
         </div>
@@ -500,6 +526,7 @@ export function MailLayout() {
                 email={detail}
                 loading={loadingDetail}
                 onAction={(action) => void bulk(action, activeEmailId ? [activeEmailId] : [])}
+                onCreateOrder={() => void createOrderFromEmailIds(activeEmailId ? [activeEmailId] : [])}
                 onReply={(html, mode) => openReply(mode, html)}
               />
             </div>
@@ -519,6 +546,83 @@ export function MailLayout() {
           void loadEmails(null, false);
         }}
       />
+      {accountModalOpen ? (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+          onClick={() => {
+            if (!savingAccount) setAccountModalOpen(false);
+          }}
+        >
+          <form
+            action={(formData) => void saveAccount(formData)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Добавить почтовый ящик"
+            className="w-full max-w-md rounded-3xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-[var(--app-text)]">Добавить ящик</h2>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                  Введите адрес Яндекс.Почты и пароль приложения.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={savingAccount}
+                onClick={() => setAccountModalOpen(false)}
+                className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)] disabled:opacity-50"
+                aria-label="Закрыть"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-5 space-y-3">
+              <input
+                name="email"
+                type="email"
+                required
+                placeholder="name@yandex.ru"
+                disabled={savingAccount}
+                className="h-12 w-full rounded-2xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)] disabled:opacity-60"
+              />
+              <input
+                name="displayName"
+                placeholder="Имя отправителя"
+                disabled={savingAccount}
+                className="h-12 w-full rounded-2xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)] disabled:opacity-60"
+              />
+              <input
+                name="appPassword"
+                type="password"
+                required
+                placeholder="Пароль приложения"
+                disabled={savingAccount}
+                className="h-12 w-full rounded-2xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)] disabled:opacity-60"
+              />
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={savingAccount}
+                onClick={() => setAccountModalOpen(false)}
+                className="rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm font-semibold text-[var(--text-body)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="submit"
+                disabled={savingAccount}
+                className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
+              >
+                {savingAccount ? "Сохраняю..." : "Добавить"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }
