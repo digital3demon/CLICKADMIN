@@ -80,7 +80,7 @@ function MailRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={`group flex h-[92px] cursor-pointer items-center gap-3 border-b border-[var(--border-subtle)] px-4 transition ${
+      className={`group relative flex h-[92px] cursor-pointer items-center gap-2 border-b border-[var(--border-subtle)] px-3 transition ${
         active
           ? "bg-[var(--accent-selection-bg)]"
           : selected
@@ -93,7 +93,7 @@ function MailRow({
     >
       <button
         type="button"
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${
+        className={`flex h-8 w-6 shrink-0 items-center justify-center rounded-full transition ${
           email.isRead
             ? "text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)]"
             : "text-orange-500 hover:bg-orange-500/10"
@@ -112,7 +112,7 @@ function MailRow({
         />
       </button>
       <div
-        className="flex h-full items-center"
+        className="absolute left-9 top-1/2 z-10 flex -translate-y-1/2 items-center"
         onClick={(e) => {
           e.stopPropagation();
           onToggleSelect();
