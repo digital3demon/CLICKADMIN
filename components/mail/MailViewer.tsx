@@ -96,7 +96,7 @@ export function MailViewer({
         </button>
       </div>
 
-      <article className="min-h-0 flex-1 overflow-auto">
+      <article className="min-h-0 flex-1 overflow-auto overflow-x-hidden">
         <div className="border-b border-[var(--card-border)] px-6 py-6">
           <h1 className="text-2xl font-semibold leading-tight tracking-[-0.03em] text-[var(--app-text)]">
             {email.subject || "(без темы)"}
@@ -129,8 +129,11 @@ export function MailViewer({
         </div>
 
         {email.attachments.length > 0 ? (
-          <div className="overflow-hidden border-b border-[var(--card-border)] px-6 py-4">
-            <div className="grid min-w-0 grid-cols-1 gap-3 min-[1180px]:grid-cols-2">
+          <div className="box-border w-full overflow-hidden border-b border-[var(--card-border)] px-6 py-4">
+            <div
+              className="grid min-w-0 gap-3"
+              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 24rem), 1fr))" }}
+            >
               {email.attachments.map((a) => (
                 <a
                   key={a.id}
@@ -153,7 +156,7 @@ export function MailViewer({
           </div>
         ) : null}
 
-        <div className="box-border w-full max-w-5xl px-6 py-6">
+        <div className="box-border w-full max-w-5xl overflow-hidden px-6 py-6">
           <iframe
             title="Тело письма"
             sandbox="allow-same-origin allow-popups"
@@ -167,7 +170,7 @@ export function MailViewer({
             }}
           />
 
-          <div className="mt-6 box-border w-full rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
+          <div className="mt-6 box-border w-full max-w-full overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
             <textarea
               value={quickReply}
               onChange={(e) => setQuickReply(e.target.value)}
@@ -175,7 +178,7 @@ export function MailViewer({
               placeholder="Быстрый ответ..."
               className="w-full resize-none bg-transparent text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
             />
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex justify-start">
               <button
                 type="button"
                 disabled={!quickReply.trim()}
