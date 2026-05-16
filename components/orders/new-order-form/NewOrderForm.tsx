@@ -69,6 +69,7 @@ import {
   saveQuickOrderTemplate,
 } from "@/lib/quick-order-template-storage";
 import { printOrderNarjadPdf } from "@/lib/print-order-narjad";
+import { cleanMailTextBody } from "@/lib/mail/mail-text-cleanup";
 import { OrderProstheticsBlock } from "@/components/orders/OrderProstheticsBlock";
 import { PodrobnoSection } from "./PodrobnoSection";
 import { type DetailLine, newDetailLineId } from "./detail-lines";
@@ -1957,18 +1958,19 @@ function sourceFileSize(bytes: number): string {
 }
 
 function sourceEmailToOrderText(email: OrderSourceEmail): string {
+  const body = cleanMailTextBody(email.textBody || email.preview || "");
   const lines = [
     `Письмо: ${email.subject || "(без темы)"}`,
     `От: ${sourceEmailSender(email)}`,
     email.receivedAt ? `Дата: ${sourceEmailDate(email.receivedAt)}` : "",
     "",
-    (email.textBody || email.preview || "").trim(),
+    body,
   ].filter((line) => line !== "");
   return lines.join("\n");
 }
 
 function sourceEmailBody(email: OrderSourceEmail): string {
-  return (email.textBody || email.preview || "В письме нет текстового содержимого.").trim();
+  return cleanMailTextBody(email.textBody || email.preview || "") || "В письме нет текстового содержимого.";
 }
 
 function sourceEmailHtml(email: OrderSourceEmail): string {

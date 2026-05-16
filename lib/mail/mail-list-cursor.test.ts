@@ -11,8 +11,8 @@ import {
 describe("mail list cursor", () => {
   it("round-trips stable cursor payload", () => {
     const date = new Date("2026-05-15T10:20:30.000Z");
-    const encoded = encodeMailListCursor(date, "email_1");
-    expect(decodeMailListCursor(encoded)).toEqual({ r: date.toISOString(), i: "email_1" });
+    const encoded = encodeMailListCursor(date, "email_1", true);
+    expect(decodeMailListCursor(encoded)).toEqual({ r: date.toISOString(), i: "email_1", f: true });
   });
 
   it("clamps page size", () => {

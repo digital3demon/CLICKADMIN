@@ -36,7 +36,7 @@ export type MailApiContextResult =
   | { ok: true; ctx: MailApiContext }
   | { ok: false; response: NextResponse };
 
-export type EmailFilter = "all" | "unread" | "attachments" | "flagged";
+export type EmailFilter = "all" | "unread" | "attachments" | "flagged" | "unflagged";
 
 const SYSTEM_FOLDERS: Array<{
   imapName: string;
@@ -525,14 +525,21 @@ export async function listEmails(
       ...(input.filter === "unread" ? { isRead: false } : {}),
       ...(input.filter === "attachments" ? { hasAttachments: true } : {}),
       ...(input.filter === "flagged" ? { isFlagged: true } : {}),
+      ...(input.filter === "unflagged" ? { isFlagged: false } : {}),
       ...(cursor
         ? {
             AND: [
               {
-                OR: [
-                  { receivedAt: { lt: new Date(cursor.r) } },
-                  { receivedAt: new Date(cursor.r), id: { lt: cursor.i } },
-                ],
+                OR: cursor.f
+                  ? [
+                      { isFlagged: false },
+                      { isFlagged: true, receivedAt: { lt: new Date(cursor.r) } },
+                      { isFlagged: true, receivedAt: new Date(cursor.r), id: { lt: cursor.i } },
+                    ]
+                  : [
+                      { isFlagged: false, receivedAt: { lt: new Date(cursor.r) } },
+                      { isFlagged: false, receivedAt: new Date(cursor.r), id: { lt: cursor.i } },
+                    ],
               },
             ],
           }
@@ -548,7 +555,7 @@ export async function listEmails(
           }
         : {}),
     },
-    orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+    orderBy: [{ isFlagged: "desc" }, { receivedAt: "desc" }, { id: "desc" }],
     take: take + 1,
     include: {
       folder: true,
@@ -562,7 +569,7 @@ export async function listEmails(
     emails,
     nextCursor:
       rows.length > take && last
-        ? encodeMailListCursor(last.receivedAt ?? last.sentAt ?? last.createdAt, last.id)
+        ? encodeMailListCursor(last.receivedAt ?? last.sentAt ?? last.createdAt, last.id, last.isFlagged)
         : null,
   };
 }

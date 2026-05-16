@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { MailAccount, MailFolder, MailLabel } from "@/components/mail/types";
 import { mailFolderDisplayName } from "@/components/mail/types";
@@ -77,6 +78,7 @@ export function MailSidebar({
   onCreateLabel: () => void;
 }) {
   const folders = account?.folders ?? [];
+  const [foldersOpen, setFoldersOpen] = useState(true);
   return (
     <aside
       className={`hidden shrink-0 border-r border-[var(--card-border)] bg-[var(--surface-muted)] py-4 transition-[width] duration-200 lg:block ${
@@ -89,27 +91,57 @@ export function MailSidebar({
         className={`mb-3 flex h-9 items-center rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] text-sm font-medium text-[var(--text-body)] shadow-sm transition hover:bg-[var(--surface-hover)] ${
           collapsed ? "w-full justify-center" : "w-full justify-between px-3"
         }`}
-        title={collapsed ? "Развернуть папки" : "Свернуть папки"}
-        aria-label={collapsed ? "Развернуть папки" : "Свернуть папки"}
+        title={collapsed ? "Развернуть боковую панель" : "Свернуть боковую панель"}
+        aria-label={collapsed ? "Развернуть боковую панель" : "Свернуть боковую панель"}
       >
         {collapsed ? "›" : (
           <>
-            <span>Папки</span>
+            <span>Почта</span>
             <span aria-hidden>‹</span>
           </>
         )}
       </button>
-      <nav className="space-y-1">
-        {folders.map((folder) => (
-          <FolderButton
-            key={folder.id}
-            folder={folder}
-            active={folder.id === activeFolderId}
-            collapsed={collapsed}
-            onClick={() => onFolderChange(folder.id)}
-          />
-        ))}
-      </nav>
+
+      {collapsed ? (
+        <nav className="space-y-1">
+          {folders.map((folder) => (
+            <FolderButton
+              key={folder.id}
+              folder={folder}
+              active={folder.id === activeFolderId}
+              collapsed={collapsed}
+              onClick={() => onFolderChange(folder.id)}
+            />
+          ))}
+        </nav>
+      ) : (
+        <div>
+          <button
+            type="button"
+            onClick={() => setFoldersOpen((open) => !open)}
+            className="mb-2 flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-body)]"
+            aria-expanded={foldersOpen}
+          >
+            <span>Папки</span>
+            <span className="text-base leading-none" aria-hidden>
+              {foldersOpen ? "⌄" : "›"}
+            </span>
+          </button>
+          {foldersOpen ? (
+            <nav className="space-y-1">
+              {folders.map((folder) => (
+                <FolderButton
+                  key={folder.id}
+                  folder={folder}
+                  active={folder.id === activeFolderId}
+                  collapsed={collapsed}
+                  onClick={() => onFolderChange(folder.id)}
+                />
+              ))}
+            </nav>
+          ) : null}
+        </div>
+      )}
 
       {collapsed ? null : <div className="mt-7">
         <div className="mb-2 flex items-center justify-between px-2">

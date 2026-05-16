@@ -131,8 +131,8 @@ export function MailViewer({
         {email.attachments.length > 0 ? (
           <div className="box-border w-full overflow-hidden border-b border-[var(--card-border)] px-6 py-4">
             <div
-              className="grid min-w-0 gap-3"
-              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 24rem), 1fr))" }}
+              className="grid w-full max-w-[760px] min-w-0 gap-3"
+              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
             >
               {email.attachments.map((a) => (
                 <a
@@ -156,7 +156,7 @@ export function MailViewer({
           </div>
         ) : null}
 
-        <div className="box-border w-full max-w-5xl overflow-hidden px-6 py-6">
+        <div className="box-border w-full max-w-[760px] overflow-hidden px-6 py-6">
           <iframe
             title="Тело письма"
             sandbox="allow-same-origin allow-popups"

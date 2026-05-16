@@ -104,4 +104,4 @@ export type MailEmailDetail = MailEmailRow & {
   folder: MailFolder | null;
 };
 
-export type MailFilter = "all" | "unread" | "attachments" | "flagged";
+export type MailFilter = "all" | "unread" | "attachments" | "flagged" | "unflagged";

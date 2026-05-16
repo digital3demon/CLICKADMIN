@@ -1,4 +1,4 @@
-export type MailListCursorPayload = { r: string; i: string };
+export type MailListCursorPayload = { r: string; i: string; f: boolean };
 
 export const MAIL_LIST_PAGE_SIZE_MIN = 20;
 export const MAIL_LIST_PAGE_SIZE_MAX = 150;
@@ -10,8 +10,8 @@ export function clampMailPageSize(raw: string | number | null | undefined): numb
   return Math.min(MAIL_LIST_PAGE_SIZE_MAX, Math.max(MAIL_LIST_PAGE_SIZE_MIN, Math.floor(n)));
 }
 
-export function encodeMailListCursor(receivedAt: Date, id: string): string {
-  return Buffer.from(JSON.stringify({ r: receivedAt.toISOString(), i: id }), "utf8").toString(
+export function encodeMailListCursor(receivedAt: Date, id: string, isFlagged: boolean): string {
+  return Buffer.from(JSON.stringify({ r: receivedAt.toISOString(), i: id, f: isFlagged }), "utf8").toString(
     "base64url",
   );
 }
@@ -23,10 +23,11 @@ export function decodeMailListCursor(raw: string | null | undefined): MailListCu
     if (!decoded || typeof decoded !== "object") return null;
     const r = (decoded as Record<string, unknown>).r;
     const i = (decoded as Record<string, unknown>).i;
+    const f = (decoded as Record<string, unknown>).f;
     if (typeof r !== "string" || typeof i !== "string" || !i.trim()) return null;
     const d = new Date(r);
     if (Number.isNaN(d.getTime())) return null;
-    return { r, i: i.trim() };
+    return { r, i: i.trim(), f: f === true };
   } catch {
     return null;
   }

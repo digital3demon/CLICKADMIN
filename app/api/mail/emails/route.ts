@@ -4,7 +4,9 @@ import { getMailApiContext, listEmails, type EmailFilter } from "@/lib/mail/mail
 export const dynamic = "force-dynamic";
 
 function emailFilter(value: string | null): EmailFilter {
-  return value === "unread" || value === "attachments" || value === "flagged" ? value : "all";
+  return value === "unread" || value === "attachments" || value === "flagged" || value === "unflagged"
+    ? value
+    : "all";
 }
 
 export async function GET(req: Request) {

@@ -91,40 +91,48 @@ function MailRow({
       } ${isDragging ? "opacity-60 shadow-lg" : ""}`}
       onClick={onOpen}
     >
-      <button
-        type="button"
-        className={`flex h-8 w-6 shrink-0 items-center justify-center rounded-full transition ${
-          email.isRead
-            ? "text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)]"
-            : "text-orange-500 hover:bg-orange-500/10"
-        }`}
-        title={email.isRead ? "Пометить непрочитанным" : "Пометить прочитанным"}
-        onClick={(e) => {
-          e.stopPropagation();
-          onAction(email.isRead ? "unread" : "read");
-        }}
-      >
-        <span
-          className={`block h-3.5 w-3.5 rounded-full ${
-            email.isRead ? "border-2 border-current" : "bg-current shadow-[0_0_0_3px_rgba(249,115,22,0.14)]"
+      <div className="relative flex h-8 w-6 shrink-0 items-center justify-center">
+        <button
+          type="button"
+          className={`absolute inset-0 flex items-center justify-center rounded-full transition ${
+            selected
+              ? "opacity-0"
+              : email.isRead
+                ? "text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] group-hover:opacity-0"
+                : "text-orange-500 hover:bg-orange-500/10 group-hover:opacity-0"
           }`}
-          aria-hidden
-        />
-      </button>
-      <div
-        className="absolute left-9 top-1/2 z-10 flex -translate-y-1/2 items-center"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleSelect();
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => undefined}
-          className="h-4 w-4 rounded border-[var(--input-border)] text-[var(--sidebar-blue)] opacity-0 transition group-hover:opacity-100 group-has-[:checked]:opacity-100"
+          title={email.isRead ? "Пометить непрочитанным" : "Пометить прочитанным"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAction(email.isRead ? "unread" : "read");
+          }}
+        >
+          <span
+            className={`block h-3.5 w-3.5 rounded-full ${
+              email.isRead ? "border-2 border-current" : "bg-current shadow-[0_0_0_3px_rgba(249,115,22,0.14)]"
+            }`}
+            aria-hidden
+          />
+        </button>
+        <button
+          type="button"
+          className={`absolute inset-0 flex items-center justify-center rounded-full transition ${
+            selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect();
+          }}
           aria-label="Выбрать письмо"
-        />
+        >
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => undefined}
+            className="pointer-events-none h-4 w-4 rounded border-[var(--input-border)] text-[var(--sidebar-blue)]"
+            tabIndex={-1}
+          />
+        </button>
       </div>
       <div
         className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-bold text-white shadow-sm"
@@ -297,6 +305,7 @@ export function MailList({
             ["unread", "Непрочитанные"],
             ["attachments", "С вложениями"],
             ["flagged", "С флажком"],
+            ["unflagged", "Без флажка"],
           ].map(([value, label]) => (
             <button
               key={value}

@@ -481,7 +481,7 @@ export function MailLayout() {
         </div>
       ) : (
         <DndContext onDragEnd={handleDragEnd}>
-          <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
             <MailSidebar
               account={activeAccount}
               activeFolderId={activeFolderId}
@@ -544,7 +544,7 @@ export function MailLayout() {
               onBulkAction={(action) => void bulk(action)}
               onEmailAction={(id, action) => void bulk(action, [id])}
             />
-            <div className="hidden min-w-0 flex-1 xl:flex">
+            <div className="hidden min-w-0 flex-1 overflow-hidden xl:flex">
               <MailViewer
                 email={detail}
                 loading={loadingDetail}
