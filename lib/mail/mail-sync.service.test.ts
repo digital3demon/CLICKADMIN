@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { EmailFolderType, EmailSyncMode } from "@prisma/client";
-import { inferFolderType, shouldSyncFolderForMode } from "./mail-sync.service";
+import { inferFolderType, previewFrom, shouldSyncFolderForMode } from "./mail-sync.service";
 
 vi.mock("server-only", () => ({}));
 
@@ -27,5 +27,15 @@ describe("shouldSyncFolderForMode", () => {
     expect(shouldSyncFolderForMode(EmailFolderType.INBOX, EmailSyncMode.BACKFILL)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.SENT, EmailSyncMode.BACKFILL)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.ARCHIVE, EmailSyncMode.BACKFILL)).toBe(true);
+  });
+});
+
+describe("previewFrom", () => {
+  it("removes logo alt text and image urls from previews", () => {
+    expect(
+      previewFrom(
+        "Логотип [https://yastatic.net/logo.png] ЗДРАВСТВУЙТЕ, ваш доступ включён",
+      ),
+    ).toBe("ЗДРАВСТВУЙТЕ, ваш доступ включён");
   });
 });

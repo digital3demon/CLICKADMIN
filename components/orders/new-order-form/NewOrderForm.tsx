@@ -1426,6 +1426,7 @@ export function NewOrderForm({
             <div
               className={[
                 "flex min-w-0 flex-col gap-2 pb-0.5 sm:flex-row sm:items-stretch sm:gap-2.5",
+                sourceEmails.length > 0 && "sm:pt-1.5",
                 !mobileHeaderDetailsOpen && "max-md:hidden",
               ]
                 .filter(Boolean)

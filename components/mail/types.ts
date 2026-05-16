@@ -73,6 +73,7 @@ export type MailEmailRow = {
   hasAttachments: boolean;
   fromName: string | null;
   fromAddress: string | null;
+  senderAvatarUrl?: string | null;
   to: MailAddress[] | null;
   subject: string | null;
   preview: string | null;

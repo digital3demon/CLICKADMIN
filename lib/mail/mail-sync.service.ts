@@ -66,9 +66,26 @@ function firstAddress(value: ParsedMail["from"]): { name: string | null; address
   };
 }
 
-function previewFrom(text: string | undefined): string | null {
-  const normalized = (text ?? "").replace(/\s+/g, " ").trim();
+export function previewFrom(text: string | undefined): string | null {
+  const normalized = (text ?? "")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)]\((?:https?:\/\/|cid:)[^)]*\)/gi, "$1")
+    .replace(/\[(?:https?:\/\/|cid:)[^\]]+]/gi, " ")
+    .replace(/https?:\/\/\S+/gi, " ")
+    // JS \b не считает кириллицу word-символами, поэтому границы задаём через \p{L}.
+    .replace(/(?<!\p{L})(?:логотип|logo)(?!\p{L})/giu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return normalized ? normalized.slice(0, 320) : null;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
 }
 
 function headersToJson(headers: ParsedMail["headers"]): Record<string, string> {
@@ -276,6 +293,20 @@ export async function syncEmailAccount(
         }
 
         const parsed = await simpleParser(item.source);
+        const duplicateByMessageId = parsed.messageId
+          ? await db.email.findFirst({
+              where: {
+                tenantId: account.tenantId,
+                accountId: account.id,
+                messageId: parsed.messageId,
+              },
+              select: { id: true },
+            })
+          : null;
+        if (duplicateByMessageId) {
+          skipped += 1;
+          continue;
+        }
         const from = firstAddress(parsed.from);
         const hasAttachments = parsed.attachments.length > 0;
         const ruleResult =
@@ -287,39 +318,52 @@ export async function syncEmailAccount(
               })
             : { isFlagged: false, isRead: false, labelIds: [], folderId: null };
         const isRead = item.flags.has("\\Seen") || ruleResult.isRead;
-        const email = await db.email.create({
-          data: {
-            tenantId: account.tenantId,
-            accountId: account.id,
-            folderId: ruleResult.folderId ?? folder.id,
-            uid: item.uid,
-            messageId: parsed.messageId ?? null,
-            direction:
-              folder.type === EmailFolderType.SENT ? "OUTBOUND" : "INBOUND",
-            isRead,
-            readAt: isRead ? item.internalDate ?? new Date() : null,
-            isFlagged: item.flags.has("\\Flagged") || ruleResult.isFlagged,
-            hasAttachments,
-            fromName: from.name,
-            fromAddress: from.address,
-            to: addressList(parsed.to),
-            cc: addressList(parsed.cc),
-            subject: parsed.subject ?? null,
-            preview: previewFrom(parsed.text),
-            textBody: parsed.text ?? null,
-            htmlBody: typeof parsed.html === "string" ? parsed.html : null,
-            rawHeaders: headersToJson(parsed.headers),
-            receivedAt: item.internalDate ?? parsed.date ?? new Date(),
-            sentAt: parsed.date ?? null,
-            internalDate: item.internalDate,
-            labelAssignments: {
-              create: ruleResult.labelIds.map((labelId) => ({
-                tenantId: account.tenantId,
-                labelId,
-              })),
+        let email: { id: string } | null = null;
+        try {
+          email = await db.email.create({
+            data: {
+              tenantId: account.tenantId,
+              accountId: account.id,
+              folderId: ruleResult.folderId ?? folder.id,
+              uid: item.uid,
+              messageId: parsed.messageId ?? null,
+              direction:
+                folder.type === EmailFolderType.SENT ? "OUTBOUND" : "INBOUND",
+              isRead,
+              readAt: isRead ? item.internalDate ?? new Date() : null,
+              isFlagged: item.flags.has("\\Flagged") || ruleResult.isFlagged,
+              hasAttachments,
+              fromName: from.name,
+              fromAddress: from.address,
+              to: addressList(parsed.to),
+              cc: addressList(parsed.cc),
+              subject: parsed.subject ?? null,
+              preview: previewFrom(parsed.text),
+              textBody: parsed.text ?? null,
+              htmlBody: typeof parsed.html === "string" ? parsed.html : null,
+              rawHeaders: headersToJson(parsed.headers),
+              receivedAt: item.internalDate ?? parsed.date ?? new Date(),
+              sentAt: parsed.date ?? null,
+              internalDate: item.internalDate,
+              labelAssignments: {
+                create: ruleResult.labelIds.map((labelId) => ({
+                  tenantId: account.tenantId,
+                  labelId,
+                })),
+              },
             },
-          },
-        });
+          });
+        } catch (error) {
+          if (isUniqueConstraintError(error)) {
+            skipped += 1;
+            continue;
+          }
+          throw error;
+        }
+        if (!email) {
+          skipped += 1;
+          continue;
+        }
         if (ruleResult.folderId) touchedFolderIds.add(ruleResult.folderId);
         for (const a of parsed.attachments) {
           const attachmentId = newMailAttachmentId();

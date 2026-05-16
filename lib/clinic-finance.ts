@@ -141,7 +141,7 @@ export async function clinicTurnoverTotalsByIds(
     const chunk = clinicIds.slice(i, i + chunkSize);
     const lines = await (await getPrisma()).orderConstruction.findMany({
       where: {
-        order: { clinicId: { in: chunk } },
+        order: { clinicId: { in: chunk }, archivedAt: null },
       },
       select: {
         orderId: true,
@@ -210,6 +210,7 @@ export async function sumClinicConstructionTotals(
     where: {
       order: {
         clinicId,
+        archivedAt: null,
         ...(range
           ? { createdAt: { gte: range.from, lte: range.to } }
           : {}),
@@ -287,6 +288,7 @@ export async function sumDoctorConstructionTotals(
     where: {
       order: {
         doctorId,
+        archivedAt: null,
         ...(range
           ? { createdAt: { gte: range.from, lte: range.to } }
           : {}),
@@ -374,6 +376,7 @@ export async function fetchDoctorReconciliationRows(
     where: {
       order: {
         doctorId,
+        archivedAt: null,
         createdAt: { gte: range.from, lte: range.to },
       },
     },
@@ -609,6 +612,7 @@ export async function listClinicReconciliationExcludedOrders(
   const orders = await (await getPrisma()).order.findMany({
     where: {
       clinicId,
+      archivedAt: null,
       createdAt: { gte: range.from, lte: range.to },
       excludeFromReconciliation: true,
       payment: {

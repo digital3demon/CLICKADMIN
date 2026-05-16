@@ -44,6 +44,23 @@ const MAIL_UI_SCALE_STYLE: CSSProperties & { zoom: number } = {
   height: `calc(100dvh / ${MAIL_UI_SCALE})`,
   minHeight: `calc(100dvh / ${MAIL_UI_SCALE})`,
 };
+const LAST_MAIL_ACCOUNT_STORAGE_KEY = "dental-crm:last-mail-account-id";
+
+function readLastMailAccountId(): string {
+  try {
+    return window.localStorage.getItem(LAST_MAIL_ACCOUNT_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeLastMailAccountId(accountId: string): void {
+  try {
+    if (accountId) window.localStorage.setItem(LAST_MAIL_ACCOUNT_STORAGE_KEY, accountId);
+  } catch {
+    /* localStorage can be unavailable in private contexts. */
+  }
+}
 
 export function MailLayout() {
   const { open: openNewOrder, canOpen: canOpenNewOrder, canCreate: canCreateOrder } = useNewOrderPanel();
@@ -92,11 +109,12 @@ export function MailLayout() {
   const loadAccounts = useCallback(async () => {
     const data = await jsonFetch<{ accounts: MailAccount[] }>("/api/mail/accounts");
     setAccounts(data.accounts);
-    setActiveAccountId((prev) =>
-      prev && data.accounts.some((account) => account.id === prev)
-        ? prev
-        : data.accounts[0]?.id || "",
-    );
+    setActiveAccountId((prev) => {
+      if (prev && data.accounts.some((account) => account.id === prev)) return prev;
+      const saved = readLastMailAccountId();
+      if (saved && data.accounts.some((account) => account.id === saved)) return saved;
+      return data.accounts[0]?.id || "";
+    });
   }, []);
 
   const loadEmails = useCallback(async (cursor: string | null = null, append = false) => {
@@ -192,6 +210,10 @@ export function MailLayout() {
   }, [activeAccount]);
 
   useEffect(() => {
+    writeLastMailAccountId(activeAccountId);
+  }, [activeAccountId]);
+
+  useEffect(() => {
     setNextCursor(null);
     void loadEmails(null, false);
   }, [loadEmails]);
@@ -231,43 +253,6 @@ export function MailLayout() {
       window.clearInterval(timer);
     };
   }, [activeAccountId]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (composerOpen || e.metaKey || e.ctrlKey || e.altKey) return;
-      const idx = emails.findIndex((m) => m.id === activeEmailId);
-      if (e.key.toLowerCase() === "j") {
-        e.preventDefault();
-        const next = emails[Math.min(emails.length - 1, Math.max(0, idx + 1))];
-        if (next) {
-          setActiveEmailId(next.id);
-          void loadDetail(next.id);
-        }
-      }
-      if (e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        const prev = emails[Math.max(0, idx - 1)];
-        if (prev) {
-          setActiveEmailId(prev.id);
-          void loadDetail(prev.id);
-        }
-      }
-      if (e.key.toLowerCase() === "r" && detail) {
-        e.preventDefault();
-        openReply("reply");
-      }
-      if (e.key.toLowerCase() === "e" && activeEmailId) {
-        e.preventDefault();
-        void bulk("archive", [activeEmailId]);
-      }
-      if (e.key === "Delete" && activeEmailId) {
-        e.preventDefault();
-        void bulk("trash", [activeEmailId]);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [activeEmailId, composerOpen, detail, emails, loadDetail]);
 
   async function bulk(
     action: "read" | "unread" | "archive" | "trash" | "delete" | "flag" | "unflag" | "move",

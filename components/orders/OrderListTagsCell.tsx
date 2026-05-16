@@ -1313,7 +1313,10 @@ export function OrderListTagsCell({
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
           role="presentation"
-          onClick={closeAdd}
+          onClick={(e) => {
+            e.stopPropagation();
+            closeAdd();
+          }}
         >
           <div
             role="dialog"
@@ -1438,7 +1441,10 @@ export function OrderListTagsCell({
         <div
           className="fixed inset-0 z-[205] flex items-center justify-center bg-black/40 p-4"
           role="presentation"
-          onClick={() => setUrgentOpen(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setUrgentOpen(false);
+          }}
         >
           <div
             role="dialog"
@@ -1490,7 +1496,8 @@ export function OrderListTagsCell({
         <div
           className="fixed inset-0 z-[210] flex items-center justify-center bg-black/40 p-4"
           role="presentation"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             setPaymentOpen(false);
             setPaymentPartialPrompt(false);
           }}

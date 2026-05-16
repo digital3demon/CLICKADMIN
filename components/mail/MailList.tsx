@@ -36,10 +36,24 @@ function initials(value: string): string {
     .toUpperCase();
 }
 
+const AVATAR_PALETTE = [
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#14b8a6",
+  "#06b6d4",
+  "#3b82f6",
+  "#6366f1",
+  "#8b5cf6",
+  "#d946ef",
+  "#ec4899",
+  "#f43f5e",
+];
+
 function avatarColor(value: string): string {
-  const sum = [...value].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  const mix = 22 + (sum % 28);
-  return `color-mix(in srgb, var(--sidebar-blue) ${mix}%, var(--card-bg))`;
+  const hash = [...value].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
 }
 
 function MailRow({
@@ -66,7 +80,7 @@ function MailRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={`group flex h-[86px] cursor-pointer items-center gap-3 border-b border-[var(--border-subtle)] px-4 transition ${
+      className={`group flex h-[92px] cursor-pointer items-center gap-3 border-b border-[var(--border-subtle)] px-4 transition ${
         active
           ? "bg-[var(--accent-selection-bg)]"
           : selected
@@ -113,8 +127,8 @@ function MailRow({
         />
       </div>
       <div
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-[var(--text-strong)]"
-        style={{ backgroundColor: avatarColor(sender) }}
+        className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-bold text-white shadow-sm"
+        style={{ backgroundColor: avatarColor(email.fromAddress || sender) }}
         title="Перетащите письмо в папку"
         {...attributes}
         {...listeners}
@@ -123,45 +137,63 @@ function MailRow({
           onOpen();
         }}
       >
-        {initials(sender) || "?"}
+        {email.senderAvatarUrl ? (
+          // Когда сервер начнёт отдавать аватар отправителя, строка письма уже покажет картинку.
+          // Сейчас для обычных писем остаются цветные инициалы.
+          <img src={email.senderAvatarUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          initials(sender) || "?"
+        )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            className={`min-w-[120px] max-w-[170px] truncate text-sm ${
-              email.isRead ? "font-medium text-[var(--text-body)]" : "font-bold text-[var(--app-text)]"
-            }`}
-          >
-            {sender}
-          </span>
-          <span
-            className={`min-w-0 flex-1 truncate text-sm ${
-              email.isRead ? "font-medium text-[var(--text-body)]" : "font-bold text-[var(--app-text)]"
-            }`}
-          >
-            {email.subject || "(без темы)"}
-          </span>
-          {email.hasAttachments ? <span title="Есть вложения">📎</span> : null}
-          <button
-            type="button"
-            className={`rounded-full px-1 text-lg leading-none transition ${
-              email.isFlagged ? "text-[var(--sidebar-blue)]" : "text-[var(--text-muted)] hover:text-[var(--sidebar-blue)]"
-            }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onAction(email.isFlagged ? "unflag" : "flag");
-            }}
-            title="Флажок"
-          >
-            ★
-          </button>
-          <time className="w-16 shrink-0 text-right text-xs font-medium text-[var(--text-muted)]">
-            {dateLabel(email.receivedAt || email.sentAt || email.createdAt)}
-          </time>
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div
+              className={`truncate text-[15px] leading-5 ${
+                email.isRead ? "font-medium text-[var(--text-body)]" : "font-bold text-[var(--app-text)]"
+              }`}
+            >
+              {sender}
+            </div>
+            <div
+              className={`mt-0.5 truncate text-sm leading-5 ${
+                email.isRead ? "font-medium text-[var(--text-body)]" : "font-bold text-[var(--app-text)]"
+              }`}
+            >
+              {email.subject || "(без темы)"}
+            </div>
+            <p className="mt-0.5 truncate text-sm leading-5 text-[var(--text-secondary)]">
+              {email.preview || "Нет предпросмотра"}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
+            <time className="text-xs font-medium text-[var(--text-muted)]">
+              {dateLabel(email.receivedAt || email.sentAt || email.createdAt)}
+            </time>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className={`rounded-full px-1 text-lg leading-none transition ${
+                  email.isFlagged
+                    ? "text-yellow-400"
+                    : "text-[var(--text-muted)] hover:text-yellow-400"
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAction(email.isFlagged ? "unflag" : "flag");
+                }}
+                title="Флажок"
+              >
+                ★
+              </button>
+              {email.hasAttachments ? (
+                <span className="text-lg leading-none text-[var(--text-muted)]" title="Есть вложения">
+                  📎
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
-        <p className="mt-1 line-clamp-2 text-sm leading-snug text-[var(--text-secondary)]">
-          {email.preview || "Нет предпросмотра"}
-        </p>
       </div>
       <div className="hidden shrink-0 gap-1 opacity-0 transition group-hover:flex group-hover:opacity-100">
         <button
@@ -230,7 +262,7 @@ export function MailList({
   const rowVirtualizer = useVirtualizer({
     count: emails.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 86,
+    estimateSize: () => 92,
     overscan: 10,
   });
   const selectedCount = selectedIds.size;
