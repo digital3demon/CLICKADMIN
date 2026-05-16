@@ -129,15 +129,15 @@ export function MailViewer({
         </div>
 
         {email.attachments.length > 0 ? (
-          <div className="border-b border-[var(--card-border)] px-6 py-4">
-            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+          <div className="overflow-hidden border-b border-[var(--card-border)] px-6 py-4">
+            <div className="grid min-w-0 grid-cols-1 gap-3 min-[1180px]:grid-cols-2">
               {email.attachments.map((a) => (
                 <a
                   key={a.id}
                   href={`/api/mail/emails/${email.id}/attachments/${a.id}`}
-                  className="flex items-center gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 transition hover:border-[var(--sidebar-blue)]/40 hover:bg-[var(--surface-hover)]"
+                  className="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 transition hover:border-[var(--sidebar-blue)]/40 hover:bg-[var(--surface-hover)]"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--accent-selection-bg)] text-xl">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-selection-bg)] text-xl">
                     {a.mimeType.startsWith("image/") ? "▧" : "▤"}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -146,18 +146,18 @@ export function MailViewer({
                     </span>
                     <span className="text-xs text-[var(--text-muted)]">{sizeLabel(a.size)}</span>
                   </span>
-                  <span className="text-sm font-semibold text-[var(--sidebar-blue)]">Скачать</span>
+                  <span className="shrink-0 text-sm font-semibold text-[var(--sidebar-blue)]">Скачать</span>
                 </a>
               ))}
             </div>
           </div>
         ) : null}
 
-        <div className="max-w-5xl px-6 py-6">
+        <div className="box-border w-full max-w-5xl px-6 py-6">
           <iframe
             title="Тело письма"
             sandbox="allow-same-origin allow-popups"
-            srcDoc={`<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:14px/1.6 Arial,sans-serif;color:CanvasText;background:Canvas} img{max-width:100%;height:auto} a{color:LinkText}</style></head><body>${body}</body></html>`}
+            srcDoc={`<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{box-sizing:border-box}*,*:before,*:after{box-sizing:inherit}body{margin:0;padding:16px 18px;font:14px/1.6 Arial,sans-serif;color:CanvasText;background:Canvas;overflow-wrap:anywhere}img{max-width:100%;height:auto}a{color:LinkText}</style></head><body>${body}</body></html>`}
             className="w-full border border-[var(--border-subtle)] bg-[var(--card-bg)]"
             style={{ height: bodyFrameHeight }}
             onLoad={(event) => {
@@ -167,7 +167,7 @@ export function MailViewer({
             }}
           />
 
-          <div className="mt-6 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
+          <div className="mt-6 box-border w-full rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
             <textarea
               value={quickReply}
               onChange={(e) => setQuickReply(e.target.value)}

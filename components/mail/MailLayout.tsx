@@ -23,6 +23,29 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
+function mailErrorMessage(value: unknown, fallback = "Ошибка почты"): string {
+  const raw = value instanceof Error ? value.message : typeof value === "string" ? value : "";
+  const message = raw.trim();
+  if (!message) return fallback;
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("connection not available") ||
+    lower.includes("socket closed") ||
+    lower.includes("connection closed") ||
+    lower.includes("econnreset") ||
+    lower.includes("etimedout")
+  ) {
+    return "Нет подключения к Яндекс.Почте. Синхронизация повторится автоматически.";
+  }
+  if (lower.includes("mail_account_password_not_configured")) {
+    return "Для ящика не задан пароль приложения Яндекса.";
+  }
+  if (lower.includes("authentication") || lower.includes("invalid credentials")) {
+    return "Яндекс не принял пароль приложения. Проверьте пароль в настройках почты.";
+  }
+  return message;
+}
+
 function inboxFolder(account: MailAccount | null): MailFolder | null {
   if (!account) return null;
   return (
@@ -152,7 +175,7 @@ export function MailLayout() {
       });
       setNextCursor(data.nextCursor);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка загрузки писем");
+      setError(mailErrorMessage(err, "Ошибка загрузки писем"));
     } finally {
       if (append) setLoadingMore(false);
       else setLoadingEmails(false);
@@ -191,14 +214,14 @@ export function MailLayout() {
       setDetail(data.email);
       setEmails((prev) => prev.map((e) => (e.id === id ? { ...e, isRead: true } : e)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка открытия письма");
+      setError(mailErrorMessage(err, "Ошибка открытия письма"));
     } finally {
       setLoadingDetail(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadAccounts().catch((err) => setError(err instanceof Error ? err.message : "Ошибка"));
+    void loadAccounts().catch((err) => setError(mailErrorMessage(err, "Ошибка")));
   }, [loadAccounts]);
 
   useEffect(() => {
@@ -240,7 +263,7 @@ export function MailLayout() {
         if (!latest) return;
         if (latest.status === "QUEUED") setSyncStatus("Синхронизация в очереди");
         else if (latest.status === "RUNNING") setSyncStatus("Загружаем новые письма");
-        else if (latest.status === "FAILED") setSyncStatus(latest.lastError || "Синхронизация завершилась ошибкой");
+        else if (latest.status === "FAILED") setSyncStatus(mailErrorMessage(latest.lastError, "Синхронизация завершилась ошибкой"));
         else setSyncStatus(`Синхронизация завершена: ${latest.imported} новых, ${latest.skipped} пропущено`);
       } catch {
         /* status is informational */
@@ -326,7 +349,7 @@ export function MailLayout() {
       await loadAccounts();
       await refreshEmailsSilently();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка синхронизации");
+      setError(mailErrorMessage(err, "Ошибка синхронизации"));
     } finally {
       setSyncing(false);
     }
@@ -349,7 +372,7 @@ export function MailLayout() {
       setActiveAccountId(data.account.id);
       setAccountModalOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось добавить ящик");
+      setError(mailErrorMessage(err, "Не удалось добавить ящик"));
     } finally {
       setSavingAccount(false);
     }
@@ -395,7 +418,7 @@ export function MailLayout() {
         setError("Не удалось открыть окно нового заказа");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось открыть новый заказ из писем");
+      setError(mailErrorMessage(err, "Не удалось открыть новый заказ из писем"));
     }
   }
 
