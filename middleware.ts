@@ -161,11 +161,31 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  /** Cron (Vercel / внешний планировщик): Bearer CRON_SECRET, без сессии. */
+  /** Cron (Vercel / standalone-loop): Bearer CRON_SECRET или внутренний header, без сессии. */
   if (pathname.startsWith("/api/cron/")) {
     const secret = process.env.CRON_SECRET?.trim();
     const auth = req.headers.get("authorization")?.trim();
     if (secret && auth === `Bearer ${secret}`) {
+      return securityHeaders(NextResponse.next());
+    }
+    const mailSecret = process.env.INTERNAL_MAIL_SYNC_SECRET?.trim();
+    const mailHeader = req.headers.get("x-internal-mail-sync-secret")?.trim();
+    if (
+      pathname === "/api/cron/mail-sync" &&
+      mailSecret &&
+      mailHeader === mailSecret
+    ) {
+      return securityHeaders(NextResponse.next());
+    }
+    const kaitenChatSecret = process.env.INTERNAL_KAITEN_CHAT_SYNC_SECRET?.trim();
+    const kaitenChatHeader = req.headers
+      .get("x-internal-kaiten-chat-sync-secret")
+      ?.trim();
+    if (
+      pathname === "/api/cron/kaiten-chat-sync" &&
+      kaitenChatSecret &&
+      kaitenChatHeader === kaitenChatSecret
+    ) {
       return securityHeaders(NextResponse.next());
     }
     const out = NextResponse.json({ error: "Forbidden" }, { status: 403 });

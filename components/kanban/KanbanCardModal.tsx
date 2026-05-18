@@ -90,6 +90,8 @@ import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 
+type ChatAction = "comment" | "correction" | "prosthetics";
+
 function columnMatchesStage(columnTitle: string, stageTitle: string): boolean {
   const col = String(columnTitle || "").trim().toLowerCase();
   const stage = String(stageTitle || "").trim().toLowerCase();
@@ -702,7 +704,10 @@ export function KanbanCardModal({
     });
   };
 
-  const sendComment = async (text: string): Promise<boolean> => {
+  const sendComment = async (
+    text: string,
+    requestedAction: ChatAction = "comment",
+  ): Promise<boolean> => {
     const trimmed = text.trim();
     if (!trimmed) return false;
 
@@ -770,7 +775,13 @@ export function KanbanCardModal({
       Number.isFinite(card.kaitenCardId);
 
     if (linkedKaiten && card.linkedOrderId) {
-      const r = await postOrderKaitenComment(card.linkedOrderId, trimmed);
+      const kaitenText =
+        requestedAction === "correction"
+          ? `!!! ${trimmed}`
+          : requestedAction === "prosthetics"
+            ? `??? ${trimmed}`
+            : trimmed;
+      const r = await postOrderKaitenComment(card.linkedOrderId, kaitenText);
       if (!r.ok) {
         toast(r.error, true);
         return false;
@@ -797,12 +808,14 @@ export function KanbanCardModal({
     }
 
     if (card.linkedOrderId) {
-      const action =
-        isOrderChatCorrectionTrigger(trimmed)
+      let action: ChatAction = requestedAction;
+      if (action === "comment") {
+        action = isOrderChatCorrectionTrigger(trimmed)
           ? "correction"
           : isOrderProstheticsRequestTrigger(trimmed)
             ? "prosthetics"
             : "comment";
+      }
       try {
         const postRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
           method: "POST",
@@ -2582,7 +2595,7 @@ function ChatPanel({
   /** Нормализованный токен (напр. clickpr) для подстановки @ в текст. */
   productionMentionTag: string;
   productionUserIds: readonly string[];
-  onSend: (t: string) => boolean | Promise<boolean>;
+  onSend: (t: string, action?: ChatAction) => boolean | Promise<boolean>;
   onFilesDropped: (files: File[]) => void | Promise<void>;
   onOpenAttachment: (f: CardFile) => void;
 }) {
@@ -2699,10 +2712,10 @@ function ChatPanel({
     void Promise.resolve(onFilesDropped(arr));
   };
 
-  const submitMessage = async () => {
+  const submitMessage = async (action: ChatAction = "comment") => {
     const v = inp.trim();
     if (!v) return;
-    const ok = await Promise.resolve(onSend(v));
+    const ok = await Promise.resolve(onSend(v, action));
     if (ok) {
       setInp("");
       setCaretPos(0);
@@ -2921,6 +2934,28 @@ function ChatPanel({
             }
           }}
         />
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-[0.72rem] font-semibold text-amber-200 hover:bg-amber-400/20 disabled:opacity-40"
+          disabled={!inp.trim()}
+          title="Отправить как корректировку"
+          onClick={() => {
+            void submitMessage("correction");
+          }}
+        >
+          Корректировка
+        </button>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-1.5 text-[0.72rem] font-semibold text-sky-200 hover:bg-sky-400/20 disabled:opacity-40"
+          disabled={!inp.trim()}
+          title="Отправить как заказ протетики"
+          onClick={() => {
+            void submitMessage("prosthetics");
+          }}
+        >
+          Заказ протетики
+        </button>
         <button
           type="button"
           className="shrink-0 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-1.5 text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
