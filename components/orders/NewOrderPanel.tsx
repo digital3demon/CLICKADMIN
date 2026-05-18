@@ -33,7 +33,8 @@ const mainStageClass = "left-0 shell-desktop:left-[calc(100%/7)]";
 const mailOrderStageClass = "left-0";
 const mailOrderViewportMargin = "1rem";
 const mailOrderGap = "0.75rem";
-const mailOrderTop = "max(0.5rem, calc((100dvh - min(92dvh, 1180px)) / 2))";
+const mailOrderMaxHeight = "min(86dvh, 1180px)";
+const mailOrderTop = `calc((100dvh - ${mailOrderMaxHeight}) / 2)`;
 const mailSourceWidth = "clamp(20rem, 30vw, 28rem)";
 const mailOrderWidth = `min(calc(100vw - (${mailOrderViewportMargin} * 2) - ${mailSourceWidth} - ${mailOrderGap}), 1320px)`;
 const mailOrderLeft = `max(${mailOrderViewportMargin}, calc((100vw - (${mailOrderWidth} + ${mailSourceWidth} + ${mailOrderGap})) / 2))`;
@@ -157,10 +158,10 @@ export function NewOrderPanel() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className={`pointer-events-auto flex w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:max-h-[min(92dvh,1180px)] md:rounded-xl ${
+                className={`pointer-events-auto flex w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:rounded-xl ${
                   hasSourceEmails ? "" : "max-w-[min(99vw,1320px)]"
                 }`}
-                style={hasSourceEmails ? { maxWidth: mailOrderWidth } : undefined}
+                style={hasSourceEmails ? { maxWidth: mailOrderWidth, maxHeight: mailOrderMaxHeight } : undefined}
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}

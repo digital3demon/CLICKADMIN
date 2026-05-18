@@ -114,7 +114,7 @@ type Props = {
 };
 
 const padTable =
-  "px-[0.6em] py-[0.14em] text-[0.72em] leading-tight sm:px-[0.68em] sm:py-[0.16em] sm:text-[0.72em] sm:leading-tight md:text-[0.72em]";
+  "order-list-tag-pill";
 
 /**
  * Облако тегов: адаптивная плотная упаковка без жёстких шаблонов.
@@ -122,7 +122,7 @@ const padTable =
  * с мягкими лимитами через clamp; длинный текст переносится внутри пилюли.
  */
 const TAG_CLOUD_PACK_CLASS =
-  "flex min-h-min w-full min-w-0 flex-wrap content-start items-start gap-x-[0.35em] gap-y-[0.35em]";
+  "order-list-tags-pack flex min-h-min w-full min-w-0 flex-wrap content-start items-start gap-x-1 gap-y-1";
 
 const TAG_ADD_BUTTON_CLASS =
   "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-6 sm:w-6";
@@ -150,7 +150,7 @@ function tagCloudCellClass(slot: TagSlotSize): string {
   return "flex min-w-0 max-w-full grow-0 shrink-0 basis-auto items-start [&>*]:max-w-full";
 }
 const TAG_EDIT_BUTTON_CLASS =
-  "rounded px-0.5 py-0 text-[0.72em] leading-none hover:opacity-90";
+  "order-list-tag-edit rounded leading-none hover:opacity-90";
 
 /** Жёлтый треугольник с «!» (как знак внимания), без клика. */
 /** Белый контур шестерёнки на «небесной» пилюле — как стек уведомлений по протетике. */
@@ -1231,11 +1231,52 @@ export function OrderListTagsCell({
 
   return (
     <Fragment>
+      <style>{`
+        .order-list-tags-root {
+          container-type: inline-size;
+        }
+        .order-list-tag-pill {
+          font-size: 0.88em;
+          line-height: 1.05;
+          padding: 0.22em 0.72em;
+        }
+        .order-list-tag-edit {
+          font-size: 0.86em;
+          padding: 0.08em 0.25em;
+        }
+        @container (max-width: 11.5rem) {
+          .order-list-tags-pack {
+            gap: 0.25rem;
+          }
+          .order-list-tag-pill {
+            font-size: 0.78em;
+            padding: 0.16em 0.58em;
+            letter-spacing: 0.01em;
+          }
+          .order-list-tag-edit {
+            font-size: 0.76em;
+            padding-inline: 0.15em;
+          }
+        }
+        @container (max-width: 9rem) {
+          .order-list-tags-pack {
+            gap: 0.2rem;
+          }
+          .order-list-tag-pill {
+            font-size: 0.7em;
+            padding: 0.12em 0.48em;
+            letter-spacing: 0;
+          }
+          .order-list-tag-edit {
+            font-size: 0.68em;
+          }
+        }
+      `}</style>
       <div
         className={
           useLeadingIconStrip
-            ? "flex w-full min-w-0 max-w-full items-start gap-x-2"
-            : "flex w-full min-w-0 max-w-full flex-col"
+            ? "order-list-tags-root flex w-full min-w-0 max-w-full items-start gap-x-2"
+            : "order-list-tags-root flex w-full min-w-0 max-w-full flex-col"
         }
         title="Отметки переносятся по ширине колонки таблицы"
       >

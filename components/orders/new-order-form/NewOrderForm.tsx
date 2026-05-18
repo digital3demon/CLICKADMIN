@@ -2033,43 +2033,94 @@ function SourceEmailAttachmentRow({
   const downloadUrl = sourceEmailAttachmentUrl(email.id, attachment.id);
   const previewUrl = sourceEmailAttachmentUrl(email.id, attachment.id, true);
   const previewable = canPreviewSourceAttachment(attachment);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const isImage = attachment.mimeType.toLowerCase().startsWith("image/");
   return (
-    <div className="group flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]">
-      <span className="min-w-0 truncate">{attachment.fileName}</span>
-      <span className={`shrink-0 ${sizeClassName}`}>{sourceFileSize(attachment.size)}</span>
-      <span className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100">
-        {previewable ? (
+    <>
+      <div className="group flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]">
+        <span className="min-w-0 truncate">{attachment.fileName}</span>
+        <span className={`shrink-0 ${sizeClassName}`}>{sourceFileSize(attachment.size)}</span>
+        <span className="flex shrink-0 items-center gap-1.5 opacity-0 transition group-hover:opacity-100">
+          {previewable ? (
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-base font-semibold leading-none text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
+              title="Посмотреть"
+              aria-label="Посмотреть вложение"
+              onClick={() => setPreviewOpen(true)}
+            >
+              ◉
+            </button>
+          ) : null}
           <a
-            href={previewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md px-1.5 py-1 text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
-            title="Посмотреть"
-            aria-label="Посмотреть вложение"
+            href={downloadUrl}
+            download={attachment.fileName}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold leading-none text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
+            title="Скачать"
+            aria-label="Скачать вложение"
           >
-            ◉
+            ⬇
           </a>
-        ) : null}
-        <a
-          href={downloadUrl}
-          download={attachment.fileName}
-          className="rounded-md px-1.5 py-1 text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
-          title="Скачать"
-          aria-label="Скачать вложение"
+          <button
+            type="button"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold leading-none text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
+            title="Добавить в заказ"
+            aria-label="Добавить вложение в заказ"
+            onClick={() => onAdd(email, attachment)}
+          >
+            ＋
+          </button>
+        </span>
+      </div>
+      {previewOpen ? (
+        <div
+          className="fixed inset-0 z-[520] flex items-center justify-center bg-black/75 p-3 sm:p-6"
+          role="presentation"
+          onClick={() => setPreviewOpen(false)}
         >
-          ⬇
-        </a>
-        <button
-          type="button"
-          className="rounded-md px-1.5 py-1 text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
-          title="Добавить в заказ"
-          aria-label="Добавить вложение в заказ"
-          onClick={() => onAdd(email, attachment)}
-        >
-          ＋
-        </button>
-      </span>
-    </div>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Просмотр вложения"
+            className="flex h-[min(92dvh,900px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-[var(--app-text)]">
+                  {attachment.fileName}
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {sourceFileSize(attachment.size)}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
+                onClick={() => setPreviewOpen(false)}
+              >
+                Закрыть
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto bg-black/10 p-3">
+              {isImage ? (
+                <img
+                  src={previewUrl}
+                  alt={attachment.fileName}
+                  className="mx-auto max-h-full max-w-full rounded-lg object-contain"
+                />
+              ) : (
+                <iframe
+                  src={previewUrl}
+                  title={attachment.fileName}
+                  className="h-full min-h-[70dvh] w-full rounded-lg border border-[var(--border-subtle)] bg-white"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -2088,18 +2139,20 @@ function OrderSourceEmailsPanel({
 
   const mailOrderViewportMargin = "1rem";
   const mailOrderGap = "0.75rem";
-  const mailOrderTop = "max(0.5rem, calc((100dvh - min(92dvh, 1180px)) / 2))";
+  const mailOrderMaxHeight = "min(86dvh, 1180px)";
+  const mailOrderTop = `calc((100dvh - ${mailOrderMaxHeight}) / 2)`;
   const mailSourceWidth = "clamp(20rem, 30vw, 28rem)";
   const mailOrderWidth = `min(calc(100vw - (${mailOrderViewportMargin} * 2) - ${mailSourceWidth} - ${mailOrderGap}), 1320px)`;
   const mailOrderLeft = `max(${mailOrderViewportMargin}, calc((100vw - (${mailOrderWidth} + ${mailSourceWidth} + ${mailOrderGap})) / 2))`;
 
   return createPortal(
     <aside
-      className="fixed z-[130] flex max-h-[min(92dvh,1180px)] flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 shadow-2xl"
+      className="fixed z-[130] flex flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 shadow-2xl"
       style={{
         top: mailOrderTop,
         left: `calc(${mailOrderLeft} + ${mailOrderWidth} + ${mailOrderGap})`,
         width: mailSourceWidth,
+        maxHeight: mailOrderMaxHeight,
       }}
     >
       <div className="min-h-0 overflow-y-auto">
