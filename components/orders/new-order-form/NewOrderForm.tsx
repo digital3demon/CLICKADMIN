@@ -69,7 +69,7 @@ import {
   saveQuickOrderTemplate,
 } from "@/lib/quick-order-template-storage";
 import { printOrderNarjadPdf } from "@/lib/print-order-narjad";
-import { cleanMailTextBody } from "@/lib/mail/mail-text-cleanup";
+import { cleanMailTextBody, mailHtmlToText } from "@/lib/mail/mail-text-cleanup";
 import { OrderProstheticsBlock } from "@/components/orders/OrderProstheticsBlock";
 import { PodrobnoSection } from "./PodrobnoSection";
 import { type DetailLine, newDetailLineId } from "./detail-lines";
@@ -253,6 +253,13 @@ export function NewOrderForm({
     emptyProsthetics(),
   );
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingSourceAttachmentLoads, setPendingSourceAttachmentLoads] = useState<
+    Array<{ key: string; name: string; size: number }>
+  >([]);
+  const pendingSourceAttachmentLoadKeys = useMemo(
+    () => new Set(pendingSourceAttachmentLoads.map((item) => item.key)),
+    [pendingSourceAttachmentLoads],
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [isTestOrder, setIsTestOrder] = useState(false);
@@ -1175,11 +1182,27 @@ export function NewOrderForm({
     email: OrderSourceEmail,
     attachment: OrderSourceEmail["attachments"][number],
   ) {
+    const loadingKey = `${email.id}:${attachment.id}`;
     if (attachment.size > CRM_UPLOAD_MAX_BYTES) {
       setSaveError(CRM_UPLOAD_TOO_LARGE_MESSAGE);
       return;
     }
+    setPendingSourceAttachmentLoads((prev) =>
+      prev.some((item) => item.key === loadingKey)
+        ? prev
+        : [
+            ...prev,
+            {
+              key: loadingKey,
+              name: attachment.fileName || "attachment",
+              size: attachment.size,
+            },
+          ],
+    );
     try {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve());
+      });
       const res = await fetch(`/api/mail/emails/${email.id}/attachments/${attachment.id}`, {
         cache: "no-store",
       });
@@ -1195,6 +1218,10 @@ export function NewOrderForm({
       });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Не удалось добавить вложение в заказ");
+    } finally {
+      setPendingSourceAttachmentLoads((prev) =>
+        prev.filter((item) => item.key !== loadingKey),
+      );
     }
   }
 
@@ -1926,6 +1953,7 @@ export function NewOrderForm({
                     orderId={null}
                     listenPaste
                     pendingFiles={pendingFiles}
+                    pendingLoadingFiles={pendingSourceAttachmentLoads}
                     onPendingChange={setPendingFiles}
                   />
                 </section>
@@ -1935,6 +1963,7 @@ export function NewOrderForm({
             {sourceEmails.length ? (
               <OrderSourceEmailsPanel
                 emails={sourceEmails}
+                loadingAttachmentKeys={pendingSourceAttachmentLoadKeys}
                 onAddAttachment={(email, attachment) => void addSourceEmailAttachmentToOrder(email, attachment)}
                 onAppend={(email) =>
                   setClientOrderText((prev) => {
@@ -1986,7 +2015,7 @@ function sourceFileSize(bytes: number): string {
 }
 
 function sourceEmailToOrderText(email: OrderSourceEmail): string {
-  const body = cleanMailTextBody(email.textBody || email.preview || "");
+  const body = sourceEmailPlainText(email);
   const lines = [
     `Письмо: ${email.subject || "(без темы)"}`,
     `От: ${sourceEmailSender(email)}`,
@@ -1997,8 +2026,16 @@ function sourceEmailToOrderText(email: OrderSourceEmail): string {
   return lines.join("\n");
 }
 
+function sourceEmailPlainText(email: OrderSourceEmail): string {
+  return (
+    cleanMailTextBody(email.textBody) ||
+    mailHtmlToText(email.safeHtmlBody) ||
+    cleanMailTextBody(email.preview)
+  );
+}
+
 function sourceEmailBody(email: OrderSourceEmail): string {
-  return cleanMailTextBody(email.textBody || email.preview || "") || "В письме нет текстового содержимого.";
+  return sourceEmailPlainText(email) || "В письме нет текстового содержимого.";
 }
 
 function sourceEmailHtml(email: OrderSourceEmail): string {
@@ -2023,11 +2060,13 @@ function SourceEmailAttachmentRow({
   email,
   attachment,
   sizeClassName = "text-[var(--text-muted)]",
+  isLoading = false,
   onAdd,
 }: {
   email: OrderSourceEmail;
   attachment: OrderSourceEmail["attachments"][number];
   sizeClassName?: string;
+  isLoading?: boolean;
   onAdd: (email: OrderSourceEmail, attachment: OrderSourceEmail["attachments"][number]) => void;
 }) {
   const downloadUrl = sourceEmailAttachmentUrl(email.id, attachment.id);
@@ -2040,7 +2079,11 @@ function SourceEmailAttachmentRow({
       <div className="group flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]">
         <span className="min-w-0 truncate">{attachment.fileName}</span>
         <span className={`shrink-0 ${sizeClassName}`}>{sourceFileSize(attachment.size)}</span>
-        <span className="flex shrink-0 items-center gap-1.5 opacity-0 transition group-hover:opacity-100">
+        <span
+          className={`flex shrink-0 items-center gap-1.5 transition ${
+            isLoading ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
+        >
           {previewable ? (
             <button
               type="button"
@@ -2063,12 +2106,22 @@ function SourceEmailAttachmentRow({
           </a>
           <button
             type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold leading-none text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
-            title="Добавить в заказ"
-            aria-label="Добавить вложение в заказ"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold leading-none text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)] disabled:pointer-events-none"
+            title={isLoading ? "Файл добавляется" : "Добавить в заказ"}
+            aria-label={isLoading ? "Файл добавляется" : "Добавить вложение в заказ"}
+            disabled={isLoading}
             onClick={() => onAdd(email, attachment)}
           >
-            ＋
+            {isLoading ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src="/stickers/clickadmin-sticker-logo.png"
+                alt=""
+                className="h-6 w-6 animate-spin rounded-full object-contain"
+              />
+            ) : (
+              "＋"
+            )}
           </button>
         </span>
       </div>
@@ -2126,10 +2179,12 @@ function SourceEmailAttachmentRow({
 
 function OrderSourceEmailsPanel({
   emails,
+  loadingAttachmentKeys,
   onAddAttachment,
   onAppend,
 }: {
   emails: OrderSourceEmail[];
+  loadingAttachmentKeys: ReadonlySet<string>;
   onAddAttachment: (email: OrderSourceEmail, attachment: OrderSourceEmail["attachments"][number]) => void;
   onAppend: (email: OrderSourceEmail) => void;
 }) {
@@ -2211,6 +2266,7 @@ function OrderSourceEmailsPanel({
                       key={attachment.id}
                       email={email}
                       attachment={attachment}
+                      isLoading={loadingAttachmentKeys.has(`${email.id}:${attachment.id}`)}
                       onAdd={onAddAttachment}
                     />
                   ))}
@@ -2281,6 +2337,7 @@ function OrderSourceEmailsPanel({
                       email={expandedEmail}
                       attachment={attachment}
                       sizeClassName="text-[var(--text-muted)]"
+                      isLoading={loadingAttachmentKeys.has(`${expandedEmail.id}:${attachment.id}`)}
                       onAdd={onAddAttachment}
                     />
                   ))}

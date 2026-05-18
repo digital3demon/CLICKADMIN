@@ -576,56 +576,60 @@ export default async function OrdersPage({
       </div>
       ) : null}
       {activeFilter ? (
-        <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/25 sm:px-4 sm:py-2.5 sm:text-base">
-          <span className="text-[var(--text-body)]">
-            Фильтр по тегу:{" "}
-            <strong className="text-[var(--text-strong)]">
-              {humanListTagLabel(activeFilter)}
-            </strong>
-          </span>
-          <Link
-            href={ordersListHref({
-              limit: pageSize,
-              hideShipped: hideShippedActive,
-              onlyShipped: onlyShippedActive,
-              q: listSearchQ || undefined,
-              from: fromUrl ?? undefined,
-              to: toUrl ?? undefined,
-            })}
-            className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
-          >
-            Показать все заказы
-          </Link>
-          {relatedOrdersListTagQuickFilters(activeFilter, {
-            kaitenColumnAlternates,
-            urgentCoefficientsInDb,
-          }).map((opt) => {
-            const optParsed = parseListTagParam(opt.tag);
-            const isActive = Boolean(
-              optParsed && listTagParamsEqual(activeFilter, optParsed),
-            );
-            return (
+        <div className="w-full rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/25 sm:px-4 sm:py-2.5 sm:text-base">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate whitespace-nowrap text-[var(--text-body)]">
+              Фильтр по тегу:{" "}
+              <strong className="text-[var(--text-strong)]">
+                {humanListTagLabel(activeFilter)}
+              </strong>
+            </span>
             <Link
-              key={opt.tag}
               href={ordersListHref({
                 limit: pageSize,
-                tag: opt.tag,
                 hideShipped: hideShippedActive,
                 onlyShipped: onlyShippedActive,
                 q: listSearchQ || undefined,
                 from: fromUrl ?? undefined,
                 to: toUrl ?? undefined,
               })}
-              className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
-                isActive
-                  ? "border-sky-500 bg-sky-100 text-sky-950 ring-1 ring-sky-500/50 dark:border-sky-600 dark:bg-sky-900/50 dark:text-sky-50"
-                  : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
-              }`}
+              className="shrink-0 whitespace-nowrap rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
             >
-              {opt.label}
+              Показать все заказы
             </Link>
-            );
-          })}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {relatedOrdersListTagQuickFilters(activeFilter, {
+              kaitenColumnAlternates,
+              urgentCoefficientsInDb,
+            }).map((opt) => {
+              const optParsed = parseListTagParam(opt.tag);
+              const isActive = Boolean(
+                optParsed && listTagParamsEqual(activeFilter, optParsed),
+              );
+              return (
+                <Link
+                  key={opt.tag}
+                  href={ordersListHref({
+                    limit: pageSize,
+                    tag: opt.tag,
+                    hideShipped: hideShippedActive,
+                    onlyShipped: onlyShippedActive,
+                    q: listSearchQ || undefined,
+                    from: fromUrl ?? undefined,
+                    to: toUrl ?? undefined,
+                  })}
+                  className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
+                    isActive
+                      ? "border-sky-500 bg-sky-100 text-sky-950 ring-1 ring-sky-500/50 dark:border-sky-600 dark:bg-sky-900/50 dark:text-sky-50"
+                      : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+                  }`}
+                >
+                  {opt.label}
+                </Link>
+              );
+            })}
+          </div>
         </div>
       ) : rawTag ? (
         <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">

@@ -26,6 +26,12 @@ type AttachmentMeta = {
   uploadedToKaitenAt: string | null;
 };
 
+type PendingLoadingFile = {
+  key: string;
+  name: string;
+  size: number;
+};
+
 function formatSize(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -181,6 +187,7 @@ export function OrderFilesPanel({
   orderNumber,
   listenPaste,
   pendingFiles,
+  pendingLoadingFiles = [],
   onPendingChange,
   onServerListChange,
 }: {
@@ -190,6 +197,7 @@ export function OrderFilesPanel({
   /** Вешать обработчик вставки на window (только если в буфере есть файлы) */
   listenPaste: boolean;
   pendingFiles?: File[];
+  pendingLoadingFiles?: PendingLoadingFile[];
   onPendingChange?: (files: File[]) => void;
   /** После загрузки/удаления на сервере */
   onServerListChange?: () => void;
@@ -552,13 +560,35 @@ export function OrderFilesPanel({
         </p>
       ) : null}
 
-      {!orderId && pendingFiles && pendingFiles.length > 0 ? (
+      {!orderId &&
+      ((pendingFiles && pendingFiles.length > 0) || pendingLoadingFiles.length > 0) ? (
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
             К отправке после сохранения наряда
           </h3>
           <ul className="mt-2 space-y-1 text-sm">
-            {pendingFiles.map((f, i) => (
+            {pendingLoadingFiles.map((f) => (
+              <li
+                key={f.key}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-amber-50/50 px-3 py-2"
+              >
+                <span className="truncate text-[var(--text-strong)]">{f.name}</span>
+                <span className="text-[var(--text-muted)]">{formatSize(f.size)}</span>
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                  title="Файл добавляется"
+                  aria-label="Файл добавляется"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/stickers/clickadmin-sticker-logo.png"
+                    alt=""
+                    className="h-6 w-6 animate-spin rounded-full object-contain"
+                  />
+                </span>
+              </li>
+            ))}
+            {(pendingFiles ?? []).map((f, i) => (
               <li
                 key={`${f.name}-${i}`}
                 className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-amber-50/50 px-3 py-2"
