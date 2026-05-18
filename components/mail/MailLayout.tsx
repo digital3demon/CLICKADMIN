@@ -35,13 +35,13 @@ function mailErrorMessage(value: unknown, fallback = "Ошибка почты"):
     lower.includes("econnreset") ||
     lower.includes("etimedout")
   ) {
-    return "Нет подключения к Яндекс.Почте. Синхронизация повторится автоматически.";
+    return "Нет подключения к почтовому серверу. Синхронизация повторится автоматически.";
   }
   if (lower.includes("mail_account_password_not_configured")) {
-    return "Для ящика не задан пароль приложения Яндекса.";
+    return "Для ящика не задан пароль приложения.";
   }
   if (lower.includes("authentication") || lower.includes("invalid credentials")) {
-    return "Яндекс не принял пароль приложения. Проверьте пароль в настройках почты.";
+    return "Почтовый сервер не принял пароль приложения. Проверьте пароль в настройках почты.";
   }
   return message;
 }

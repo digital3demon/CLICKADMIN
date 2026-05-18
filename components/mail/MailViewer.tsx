@@ -76,8 +76,8 @@ export function MailViewer({
         <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" onClick={() => onReply("", "reply")}>
           Ответить
         </button>
-        <button className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onReply("", "replyAll")}>
-          Ответить всем
+        <button className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onAction("unread")}>
+          Непрочитано
         </button>
         <button className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]" onClick={() => onReply("", "forward")}>
           Переслать

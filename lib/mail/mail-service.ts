@@ -301,9 +301,20 @@ export async function deleteEmailAccount(
   userId: string,
   accountId: string,
 ): Promise<void> {
+  const attachments = await db.emailAttachment.findMany({
+    where: {
+      tenantId,
+      email: {
+        accountId,
+        account: { createdByUserId: userId },
+      },
+    },
+    select: { diskRelPath: true },
+  });
   await db.emailAccount.deleteMany({
     where: { id: accountId, ...userAccountWhere(tenantId, userId) },
   });
+  await Promise.all(attachments.map((a) => deleteMailAttachmentBytes(a.diskRelPath)));
 }
 
 export async function testEmailAccountConnection(

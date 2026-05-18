@@ -114,7 +114,7 @@ type Props = {
 };
 
 const padTable =
-  "px-1.5 py-0.5 text-[10px] leading-tight sm:px-2 sm:py-0.5 sm:text-[11px] sm:leading-tight md:text-xs";
+  "px-[0.6em] py-[0.14em] text-[0.72em] leading-tight sm:px-[0.68em] sm:py-[0.16em] sm:text-[0.72em] sm:leading-tight md:text-[0.72em]";
 
 /**
  * Облако тегов: адаптивная плотная упаковка без жёстких шаблонов.
@@ -122,7 +122,7 @@ const padTable =
  * с мягкими лимитами через clamp; длинный текст переносится внутри пилюли.
  */
 const TAG_CLOUD_PACK_CLASS =
-  "flex min-h-min w-full min-w-0 flex-wrap content-start items-start gap-x-1 gap-y-1";
+  "flex min-h-min w-full min-w-0 flex-wrap content-start items-start gap-x-[0.35em] gap-y-[0.35em]";
 
 const TAG_ADD_BUTTON_CLASS =
   "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-6 sm:w-6";
@@ -150,7 +150,7 @@ function tagCloudCellClass(slot: TagSlotSize): string {
   return "flex min-w-0 max-w-full grow-0 shrink-0 basis-auto items-start [&>*]:max-w-full";
 }
 const TAG_EDIT_BUTTON_CLASS =
-  "rounded p-1 text-xs leading-none hover:opacity-90";
+  "rounded px-0.5 py-0 text-[0.72em] leading-none hover:opacity-90";
 
 /** Жёлтый треугольник с «!» (как знак внимания), без клика. */
 /** Белый контур шестерёнки на «небесной» пилюле — как стек уведомлений по протетике. */
@@ -908,9 +908,9 @@ export function OrderListTagsCell({
         <Link
           href={href(kaitenFilterKey)}
           title="Показать наряды в этой колонке Kaiten"
-          className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left text-[11px] font-semibold uppercase leading-tight tracking-wide shadow-sm outline-none transition-opacity hover:opacity-90 focus-visible:outline-none sm:px-2.5 sm:py-1 sm:text-xs sm:leading-tight md:text-sm md:leading-tight ${
+          className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm outline-none transition-opacity hover:opacity-90 focus-visible:outline-none ${
             LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
-          }`}
+          } ${padTable}`}
         >
           {noKaitenKanbanStatus ? (
             <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
@@ -929,9 +929,9 @@ export function OrderListTagsCell({
       ) : (
         <span
           title="Колонка доски Kaiten (обновляется в фоне на списке заказов)"
-          className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left text-[11px] font-semibold uppercase leading-tight tracking-wide shadow-sm sm:px-2.5 sm:py-1 sm:text-xs sm:leading-tight md:text-sm md:leading-tight ${
+          className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${
             LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
-          }`}
+          } ${padTable}`}
         >
           {noKaitenKanbanStatus ? (
             <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
@@ -1107,7 +1107,7 @@ export function OrderListTagsCell({
           )}
           <button
             type="button"
-            className="rounded p-1 text-xs leading-none text-indigo-700 hover:bg-indigo-100 dark:text-indigo-200 dark:hover:bg-indigo-950/50"
+            className={`${TAG_EDIT_BUTTON_CLASS} text-indigo-700 hover:bg-indigo-100 dark:text-indigo-200 dark:hover:bg-indigo-950/50`}
             title="Изменить статус оплаты"
             aria-label="Изменить статус оплаты"
             onClick={() => {

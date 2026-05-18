@@ -1171,6 +1171,33 @@ export function NewOrderForm({
     ],
   );
 
+  async function addSourceEmailAttachmentToOrder(
+    email: OrderSourceEmail,
+    attachment: OrderSourceEmail["attachments"][number],
+  ) {
+    if (attachment.size > CRM_UPLOAD_MAX_BYTES) {
+      setSaveError(CRM_UPLOAD_TOO_LARGE_MESSAGE);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/mail/emails/${email.id}/attachments/${attachment.id}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error("Не удалось скачать вложение из письма");
+      const blob = await res.blob();
+      const file = new File([blob], attachment.fileName || "attachment", {
+        type: attachment.mimeType || blob.type || "application/octet-stream",
+      });
+      setPendingFiles((prev) => {
+        const key = `${file.name}-${file.size}`;
+        if (prev.some((item) => `${item.name}-${item.size}` === key)) return prev;
+        return [...prev, file];
+      });
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Не удалось добавить вложение в заказ");
+    }
+  }
+
   return (
     <div className="flex min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden">
       <NewOrderDuplicatePreflightModal
@@ -1908,6 +1935,7 @@ export function NewOrderForm({
             {sourceEmails.length ? (
               <OrderSourceEmailsPanel
                 emails={sourceEmails}
+                onAddAttachment={(email, attachment) => void addSourceEmailAttachmentToOrder(email, attachment)}
                 onAppend={(email) =>
                   setClientOrderText((prev) => {
                     const block = sourceEmailToOrderText(email);
@@ -1982,23 +2010,88 @@ function sourceEmailHtml(email: OrderSourceEmail): string {
     .replaceAll(">", "&gt;")}</pre>`;
 }
 
+function sourceEmailAttachmentUrl(emailId: string, attachmentId: string, inline = false): string {
+  return `/api/mail/emails/${emailId}/attachments/${attachmentId}${inline ? "?inline=1" : ""}`;
+}
+
+function canPreviewSourceAttachment(attachment: OrderSourceEmail["attachments"][number]): boolean {
+  const mime = attachment.mimeType.toLowerCase();
+  return mime.startsWith("image/") || mime === "application/pdf";
+}
+
+function SourceEmailAttachmentRow({
+  email,
+  attachment,
+  sizeClassName = "text-[var(--text-muted)]",
+  onAdd,
+}: {
+  email: OrderSourceEmail;
+  attachment: OrderSourceEmail["attachments"][number];
+  sizeClassName?: string;
+  onAdd: (email: OrderSourceEmail, attachment: OrderSourceEmail["attachments"][number]) => void;
+}) {
+  const downloadUrl = sourceEmailAttachmentUrl(email.id, attachment.id);
+  const previewUrl = sourceEmailAttachmentUrl(email.id, attachment.id, true);
+  const previewable = canPreviewSourceAttachment(attachment);
+  return (
+    <div className="group flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]">
+      <span className="min-w-0 truncate">{attachment.fileName}</span>
+      <span className={`shrink-0 ${sizeClassName}`}>{sourceFileSize(attachment.size)}</span>
+      <span className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100">
+        {previewable ? (
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md px-1.5 py-1 text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
+            title="Посмотреть"
+            aria-label="Посмотреть вложение"
+          >
+            ◉
+          </a>
+        ) : null}
+        <a
+          href={downloadUrl}
+          download={attachment.fileName}
+          className="rounded-md px-1.5 py-1 text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
+          title="Скачать"
+          aria-label="Скачать вложение"
+        >
+          ⬇
+        </a>
+        <button
+          type="button"
+          className="rounded-md px-1.5 py-1 text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
+          title="Добавить в заказ"
+          aria-label="Добавить вложение в заказ"
+          onClick={() => onAdd(email, attachment)}
+        >
+          ＋
+        </button>
+      </span>
+    </div>
+  );
+}
+
 function OrderSourceEmailsPanel({
   emails,
+  onAddAttachment,
   onAppend,
 }: {
   emails: OrderSourceEmail[];
+  onAddAttachment: (email: OrderSourceEmail, attachment: OrderSourceEmail["attachments"][number]) => void;
   onAppend: (email: OrderSourceEmail) => void;
 }) {
   const [expandedEmail, setExpandedEmail] = useState<OrderSourceEmail | null>(null);
 
   if (typeof document === "undefined") return null;
 
-  const mailOrderLeft = "clamp(1rem, 7vw, 8rem)";
-  const mailOrderRight = "clamp(1rem, 7vw, 8rem)";
+  const mailOrderViewportMargin = "1rem";
   const mailOrderGap = "0.75rem";
-  const mailOrderTop = "max(0.5rem, 3dvh)";
+  const mailOrderTop = "max(0.5rem, calc((100dvh - min(92dvh, 1180px)) / 2))";
   const mailSourceWidth = "clamp(20rem, 30vw, 28rem)";
-  const mailOrderWidth = `min(calc(100vw - ${mailOrderLeft} - ${mailSourceWidth} - ${mailOrderGap} - ${mailOrderRight}), 1320px)`;
+  const mailOrderWidth = `min(calc(100vw - (${mailOrderViewportMargin} * 2) - ${mailSourceWidth} - ${mailOrderGap}), 1320px)`;
+  const mailOrderLeft = `max(${mailOrderViewportMargin}, calc((100vw - (${mailOrderWidth} + ${mailSourceWidth} + ${mailOrderGap})) / 2))`;
 
   return createPortal(
     <aside
@@ -2061,16 +2154,12 @@ function OrderSourceEmailsPanel({
                     Вложения
                   </div>
                   {email.attachments.map((attachment) => (
-                    <a
+                    <SourceEmailAttachmentRow
                       key={attachment.id}
-                      href={`/api/mail/emails/${email.id}/attachments/${attachment.id}`}
-                      className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-                    >
-                      <span className="min-w-0 truncate">{attachment.fileName}</span>
-                      <span className="shrink-0 text-[var(--text-muted)]">
-                        {sourceFileSize(attachment.size)}
-                      </span>
-                    </a>
+                      email={email}
+                      attachment={attachment}
+                      onAdd={onAddAttachment}
+                    />
                   ))}
                 </div>
               ) : null}
@@ -2134,16 +2223,13 @@ function OrderSourceEmailsPanel({
                     Вложения
                   </div>
                   {expandedEmail.attachments.map((attachment) => (
-                    <a
+                    <SourceEmailAttachmentRow
                       key={attachment.id}
-                      href={`/api/mail/emails/${expandedEmail.id}/attachments/${attachment.id}`}
-                      className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-3 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-                    >
-                      <span className="min-w-0 truncate">{attachment.fileName}</span>
-                      <span className="shrink-0 text-[var(--text-muted)]">
-                        {sourceFileSize(attachment.size)}
-                      </span>
-                    </a>
+                      email={expandedEmail}
+                      attachment={attachment}
+                      sizeClassName="text-[var(--text-muted)]"
+                      onAdd={onAddAttachment}
+                    />
                   ))}
                 </div>
               ) : null}

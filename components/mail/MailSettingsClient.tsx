@@ -77,7 +77,9 @@ export function MailSettingsClient() {
     setError("");
     const accountsData = await jsonFetch<{ accounts: MailAccount[] }>("/api/mail/accounts");
     setAccounts(accountsData.accounts);
-    const nextAccountId = accountId || accountsData.accounts[0]?.id || "";
+    const nextAccountId = accountsData.accounts.some((account) => account.id === accountId)
+      ? accountId
+      : accountsData.accounts[0]?.id || "";
     setAccountId(nextAccountId);
     const rulesData = await jsonFetch<{ rules: EmailRule[] }>(
       nextAccountId
@@ -110,6 +112,27 @@ export function MailSettingsClient() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить аккаунт");
+    }
+  }
+
+  async function deleteAccount(account: MailAccount) {
+    const label = account.displayName || account.email;
+    const emailsCount = account._count?.emails ?? 0;
+    const confirmText =
+      emailsCount > 0
+        ? `Удалить ящик «${label}» и ${emailsCount.toLocaleString("ru-RU")} писем из CRM? На Яндекс.Почте письма не удаляются.`
+        : `Удалить ящик «${label}» из CRM?`;
+    if (!window.confirm(confirmText)) return;
+
+    setError("");
+    setStatus("Удаляю ящик...");
+    try {
+      await jsonFetch(`/api/mail/accounts/${account.id}`, { method: "DELETE" });
+      setStatus("Ящик удалён");
+      setAccountId((prev) => (prev === account.id ? "" : prev));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось удалить ящик");
     }
   }
 
@@ -260,17 +283,28 @@ export function MailSettingsClient() {
             </p>
           </div>
           {accounts.length > 0 ? (
-            <select
-              value={activeAccount?.id ?? ""}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
-            >
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.displayName || account.email}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <select
+                value={activeAccount?.id ?? ""}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
+              >
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.displayName || account.email}
+                  </option>
+                ))}
+              </select>
+              {activeAccount ? (
+                <button
+                  type="button"
+                  onClick={() => void deleteAccount(activeAccount)}
+                  className="h-10 rounded-xl border border-red-400/40 px-3 text-sm font-semibold text-red-600 hover:bg-red-500/10 dark:text-red-300"
+                >
+                  Удалить ящик
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
 

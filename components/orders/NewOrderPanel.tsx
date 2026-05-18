@@ -31,12 +31,12 @@ const collapsedStripClass =
 const mainStageClass = "left-0 shell-desktop:left-[calc(100%/7)]";
 /** Заказ из почты занимает весь экран, чтобы справа поместить широкую колонку писем. */
 const mailOrderStageClass = "left-0";
-const mailOrderLeft = "clamp(1rem, 7vw, 8rem)";
-const mailOrderRight = "clamp(1rem, 7vw, 8rem)";
+const mailOrderViewportMargin = "1rem";
 const mailOrderGap = "0.75rem";
-const mailOrderTop = "max(0.5rem, 3dvh)";
+const mailOrderTop = "max(0.5rem, calc((100dvh - min(92dvh, 1180px)) / 2))";
 const mailSourceWidth = "clamp(20rem, 30vw, 28rem)";
-const mailOrderWidth = `min(calc(100vw - ${mailOrderLeft} - ${mailSourceWidth} - ${mailOrderGap} - ${mailOrderRight}), 1320px)`;
+const mailOrderWidth = `min(calc(100vw - (${mailOrderViewportMargin} * 2) - ${mailSourceWidth} - ${mailOrderGap}), 1320px)`;
+const mailOrderLeft = `max(${mailOrderViewportMargin}, calc((100vw - (${mailOrderWidth} + ${mailSourceWidth} + ${mailOrderGap})) / 2))`;
 
 export function NewOrderPanel() {
   const { panels, close, collapse, expand, dismissExpandedPanel } =
@@ -145,7 +145,7 @@ export function NewOrderPanel() {
                 paddingTop: hasSourceEmails ? mailOrderTop : undefined,
                 paddingLeft: hasSourceEmails ? mailOrderLeft : undefined,
                 paddingRight: hasSourceEmails
-                  ? `calc(${mailSourceWidth} + ${mailOrderGap} + ${mailOrderRight})`
+                  ? `calc(${mailSourceWidth} + ${mailOrderGap} + ${mailOrderLeft})`
                   : undefined,
               }}
               initial={{ opacity: 0 }}
