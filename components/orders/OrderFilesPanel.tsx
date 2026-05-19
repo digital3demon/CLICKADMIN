@@ -581,7 +581,7 @@ export function OrderFilesPanel({
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="/stickers/clickadmin-sticker-logo.png"
+                    src="/favicons/favicon-blue-48.png"
                     alt=""
                     className="h-6 w-6 animate-spin rounded-full object-contain"
                   />

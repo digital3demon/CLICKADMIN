@@ -1965,9 +1965,9 @@ export function NewOrderForm({
                 emails={sourceEmails}
                 loadingAttachmentKeys={pendingSourceAttachmentLoadKeys}
                 onAddAttachment={(email, attachment) => void addSourceEmailAttachmentToOrder(email, attachment)}
-                onAppend={(email) =>
+                onAppend={(email, selectedText) =>
                   setClientOrderText((prev) => {
-                    const block = sourceEmailToOrderText(email);
+                    const block = sourceEmailToOrderText(email, selectedText);
                     return prev.trim() ? `${prev.trim()}\n\n${block}` : block;
                   })
                 }
@@ -2014,8 +2014,8 @@ function sourceFileSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
 }
 
-function sourceEmailToOrderText(email: OrderSourceEmail): string {
-  const body = sourceEmailPlainText(email);
+function sourceEmailToOrderText(email: OrderSourceEmail, selectedText?: string): string {
+  const body = cleanMailTextBody(selectedText) || sourceEmailPlainText(email);
   const lines = [
     `Письмо: ${email.subject || "(без темы)"}`,
     `От: ${sourceEmailSender(email)}`,
@@ -2045,6 +2045,28 @@ function sourceEmailHtml(email: OrderSourceEmail): string {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")}</pre>`;
+}
+
+function nodeOwnerElement(node: Node | null): HTMLElement | null {
+  if (!node) return null;
+  if (node instanceof HTMLElement) return node;
+  return node.parentElement;
+}
+
+function selectedTextInside(element: HTMLElement | null): string {
+  if (typeof window === "undefined" || !element) return "";
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return "";
+  const anchor = nodeOwnerElement(selection.anchorNode);
+  const focus = nodeOwnerElement(selection.focusNode);
+  if (!anchor || !focus || !element.contains(anchor) || !element.contains(focus)) return "";
+  return cleanMailTextBody(selection.toString());
+}
+
+function selectedTextFromDocument(doc: Document | null | undefined): string {
+  const selection = doc?.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return "";
+  return cleanMailTextBody(selection.toString());
 }
 
 function sourceEmailAttachmentUrl(emailId: string, attachmentId: string, inline = false): string {
@@ -2115,7 +2137,7 @@ function SourceEmailAttachmentRow({
             {isLoading ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src="/stickers/clickadmin-sticker-logo.png"
+                src="/favicons/favicon-blue-48.png"
                 alt=""
                 className="h-6 w-6 animate-spin rounded-full object-contain"
               />
@@ -2186,9 +2208,11 @@ function OrderSourceEmailsPanel({
   emails: OrderSourceEmail[];
   loadingAttachmentKeys: ReadonlySet<string>;
   onAddAttachment: (email: OrderSourceEmail, attachment: OrderSourceEmail["attachments"][number]) => void;
-  onAppend: (email: OrderSourceEmail) => void;
+  onAppend: (email: OrderSourceEmail, selectedText?: string) => void;
 }) {
   const [expandedEmail, setExpandedEmail] = useState<OrderSourceEmail | null>(null);
+  const emailBodyRefs = useRef(new Map<string, HTMLParagraphElement>());
+  const expandedFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   if (typeof document === "undefined") return null;
 
@@ -2253,7 +2277,13 @@ function OrderSourceEmailsPanel({
               <p className="mt-2 truncate text-xs font-medium text-[var(--text-secondary)]">
                 {sourceEmailSender(email)}
               </p>
-              <p className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)]">
+              <p
+                ref={(node) => {
+                  if (node) emailBodyRefs.current.set(email.id, node);
+                  else emailBodyRefs.current.delete(email.id);
+                }}
+                className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)]"
+              >
                 {sourceEmailBody(email)}
               </p>
               {email.attachments.length ? (
@@ -2275,7 +2305,7 @@ function OrderSourceEmailsPanel({
               <button
                 type="button"
                 className="mt-3 w-full rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)]"
-                onClick={() => onAppend(email)}
+                onClick={() => onAppend(email, selectedTextInside(emailBodyRefs.current.get(email.id) ?? null))}
               >
                 Добавить текст в заказ
               </button>
@@ -2321,6 +2351,7 @@ function OrderSourceEmailsPanel({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
               <iframe
+                ref={expandedFrameRef}
                 title="Тело письма"
                 sandbox="allow-same-origin allow-popups"
                 srcDoc={`<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:14px/1.6 Arial,sans-serif;color:CanvasText;background:Canvas} img{max-width:100%;height:auto} a{color:LinkText}</style></head><body>${sourceEmailHtml(expandedEmail)}</body></html>`}
@@ -2348,7 +2379,12 @@ function OrderSourceEmailsPanel({
               <button
                 type="button"
                 className="w-full rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2.5 text-sm font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-hover)]"
-                onClick={() => onAppend(expandedEmail)}
+                onClick={() =>
+                  onAppend(
+                    expandedEmail,
+                    selectedTextFromDocument(expandedFrameRef.current?.contentDocument),
+                  )
+                }
               >
                 Добавить текст в заказ
               </button>

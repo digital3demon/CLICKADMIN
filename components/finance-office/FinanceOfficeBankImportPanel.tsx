@@ -104,6 +104,7 @@ export function FinanceOfficeBankImportPanel({ className = "" }: { className?: s
     <section
       className={[
         "rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm",
+        rows.length > 0 ? "xl:col-span-2 xl:self-stretch" : "",
         className,
       ]
         .filter(Boolean)
@@ -162,8 +163,17 @@ export function FinanceOfficeBankImportPanel({ className = "" }: { className?: s
 
       {rows.length > 0 ? (
         <div className="space-y-3 p-3">
-          <div className="overflow-x-auto rounded-md border border-[var(--card-border)]">
-            <table className="min-w-full text-left text-xs">
+          <div className="max-h-[min(72dvh,760px)] overflow-auto rounded-md border border-[var(--card-border)]">
+            <table className="min-w-[58rem] table-fixed text-left text-xs">
+              <colgroup>
+                <col className="w-[5.5rem]" />
+                <col className="w-[4.5rem]" />
+                <col className="w-[15rem]" />
+                <col className="w-[10rem]" />
+                <col className="w-[10rem]" />
+                <col className="w-[5rem]" />
+                <col className="w-[8rem]" />
+              </colgroup>
               <thead className="bg-[var(--surface-subtle)] text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
                 <tr>
                   <th className="px-2 py-2">Применить</th>
@@ -190,9 +200,9 @@ export function FinanceOfficeBankImportPanel({ className = "" }: { className?: s
                       <input
                         value={row.orderNumber}
                         onChange={(e) => patchRow(idx, { orderNumber: e.target.value, errors: [] })}
-                        className="w-28 rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
+                        className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
                       />
-                      <div className="mt-1 max-w-[16rem] text-[10px] text-[var(--text-muted)]">
+                      <div className="mt-1 max-h-20 overflow-y-auto whitespace-normal break-words text-[10px] leading-snug text-[var(--text-muted)]">
                         {row.orderLabel ?? row.originalText}
                       </div>
                     </td>
@@ -200,14 +210,14 @@ export function FinanceOfficeBankImportPanel({ className = "" }: { className?: s
                       <input
                         value={row.invoiceNumberRaw}
                         onChange={(e) => patchRow(idx, { invoiceNumberRaw: e.target.value, errors: [] })}
-                        className="w-32 rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
+                        className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
                       />
                     </td>
                     <td className="px-2 py-2 align-top">
                       <input
                         value={row.invoiceDate || row.dateRaw}
                         onChange={(e) => patchRow(idx, { invoiceDate: e.target.value, errors: [] })}
-                        className="w-32 rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
+                        className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
                       />
                     </td>
                     <td className="px-2 py-2 align-top text-center">
