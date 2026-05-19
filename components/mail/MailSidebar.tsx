@@ -15,6 +15,42 @@ const FOLDER_ICONS: Record<string, string> = {
   CUSTOM: "•",
 };
 
+const SYSTEM_FOLDER_TYPES: MailFolder["type"][] = [
+  "INBOX",
+  "SENT",
+  "DRAFTS",
+  "ARCHIVE",
+  "SPAM",
+  "TRASH",
+];
+
+const SEEDED_SYSTEM_IMAP_NAMES: Partial<Record<MailFolder["type"], string>> = {
+  INBOX: "INBOX",
+  SENT: "Sent",
+  DRAFTS: "Drafts",
+  ARCHIVE: "Archive",
+  SPAM: "Spam",
+  TRASH: "Trash",
+};
+
+function folderScore(folder: MailFolder, activeFolderId: string): number {
+  const seededName = SEEDED_SYSTEM_IMAP_NAMES[folder.type];
+  return (
+    (folder.id === activeFolderId ? 10_000 : 0) +
+    (seededName && folder.imapName !== seededName ? 1_000 : 0) +
+    (folder.unreadCount > 0 ? 100 : 0) +
+    (folder.totalCount > 0 ? 10 : 0)
+  );
+}
+
+function visibleSystemFolders(folders: MailFolder[], activeFolderId: string): MailFolder[] {
+  return SYSTEM_FOLDER_TYPES.flatMap((type) => {
+    const sameType = folders.filter((folder) => folder.type === type);
+    if (!sameType.length) return [];
+    return sameType.slice().sort((a, b) => folderScore(b, activeFolderId) - folderScore(a, activeFolderId))[0];
+  });
+}
+
 function FolderButton({
   folder,
   active,
@@ -78,10 +114,12 @@ export function MailSidebar({
   onCreateLabel: () => void;
 }) {
   const folders = account?.folders ?? [];
+  const systemFolders = visibleSystemFolders(folders, activeFolderId);
+  const customFolders = folders.filter((folder) => folder.type === "CUSTOM");
   const [foldersOpen, setFoldersOpen] = useState(true);
   return (
     <aside
-      className={`hidden shrink-0 border-r border-[var(--card-border)] bg-[var(--surface-muted)] py-4 transition-[width] duration-200 lg:block ${
+      className={`hidden min-h-0 shrink-0 overflow-y-auto border-r border-[var(--card-border)] bg-[var(--surface-muted)] py-4 transition-[width] duration-200 lg:block ${
         collapsed ? "w-[72px] px-2" : "w-[280px] px-4"
       }`}
     >
@@ -104,7 +142,7 @@ export function MailSidebar({
 
       {collapsed ? (
         <nav className="space-y-1">
-          {folders.map((folder) => (
+          {[...systemFolders, ...customFolders].map((folder) => (
             <FolderButton
               key={folder.id}
               folder={folder}
@@ -116,10 +154,21 @@ export function MailSidebar({
         </nav>
       ) : (
         <div>
+          <nav className="space-y-1">
+            {systemFolders.map((folder) => (
+              <FolderButton
+                key={folder.id}
+                folder={folder}
+                active={folder.id === activeFolderId}
+                collapsed={collapsed}
+                onClick={() => onFolderChange(folder.id)}
+              />
+            ))}
+          </nav>
           <button
             type="button"
             onClick={() => setFoldersOpen((open) => !open)}
-            className="mb-2 flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-body)]"
+            className="mb-2 mt-4 flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-body)]"
             aria-expanded={foldersOpen}
           >
             <span>Папки</span>
@@ -129,7 +178,7 @@ export function MailSidebar({
           </button>
           {foldersOpen ? (
             <nav className="space-y-1">
-              {folders.map((folder) => (
+              {customFolders.map((folder) => (
                 <FolderButton
                   key={folder.id}
                   folder={folder}
@@ -138,6 +187,9 @@ export function MailSidebar({
                   onClick={() => onFolderChange(folder.id)}
                 />
               ))}
+              {customFolders.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-[var(--text-muted)]">Пользовательские папки пока не созданы</p>
+              ) : null}
             </nav>
           ) : null}
         </div>

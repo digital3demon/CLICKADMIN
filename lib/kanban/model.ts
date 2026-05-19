@@ -8,6 +8,7 @@ import type {
   KanbanCard,
   KanbanColumn,
   KanbanFilters,
+  KanbanStoppedCard,
   CardTypeDef,
 } from "./types";
 import type { UserRole } from "@prisma/client";
@@ -566,6 +567,51 @@ export function archiveCardByIdOnBoard(
   return false;
 }
 
+export function stopCardByIdOnBoard(board: KanbanBoard, cardId: string): boolean {
+  const now = new Date().toISOString();
+  board.stoppedCards = board.stoppedCards || [];
+  if (board.stoppedCards.some((row) => row.card.id === cardId)) return false;
+  for (const col of board.columns) {
+    const ix = col.cards.findIndex((c) => c.id === cardId);
+    if (ix < 0) continue;
+    const card = col.cards[ix];
+    if (!card) return false;
+    col.cards.splice(ix, 1);
+    card.lastMovedAt = now;
+    pushActivity(card, "Перемещена в «СТОП»", board.users[0]?.id, board);
+    board.stoppedCards.unshift({
+      id: generateId("stop"),
+      card: structuredClone(card),
+      stoppedAt: now,
+      sourceColumnId: col.id,
+      sourceColumnTitle: col.title,
+    });
+    return true;
+  }
+  return false;
+}
+
+export function restoreStoppedCardOnBoard(board: KanbanBoard, stoppedId: string): boolean {
+  const list = board.stoppedCards || [];
+  const ix = list.findIndex((x) => x.id === stoppedId || x.card.id === stoppedId);
+  if (ix < 0) return false;
+  const row = list[ix];
+  if (!row) return false;
+  list.splice(ix, 1);
+  const col =
+    board.columns.find((c) => c.id === row.sourceColumnId) ??
+    board.columns.find(
+      (c) => c.title.trim().toLowerCase() === row.sourceColumnTitle.trim().toLowerCase(),
+    ) ??
+    board.columns[0];
+  if (!col) return false;
+  const card = structuredClone(row.card);
+  card.lastMovedAt = new Date().toISOString();
+  pushActivity(card, `Возвращена из «СТОП» в «${col.title}»`, board.users[0]?.id, board);
+  col.cards.unshift(card);
+  return true;
+}
+
 export function restoreArchivedCardOnBoard(board: KanbanBoard, archivedId: string): boolean {
   const list = board.archivedCards || [];
   const ix = list.findIndex((x) => x.id === archivedId);
@@ -888,6 +934,7 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
   if (!Array.isArray(board.accessUserIds)) board.accessUserIds = [];
   if (!Array.isArray(board.autoArchiveRules)) board.autoArchiveRules = [];
   if (!Array.isArray(board.archivedCards)) board.archivedCards = [];
+  if (!Array.isArray(board.stoppedCards)) board.stoppedCards = [];
   if (!board.productionSettings || typeof board.productionSettings !== "object") {
     board.productionSettings = {
       enabled: true,
@@ -1064,6 +1111,10 @@ export function migrateBoard(board: KanbanBoard): KanbanBoard {
     if (!x || typeof x.id !== "string" || !x.card) return false;
     return true;
   }) as KanbanArchivedCard[];
+  board.stoppedCards = (board.stoppedCards || []).filter((x) => {
+    if (!x || typeof x.id !== "string" || !x.card) return false;
+    return true;
+  }) as KanbanStoppedCard[];
   return board;
 }
 
@@ -1108,6 +1159,7 @@ export function createBoardShell(boardId: string, title: string): KanbanBoard {
     excludedCrmUserIds: [],
     archiveRetentionDays: 365,
     archivedCards: [],
+    stoppedCards: [],
     productionSettings: {
       enabled: true,
       triggerColumnTitle: "Производство",
@@ -1459,6 +1511,18 @@ export function findCardInAppState(
     for (const col of b.columns) {
       const c = col.cards.find((x) => x.id === cardId);
       if (c) return { board: b, col, card: c };
+    }
+    const stopped = (b.stoppedCards || []).find((x) => x.card.id === cardId);
+    if (stopped) {
+      return {
+        board: b,
+        col: {
+          id: stopped.sourceColumnId || "stop",
+          title: "СТОП",
+          cards: (b.stoppedCards || []).map((x) => x.card),
+        },
+        card: stopped.card,
+      };
     }
   }
   return null;

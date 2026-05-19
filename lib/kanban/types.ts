@@ -167,6 +167,14 @@ export type KanbanArchivedCard = {
   reason: "auto" | "manual";
 };
 
+export type KanbanStoppedCard = {
+  id: string;
+  card: KanbanCard;
+  stoppedAt: string;
+  sourceColumnId: string;
+  sourceColumnTitle: string;
+};
+
 /** Действие правила «если условие выполнено — сделать …». */
 export type KanbanAutomationAction =
   | { type: "move_to_column"; columnId: string }
@@ -237,6 +245,8 @@ export type KanbanBoard = {
   archiveRetentionDays?: number;
   /** Архив карточек по доске. */
   archivedCards?: KanbanArchivedCard[];
+  /** Карточки в отдельном «СТОП» разделе: скрыты из дорожек, но не архивируются. */
+  stoppedCards?: KanbanStoppedCard[];
   /** Настройки производственного контура на доске. */
   productionSettings?: {
     enabled: boolean;

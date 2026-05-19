@@ -2015,7 +2015,10 @@ function sourceFileSize(bytes: number): string {
 }
 
 function sourceEmailToOrderText(email: OrderSourceEmail, selectedText?: string): string {
-  const body = cleanMailTextBody(selectedText) || sourceEmailPlainText(email);
+  const selectedBody = cleanMailTextBody(selectedText);
+  if (selectedBody) return selectedBody;
+
+  const body = sourceEmailPlainText(email);
   const lines = [
     `Письмо: ${email.subject || "(без темы)"}`,
     `От: ${sourceEmailSender(email)}`,

@@ -24,6 +24,7 @@ import {
   DragOverlay,
   type DragCancelEvent,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragStartEvent,
   type DraggableSyntheticListeners,
   KeyboardSensor,
@@ -88,6 +89,7 @@ type BoardCanvasProps = {
   onCopyCardLink: (cardId: string) => void;
   onRequestMoveCard: (cardId: string) => void;
   onRequestArchiveCard: (cardId: string) => void;
+  onRequestStopCard?: (cardId: string) => void;
   onRequestDeleteCard: (cardId: string) => void;
   /** false — одна доска, пункт «на другую доску» скрыт */
   allowMoveToOtherBoard?: boolean;
@@ -132,6 +134,7 @@ function KanbanCardView({
   onCopyLink,
   onMoveCard,
   onArchiveCard,
+  onStopCard,
   onDeleteCard,
   dragListeners,
   allowMoveToOtherBoard = true,
@@ -144,6 +147,7 @@ function KanbanCardView({
   onCopyLink: () => void;
   onMoveCard: () => void;
   onArchiveCard: () => void;
+  onStopCard?: () => void;
   onDeleteCard: () => void;
   /** Слушатели @dnd-kit (только для незаблокированной карточки). */
   dragListeners?: DraggableSyntheticListeners;
@@ -436,6 +440,21 @@ function KanbanCardView({
                         В архив
                       </button>
                     </li>
+                    {onStopCard ? (
+                      <li>
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-black/[0.06] dark:hover:bg-white/[0.06]"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onStopCard();
+                            setMenuOpen(false);
+                          }}
+                        >
+                          В стоп
+                        </button>
+                      </li>
+                    ) : null}
                     <li className="border-t border-[var(--kanban-border,var(--card-border))] dark:border-white/10">
                       <button
                         type="button"
@@ -469,6 +488,7 @@ function SortableKanbanCard({
   onCopyCardLink,
   onRequestMoveCard,
   onRequestArchiveCard,
+  onRequestStopCard,
   onRequestDeleteCard,
   allowMoveToOtherBoard,
 }: {
@@ -480,6 +500,7 @@ function SortableKanbanCard({
   onCopyCardLink: (id: string) => void;
   onRequestMoveCard: (id: string) => void;
   onRequestArchiveCard: (id: string) => void;
+  onRequestStopCard?: (id: string) => void;
   onRequestDeleteCard: (id: string) => void;
   allowMoveToOtherBoard: boolean;
 }) {
@@ -505,6 +526,7 @@ function SortableKanbanCard({
         onCopyLink={() => onCopyCardLink(card.id)}
         onMoveCard={() => onRequestMoveCard(card.id)}
         onArchiveCard={() => onRequestArchiveCard(card.id)}
+        onStopCard={onRequestStopCard ? () => onRequestStopCard(card.id) : undefined}
         onDeleteCard={() => onRequestDeleteCard(card.id)}
         dragListeners={dndLocked ? undefined : listeners}
         allowMoveToOtherBoard={allowMoveToOtherBoard}
@@ -741,6 +763,7 @@ export function BoardCanvas({
   onCopyCardLink,
   onRequestMoveCard,
   onRequestArchiveCard,
+  onRequestStopCard,
   onRequestDeleteCard,
   allowMoveToOtherBoard = true,
   onLinkedOrderMovedToKaitenMirror,
@@ -754,6 +777,7 @@ export function BoardCanvas({
   const [dragLaneId, setDragLaneId] = useState<string | null>(null);
   const laneOffsetsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const laneDragRafRef = useRef<number | null>(null);
+  const dragPointRef = useRef<{ x: number; y: number } | null>(null);
   const laneDragPendingPointRef = useRef<{
     laneId: string;
     clientX: number;
@@ -1064,17 +1088,48 @@ export function BoardCanvas({
     [columnIds],
   );
 
+  const onDragMove = useCallback((event: DragMoveEvent) => {
+    const rect = event.active.rect.current.translated;
+    if (!rect) return;
+    dragPointRef.current = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+  }, []);
+
   const onDragCancel = useCallback((_event: DragCancelEvent) => {
     setActiveDragCardId(null);
+    dragPointRef.current = null;
   }, []);
 
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveDragCardId(null);
       const { active, over } = event;
+      const aid = String(active.id);
+      const point = dragPointRef.current;
+      dragPointRef.current = null;
+      if (
+        onRequestStopCard &&
+        point &&
+        !columnIds.includes(aid) &&
+        !dndLocked
+      ) {
+        const stopButton = document.getElementById("kanban-stop-drop-target");
+        const rect = stopButton?.getBoundingClientRect();
+        if (
+          rect &&
+          point.x >= rect.left &&
+          point.x <= rect.right &&
+          point.y >= rect.top &&
+          point.y <= rect.bottom
+        ) {
+          onRequestStopCard(aid);
+          return;
+        }
+      }
       if (!over || active.id === over.id) return;
 
-      const aid = String(active.id);
       const oid = String(over.id);
 
       const activeIsColumn = columnIds.includes(aid);
@@ -1236,6 +1291,7 @@ export function BoardCanvas({
       onLinkedOrderMovedToKaitenMirror,
       aggregateLayoutLocked,
       onAggregateCardDrag,
+      onRequestStopCard,
     ],
   );
 
@@ -1244,6 +1300,7 @@ export function BoardCanvas({
       sensors={sensors}
       collisionDetection={collisionDetection}
       onDragStart={onDragStart}
+      onDragMove={onDragMove}
       onDragCancel={onDragCancel}
       onDragEnd={onDragEnd}
     >
@@ -1312,6 +1369,7 @@ export function BoardCanvas({
                                     onCopyCardLink={onCopyCardLink}
                                     onRequestMoveCard={onRequestMoveCard}
                                     onRequestArchiveCard={onRequestArchiveCard}
+                                    onRequestStopCard={onRequestStopCard}
                                     onRequestDeleteCard={onRequestDeleteCard}
                                     allowMoveToOtherBoard={allowMoveToOtherBoard}
                                   />
@@ -1380,6 +1438,7 @@ export function BoardCanvas({
                                 onCopyCardLink={onCopyCardLink}
                                 onRequestMoveCard={onRequestMoveCard}
                                 onRequestArchiveCard={onRequestArchiveCard}
+                                onRequestStopCard={onRequestStopCard}
                                 onRequestDeleteCard={onRequestDeleteCard}
                                 allowMoveToOtherBoard={allowMoveToOtherBoard}
                               />

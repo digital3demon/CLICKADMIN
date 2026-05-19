@@ -2858,7 +2858,7 @@ function ChatPanel({
           );
         })}
       </div>
-      <div className="relative flex gap-1 border-t border-[var(--kaiten-modal-border)] p-2">
+      <div className="relative flex flex-col gap-2 border-t border-[var(--kaiten-modal-border)] p-2">
         {mentionFiltered.length > 0 ? (
           <div className="absolute bottom-[calc(100%+4px)] left-2 right-2 z-20 max-h-56 overflow-y-auto rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-1 shadow-xl">
             {mentionFiltered.map((opt, idx) => (
@@ -2886,8 +2886,8 @@ function ChatPanel({
         <input
           ref={inputRef}
           type="text"
-          className="min-w-0 flex-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)] placeholder:text-[var(--kaiten-modal-muted)]"
-          placeholder="Комментарий от админов в чат (в т.ч. обсуждение файлов)…"
+          className="h-11 w-full min-w-0 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-3 py-2 text-center text-[0.8125rem] font-medium text-[var(--kaiten-modal-text)] placeholder:text-[var(--kaiten-modal-muted)]"
+          placeholder="Комментарий"
           value={inp}
           onChange={(e) => {
             setInp(e.target.value);
@@ -2934,37 +2934,41 @@ function ChatPanel({
             }
           }}
         />
-        <button
-          type="button"
-          className="shrink-0 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-[0.72rem] font-semibold text-amber-200 hover:bg-amber-400/20 disabled:opacity-40"
-          disabled={!inp.trim()}
-          title="Отправить как корректировку"
-          onClick={() => {
-            void submitMessage("correction");
-          }}
-        >
-          Корректировка
-        </button>
-        <button
-          type="button"
-          className="shrink-0 rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-1.5 text-[0.72rem] font-semibold text-sky-200 hover:bg-sky-400/20 disabled:opacity-40"
-          disabled={!inp.trim()}
-          title="Отправить как заказ протетики"
-          onClick={() => {
-            void submitMessage("prosthetics");
-          }}
-        >
-          Заказ протетики
-        </button>
-        <button
-          type="button"
-          className="shrink-0 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-1.5 text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
-          onClick={() => {
-            void submitMessage();
-          }}
-        >
-          <IconSend />
-        </button>
+        <div className="flex min-w-0 items-stretch gap-1.5">
+          <button
+            type="button"
+            className="min-w-0 flex-1 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-2 text-[0.75rem] font-semibold text-amber-200 hover:bg-amber-400/20 disabled:opacity-40"
+            disabled={!inp.trim()}
+            title="Отправить как корректировку"
+            onClick={() => {
+              void submitMessage("correction");
+            }}
+          >
+            Корректировка
+          </button>
+          <button
+            type="button"
+            className="min-w-0 flex-1 rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-2 text-[0.75rem] font-semibold text-sky-200 hover:bg-sky-400/20 disabled:opacity-40"
+            disabled={!inp.trim()}
+            title="Отправить как заказ протетики"
+            onClick={() => {
+              void submitMessage("prosthetics");
+            }}
+          >
+            Заказ протетики
+          </button>
+          <button
+            type="button"
+            className="flex w-11 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-2 text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
+            disabled={!inp.trim()}
+            aria-label="Отправить комментарий"
+            onClick={() => {
+              void submitMessage();
+            }}
+          >
+            <IconSend />
+          </button>
+        </div>
       </div>
     </div>
   );
