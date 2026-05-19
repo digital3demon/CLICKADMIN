@@ -18,23 +18,23 @@ export async function PATCH(
     if (!displayName && !color) {
       return NextResponse.json({ error: "Укажите название или цвет папки" }, { status: 400 });
     }
-    const updated = await r.ctx.db.emailFolder.updateMany({
+    const current = await r.ctx.db.emailFolder.findFirst({
       where: {
         id,
         tenantId: r.ctx.tenantId,
-        type: "CUSTOM",
         account: { createdByUserId: r.ctx.userId },
       },
-      data: {
-        ...(displayName ? { displayName } : {}),
-        ...(color ? { color } : {}),
-      },
+      select: { id: true, type: true },
     });
-    if (!updated.count) {
+    if (!current) {
       return NextResponse.json({ error: "Папка не найдена" }, { status: 404 });
     }
-    const folder = await r.ctx.db.emailFolder.findFirst({
-      where: { id, tenantId: r.ctx.tenantId, account: { createdByUserId: r.ctx.userId } },
+    const folder = await r.ctx.db.emailFolder.update({
+      where: { id: current.id },
+      data: {
+        ...(displayName && current.type === "CUSTOM" ? { displayName } : {}),
+        ...(color ? { color } : {}),
+      },
     });
     return NextResponse.json({ folder });
   } catch (err) {

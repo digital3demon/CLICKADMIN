@@ -61,6 +61,71 @@ function ruleSummary(rule: EmailRule, account: MailAccount | null): { conditions
   };
 }
 
+const FOLDER_COLOR_PRESETS = [
+  "#6b7280",
+  "#ef4444",
+  "#f97316",
+  "#f59e0b",
+  "#22c55e",
+  "#14b8a6",
+  "#3b82f6",
+  "#6366f1",
+  "#8b5cf6",
+  "#ec4899",
+];
+
+function normalizeHexColor(value: string | null | undefined, fallback = "#6b7280"): string {
+  const color = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
+}
+
+function FolderColorPicker({
+  defaultValue,
+  compact = false,
+}: {
+  defaultValue: string | null | undefined;
+  compact?: boolean;
+}) {
+  const [color, setColor] = useState(() => normalizeHexColor(defaultValue));
+  const submittedColor = normalizeHexColor(color);
+  return (
+    <div className={compact ? "min-w-[11rem] flex-1" : ""}>
+      <input type="hidden" name="color" value={submittedColor} />
+      <div className="flex flex-wrap items-center gap-1.5">
+        {FOLDER_COLOR_PRESETS.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => setColor(preset)}
+            className={`h-6 w-6 rounded-full border transition ${
+              color.toLowerCase() === preset.toLowerCase()
+                ? "border-[var(--app-text)] ring-2 ring-[var(--sidebar-blue)]/40"
+                : "border-[var(--card-border)] hover:scale-105"
+            }`}
+            style={{ backgroundColor: preset }}
+            aria-label={`Выбрать цвет ${preset}`}
+            title={preset}
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <span
+          className="h-8 w-8 shrink-0 rounded-lg border border-[var(--card-border)]"
+          style={{ backgroundColor: submittedColor }}
+          aria-hidden
+        />
+        <input
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+          onBlur={() => setColor(submittedColor)}
+          className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-xs font-medium text-[var(--app-text)] outline-none"
+          aria-label="Цвет папки в HEX"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function MailSettingsClient() {
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
   const [rules, setRules] = useState<EmailRule[]>([]);
@@ -348,7 +413,7 @@ export function MailSettingsClient() {
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="space-y-3">
+          <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-3">
             {activeAccount?.folders.length ? (
               activeAccount.folders.map((folder) => {
                 const editable = folder.type === "CUSTOM";
@@ -369,17 +434,10 @@ export function MailSettingsClient() {
                       disabled={!editable}
                       className="h-10 min-w-[12rem] flex-1 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none disabled:opacity-70"
                     />
-                    <input
-                      name="color"
-                      type="color"
-                      defaultValue={folder.color || "#6b7280"}
-                      className="h-10 w-12 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] p-1"
-                      title="Цвет папки"
-                    />
+                    <FolderColorPicker defaultValue={folder.color} compact />
                     <button
                       type="submit"
-                      disabled={!editable}
-                      className="rounded-lg border border-[var(--card-border)] px-3 py-2 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-lg border border-[var(--card-border)] px-3 py-2 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
                     >
                       Сохранить
                     </button>
@@ -412,12 +470,9 @@ export function MailSettingsClient() {
             <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
               Цвет
             </label>
-            <input
-              name="color"
-              type="color"
-              defaultValue="#6b7280"
-              className="mt-2 h-10 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] p-1"
-            />
+            <div className="mt-2">
+              <FolderColorPicker defaultValue="#6b7280" />
+            </div>
             <button
               type="submit"
               disabled={!activeAccount}
