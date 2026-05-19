@@ -7,15 +7,9 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { getKaitenRestAuth, kaitenListComments } from "@/lib/kaiten-rest";
-import { getPrisma } from "@/lib/get-prisma";
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
-import {
-  findCardByLinkedOrderId,
-  KANBAN_CHAT_STATE_KEY,
-  parseKanbanAppState,
-  upsertKaitenCommentsToCard,
-} from "@/lib/kanban/chat-sync";
+import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
 
 export const dynamic = "force-dynamic";
 
@@ -80,28 +74,11 @@ export async function GET(
   }
 
   try {
-    const corePrisma = await getPrisma();
-    const row = await corePrisma.tenantClientState.findUnique({
-      where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
-      select: { value: true },
+    await syncKaitenCommentsIntoKanbanState({
+      tenantId,
+      orderId: order.id,
+      comments,
     });
-    const state = parseKanbanAppState(row?.value ?? null);
-    if (state) {
-      const loc = findCardByLinkedOrderId(state, order.id);
-      if (loc) {
-        const card = state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
-        const merged = upsertKaitenCommentsToCard(card.comments || [], comments);
-        if (merged.changed) {
-          card.comments = merged.next;
-          card.updatedAt = new Date().toISOString();
-          await corePrisma.tenantClientState.upsert({
-            where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
-            create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },
-            update: { value: state as never },
-          });
-        }
-      }
-    }
   } catch (e) {
     console.error("[kaiten chat GET] kanban ingest", e);
   }

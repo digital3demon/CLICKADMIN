@@ -4,9 +4,10 @@ import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-colum
 import { logger } from "@/lib/server/logger";
 
 const CURSOR_KEY = "kaitenChatBackgroundCursorV1";
-const DEFAULT_LIMIT = 10;
-const MAX_LIMIT = 20;
-const DEFAULT_PER_TENANT_LIMIT = 5;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 60;
+const DEFAULT_PER_TENANT_LIMIT = 20;
+const SYNC_HELPER_CHUNK_SIZE = 10;
 const memoryCursorByTenant = new Map<string, CursorState>();
 
 type CursorState = {
@@ -195,13 +196,16 @@ export async function syncKaitenChatsInBackground(
     const orderIds = batch.map((r) => r.id);
     if (orderIds.length === 0) continue;
     try {
-      const res = await syncKaitenColumnTitlesForOrderIds(db, auth, orderIds, {
-        includeComments: true,
-      });
+      for (let i = 0; i < orderIds.length; i += SYNC_HELPER_CHUNK_SIZE) {
+        const chunk = orderIds.slice(i, i + SYNC_HELPER_CHUNK_SIZE);
+        const res = await syncKaitenColumnTitlesForOrderIds(db, auth, chunk, {
+          includeComments: true,
+        });
+        syncedCount += res.syncedCount;
+        errorCount += res.errorCount;
+        if (res.kaitenLabMentionDbChanged) kaitenLabMentionDbChanged = true;
+      }
       checked += orderIds.length;
-      syncedCount += res.syncedCount;
-      errorCount += res.errorCount;
-      if (res.kaitenLabMentionDbChanged) kaitenLabMentionDbChanged = true;
     } catch (err) {
       checked += orderIds.length;
       errorCount += orderIds.length;

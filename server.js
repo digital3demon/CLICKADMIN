@@ -50,12 +50,12 @@ function startKaitenChatBackgroundSync() {
     return;
   }
   const intervalMs = Math.max(
-    60_000,
-    Number(process.env.KAITEN_CHAT_BACKGROUND_SYNC_INTERVAL_MS || 120_000),
+    30_000,
+    Number(process.env.KAITEN_CHAT_BACKGROUND_SYNC_INTERVAL_MS || 30_000),
   );
   const limit = Math.max(
     1,
-    Math.min(20, Number(process.env.KAITEN_CHAT_BACKGROUND_SYNC_LIMIT || 10)),
+    Math.min(60, Number(process.env.KAITEN_CHAT_BACKGROUND_SYNC_LIMIT || 20)),
   );
   const port = process.env.PORT || "3000";
   const url = `http://127.0.0.1:${port}/api/cron/kaiten-chat-sync?limit=${limit}`;
@@ -67,7 +67,7 @@ function startKaitenChatBackgroundSync() {
       },
     }).catch(() => undefined);
   };
-  setTimeout(run, 20_000);
+  setTimeout(run, 10_000);
   setInterval(run, intervalMs);
 }
 

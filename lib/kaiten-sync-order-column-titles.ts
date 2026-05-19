@@ -18,6 +18,7 @@ import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
+import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
 
 const MAX_IDS = 10;
 /** Параллельные карточки — очередь в kaitenFetch + малый параллелизм снижает 429. */
@@ -71,6 +72,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
       kaitenBlockReason: true,
       kaitenBlockedAt: true,
       kaitenChatHasLabMention: true,
+      tenantId: true,
       tenant: { select: { kanbanAdminMentionTag: true } },
     },
   });
@@ -118,11 +120,12 @@ export async function syncKaitenColumnTitlesForOrderIds(
       let computedLabMention: boolean | undefined;
       if (includeComments && commRes?.ok) {
         try {
-          const comments = dedupeParsedKaitenComments(
+          const parsedFull = dedupeParsedKaitenComments(
             commRes.comments
               .map(parseKaitenListComment)
               .filter((x): x is NonNullable<typeof x> => x != null),
-          ).map((c) => ({ id: c.id, text: c.text }));
+          );
+          const comments = parsedFull.map((c) => ({ id: c.id, text: c.text }));
           const labTag = normalizeKanbanAdminMentionTag(
             row.tenant?.kanbanAdminMentionTag,
           );
@@ -139,6 +142,17 @@ export async function syncKaitenColumnTitlesForOrderIds(
             row.tenant?.kanbanAdminMentionTag,
           );
           if (labChanged) kaitenLabMentionDbChanged = true;
+          await syncKaitenCommentsIntoKanbanState({
+            tenantId: row.tenantId,
+            orderId: row.id,
+            comments: parsedFull.map((c) => ({
+              id: c.id,
+              text: c.text,
+              created: c.created,
+              authorName: c.authorName,
+              parentId: c.parentId,
+            })),
+          });
         } catch (e) {
           console.error("[kaiten-titles-sync] chat corrections", row.id, e);
         }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import { orderPathById } from "@/lib/order-public-ref";
@@ -60,6 +60,7 @@ const MAX_VISIBLE = 8;
 
 export function OrderCorrectionToastStack() {
   const pathname = usePathname() ?? "";
+  const router = useRouter();
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
   const isKanban = pathname === "/kanban" || pathname.startsWith("/kanban/");
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
@@ -157,6 +158,14 @@ export function OrderCorrectionToastStack() {
           lastFpRef.current = fp;
           setCorrections(corrList);
           setProstheticsRequests(proList);
+          if (
+            pathname === "/orders" ||
+            pathname.startsWith("/orders/") ||
+            pathname === "/finance-office" ||
+            pathname.startsWith("/finance-office/")
+          ) {
+            router.refresh();
+          }
         }
         pollBackoffMsRef.current = 0;
         nextPollAllowedAtRef.current = 0;
@@ -185,7 +194,7 @@ export function OrderCorrectionToastStack() {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [isLogin, isKanban]);
+  }, [isLogin, isKanban, pathname, router]);
 
   const { correctionVisible, prostheticsVisible } = useMemo(() => {
     const corr = corrections
