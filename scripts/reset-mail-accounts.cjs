@@ -17,10 +17,11 @@ const { PrismaClient } = require("@prisma/client");
 
 const APPLY = process.argv.includes("--apply");
 const AUTO_ONCE = process.argv.includes("--auto-once");
+const SHOULD_APPLY = APPLY || AUTO_ONCE;
 const DELETE_FILES = !process.argv.includes("--keep-files");
 const DELETE_ACCOUNTS = true;
 const CONFIRM = AUTO_ONCE || process.env.RESET_MAIL_ACCOUNTS_CONFIRM === "DELETE_ALL_MAIL";
-const ONCE_MARKER_KEY = "mail-reset-accounts-20260521-v1";
+const ONCE_MARKER_KEY = "mail-reset-delete-accounts-20260521-v2";
 
 const RESET_TABLES = [
   "EmailAttachment",
@@ -245,7 +246,7 @@ async function main() {
     console.log("[mail-reset] Текущие количества:", JSON.stringify(counts, null, 2));
     console.log(`[mail-reset] Файлов вложений в БД: ${attachmentPaths.length}`);
 
-    if (!APPLY) {
+    if (!SHOULD_APPLY) {
       console.log("[mail-reset] DRY-RUN: добавьте --apply и RESET_MAIL_ACCOUNTS_CONFIRM=DELETE_ALL_MAIL для удаления.");
       return;
     }

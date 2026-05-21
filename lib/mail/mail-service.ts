@@ -362,19 +362,20 @@ export async function updateEmailAccountAccessRoles(
 export async function deleteEmailAccount(
   db: PrismaClient,
   tenantId: string,
-  userId: string,
+  _userId: string,
   role: string,
   accountId: string,
 ): Promise<void> {
   if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
-  await db.emailAccount.updateMany({
-    where: { id: accountId, ...userAccountWhere(tenantId, userId, role) },
+  const updated = await db.emailAccount.updateMany({
+    where: { id: accountId, tenantId },
     data: {
       isActive: false,
       lastSyncError: null,
       allowedRoles: [UserRole.OWNER],
     },
   });
+  if (!updated.count) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
 }
 
 export async function testEmailAccountConnection(
