@@ -2,7 +2,9 @@ const { EmailFolderType } = require("@prisma/client");
 const { findMailAccountClient } = require("./mail-tenant-prisma.cjs");
 
 const ACCOUNT_EMAIL = "order@digitaldemon.studio";
-const BATCH_SIZE = 200;
+const BATCH_SIZE = Math.max(1, Math.min(500, Number(process.env.MAIL_RULES_ORDER_APPLY_BATCH_SIZE || 200)));
+const APPLY_LIMIT = Math.max(0, Number(process.env.MAIL_RULES_ORDER_APPLY_LIMIT || 0));
+const NEWEST_FIRST = process.env.MAIL_RULES_ORDER_APPLY_NEWEST_FIRST === "1";
 
 function stringArray(value, key) {
   if (!value || typeof value !== "object") return [];
@@ -155,14 +157,16 @@ async function main() {
     const touchedFolders = new Set();
     const touchedLabels = new Set();
     for (;;) {
+      const remaining = APPLY_LIMIT > 0 ? APPLY_LIMIT - processed : BATCH_SIZE;
+      if (APPLY_LIMIT > 0 && remaining <= 0) break;
       const emails = await prisma.email.findMany({
         where: {
           tenantId: account.tenantId,
           accountId: account.id,
-          ...(cursor ? { id: { gt: cursor } } : {}),
         },
-        orderBy: { id: "asc" },
-        take: BATCH_SIZE,
+        orderBy: NEWEST_FIRST ? [{ receivedAt: "desc" }, { id: "desc" }] : { id: "asc" },
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        take: Math.min(BATCH_SIZE, remaining),
         include: { attachments: { select: { fileName: true } } },
       });
       if (emails.length === 0) break;

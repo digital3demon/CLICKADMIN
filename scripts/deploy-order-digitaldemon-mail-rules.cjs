@@ -24,12 +24,19 @@ function run(script) {
 const importStatus = run("import-order-digitaldemon-mail-rules.cjs");
 if (importStatus !== 0) process.exit(importStatus);
 
-if (process.env.MAIL_RULES_ORDER_APPLY_ON_DEPLOY !== "1") {
+if (process.env.MAIL_RULES_ORDER_APPLY_ON_DEPLOY === "0") {
   console.warn(
-    "[mail-rules] обратное применение правил по всем письмам пропущено. Для разового запуска задайте MAIL_RULES_ORDER_APPLY_ON_DEPLOY=1.",
+    "[mail-rules] обратное применение правил по письмам пропущено из-за MAIL_RULES_ORDER_APPLY_ON_DEPLOY=0.",
   );
   process.exit(0);
 }
+
+process.env.MAIL_RULES_ORDER_APPLY_LIMIT =
+  process.env.MAIL_RULES_ORDER_APPLY_ON_DEPLOY === "1"
+    ? process.env.MAIL_RULES_ORDER_APPLY_LIMIT || "0"
+    : process.env.MAIL_RULES_ORDER_APPLY_LIMIT || "500";
+process.env.MAIL_RULES_ORDER_APPLY_NEWEST_FIRST =
+  process.env.MAIL_RULES_ORDER_APPLY_NEWEST_FIRST || "1";
 
 const applyStatus = run("apply-order-digitaldemon-mail-rules.cjs");
 if (applyStatus !== 0) process.exit(applyStatus);
