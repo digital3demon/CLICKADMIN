@@ -14,6 +14,7 @@ import type {
   MailEmailRow,
   MailFilter,
   MailFolder,
+  MailLabel,
 } from "@/components/mail/types";
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -90,6 +91,7 @@ export function MailLayout() {
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
   const [activeAccountId, setActiveAccountId] = useState("");
   const [activeFolderId, setActiveFolderId] = useState("");
+  const [activeLabelId, setActiveLabelId] = useState("");
   const [emails, setEmails] = useState<MailEmailRow[]>([]);
   const [activeEmailId, setActiveEmailId] = useState("");
   const [detail, setDetail] = useState<MailEmailDetail | null>(null);
@@ -119,14 +121,19 @@ export function MailLayout() {
     () => activeAccount?.folders.find((f) => f.id === activeFolderId) ?? null,
     [activeAccount, activeFolderId],
   );
+  const activeLabel = useMemo(
+    () => activeAccount?.labels.find((label) => label.id === activeLabelId) ?? null,
+    [activeAccount, activeLabelId],
+  );
   const listQueryKey = useMemo(
     () => JSON.stringify({
       accountId: activeAccountId,
       folderId: activeFolderId,
+      labelId: activeLabelId,
       filter,
       search: search.trim(),
     }),
-    [activeAccountId, activeFolderId, filter, search],
+    [activeAccountId, activeFolderId, activeLabelId, filter, search],
   );
 
   const loadAccounts = useCallback(async () => {
@@ -158,6 +165,7 @@ export function MailLayout() {
         take: "80",
       });
       if (activeFolderId) params.set("folderId", activeFolderId);
+      if (activeLabelId) params.set("labelId", activeLabelId);
       if (search.trim()) params.set("q", search.trim());
       if (cursor) params.set("cursor", cursor);
       const data = await jsonFetch<{ emails: MailEmailRow[]; nextCursor: string | null }>(
@@ -180,7 +188,7 @@ export function MailLayout() {
       if (append) setLoadingMore(false);
       else setLoadingEmails(false);
     }
-  }, [activeAccountId, activeFolderId, filter, search, listQueryKey]);
+  }, [activeAccountId, activeFolderId, activeLabelId, filter, search, listQueryKey]);
 
   const refreshEmailsSilently = useCallback(async () => {
     if (!activeAccountId) return;
@@ -191,6 +199,7 @@ export function MailLayout() {
         take: "80",
       });
       if (activeFolderId) params.set("folderId", activeFolderId);
+      if (activeLabelId) params.set("labelId", activeLabelId);
       if (search.trim()) params.set("q", search.trim());
       const data = await jsonFetch<{ emails: MailEmailRow[]; nextCursor: string | null }>(
         `/api/mail/emails?${params.toString()}`,
@@ -204,7 +213,7 @@ export function MailLayout() {
     } catch {
       /* Тихое обновление не должно мешать чтению письма. */
     }
-  }, [activeAccountId, activeFolderId, filter, search]);
+  }, [activeAccountId, activeFolderId, activeLabelId, filter, search]);
 
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
@@ -226,11 +235,13 @@ export function MailLayout() {
 
   useEffect(() => {
     if (!activeAccount) return;
+    if (activeLabelId && activeAccount.labels.some((label) => label.id === activeLabelId)) return;
+    if (activeLabelId) setActiveLabelId("");
     const folder = inboxFolder(activeAccount);
     setActiveFolderId((prev) =>
       prev && activeAccount.folders.some((f) => f.id === prev) ? prev : folder?.id || "",
     );
-  }, [activeAccount]);
+  }, [activeAccount, activeLabelId]);
 
   useEffect(() => {
     writeLastMailAccountId(activeAccountId);
@@ -449,6 +460,7 @@ export function MailLayout() {
         syncing={syncing}
         onAccountChange={(id) => {
           setActiveAccountId(id);
+          setActiveLabelId("");
           setActiveEmailId("");
           setDetail(null);
           setSelectedIds(new Set());
@@ -495,11 +507,20 @@ export function MailLayout() {
             <MailSidebar
               account={activeAccount}
               activeFolderId={activeFolderId}
+              activeLabelId={activeLabelId}
               labels={activeAccount?.labels ?? []}
               collapsed={sidebarCollapsed}
               onCollapsedChange={setSidebarCollapsed}
               onFolderChange={(id) => {
                 setActiveFolderId(id);
+                setActiveLabelId("");
+                setActiveEmailId("");
+                setDetail(null);
+                setSelectedIds(new Set());
+              }}
+              onLabelChange={(id) => {
+                setActiveLabelId(id);
+                setActiveFolderId("");
                 setActiveEmailId("");
                 setDetail(null);
                 setSelectedIds(new Set());
@@ -525,6 +546,7 @@ export function MailLayout() {
             />
             <MailList
               folder={activeFolder}
+              label={activeLabel}
               emails={emails}
               activeEmailId={activeEmailId}
               selectedIds={selectedIds}

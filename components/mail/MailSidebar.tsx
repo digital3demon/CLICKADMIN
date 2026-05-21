@@ -97,19 +97,23 @@ function FolderButton({
 export function MailSidebar({
   account,
   activeFolderId,
+  activeLabelId,
   labels,
   collapsed,
   onCollapsedChange,
   onFolderChange,
+  onLabelChange,
   onCreateFolder,
   onCreateLabel,
 }: {
   account: MailAccount | null;
   activeFolderId: string;
+  activeLabelId: string;
   labels: MailLabel[];
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onFolderChange: (folderId: string) => void;
+  onLabelChange: (labelId: string) => void;
   onCreateFolder: () => void;
   onCreateLabel: () => void;
 }) {
@@ -117,6 +121,7 @@ export function MailSidebar({
   const systemFolders = visibleSystemFolders(folders, activeFolderId);
   const customFolders = folders.filter((folder) => folder.type === "CUSTOM");
   const [foldersOpen, setFoldersOpen] = useState(true);
+  const [labelsOpen, setLabelsOpen] = useState(true);
   return (
     <aside
       className={`hidden min-h-0 shrink-0 overflow-y-auto border-r border-[var(--card-border)] bg-[var(--surface-muted)] py-4 transition-[width] duration-200 lg:block ${
@@ -196,10 +201,18 @@ export function MailSidebar({
       )}
 
       {collapsed ? null : <div className="mt-7">
-        <div className="mb-2 flex items-center justify-between px-2">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-            Метки
-          </h3>
+        <div className="mb-2 flex items-center justify-between gap-2 px-2">
+          <button
+            type="button"
+            onClick={() => setLabelsOpen((open) => !open)}
+            className="flex min-w-0 flex-1 items-center justify-between rounded-lg py-1 pr-1 text-left text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] transition hover:text-[var(--text-body)]"
+            aria-expanded={labelsOpen}
+          >
+            <span>Метки</span>
+            <span className="text-base leading-none" aria-hidden>
+              {labelsOpen ? "⌄" : "›"}
+            </span>
+          </button>
           <button
             type="button"
             onClick={onCreateLabel}
@@ -209,26 +222,33 @@ export function MailSidebar({
             +
           </button>
         </div>
-        <div className="space-y-1">
+        {labelsOpen ? <div className="space-y-1">
           {labels.map((label) => (
-            <div
+            <button
               key={label.id}
-              className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-[var(--text-body)]"
+              type="button"
+              onClick={() => onLabelChange(label.id)}
+              title={label.name}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${
+                label.id === activeLabelId
+                  ? "bg-[var(--accent-selection-bg)] font-semibold text-[var(--sidebar-blue)]"
+                  : "text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+              }`}
             >
               <span
-                className="h-2.5 w-2.5 rounded-full"
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: label.color }}
               />
               <span className="min-w-0 flex-1 truncate">{label.name}</span>
               {label.unreadCount > 0 ? (
                 <span className="text-xs font-semibold text-[var(--text-secondary)]">{label.unreadCount}</span>
               ) : null}
-            </div>
+            </button>
           ))}
           {labels.length === 0 ? (
             <p className="px-3 py-2 text-xs text-[var(--text-muted)]">Метки пока не созданы</p>
           ) : null}
-        </div>
+        </div> : null}
       </div>}
 
       {collapsed ? null : <div className="mt-auto space-y-2 pt-6">

@@ -519,6 +519,7 @@ export async function listEmails(
   input: {
     accountId: string;
     folderId?: string | null;
+    labelId?: string | null;
     q?: string | null;
     filter?: EmailFilter;
     take?: number;
@@ -533,6 +534,17 @@ export async function listEmails(
       tenantId,
       accountId: input.accountId,
       ...(input.folderId ? { folderId: input.folderId } : {}),
+      ...(input.labelId
+        ? {
+            labelAssignments: {
+              some: {
+                tenantId,
+                labelId: input.labelId,
+                label: { accountId: input.accountId },
+              },
+            },
+          }
+        : {}),
       ...(input.filter === "unread" ? { isRead: false } : {}),
       ...(input.filter === "attachments" ? { hasAttachments: true } : {}),
       ...(input.filter === "flagged" ? { isFlagged: true } : {}),

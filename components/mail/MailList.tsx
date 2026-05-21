@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { MailEmailRow, MailFilter, MailFolder } from "@/components/mail/types";
+import type { MailEmailRow, MailFilter, MailFolder, MailLabel } from "@/components/mail/types";
 import { mailFolderDisplayName } from "@/components/mail/types";
 
 function senderName(email: MailEmailRow): string {
@@ -260,6 +260,7 @@ function MailRow({
 
 export function MailList({
   folder,
+  label,
   emails,
   activeEmailId,
   selectedIds,
@@ -278,6 +279,7 @@ export function MailList({
   onEmailAction,
 }: {
   folder: MailFolder | null;
+  label: MailLabel | null;
   emails: MailEmailRow[];
   activeEmailId: string;
   selectedIds: Set<string>;
@@ -314,10 +316,14 @@ export function MailList({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--app-text)]">
-              {folder ? mailFolderDisplayName(folder) : "Почта"}
+              {label ? label.name : folder ? mailFolderDisplayName(folder) : "Почта"}
             </h2>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              {folder ? `${folder.totalCount} писем, ${folder.unreadCount} непрочитанных` : "Выберите папку"}
+              {label
+                ? `${label.totalCount} писем с меткой, ${label.unreadCount} непрочитанных`
+                : folder
+                  ? `${folder.totalCount} писем, ${folder.unreadCount} непрочитанных`
+                  : "Выберите папку или метку"}
             </p>
           </div>
           <button

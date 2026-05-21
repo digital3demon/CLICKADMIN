@@ -18,6 +18,7 @@ export async function GET(req: Request) {
   const result = await listEmails(r.ctx.db, r.ctx.tenantId, r.ctx.userId, {
     accountId,
     folderId: url.searchParams.get("folderId")?.trim() || null,
+    labelId: url.searchParams.get("labelId")?.trim() || null,
     q: url.searchParams.get("q")?.trim() || null,
     filter: emailFilter(url.searchParams.get("filter")),
     take: Number(url.searchParams.get("take") || 80),
