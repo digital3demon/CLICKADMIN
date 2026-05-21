@@ -67,6 +67,7 @@ function userAccountWhere(tenantId: string, userId: string, role?: string) {
   const normalizedRole = normalizeUserRole(role || "");
   return {
     tenantId,
+    isActive: true,
     OR: [
       { createdByUserId: userId },
       ...(normalizedRole ? [{ allowedRoles: { has: normalizedRole } }] : []),
@@ -263,14 +264,22 @@ export async function refreshLabelCounters(
 export async function listEmailAccounts(db: PrismaClient, tenantId: string, userId: string, role: string) {
   const accounts = await db.emailAccount.findMany({
     where: userAccountWhere(tenantId, userId, role),
-    orderBy: [{ isActive: "desc" }, { email: "asc" }],
+    orderBy: [{ email: "asc" }, { createdAt: "desc" }],
     include: {
       folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
       labels: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
       _count: { select: { emails: true } },
     },
   });
-  return accounts.map(({ encryptedAppPassword, ...account }) => ({
+  const byEmail = new Map<string, (typeof accounts)[number]>();
+  for (const account of accounts) {
+    const key = account.email.trim().toLowerCase();
+    const prev = byEmail.get(key);
+    if (!prev || account.createdByUserId === userId) {
+      byEmail.set(key, account);
+    }
+  }
+  return [...byEmail.values()].map(({ encryptedAppPassword, ...account }) => ({
     ...account,
     hasPassword: Boolean(encryptedAppPassword),
   }));
@@ -302,6 +311,7 @@ export async function upsertEmailAccount(
     },
     update: {
       displayName: input.displayName || null,
+      isActive: true,
       ...(input.appPassword
         ? {
             encryptedAppPassword: encryptAppPassword(input.appPassword),
@@ -357,20 +367,14 @@ export async function deleteEmailAccount(
   accountId: string,
 ): Promise<void> {
   if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
-  const attachments = await db.emailAttachment.findMany({
-    where: {
-      tenantId,
-      email: {
-        accountId,
-        account: userAccountWhere(tenantId, userId, role),
-      },
-    },
-    select: { diskRelPath: true },
-  });
-  await db.emailAccount.deleteMany({
+  await db.emailAccount.updateMany({
     where: { id: accountId, ...userAccountWhere(tenantId, userId, role) },
+    data: {
+      isActive: false,
+      lastSyncError: null,
+      allowedRoles: [UserRole.OWNER],
+    },
   });
-  await Promise.all(attachments.map((a) => deleteMailAttachmentBytes(a.diskRelPath)));
 }
 
 export async function testEmailAccountConnection(

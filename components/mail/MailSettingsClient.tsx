@@ -229,22 +229,18 @@ export function MailSettingsClient() {
   async function deleteAccount(account: MailAccount) {
     if (!canManageAccountAccess) return;
     const label = account.displayName || account.email;
-    const emailsCount = account._count?.emails ?? 0;
-    const confirmText =
-      emailsCount > 0
-        ? `Удалить ящик «${label}» и ${emailsCount.toLocaleString("ru-RU")} писем из CRM? На Яндекс.Почте письма не удаляются.`
-        : `Удалить ящик «${label}» из CRM?`;
+    const confirmText = `Отключить ящик «${label}» в CRM? Письма в Яндекс.Почте и история в базе не удаляются.`;
     if (!window.confirm(confirmText)) return;
 
     setError("");
-    setStatus("Удаляю ящик...");
+    setStatus("Отключаю ящик...");
     try {
       await jsonFetch(`/api/mail/accounts/${account.id}`, { method: "DELETE" });
-      setStatus("Ящик удалён");
+      setStatus("Ящик отключён");
       setAccountId((prev) => (prev === account.id ? "" : prev));
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось удалить ящик");
+      setError(err instanceof Error ? err.message : "Не удалось отключить ящик");
     }
   }
 
@@ -440,7 +436,7 @@ export function MailSettingsClient() {
                   onClick={() => void deleteAccount(activeAccount)}
                   className="h-10 rounded-xl border border-red-400/40 px-3 text-sm font-semibold text-red-600 hover:bg-red-500/10 dark:text-red-300"
                 >
-                  Удалить ящик
+                  Отключить ящик
                 </button>
               ) : null}
             </div>
