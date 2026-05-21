@@ -1,7 +1,6 @@
 /**
  * Полный сброс CRM-копии почты: письма, вложения, папки, метки, правила и sync jobs.
- * По умолчанию сохраняет по одному активному аккаунту на каждый email, чтобы фон синхронизировал заново
- * без ручного переподключения ящика.
+ * Удаляет и сами EmailAccount: после сброса ящики подключаются заново через интерфейс CRM.
  *
  * По умолчанию dry-run. Реальное удаление требует:
  *   RESET_MAIL_ACCOUNTS_CONFIRM=DELETE_ALL_MAIL node --env-file=.env scripts/reset-mail-accounts.cjs --apply
@@ -19,7 +18,7 @@ const { PrismaClient } = require("@prisma/client");
 const APPLY = process.argv.includes("--apply");
 const AUTO_ONCE = process.argv.includes("--auto-once");
 const DELETE_FILES = !process.argv.includes("--keep-files");
-const DELETE_ACCOUNTS = process.argv.includes("--delete-accounts");
+const DELETE_ACCOUNTS = true;
 const CONFIRM = AUTO_ONCE || process.env.RESET_MAIL_ACCOUNTS_CONFIRM === "DELETE_ALL_MAIL";
 const ONCE_MARKER_KEY = "mail-reset-accounts-20260521-v1";
 
@@ -242,9 +241,7 @@ async function main() {
 
     const resetTables = DELETE_ACCOUNTS ? ALL_TABLES : RESET_TABLES;
     console.log("[mail-reset] Будут очищены таблицы:", resetTables.join(", "));
-    if (!DELETE_ACCOUNTS) {
-      console.log("[mail-reset] EmailAccount сохраняется: будет оставлен один активный аккаунт на email.");
-    }
+    console.log("[mail-reset] EmailAccount тоже будет очищен: доступы к ящикам нужно будет подключить заново.");
     console.log("[mail-reset] Текущие количества:", JSON.stringify(counts, null, 2));
     console.log(`[mail-reset] Файлов вложений в БД: ${attachmentPaths.length}`);
 
@@ -261,7 +258,7 @@ async function main() {
     } else {
       await resetSqlite(prisma);
     }
-    const accountSummary = await dedupePreservedAccounts(prisma);
+    const accountSummary = { kept: 0, disabled: 0 };
 
     let deletedFiles = 0;
     if (DELETE_FILES) {
@@ -274,7 +271,7 @@ async function main() {
       before: counts,
       attachmentsSeen: attachmentPaths.length,
       deletedFiles,
-      deleteAccounts: DELETE_ACCOUNTS,
+      deleteAccounts: true,
       accountSummary,
     };
     if (AUTO_ONCE) {
@@ -283,11 +280,7 @@ async function main() {
     }
 
     console.log("[mail-reset] CRM-данные почты очищены.");
-    if (!DELETE_ACCOUNTS) {
-      console.log(
-        `[mail-reset] Аккаунтов сохранено: ${accountSummary.kept}, дублей отключено: ${accountSummary.disabled}`,
-      );
-    }
+    console.log("[mail-reset] Почтовые аккаунты удалены из CRM.");
     console.log(
       DELETE_FILES
         ? `[mail-reset] Локальных файлов вложений удалено: ${deletedFiles}`
