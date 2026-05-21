@@ -345,7 +345,17 @@ export function MailLayout() {
     setError("");
     setSyncStatus("Проверяем новые письма...");
     try {
-      await jsonFetch(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
+      const data = await jsonFetch<{
+        status?: string;
+        lastError?: string | null;
+        queued?: boolean;
+      }>(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
+      if (data.status === "FAILED") {
+        setSyncStatus("");
+        setError(mailErrorMessage(data.lastError, "Синхронизация завершилась ошибкой"));
+      } else if (data.queued) {
+        setSyncStatus("Синхронизация в очереди");
+      }
       await loadAccounts();
       await refreshEmailsSilently();
     } catch (err) {

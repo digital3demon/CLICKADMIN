@@ -99,8 +99,7 @@ export async function runMailSyncJob(
       },
     });
     logger.error({ err, tenantId, accountId: syncJob.accountId, syncJobId }, "mail sync job failed");
-    if (failedPermanently) throw err;
-    return { syncJob: updated, processed: false, result: null };
+    return { syncJob: updated, processed: failedPermanently, result: null };
   }
 }
 

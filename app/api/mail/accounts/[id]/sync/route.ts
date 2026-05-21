@@ -21,6 +21,8 @@ export async function POST(
     const result = await enqueueAndRunMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, id, mode);
     return NextResponse.json({
       ok: true,
+      status: result.syncJob.status,
+      lastError: result.syncJob.lastError,
       queued: !result.processed,
       enqueued: result.enqueued,
       processed: result.processed,
