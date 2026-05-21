@@ -90,6 +90,19 @@ function isUniqueConstraintError(error: unknown): boolean {
   );
 }
 
+function syncErrorMessage(err: unknown): string {
+  if (!(err instanceof Error)) return "Ошибка синхронизации";
+  const details = err as Error & { code?: unknown; responseText?: unknown };
+  const code = typeof details.code === "string" ? details.code : "";
+  if (code === "ETIMEOUT" || code === "ETIMEDOUT" || err.message.toLowerCase().includes("socket timeout")) {
+    return "Почтовый сервер не ответил вовремя. Синхронизация повторится автоматически.";
+  }
+  if (err.message === "Command failed" && typeof details.responseText === "string" && details.responseText.trim()) {
+    return `IMAP-команда отклонена сервером: ${details.responseText.trim()}`;
+  }
+  return err.message || "Ошибка синхронизации";
+}
+
 function headersToJson(headers: ParsedMail["headers"]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of headers.entries()) {
@@ -580,7 +593,7 @@ export async function syncEmailAccount(
     await db.emailAccount.update({
       where: { id: account.id },
       data: {
-        lastSyncError: err instanceof Error ? err.message : "Ошибка синхронизации",
+        lastSyncError: syncErrorMessage(err),
       },
     }).catch(() => undefined);
     logger.error(

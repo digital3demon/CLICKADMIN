@@ -6,6 +6,26 @@ import { logger } from "@/lib/server/logger";
 
 const STALE_RUNNING_JOB_MS = 10 * 60 * 1000;
 
+function mailSyncErrorMessage(err: unknown): string {
+  if (!(err instanceof Error)) return "Синхронизация почты завершилась ошибкой";
+  const details = err as Error & {
+    code?: unknown;
+    responseText?: unknown;
+    executedCommand?: unknown;
+  };
+  const code = typeof details.code === "string" ? details.code : "";
+  if (code === "ETIMEOUT" || code === "ETIMEDOUT" || err.message.toLowerCase().includes("socket timeout")) {
+    return "Почтовый сервер не ответил вовремя. Синхронизация повторится автоматически.";
+  }
+  if (err.message === "Command failed" && typeof details.responseText === "string" && details.responseText.trim()) {
+    return `IMAP-команда отклонена сервером: ${details.responseText.trim()}`;
+  }
+  if (err.message === "Command failed" && typeof details.executedCommand === "string") {
+    return `IMAP-команда отклонена сервером: ${details.executedCommand.slice(0, 120)}`;
+  }
+  return err.message || "Синхронизация почты завершилась ошибкой";
+}
+
 export async function enqueueMailSyncJob(
   db: PrismaClient,
   tenantId: string,
@@ -87,7 +107,7 @@ export async function runMailSyncJob(
     });
     return { syncJob: updated, processed: true, result };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Mail sync failed";
+    const message = mailSyncErrorMessage(err);
     const failedPermanently = syncJob.attempts + 1 >= syncJob.maxAttempts;
     const updated = await db.emailSyncJob.update({
       where: { id: syncJob.id },

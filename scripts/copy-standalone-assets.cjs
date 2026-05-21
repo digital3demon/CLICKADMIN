@@ -12,6 +12,22 @@ const staticDest = path.join(root, ".next", "standalone", ".next", "static");
 const publicSrc = path.join(root, "public");
 const publicDest = path.join(root, ".next", "standalone", "public");
 
+function copyDirRecursive(src, dest) {
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const from = path.join(src, entry.name);
+    const to = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(from, to);
+    } else if (entry.isSymbolicLink()) {
+      fs.symlinkSync(fs.readlinkSync(from), to);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(from, to);
+    }
+  }
+}
+
 if (!fs.existsSync(staticSrc)) {
   console.error(
     "[copy-standalone-assets] Нет каталога .next/static — сначала выполните next build.",
@@ -20,10 +36,10 @@ if (!fs.existsSync(staticSrc)) {
 }
 
 fs.mkdirSync(path.dirname(staticDest), { recursive: true });
-fs.cpSync(staticSrc, staticDest, { recursive: true, force: true });
+copyDirRecursive(staticSrc, staticDest);
 
 if (fs.existsSync(publicSrc)) {
-  fs.cpSync(publicSrc, publicDest, { recursive: true, force: true });
+  copyDirRecursive(publicSrc, publicDest);
 }
 
 console.log("[copy-standalone-assets] OK → .next/standalone/.next/static");

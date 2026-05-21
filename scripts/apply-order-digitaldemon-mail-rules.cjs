@@ -105,6 +105,15 @@ async function refreshLabelCounters(prisma, tenantId, labelId) {
   await prisma.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
 }
 
+function isUniqueConstraintError(error) {
+  return Boolean(error && typeof error === "object" && error.code === "P2002");
+}
+
+function withoutFolderMove(data) {
+  const { folderId, ...rest } = data;
+  return rest;
+}
+
 async function main() {
   const ctx = await findMailAccountClient(ACCOUNT_EMAIL);
   const { prisma, account } = ctx;
@@ -180,18 +189,61 @@ async function main() {
         const data = {};
         if (nextFolderId && nextFolderId !== email.folderId) {
           data.folderId = nextFolderId;
-          if (email.folderId) touchedFolders.add(email.folderId);
-          touchedFolders.add(nextFolderId);
         }
         if (result.isRead && !email.isRead) {
           data.isRead = true;
           data.readAt = new Date();
-          if (email.folderId) touchedFolders.add(email.folderId);
         }
         if (result.isFlagged && !email.isFlagged) data.isFlagged = true;
         if (Object.keys(data).length > 0) {
-          await prisma.email.update({ where: { id: email.id }, data });
-          updated += 1;
+          let updateData = data;
+          let skippedFolderMove = false;
+          const requestedFolderId = typeof data.folderId === "string" ? data.folderId : null;
+          if (requestedFolderId && email.uid != null) {
+            const duplicateInTargetFolder = await prisma.email.findFirst({
+              where: {
+                tenantId: account.tenantId,
+                accountId: account.id,
+                folderId: requestedFolderId,
+                uid: email.uid,
+                NOT: { id: email.id },
+              },
+              select: { id: true },
+            });
+            if (duplicateInTargetFolder) {
+              updateData = withoutFolderMove(updateData);
+              skippedFolderMove = true;
+              console.warn(
+                `[mail-rules] письмо ${email.id} не перенесено: в целевой папке уже есть uid ${email.uid}`,
+              );
+            }
+          }
+          if (Object.keys(updateData).length > 0) {
+            try {
+              await prisma.email.update({ where: { id: email.id }, data: updateData });
+            } catch (err) {
+              if (!requestedFolderId || !isUniqueConstraintError(err)) throw err;
+              updateData = withoutFolderMove(updateData);
+              skippedFolderMove = true;
+              if (Object.keys(updateData).length === 0) {
+                console.warn(
+                  `[mail-rules] письмо ${email.id} не обновлено: конфликт uid ${email.uid} при переносе`,
+                );
+              } else {
+                await prisma.email.update({ where: { id: email.id }, data: updateData });
+                console.warn(
+                  `[mail-rules] письмо ${email.id} обновлено без переноса: конфликт uid ${email.uid} в целевой папке`,
+                );
+              }
+            }
+          }
+          if (Object.keys(updateData).length > 0) updated += 1;
+          if (requestedFolderId && !skippedFolderMove) {
+            if (email.folderId) touchedFolders.add(email.folderId);
+            touchedFolders.add(requestedFolderId);
+          } else if (result.isRead && !email.isRead && email.folderId) {
+            touchedFolders.add(email.folderId);
+          }
         }
         processed += 1;
       }

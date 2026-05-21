@@ -37,20 +37,32 @@ export function recentWindowStartUid(
   return Math.max(startUid, Math.max(1, uidNext - maxMessages));
 }
 
+function envTimeoutMs(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
 export function createImapClient(account: MailConnectionAccount): ImapFlow {
   if (!account.encryptedAppPassword) {
     throw new Error("MAIL_ACCOUNT_PASSWORD_NOT_CONFIGURED");
   }
-  return new ImapFlow({
+  const client = new ImapFlow({
     host: account.imapHost,
     port: account.imapPort,
     secure: account.imapSecure,
+    connectionTimeout: envTimeoutMs("MAIL_IMAP_CONNECTION_TIMEOUT_MS", 120_000),
+    greetingTimeout: envTimeoutMs("MAIL_IMAP_GREETING_TIMEOUT_MS", 30_000),
+    socketTimeout: envTimeoutMs("MAIL_IMAP_SOCKET_TIMEOUT_MS", 15 * 60_000),
     auth: {
       user: account.email,
       pass: decryptAppPassword(account.encryptedAppPassword),
     },
     logger: false,
   });
+  // ImapFlow emits socket timeouts as "error" events. Without a listener Node
+  // treats them as uncaught exceptions even when the active command is handled.
+  client.on("error", () => undefined);
+  return client;
 }
 
 export async function testImapConnection(account: MailConnectionAccount): Promise<void> {

@@ -16,6 +16,34 @@ const bundleRoot =
     ? path.join(hereDir, "..")
     : hereDir;
 
+function unquoteEnvValue(value) {
+  const trimmed = String(value || "").trim();
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"');
+  }
+  if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function loadBundleEnv() {
+  const envPath = path.join(bundleRoot, ".env");
+  if (!fs.existsSync(envPath)) return;
+  const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim().replace(/^export\s+/, "");
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || (process.env[key] != null && process.env[key] !== "")) continue;
+    process.env[key] = unquoteEnvValue(trimmed.slice(eq + 1));
+  }
+}
+
+loadBundleEnv();
+
 function pathToEnsure(name) {
   const inScripts = path.join(bundleRoot, "scripts", name);
   if (fs.existsSync(inScripts)) return inScripts;
@@ -51,6 +79,15 @@ function resolvePrismaVersion() {
 const prismaVer = resolvePrismaVersion();
 const prismaSpec = `prisma@${prismaVer}`;
 const isWin = process.platform === "win32";
+
+function runPrisma(args, options = {}) {
+  return spawnSync("npx", ["-y", prismaSpec, ...args], {
+    cwd: bundleRoot,
+    env: process.env,
+    shell: isWin,
+    ...options,
+  });
+}
 
 /** У Next.js standalone в node_modules часто не хватает файлов runtime Prisma → generate падает на WASM. */
 function prismaSqliteWasmRuntimePresent() {
@@ -95,16 +132,7 @@ function npmInstallPrismaPackages() {
 
 /** Нужен до `prisma-resolve-stuck-*` (импорт @prisma/client) и до migrate на CI с PostgreSQL. */
 function runPrismaGenerate() {
-  return spawnSync(
-    "npx",
-    ["-y", prismaSpec, "generate", "--schema=prisma/schema.prisma"],
-    {
-      cwd: bundleRoot,
-      stdio: "inherit",
-      env: process.env,
-      shell: isWin,
-    },
-  );
+  return runPrisma(["generate", "--schema=prisma/schema.prisma"], { stdio: "inherit" });
 }
 
 /**
@@ -164,22 +192,75 @@ if (fs.existsSync(fixPath)) {
   );
 }
 
-const r = spawnSync(
-  "npx",
-  [
-    "-y",
-    prismaSpec,
-    "migrate",
-    "deploy",
-    "--schema=prisma/schema.prisma",
-  ],
-  {
-    cwd: bundleRoot,
-    stdio: "inherit",
-    env: process.env,
-    shell: isWin,
-  },
-);
+function outputSpawnResult(result) {
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+}
+
+function isP3005(result) {
+  const text = `${result.stdout || ""}\n${result.stderr || ""}`;
+  return text.includes("P3005") || text.includes("database schema is not empty");
+}
+
+function schemaMatchesDatamodel() {
+  if (!process.env.DATABASE_URL) return false;
+  const diff = runPrisma(
+    [
+      "migrate",
+      "diff",
+      "--from-url",
+      process.env.DATABASE_URL,
+      "--to-schema-datamodel",
+      "prisma/schema.prisma",
+      "--exit-code",
+    ],
+    { stdio: "pipe", encoding: "utf8" },
+  );
+  outputSpawnResult(diff);
+  return diff.status === 0;
+}
+
+function migrationNames() {
+  const dir = path.join(bundleRoot, "prisma", "migrations");
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(dir, entry.name, "migration.sql")))
+    .map((entry) => entry.name)
+    .sort();
+}
+
+function resolveExistingSchemaAsApplied() {
+  const names = migrationNames();
+  if (names.length === 0) return false;
+  console.warn(
+    `[migrate] P3005: схема БД уже совпадает с Prisma schema, помечаю ${names.length} миграций как применённые.`,
+  );
+  for (const name of names) {
+    const resolve = runPrisma(
+      ["migrate", "resolve", "--applied", name, "--schema=prisma/schema.prisma"],
+      { stdio: "inherit" },
+    );
+    if (resolve.status !== 0) return false;
+  }
+  return true;
+}
+
+function runMigrateDeploy() {
+  return runPrisma(["migrate", "deploy", "--schema=prisma/schema.prisma"], {
+    stdio: "pipe",
+    encoding: "utf8",
+  });
+}
+
+let r = runMigrateDeploy();
+outputSpawnResult(r);
+
+if (r.status !== 0) {
+  if (isP3005(r) && schemaMatchesDatamodel() && resolveExistingSchemaAsApplied()) {
+    r = runMigrateDeploy();
+    outputSpawnResult(r);
+  }
+}
 
 if (r.status !== 0) {
   process.exit(r.status === null ? 1 : r.status);
