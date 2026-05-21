@@ -45,6 +45,7 @@ export async function GET(req: Request) {
         db,
         account.tenantId,
         account.createdByUserId,
+        "OWNER",
         account.id,
         EmailSyncMode.RECENT,
       );

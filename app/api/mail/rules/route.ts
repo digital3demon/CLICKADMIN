@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   if (!r.ok) return r.response;
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId")?.trim() || null;
-  const rules = await listEmailRules(r.ctx.db, r.ctx.tenantId, r.ctx.userId, accountId);
+  const rules = await listEmailRules(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, accountId);
   return NextResponse.json({ rules });
 }
 
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   if (!r.ok) return r.response;
   try {
     const body = await jsonBody(req);
-    const rule = await createEmailRule(r.ctx.db, r.ctx.tenantId, r.ctx.userId, {
+    const rule = await createEmailRule(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, {
       accountId: stringField(body.accountId, 200),
       name: stringField(body.name, 160),
       conditions: body.conditions,

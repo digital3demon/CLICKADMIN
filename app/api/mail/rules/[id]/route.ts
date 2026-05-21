@@ -18,7 +18,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await jsonBody(req);
-    const rule = await updateEmailRule(r.ctx.db, r.ctx.tenantId, r.ctx.userId, id, {
+    const rule = await updateEmailRule(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, id, {
       name: typeof body.name === "string" ? stringField(body.name, 160) : null,
       isActive: typeof body.isActive === "boolean" ? body.isActive : null,
       sortOrder: typeof body.sortOrder === "number" ? body.sortOrder : null,
@@ -39,7 +39,7 @@ export async function DELETE(
   if (!r.ok) return r.response;
   try {
     const { id } = await params;
-    await deleteEmailRule(r.ctx.db, r.ctx.tenantId, r.ctx.userId, id);
+    await deleteEmailRule(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось удалить правило почты");

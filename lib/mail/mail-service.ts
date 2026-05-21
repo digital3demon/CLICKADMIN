@@ -1,5 +1,5 @@
 import "server-only";
-import { EmailFolderType, type EmailAccount, type EmailSyncMode, type PrismaClient } from "@prisma/client";
+import { EmailFolderType, UserRole, type EmailAccount, type EmailSyncMode, type PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
@@ -29,6 +29,7 @@ import { syncEmailAccount } from "@/lib/mail/mail-sync.service";
 export type MailApiContext = {
   tenantId: string;
   userId: string;
+  role: string;
   db: PrismaClient;
 };
 
@@ -58,8 +59,23 @@ export function normalizeMailColor(value: unknown, fallback = "#6b7280"): string
   return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
 }
 
-function userAccountWhere(tenantId: string, userId: string) {
-  return { tenantId, createdByUserId: userId };
+function normalizeUserRole(role: string): UserRole | null {
+  return (Object.values(UserRole) as string[]).includes(role) ? (role as UserRole) : null;
+}
+
+function userAccountWhere(tenantId: string, userId: string, role?: string) {
+  const normalizedRole = normalizeUserRole(role || "");
+  return {
+    tenantId,
+    OR: [
+      { createdByUserId: userId },
+      ...(normalizedRole ? [{ allowedRoles: { has: normalizedRole } }] : []),
+    ],
+  };
+}
+
+export function mailAccountAccessWhere(tenantId: string, userId: string, role: string) {
+  return userAccountWhere(tenantId, userId, role);
 }
 
 async function requireUserEmailAccount(
@@ -67,9 +83,10 @@ async function requireUserEmailAccount(
   tenantId: string,
   userId: string,
   accountId: string,
+  role?: string,
 ) {
   const account = await db.emailAccount.findFirst({
-    where: { id: accountId, ...userAccountWhere(tenantId, userId) },
+    where: { id: accountId, ...userAccountWhere(tenantId, userId, role) },
   });
   if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
   return account;
@@ -89,6 +106,7 @@ export async function getMailApiContext(): Promise<MailApiContextResult> {
     ctx: {
       tenantId,
       userId: session.sub,
+      role: session.role,
       db: (await getOrdersPrisma()) as PrismaClient,
     },
   };
@@ -200,12 +218,13 @@ async function folderByType(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId: string,
   type: EmailFolderType,
 ) {
-  await requireUserEmailAccount(db, tenantId, userId, accountId);
+  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   const existing = await db.emailFolder.findFirst({
-    where: { tenantId, accountId, type, account: { createdByUserId: userId } },
+    where: { tenantId, accountId, type, account: userAccountWhere(tenantId, userId, role) },
     orderBy: { sortOrder: "asc" },
   });
   if (existing) return existing;
@@ -241,9 +260,9 @@ export async function refreshLabelCounters(
   await db.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
 }
 
-export async function listEmailAccounts(db: PrismaClient, tenantId: string, userId: string) {
+export async function listEmailAccounts(db: PrismaClient, tenantId: string, userId: string, role: string) {
   const accounts = await db.emailAccount.findMany({
-    where: userAccountWhere(tenantId, userId),
+    where: userAccountWhere(tenantId, userId, role),
     orderBy: [{ isActive: "desc" }, { email: "asc" }],
     include: {
       folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
@@ -295,24 +314,61 @@ export async function upsertEmailAccount(
   return account;
 }
 
+export const MAIL_ACCOUNT_ACCESS_ROLES: UserRole[] = Object.values(UserRole);
+
+function normalizeAllowedMailRoles(value: unknown): UserRole[] {
+  const roles = Array.isArray(value) ? value : [];
+  const allowed = roles.filter((role): role is UserRole => normalizeUserRole(String(role)) !== null);
+  return Array.from(new Set<UserRole>([UserRole.OWNER, ...allowed]));
+}
+
+export async function updateEmailAccountAccessRoles(
+  db: PrismaClient,
+  tenantId: string,
+  role: string,
+  accountId: string,
+  allowedRolesInput: unknown,
+) {
+  if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
+  const allowedRoles = normalizeAllowedMailRoles(allowedRolesInput);
+  const updated = await db.emailAccount.updateMany({
+    where: { id: accountId, tenantId },
+    data: { allowedRoles },
+  });
+  if (!updated.count) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  const account = await db.emailAccount.findFirst({
+    where: { id: accountId, tenantId },
+    include: {
+      folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
+      labels: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+      _count: { select: { emails: true } },
+    },
+  });
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  const { encryptedAppPassword, ...safeAccount } = account;
+  return { ...safeAccount, hasPassword: Boolean(encryptedAppPassword) };
+}
+
 export async function deleteEmailAccount(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId: string,
 ): Promise<void> {
+  if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
   const attachments = await db.emailAttachment.findMany({
     where: {
       tenantId,
       email: {
         accountId,
-        account: { createdByUserId: userId },
+        account: userAccountWhere(tenantId, userId, role),
       },
     },
     select: { diskRelPath: true },
   });
   await db.emailAccount.deleteMany({
-    where: { id: accountId, ...userAccountWhere(tenantId, userId) },
+    where: { id: accountId, ...userAccountWhere(tenantId, userId, role) },
   });
   await Promise.all(attachments.map((a) => deleteMailAttachmentBytes(a.diskRelPath)));
 }
@@ -321,9 +377,10 @@ export async function testEmailAccountConnection(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId: string,
 ): Promise<void> {
-  const account = await requireUserEmailAccount(db, tenantId, userId, accountId);
+  const account = await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   await testImapConnection(account);
 }
 
@@ -331,10 +388,11 @@ export async function syncAccountNow(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId: string,
   options: { mode?: EmailSyncMode } = {},
 ) {
-  const account = await requireUserEmailAccount(db, tenantId, userId, accountId);
+  const account = await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   await ensureSystemFolders(db, tenantId, account.id);
   return syncEmailAccount(db, account, options);
 }
@@ -343,9 +401,10 @@ export async function listEmailFolders(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId: string,
 ) {
-  await requireUserEmailAccount(db, tenantId, userId, accountId);
+  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   await ensureSystemFolders(db, tenantId, accountId);
   return db.emailFolder.findMany({
     where: { tenantId, accountId },
@@ -357,11 +416,12 @@ export async function createEmailFolder(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId: string,
   displayName: string,
   color = "#6b7280",
 ) {
-  await requireUserEmailAccount(db, tenantId, userId, accountId);
+  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   const name = displayName.trim().slice(0, 120);
   if (!name) throw new Error("EMPTY_FOLDER_NAME");
   return db.emailFolder.create({
@@ -381,9 +441,10 @@ export async function listEmailLabels(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId: string,
 ) {
-  await requireUserEmailAccount(db, tenantId, userId, accountId);
+  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   return db.emailLabel.findMany({
     where: { tenantId, accountId },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -394,10 +455,11 @@ export async function createEmailLabel(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId: string,
   input: { name: string; color: string },
 ) {
-  await requireUserEmailAccount(db, tenantId, userId, accountId);
+  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   const name = input.name.trim().slice(0, 80);
   if (!name) throw new Error("EMPTY_LABEL_NAME");
   return db.emailLabel.create({
@@ -415,13 +477,14 @@ export async function listEmailRules(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId?: string | null,
 ) {
-  if (accountId) await requireUserEmailAccount(db, tenantId, userId, accountId);
+  if (accountId) await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   return db.emailRule.findMany({
     where: {
       tenantId,
-      account: { createdByUserId: userId },
+      account: userAccountWhere(tenantId, userId, role),
       ...(accountId ? { accountId } : {}),
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -435,6 +498,7 @@ export async function createEmailRule(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   input: {
     accountId: string;
     name: string;
@@ -442,7 +506,7 @@ export async function createEmailRule(
     actions: unknown;
   },
 ) {
-  const account = await requireUserEmailAccount(db, tenantId, userId, input.accountId);
+  const account = await requireUserEmailAccount(db, tenantId, userId, input.accountId, role);
   const name = input.name.trim().slice(0, 160);
   if (!name) throw new Error("EMPTY_RULE_NAME");
   const last = await db.emailRule.findFirst({
@@ -472,6 +536,7 @@ export async function updateEmailRule(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   ruleId: string,
   input: {
     name?: string | null;
@@ -492,12 +557,12 @@ export async function updateEmailRule(
   if (input.conditions && typeof input.conditions === "object") data.conditions = input.conditions;
   if (input.actions && typeof input.actions === "object") data.actions = input.actions;
   const updated = await db.emailRule.updateMany({
-    where: { id: ruleId, tenantId, account: { createdByUserId: userId } },
+    where: { id: ruleId, tenantId, account: userAccountWhere(tenantId, userId, role) },
     data,
   });
   if (!updated.count) throw new Error("EMAIL_RULE_NOT_FOUND");
   return db.emailRule.findFirst({
-    where: { id: ruleId, tenantId, account: { createdByUserId: userId } },
+    where: { id: ruleId, tenantId, account: userAccountWhere(tenantId, userId, role) },
   });
 }
 
@@ -505,10 +570,11 @@ export async function deleteEmailRule(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   ruleId: string,
 ): Promise<void> {
   await db.emailRule.deleteMany({
-    where: { id: ruleId, tenantId, account: { createdByUserId: userId } },
+    where: { id: ruleId, tenantId, account: userAccountWhere(tenantId, userId, role) },
   });
 }
 
@@ -516,6 +582,7 @@ export async function listEmails(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   input: {
     accountId: string;
     folderId?: string | null;
@@ -526,7 +593,7 @@ export async function listEmails(
     cursor?: string | null;
   },
 ) {
-  await requireUserEmailAccount(db, tenantId, userId, input.accountId);
+  await requireUserEmailAccount(db, tenantId, userId, input.accountId, role);
   const take = clampMailPageSize(input.take);
   const cursor = decodeMailListCursor(input.cursor);
   const rows = await db.email.findMany({
@@ -601,11 +668,12 @@ export async function getEmailDetail(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   emailId: string,
   markRead = true,
 ) {
   const email = await db.email.findFirst({
-    where: { id: emailId, tenantId, account: { createdByUserId: userId } },
+    where: { id: emailId, tenantId, account: userAccountWhere(tenantId, userId, role) },
     include: {
       account: { select: { id: true, email: true, displayName: true } },
       folder: true,
@@ -639,6 +707,7 @@ export async function getEmailAttachment(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   emailId: string,
   attachmentId: string,
 ) {
@@ -647,7 +716,7 @@ export async function getEmailAttachment(
       id: attachmentId,
       emailId,
       tenantId,
-      email: { account: { createdByUserId: userId } },
+      email: { account: userAccountWhere(tenantId, userId, role) },
     },
   });
   if (!attachment) throw new Error("EMAIL_ATTACHMENT_NOT_FOUND");
@@ -661,17 +730,48 @@ export async function bulkEmailAction(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   input: {
     ids: string[];
-    action: "read" | "unread" | "flag" | "unflag" | "archive" | "trash" | "delete" | "move";
+    action: "read" | "unread" | "flag" | "unflag" | "archive" | "trash" | "delete" | "move" | "markAllRead";
     accountId?: string | null;
     targetFolderId?: string | null;
   },
 ) {
+  if (input.action === "markAllRead") {
+    if (!input.accountId) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+    await requireUserEmailAccount(db, tenantId, userId, input.accountId, role);
+    const res = await db.email.updateMany({
+      where: {
+        tenantId,
+        accountId: input.accountId,
+        isRead: false,
+        account: userAccountWhere(tenantId, userId, role),
+      },
+      data: { isRead: true, readAt: new Date() },
+    });
+    const [folders, labels] = await Promise.all([
+      db.emailFolder.findMany({
+        where: { tenantId, accountId: input.accountId },
+        select: { id: true },
+      }),
+      db.emailLabel.findMany({
+        where: { tenantId, accountId: input.accountId },
+        select: { id: true },
+      }),
+    ]);
+    await Promise.all([
+      ...folders.map((folder) => refreshFolderCounters(db, tenantId, folder.id)),
+      ...labels.map((label) => refreshLabelCounters(db, tenantId, label.id)),
+    ]);
+    return { updated: res.count };
+  }
+
   const ids = input.ids.filter(Boolean).slice(0, 500);
   if (!ids.length) return { updated: 0 };
+  const accountAccessWhere = userAccountWhere(tenantId, userId, role);
   const before = await db.email.findMany({
-    where: { tenantId, id: { in: ids }, account: { createdByUserId: userId } },
+    where: { tenantId, id: { in: ids }, account: accountAccessWhere },
     include: {
       account: true,
       folder: true,
@@ -684,7 +784,7 @@ export async function bulkEmailAction(
       where: {
         tenantId,
         emailId: { in: ids },
-        email: { account: { createdByUserId: userId } },
+        email: { account: accountAccessWhere },
       },
       select: { diskRelPath: true },
     });
@@ -694,7 +794,7 @@ export async function bulkEmailAction(
       }
     }
     const res = await db.email.deleteMany({
-      where: { tenantId, id: { in: ids }, account: { createdByUserId: userId } },
+      where: { tenantId, id: { in: ids }, account: accountAccessWhere },
     });
     await Promise.all(attachments.map((a) => deleteMailAttachmentBytes(a.diskRelPath)));
     updated = res.count;
@@ -708,13 +808,14 @@ export async function bulkEmailAction(
               id: input.targetFolderId,
               tenantId,
               accountId,
-              account: { createdByUserId: userId },
+              account: accountAccessWhere,
             },
           })
         : await folderByType(
             db,
             tenantId,
             userId,
+            role,
             accountId,
             input.action === "archive" ? EmailFolderType.ARCHIVE : EmailFolderType.TRASH,
           );
@@ -725,7 +826,7 @@ export async function bulkEmailAction(
         movedUid = await moveMessage(email.account, email.folder.imapName, email.uid, target.imapName);
       }
       const res = await db.email.updateMany({
-        where: { tenantId, id: email.id, account: { createdByUserId: userId } },
+        where: { tenantId, id: email.id, account: accountAccessWhere },
         data: { folderId: target.id, ...(movedUid ? { uid: movedUid } : {}) },
       });
       updated += res.count;
@@ -740,7 +841,7 @@ export async function bulkEmailAction(
       }
     }
     const res = await db.email.updateMany({
-      where: { tenantId, id: { in: ids }, account: { createdByUserId: userId } },
+      where: { tenantId, id: { in: ids }, account: accountAccessWhere },
       data:
         input.action === "read"
           ? { isRead: true, readAt: new Date() }
@@ -755,7 +856,7 @@ export async function bulkEmailAction(
 
   const folders = new Set(before.map((e) => e.folderId).filter((x): x is string => Boolean(x)));
   const after = await db.email.findMany({
-    where: { tenantId, id: { in: ids }, account: { createdByUserId: userId } },
+    where: { tenantId, id: { in: ids }, account: accountAccessWhere },
     select: { folderId: true },
   });
   for (const folderId of after.map((e) => e.folderId)) {
@@ -769,6 +870,7 @@ export async function sendEmail(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   input: {
     accountId: string;
     to: string;
@@ -779,7 +881,7 @@ export async function sendEmail(
     attachments: MailSendAttachment[];
   },
 ) {
-  const account = await requireUserEmailAccount(db, tenantId, userId, input.accountId);
+  const account = await requireUserEmailAccount(db, tenantId, userId, input.accountId, role);
   const text = textFromHtml(input.html);
   const sent = await sendSmtpMessage(account, {
     to: input.to,
@@ -790,7 +892,7 @@ export async function sendEmail(
     text,
     attachments: input.attachments,
   });
-  const sentFolder = await folderByType(db, tenantId, userId, account.id, EmailFolderType.SENT);
+  const sentFolder = await folderByType(db, tenantId, userId, role, account.id, EmailFolderType.SENT);
   const email = await db.email.create({
     data: {
       tenantId,

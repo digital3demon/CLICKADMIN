@@ -119,7 +119,7 @@ async function main() {
       }
       const actions = {
         delete: source.delete === true,
-        markRead: source.markRead === true,
+        markRead: true,
         markImportant: source.markImportant === true,
         stopProcessing: source.stopProcessing === true,
         moveToFolderId: folder?.id ?? null,

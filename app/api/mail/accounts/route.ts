@@ -12,14 +12,17 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
-  const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId);
-  return NextResponse.json({ accounts });
+  const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role);
+  return NextResponse.json({ accounts, currentUser: { role: r.ctx.role } });
 }
 
 export async function POST(req: Request) {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
   try {
+    if (r.ctx.role !== "OWNER") {
+      return NextResponse.json({ error: "Только владелец может подключать почтовые ящики" }, { status: 403 });
+    }
     const body = await jsonBody(req);
     const account = await upsertEmailAccount(r.ctx.db, r.ctx.tenantId, r.ctx.userId, {
       email: stringField(body.email, 320),

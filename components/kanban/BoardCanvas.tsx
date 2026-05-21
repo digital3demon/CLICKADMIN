@@ -113,6 +113,10 @@ const CARD_MENU_EST_HEIGHT = 150;
 const BOARD_COLUMN_WIDTH_CLASS =
   "w-[140px] min-[420px]:w-[156px] sm:w-[176px] lg:w-[192px] xl:w-[208px]";
 
+function rectsIntersect(a: DOMRect | { left: number; right: number; top: number; bottom: number }, b: DOMRect): boolean {
+  return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
+}
+
 /** Элементы со скроллом выше по дереву — absolute-меню внутри колонки обрезается без портала. */
 function scrollContainerAncestors(start: HTMLElement | null): HTMLElement[] {
   const acc: HTMLElement[] = [];
@@ -1111,19 +1115,20 @@ export function BoardCanvas({
       dragPointRef.current = null;
       if (
         onRequestStopCard &&
-        point &&
         !columnIds.includes(aid) &&
         !dndLocked
       ) {
         const stopButton = document.getElementById("kanban-stop-drop-target");
-        const rect = stopButton?.getBoundingClientRect();
-        if (
-          rect &&
-          point.x >= rect.left &&
-          point.x <= rect.right &&
-          point.y >= rect.top &&
-          point.y <= rect.bottom
-        ) {
+        const stopRect = stopButton?.getBoundingClientRect();
+        const dragRect = active.rect.current.translated;
+        const pointInside =
+          point &&
+          stopRect &&
+          point.x >= stopRect.left &&
+          point.x <= stopRect.right &&
+          point.y >= stopRect.top &&
+          point.y <= stopRect.bottom;
+        if (stopRect && (pointInside || (dragRect && rectsIntersect(dragRect, stopRect)))) {
           onRequestStopCard(aid);
           return;
         }

@@ -104,7 +104,7 @@ export function FinanceOfficeOrdersTable({
         </div>
       }
     >
-      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm xl:overflow-x-visible [-webkit-overflow-scrolling:touch]">
+      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm [-webkit-overflow-scrolling:touch]">
         <table className="w-max min-w-full border-collapse text-left text-sm">
           <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
@@ -125,10 +125,10 @@ export function FinanceOfficeOrdersTable({
               <th className="px-2 py-2 text-center">Врач</th>
               <th className="px-2 py-2 text-center">Пациент</th>
               <th className="px-2 py-2 text-center">Лаборатория</th>
-              <th className="min-w-[14rem] px-2 py-2 text-center normal-case">Реквизиты</th>
-              <th className="min-w-[10rem] px-2 py-2 text-center normal-case">Наше юрлицо</th>
-              <th className="px-2 py-2 text-center normal-case">Отправка</th>
-              <th className="min-w-[14rem] px-2 py-2 text-center normal-case">Отметки</th>
+              <th className="w-[11rem] px-1.5 py-2 text-center normal-case">Реквизиты</th>
+              <th className="w-[7rem] px-1.5 py-2 text-center normal-case">Наше юрлицо</th>
+              <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
+              <th className="w-[10.5rem] px-1.5 py-2 text-center normal-case">Отметки</th>
             </tr>
           </thead>
           <tbody>
@@ -188,19 +188,19 @@ export function FinanceOfficeOrdersTable({
                       createdAtIso={o.createdAt}
                     />
                   </td>
-                  <td className="max-w-[22rem] whitespace-pre-line px-2 py-2 text-xs text-[var(--text-secondary)]">
+                  <td className="w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-[11px] leading-snug text-[var(--text-secondary)]">
                     {o.counterpartyRequisitesText || "—"}
                   </td>
-                  <td className="max-w-[14rem] px-2 py-2 text-xs text-[var(--text-secondary)]">
+                  <td className="w-[7rem] max-w-[7rem] break-words px-1.5 py-2 text-[11px] leading-snug text-[var(--text-secondary)]">
                     {o.legalEntity || "—"}
                   </td>
                   <td
                     data-shipped-cell
-                    className="px-2 py-2 text-center align-middle"
+                    className="w-[4.5rem] px-1 py-2 text-center align-middle"
                   >
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="w-[10.5rem] max-w-[10.5rem] px-1.5 py-2">
                     <OrderListTagsCell
                       orderId={o.id}
                       pageSize={500}

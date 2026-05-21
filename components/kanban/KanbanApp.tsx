@@ -37,6 +37,7 @@ import {
   isKanbanAggregateBoardId,
   KANBAN_BOARD_DISTRIBUTE_ID,
   KANBAN_BOARD_MY_CARDS_ID,
+  KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
   mergeKanbanStatePreservingLocalBoards,
   withActiveBoard,
@@ -140,6 +141,12 @@ const PRODUCTION_BOARD_ID = "kanban-board-production";
 
 function normalizeBoardTitle(title: string | null | undefined): string {
   return String(title || "").trim().toLowerCase();
+}
+
+function kaitenLaneForKanbanBoardId(boardId: string): KaitenTrackLane | undefined {
+  if (boardId === KANBAN_BOARD_ORTHOPEDICS_ID) return "ORTHOPEDICS";
+  if (boardId === KANBAN_BOARD_ORTHODONTICS_ID) return "ORTHODONTICS";
+  return undefined;
 }
 
 function KanbanStopView({
@@ -1331,6 +1338,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         orderId: cardSnapshot.linkedOrderId,
         kaitenCardId: cardSnapshot.kaitenCardId,
         columnTitle: prevTitle,
+        kaitenTrackLane: kaitenLaneForKanbanBoardId(home.id),
         sortOrder,
       });
     }
@@ -1423,6 +1431,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           orderId: cardSnapshot.linkedOrderId,
           kaitenCardId: cardSnapshot.kaitenCardId,
           columnTitle: targetCol.title,
+          kaitenTrackLane: kaitenLaneForKanbanBoardId(home.id),
           sortOrder,
         });
       }
@@ -1835,7 +1844,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 appState.boards.length > 1 && kanbanCardPerms.moveToOtherBoard
               }
               onLinkedOrderMovedToKaitenMirror={
-                isDemo ? undefined : syncKaitenMirrorAfterKanbanMove
+                isDemo
+                  ? undefined
+                  : (args) =>
+                      syncKaitenMirrorAfterKanbanMove({
+                        ...args,
+                        kaitenTrackLane: kaitenLaneForKanbanBoardId(board.id),
+                      })
               }
               onCardColumnChanged={({ cardId, toColumnId }) => {
                 let productionTelegramCreates: Array<{

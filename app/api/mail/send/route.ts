@@ -36,7 +36,7 @@ export async function POST(req: Request) {
         content: Buffer.from(await value.arrayBuffer()),
       });
     }
-    const result = await sendEmail(r.ctx.db, r.ctx.tenantId, r.ctx.userId, {
+    const result = await sendEmail(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, {
       accountId,
       to,
       cc: stringField(form.get("cc"), 2000) || null,

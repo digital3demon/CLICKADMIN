@@ -69,6 +69,8 @@ const MAIL_UI_SCALE_STYLE: CSSProperties & { zoom: number } = {
   minHeight: `calc(100dvh / ${MAIL_UI_SCALE})`,
 };
 const LAST_MAIL_ACCOUNT_STORAGE_KEY = "dental-crm:last-mail-account-id";
+const MAIL_DB_REFRESH_INTERVAL_MS = 15_000;
+const MAIL_ACTIVE_SYNC_INTERVAL_MS = 60_000;
 
 function readLastMailAccountId(): string {
   try {
@@ -89,6 +91,7 @@ function writeLastMailAccountId(accountId: string): void {
 export function MailLayout() {
   const { open: openNewOrder, canOpen: canOpenNewOrder, canCreate: canCreateOrder } = useNewOrderPanel();
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
+  const [currentUserRole, setCurrentUserRole] = useState("");
   const [activeAccountId, setActiveAccountId] = useState("");
   const [activeFolderId, setActiveFolderId] = useState("");
   const [activeLabelId, setActiveLabelId] = useState("");
@@ -112,6 +115,7 @@ export function MailLayout() {
   const [error, setError] = useState("");
   const listQueryKeyRef = useRef("");
   const listHasRowsRef = useRef(false);
+  const syncInFlightRef = useRef(false);
 
   const activeAccount = useMemo(
     () => accounts.find((a) => a.id === activeAccountId) ?? null,
@@ -125,6 +129,7 @@ export function MailLayout() {
     () => activeAccount?.labels.find((label) => label.id === activeLabelId) ?? null,
     [activeAccount, activeLabelId],
   );
+  const canConnectAccount = currentUserRole === "OWNER";
   const listQueryKey = useMemo(
     () => JSON.stringify({
       accountId: activeAccountId,
@@ -137,8 +142,9 @@ export function MailLayout() {
   );
 
   const loadAccounts = useCallback(async () => {
-    const data = await jsonFetch<{ accounts: MailAccount[] }>("/api/mail/accounts");
+    const data = await jsonFetch<{ accounts: MailAccount[]; currentUser?: { role: string } }>("/api/mail/accounts");
     setAccounts(data.accounts);
+    setCurrentUserRole(data.currentUser?.role ?? "");
     setActiveAccountId((prev) => {
       if (prev && data.accounts.some((account) => account.id === prev)) return prev;
       const saved = readLastMailAccountId();
@@ -257,9 +263,61 @@ export function MailLayout() {
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void refreshEmailsSilently();
-    }, 15_000);
+    }, MAIL_DB_REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [activeAccountId, refreshEmailsSilently]);
+
+  const syncActive = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!activeAccountId || syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
+    if (!options.silent) {
+      setSyncing(true);
+      setError("");
+      setSyncStatus("Проверяем новые письма...");
+    }
+    try {
+      const data = await jsonFetch<{
+        status?: string;
+        lastError?: string | null;
+        queued?: boolean;
+        rulesApply?: { skipped: boolean; processed: number; updated: number; labelsTouched: number };
+      }>(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
+      if (!options.silent) {
+        if (data.status === "FAILED") {
+          setSyncStatus("");
+          setError(mailErrorMessage(data.lastError, "Синхронизация завершилась ошибкой"));
+        } else if (data.queued) {
+          setSyncStatus("Синхронизация в очереди");
+        } else if (data.rulesApply && !data.rulesApply.skipped) {
+          setSyncStatus(
+            `Синхронизация завершена. Правила проверили ${data.rulesApply.processed} писем, обновили ${data.rulesApply.updated}.`,
+          );
+        }
+      }
+      await loadAccounts();
+      await refreshEmailsSilently();
+    } catch (err) {
+      if (!options.silent) setError(mailErrorMessage(err, "Ошибка синхронизации"));
+    } finally {
+      syncInFlightRef.current = false;
+      if (!options.silent) setSyncing(false);
+    }
+  }, [activeAccountId, loadAccounts, refreshEmailsSilently]);
+
+  useEffect(() => {
+    if (!activeAccountId) return;
+    const run = () => {
+      if (document.visibilityState !== "visible") return;
+      void syncActive({ silent: true });
+    };
+    run();
+    const timer = window.setInterval(run, MAIL_ACTIVE_SYNC_INTERVAL_MS);
+    window.addEventListener("focus", run);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", run);
+    };
+  }, [activeAccountId, syncActive]);
 
   useEffect(() => {
     if (!activeAccountId) return;
@@ -320,6 +378,23 @@ export function MailLayout() {
     await loadEmails(null, false);
   }
 
+  async function markAllRead() {
+    if (!activeAccountId) return;
+    if (!window.confirm("Отметить все письма этого ящика прочитанными?")) return;
+    setError("");
+    try {
+      await jsonFetch("/api/mail/emails/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [], action: "markAllRead", accountId: activeAccountId }),
+      });
+      await loadAccounts();
+      await loadEmails(null, false);
+    } catch (err) {
+      setError(mailErrorMessage(err, "Не удалось отметить письма прочитанными"));
+    }
+  }
+
   function openReply(mode: "reply" | "replyAll" | "forward", html = "") {
     if (!detail) return;
     const to =
@@ -350,33 +425,8 @@ export function MailLayout() {
     );
   }
 
-  async function syncActive() {
-    if (!activeAccountId || syncing) return;
-    setSyncing(true);
-    setError("");
-    setSyncStatus("Проверяем новые письма...");
-    try {
-      const data = await jsonFetch<{
-        status?: string;
-        lastError?: string | null;
-        queued?: boolean;
-      }>(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
-      if (data.status === "FAILED") {
-        setSyncStatus("");
-        setError(mailErrorMessage(data.lastError, "Синхронизация завершилась ошибкой"));
-      } else if (data.queued) {
-        setSyncStatus("Синхронизация в очереди");
-      }
-      await loadAccounts();
-      await refreshEmailsSilently();
-    } catch (err) {
-      setError(mailErrorMessage(err, "Ошибка синхронизации"));
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   async function saveAccount(formData: FormData) {
+    if (!canConnectAccount) return;
     setSavingAccount(true);
     setError("");
     try {
@@ -472,6 +522,7 @@ export function MailLayout() {
         }}
         onSync={() => void syncActive()}
         onConnectAccount={() => setAccountModalOpen(true)}
+        canConnectAccount={canConnectAccount}
       />
 
       {error ? (
@@ -488,17 +539,23 @@ export function MailLayout() {
       {accounts.length === 0 ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-8">
           <div className="max-w-md rounded-[28px] bg-[var(--card-bg)] p-8 text-center shadow-sm ring-1 ring-[var(--card-border)]">
-            <h2 className="text-2xl font-semibold text-[var(--app-text)]">Подключите Яндекс.Почту</h2>
+            <h2 className="text-2xl font-semibold text-[var(--app-text)]">
+              {canConnectAccount ? "Подключите Яндекс.Почту" : "Нет доступных почтовых ящиков"}
+            </h2>
             <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
-              Подключение аккаунтов и правила обработки входящей почты находятся в конфигурации.
+              {canConnectAccount
+                ? "Подключение аккаунтов и правила обработки входящей почты находятся в конфигурации."
+                : "Владелец должен открыть доступ к нужному ящику для вашей роли."}
             </p>
-            <button
-              type="button"
-              onClick={() => setAccountModalOpen(true)}
-              className="mt-6 rounded-2xl bg-[var(--sidebar-blue)] px-6 py-3 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]"
-            >
-              Добавить ящик
-            </button>
+            {canConnectAccount ? (
+              <button
+                type="button"
+                onClick={() => setAccountModalOpen(true)}
+                className="mt-6 rounded-2xl bg-[var(--sidebar-blue)] px-6 py-3 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]"
+              >
+                Добавить ящик
+              </button>
+            ) : null}
           </div>
         </div>
       ) : (
@@ -573,8 +630,10 @@ export function MailLayout() {
               onSelectAll={() => setSelectedIds(new Set(emails.map((e) => e.id)))}
               onClearSelection={() => setSelectedIds(new Set())}
               onCreateOrder={() => void createOrderFromSelectedEmails()}
+              onMarkAllRead={() => void markAllRead()}
               onBulkAction={(action) => void bulk(action)}
               onEmailAction={(id, action) => void bulk(action, [id])}
+              canMarkAllRead={currentUserRole === "OWNER"}
             />
             <div className="hidden min-w-0 flex-1 overflow-hidden xl:flex">
               <MailViewer
@@ -601,7 +660,7 @@ export function MailLayout() {
           void loadEmails(null, false);
         }}
       />
-      {accountModalOpen ? (
+      {accountModalOpen && canConnectAccount ? (
         <div
           className="fixed inset-0 z-[220] flex items-center justify-center bg-black/50 p-4"
           role="presentation"

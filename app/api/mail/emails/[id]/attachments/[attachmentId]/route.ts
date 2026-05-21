@@ -15,6 +15,7 @@ export async function GET(
       r.ctx.db,
       r.ctx.tenantId,
       r.ctx.userId,
+      r.ctx.role,
       id,
       attachmentId,
     );

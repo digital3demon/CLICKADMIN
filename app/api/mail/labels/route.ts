@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId")?.trim();
   if (!accountId) return NextResponse.json({ error: "accountId обязателен" }, { status: 400 });
-  const labels = await listEmailLabels(r.ctx.db, r.ctx.tenantId, r.ctx.userId, accountId);
+  const labels = await listEmailLabels(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, accountId);
   return NextResponse.json({ labels });
 }
 
@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       r.ctx.db,
       r.ctx.tenantId,
       r.ctx.userId,
+      r.ctx.role,
       stringField(body.accountId, 200),
       {
         name: stringField(body.name, 80),

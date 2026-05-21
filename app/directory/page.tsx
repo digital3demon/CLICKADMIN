@@ -28,7 +28,7 @@ export default async function DirectoryHubPage() {
   const showCouriers = a?.CONFIG_COURIERS === true;
   const showOrdersImportExport = a?.CONFIG_ORDERS_IMPORT_EXPORT === true;
   const showContractTemplate = a?.CONFIG_CONTRACT_TEMPLATE === true;
-  const showMail = a?.MAIL === true;
+  const showMail = session?.role === "OWNER";
 
   return (
     <ModuleFrame
@@ -168,7 +168,7 @@ export default async function DirectoryHubPage() {
               Почта
             </h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Подключение аккаунтов Яндекс.Почты и правила обработки входящих писем.
+              Подключение ящиков, роли доступа и правила обработки входящих писем.
             </p>
           </Link>
         ) : null}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMailApiContext } from "@/lib/mail/mail-service";
+import { getMailApiContext, mailAccountAccessWhere } from "@/lib/mail/mail-service";
 
 export const dynamic = "force-dynamic";
 
@@ -8,11 +8,23 @@ export async function GET(req: Request) {
   if (!r.ok) return r.response;
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId")?.trim();
+  const accessibleAccount = accountId
+    ? await r.ctx.db.emailAccount.findFirst({
+        where: {
+          id: accountId,
+          ...mailAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
+        },
+        select: { id: true },
+      })
+    : null;
+  if (accountId && !accessibleAccount) {
+    return NextResponse.json({ jobs: [] });
+  }
   const jobs = await r.ctx.db.emailSyncJob.findMany({
     where: {
       tenantId: r.ctx.tenantId,
-      createdByUserId: r.ctx.userId,
       ...(accountId ? { accountId } : {}),
+      account: mailAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
     },
     orderBy: [{ queuedAt: "desc" }],
     take: 10,

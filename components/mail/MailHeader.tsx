@@ -13,6 +13,7 @@ type Props = {
   onCompose: () => void;
   onSync: () => void;
   onConnectAccount: () => void;
+  canConnectAccount: boolean;
 };
 
 export function MailHeader({
@@ -25,6 +26,7 @@ export function MailHeader({
   onCompose,
   onSync,
   onConnectAccount,
+  canConnectAccount,
 }: Props) {
   const active = accounts.find((a) => a.id === activeAccountId) ?? null;
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -105,16 +107,18 @@ export function MailHeader({
                     Ящики ещё не подключены.
                   </p>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    onConnectAccount();
-                  }}
-                  className="mt-2 flex w-full items-center justify-center rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-semibold text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
-                >
-                  Добавить ящик
-                </button>
+                {canConnectAccount ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      onConnectAccount();
+                    }}
+                    className="mt-2 flex w-full items-center justify-center rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-semibold text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+                  >
+                    Добавить ящик
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

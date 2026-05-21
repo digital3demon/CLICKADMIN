@@ -769,6 +769,8 @@ model EmailAccount {
   tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   /// Пользователь, который подключил ящик. Ящики не являются общими по умолчанию.
   createdByUserId      String?
+  /// Роли, которым владелец разрешил видеть и использовать ящик.
+  allowedRoles         UserRole[] @default([OWNER])
   email                String
   displayName          String?
   encryptedAppPassword String?

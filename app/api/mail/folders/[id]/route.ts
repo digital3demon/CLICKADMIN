@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { jsonBody, mailErrorResponse } from "@/app/api/mail/_utils";
-import { getMailApiContext, normalizeMailColor, stringField } from "@/lib/mail/mail-service";
+import {
+  getMailApiContext,
+  mailAccountAccessWhere,
+  normalizeMailColor,
+  stringField,
+} from "@/lib/mail/mail-service";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +27,7 @@ export async function PATCH(
       where: {
         id,
         tenantId: r.ctx.tenantId,
-        account: { createdByUserId: r.ctx.userId },
+        account: mailAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
       },
       select: { id: true, type: true },
     });
@@ -55,7 +60,7 @@ export async function DELETE(
         id,
         tenantId: r.ctx.tenantId,
         type: "CUSTOM",
-        account: { createdByUserId: r.ctx.userId },
+        account: mailAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
       },
     });
     return NextResponse.json({ ok: true });

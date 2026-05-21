@@ -100,6 +100,19 @@ const FOLDER_COLOR_PRESETS = [
   "#ec4899",
 ];
 
+const MAIL_ROLE_OPTIONS = [
+  { value: "OWNER", label: "Владелец" },
+  { value: "ADMINISTRATOR", label: "Администратор" },
+  { value: "SENIOR_ADMINISTRATOR", label: "Старший администратор" },
+  { value: "MANAGER", label: "Менеджер" },
+  { value: "ACCOUNTANT", label: "Бухгалтер" },
+  { value: "FINANCIAL_MANAGER", label: "Финансовый менеджер" },
+  { value: "PRODUCTION", label: "Производство" },
+  { value: "SENIOR_PRODUCTION", label: "Старшее производство" },
+  { value: "SENIOR_TECHNICIAN", label: "Старший техник" },
+  { value: "USER", label: "Пользователь" },
+];
+
 function normalizeHexColor(value: string | null | undefined, fallback = "#6b7280"): string {
   const color = String(value || "").trim();
   return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
@@ -156,6 +169,7 @@ export function MailSettingsClient() {
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
   const [rules, setRules] = useState<EmailRule[]>([]);
   const [accountId, setAccountId] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -166,8 +180,12 @@ export function MailSettingsClient() {
 
   const load = useCallback(async () => {
     setError("");
-    const accountsData = await jsonFetch<{ accounts: MailAccount[] }>("/api/mail/accounts");
+    const accountsData = await jsonFetch<{
+      accounts: MailAccount[];
+      currentUser?: { role?: string };
+    }>("/api/mail/accounts");
     setAccounts(accountsData.accounts);
+    setCurrentUserRole(accountsData.currentUser?.role || "");
     const nextAccountId = accountsData.accounts.some((account) => account.id === accountId)
       ? accountId
       : accountsData.accounts[0]?.id || "";
@@ -179,6 +197,8 @@ export function MailSettingsClient() {
     );
     setRules(rulesData.rules);
   }, [accountId]);
+
+  const canManageAccountAccess = currentUserRole === "OWNER";
 
   useEffect(() => {
     void load().catch((err) =>
@@ -207,6 +227,7 @@ export function MailSettingsClient() {
   }
 
   async function deleteAccount(account: MailAccount) {
+    if (!canManageAccountAccess) return;
     const label = account.displayName || account.email;
     const emailsCount = account._count?.emails ?? 0;
     const confirmText =
@@ -224,6 +245,24 @@ export function MailSettingsClient() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось удалить ящик");
+    }
+  }
+
+  async function saveAccountAccess(formData: FormData) {
+    if (!activeAccount) return;
+    setError("");
+    setStatus("Сохраняю доступ к ящику...");
+    try {
+      const allowedRoles = formData.getAll("allowedRoles").map(String);
+      await jsonFetch(`/api/mail/accounts/${activeAccount.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowedRoles }),
+      });
+      setStatus("Доступ к ящику обновлён");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сохранить доступ к ящику");
     }
   }
 
@@ -395,7 +434,7 @@ export function MailSettingsClient() {
                   </option>
                 ))}
               </select>
-              {activeAccount ? (
+              {activeAccount && canManageAccountAccess ? (
                 <button
                   type="button"
                   onClick={() => void deleteAccount(activeAccount)}
@@ -408,33 +447,91 @@ export function MailSettingsClient() {
           ) : null}
         </div>
 
-        <form action={(formData) => void saveAccount(formData)} className="mt-5 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
-          <input
-            name="email"
-            type="email"
-            required
-            placeholder="name@yandex.ru"
-            className="h-11 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
-          />
-          <input
-            name="displayName"
-            placeholder="Имя отправителя"
-            className="h-11 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
-          />
-          <input
-            name="appPassword"
-            type="password"
-            required
-            placeholder="Пароль приложения"
-            className="h-11 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
-          />
-          <button
-            type="submit"
-            className="h-11 rounded-xl bg-[var(--sidebar-blue)] px-5 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]"
+        {canManageAccountAccess ? (
+          <form action={(formData) => void saveAccount(formData)} className="mt-5 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+            <input
+              name="email"
+              type="email"
+              required
+              placeholder="name@yandex.ru"
+              className="h-11 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+            />
+            <input
+              name="displayName"
+              placeholder="Имя отправителя"
+              className="h-11 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+            />
+            <input
+              name="appPassword"
+              type="password"
+              required
+              placeholder="Пароль приложения"
+              className="h-11 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+            />
+            <button
+              type="submit"
+              className="h-11 rounded-xl bg-[var(--sidebar-blue)] px-5 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]"
+            >
+              Сохранить
+            </button>
+          </form>
+        ) : (
+          <div className="mt-5 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4 text-sm text-[var(--text-secondary)]">
+            Подключение новых почтовых ящиков доступно владельцу.
+          </div>
+        )}
+
+        {activeAccount && canManageAccountAccess ? (
+          <form
+            key={activeAccount.id}
+            action={(formData) => void saveAccountAccess(formData)}
+            className="mt-5 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4"
           >
-            Сохранить
-          </button>
-        </form>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--app-text)]">
+                  Доступ к ящику «{activeAccount.displayName || activeAccount.email}»
+                </h3>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  Отметьте роли, которым можно видеть письма, синхронизировать ящик и отправлять письма от этого аккаунта.
+                </p>
+              </div>
+              <button
+                type="submit"
+                className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]"
+              >
+                Сохранить доступ
+              </button>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {MAIL_ROLE_OPTIONS.map((role) => {
+                const checked = (activeAccount.allowedRoles || ["OWNER"]).includes(role.value);
+                const isOwnerRole = role.value === "OWNER";
+                return (
+                  <label
+                    key={role.value}
+                    className="flex items-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)]"
+                  >
+                    <input
+                      type="checkbox"
+                      name="allowedRoles"
+                      value={role.value}
+                      defaultChecked={checked || isOwnerRole}
+                      disabled={isOwnerRole}
+                      className="h-4 w-4 rounded border-[var(--input-border)]"
+                    />
+                    {isOwnerRole ? <input type="hidden" name="allowedRoles" value="OWNER" /> : null}
+                    <span>{role.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </form>
+        ) : activeAccount ? (
+          <div className="mt-5 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4 text-sm text-[var(--text-secondary)]">
+            Доступ к этому ящику настраивает владелец.
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">

@@ -4,7 +4,7 @@ import { bulkEmailAction, getMailApiContext, stringField } from "@/lib/mail/mail
 
 export const dynamic = "force-dynamic";
 
-const ACTIONS = new Set(["read", "unread", "flag", "unflag", "archive", "trash", "delete", "move"]);
+const ACTIONS = new Set(["read", "unread", "flag", "unflag", "archive", "trash", "delete", "move", "markAllRead"]);
 
 export async function POST(req: Request) {
   const r = await getMailApiContext();
@@ -15,12 +15,15 @@ export async function POST(req: Request) {
     if (!ACTIONS.has(action)) {
       return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });
     }
+    if (action === "markAllRead" && r.ctx.role !== "OWNER") {
+      return NextResponse.json({ error: "Только владелец может отметить все письма прочитанными" }, { status: 403 });
+    }
     const ids = Array.isArray(body.ids)
       ? body.ids.filter((x): x is string => typeof x === "string")
       : [];
-    const result = await bulkEmailAction(r.ctx.db, r.ctx.tenantId, r.ctx.userId, {
+    const result = await bulkEmailAction(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, {
       ids,
-      action: action as Parameters<typeof bulkEmailAction>[3]["action"],
+      action: action as Parameters<typeof bulkEmailAction>[4]["action"],
       accountId: stringField(body.accountId, 200) || null,
       targetFolderId: stringField(body.targetFolderId, 200) || null,
     });

@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId")?.trim();
   if (!accountId) return NextResponse.json({ error: "accountId обязателен" }, { status: 400 });
-  const result = await listEmails(r.ctx.db, r.ctx.tenantId, r.ctx.userId, {
+  const result = await listEmails(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, {
     accountId,
     folderId: url.searchParams.get("folderId")?.trim() || null,
     labelId: url.searchParams.get("labelId")?.trim() || null,

@@ -58,6 +58,7 @@ export type MailAccount = {
   hasPassword: boolean;
   lastSyncAt: string | null;
   lastSyncError: string | null;
+  allowedRoles: string[];
   folders: MailFolder[];
   labels: MailLabel[];
   _count?: { emails: number };

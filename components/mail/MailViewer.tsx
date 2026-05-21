@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { MailEmailDetail } from "@/components/mail/types";
+import { mailFullDateLabel, mailPrimaryDateValue } from "@/components/mail/date-format";
 
 function addressLine(value: unknown): string {
   if (!Array.isArray(value)) return "";
@@ -124,9 +125,7 @@ export function MailViewer({
             ) : null}
             <div>
               <span className="mr-2 text-[var(--text-muted)]">Дата</span>
-              <span>
-                {new Date(email.receivedAt || email.sentAt || email.createdAt).toLocaleString("ru-RU")}
-              </span>
+              <span>{mailFullDateLabel(mailPrimaryDateValue(email))}</span>
             </div>
           </div>
         </div>

@@ -6,24 +6,12 @@ import { CSS } from "@dnd-kit/utilities";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { MailEmailRow, MailFilter, MailFolder, MailLabel } from "@/components/mail/types";
 import { mailFolderDisplayName } from "@/components/mail/types";
+import { mailListDateLabel, mailPrimaryDateValue } from "@/components/mail/date-format";
 
 function senderName(email: MailEmailRow): string {
   return email.direction === "OUTBOUND"
     ? "Вы"
     : email.fromName || email.fromAddress || "Без отправителя";
-}
-
-function dateLabel(value: string | null): string {
-  if (!value) return "";
-  const d = new Date(value);
-  const now = new Date();
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-  return sameDay
-    ? d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
 }
 
 function initials(value: string): string {
@@ -205,7 +193,7 @@ function MailRow({
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
             <time className="text-xs font-medium text-[var(--text-muted)]">
-              {dateLabel(email.receivedAt || email.sentAt || email.createdAt)}
+              {mailListDateLabel(mailPrimaryDateValue(email))}
             </time>
             <div className="flex items-center gap-1">
               <button
@@ -275,8 +263,10 @@ export function MailList({
   onSelectAll,
   onClearSelection,
   onCreateOrder,
+  onMarkAllRead,
   onBulkAction,
   onEmailAction,
+  canMarkAllRead,
 }: {
   folder: MailFolder | null;
   label: MailLabel | null;
@@ -294,8 +284,10 @@ export function MailList({
   onSelectAll: () => void;
   onClearSelection: () => void;
   onCreateOrder: () => void;
+  onMarkAllRead: () => void;
   onBulkAction: (action: "read" | "unread" | "archive" | "trash" | "delete") => void;
   onEmailAction: (id: string, action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
+  canMarkAllRead: boolean;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
@@ -326,13 +318,24 @@ export function MailList({
                   : "Выберите папку или метку"}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={allSelected ? onClearSelection : onSelectAll}
-            className="rounded-xl border border-[var(--card-border)] px-3 py-1.5 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-          >
-            {allSelected ? "Снять" : "Выбрать"}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {canMarkAllRead ? (
+              <button
+                type="button"
+                onClick={onMarkAllRead}
+                className="rounded-xl border border-[var(--card-border)] px-3 py-1.5 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+              >
+                Отметить все прочитанными
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={allSelected ? onClearSelection : onSelectAll}
+              className="rounded-xl border border-[var(--card-border)] px-3 py-1.5 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+            >
+              {allSelected ? "Снять" : "Выбрать"}
+            </button>
+          </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {[

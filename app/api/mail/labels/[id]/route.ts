@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { jsonBody, mailErrorResponse } from "@/app/api/mail/_utils";
-import { getMailApiContext, stringField } from "@/lib/mail/mail-service";
+import { getMailApiContext, mailAccountAccessWhere, stringField } from "@/lib/mail/mail-service";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,11 @@ export async function PATCH(
     const name = stringField(body.name, 80);
     const color = stringField(body.color, 20);
     const updated = await r.ctx.db.emailLabel.updateMany({
-      where: { id, tenantId: r.ctx.tenantId, account: { createdByUserId: r.ctx.userId } },
+      where: {
+        id,
+        tenantId: r.ctx.tenantId,
+        account: mailAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
+      },
       data: {
         ...(name ? { name } : {}),
         ...(color ? { color } : {}),
@@ -24,7 +28,11 @@ export async function PATCH(
     });
     if (!updated.count) return NextResponse.json({ error: "Метка не найдена" }, { status: 404 });
     const label = await r.ctx.db.emailLabel.findFirst({
-      where: { id, tenantId: r.ctx.tenantId, account: { createdByUserId: r.ctx.userId } },
+      where: {
+        id,
+        tenantId: r.ctx.tenantId,
+        account: mailAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
+      },
     });
     return NextResponse.json({ label });
   } catch (err) {
@@ -41,7 +49,11 @@ export async function DELETE(
   try {
     const { id } = await params;
     await r.ctx.db.emailLabel.deleteMany({
-      where: { id, tenantId: r.ctx.tenantId, account: { createdByUserId: r.ctx.userId } },
+      where: {
+        id,
+        tenantId: r.ctx.tenantId,
+        account: mailAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
+      },
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

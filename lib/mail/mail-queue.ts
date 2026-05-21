@@ -63,6 +63,7 @@ export async function runMailSyncJob(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   syncJobId: string,
 ) {
   const staleBefore = new Date(Date.now() - STALE_RUNNING_JOB_MS);
@@ -90,7 +91,7 @@ export async function runMailSyncJob(
   if (!started.count) return { syncJob, processed: false, result: null };
 
   try {
-    const result = await syncAccountNow(db, tenantId, userId, syncJob.accountId, {
+    const result = await syncAccountNow(db, tenantId, userId, role, syncJob.accountId, {
       mode: syncJob.mode,
     });
     const updated = await db.emailSyncJob.update({
@@ -127,10 +128,11 @@ export async function enqueueAndRunMailSyncJob(
   db: PrismaClient,
   tenantId: string,
   userId: string,
+  role: string,
   accountId: string,
   mode: EmailSyncMode = EmailSyncMode.RECENT,
 ) {
   const queued = await enqueueMailSyncJob(db, tenantId, userId, accountId, mode);
-  const processed = await runMailSyncJob(db, tenantId, userId, queued.syncJob.id);
+  const processed = await runMailSyncJob(db, tenantId, userId, role, queued.syncJob.id);
   return { ...queued, ...processed };
 }
