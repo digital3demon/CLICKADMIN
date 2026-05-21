@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MailAccount, MailFolder } from "@/components/mail/types";
 import { mailFolderDisplayName } from "@/components/mail/types";
+import { ALL_USER_ROLES, USER_ROLE_LABELS } from "@/lib/user-role-labels";
 
 type EmailRule = {
   id: string;
@@ -101,16 +102,7 @@ const FOLDER_COLOR_PRESETS = [
 ];
 
 const MAIL_ROLE_OPTIONS = [
-  { value: "OWNER", label: "Владелец" },
-  { value: "ADMINISTRATOR", label: "Администратор" },
-  { value: "SENIOR_ADMINISTRATOR", label: "Старший администратор" },
-  { value: "MANAGER", label: "Менеджер" },
-  { value: "ACCOUNTANT", label: "Бухгалтер" },
-  { value: "FINANCIAL_MANAGER", label: "Финансовый менеджер" },
-  { value: "PRODUCTION", label: "Производство" },
-  { value: "SENIOR_PRODUCTION", label: "Старшее производство" },
-  { value: "SENIOR_TECHNICIAN", label: "Старший техник" },
-  { value: "USER", label: "Пользователь" },
+  ...ALL_USER_ROLES.map((role) => ({ value: role, label: USER_ROLE_LABELS[role] })),
 ];
 
 function normalizeHexColor(value: string | null | undefined, fallback = "#6b7280"): string {
@@ -256,7 +248,11 @@ export function MailSettingsClient() {
         body: JSON.stringify({ allowedRoles }),
       });
       setStatus("Доступ к ящику обновлён");
-      await load();
+      setAccounts((prev) =>
+        prev.map((account) =>
+          account.id === activeAccount.id ? { ...account, allowedRoles } : account,
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить доступ к ящику");
     }

@@ -346,17 +346,7 @@ export async function updateEmailAccountAccessRoles(
     data: { allowedRoles },
   });
   if (!updated.count) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
-  const account = await db.emailAccount.findFirst({
-    where: { id: accountId, tenantId },
-    include: {
-      folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
-      labels: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
-      _count: { select: { emails: true } },
-    },
-  });
-  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
-  const { encryptedAppPassword, ...safeAccount } = account;
-  return { ...safeAccount, hasPassword: Boolean(encryptedAppPassword) };
+  return { id: accountId, allowedRoles };
 }
 
 export async function deleteEmailAccount(
