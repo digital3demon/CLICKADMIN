@@ -22,7 +22,7 @@ import {
 import { ensureOrderDigitaldemonRules } from "@/lib/mail/order-digitaldemon-rules";
 import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
-const RECENT_MESSAGES_PER_FOLDER = 40;
+const RECENT_MESSAGES_PER_FOLDER = 250;
 const BACKFILL_MESSAGES_PER_FOLDER = 120;
 
 function normalizeFolderPath(value: string): string {

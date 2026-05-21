@@ -8,11 +8,11 @@ describe("recentWindowStartUid", () => {
     expect(recentWindowStartUid(1, 5000, 120)).toBe(4880);
   });
 
-  it("recovers old bootstrap syncs that saved a very low UID", () => {
-    expect(recentWindowStartUid(121, 5000, 120)).toBe(4880);
+  it("continues from the saved cursor instead of jumping over a gap", () => {
+    expect(recentWindowStartUid(121, 5000, 120)).toBe(121);
   });
 
-  it("continues incrementally when already inside the recent UID window", () => {
-    expect(recentWindowStartUid(4940, 5000, 120)).toBe(4940);
+  it("keeps a recent lookback when the saved cursor is newer than the recent window", () => {
+    expect(recentWindowStartUid(4940, 5000, 120)).toBe(4880);
   });
 });

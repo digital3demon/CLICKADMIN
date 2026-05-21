@@ -91,6 +91,7 @@ function writeLastMailAccountId(accountId: string): void {
 export function MailLayout() {
   const { open: openNewOrder, canOpen: canOpenNewOrder, canCreate: canCreateOrder } = useNewOrderPanel();
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState("");
   const [activeAccountId, setActiveAccountId] = useState("");
   const [activeFolderId, setActiveFolderId] = useState("");
@@ -142,15 +143,19 @@ export function MailLayout() {
   );
 
   const loadAccounts = useCallback(async () => {
-    const data = await jsonFetch<{ accounts: MailAccount[]; currentUser?: { role: string } }>("/api/mail/accounts");
-    setAccounts(data.accounts);
-    setCurrentUserRole(data.currentUser?.role ?? "");
-    setActiveAccountId((prev) => {
-      if (prev && data.accounts.some((account) => account.id === prev)) return prev;
-      const saved = readLastMailAccountId();
-      if (saved && data.accounts.some((account) => account.id === saved)) return saved;
-      return data.accounts[0]?.id || "";
-    });
+    try {
+      const data = await jsonFetch<{ accounts: MailAccount[]; currentUser?: { role: string } }>("/api/mail/accounts");
+      setAccounts(data.accounts);
+      setCurrentUserRole(data.currentUser?.role ?? "");
+      setActiveAccountId((prev) => {
+        if (prev && data.accounts.some((account) => account.id === prev)) return prev;
+        const saved = readLastMailAccountId();
+        if (saved && data.accounts.some((account) => account.id === saved)) return saved;
+        return data.accounts[0]?.id || "";
+      });
+    } finally {
+      setAccountsLoaded(true);
+    }
   }, []);
 
   const loadEmails = useCallback(async (cursor: string | null = null, append = false) => {
@@ -539,15 +544,26 @@ export function MailLayout() {
       {accounts.length === 0 ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-8">
           <div className="max-w-md rounded-[28px] bg-[var(--card-bg)] p-8 text-center shadow-sm ring-1 ring-[var(--card-border)]">
-            <h2 className="text-2xl font-semibold text-[var(--app-text)]">
-              {canConnectAccount ? "Подключите Яндекс.Почту" : "Нет доступных почтовых ящиков"}
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
-              {canConnectAccount
-                ? "Подключение аккаунтов и правила обработки входящей почты находятся в конфигурации."
-                : "Владелец должен открыть доступ к нужному ящику для вашей роли."}
-            </p>
-            {canConnectAccount ? (
+            {!accountsLoaded ? (
+              <>
+                <h2 className="text-2xl font-semibold text-[var(--app-text)]">Загружаем почту...</h2>
+                <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+                  Проверяем доступные ящики и последние синхронизации.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-semibold text-[var(--app-text)]">
+                  {canConnectAccount ? "Подключите Яндекс.Почту" : "Нет доступных почтовых ящиков"}
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+                  {canConnectAccount
+                    ? "Подключение аккаунтов и правила обработки входящей почты находятся в конфигурации."
+                    : "Владелец должен открыть доступ к нужному ящику для вашей роли."}
+                </p>
+              </>
+            )}
+            {accountsLoaded && canConnectAccount ? (
               <button
                 type="button"
                 onClick={() => setAccountModalOpen(true)}

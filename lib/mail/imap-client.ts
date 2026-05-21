@@ -34,7 +34,13 @@ export function recentWindowStartUid(
   const startUid = Math.max(1, requestedStartUid);
   if (!uidNext || uidNext <= 1 || maxMessages <= 0) return startUid;
 
-  return Math.max(startUid, Math.max(1, uidNext - maxMessages));
+  const recentStartUid = Math.max(1, uidNext - maxMessages);
+  if (startUid <= 1) return recentStartUid;
+
+  // Once a folder has a sync cursor, never jump over the gap to the newest
+  // window. Still include the newest window as a lookback to recover messages
+  // missed by older cursor jumps or transient IMAP errors.
+  return Math.min(startUid, recentStartUid);
 }
 
 function envTimeoutMs(name: string, fallback: number): number {
