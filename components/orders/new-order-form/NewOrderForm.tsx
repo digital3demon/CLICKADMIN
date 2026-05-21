@@ -2226,6 +2226,7 @@ function OrderSourceEmailsPanel({
   const mailSourceWidth = "clamp(20rem, 30vw, 28rem)";
   const mailOrderWidth = `min(calc(100vw - (${mailOrderViewportMargin} * 2) - ${mailSourceWidth} - ${mailOrderGap}), 1320px)`;
   const mailOrderLeft = `max(${mailOrderViewportMargin}, calc((100vw - (${mailOrderWidth} + ${mailSourceWidth} + ${mailOrderGap})) / 2))`;
+  const singleEmail = emails.length === 1;
 
   return createPortal(
     <aside
@@ -2234,10 +2235,11 @@ function OrderSourceEmailsPanel({
         top: mailOrderTop,
         left: `calc(${mailOrderLeft} + ${mailOrderWidth} + ${mailOrderGap})`,
         width: mailSourceWidth,
+        height: singleEmail ? mailOrderMaxHeight : undefined,
         maxHeight: mailOrderMaxHeight,
       }}
     >
-      <div className="min-h-0 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--app-text)] sm:text-base">
@@ -2245,11 +2247,19 @@ function OrderSourceEmailsPanel({
             </h3>
           </div>
         </div>
-        <div className="space-y-3">
+        <div
+          className={
+            singleEmail
+              ? "flex min-h-0 flex-1 flex-col"
+              : "min-h-0 space-y-3 overflow-y-auto"
+          }
+        >
           {emails.map((email, index) => (
             <article
               key={email.id}
-              className="rounded-[1.35rem] border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm"
+              className={`rounded-[1.35rem] border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm ${
+                singleEmail ? "flex min-h-0 flex-1 flex-col" : ""
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -2285,7 +2295,9 @@ function OrderSourceEmailsPanel({
                   if (node) emailBodyRefs.current.set(email.id, node);
                   else emailBodyRefs.current.delete(email.id);
                 }}
-                className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)]"
+                className={`mt-3 overflow-y-auto whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)] ${
+                  singleEmail ? "min-h-0 flex-1" : "max-h-44"
+                }`}
               >
                 {sourceEmailBody(email)}
               </p>

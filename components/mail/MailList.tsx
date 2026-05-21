@@ -56,6 +56,17 @@ function avatarColor(value: string): string {
   return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
 }
 
+function labelTextColor(bg: string): string {
+  const match = /^#?([0-9a-f]{6})$/i.exec(bg.trim());
+  if (!match) return "#111827";
+  const hex = match[1]!;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.58 ? "#111827" : "#ffffff";
+}
+
 function MailRow({
   email,
   active,
@@ -72,6 +83,7 @@ function MailRow({
   onAction: (action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
 }) {
   const sender = senderName(email);
+  const labels = email.labelAssignments?.map((item) => item.label) ?? [];
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `email:${email.id}`,
     data: { emailId: email.id },
@@ -80,7 +92,7 @@ function MailRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={`group relative flex h-[92px] cursor-pointer items-center gap-2 border-b border-[var(--border-subtle)] px-3 transition ${
+      className={`group relative flex min-h-[96px] cursor-pointer items-center gap-2 border-b-2 border-white/10 px-3 py-2 transition dark:border-white/10 ${
         active
           ? "bg-[var(--accent-selection-bg)]"
           : selected
@@ -173,6 +185,23 @@ function MailRow({
             <p className="mt-0.5 truncate text-sm leading-5 text-[var(--text-secondary)]">
               {email.preview || "Нет предпросмотра"}
             </p>
+            {labels.length > 0 ? (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {labels.map((label) => {
+                  const color = label.color || "#a78bfa";
+                  return (
+                    <span
+                      key={label.id}
+                      className="max-w-[11rem] truncate rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-sm"
+                      style={{ backgroundColor: color, color: labelTextColor(color) }}
+                      title={label.name}
+                    >
+                      {label.name}
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
             <time className="text-xs font-medium text-[var(--text-muted)]">
@@ -270,7 +299,7 @@ export function MailList({
   const rowVirtualizer = useVirtualizer({
     count: emails.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 92,
+    estimateSize: (index) => (emails[index]?.labelAssignments?.length ? 118 : 96),
     overscan: 10,
   });
   const selectedCount = selectedIds.size;

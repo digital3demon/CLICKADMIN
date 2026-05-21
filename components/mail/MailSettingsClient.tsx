@@ -27,6 +27,33 @@ function stringArrayValue(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function ruleConditionLabel(field: string): string {
+  if (field === "from") return "От кого";
+  if (field === "toCc") return "Кому или копия";
+  if (field === "subject") return "Тема";
+  if (field === "body") return "Тело письма";
+  if (field === "attachmentName") return "Название вложения";
+  return field;
+}
+
+function ruleConditionParts(conditions: Record<string, unknown>): string[] {
+  if (Array.isArray(conditions.any)) {
+    return conditions.any
+      .map((item) => {
+        const record = asRecord(item);
+        const field = stringValue(record.field);
+        const contains = stringValue(record.contains);
+        return field && contains ? `${ruleConditionLabel(field)} содержит «${contains}»` : "";
+      })
+      .filter(Boolean);
+  }
+  return [
+    stringValue(conditions.from) ? `От кого содержит «${stringValue(conditions.from)}»` : "",
+    stringValue(conditions.subject) ? `Тема содержит «${stringValue(conditions.subject)}»` : "",
+    stringValue(conditions.body) ? `Текст содержит «${stringValue(conditions.body)}»` : "",
+  ].filter(Boolean);
+}
+
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, cache: "no-store" });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -37,14 +64,11 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
 function ruleSummary(rule: EmailRule, account: MailAccount | null): { conditions: string; actions: string } {
   const conditions = asRecord(rule.conditions);
   const actions = asRecord(rule.actions);
-  const conditionParts = [
-    stringValue(conditions.from) ? `От кого содержит «${stringValue(conditions.from)}»` : "",
-    stringValue(conditions.subject) ? `Тема содержит «${stringValue(conditions.subject)}»` : "",
-    stringValue(conditions.body) ? `Текст содержит «${stringValue(conditions.body)}»` : "",
-  ].filter(Boolean);
+  const conditionParts = ruleConditionParts(conditions);
   const folderId = stringValue(actions.moveToFolderId);
   const folder = account?.folders.find((item) => item.id === folderId);
   const labelIds = stringArrayValue(actions.labelIds);
+  const forwardTo = stringArrayValue(actions.forwardTo);
   const labelNames = labelIds
     .map((id) => account?.labels.find((label) => label.id === id)?.name)
     .filter(Boolean);
@@ -54,9 +78,11 @@ function ruleSummary(rule: EmailRule, account: MailAccount | null): { conditions
     actions.markImportant === true ? "Поставить флажок" : "",
     folder ? `Положить в папку «${mailFolderDisplayName(folder)}»` : "",
     labelNames.length ? `Поставить метку: ${labelNames.join(", ")}` : "",
+    forwardTo.length ? `Переслать: ${forwardTo.join(", ")}` : "",
+    actions.stopProcessing === true ? "Не применять остальные правила" : "",
   ].filter(Boolean);
   return {
-    conditions: conditionParts.length ? conditionParts.join("; ") : "Без условий",
+    conditions: conditionParts.length ? conditionParts.join(" или ") : "Без условий",
     actions: actionParts.length ? actionParts.join("; ") : "Без действий",
   };
 }
@@ -207,11 +233,15 @@ export function MailSettingsClient() {
     setStatus("Создаю правило...");
     try {
       const conditions = {
-        from: String(formData.get("conditionFrom") || "").trim(),
-        subject: String(formData.get("conditionSubject") || "").trim(),
-        body: String(formData.get("conditionBody") || "").trim(),
+        any: [
+          { field: "from", contains: String(formData.get("conditionFrom") || "").trim() },
+          { field: "toCc", contains: String(formData.get("conditionToCc") || "").trim() },
+          { field: "subject", contains: String(formData.get("conditionSubject") || "").trim() },
+          { field: "body", contains: String(formData.get("conditionBody") || "").trim() },
+          { field: "attachmentName", contains: String(formData.get("conditionAttachmentName") || "").trim() },
+        ].filter((item) => item.contains),
       };
-      if (!conditions.from && !conditions.subject && !conditions.body) {
+      if (conditions.any.length === 0) {
         setError("Добавьте хотя бы одно условие: отправитель, тема или текст письма");
         setStatus("");
         return;
@@ -228,8 +258,13 @@ export function MailSettingsClient() {
         delete: formData.get("delete") === "on",
         markRead: formData.get("markRead") === "on",
         markImportant: formData.get("markImportant") === "on",
+        stopProcessing: formData.get("stopProcessing") === "on",
         moveToFolderId,
         labelIds: labelId ? [labelId] : [],
+        forwardTo: String(formData.get("forwardTo") || "")
+          .split(/[;,]/)
+          .map((item) => item.trim())
+          .filter(Boolean),
       };
       await jsonFetch("/api/mail/rules", {
         method: "POST",
@@ -567,6 +602,14 @@ export function MailSettingsClient() {
                   />
                 </label>
                 <label className="grid gap-1 text-xs font-medium text-[var(--text-muted)]">
+                  Кому или копия содержит
+                  <input
+                    name="conditionToCc"
+                    placeholder="order@example.ru или Клиника"
+                    className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm font-normal text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-[var(--text-muted)]">
                   Тема содержит
                   <input
                     name="conditionSubject"
@@ -582,7 +625,18 @@ export function MailSettingsClient() {
                     className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm font-normal text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
                   />
                 </label>
+                <label className="grid gap-1 text-xs font-medium text-[var(--text-muted)]">
+                  Название вложения содержит
+                  <input
+                    name="conditionAttachmentName"
+                    placeholder="stl, ply, договор"
+                    className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm font-normal text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+                  />
+                </label>
               </div>
+              <p className="mt-3 text-xs text-[var(--text-muted)]">
+                Если заполнено несколько условий, правило сработает по любому из них.
+              </p>
             </div>
 
             <div className="mt-4 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
@@ -599,6 +653,18 @@ export function MailSettingsClient() {
                 <label className="flex items-center gap-3">
                   <input name="markImportant" type="checkbox" className="h-4 w-4 rounded border-[var(--input-border)]" />
                   Поставить флажок
+                </label>
+                <label className="flex items-center gap-3">
+                  <input name="stopProcessing" type="checkbox" className="h-4 w-4 rounded border-[var(--input-border)]" />
+                  Не применять остальные правила
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-[var(--text-muted)]">
+                  Переслать на адреса
+                  <input
+                    name="forwardTo"
+                    placeholder="main@digitaldemon.studio"
+                    className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm font-normal text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+                  />
                 </label>
                 <label className="grid gap-2 rounded-xl border border-[var(--card-border)] p-3">
                   <span className="flex items-center gap-3">

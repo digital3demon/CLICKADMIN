@@ -50,7 +50,10 @@ export function MailViewer({
   }
   if (!email) {
     return (
-      <section className="hidden min-w-0 flex-1 items-center justify-center bg-[var(--app-bg)] p-10 xl:flex">
+      <section
+        className="hidden min-w-0 flex-1 items-center justify-center bg-[var(--app-bg)] p-10 xl:flex"
+        style={{ paddingRight: "calc((100vw / 0.85) - 100vw + 2.5rem)" }}
+      >
         <div className="max-w-sm text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-[var(--card-bg)] text-3xl shadow-sm">
             ✉

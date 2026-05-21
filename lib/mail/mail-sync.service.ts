@@ -19,6 +19,8 @@ import {
   newMailAttachmentId,
   writeMailAttachmentBytes,
 } from "@/lib/mail/mail-attachment-storage";
+import { ensureOrderDigitaldemonRules } from "@/lib/mail/order-digitaldemon-rules";
+import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
 const RECENT_MESSAGES_PER_FOLDER = 40;
 const BACKFILL_MESSAGES_PER_FOLDER = 120;
@@ -96,6 +98,31 @@ function headersToJson(headers: ParsedMail["headers"]): Record<string, string> {
   return out;
 }
 
+export type MailRuleConditionField = "from" | "toCc" | "subject" | "body" | "attachmentName";
+
+export type MailRuleCondition = {
+  field: MailRuleConditionField;
+  contains: string;
+};
+
+export type MailRuleMessage = {
+  from: string;
+  toCc: string;
+  subject: string;
+  body: string;
+  attachmentNames: string[];
+};
+
+export type MailRuleApplyResult = {
+  isFlagged: boolean;
+  isRead: boolean;
+  shouldDelete: boolean;
+  stopProcessing: boolean;
+  labelIds: string[];
+  folderId: string | null;
+  forwardTo: string[];
+};
+
 function stringFromJsonField(value: unknown, key: string): string {
   if (!value || typeof value !== "object") return "";
   const raw = (value as Record<string, unknown>)[key];
@@ -110,6 +137,44 @@ function stringArrayFromJsonField(value: unknown, key: string): string[] {
     : [];
 }
 
+function normalizedContains(haystack: string, needle: string): boolean {
+  const value = needle.trim().toLowerCase();
+  return Boolean(value) && haystack.toLowerCase().includes(value);
+}
+
+function normalizeRuleField(value: unknown): MailRuleConditionField | null {
+  return value === "from" ||
+    value === "toCc" ||
+    value === "subject" ||
+    value === "body" ||
+    value === "attachmentName"
+    ? value
+    : null;
+}
+
+export function getRuleConditions(conditions: unknown): MailRuleCondition[] {
+  if (!conditions || typeof conditions !== "object") return [];
+  const record = conditions as Record<string, unknown>;
+  if (Array.isArray(record.any)) {
+    return record.any
+      .map((item): MailRuleCondition | null => {
+        if (!item || typeof item !== "object") return null;
+        const source = item as Record<string, unknown>;
+        const field = normalizeRuleField(source.field);
+        const contains = typeof source.contains === "string" ? source.contains.trim() : "";
+        return field && contains ? { field, contains } : null;
+      })
+      .filter((item): item is MailRuleCondition => Boolean(item));
+  }
+
+  return (["from", "subject", "body"] as const)
+    .map((field): MailRuleCondition | null => {
+      const contains = stringFromJsonField(conditions, field);
+      return contains ? { field, contains } : null;
+    })
+    .filter((item): item is MailRuleCondition => Boolean(item));
+}
+
 function booleanFromJsonField(value: unknown, key: string): boolean {
   return Boolean(value && typeof value === "object" && (value as Record<string, unknown>)[key] === true);
 }
@@ -120,41 +185,70 @@ function nullableStringFromJsonField(value: unknown, key: string): string | null
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 
-function ruleMatches(
+export function ruleMatches(
   rule: Pick<EmailRule, "conditions">,
-  message: { from: string; subject: string; body: string },
+  message: MailRuleMessage,
 ): boolean {
-  const from = stringFromJsonField(rule.conditions, "from");
-  const subject = stringFromJsonField(rule.conditions, "subject");
-  const body = stringFromJsonField(rule.conditions, "body");
-  if (from && !message.from.toLowerCase().includes(from)) return false;
-  if (subject && !message.subject.toLowerCase().includes(subject)) return false;
-  if (body && !message.body.toLowerCase().includes(body)) return false;
-  return Boolean(from || subject || body);
+  const conditions = getRuleConditions(rule.conditions);
+  if (conditions.length === 0) return false;
+
+  const values: Record<MailRuleConditionField, string> = {
+    from: message.from,
+    toCc: message.toCc,
+    subject: message.subject,
+    body: message.body,
+    attachmentName: message.attachmentNames.join(" "),
+  };
+  return conditions.some((condition) => normalizedContains(values[condition.field], condition.contains));
 }
 
-async function applyIncomingRules(
-  db: PrismaClient,
-  account: Pick<EmailAccount, "id" | "tenantId">,
-  rules: EmailRule[],
-  message: { from: string; subject: string; body: string },
-): Promise<{ isFlagged: boolean; isRead: boolean; labelIds: string[]; folderId: string | null }> {
+export function evaluateIncomingRules(
+  rules: Array<Pick<EmailRule, "conditions" | "actions">>,
+  message: MailRuleMessage,
+): MailRuleApplyResult {
   let isFlagged = false;
   let isRead = false;
   let shouldDelete = false;
+  let stopProcessing = false;
   const labelIds = new Set<string>();
+  const forwardTo = new Set<string>();
   let folderId: string | null = null;
 
   for (const rule of rules) {
     if (!ruleMatches(rule, message)) continue;
-    isFlagged ||= booleanFromJsonField(rule.actions, "markImportant");
-    isRead ||= booleanFromJsonField(rule.actions, "markRead");
-    shouldDelete ||= booleanFromJsonField(rule.actions, "delete");
-    for (const labelId of stringArrayFromJsonField(rule.actions, "labelIds")) {
+    const actions = rule.actions;
+    isFlagged ||= booleanFromJsonField(actions, "markImportant");
+    isRead ||= booleanFromJsonField(actions, "markRead");
+    shouldDelete ||= booleanFromJsonField(actions, "delete");
+    stopProcessing ||= booleanFromJsonField(actions, "stopProcessing");
+    for (const labelId of stringArrayFromJsonField(actions, "labelIds")) {
       labelIds.add(labelId);
     }
-    folderId = nullableStringFromJsonField(rule.actions, "moveToFolderId") ?? folderId;
+    for (const recipient of stringArrayFromJsonField(actions, "forwardTo")) {
+      forwardTo.add(recipient);
+    }
+    folderId = nullableStringFromJsonField(actions, "moveToFolderId") ?? folderId;
+    if (stopProcessing) break;
   }
+
+  return {
+    isFlagged,
+    isRead,
+    shouldDelete,
+    stopProcessing,
+    labelIds: [...labelIds],
+    folderId,
+    forwardTo: [...forwardTo],
+  };
+}
+
+async function validateRuleResult(
+  db: PrismaClient,
+  account: Pick<EmailAccount, "id" | "tenantId">,
+  result: MailRuleApplyResult,
+): Promise<MailRuleApplyResult> {
+  const labelIds = new Set(result.labelIds);
+  let folderId = result.folderId;
 
   if (labelIds.size > 0) {
     const existing = await db.emailLabel.findMany({
@@ -173,7 +267,7 @@ async function applyIncomingRules(
     folderId = folder?.id ?? null;
   }
 
-  if (shouldDelete) {
+  if (result.shouldDelete) {
     const trashFolder = await db.emailFolder.findFirst({
       where: { tenantId: account.tenantId, accountId: account.id, type: EmailFolderType.TRASH },
       select: { id: true },
@@ -181,7 +275,48 @@ async function applyIncomingRules(
     folderId = trashFolder?.id ?? folderId;
   }
 
-  return { isFlagged, isRead, labelIds: [...labelIds], folderId };
+  return { ...result, labelIds: [...labelIds], folderId };
+}
+
+async function applyIncomingRules(
+  db: PrismaClient,
+  account: Pick<EmailAccount, "id" | "tenantId">,
+  rules: EmailRule[],
+  message: MailRuleMessage,
+): Promise<MailRuleApplyResult> {
+  return validateRuleResult(db, account, evaluateIncomingRules(rules, message));
+}
+
+function mailRuleMessageFromParsed(parsed: ParsedMail): MailRuleMessage {
+  const from = firstAddress(parsed.from);
+  const recipients = [...addressList(parsed.to), ...addressList(parsed.cc)];
+  return {
+    from: [from.name, from.address].filter(Boolean).join(" "),
+    toCc: recipients.map((item) => [item.name, item.address].filter(Boolean).join(" ")).join(" "),
+    subject: parsed.subject ?? "",
+    body: parsed.text ?? "",
+    attachmentNames: parsed.attachments.map((attachment) => attachment.filename || "attachment"),
+  };
+}
+
+async function forwardIncomingMessage(
+  account: EmailAccount,
+  recipients: string[],
+  parsed: ParsedMail,
+): Promise<void> {
+  if (recipients.length === 0) return;
+  const body = typeof parsed.html === "string" ? parsed.html : parsed.text ?? "";
+  await sendSmtpMessage(account, {
+    to: recipients.join(", "),
+    subject: parsed.subject ? `Fwd: ${parsed.subject}` : "Fwd: письмо",
+    html: typeof body === "string" ? body : "",
+    text: parsed.text ?? "",
+    attachments: parsed.attachments.map((attachment) => ({
+      filename: attachment.filename || "attachment",
+      contentType: attachment.contentType || "application/octet-stream",
+      content: attachment.content,
+    })),
+  });
 }
 
 async function upsertFolder(
@@ -248,7 +383,11 @@ export async function syncEmailAccount(
   let imported = 0;
   let skipped = 0;
   let folders = 0;
+  let folderErrors = 0;
 
+  await ensureOrderDigitaldemonRules(db, account).catch((err) =>
+    logger.error({ err, accountId: account.id }, "order mail rules ensure failed"),
+  );
   await client.connect();
   try {
     const activeRules = await db.emailRule.findMany({
@@ -257,6 +396,7 @@ export async function syncEmailAccount(
     });
     const listedFolders = await listImapFolders(client);
     for (const listed of listedFolders) {
+      try {
       const folder = await upsertFolder(db, account, listed);
       folders += 1;
       if (!shouldSyncFolderForMode(folder.type, mode)) continue;
@@ -311,12 +451,21 @@ export async function syncEmailAccount(
         const hasAttachments = parsed.attachments.length > 0;
         const ruleResult =
           folder.type === EmailFolderType.INBOX
-            ? await applyIncomingRules(db, account, activeRules, {
-                from: [from.name, from.address].filter(Boolean).join(" "),
-                subject: parsed.subject ?? "",
-                body: parsed.text ?? "",
-              })
-            : { isFlagged: false, isRead: false, labelIds: [], folderId: null };
+            ? await applyIncomingRules(db, account, activeRules, mailRuleMessageFromParsed(parsed))
+            : {
+                isFlagged: false,
+                isRead: false,
+                shouldDelete: false,
+                stopProcessing: false,
+                labelIds: [],
+                folderId: null,
+                forwardTo: [],
+              };
+        if (ruleResult.forwardTo.length > 0) {
+          await forwardIncomingMessage(account, ruleResult.forwardTo, parsed).catch((err) =>
+            logger.error({ err, accountId: account.id, messageId: parsed.messageId }, "mail rule forward failed"),
+          );
+        }
         const isRead = item.flags.has("\\Seen") || ruleResult.isRead;
         let email: { id: string } | null = null;
         try {
@@ -403,14 +552,27 @@ export async function syncEmailAccount(
       for (const folderId of touchedFolderIds) {
         await refreshFolderCounters(db, account.tenantId, folderId);
       }
+      } catch (err) {
+        folderErrors += 1;
+        logger.error(
+          { err, accountId: account.id, folderPath: listed.path, mode },
+          "mail folder sync failed",
+        );
+      }
     }
 
     await db.emailAccount.update({
       where: { id: account.id },
-      data: { lastSyncAt: new Date(), lastSyncError: null },
+      data: {
+        lastSyncAt: new Date(),
+        lastSyncError:
+          folderErrors > 0
+            ? `Не синхронизировано папок: ${folderErrors}. Остальные папки загружены.`
+            : null,
+      },
     });
     logger.info(
-      { accountId: account.id, mode, imported, skipped, folders, elapsedMs: Date.now() - startedAt },
+      { accountId: account.id, mode, imported, skipped, folders, folderErrors, elapsedMs: Date.now() - startedAt },
       "mail sync completed",
     );
     return { imported, skipped, folders };

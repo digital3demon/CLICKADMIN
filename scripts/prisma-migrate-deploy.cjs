@@ -316,5 +316,21 @@ if (shouldAutoMigrateAttachmentsToS3()) {
   console.log("attachments->s3 auto-migrate: done");
 }
 
+function runOrderMailRulesOnDeploy() {
+  const script = pathToEnsure("deploy-order-digitaldemon-mail-rules.cjs");
+  if (!fs.existsSync(script)) {
+    console.warn("[mail-rules] deploy-order-digitaldemon-mail-rules.cjs не найден, пропускаю.");
+    return;
+  }
+  const runRules = spawnNodeScript(script, {
+    MAIL_RULES_ORDER_SKIP_MISSING: process.env.MAIL_RULES_ORDER_SKIP_MISSING || "1",
+  });
+  if (runRules.status !== 0) {
+    process.exit(runRules.status === null ? 1 : runRules.status);
+  }
+}
+
+runOrderMailRulesOnDeploy();
+
 console.log("single db mode: OK.");
 process.exit(0);
