@@ -105,6 +105,12 @@ async function refreshLabelCounters(prisma, tenantId, labelId) {
   await prisma.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
 }
 
+async function refreshCountersSequentially(items, refresh) {
+  for (const item of items) {
+    await refresh(item);
+  }
+}
+
 function isUniqueConstraintError(error) {
   return Boolean(error && typeof error === "object" && error.code === "P2002");
 }
@@ -249,8 +255,12 @@ async function main() {
       }
       cursor = emails.at(-1).id;
     }
-    await Promise.all([...touchedFolders].map((folderId) => refreshFolderCounters(prisma, account.tenantId, folderId)));
-    await Promise.all([...touchedLabels].map((labelId) => refreshLabelCounters(prisma, account.tenantId, labelId)));
+    await refreshCountersSequentially([...touchedFolders], (folderId) =>
+      refreshFolderCounters(prisma, account.tenantId, folderId),
+    );
+    await refreshCountersSequentially([...touchedLabels], (labelId) =>
+      refreshLabelCounters(prisma, account.tenantId, labelId),
+    );
     console.log(
       `Проверено писем: ${processed}, обновлено писем: ${updated}, меток затронуто: ${touchedLabels.size} (${ctx.label})`,
     );
