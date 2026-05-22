@@ -9,10 +9,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
-  const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role);
+  const url = new URL(req.url);
+  const lite = url.searchParams.get("lite") === "1";
+  const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, { lite });
   return NextResponse.json({ accounts, currentUser: { role: r.ctx.role } });
 }
 

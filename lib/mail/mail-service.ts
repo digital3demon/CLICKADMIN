@@ -261,15 +261,39 @@ export async function refreshLabelCounters(
   await db.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
 }
 
-export async function listEmailAccounts(db: PrismaClient, tenantId: string, userId: string, role: string) {
-  const accounts = await db.emailAccount.findMany({
-    where: userAccountWhere(tenantId, userId, role),
-    orderBy: [{ email: "asc" }, { createdAt: "desc" }],
-    include: {
-      folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
-      labels: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
-    },
-  });
+export async function listEmailAccounts(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+  role: string,
+  options: { lite?: boolean } = {},
+) {
+  const accountWhere = userAccountWhere(tenantId, userId, role);
+  const accountOrderBy = [{ email: "asc" as const }, { createdAt: "desc" as const }];
+  const accounts = options.lite
+    ? await db.emailAccount.findMany({
+        where: accountWhere,
+        orderBy: accountOrderBy,
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+          isActive: true,
+          lastSyncAt: true,
+          lastSyncError: true,
+          allowedRoles: true,
+          createdByUserId: true,
+          encryptedAppPassword: true,
+        },
+      })
+    : await db.emailAccount.findMany({
+        where: accountWhere,
+        orderBy: accountOrderBy,
+        include: {
+          folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
+          labels: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+        },
+      });
   const byEmail = new Map<string, (typeof accounts)[number]>();
   for (const account of accounts) {
     const key = account.email.trim().toLowerCase();
@@ -278,10 +302,15 @@ export async function listEmailAccounts(db: PrismaClient, tenantId: string, user
       byEmail.set(key, account);
     }
   }
-  return [...byEmail.values()].map(({ encryptedAppPassword, ...account }) => ({
-    ...account,
-    hasPassword: Boolean(encryptedAppPassword),
-  }));
+  return [...byEmail.values()].map(({ encryptedAppPassword, ...account }) => {
+    const safeAccount = account as typeof account & { folders?: unknown[]; labels?: unknown[] };
+    return {
+      ...safeAccount,
+      folders: safeAccount.folders ?? [],
+      labels: safeAccount.labels ?? [],
+      hasPassword: Boolean(encryptedAppPassword),
+    };
+  });
 }
 
 export async function upsertEmailAccount(

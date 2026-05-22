@@ -164,6 +164,7 @@ export function MailSettingsClient() {
   const [currentUserRole, setCurrentUserRole] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [accountDetailsLoading, setAccountDetailsLoading] = useState(false);
 
   const activeAccount = useMemo(
     () => accounts.find((a) => a.id === accountId) ?? accounts[0] ?? null,
@@ -175,7 +176,7 @@ export function MailSettingsClient() {
     const accountsData = await jsonFetch<{
       accounts: MailAccount[];
       currentUser?: { role?: string };
-    }>("/api/mail/accounts");
+    }>("/api/mail/accounts?lite=1");
     setAccounts(accountsData.accounts);
     setCurrentUserRole(accountsData.currentUser?.role || "");
     setAccountId((prev) =>
@@ -183,6 +184,26 @@ export function MailSettingsClient() {
         ? prev
         : accountsData.accounts[0]?.id || "",
     );
+  }, []);
+
+  const loadAccountDetails = useCallback(async (nextAccountId: string) => {
+    if (!nextAccountId) return;
+    setAccountDetailsLoading(true);
+    try {
+      const [foldersData, labelsData] = await Promise.all([
+        jsonFetch<{ folders: MailFolder[] }>(`/api/mail/folders?accountId=${encodeURIComponent(nextAccountId)}`),
+        jsonFetch<{ labels: MailAccount["labels"] }>(`/api/mail/labels?accountId=${encodeURIComponent(nextAccountId)}`),
+      ]);
+      setAccounts((prev) =>
+        prev.map((account) =>
+          account.id === nextAccountId
+            ? { ...account, folders: foldersData.folders, labels: labelsData.labels }
+            : account,
+        ),
+      );
+    } finally {
+      setAccountDetailsLoading(false);
+    }
   }, []);
 
   const loadRules = useCallback(async (nextAccountId: string) => {
@@ -205,10 +226,10 @@ export function MailSettingsClient() {
   }, [loadAccounts]);
 
   useEffect(() => {
-    void loadRules(accountId).catch((err) =>
-      setError(err instanceof Error ? err.message : "Ошибка загрузки правил почты"),
+    void Promise.all([loadAccountDetails(accountId), loadRules(accountId)]).catch((err) =>
+      setError(err instanceof Error ? err.message : "Ошибка загрузки данных ящика"),
     );
-  }, [accountId, loadRules]);
+  }, [accountId, loadAccountDetails, loadRules]);
 
   async function saveAccount(formData: FormData) {
     setError("");
@@ -360,7 +381,7 @@ export function MailSettingsClient() {
         }),
       });
       setStatus("Папка создана");
-      await loadAccounts();
+      await loadAccountDetails(activeAccount.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось создать папку");
     }
@@ -381,7 +402,7 @@ export function MailSettingsClient() {
         }),
       });
       setStatus("Папка сохранена");
-      await loadAccounts();
+      await loadAccountDetails(activeAccount.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить папку");
     }
@@ -396,7 +417,7 @@ export function MailSettingsClient() {
     try {
       await jsonFetch(`/api/mail/folders/${folder.id}`, { method: "DELETE" });
       setStatus("Папка удалена");
-      await loadAccounts();
+      await loadAccountDetails(activeAccount?.id || "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось удалить папку");
     }
@@ -550,7 +571,11 @@ export function MailSettingsClient() {
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {activeAccount?.folders.length ? (
+            {accountDetailsLoading ? (
+              <div className="rounded-xl border border-dashed border-[var(--card-border)] p-6 text-sm text-[var(--text-muted)]">
+                Загружаем папки выбранного ящика...
+              </div>
+            ) : activeAccount?.folders.length ? (
               activeAccount.folders.map((folder) => {
                 const editable = folder.type === "CUSTOM";
                 return (
@@ -632,7 +657,11 @@ export function MailSettingsClient() {
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_32rem]">
           <div className="space-y-3">
-            {rules.length > 0 ? (
+            {accountDetailsLoading ? (
+              <div className="rounded-xl border border-dashed border-[var(--card-border)] p-6 text-sm text-[var(--text-muted)]">
+                Загружаем правила выбранного ящика...
+              </div>
+            ) : rules.length > 0 ? (
               rules.map((rule) => {
                 const summary = ruleSummary(rule, activeAccount);
                 return (
