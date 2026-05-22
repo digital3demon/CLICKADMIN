@@ -429,8 +429,25 @@ function runOneTimeMailResetBeforeRules() {
   }
 }
 
+function runOneTimeMailSeenReconcile() {
+  if (String(process.env.MAIL_SEEN_RECONCILE_AUTORUN_DISABLE || "").trim() === "1") {
+    console.warn("[mail-seen] сверка read/unread отключена через MAIL_SEEN_RECONCILE_AUTORUN_DISABLE=1.");
+    return;
+  }
+  const script = pathToEnsure("reconcile-mail-seen-from-imap.cjs");
+  if (!fs.existsSync(script)) {
+    console.warn("[mail-seen] reconcile-mail-seen-from-imap.cjs не найден, пропускаю.");
+    return;
+  }
+  const reconcile = spawnNodeScript(script, {}, ["--auto-once"]);
+  if (reconcile.status !== 0) {
+    process.exit(reconcile.status === null ? 1 : reconcile.status);
+  }
+}
+
 runOneTimeMailResetBeforeRules();
 runOrderMailRulesOnDeploy();
+runOneTimeMailSeenReconcile();
 
 console.log("single db mode: OK.");
 process.exit(0);

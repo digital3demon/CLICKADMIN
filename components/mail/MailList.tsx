@@ -314,9 +314,9 @@ export function MailList({
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col border-r border-[var(--card-border)] bg-[var(--card-bg)]">
       <div className="border-b border-[var(--card-border)] bg-[var(--card-bg)] px-5 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--app-text)]">
+        <div className="flex flex-col gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="min-w-0 text-xl font-semibold tracking-[-0.02em] text-[var(--app-text)]">
               {label ? label.name : folder ? mailFolderDisplayName(folder) : "Почта"}
               {(label?.unreadCount ?? folder?.unreadCount ?? 0) > 0 ? (
                 <span className="ml-3 inline-flex min-w-7 items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-2 py-0.5 align-middle text-xs font-semibold text-white">
@@ -326,7 +326,7 @@ export function MailList({
                 </span>
               ) : null}
             </h2>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+            <p className="text-sm text-[var(--text-muted)]">
               {label
                 ? `${label.totalCount} писем с меткой, ${label.unreadCount} непрочитанных`
                 : folder
@@ -334,7 +334,7 @@ export function MailList({
                   : "Выберите папку или метку"}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             {canMarkAllRead ? (
               <button
                 type="button"

@@ -19,6 +19,7 @@ import {
   moveMessage,
   setMessageFlagged,
   setMessageSeen,
+  setMessagesSeen,
   testImapConnection,
 } from "@/lib/mail/imap-client";
 import {
@@ -744,6 +745,98 @@ export async function listEmails(
   };
 }
 
+async function setEmailSeenOnServerBestEffort(
+  db: PrismaClient,
+  tenantId: string,
+  email: {
+    uid: number | null;
+    direction: EmailDirection;
+    accountId: string;
+    account: {
+      email: string;
+      encryptedAppPassword: string | null;
+      imapHost: string;
+      imapPort: number;
+      imapSecure: boolean;
+    };
+    folder: { imapName: string; type: EmailFolderType } | null;
+  },
+  seen: boolean,
+): Promise<void> {
+  if (!email.uid || !email.account.encryptedAppPassword) return;
+  const paths = new Set<string>();
+  if (email.folder?.imapName) paths.add(email.folder.imapName);
+  if (email.direction === EmailDirection.INBOUND && email.folder?.type !== EmailFolderType.INBOX) {
+    const inbox = await db.emailFolder.findFirst({
+      where: { tenantId, accountId: email.accountId, type: EmailFolderType.INBOX },
+      select: { imapName: true },
+    });
+    if (inbox?.imapName) paths.add(inbox.imapName);
+  }
+  for (const path of paths) {
+    try {
+      await setMessageSeen(email.account, path, email.uid, seen);
+      return;
+    } catch {
+      // CRM folders can be classification-only while the original IMAP message
+      // still lives in INBOX. Try the next plausible server folder.
+    }
+  }
+}
+
+async function setEmailsSeenOnServerBestEffort(
+  db: PrismaClient,
+  tenantId: string,
+  emails: Array<{
+    uid: number | null;
+    direction: EmailDirection;
+    accountId: string;
+    account: {
+      id: string;
+      email: string;
+      encryptedAppPassword: string | null;
+      imapHost: string;
+      imapPort: number;
+      imapSecure: boolean;
+    };
+    folder: { imapName: string; type: EmailFolderType } | null;
+  }>,
+  seen: boolean,
+): Promise<void> {
+  const inboxByAccountId = new Map<string, string | null>();
+  const groups = new Map<string, { account: (typeof emails)[number]["account"]; path: string; uids: number[] }>();
+  for (const email of emails) {
+    if (!email.uid || !email.account.encryptedAppPassword) continue;
+    const paths = new Set<string>();
+    if (email.folder?.imapName) paths.add(email.folder.imapName);
+    if (email.direction === EmailDirection.INBOUND && email.folder?.type !== EmailFolderType.INBOX) {
+      if (!inboxByAccountId.has(email.accountId)) {
+        const inbox = await db.emailFolder.findFirst({
+          where: { tenantId, accountId: email.accountId, type: EmailFolderType.INBOX },
+          select: { imapName: true },
+        });
+        inboxByAccountId.set(email.accountId, inbox?.imapName ?? null);
+      }
+      const inboxPath = inboxByAccountId.get(email.accountId);
+      if (inboxPath) paths.add(inboxPath);
+    }
+    for (const path of paths) {
+      const key = `${email.account.id}:${path}`;
+      const group = groups.get(key) ?? { account: email.account, path, uids: [] };
+      group.uids.push(email.uid);
+      groups.set(key, group);
+    }
+  }
+  for (const group of groups.values()) {
+    try {
+      await setMessagesSeen(group.account, group.path, group.uids, seen);
+    } catch {
+      // DB state still records the explicit CRM action; later reconcile/sync can
+      // repair transient IMAP failures without blocking the operator.
+    }
+  }
+}
+
 export async function getEmailDetail(
   db: PrismaClient,
   tenantId: string,
@@ -755,7 +848,17 @@ export async function getEmailDetail(
   const email = await db.email.findFirst({
     where: { id: emailId, tenantId, account: userAccountWhere(tenantId, userId, role) },
     include: {
-      account: { select: { id: true, email: true, displayName: true } },
+      account: {
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+          encryptedAppPassword: true,
+          imapHost: true,
+          imapPort: true,
+          imapSecure: true,
+        },
+      },
       folder: true,
       attachments: {
         select: { id: true, fileName: true, mimeType: true, size: true, contentId: true, isInline: true },
@@ -765,20 +868,25 @@ export async function getEmailDetail(
   });
   if (!email) throw new Error("EMAIL_NOT_FOUND");
   if (markRead && !email.isRead) {
+    await setEmailSeenOnServerBestEffort(db, tenantId, email, true);
     await db.email.update({
       where: { id: email.id },
       data: { isRead: true, readAt: new Date() },
     });
     if (email.folderId) {
-      await db.emailFolder.updateMany({
-        where: { id: email.folderId, unreadCount: { gt: 0 } },
-        data: { unreadCount: { decrement: 1 } },
-      }).catch(() => undefined);
+      await refreshFolderCounters(db, tenantId, email.folderId).catch(() => undefined);
     }
+    await Promise.all(
+      email.labelAssignments.map((assignment) => refreshLabelCounters(db, tenantId, assignment.labelId).catch(() => undefined)),
+    );
   }
   const sanitizedHtml = sanitizeMailHtml(email.htmlBody);
+  const { encryptedAppPassword: _encryptedAppPassword, imapHost: _imapHost, imapPort: _imapPort, imapSecure: _imapSecure, ...safeAccount } = email.account;
   return {
     ...email,
+    account: safeAccount,
+    isRead: markRead ? true : email.isRead,
+    readAt: markRead && !email.isRead ? new Date() : email.readAt,
     safeHtmlBody: inlineCidImages(sanitizedHtml, email.id, email.attachments),
   };
 }
@@ -821,6 +929,19 @@ export async function bulkEmailAction(
   if (input.action === "markAllRead") {
     if (!input.accountId) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
     await requireUserEmailAccount(db, tenantId, userId, input.accountId, role);
+    const unreadEmails = await db.email.findMany({
+      where: {
+        tenantId,
+        accountId: input.accountId,
+        isRead: false,
+        account: userAccountWhere(tenantId, userId, role),
+      },
+      include: {
+        account: true,
+        folder: true,
+      },
+    });
+    await setEmailsSeenOnServerBestEffort(db, tenantId, unreadEmails, true);
     const res = await db.email.updateMany({
       where: {
         tenantId,
@@ -855,6 +976,7 @@ export async function bulkEmailAction(
     include: {
       account: true,
       folder: true,
+      labelAssignments: { select: { labelId: true } },
     },
   });
 
@@ -913,10 +1035,10 @@ export async function bulkEmailAction(
     }
   } else {
     for (const email of before) {
-      if (!email.uid || !email.folder?.imapName) continue;
       if (input.action === "read" || input.action === "unread") {
-        await setMessageSeen(email.account, email.folder.imapName, email.uid, input.action === "read");
+        await setEmailSeenOnServerBestEffort(db, tenantId, email, input.action === "read");
       } else {
+        if (!email.uid || !email.folder?.imapName) continue;
         await setMessageFlagged(email.account, email.folder.imapName, email.uid, input.action === "flag");
       }
     }
@@ -935,14 +1057,21 @@ export async function bulkEmailAction(
   }
 
   const folders = new Set(before.map((e) => e.folderId).filter((x): x is string => Boolean(x)));
+  const labels = new Set(before.flatMap((e) => e.labelAssignments.map((assignment) => assignment.labelId)));
   const after = await db.email.findMany({
     where: { tenantId, id: { in: ids }, account: accountAccessWhere },
-    select: { folderId: true },
+    select: { folderId: true, labelAssignments: { select: { labelId: true } } },
   });
   for (const folderId of after.map((e) => e.folderId)) {
     if (folderId) folders.add(folderId);
   }
-  await Promise.all([...folders].map((folderId) => refreshFolderCounters(db, tenantId, folderId)));
+  for (const email of after) {
+    for (const assignment of email.labelAssignments) labels.add(assignment.labelId);
+  }
+  await Promise.all([
+    ...[...folders].map((folderId) => refreshFolderCounters(db, tenantId, folderId)),
+    ...[...labels].map((labelId) => refreshLabelCounters(db, tenantId, labelId)),
+  ]);
   return { updated };
 }
 

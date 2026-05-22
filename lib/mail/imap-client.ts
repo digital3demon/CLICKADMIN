@@ -200,15 +200,29 @@ export async function setMessageSeen(
   uid: number,
   seen: boolean,
 ): Promise<void> {
+  await setMessagesSeen(account, folderPath, [uid], seen);
+}
+
+export async function setMessagesSeen(
+  account: MailConnectionAccount,
+  folderPath: string,
+  uids: number[],
+  seen: boolean,
+): Promise<void> {
+  const validUids = [...new Set(uids.filter((uid) => Number.isFinite(uid) && uid > 0))];
+  if (validUids.length === 0) return;
   const client = createImapClient(account);
   await client.connect();
   try {
     const lock = await client.getMailboxLock(folderPath);
     try {
-      if (seen) {
-        await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
-      } else {
-        await client.messageFlagsRemove(String(uid), ["\\Seen"], { uid: true });
+      for (let index = 0; index < validUids.length; index += 100) {
+        const batch = validUids.slice(index, index + 100).join(",");
+        if (seen) {
+          await client.messageFlagsAdd(batch, ["\\Seen"], { uid: true });
+        } else {
+          await client.messageFlagsRemove(batch, ["\\Seen"], { uid: true });
+        }
       }
     } finally {
       lock.release();

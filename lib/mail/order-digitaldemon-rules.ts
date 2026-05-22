@@ -119,7 +119,7 @@ export async function ensureOrderDigitaldemonRules(
     const folder = await ensureFolder(db, account, folderName);
     const actions = {
       delete: source.delete === true,
-      markRead: true,
+      markRead: source.markRead === true,
       markImportant: source.markImportant === true,
       stopProcessing: source.stopProcessing === true,
       moveToFolderId: folder?.id ?? null,

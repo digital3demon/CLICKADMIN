@@ -15,6 +15,7 @@ import {
   fetchFolderMessages,
   fetchFolderMessagesSince,
   listImapFolders,
+  setMessageSeen,
   type ImapFetchedMessage,
   type ImapFolderInfo,
 } from "@/lib/mail/imap-client";
@@ -466,6 +467,24 @@ async function refreshLabelCounters(
   await db.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
 }
 
+async function applyExplicitRuleSeenOnServer(
+  account: EmailAccount,
+  folder: { imapName: string },
+  item: ImapFetchedMessage,
+  shouldMarkRead: boolean,
+): Promise<void> {
+  if (!shouldMarkRead || item.flags.has("\\Seen")) return;
+  try {
+    await setMessageSeen(account, folder.imapName, item.uid, true);
+    item.flags.add("\\Seen");
+  } catch (err) {
+    logger.warn(
+      { err, accountId: account.id, folder: folder.imapName, uid: item.uid },
+      "mail rule markRead could not update IMAP seen flag",
+    );
+  }
+}
+
 async function ensureFolderForLabel(
   db: PrismaClient,
   account: Pick<EmailAccount, "id" | "tenantId">,
@@ -561,9 +580,28 @@ export async function syncEmailAccount(
             folderId: folder.id,
             uid: item.uid,
           },
-          select: { id: true },
+          select: {
+            id: true,
+            isRead: true,
+            isFlagged: true,
+            labelAssignments: { select: { labelId: true } },
+          },
         });
         if (exists) {
+          const seenOnServer = item.flags.has("\\Seen");
+          const flaggedOnServer = item.flags.has("\\Flagged");
+          const data: Record<string, unknown> = {};
+          if (exists.isRead !== seenOnServer) {
+            data.isRead = seenOnServer;
+            data.readAt = seenOnServer ? item.internalDate ?? new Date() : null;
+          }
+          if (exists.isFlagged !== flaggedOnServer) {
+            data.isFlagged = flaggedOnServer;
+          }
+          if (Object.keys(data).length > 0) {
+            await db.email.update({ where: { id: exists.id }, data });
+            for (const assignment of exists.labelAssignments) touchedLabelIds.add(assignment.labelId);
+          }
           skipped += 1;
           continue;
         }
@@ -611,6 +649,8 @@ export async function syncEmailAccount(
                 forwardTo: [],
               };
         const targetFolderId = ruleResult.folderId ?? folder.id;
+        await applyExplicitRuleSeenOnServer(account, folder, item, ruleResult.isRead);
+        const isRead = item.flags.has("\\Seen") || ruleResult.isRead;
         const duplicateByMessageId = parsed.messageId
           ? await db.email.findFirst({
               where: {
@@ -618,16 +658,23 @@ export async function syncEmailAccount(
                 accountId: account.id,
                 messageId: parsed.messageId,
               },
-              select: { id: true, folderId: true, uid: true, isRead: true, isFlagged: true },
+              select: {
+                id: true,
+                folderId: true,
+                uid: true,
+                isRead: true,
+                isFlagged: true,
+                labelAssignments: { select: { labelId: true } },
+              },
             })
           : null;
         if (duplicateByMessageId) {
           const duplicateData: Record<string, unknown> = {};
           if (duplicateByMessageId.folderId !== targetFolderId) duplicateData.folderId = targetFolderId;
           if (duplicateByMessageId.uid !== item.uid) duplicateData.uid = item.uid;
-          if (ruleResult.isRead && !duplicateByMessageId.isRead) {
-            duplicateData.isRead = true;
-            duplicateData.readAt = item.internalDate ?? new Date();
+          if (duplicateByMessageId.isRead !== isRead) {
+            duplicateData.isRead = isRead;
+            duplicateData.readAt = isRead ? item.internalDate ?? new Date() : null;
           }
           if ((item.flags.has("\\Flagged") || ruleResult.isFlagged) && !duplicateByMessageId.isFlagged) {
             duplicateData.isFlagged = true;
@@ -644,6 +691,7 @@ export async function syncEmailAccount(
             }
             if (duplicateByMessageId.folderId) touchedFolderIds.add(duplicateByMessageId.folderId);
             touchedFolderIds.add(targetFolderId);
+            for (const assignment of duplicateByMessageId.labelAssignments) touchedLabelIds.add(assignment.labelId);
           }
           for (const labelId of ruleResult.labelIds) {
             await db.emailLabelAssignment.upsert({
@@ -661,7 +709,6 @@ export async function syncEmailAccount(
             logger.error({ err, accountId: account.id, messageId: parsed.messageId }, "mail rule forward failed"),
           );
         }
-        const isRead = item.flags.has("\\Seen") || ruleResult.isRead;
         const emailId = randomUUID();
         const attachmentCreates = [];
         for (const a of parsed.attachments) {

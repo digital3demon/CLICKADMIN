@@ -172,7 +172,10 @@ export function MailLayout() {
     [activeAccount, activeLabelId],
   );
   const activeAccountUnreadCount = useMemo(
-    () => activeAccount?.folders.reduce((sum, folder) => sum + folder.unreadCount, 0) ?? 0,
+    () =>
+      activeAccount?.folders.find((folder) => folder.type === "INBOX")?.unreadCount ??
+      activeAccount?.folders.reduce((sum, folder) => sum + folder.unreadCount, 0) ??
+      0,
     [activeAccount],
   );
   const canConnectAccount = currentUserRole === "OWNER";
