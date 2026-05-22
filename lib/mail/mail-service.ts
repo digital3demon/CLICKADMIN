@@ -1,9 +1,11 @@
 import "server-only";
 import {
+  EmailDirection,
   EmailFolderType,
   EmailSyncJobStatus,
   UserRole,
   type EmailAccount,
+  type EmailFolder,
   type EmailSyncMode,
   type PrismaClient,
 } from "@prisma/client";
@@ -310,6 +312,23 @@ export async function listEmailAccounts(
     }
   }
   const uniqueAccounts = [...byEmail.values()];
+  if (!options.lite) {
+    await Promise.all(
+      uniqueAccounts.map(async (account) => {
+        const accountWithFolders = account as typeof account & { folders?: EmailFolder[] };
+        if (!Array.isArray(accountWithFolders.folders)) return;
+        const [totalCount, unreadCount] = await Promise.all([
+          db.email.count({ where: { tenantId, accountId: account.id, direction: EmailDirection.INBOUND } }),
+          db.email.count({
+            where: { tenantId, accountId: account.id, direction: EmailDirection.INBOUND, isRead: false },
+          }),
+        ]);
+        accountWithFolders.folders = accountWithFolders.folders.map((folder) =>
+          folder.type === EmailFolderType.INBOX ? { ...folder, totalCount, unreadCount } : folder,
+        );
+      }),
+    );
+  }
   return uniqueAccounts.map(({ encryptedAppPassword, ...account }) => {
     const safeAccount = account as typeof account & { folders?: unknown[]; labels?: unknown[] };
     return {
@@ -652,11 +671,22 @@ export async function listEmails(
   await requireUserEmailAccount(db, tenantId, userId, input.accountId, role);
   const take = clampMailPageSize(input.take);
   const cursor = decodeMailListCursor(input.cursor);
+  const folder = input.folderId
+    ? await db.emailFolder.findFirst({
+        where: { id: input.folderId, tenantId, accountId: input.accountId },
+        select: { id: true, type: true },
+      })
+    : null;
+  const isInboxView = folder?.type === EmailFolderType.INBOX;
   const rows = await db.email.findMany({
     where: {
       tenantId,
       accountId: input.accountId,
-      ...(input.folderId ? { folderId: input.folderId } : {}),
+      ...(isInboxView
+        ? { direction: EmailDirection.INBOUND }
+        : input.folderId
+          ? { folderId: input.folderId }
+          : {}),
       ...(input.labelId
         ? {
             labelAssignments: {

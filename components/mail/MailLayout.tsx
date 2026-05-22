@@ -148,10 +148,6 @@ export function MailLayout() {
     () => activeAccount?.folders.reduce((sum, folder) => sum + folder.unreadCount, 0) ?? 0,
     [activeAccount],
   );
-  const activeAccountTotalCount = useMemo(
-    () => activeAccount?.folders.reduce((sum, folder) => sum + folder.totalCount, 0) ?? 0,
-    [activeAccount],
-  );
   const canConnectAccount = currentUserRole === "OWNER";
   const listQueryKey = useMemo(
     () => JSON.stringify({
@@ -270,8 +266,9 @@ export function MailLayout() {
     if (!activeAccount) return;
     if (activeLabelId && activeAccount.labels.some((label) => label.id === activeLabelId)) return;
     if (activeLabelId) setActiveLabelId("");
+    const folder = inboxFolder(activeAccount);
     setActiveFolderId((prev) =>
-      prev && activeAccount.folders.some((f) => f.id === prev) ? prev : "",
+      prev && activeAccount.folders.some((f) => f.id === prev) ? prev : folder?.id || "",
     );
   }, [activeAccount, activeLabelId]);
 
@@ -608,16 +605,8 @@ export function MailLayout() {
               activeLabelId={activeLabelId}
               labels={activeAccount?.labels ?? []}
               unreadCount={activeAccountUnreadCount}
-              totalCount={activeAccountTotalCount}
               collapsed={sidebarCollapsed}
               onCollapsedChange={setSidebarCollapsed}
-              onAllMailChange={() => {
-                setActiveFolderId("");
-                setActiveLabelId("");
-                setActiveEmailId("");
-                setDetail(null);
-                setSelectedIds(new Set());
-              }}
               onFolderChange={(id) => {
                 setActiveFolderId(id);
                 setActiveLabelId("");
@@ -658,8 +647,6 @@ export function MailLayout() {
               activeEmailId={activeEmailId}
               selectedIds={selectedIds}
               filter={filter}
-              allTotalCount={activeAccountTotalCount}
-              allUnreadCount={activeAccountUnreadCount}
               loading={loadingEmails}
               hasMore={Boolean(nextCursor)}
               loadingMore={loadingMore}

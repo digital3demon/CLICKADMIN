@@ -260,8 +260,6 @@ export function MailList({
   activeEmailId,
   selectedIds,
   filter,
-  allTotalCount,
-  allUnreadCount,
   loading,
   hasMore,
   loadingMore,
@@ -284,8 +282,6 @@ export function MailList({
   activeEmailId: string;
   selectedIds: Set<string>;
   filter: MailFilter;
-  allTotalCount: number;
-  allUnreadCount: number;
   loading: boolean;
   hasMore: boolean;
   loadingMore: boolean;
@@ -321,12 +317,12 @@ export function MailList({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--app-text)]">
-              {label ? label.name : folder ? mailFolderDisplayName(folder) : "Все письма"}
-              {(label?.unreadCount ?? folder?.unreadCount ?? allUnreadCount) > 0 ? (
+              {label ? label.name : folder ? mailFolderDisplayName(folder) : "Почта"}
+              {(label?.unreadCount ?? folder?.unreadCount ?? 0) > 0 ? (
                 <span className="ml-3 inline-flex min-w-7 items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-2 py-0.5 align-middle text-xs font-semibold text-white">
-                  {(label?.unreadCount ?? folder?.unreadCount ?? allUnreadCount) > 99
+                  {(label?.unreadCount ?? folder?.unreadCount ?? 0) > 99
                     ? "99+"
-                    : (label?.unreadCount ?? folder?.unreadCount ?? allUnreadCount)}
+                    : (label?.unreadCount ?? folder?.unreadCount ?? 0)}
                 </span>
               ) : null}
             </h2>
@@ -335,7 +331,7 @@ export function MailList({
                 ? `${label.totalCount} писем с меткой, ${label.unreadCount} непрочитанных`
                 : folder
                   ? `${folder.totalCount} писем, ${folder.unreadCount} непрочитанных`
-                  : `${allTotalCount} писем в ящике, ${allUnreadCount} непрочитанных`}
+                  : "Выберите папку или метку"}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
