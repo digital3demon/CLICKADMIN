@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { MailComposer } from "@/components/mail/MailComposer";
 import { MailHeader } from "@/components/mail/MailHeader";
@@ -83,6 +83,10 @@ const MAIL_UI_SCALE_STYLE: CSSProperties & { zoom: number } = {
   minHeight: `calc(100dvh / ${MAIL_UI_SCALE})`,
 };
 const LAST_MAIL_ACCOUNT_STORAGE_KEY = "dental-crm:last-mail-account-id";
+const MAIL_LIST_WIDTH_STORAGE_KEY = "dental-crm:mail-list-width";
+const MAIL_LIST_DEFAULT_WIDTH = 600;
+const MAIL_LIST_MIN_WIDTH = 420;
+const MAIL_LIST_MAX_WIDTH = 920;
 const MAIL_DB_REFRESH_INTERVAL_MS = 15_000;
 const MAIL_ACTIVE_SYNC_INTERVAL_MS = 60_000;
 
@@ -97,6 +101,27 @@ function readLastMailAccountId(): string {
 function writeLastMailAccountId(accountId: string): void {
   try {
     if (accountId) window.localStorage.setItem(LAST_MAIL_ACCOUNT_STORAGE_KEY, accountId);
+  } catch {
+    /* localStorage can be unavailable in private contexts. */
+  }
+}
+
+function clampMailListWidth(value: number): number {
+  return Math.min(MAIL_LIST_MAX_WIDTH, Math.max(MAIL_LIST_MIN_WIDTH, Math.round(value)));
+}
+
+function readMailListWidth(): number {
+  try {
+    const saved = Number(window.localStorage.getItem(MAIL_LIST_WIDTH_STORAGE_KEY));
+    return Number.isFinite(saved) ? clampMailListWidth(saved) : MAIL_LIST_DEFAULT_WIDTH;
+  } catch {
+    return MAIL_LIST_DEFAULT_WIDTH;
+  }
+}
+
+function writeMailListWidth(width: number): void {
+  try {
+    window.localStorage.setItem(MAIL_LIST_WIDTH_STORAGE_KEY, String(clampMailListWidth(width)));
   } catch {
     /* localStorage can be unavailable in private contexts. */
   }
@@ -127,10 +152,12 @@ export function MailLayout() {
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [savingAccount, setSavingAccount] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mailListWidth, setMailListWidth] = useState(MAIL_LIST_DEFAULT_WIDTH);
   const [error, setError] = useState("");
   const listQueryKeyRef = useRef("");
   const listHasRowsRef = useRef(false);
   const syncInFlightRef = useRef(false);
+  const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
 
   const activeAccount = useMemo(
     () => accounts.find((a) => a.id === activeAccountId) ?? null,
@@ -261,6 +288,10 @@ export function MailLayout() {
   useEffect(() => {
     void loadAccounts().catch((err) => setError(mailErrorMessage(err, "Ошибка")));
   }, [loadAccounts]);
+
+  useEffect(() => {
+    setMailListWidth(readMailListWidth());
+  }, []);
 
   useEffect(() => {
     if (!activeAccount) return;
@@ -452,6 +483,33 @@ export function MailLayout() {
     );
   }
 
+  function startMailListResize(event: PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    resizeStartRef.current = { x: event.clientX, width: mailListWidth };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function resizeMailList(event: PointerEvent<HTMLDivElement>) {
+    const start = resizeStartRef.current;
+    if (!start) return;
+    const nextWidth = clampMailListWidth(start.width + event.clientX - start.x);
+    setMailListWidth(nextWidth);
+  }
+
+  function stopMailListResize(event: PointerEvent<HTMLDivElement>) {
+    const start = resizeStartRef.current;
+    if (!start) return;
+    const nextWidth = clampMailListWidth(start.width + event.clientX - start.x);
+    resizeStartRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    setMailListWidth(nextWidth);
+    writeMailListWidth(nextWidth);
+  }
+
   async function saveAccount(formData: FormData) {
     if (!canConnectAccount) return;
     setSavingAccount(true);
@@ -640,47 +698,65 @@ export function MailLayout() {
                 }).then(loadAccounts);
               }}
             />
-            <MailList
-              folder={activeFolder}
-              label={activeLabel}
-              emails={emails}
-              activeEmailId={activeEmailId}
-              selectedIds={selectedIds}
-              filter={filter}
-              loading={loadingEmails}
-              hasMore={Boolean(nextCursor)}
-              loadingMore={loadingMore}
-              onFilterChange={setFilter}
-              onLoadMore={() => {
-                if (nextCursor) void loadEmails(nextCursor, true);
-              }}
-              onOpen={(id) => {
-                setActiveEmailId(id);
-                void loadDetail(id);
-              }}
-              onToggleSelect={(id) =>
-                setSelectedIds((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(id)) next.delete(id);
-                  else next.add(id);
-                  return next;
-                })
-              }
-              onSelectAll={() => setSelectedIds(new Set(emails.map((e) => e.id)))}
-              onClearSelection={() => setSelectedIds(new Set())}
-              onCreateOrder={() => void createOrderFromSelectedEmails()}
-              onMarkAllRead={() => void markAllRead()}
-              onBulkAction={(action) => void bulk(action)}
-              onEmailAction={(id, action) => void bulk(action, [id])}
-              onLabelClick={(id) => {
-                setActiveLabelId(id);
-                setActiveFolderId("");
-                setActiveEmailId("");
-                setDetail(null);
-                setSelectedIds(new Set());
-              }}
-              canMarkAllRead={currentUserRole === "OWNER"}
-            />
+            <div
+              className="relative flex min-h-0 min-w-0 flex-1 xl:flex-none"
+              style={{ width: mailListWidth, flexBasis: mailListWidth }}
+            >
+              <MailList
+                folder={activeFolder}
+                label={activeLabel}
+                emails={emails}
+                activeEmailId={activeEmailId}
+                selectedIds={selectedIds}
+                filter={filter}
+                loading={loadingEmails}
+                hasMore={Boolean(nextCursor)}
+                loadingMore={loadingMore}
+                onFilterChange={setFilter}
+                onLoadMore={() => {
+                  if (nextCursor) void loadEmails(nextCursor, true);
+                }}
+                onOpen={(id) => {
+                  setActiveEmailId(id);
+                  void loadDetail(id);
+                }}
+                onToggleSelect={(id) =>
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  })
+                }
+                onSelectAll={() => setSelectedIds(new Set(emails.map((e) => e.id)))}
+                onClearSelection={() => setSelectedIds(new Set())}
+                onCreateOrder={() => void createOrderFromSelectedEmails()}
+                onMarkAllRead={() => void markAllRead()}
+                onBulkAction={(action) => void bulk(action)}
+                onEmailAction={(id, action) => void bulk(action, [id])}
+                onLabelClick={(id) => {
+                  setActiveLabelId(id);
+                  setActiveFolderId("");
+                  setActiveEmailId("");
+                  setDetail(null);
+                  setSelectedIds(new Set());
+                }}
+                canMarkAllRead={currentUserRole === "OWNER"}
+              />
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Изменить ширину списка писем"
+                title="Потяните, чтобы изменить ширину списка"
+                onPointerDown={startMailListResize}
+                onPointerMove={resizeMailList}
+                onPointerUp={stopMailListResize}
+                onPointerCancel={stopMailListResize}
+                className="group absolute -right-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none items-center justify-center xl:flex"
+              >
+                <span className="h-12 w-1 rounded-full bg-[var(--sidebar-blue)]/0 transition group-hover:bg-[var(--sidebar-blue)]/40" />
+              </div>
+            </div>
             <div className="hidden min-w-0 flex-1 overflow-hidden xl:flex">
               <MailViewer
                 email={detail}

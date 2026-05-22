@@ -312,7 +312,7 @@ export function MailList({
   );
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col border-r border-[var(--card-border)] bg-[var(--card-bg)] xl:max-w-[600px]">
+    <section className="flex h-full min-w-0 flex-1 flex-col border-r border-[var(--card-border)] bg-[var(--card-bg)]">
       <div className="border-b border-[var(--card-border)] bg-[var(--card-bg)] px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>

@@ -1,6 +1,6 @@
 import "server-only";
 import { EmailFolderType, UserRole, type PrismaClient } from "@prisma/client";
-import { evaluateIncomingRules } from "@/lib/mail/mail-sync.service";
+import { evaluateIncomingRules, validateRuleResult } from "@/lib/mail/mail-sync.service";
 import { ensureOrderDigitaldemonRules } from "@/lib/mail/order-digitaldemon-rules";
 
 const ACCOUNT_EMAIL = "order@digitaldemon.studio";
@@ -81,12 +81,11 @@ export async function applyOrderDigitaldemonRulesToExistingEmails(
     where: { tenantId, accountId: account.id, type: EmailFolderType.TRASH },
     select: { id: true },
   });
-  const [labels, folders] = await Promise.all([
-    db.emailLabel.findMany({ where: { tenantId, accountId: account.id }, select: { id: true } }),
-    db.emailFolder.findMany({ where: { tenantId, accountId: account.id }, select: { id: true } }),
-  ]);
+  const labels = await db.emailLabel.findMany({
+    where: { tenantId, accountId: account.id },
+    select: { id: true },
+  });
   const validLabelIds = new Set(labels.map((label) => label.id));
-  const validFolderIds = new Set(folders.map((folder) => folder.id));
   const touchedLabels = new Set<string>();
   const touchedFolders = new Set<string>();
 
@@ -104,19 +103,17 @@ export async function applyOrderDigitaldemonRulesToExistingEmails(
     if (emails.length === 0) break;
 
     for (const email of emails) {
-      const result = evaluateIncomingRules(rules, {
+      const result = await validateRuleResult(db, account, evaluateIncomingRules(rules, {
         from: [email.fromName, email.fromAddress].filter(Boolean).join(" "),
         toCc: [addressJsonText(email.to), addressJsonText(email.cc)].filter(Boolean).join(" "),
         subject: email.subject || "",
         body: [email.textBody, email.preview].filter(Boolean).join(" "),
         attachmentNames: email.attachments.map((attachment) => attachment.fileName || "attachment"),
-      });
+      }));
       const labelIds = result.labelIds.filter((id) => validLabelIds.has(id));
       const nextFolderId = result.shouldDelete
         ? trash?.id || result.folderId
-        : result.folderId && validFolderIds.has(result.folderId)
-          ? result.folderId
-          : null;
+        : result.folderId;
 
       if (labelIds.length === 0 && !nextFolderId && !result.isRead && !result.isFlagged) {
         processed += 1;

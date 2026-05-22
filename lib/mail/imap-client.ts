@@ -33,10 +33,7 @@ export function recentWindowStartUid(
 ): number {
   const startUid = Math.max(1, requestedStartUid);
   if (!uidNext || uidNext <= 1 || maxMessages <= 0) return startUid;
-
-  const recentStartUid = Math.max(1, uidNext - maxMessages);
-  if (startUid <= 1) return recentStartUid;
-  return Math.max(startUid, recentStartUid);
+  return startUid;
 }
 
 function envTimeoutMs(name: string, fallback: number): number {

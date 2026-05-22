@@ -863,6 +863,8 @@ model Email {
 
   @@unique([accountId, folderId, uid])
   @@unique([accountId, messageId])
+  @@index([tenantId, accountId, receivedAt, id])
+  @@index([tenantId, accountId, direction, receivedAt, id])
   @@index([tenantId, accountId, folderId, receivedAt, id])
   @@index([tenantId, accountId, isRead, receivedAt, id])
   @@index([tenantId, accountId, isFlagged, receivedAt, id])
@@ -901,6 +903,7 @@ model EmailLabelAssignment {
 
   @@unique([emailId, labelId])
   @@index([tenantId, labelId])
+  @@index([tenantId, labelId, emailId])
 }
 
 /// Правило обработки входящей почты. Условия/действия — JSON-контракт UI; применяется при синхронизации.

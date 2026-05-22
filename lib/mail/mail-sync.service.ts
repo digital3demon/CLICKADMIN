@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import {
   EmailFolderType,
   EmailSyncMode,
@@ -14,9 +15,11 @@ import {
   fetchFolderMessages,
   fetchFolderMessagesSince,
   listImapFolders,
+  type ImapFetchedMessage,
   type ImapFolderInfo,
 } from "@/lib/mail/imap-client";
 import {
+  deleteMailAttachmentBytes,
   newMailAttachmentId,
   writeMailAttachmentBytes,
 } from "@/lib/mail/mail-attachment-storage";
@@ -25,7 +28,13 @@ import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
 const RECENT_MESSAGES_PER_FOLDER = 250;
 const BACKFILL_MESSAGES_PER_FOLDER = 120;
-const INITIAL_SYNC_LOOKBACK_DAYS = 31;
+const RECENT_SYNC_LOOKBACK_DAYS = 4;
+
+type SyncCursorMode = "forward" | "backfill" | "lookback";
+type SyncFetchedMessage = {
+  item: ImapFetchedMessage;
+  cursorMode: SyncCursorMode;
+};
 
 function normalizeFolderPath(value: string): string {
   return value.trim().toLowerCase();
@@ -49,8 +58,33 @@ export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMo
   return type === EmailFolderType.INBOX || type === EmailFolderType.SENT || type === EmailFolderType.CUSTOM;
 }
 
-function initialSyncSinceDate(now = new Date()): Date {
-  return new Date(now.getTime() - INITIAL_SYNC_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+function recentSyncSinceDate(now = new Date()): Date {
+  return new Date(now.getTime() - RECENT_SYNC_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+}
+
+async function* fetchRecentFolderMessages(
+  client: Parameters<typeof fetchFolderMessages>[0],
+  folderPath: string,
+  startUid: number,
+  maxMessages: number,
+): AsyncGenerator<SyncFetchedMessage> {
+  // Date search catches today's mail even if the saved UID cursor/window is stale.
+  // It must not move lastSyncedUid, because that would skip unprocessed UID gaps.
+  for await (const item of fetchFolderMessagesSince(client, folderPath, recentSyncSinceDate(), maxMessages)) {
+    yield { item, cursorMode: "lookback" };
+  }
+  for await (const item of fetchFolderMessages(client, folderPath, startUid, maxMessages)) {
+    yield { item, cursorMode: "forward" };
+  }
+}
+
+async function* markCursorMode(
+  messages: AsyncGenerator<ImapFetchedMessage>,
+  cursorMode: SyncCursorMode,
+): AsyncGenerator<SyncFetchedMessage> {
+  for await (const item of messages) {
+    yield { item, cursorMode };
+  }
 }
 
 function folderSyncPriority(folder: ImapFolderInfo): number {
@@ -126,6 +160,15 @@ function headersToJson(headers: ParsedMail["headers"]): Record<string, string> {
     out[key] = Array.isArray(value) ? value.join(", ") : String(value ?? "");
   }
   return out;
+}
+
+async function parseMailForSync(item: ImapFetchedMessage): Promise<ParsedMail | null> {
+  try {
+    return await simpleParser(item.source);
+  } catch (err) {
+    logger.error({ err, uid: item.uid }, "mail message parse failed");
+    return null;
+  }
 }
 
 export type MailRuleConditionField = "from" | "toCc" | "subject" | "body" | "attachmentName";
@@ -272,21 +315,24 @@ export function evaluateIncomingRules(
   };
 }
 
-async function validateRuleResult(
+export async function validateRuleResult(
   db: PrismaClient,
   account: Pick<EmailAccount, "id" | "tenantId">,
   result: MailRuleApplyResult,
 ): Promise<MailRuleApplyResult> {
   const labelIds = new Set(result.labelIds);
   let folderId = result.folderId;
+  let firstLabelForFolder: { name: string; color: string } | null = null;
 
   if (labelIds.size > 0) {
     const existing = await db.emailLabel.findMany({
       where: { tenantId: account.tenantId, accountId: account.id, id: { in: [...labelIds] } },
-      select: { id: true },
+      select: { id: true, name: true, color: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
     labelIds.clear();
     existing.forEach((label) => labelIds.add(label.id));
+    firstLabelForFolder = existing[0] ? { name: existing[0].name, color: existing[0].color } : null;
   }
 
   if (folderId) {
@@ -295,6 +341,10 @@ async function validateRuleResult(
       select: { id: true },
     });
     folderId = folder?.id ?? null;
+  }
+
+  if (firstLabelForFolder && !result.shouldDelete) {
+    folderId = await ensureFolderForLabel(db, account, firstLabelForFolder);
   }
 
   if (result.shouldDelete) {
@@ -416,6 +466,40 @@ async function refreshLabelCounters(
   await db.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
 }
 
+async function ensureFolderForLabel(
+  db: PrismaClient,
+  account: Pick<EmailAccount, "id" | "tenantId">,
+  label: { name: string; color: string },
+): Promise<string | null> {
+  const name = label.name.trim();
+  if (!name) return null;
+  const existing = await db.emailFolder.findFirst({
+    where: {
+      tenantId: account.tenantId,
+      accountId: account.id,
+      OR: [
+        { displayName: { equals: name, mode: "insensitive" } },
+        { imapName: { equals: name, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+  const created = await db.emailFolder.create({
+    data: {
+      tenantId: account.tenantId,
+      accountId: account.id,
+      imapName: name,
+      displayName: name,
+      color: label.color,
+      type: EmailFolderType.CUSTOM,
+      sortOrder: 200,
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
 export async function syncEmailAccount(
   db: PrismaClient,
   account: EmailAccount,
@@ -457,15 +541,18 @@ export async function syncEmailAccount(
           : RECENT_MESSAGES_PER_FOLDER;
       const messages =
         mode === EmailSyncMode.BACKFILL
-          ? fetchFolderMessagesBefore(client, listed.path, folder.lastBackfillUid, maxMessages)
-          : maxUid > 0
-            ? fetchFolderMessages(client, listed.path, maxUid + 1, maxMessages)
-            : fetchFolderMessagesSince(client, listed.path, initialSyncSinceDate(), maxMessages);
-      for await (const item of messages) {
-        if (processed >= maxMessages) break;
+          ? markCursorMode(
+              fetchFolderMessagesBefore(client, listed.path, folder.lastBackfillUid, maxMessages),
+              "backfill",
+            )
+          : fetchRecentFolderMessages(client, listed.path, maxUid + 1, maxMessages);
+      for await (const { item, cursorMode } of messages) {
+        if (processed >= maxMessages * 2) break;
         processed += 1;
-        maxUid = Math.max(maxUid, item.uid);
-        minBackfillUid = minBackfillUid == null ? item.uid : Math.min(minBackfillUid, item.uid);
+        if (cursorMode === "forward") maxUid = Math.max(maxUid, item.uid);
+        if (cursorMode === "backfill") {
+          minBackfillUid = minBackfillUid == null ? item.uid : Math.min(minBackfillUid, item.uid);
+        }
 
         const exists = await db.email.findFirst({
           where: {
@@ -481,7 +568,34 @@ export async function syncEmailAccount(
           continue;
         }
 
-        const parsed = await simpleParser(item.source);
+        const parsed = await parseMailForSync(item);
+        if (!parsed) {
+          try {
+            await db.email.create({
+              data: {
+                id: randomUUID(),
+                tenantId: account.tenantId,
+                accountId: account.id,
+                folderId: folder.id,
+                uid: item.uid,
+                direction: folder.type === EmailFolderType.SENT ? "OUTBOUND" : "INBOUND",
+                isRead: item.flags.has("\\Seen"),
+                readAt: item.flags.has("\\Seen") ? item.internalDate ?? new Date() : null,
+                isFlagged: item.flags.has("\\Flagged"),
+                hasAttachments: false,
+                subject: "(письмо загружено без разбора)",
+                preview: "CRM получила письмо, но не смогла разобрать MIME-содержимое. Оригинал остаётся в Яндекс.Почте.",
+                receivedAt: item.internalDate ?? new Date(),
+                internalDate: item.internalDate,
+              },
+            });
+            imported += 1;
+          } catch (error) {
+            if (!isUniqueConstraintError(error)) throw error;
+            skipped += 1;
+          }
+          continue;
+        }
         const from = firstAddress(parsed.from);
         const hasAttachments = parsed.attachments.length > 0;
         const ruleResult =
@@ -548,10 +662,35 @@ export async function syncEmailAccount(
           );
         }
         const isRead = item.flags.has("\\Seen") || ruleResult.isRead;
+        const emailId = randomUUID();
+        const attachmentCreates = [];
+        for (const a of parsed.attachments) {
+          const attachmentId = newMailAttachmentId();
+          const mimeType = a.contentType || "application/octet-stream";
+          const stored = await writeMailAttachmentBytes({
+            tenantId: account.tenantId,
+            emailId,
+            attachmentId,
+            body: a.content,
+            contentType: mimeType,
+          });
+          attachmentCreates.push({
+            id: attachmentId,
+            tenantId: account.tenantId,
+            fileName: a.filename || "attachment",
+            mimeType,
+            size: a.size || a.content.length,
+            contentId: a.contentId ?? null,
+            isInline: Boolean(a.related),
+            diskRelPath: stored.diskRelPath,
+            checksumSha256: stored.checksumSha256,
+          });
+        }
         let email: { id: string } | null = null;
         try {
           email = await db.email.create({
             data: {
+              id: emailId,
               tenantId: account.tenantId,
               accountId: account.id,
               folderId: targetFolderId,
@@ -581,9 +720,13 @@ export async function syncEmailAccount(
                   labelId,
                 })),
               },
+              attachments: {
+                create: attachmentCreates,
+              },
             },
           });
         } catch (error) {
+          await Promise.all(attachmentCreates.map((a) => deleteMailAttachmentBytes(a.diskRelPath)));
           if (isUniqueConstraintError(error)) {
             skipped += 1;
             continue;
@@ -596,31 +739,6 @@ export async function syncEmailAccount(
         }
         if (ruleResult.folderId) touchedFolderIds.add(ruleResult.folderId);
         for (const labelId of ruleResult.labelIds) touchedLabelIds.add(labelId);
-        for (const a of parsed.attachments) {
-          const attachmentId = newMailAttachmentId();
-          const mimeType = a.contentType || "application/octet-stream";
-          const stored = await writeMailAttachmentBytes({
-            tenantId: account.tenantId,
-            emailId: email.id,
-            attachmentId,
-            body: a.content,
-            contentType: mimeType,
-          });
-          await db.emailAttachment.create({
-            data: {
-              id: attachmentId,
-              tenantId: account.tenantId,
-              emailId: email.id,
-              fileName: a.filename || "attachment",
-              mimeType,
-              size: a.size || a.content.length,
-              contentId: a.contentId ?? null,
-              isInline: Boolean(a.related),
-              diskRelPath: stored.diskRelPath,
-              checksumSha256: stored.checksumSha256,
-            },
-          });
-        }
         imported += 1;
       }
 
