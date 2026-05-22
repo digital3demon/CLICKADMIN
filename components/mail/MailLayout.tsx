@@ -58,9 +58,19 @@ function inboxFolder(account: MailAccount | null): MailFolder | null {
   );
 }
 
-function mergeEmailRows(fresh: MailEmailRow[], existing: MailEmailRow[]): MailEmailRow[] {
+function emailMatchesFilter(email: MailEmailRow, filter: MailFilter): boolean {
+  if (filter === "unread") return !email.isRead;
+  if (filter === "attachments") return email.hasAttachments;
+  if (filter === "flagged") return email.isFlagged;
+  if (filter === "unflagged") return !email.isFlagged;
+  return true;
+}
+
+function mergeEmailRows(fresh: MailEmailRow[], existing: MailEmailRow[], filter: MailFilter): MailEmailRow[] {
   const freshIds = new Set(fresh.map((email) => email.id));
-  return [...fresh, ...existing.filter((email) => !freshIds.has(email.id))].sort(compareMailRowsByDateDesc);
+  return [...fresh, ...existing.filter((email) => !freshIds.has(email.id))]
+    .filter((email) => emailMatchesFilter(email, filter))
+    .sort(compareMailRowsByDateDesc);
 }
 
 function mailRowDateMs(email: MailEmailRow): number {
@@ -233,10 +243,8 @@ export function MailLayout() {
       listQueryKeyRef.current = listQueryKey;
       setEmails((prev) => {
         const next = append
-          ? mergeEmailRows(prev, data.emails)
-          : sameQuery
-            ? mergeEmailRows(data.emails, prev)
-            : data.emails;
+          ? mergeEmailRows(prev, data.emails, filter)
+          : data.emails;
         listHasRowsRef.current = next.length > 0;
         return next;
       });
@@ -264,7 +272,7 @@ export function MailLayout() {
         `/api/mail/emails?${params.toString()}`,
       );
       setEmails((prev) => {
-        const next = mergeEmailRows(data.emails, prev);
+        const next = mergeEmailRows(data.emails, prev, filter);
         listHasRowsRef.current = next.length > 0;
         return next;
       });
@@ -280,13 +288,17 @@ export function MailLayout() {
     try {
       const data = await jsonFetch<{ email: MailEmailDetail }>(`/api/mail/emails/${id}`);
       setDetail(data.email);
-      setEmails((prev) => prev.map((e) => (e.id === id ? { ...e, isRead: true } : e)));
+      setEmails((prev) =>
+        filter === "unread"
+          ? prev.filter((email) => email.id !== id)
+          : prev.map((email) => (email.id === id ? { ...email, isRead: true } : email)),
+      );
     } catch (err) {
       setError(mailErrorMessage(err, "Ошибка открытия письма"));
     } finally {
       setLoadingDetail(false);
     }
-  }, []);
+  }, [filter]);
 
   useEffect(() => {
     void loadAccounts().catch((err) => setError(mailErrorMessage(err, "Ошибка")));

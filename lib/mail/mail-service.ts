@@ -868,11 +868,11 @@ export async function getEmailDetail(
   });
   if (!email) throw new Error("EMAIL_NOT_FOUND");
   if (markRead && !email.isRead) {
-    await setEmailSeenOnServerBestEffort(db, tenantId, email, true);
     await db.email.update({
       where: { id: email.id },
       data: { isRead: true, readAt: new Date() },
     });
+    void setEmailSeenOnServerBestEffort(db, tenantId, email, true);
     if (email.folderId) {
       await refreshFolderCounters(db, tenantId, email.folderId).catch(() => undefined);
     }
