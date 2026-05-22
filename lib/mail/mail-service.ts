@@ -643,16 +643,10 @@ export async function listEmails(
         ? {
             AND: [
               {
-                OR: cursor.f
-                  ? [
-                      { isFlagged: false },
-                      { isFlagged: true, receivedAt: { lt: new Date(cursor.r) } },
-                      { isFlagged: true, receivedAt: new Date(cursor.r), id: { lt: cursor.i } },
-                    ]
-                  : [
-                      { isFlagged: false, receivedAt: { lt: new Date(cursor.r) } },
-                      { isFlagged: false, receivedAt: new Date(cursor.r), id: { lt: cursor.i } },
-                    ],
+                OR: [
+                  { receivedAt: { lt: new Date(cursor.r) } },
+                  { receivedAt: new Date(cursor.r), id: { lt: cursor.i } },
+                ],
               },
             ],
           }
@@ -668,7 +662,7 @@ export async function listEmails(
           }
         : {}),
     },
-    orderBy: [{ isFlagged: "desc" }, { receivedAt: "desc" }, { id: "desc" }],
+    orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
     take: take + 1,
     include: {
       folder: true,

@@ -165,6 +165,8 @@ export function MailSettingsClient() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [accountDetailsLoading, setAccountDetailsLoading] = useState(false);
+  const [selectedAccessRoles, setSelectedAccessRoles] = useState<string[]>(["OWNER"]);
+  const [accessSaving, setAccessSaving] = useState(false);
 
   const activeAccount = useMemo(
     () => accounts.find((a) => a.id === accountId) ?? accounts[0] ?? null,
@@ -220,6 +222,10 @@ export function MailSettingsClient() {
   const canManageAccountAccess = currentUserRole === "OWNER";
 
   useEffect(() => {
+    setSelectedAccessRoles(Array.from(new Set(["OWNER", ...(activeAccount?.allowedRoles || [])])));
+  }, [activeAccount?.id, activeAccount?.allowedRoles]);
+
+  useEffect(() => {
     void loadAccounts().catch((err) =>
       setError(err instanceof Error ? err.message : "Ошибка загрузки настроек почты"),
     );
@@ -269,12 +275,27 @@ export function MailSettingsClient() {
     }
   }
 
-  async function saveAccountAccess(formData: FormData) {
+  function toggleAccessRole(role: string): void {
+    if (role === "OWNER") return;
+    setSelectedAccessRoles((prev) => {
+      const roles = new Set(["OWNER", ...prev]);
+      if (roles.has(role)) {
+        roles.delete(role);
+      } else {
+        roles.add(role);
+      }
+      roles.add("OWNER");
+      return [...roles];
+    });
+  }
+
+  async function saveAccountAccess() {
     if (!activeAccount) return;
     setError("");
     setStatus("Сохраняю доступ к ящику...");
+    setAccessSaving(true);
     try {
-      const allowedRoles = formData.getAll("allowedRoles").map(String);
+      const allowedRoles = Array.from(new Set(["OWNER", ...selectedAccessRoles]));
       await jsonFetch(`/api/mail/accounts/${activeAccount.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -288,6 +309,8 @@ export function MailSettingsClient() {
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить доступ к ящику");
+    } finally {
+      setAccessSaving(false);
     }
   }
 
@@ -507,9 +530,8 @@ export function MailSettingsClient() {
         )}
 
         {activeAccount && canManageAccountAccess ? (
-          <form
+          <div
             key={activeAccount.id}
-            action={(formData) => void saveAccountAccess(formData)}
             className="mt-5 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -522,16 +544,18 @@ export function MailSettingsClient() {
                 </p>
               </div>
               <button
-                type="submit"
-                className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]"
+                type="button"
+                disabled={accessSaving}
+                onClick={() => void saveAccountAccess()}
+                className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:cursor-wait disabled:opacity-60"
               >
-                Сохранить доступ
+                {accessSaving ? "Сохраняю..." : "Сохранить доступ"}
               </button>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {MAIL_ROLE_OPTIONS.map((role) => {
-                const checked = (activeAccount.allowedRoles || ["OWNER"]).includes(role.value);
                 const isOwnerRole = role.value === "OWNER";
+                const checked = isOwnerRole || selectedAccessRoles.includes(role.value);
                 return (
                   <label
                     key={role.value}
@@ -541,17 +565,17 @@ export function MailSettingsClient() {
                       type="checkbox"
                       name="allowedRoles"
                       value={role.value}
-                      defaultChecked={checked || isOwnerRole}
-                      disabled={isOwnerRole}
+                      checked={checked}
+                      disabled={isOwnerRole || accessSaving}
+                      onChange={() => toggleAccessRole(role.value)}
                       className="h-4 w-4 rounded border-[var(--input-border)]"
                     />
-                    {isOwnerRole ? <input type="hidden" name="allowedRoles" value="OWNER" /> : null}
                     <span>{role.label}</span>
                   </label>
                 );
               })}
             </div>
-          </form>
+          </div>
         ) : activeAccount ? (
           <div className="mt-5 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4 text-sm text-[var(--text-secondary)]">
             Доступ к этому ящику настраивает владелец.

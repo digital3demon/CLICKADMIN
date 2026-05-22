@@ -36,11 +36,7 @@ export function recentWindowStartUid(
 
   const recentStartUid = Math.max(1, uidNext - maxMessages);
   if (startUid <= 1) return recentStartUid;
-
-  // Once a folder has a sync cursor, never jump over the gap to the newest
-  // window. Still include the newest window as a lookback to recover messages
-  // missed by older cursor jumps or transient IMAP errors.
-  return Math.min(startUid, recentStartUid);
+  return Math.max(startUid, recentStartUid);
 }
 
 function envTimeoutMs(name: string, fallback: number): number {
@@ -141,7 +137,7 @@ export async function* fetchFolderMessagesSince(
     const limitedUids = [...uids]
       .filter((uid): uid is number => Number.isFinite(uid) && uid > 0)
       .sort((a, b) => a - b)
-      .slice(0, maxMessages);
+      .slice(-maxMessages);
     if (limitedUids.length === 0) return;
     for await (const item of client.fetch(
       limitedUids.join(","),

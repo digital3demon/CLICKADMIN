@@ -58,7 +58,19 @@ function inboxFolder(account: MailAccount | null): MailFolder | null {
 
 function mergeEmailRows(fresh: MailEmailRow[], existing: MailEmailRow[]): MailEmailRow[] {
   const freshIds = new Set(fresh.map((email) => email.id));
-  return [...fresh, ...existing.filter((email) => !freshIds.has(email.id))];
+  return [...fresh, ...existing.filter((email) => !freshIds.has(email.id))].sort(compareMailRowsByDateDesc);
+}
+
+function mailRowDateMs(email: MailEmailRow): number {
+  const raw = email.receivedAt || email.sentAt || email.createdAt;
+  const time = raw ? new Date(raw).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function compareMailRowsByDateDesc(a: MailEmailRow, b: MailEmailRow): number {
+  const byDate = mailRowDateMs(b) - mailRowDateMs(a);
+  if (byDate !== 0) return byDate;
+  return b.id.localeCompare(a.id);
 }
 
 const MAIL_UI_SCALE = 0.85;
