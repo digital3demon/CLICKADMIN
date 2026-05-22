@@ -268,7 +268,6 @@ export async function listEmailAccounts(db: PrismaClient, tenantId: string, user
     include: {
       folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
       labels: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
-      _count: { select: { emails: true } },
     },
   });
   const byEmail = new Map<string, (typeof accounts)[number]>();

@@ -170,7 +170,7 @@ export function MailSettingsClient() {
     [accountId, accounts],
   );
 
-  const load = useCallback(async () => {
+  const loadAccounts = useCallback(async () => {
     setError("");
     const accountsData = await jsonFetch<{
       accounts: MailAccount[];
@@ -178,25 +178,37 @@ export function MailSettingsClient() {
     }>("/api/mail/accounts");
     setAccounts(accountsData.accounts);
     setCurrentUserRole(accountsData.currentUser?.role || "");
-    const nextAccountId = accountsData.accounts.some((account) => account.id === accountId)
-      ? accountId
-      : accountsData.accounts[0]?.id || "";
-    setAccountId(nextAccountId);
+    setAccountId((prev) =>
+      prev && accountsData.accounts.some((account) => account.id === prev)
+        ? prev
+        : accountsData.accounts[0]?.id || "",
+    );
+  }, []);
+
+  const loadRules = useCallback(async (nextAccountId: string) => {
+    if (!nextAccountId) {
+      setRules([]);
+      return;
+    }
     const rulesData = await jsonFetch<{ rules: EmailRule[] }>(
-      nextAccountId
-        ? `/api/mail/rules?accountId=${encodeURIComponent(nextAccountId)}`
-        : "/api/mail/rules",
+      `/api/mail/rules?accountId=${encodeURIComponent(nextAccountId)}`,
     );
     setRules(rulesData.rules);
-  }, [accountId]);
+  }, []);
 
   const canManageAccountAccess = currentUserRole === "OWNER";
 
   useEffect(() => {
-    void load().catch((err) =>
+    void loadAccounts().catch((err) =>
       setError(err instanceof Error ? err.message : "Ошибка загрузки настроек почты"),
     );
-  }, [load]);
+  }, [loadAccounts]);
+
+  useEffect(() => {
+    void loadRules(accountId).catch((err) =>
+      setError(err instanceof Error ? err.message : "Ошибка загрузки правил почты"),
+    );
+  }, [accountId, loadRules]);
 
   async function saveAccount(formData: FormData) {
     setError("");
@@ -212,7 +224,7 @@ export function MailSettingsClient() {
         }),
       });
       setStatus("Аккаунт сохранён");
-      await load();
+      await loadAccounts();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить аккаунт");
     }
@@ -230,7 +242,7 @@ export function MailSettingsClient() {
       await jsonFetch(`/api/mail/accounts/${account.id}`, { method: "DELETE" });
       setStatus("Ящик отключён");
       setAccountId((prev) => (prev === account.id ? "" : prev));
-      await load();
+      await loadAccounts();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось отключить ящик");
     }
@@ -308,7 +320,7 @@ export function MailSettingsClient() {
         }),
       });
       setStatus("Правило создано");
-      await load();
+      await loadRules(activeAccount.id);
     } catch (err) {
       setError(
         err instanceof Error
@@ -324,13 +336,13 @@ export function MailSettingsClient() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !rule.isActive }),
     });
-    await load();
+    await loadRules(activeAccount?.id || "");
   }
 
   async function deleteRule(rule: EmailRule) {
     if (!window.confirm(`Удалить правило «${rule.name}»?`)) return;
     await jsonFetch(`/api/mail/rules/${rule.id}`, { method: "DELETE" });
-    await load();
+    await loadRules(activeAccount?.id || "");
   }
 
   async function createFolder(formData: FormData) {
@@ -348,7 +360,7 @@ export function MailSettingsClient() {
         }),
       });
       setStatus("Папка создана");
-      await load();
+      await loadAccounts();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось создать папку");
     }
@@ -369,7 +381,7 @@ export function MailSettingsClient() {
         }),
       });
       setStatus("Папка сохранена");
-      await load();
+      await loadAccounts();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить папку");
     }
@@ -384,7 +396,7 @@ export function MailSettingsClient() {
     try {
       await jsonFetch(`/api/mail/folders/${folder.id}`, { method: "DELETE" });
       setStatus("Папка удалена");
-      await load();
+      await loadAccounts();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось удалить папку");
     }

@@ -12,6 +12,7 @@ import {
   createImapClient,
   fetchFolderMessagesBefore,
   fetchFolderMessages,
+  fetchFolderMessagesSince,
   listImapFolders,
   type ImapFolderInfo,
 } from "@/lib/mail/imap-client";
@@ -24,6 +25,7 @@ import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
 const RECENT_MESSAGES_PER_FOLDER = 250;
 const BACKFILL_MESSAGES_PER_FOLDER = 120;
+const INITIAL_SYNC_LOOKBACK_DAYS = 31;
 
 function normalizeFolderPath(value: string): string {
   return value.trim().toLowerCase();
@@ -44,6 +46,10 @@ export function inferFolderType(path: string): EmailFolderType {
 
 export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMode): boolean {
   return Boolean(type || mode);
+}
+
+function initialSyncSinceDate(now = new Date()): Date {
+  return new Date(now.getTime() - INITIAL_SYNC_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 }
 
 function addressList(value: ParsedMail["from"] | ParsedMail["to"] | ParsedMail["cc"]): Array<{
@@ -424,7 +430,9 @@ export async function syncEmailAccount(
       const messages =
         mode === EmailSyncMode.BACKFILL
           ? fetchFolderMessagesBefore(client, listed.path, folder.lastBackfillUid, maxMessages)
-          : fetchFolderMessages(client, listed.path, maxUid + 1, maxMessages);
+          : maxUid > 0
+            ? fetchFolderMessages(client, listed.path, maxUid + 1, maxMessages)
+            : fetchFolderMessagesSince(client, listed.path, initialSyncSinceDate(), maxMessages);
       for await (const item of messages) {
         if (processed >= maxMessages) break;
         processed += 1;

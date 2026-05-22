@@ -127,6 +127,45 @@ export async function* fetchFolderMessages(
   }
 }
 
+export async function* fetchFolderMessagesSince(
+  client: ImapFlow,
+  folderPath: string,
+  sinceDate: Date,
+  maxMessages: number,
+): AsyncGenerator<ImapFetchedMessage> {
+  const lock = await client.getMailboxLock(folderPath);
+  try {
+    if (maxMessages <= 0) return;
+    const foundUids = await client.search({ since: sinceDate }, { uid: true });
+    const uids = Array.isArray(foundUids) ? foundUids : [];
+    const limitedUids = [...uids]
+      .filter((uid): uid is number => Number.isFinite(uid) && uid > 0)
+      .sort((a, b) => a - b)
+      .slice(0, maxMessages);
+    if (limitedUids.length === 0) return;
+    for await (const item of client.fetch(
+      limitedUids.join(","),
+      { uid: true, flags: true, internalDate: true, source: true },
+      { uid: true },
+    )) {
+      if (!item.uid || !item.source) continue;
+      yield {
+        uid: item.uid,
+        flags: item.flags ?? new Set<string>(),
+        internalDate:
+          item.internalDate instanceof Date
+            ? item.internalDate
+            : item.internalDate
+              ? new Date(item.internalDate)
+              : null,
+        source: Buffer.isBuffer(item.source) ? item.source : Buffer.from(item.source),
+      };
+    }
+  } finally {
+    lock.release();
+  }
+}
+
 export async function* fetchFolderMessagesBefore(
   client: ImapFlow,
   folderPath: string,
