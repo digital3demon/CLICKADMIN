@@ -62,6 +62,7 @@ function MailRow({
   onOpen,
   onToggleSelect,
   onAction,
+  onLabelClick,
 }: {
   email: MailEmailRow;
   active: boolean;
@@ -69,6 +70,7 @@ function MailRow({
   onOpen: () => void;
   onToggleSelect: () => void;
   onAction: (action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
+  onLabelClick: (labelId: string) => void;
 }) {
   const sender = senderName(email);
   const labels = email.labelAssignments?.map((item) => item.label) ?? [];
@@ -178,14 +180,19 @@ function MailRow({
                 {labels.map((label) => {
                   const color = label.color || "#a78bfa";
                   return (
-                    <span
+                    <button
                       key={label.id}
+                      type="button"
                       className="max-w-[11rem] truncate rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-sm"
                       style={{ backgroundColor: color, color: labelTextColor(color) }}
-                      title={label.name}
+                      title={`Показать письма с меткой «${label.name}»`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onLabelClick(label.id);
+                      }}
                     >
                       {label.name}
-                    </span>
+                    </button>
                   );
                 })}
               </div>
@@ -253,6 +260,8 @@ export function MailList({
   activeEmailId,
   selectedIds,
   filter,
+  allTotalCount,
+  allUnreadCount,
   loading,
   hasMore,
   loadingMore,
@@ -266,6 +275,7 @@ export function MailList({
   onMarkAllRead,
   onBulkAction,
   onEmailAction,
+  onLabelClick,
   canMarkAllRead,
 }: {
   folder: MailFolder | null;
@@ -274,6 +284,8 @@ export function MailList({
   activeEmailId: string;
   selectedIds: Set<string>;
   filter: MailFilter;
+  allTotalCount: number;
+  allUnreadCount: number;
   loading: boolean;
   hasMore: boolean;
   loadingMore: boolean;
@@ -287,6 +299,7 @@ export function MailList({
   onMarkAllRead: () => void;
   onBulkAction: (action: "read" | "unread" | "archive" | "trash" | "delete") => void;
   onEmailAction: (id: string, action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
+  onLabelClick: (labelId: string) => void;
   canMarkAllRead: boolean;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -308,14 +321,21 @@ export function MailList({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--app-text)]">
-              {label ? label.name : folder ? mailFolderDisplayName(folder) : "Почта"}
+              {label ? label.name : folder ? mailFolderDisplayName(folder) : "Все письма"}
+              {(label?.unreadCount ?? folder?.unreadCount ?? allUnreadCount) > 0 ? (
+                <span className="ml-3 inline-flex min-w-7 items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-2 py-0.5 align-middle text-xs font-semibold text-white">
+                  {(label?.unreadCount ?? folder?.unreadCount ?? allUnreadCount) > 99
+                    ? "99+"
+                    : (label?.unreadCount ?? folder?.unreadCount ?? allUnreadCount)}
+                </span>
+              ) : null}
             </h2>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
               {label
                 ? `${label.totalCount} писем с меткой, ${label.unreadCount} непрочитанных`
                 : folder
                   ? `${folder.totalCount} писем, ${folder.unreadCount} непрочитанных`
-                  : "Выберите папку или метку"}
+                  : `${allTotalCount} писем в ящике, ${allUnreadCount} непрочитанных`}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -412,6 +432,7 @@ export function MailList({
                       onOpen={() => onOpen(email.id)}
                       onToggleSelect={() => onToggleSelect(email.id)}
                       onAction={(action) => onEmailAction(email.id, action)}
+                      onLabelClick={onLabelClick}
                     />
                   </div>
                 );

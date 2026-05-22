@@ -143,6 +143,7 @@ export function SidebarNav() {
   const [role, setRole] = useState<UserRole | null>(null);
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean> | null>(null);
   const [orderHrefs, setOrderHrefs] = useState<string[]>(DEFAULT_HREF_ORDER);
+  const [mailUnreadCount, setMailUnreadCount] = useState(0);
   const dragHrefRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -168,6 +169,26 @@ export function SidebarNav() {
     })();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMailUnread() {
+      try {
+        const res = await fetch("/api/mail/unread", { cache: "no-store", credentials: "include" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { unreadCount?: number };
+        if (!cancelled) setMailUnreadCount(Math.max(0, Number(data.unreadCount) || 0));
+      } catch {
+        if (!cancelled) setMailUnreadCount(0);
+      }
+    }
+    void loadMailUnread();
+    const timer = window.setInterval(() => void loadMailUnread(), 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 
@@ -320,10 +341,19 @@ export function SidebarNav() {
                   ) : null}
                   <span className="nav-marker-text">{item.label}</span>
                 </span>
-                <span
-                  className="pointer-events-none absolute right-0 top-1/2 inline-flex min-h-5 w-[1.75rem] -translate-y-1/2 items-center justify-center tabular-nums text-xs font-semibold text-[var(--sidebar-text)]"
-                  aria-hidden
-                />
+                {item.href === "/mail" && mailUnreadCount > 0 ? (
+                  <span
+                    className="pointer-events-none absolute right-0 top-1/2 inline-flex min-h-5 min-w-[1.75rem] -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-2 tabular-nums text-xs font-semibold text-white shadow-sm"
+                    aria-label={`Непрочитанных писем: ${mailUnreadCount}`}
+                  >
+                    {mailUnreadCount > 99 ? "99+" : mailUnreadCount}
+                  </span>
+                ) : (
+                  <span
+                    className="pointer-events-none absolute right-0 top-1/2 inline-flex min-h-5 w-[1.75rem] -translate-y-1/2 items-center justify-center tabular-nums text-xs font-semibold text-[var(--sidebar-text)]"
+                    aria-hidden
+                  />
+                )}
               </Link>
             </li>
           );

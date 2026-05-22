@@ -1,5 +1,12 @@
 import "server-only";
-import { EmailFolderType, UserRole, type EmailAccount, type EmailSyncMode, type PrismaClient } from "@prisma/client";
+import {
+  EmailFolderType,
+  EmailSyncJobStatus,
+  UserRole,
+  type EmailAccount,
+  type EmailSyncMode,
+  type PrismaClient,
+} from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
@@ -302,7 +309,8 @@ export async function listEmailAccounts(
       byEmail.set(key, account);
     }
   }
-  return [...byEmail.values()].map(({ encryptedAppPassword, ...account }) => {
+  const uniqueAccounts = [...byEmail.values()];
+  return uniqueAccounts.map(({ encryptedAppPassword, ...account }) => {
     const safeAccount = account as typeof account & { folders?: unknown[]; labels?: unknown[] };
     return {
       ...safeAccount,
@@ -311,6 +319,16 @@ export async function listEmailAccounts(
       hasPassword: Boolean(encryptedAppPassword),
     };
   });
+}
+
+export async function mailUnreadSummary(db: PrismaClient, tenantId: string, userId: string, role: string) {
+  const accounts = await listEmailAccounts(db, tenantId, userId, role, { lite: true });
+  const accountIds = accounts.map((account) => account.id);
+  if (!accountIds.length) return { unreadCount: 0 };
+  const unreadCount = await db.email.count({
+    where: { tenantId, accountId: { in: accountIds }, isRead: false },
+  });
+  return { unreadCount };
 }
 
 export async function upsertEmailAccount(
@@ -348,6 +366,21 @@ export async function upsertEmailAccount(
         : {}),
     },
   });
+  if (input.appPassword) {
+    await Promise.all([
+      db.emailFolder.updateMany({
+        where: { tenantId, accountId: account.id },
+        data: { lastSyncedUid: null, lastBackfillUid: null },
+      }),
+      db.emailSyncJob.deleteMany({
+        where: {
+          tenantId,
+          accountId: account.id,
+          status: { in: [EmailSyncJobStatus.QUEUED, EmailSyncJobStatus.RUNNING] },
+        },
+      }),
+    ]);
+  }
   await ensureSystemFolders(db, tenantId, account.id);
   return account;
 }

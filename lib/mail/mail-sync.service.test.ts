@@ -22,11 +22,14 @@ describe("inferFolderType", () => {
 });
 
 describe("shouldSyncFolderForMode", () => {
-  it("syncs all folders in recent mode so moved and sent mail are not missed", () => {
+  it("keeps recent sync focused on folders that can affect day-to-day mail", () => {
     expect(shouldSyncFolderForMode(EmailFolderType.INBOX, EmailSyncMode.RECENT)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.SENT, EmailSyncMode.RECENT)).toBe(true);
-    expect(shouldSyncFolderForMode(EmailFolderType.ARCHIVE, EmailSyncMode.RECENT)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.CUSTOM, EmailSyncMode.RECENT)).toBe(true);
+    expect(shouldSyncFolderForMode(EmailFolderType.ARCHIVE, EmailSyncMode.RECENT)).toBe(false);
+    expect(shouldSyncFolderForMode(EmailFolderType.SPAM, EmailSyncMode.RECENT)).toBe(false);
+    expect(shouldSyncFolderForMode(EmailFolderType.TRASH, EmailSyncMode.RECENT)).toBe(false);
+    expect(shouldSyncFolderForMode(EmailFolderType.DRAFTS, EmailSyncMode.RECENT)).toBe(false);
   });
 
   it("allows explicit backfill to walk all folders", () => {

@@ -5,6 +5,9 @@ import type { MailAccount, MailFolder } from "@/components/mail/types";
 import { mailFolderDisplayName } from "@/components/mail/types";
 import { ALL_USER_ROLES, USER_ROLE_LABELS } from "@/lib/user-role-labels";
 
+const NEW_FOLDER_VALUE = "__new_folder__";
+const NEW_LABEL_VALUE = "__new_label__";
+
 type EmailRule = {
   id: string;
   accountId: string;
@@ -167,6 +170,8 @@ export function MailSettingsClient() {
   const [accountDetailsLoading, setAccountDetailsLoading] = useState(false);
   const [selectedAccessRoles, setSelectedAccessRoles] = useState<string[]>(["OWNER"]);
   const [accessSaving, setAccessSaving] = useState(false);
+  const [ruleFolderChoice, setRuleFolderChoice] = useState("");
+  const [ruleLabelChoice, setRuleLabelChoice] = useState("");
 
   const activeAccount = useMemo(
     () => accounts.find((a) => a.id === accountId) ?? accounts[0] ?? null,
@@ -333,14 +338,42 @@ export function MailSettingsClient() {
         setStatus("");
         return;
       }
-      const moveToFolderId =
+      let moveToFolderId =
         formData.get("moveToFolder") === "on"
           ? String(formData.get("moveToFolderId") || "").trim() || null
           : null;
-      const labelId =
+      let labelId =
         formData.get("setLabel") === "on"
           ? String(formData.get("labelId") || "").trim()
           : "";
+      if (moveToFolderId === NEW_FOLDER_VALUE) {
+        const name = String(formData.get("newFolderName") || "").trim();
+        if (!name) {
+          setError("Введите название новой папки");
+          setStatus("");
+          return;
+        }
+        const data = await jsonFetch<{ folder: MailFolder }>("/api/mail/folders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountId: activeAccount.id, name, color: "#6b7280" }),
+        });
+        moveToFolderId = data.folder.id;
+      }
+      if (labelId === NEW_LABEL_VALUE) {
+        const name = String(formData.get("newLabelName") || "").trim();
+        if (!name) {
+          setError("Введите название новой метки");
+          setStatus("");
+          return;
+        }
+        const data = await jsonFetch<{ label: { id: string } }>("/api/mail/labels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountId: activeAccount.id, name, color: "#ff6680" }),
+        });
+        labelId = data.label.id;
+      }
       const actions = {
         delete: formData.get("delete") === "on",
         markRead: formData.get("markRead") === "on",
@@ -364,6 +397,9 @@ export function MailSettingsClient() {
         }),
       });
       setStatus("Правило создано");
+      setRuleFolderChoice("");
+      setRuleLabelChoice("");
+      await loadAccountDetails(activeAccount.id);
       await loadRules(activeAccount.id);
     } catch (err) {
       setError(
@@ -827,16 +863,25 @@ export function MailSettingsClient() {
                   </span>
                   <select
                     name="moveToFolderId"
+                    value={ruleFolderChoice}
+                    onChange={(event) => setRuleFolderChoice(event.target.value)}
                     className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
-                    defaultValue=""
                   >
                     <option value="">Выберите папку</option>
+                    <option value={NEW_FOLDER_VALUE}>+ Новая папка</option>
                     {activeAccount?.folders.map((folder) => (
                       <option key={folder.id} value={folder.id}>
                         {mailFolderDisplayName(folder)}
                       </option>
                     ))}
                   </select>
+                  {ruleFolderChoice === NEW_FOLDER_VALUE ? (
+                    <input
+                      name="newFolderName"
+                      placeholder="Название новой папки"
+                      className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+                    />
+                  ) : null}
                 </label>
                 <label className="grid gap-2 rounded-xl border border-[var(--card-border)] p-3">
                   <span className="flex items-center gap-3">
@@ -845,16 +890,25 @@ export function MailSettingsClient() {
                   </span>
                   <select
                     name="labelId"
+                    value={ruleLabelChoice}
+                    onChange={(event) => setRuleLabelChoice(event.target.value)}
                     className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
-                    defaultValue=""
                   >
                     <option value="">Выберите метку</option>
+                    <option value={NEW_LABEL_VALUE}>+ Новая метка</option>
                     {activeAccount?.labels.map((label) => (
                       <option key={label.id} value={label.id}>
                         {label.name}
                       </option>
                     ))}
                   </select>
+                  {ruleLabelChoice === NEW_LABEL_VALUE ? (
+                    <input
+                      name="newLabelName"
+                      placeholder="Название новой метки"
+                      className="h-10 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--text-placeholder)]"
+                    />
+                  ) : null}
                 </label>
               </div>
             </div>

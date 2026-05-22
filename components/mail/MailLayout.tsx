@@ -49,8 +49,10 @@ function mailErrorMessage(value: unknown, fallback = "Ошибка почты"):
 
 function inboxFolder(account: MailAccount | null): MailFolder | null {
   if (!account) return null;
+  const inboxes = account.folders.filter((f) => f.type === "INBOX");
   return (
-    account.folders.find((f) => f.type === "INBOX") ??
+    inboxes.find((f) => (f.totalCount ?? 0) > 0 || (f.unreadCount ?? 0) > 0) ??
+    inboxes[0] ??
     account.folders.slice().sort((a, b) => a.sortOrder - b.sortOrder)[0] ??
     null
   );
@@ -141,6 +143,14 @@ export function MailLayout() {
   const activeLabel = useMemo(
     () => activeAccount?.labels.find((label) => label.id === activeLabelId) ?? null,
     [activeAccount, activeLabelId],
+  );
+  const activeAccountUnreadCount = useMemo(
+    () => activeAccount?.folders.reduce((sum, folder) => sum + folder.unreadCount, 0) ?? 0,
+    [activeAccount],
+  );
+  const activeAccountTotalCount = useMemo(
+    () => activeAccount?.folders.reduce((sum, folder) => sum + folder.totalCount, 0) ?? 0,
+    [activeAccount],
   );
   const canConnectAccount = currentUserRole === "OWNER";
   const listQueryKey = useMemo(
@@ -260,9 +270,8 @@ export function MailLayout() {
     if (!activeAccount) return;
     if (activeLabelId && activeAccount.labels.some((label) => label.id === activeLabelId)) return;
     if (activeLabelId) setActiveLabelId("");
-    const folder = inboxFolder(activeAccount);
     setActiveFolderId((prev) =>
-      prev && activeAccount.folders.some((f) => f.id === prev) ? prev : folder?.id || "",
+      prev && activeAccount.folders.some((f) => f.id === prev) ? prev : "",
     );
   }, [activeAccount, activeLabelId]);
 
@@ -297,6 +306,7 @@ export function MailLayout() {
         status?: string;
         lastError?: string | null;
         queued?: boolean;
+        result?: { imported?: number; skipped?: number; folders?: number } | null;
         rulesApply?: { skipped: boolean; processed: number; updated: number; labelsTouched: number };
       }>(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
       if (!options.silent) {
@@ -309,6 +319,9 @@ export function MailLayout() {
           setSyncStatus(
             `Синхронизация завершена. Правила проверили ${data.rulesApply.processed} писем, обновили ${data.rulesApply.updated}.`,
           );
+        } else {
+          const imported = data.result?.imported ?? 0;
+          setSyncStatus(imported > 0 ? `Синхронизация завершена. Новых писем: ${imported}.` : "Новых писем нет.");
         }
       }
       await loadAccounts();
@@ -594,8 +607,17 @@ export function MailLayout() {
               activeFolderId={activeFolderId}
               activeLabelId={activeLabelId}
               labels={activeAccount?.labels ?? []}
+              unreadCount={activeAccountUnreadCount}
+              totalCount={activeAccountTotalCount}
               collapsed={sidebarCollapsed}
               onCollapsedChange={setSidebarCollapsed}
+              onAllMailChange={() => {
+                setActiveFolderId("");
+                setActiveLabelId("");
+                setActiveEmailId("");
+                setDetail(null);
+                setSelectedIds(new Set());
+              }}
               onFolderChange={(id) => {
                 setActiveFolderId(id);
                 setActiveLabelId("");
@@ -636,6 +658,8 @@ export function MailLayout() {
               activeEmailId={activeEmailId}
               selectedIds={selectedIds}
               filter={filter}
+              allTotalCount={activeAccountTotalCount}
+              allUnreadCount={activeAccountUnreadCount}
               loading={loadingEmails}
               hasMore={Boolean(nextCursor)}
               loadingMore={loadingMore}
@@ -661,6 +685,13 @@ export function MailLayout() {
               onMarkAllRead={() => void markAllRead()}
               onBulkAction={(action) => void bulk(action)}
               onEmailAction={(id, action) => void bulk(action, [id])}
+              onLabelClick={(id) => {
+                setActiveLabelId(id);
+                setActiveFolderId("");
+                setActiveEmailId("");
+                setDetail(null);
+                setSelectedIds(new Set());
+              }}
               canMarkAllRead={currentUserRole === "OWNER"}
             />
             <div className="hidden min-w-0 flex-1 overflow-hidden xl:flex">

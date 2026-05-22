@@ -4,7 +4,7 @@ import { EmailSyncJobStatus, EmailSyncMode, type PrismaClient } from "@prisma/cl
 import { syncAccountNow } from "@/lib/mail/mail-service";
 import { logger } from "@/lib/server/logger";
 
-const STALE_RUNNING_JOB_MS = 10 * 60 * 1000;
+const STALE_RUNNING_JOB_MS = 2 * 60 * 1000;
 
 function mailSyncErrorMessage(err: unknown): string {
   if (!(err instanceof Error)) return "Синхронизация почты завершилась ошибкой";
@@ -73,6 +73,7 @@ export async function runMailSyncJob(
       tenantId,
       OR: [
         { status: EmailSyncJobStatus.QUEUED },
+        { status: EmailSyncJobStatus.RUNNING, lockedAt: null },
         { status: EmailSyncJobStatus.RUNNING, lockedAt: { lt: staleBefore } },
       ],
     },

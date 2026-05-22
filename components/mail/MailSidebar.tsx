@@ -63,6 +63,8 @@ function FolderButton({
   onClick: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `folder:${folder.id}` });
+  const hasUnread = folder.unreadCount > 0;
+  const hasMessages = folder.totalCount > 0;
   return (
     <button
       ref={setNodeRef}
@@ -80,14 +82,68 @@ function FolderButton({
         style={{ backgroundColor: folder.color || "var(--card-bg)" }}
       >
         {FOLDER_ICONS[folder.type] ?? "•"}
-        {collapsed && folder.unreadCount > 0 ? (
+        {collapsed && hasUnread ? (
           <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-orange-500 ring-2 ring-[var(--surface-muted)]" />
         ) : null}
       </span>
       {collapsed ? null : <span className="min-w-0 flex-1 truncate">{mailFolderDisplayName(folder)}</span>}
-      {!collapsed && folder.unreadCount > 0 ? (
-        <span className="rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 text-xs font-semibold text-[var(--text-body)]">
-          {folder.unreadCount > 99 ? "99+" : folder.unreadCount}
+      {!collapsed && hasMessages ? (
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+            hasUnread
+              ? "bg-[var(--sidebar-blue)] text-white"
+              : "bg-[var(--surface-subtle)] text-[var(--text-secondary)]"
+          }`}
+          title={hasUnread ? `${folder.unreadCount} непрочитанных из ${folder.totalCount}` : `${folder.totalCount} писем`}
+        >
+          {folder.totalCount > 999 ? "999+" : folder.totalCount}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function AllMailButton({
+  active,
+  collapsed,
+  totalCount,
+  unreadCount,
+  onClick,
+}: {
+  active: boolean;
+  collapsed: boolean;
+  totalCount: number;
+  unreadCount: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Все письма"
+      className={`group flex w-full items-center rounded-xl text-left text-sm transition ${
+        active
+          ? "bg-[var(--accent-selection-bg)] font-semibold text-[var(--sidebar-blue)]"
+          : "text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+      } ${collapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2"}`}
+    >
+      <span className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[var(--sidebar-blue)] text-xs text-white shadow-sm">
+        ✉
+        {collapsed && unreadCount > 0 ? (
+          <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-orange-500 ring-2 ring-[var(--surface-muted)]" />
+        ) : null}
+      </span>
+      {collapsed ? null : <span className="min-w-0 flex-1 truncate">Все письма</span>}
+      {!collapsed && totalCount > 0 ? (
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+            unreadCount > 0
+              ? "bg-[var(--sidebar-blue)] text-white"
+              : "bg-[var(--surface-subtle)] text-[var(--text-secondary)]"
+          }`}
+          title={unreadCount > 0 ? `${unreadCount} непрочитанных из ${totalCount}` : `${totalCount} писем`}
+        >
+          {totalCount > 999 ? "999+" : totalCount}
         </span>
       ) : null}
     </button>
@@ -99,8 +155,11 @@ export function MailSidebar({
   activeFolderId,
   activeLabelId,
   labels,
+  unreadCount,
+  totalCount,
   collapsed,
   onCollapsedChange,
+  onAllMailChange,
   onFolderChange,
   onLabelChange,
   onCreateFolder,
@@ -110,8 +169,11 @@ export function MailSidebar({
   activeFolderId: string;
   activeLabelId: string;
   labels: MailLabel[];
+  unreadCount: number;
+  totalCount: number;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  onAllMailChange: () => void;
   onFolderChange: (folderId: string) => void;
   onLabelChange: (labelId: string) => void;
   onCreateFolder: () => void;
@@ -137,9 +199,21 @@ export function MailSidebar({
         title={collapsed ? "Развернуть боковую панель" : "Свернуть боковую панель"}
         aria-label={collapsed ? "Развернуть боковую панель" : "Свернуть боковую панель"}
       >
-        {collapsed ? "›" : (
+        {collapsed ? (
+          <span className="relative">
+            ›
+            {unreadCount > 0 ? (
+              <span className="absolute -right-2 -top-1 h-2.5 w-2.5 rounded-full bg-orange-500 ring-2 ring-[var(--card-bg)]" />
+            ) : null}
+          </span>
+        ) : (
           <>
             <span>Почта</span>
+            {unreadCount > 0 ? (
+              <span className="ml-auto mr-2 rounded-full bg-[var(--sidebar-blue)] px-2 py-0.5 text-xs font-semibold text-white">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            ) : null}
             <span aria-hidden>‹</span>
           </>
         )}
@@ -147,6 +221,13 @@ export function MailSidebar({
 
       {collapsed ? (
         <nav className="space-y-1">
+          <AllMailButton
+            active={!activeFolderId && !activeLabelId}
+            collapsed={collapsed}
+            totalCount={totalCount}
+            unreadCount={unreadCount}
+            onClick={onAllMailChange}
+          />
           {[...systemFolders, ...customFolders].map((folder) => (
             <FolderButton
               key={folder.id}
@@ -160,6 +241,13 @@ export function MailSidebar({
       ) : (
         <div>
           <nav className="space-y-1">
+            <AllMailButton
+              active={!activeFolderId && !activeLabelId}
+              collapsed={collapsed}
+              totalCount={totalCount}
+              unreadCount={unreadCount}
+              onClick={onAllMailChange}
+            />
             {systemFolders.map((folder) => (
               <FolderButton
                 key={folder.id}
@@ -240,8 +328,21 @@ export function MailSidebar({
                 style={{ backgroundColor: label.color }}
               />
               <span className="min-w-0 flex-1 truncate">{label.name}</span>
-              {label.unreadCount > 0 ? (
-                <span className="text-xs font-semibold text-[var(--text-secondary)]">{label.unreadCount}</span>
+              {label.totalCount > 0 ? (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                    label.unreadCount > 0
+                      ? "bg-[var(--sidebar-blue)] text-white"
+                      : "bg-[var(--surface-subtle)] text-[var(--text-secondary)]"
+                  }`}
+                  title={
+                    label.unreadCount > 0
+                      ? `${label.unreadCount} непрочитанных из ${label.totalCount}`
+                      : `${label.totalCount} писем`
+                  }
+                >
+                  {label.totalCount > 999 ? "999+" : label.totalCount}
+                </span>
               ) : null}
             </button>
           ))}

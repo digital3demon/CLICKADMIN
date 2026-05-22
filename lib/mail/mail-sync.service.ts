@@ -45,11 +45,22 @@ export function inferFolderType(path: string): EmailFolderType {
 }
 
 export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMode): boolean {
-  return Boolean(type || mode);
+  if (mode === EmailSyncMode.BACKFILL) return true;
+  return type === EmailFolderType.INBOX || type === EmailFolderType.SENT || type === EmailFolderType.CUSTOM;
 }
 
 function initialSyncSinceDate(now = new Date()): Date {
   return new Date(now.getTime() - INITIAL_SYNC_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+}
+
+function folderSyncPriority(folder: ImapFolderInfo): number {
+  const type = inferFolderType(folder.path);
+  if (type === EmailFolderType.INBOX) return 0;
+  if (type === EmailFolderType.SENT) return 10;
+  if (type === EmailFolderType.CUSTOM) return 20;
+  if (type === EmailFolderType.ARCHIVE) return 40;
+  if (type === EmailFolderType.SPAM || type === EmailFolderType.TRASH) return 80;
+  return 60;
 }
 
 function addressList(value: ParsedMail["from"] | ParsedMail["to"] | ParsedMail["cc"]): Array<{
@@ -391,6 +402,20 @@ async function refreshFolderCounters(
   });
 }
 
+async function refreshLabelCounters(
+  db: PrismaClient,
+  tenantId: string,
+  labelId: string,
+): Promise<void> {
+  const [totalCount, unreadCount] = await Promise.all([
+    db.emailLabelAssignment.count({ where: { tenantId, labelId } }),
+    db.emailLabelAssignment.count({
+      where: { tenantId, labelId, email: { isRead: false } },
+    }),
+  ]);
+  await db.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
+}
+
 export async function syncEmailAccount(
   db: PrismaClient,
   account: EmailAccount,
@@ -413,7 +438,9 @@ export async function syncEmailAccount(
       where: { tenantId: account.tenantId, accountId: account.id, isActive: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
-    const listedFolders = await listImapFolders(client);
+    const listedFolders = (await listImapFolders(client)).sort(
+      (a, b) => folderSyncPriority(a) - folderSyncPriority(b) || a.path.localeCompare(b.path),
+    );
     for (const listed of listedFolders) {
       try {
       const folder = await upsertFolder(db, account, listed);
@@ -423,6 +450,7 @@ export async function syncEmailAccount(
       let minBackfillUid = folder.lastBackfillUid ?? null;
       let processed = 0;
       const touchedFolderIds = new Set<string>([folder.id]);
+      const touchedLabelIds = new Set<string>();
       const maxMessages =
         mode === EmailSyncMode.BACKFILL
           ? BACKFILL_MESSAGES_PER_FOLDER
@@ -454,20 +482,6 @@ export async function syncEmailAccount(
         }
 
         const parsed = await simpleParser(item.source);
-        const duplicateByMessageId = parsed.messageId
-          ? await db.email.findFirst({
-              where: {
-                tenantId: account.tenantId,
-                accountId: account.id,
-                messageId: parsed.messageId,
-              },
-              select: { id: true },
-            })
-          : null;
-        if (duplicateByMessageId) {
-          skipped += 1;
-          continue;
-        }
         const from = firstAddress(parsed.from);
         const hasAttachments = parsed.attachments.length > 0;
         const ruleResult =
@@ -482,6 +496,52 @@ export async function syncEmailAccount(
                 folderId: null,
                 forwardTo: [],
               };
+        const targetFolderId = ruleResult.folderId ?? folder.id;
+        const duplicateByMessageId = parsed.messageId
+          ? await db.email.findFirst({
+              where: {
+                tenantId: account.tenantId,
+                accountId: account.id,
+                messageId: parsed.messageId,
+              },
+              select: { id: true, folderId: true, uid: true, isRead: true, isFlagged: true },
+            })
+          : null;
+        if (duplicateByMessageId) {
+          const duplicateData: Record<string, unknown> = {};
+          if (duplicateByMessageId.folderId !== targetFolderId) duplicateData.folderId = targetFolderId;
+          if (duplicateByMessageId.uid !== item.uid) duplicateData.uid = item.uid;
+          if (ruleResult.isRead && !duplicateByMessageId.isRead) {
+            duplicateData.isRead = true;
+            duplicateData.readAt = item.internalDate ?? new Date();
+          }
+          if ((item.flags.has("\\Flagged") || ruleResult.isFlagged) && !duplicateByMessageId.isFlagged) {
+            duplicateData.isFlagged = true;
+          }
+          if (Object.keys(duplicateData).length > 0) {
+            try {
+              await db.email.update({ where: { id: duplicateByMessageId.id }, data: duplicateData });
+            } catch (error) {
+              if (!isUniqueConstraintError(error)) throw error;
+              const { folderId: _folderId, uid: _uid, ...safeDuplicateData } = duplicateData;
+              if (Object.keys(safeDuplicateData).length > 0) {
+                await db.email.update({ where: { id: duplicateByMessageId.id }, data: safeDuplicateData });
+              }
+            }
+            if (duplicateByMessageId.folderId) touchedFolderIds.add(duplicateByMessageId.folderId);
+            touchedFolderIds.add(targetFolderId);
+          }
+          for (const labelId of ruleResult.labelIds) {
+            await db.emailLabelAssignment.upsert({
+              where: { emailId_labelId: { emailId: duplicateByMessageId.id, labelId } },
+              create: { tenantId: account.tenantId, emailId: duplicateByMessageId.id, labelId },
+              update: {},
+            });
+            touchedLabelIds.add(labelId);
+          }
+          skipped += 1;
+          continue;
+        }
         if (ruleResult.forwardTo.length > 0) {
           await forwardIncomingMessage(account, ruleResult.forwardTo, parsed).catch((err) =>
             logger.error({ err, accountId: account.id, messageId: parsed.messageId }, "mail rule forward failed"),
@@ -494,7 +554,7 @@ export async function syncEmailAccount(
             data: {
               tenantId: account.tenantId,
               accountId: account.id,
-              folderId: ruleResult.folderId ?? folder.id,
+              folderId: targetFolderId,
               uid: item.uid,
               messageId: parsed.messageId ?? null,
               direction:
@@ -535,6 +595,7 @@ export async function syncEmailAccount(
           continue;
         }
         if (ruleResult.folderId) touchedFolderIds.add(ruleResult.folderId);
+        for (const labelId of ruleResult.labelIds) touchedLabelIds.add(labelId);
         for (const a of parsed.attachments) {
           const attachmentId = newMailAttachmentId();
           const mimeType = a.contentType || "application/octet-stream";
@@ -572,6 +633,9 @@ export async function syncEmailAccount(
       });
       for (const folderId of touchedFolderIds) {
         await refreshFolderCounters(db, account.tenantId, folderId);
+      }
+      for (const labelId of touchedLabelIds) {
+        await refreshLabelCounters(db, account.tenantId, labelId);
       }
       } catch (err) {
         folderErrors += 1;
