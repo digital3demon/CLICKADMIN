@@ -124,6 +124,7 @@ export type CreateOrderBody = {
   correctionReason?: string | null;
   correctionPaid?: boolean;
   continuesFromOrderId?: string | null;
+  sourceEmailIds?: string[];
 };
 
 export type CreateOrderResult =
@@ -519,6 +520,36 @@ export async function createOrderFromBody(
     await recordOrderRevision(order.id, { kind: "CREATE" });
   } catch (e) {
     logger.error({ err: e, msg: "order_revision_log" }, "createOrderFromBody");
+  }
+
+  const sourceEmailIds = Array.isArray(body.sourceEmailIds)
+    ? Array.from(
+        new Set(
+          body.sourceEmailIds
+            .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+            .map((id) => id.trim()),
+        ),
+      ).slice(0, 20)
+    : [];
+  if (sourceEmailIds.length > 0) {
+    try {
+      const emails = await ordersPrisma.email.findMany({
+        where: { tenantId, id: { in: sourceEmailIds } },
+        select: { id: true },
+      });
+      if (emails.length > 0) {
+        await ordersPrisma.emailSourceOrder.createMany({
+          data: emails.map((email) => ({
+            tenantId,
+            orderId: order.id,
+            emailId: email.id,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    } catch (e) {
+      logger.error({ err: e, orderId: order.id, sourceEmailIds }, "order_source_email_link_failed");
+    }
   }
 
   auditLogger.info({

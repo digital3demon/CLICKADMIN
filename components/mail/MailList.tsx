@@ -249,6 +249,22 @@ function MailRow({
           Удалить
         </button>
       </div>
+      {email.hasLinkedOrder ? (
+        <span
+          className="pointer-events-none absolute bottom-2 right-3 flex flex-col items-center gap-0.5"
+          title="Из письма сформирован заказ"
+          aria-label="Из письма сформирован заказ"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xl font-black leading-none text-zinc-500 shadow-sm ring-2 ring-[var(--card-bg)] dark:text-zinc-500">
+            ✓
+          </span>
+          {email.linkedOrderNumber ? (
+            <span className="max-w-16 truncate text-[10px] font-semibold leading-3 text-[var(--text-muted)]">
+              {email.linkedOrderNumber}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
     </div>
   );
 }

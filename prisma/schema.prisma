@@ -860,6 +860,7 @@ model Email {
 
   attachments      EmailAttachment[]
   labelAssignments EmailLabelAssignment[]
+  sourceOrderLinks EmailSourceOrder[]
 
   @@unique([accountId, folderId, uid])
   @@unique([accountId, messageId])
@@ -904,6 +905,21 @@ model EmailLabelAssignment {
   @@unique([emailId, labelId])
   @@index([tenantId, labelId])
   @@index([tenantId, labelId, emailId])
+}
+
+/// Связь письма с нарядом, созданным из этого письма.
+model EmailSourceOrder {
+  id        String   @id @default(cuid())
+  tenantId  String
+  emailId   String
+  email     Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([orderId, emailId])
+  @@index([tenantId, emailId])
+  @@index([tenantId, orderId])
 }
 
 /// Правило обработки входящей почты. Условия/действия — JSON-контракт UI; применяется при синхронизации.
@@ -1258,6 +1274,7 @@ model Order {
   prostheticsRequests            OrderProstheticsRequest[]
   kaitenLabMentionAcks           OrderKaitenLabMentionAck[]
   payrollWorkEntries             PayrollWorkEntry[]
+  sourceEmailLinks               EmailSourceOrder[]
   /// Мягкое архивирование («удаление»): наряд скрыт из списков и канбана; номер YYMM-NNN снимается (плейхолдер `ARCH:id`), чтобы его можно было выдать другому наряду.
   archivedAt                     DateTime?
   createdAt                      DateTime                  @default(now())

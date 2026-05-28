@@ -81,8 +81,10 @@ export type MailEmailRow = {
   receivedAt: string | null;
   sentAt: string | null;
   createdAt: string;
+  hasLinkedOrder?: boolean;
+  linkedOrderNumber?: string | null;
   labelAssignments?: Array<{ label: MailLabel }>;
-  _count?: { attachments: number };
+  _count?: { attachments: number; sourceOrderLinks?: number };
 };
 
 export type MailAttachment = {

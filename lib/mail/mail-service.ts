@@ -731,13 +731,22 @@ export async function listEmails(
     include: {
       folder: true,
       labelAssignments: { include: { label: true } },
-      _count: { select: { attachments: true } },
+      sourceOrderLinks: {
+        take: 1,
+        orderBy: { createdAt: "desc" },
+        select: { order: { select: { orderNumber: true } } },
+      },
+      _count: { select: { attachments: true, sourceOrderLinks: true } },
     },
   });
   const emails = rows.slice(0, take);
   const last = emails.at(-1);
   return {
-    emails,
+    emails: emails.map((email) => ({
+      ...email,
+      hasLinkedOrder: email._count.sourceOrderLinks > 0,
+      linkedOrderNumber: email.sourceOrderLinks[0]?.order.orderNumber ?? null,
+    })),
     nextCursor:
       rows.length > take && last
         ? encodeMailListCursor(last.receivedAt ?? last.sentAt ?? last.createdAt, last.id, last.isFlagged)
@@ -864,6 +873,12 @@ export async function getEmailDetail(
         select: { id: true, fileName: true, mimeType: true, size: true, contentId: true, isInline: true },
       },
       labelAssignments: { include: { label: true } },
+      sourceOrderLinks: {
+        take: 1,
+        orderBy: { createdAt: "desc" },
+        select: { order: { select: { orderNumber: true } } },
+      },
+      _count: { select: { attachments: true, sourceOrderLinks: true } },
     },
   });
   if (!email) throw new Error("EMAIL_NOT_FOUND");
@@ -887,6 +902,8 @@ export async function getEmailDetail(
     account: safeAccount,
     isRead: markRead ? true : email.isRead,
     readAt: markRead && !email.isRead ? new Date() : email.readAt,
+    hasLinkedOrder: email._count.sourceOrderLinks > 0,
+    linkedOrderNumber: email.sourceOrderLinks[0]?.order.orderNumber ?? null,
     safeHtmlBody: inlineCidImages(sanitizedHtml, email.id, email.attachments),
   };
 }

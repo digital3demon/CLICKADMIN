@@ -695,6 +695,7 @@ export function NewOrderForm({
       detailLines,
       bridgeLines,
       prosthetics,
+      sourceEmails,
       correctionTrack,
       correctionReason,
       correctionPaid,
@@ -1041,6 +1042,7 @@ export function NewOrderForm({
               ...constructionsFromQuickOrder(quickOrder),
             ],
             prosthetics,
+            sourceEmailIds: sourceEmails.map((email) => email.id),
             correctionTrack: correctionTrack ?? null,
             correctionReason:
               correctionTrack != null ? correctionReason.trim() || null : null,
