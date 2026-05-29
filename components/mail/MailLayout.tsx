@@ -18,10 +18,27 @@ import type {
 } from "@/components/mail/types";
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { ...init, cache: "no-store" });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
+  const maxAttempts = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const res = await fetch(url, { ...init, cache: "no-store" });
+      const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    } catch (err) {
+      lastError = err;
+      const message = err instanceof Error ? err.message.toLowerCase() : "";
+      const retriable =
+        err instanceof TypeError ||
+        message.includes("failed to fetch") ||
+        message.includes("load failed") ||
+        message.includes("networkerror");
+      if (!retriable || attempt >= maxAttempts - 1) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
+    }
+  }
+  throw lastError;
 }
 
 function mailErrorMessage(value: unknown, fallback = "Ошибка почты"): string {
@@ -29,6 +46,15 @@ function mailErrorMessage(value: unknown, fallback = "Ошибка почты"):
   const message = raw.trim();
   if (!message) return fallback;
   const lower = message.toLowerCase();
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("load failed") ||
+    lower.includes("networkerror") ||
+    lower.includes("err_proxy") ||
+    lower.includes("proxy connection")
+  ) {
+    return "Браузер не смог связаться с CRM. Проверьте интернет, отключите VPN/прокси и обновите страницу.";
+  }
   if (
     lower.includes("connection not available") ||
     lower.includes("socket closed") ||
