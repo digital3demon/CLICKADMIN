@@ -13,8 +13,7 @@ import {
 } from "@/lib/custom-list-tag-kaiten-unblock-label";
 import { LAB_WORK_STATUS_PILL_STYLES } from "@/lib/lab-work-status";
 import { kaitenStatusDisplay } from "@/lib/kaiten-column-title";
-import { getKaitenColumnDisplayFromOrder } from "@/lib/order-status-display";
-import { Badge } from "@/components/ui";
+import { getKaitenColumnPillClassFromOrder } from "@/lib/order-status-display";
 import {
   LIST_TAG_FINANCE_CALCULATED,
   LIST_TAG_FINANCE_NOT_CALCULATED,
@@ -397,7 +396,7 @@ export function OrderListTagsCell({
     ? kanbanColumnLabelForNoKaitenPill(demoKanbanColumn, demoCardTypeName)
     : null;
   const kaitenColTrimmed = kaitenColumnTitle?.trim() ?? "";
-  const kaitenColumnDisplay = getKaitenColumnDisplayFromOrder({
+  const kaitenPillClass = getKaitenColumnPillClassFromOrder({
     kaitenColumnTitle: kaitenColTrimmed || null,
     demoKanbanColumn,
   });
@@ -933,12 +932,11 @@ export function OrderListTagsCell({
               </span>
             </span>
           ) : (
-            <Badge
-              variant={kaitenColumnDisplay.variant}
-              className={`truncate font-semibold uppercase tracking-wide shadow-sm ${padTable}`}
+            <span
+              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass} ${padTable}`}
             >
               {kaitenLabel}
-            </Badge>
+            </span>
           )}
         </Link>
       ) : (
@@ -960,12 +958,11 @@ export function OrderListTagsCell({
               </span>
             </span>
           ) : (
-            <Badge
-              variant={kaitenColumnDisplay.variant}
-              className={`truncate font-semibold uppercase tracking-wide shadow-sm ${padTable}`}
+            <span
+              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass} ${padTable}`}
             >
               {kaitenLabel}
-            </Badge>
+            </span>
           )}
         </span>
       ),
@@ -1192,7 +1189,7 @@ export function OrderListTagsCell({
     kaitenBlockReason,
     kaitenFilterKey,
     kaitenLabel,
-    kaitenColumnDisplay.variant,
+    kaitenPillClass,
     noKaitenKanbanStatus,
     pageSize,
     hideShipped,

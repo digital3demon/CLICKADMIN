@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { MailEmailDetail } from "@/components/mail/types";
 import { mailFullDateLabel, mailPrimaryDateValue } from "@/components/mail/date-format";
+import { sanitizeMailHtml } from "@/lib/mail/sanitize-mail-html";
 
 function addressLine(value: unknown): string {
   if (!Array.isArray(value)) return "";
@@ -66,7 +67,7 @@ export function MailViewer({
   }
 
   const body = email.safeHtmlBody?.trim()
-    ? email.safeHtmlBody
+    ? sanitizeMailHtml(email.safeHtmlBody)
     : `<pre style="white-space:pre-wrap;font:14px/1.6 system-ui;color:CanvasText">${(
         email.textBody || ""
       )

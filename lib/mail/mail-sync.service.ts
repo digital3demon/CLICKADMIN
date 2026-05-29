@@ -33,8 +33,16 @@ import { ensureOrderDigitaldemonRules } from "@/lib/mail/order-digitaldemon-rule
 import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
 const RECENT_MESSAGES_PER_FOLDER = 250;
+const RECENT_MESSAGES_CUSTOM_FOLDER = 120;
 const BACKFILL_MESSAGES_PER_FOLDER = 120;
 const RECENT_SYNC_LOOKBACK_DAYS = 7;
+
+function recentMessagesPerFolder(type: EmailFolderType): number {
+  if (type === EmailFolderType.INBOX || type === EmailFolderType.SENT) return RECENT_MESSAGES_PER_FOLDER;
+  if (type === EmailFolderType.CUSTOM) return RECENT_MESSAGES_CUSTOM_FOLDER;
+  if (type === EmailFolderType.ARCHIVE) return 80;
+  return RECENT_MESSAGES_PER_FOLDER;
+}
 
 type SyncCursorMode = "forward" | "backfill" | "lookback";
 type SyncFetchedMessage = {
@@ -697,18 +705,7 @@ export async function syncEmailAccount(
       const { folder: folderAfterValidity, uidValidityMismatch, imapUidNext } =
         await syncFolderUidValidity(client, db, listed.path, folder);
       folder = folderAfterValidity;
-      const latest = await fetchFolderMessageSummariesBefore(client, listed.path, 5).catch((err) => {
-        logger.warn({ err, accountId: account.id, folderPath: listed.path }, "mail latest IMAP summaries failed");
-        return [] as ImapMessageSummary[];
-      });
-      const latestImapUids = latest.map((item) => item.uid);
       if (!shouldSyncFolderForMode(folder.type, mode)) {
-        const latestInDb = await db.email.findMany({
-          where: { tenantId: account.tenantId, accountId: account.id, folderId: folder.id },
-          orderBy: { uid: "desc" },
-          take: 5,
-          select: { uid: true },
-        });
         folderStats.push({
           path: listed.path,
           type: folder.type,
@@ -716,15 +713,20 @@ export async function syncEmailAccount(
           skipped: 0,
           processed: 0,
           lastSyncedUid: folder.lastSyncedUid,
-          latest,
+          latest: [],
           imapUidNext,
           dbLastSyncedUid: folder.lastSyncedUid,
           uidValidityMismatch,
-          latestImapUids,
-          latestDbUids: latestInDb.map((email) => email.uid).filter((uid): uid is number => uid != null),
+          latestImapUids: [],
+          latestDbUids: [],
         });
         continue;
       }
+      const latest = await fetchFolderMessageSummariesBefore(client, listed.path, 5).catch((err) => {
+        logger.warn({ err, accountId: account.id, folderPath: listed.path }, "mail latest IMAP summaries failed");
+        return [] as ImapMessageSummary[];
+      });
+      const latestImapUids = latest.map((item) => item.uid);
       let maxUid = folder.lastSyncedUid ?? 0;
       let minBackfillUid = folder.lastBackfillUid ?? null;
       let processed = 0;
@@ -740,7 +742,7 @@ export async function syncEmailAccount(
       const maxMessages =
         mode === EmailSyncMode.BACKFILL
           ? BACKFILL_MESSAGES_PER_FOLDER
-          : RECENT_MESSAGES_PER_FOLDER;
+          : recentMessagesPerFolder(folder.type);
       const messages =
         mode === EmailSyncMode.BACKFILL
           ? markCursorMode(

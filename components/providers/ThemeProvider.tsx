@@ -42,15 +42,15 @@ function applyDom(pref: ThemePreference) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const init = getClientThemeInitialState();
-  const [theme, setThemeState] = useState<ThemePreference>(init.theme);
-  const [resolvedDark, setResolvedDark] = useState(init.resolvedDark);
+  const [theme, setThemeState] = useState<ThemePreference>("system");
+  const [resolvedDark, setResolvedDark] = useState(false);
   const [ready, setReady] = useState(false);
 
   useLayoutEffect(() => {
-    const dark = computeResolvedDark(theme, systemPrefersDark());
-    setResolvedDark(dark);
-    document.documentElement.classList.toggle("dark", dark);
+    const init = getClientThemeInitialState();
+    setThemeState(init.theme);
+    setResolvedDark(init.resolvedDark);
+    document.documentElement.classList.toggle("dark", init.resolvedDark);
   }, []);
 
   useEffect(() => {

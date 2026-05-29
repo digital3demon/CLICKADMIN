@@ -343,7 +343,7 @@ export function MailList({
   const rowVirtualizer = useVirtualizer({
     count: emails.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: (index) => (emails[index]?.labelAssignments?.length ? 118 : 96),
+    estimateSize: () => 118,
     overscan: 10,
   });
   const selectedCount = selectedIds.size;

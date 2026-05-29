@@ -19,6 +19,7 @@ describe("enqueueMailSyncJob", () => {
       emailSyncJob: {
         findFirst: vi.fn().mockResolvedValue(existing),
         create: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
     };
 

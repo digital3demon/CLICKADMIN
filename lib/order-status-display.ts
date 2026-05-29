@@ -1,22 +1,47 @@
 import type { BadgeVariant } from '@/components/ui/Badge'
+import { normalizeKanbanColumnTitle } from '@/lib/kaiten-column-title'
+import {
+  LAB_WORK_STATUS_LABELS,
+  LAB_WORK_STATUS_ORDER,
+  LAB_WORK_STATUS_PILL_STYLES,
+  type LabWorkStatus,
+} from '@/lib/lab-work-status'
 
 interface StatusDisplay {
   variant: BadgeVariant
   label?: string
 }
 
-// Маппинг заголовков колонок Kaiten → цвет бейджа
-// Ключи — точные строки из kaitenColumnTitle
-// Дополняй по мере появления новых статусов в Kaiten
-export const KAITEN_COLUMN_DISPLAY: Record<string, StatusDisplay> = {
-  'Новые':             { variant: 'blue' },
-  'В работе':          { variant: 'yellow' },
-  'Готово':            { variant: 'green' },
-  'Отправлено':        { variant: 'purple' },
-  'Корректировка':     { variant: 'red' },
-  'Стоп':              { variant: 'red' },
-  'Ожидание':          { variant: 'gray' },
+const LAB_STATUS_BADGE_VARIANT: Record<LabWorkStatus, BadgeVariant> = {
+  TO_SCAN: 'gray',
+  TO_EXECUTION: 'blue',
+  APPROVAL: 'purple',
+  PRODUCTION: 'yellow',
+  ASSEMBLY: 'green',
+  PROCESSING: 'blue',
+  MANUAL: 'purple',
+  TO_REVIEW: 'purple',
+  TO_ADMINS: 'yellow',
 }
+
+/** Колонки воронки лаборатории (как в Kaiten / CRM-канбане) → цвет. */
+const KAITEN_COLUMN_DISPLAY: Record<string, StatusDisplay> = (() => {
+  const map: Record<string, StatusDisplay> = {
+    Новые: { variant: 'blue' },
+    'В работе': { variant: 'yellow' },
+    Готово: { variant: 'green' },
+    Отправлено: { variant: 'purple' },
+    Корректировка: { variant: 'red' },
+    Стоп: { variant: 'red' },
+    Ожидание: { variant: 'gray' },
+  }
+  for (const status of LAB_WORK_STATUS_ORDER) {
+    map[LAB_WORK_STATUS_LABELS[status]] = {
+      variant: LAB_STATUS_BADGE_VARIANT[status],
+    }
+  }
+  return map
+})()
 
 /** Демо-канбан: enum → подпись колонки (как в kaitenStatusDisplay). */
 const DEMO_KANBAN_COL_RU: Record<string, string> = {
@@ -36,11 +61,63 @@ export function resolveKaitenColumnTitleForDisplay(opts: {
   return DEMO_KANBAN_COL_RU[demo] ?? demo
 }
 
+function resolveLabWorkStatusForColumnTitle(
+  columnTitle: string | null | undefined,
+): LabWorkStatus | null {
+  const norm = normalizeKanbanColumnTitle(columnTitle ?? '')
+  if (!norm) return null
+
+  for (const status of LAB_WORK_STATUS_ORDER) {
+    const labelNorm = normalizeKanbanColumnTitle(LAB_WORK_STATUS_LABELS[status])
+    if (norm === labelNorm) return status
+  }
+
+  for (const status of LAB_WORK_STATUS_ORDER) {
+    const labelNorm = normalizeKanbanColumnTitle(LAB_WORK_STATUS_LABELS[status])
+    if (
+      labelNorm.length >= 4 &&
+      norm.length >= 4 &&
+      (norm.includes(labelNorm) || labelNorm.includes(norm))
+    ) {
+      return status
+    }
+  }
+
+  return null
+}
+
+export function getKaitenColumnPillClassName(
+  columnTitle: string | null | undefined,
+): string {
+  const status = resolveLabWorkStatusForColumnTitle(columnTitle)
+  if (status) return LAB_WORK_STATUS_PILL_STYLES[status]
+  return LAB_WORK_STATUS_PILL_STYLES.TO_EXECUTION
+}
+
+export function getKaitenColumnPillClassFromOrder(opts: {
+  kaitenColumnTitle?: string | null
+  demoKanbanColumn?: string | null
+}): string {
+  return getKaitenColumnPillClassName(resolveKaitenColumnTitleForDisplay(opts))
+}
+
 export function getKaitenColumnDisplay(
-  columnTitle: string | null | undefined
+  columnTitle: string | null | undefined,
 ): StatusDisplay {
-  if (!columnTitle) return { variant: 'default' }
-  return KAITEN_COLUMN_DISPLAY[columnTitle] ?? { variant: 'default' }
+  if (!columnTitle?.trim()) return { variant: 'default' }
+
+  const exact = KAITEN_COLUMN_DISPLAY[columnTitle.trim()]
+  if (exact) return exact
+
+  const status = resolveLabWorkStatusForColumnTitle(columnTitle)
+  if (status) return { variant: LAB_STATUS_BADGE_VARIANT[status] }
+
+  const norm = normalizeKanbanColumnTitle(columnTitle)
+  for (const [key, value] of Object.entries(KAITEN_COLUMN_DISPLAY)) {
+    if (normalizeKanbanColumnTitle(key) === norm) return value
+  }
+
+  return { variant: 'blue' }
 }
 
 export function getKaitenColumnDisplayFromOrder(opts: {
@@ -52,15 +129,15 @@ export function getKaitenColumnDisplayFromOrder(opts: {
 
 // Индикаторы проблем в строке заказа
 export interface OrderIndicators {
-  hasCorrection: boolean    // !!! в чате Kaiten
-  hasProsthetics: boolean   // ??? в чате Kaiten
-  isOverdue: boolean        // срок лаборатории прошёл
-  hasUnreadChat: boolean    // непрочитанный чат
-  hasMention: boolean       // @упоминание лаборатории
+  hasCorrection: boolean
+  hasProsthetics: boolean
+  isOverdue: boolean
+  hasUnreadChat: boolean
+  hasMention: boolean
 }
 
 export function getOrderWarnings(
-  indicators: Partial<OrderIndicators>
+  indicators: Partial<OrderIndicators>,
 ): Array<{ icon: string; label: string; variant: BadgeVariant }> {
   const warnings = []
 

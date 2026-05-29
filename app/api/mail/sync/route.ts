@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { EmailSyncMode } from "@prisma/client";
 import { jsonBody, mailErrorResponse, mailJsonResponse } from "@/app/api/mail/_utils";
 import { getMailApiContext, listEmailAccounts, stringField } from "@/lib/mail/mail-service";
-import { enqueueAndRunMailSyncJob } from "@/lib/mail/mail-queue";
+import { enqueueAndStartMailSyncJob } from "@/lib/mail/mail-queue";
 
 export const dynamic = "force-dynamic";
 
@@ -16,15 +16,15 @@ export async function POST(req: Request) {
       ? EmailSyncMode.BACKFILL
       : EmailSyncMode.RECENT;
     if (accountId) {
-      const result = await enqueueAndRunMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, accountId, mode);
-      return mailJsonResponse({ ok: true, queued: !result.processed, result });
+      const result = await enqueueAndStartMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, accountId, mode);
+      return mailJsonResponse({ ok: true, background: result.background ?? false, queued: !result.processed, result });
     }
     const accounts = (await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role)).filter(
       (account) => account.isActive,
     );
     const results = [];
     for (const account of accounts) {
-      const result = await enqueueAndRunMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, account.id, mode);
+      const result = await enqueueAndStartMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, account.id, mode);
       results.push({
         accountId: account.id,
         ...result,

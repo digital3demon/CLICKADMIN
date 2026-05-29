@@ -145,15 +145,9 @@ export function textFromHtml(html: string): string {
     .trim();
 }
 
-export function sanitizeMailHtml(html: string | null): string {
-  if (!html) return "";
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "")
-    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "")
-    .replace(/\s(href|src)\s*=\s*["']javascript:[^"']*["']/gi, "");
-}
+import { sanitizeMailHtml } from "@/lib/mail/sanitize-mail-html";
+
+export { sanitizeMailHtml } from "@/lib/mail/sanitize-mail-html";
 
 function normalizeContentId(value: string | null | undefined): string {
   if (!value) return "";
@@ -319,19 +313,8 @@ export async function listEmailAccounts(
       uniqueAccounts.map(async (account) => {
         const accountWithFolders = account as typeof account & { folders?: EmailFolderRow[] };
         if (!Array.isArray(accountWithFolders.folders)) return;
-        const [totalCount, unreadCount] = await Promise.all([
-          db.email.count({ where: { tenantId, accountId: account.id, direction: EmailDirection.INBOUND } }),
-          db.email.count({
-            where: { tenantId, accountId: account.id, direction: EmailDirection.INBOUND, isRead: false },
-          }),
-        ]);
         (account as typeof account & { folders?: MailFolderDto[] }).folders =
-          accountWithFolders.folders.map((folder) => {
-            const dto = toMailFolderDto(folder);
-            return folder.type === EmailFolderType.INBOX
-              ? { ...dto, totalCount, unreadCount }
-              : dto;
-          });
+          accountWithFolders.folders.map((folder) => toMailFolderDto(folder));
       }),
     );
   }
@@ -720,16 +703,11 @@ export async function listEmails(
         select: { id: true, type: true },
       })
     : null;
-  const isInboxView = folder?.type === EmailFolderType.INBOX;
   const rows = await db.email.findMany({
     where: {
       tenantId,
       accountId: input.accountId,
-      ...(isInboxView
-        ? { direction: EmailDirection.INBOUND }
-        : input.folderId
-          ? { folderId: input.folderId }
-          : {}),
+      ...(input.folderId && folder ? { folderId: input.folderId } : {}),
       ...(input.labelId
         ? {
             labelAssignments: {

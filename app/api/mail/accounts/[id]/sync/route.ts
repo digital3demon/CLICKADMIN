@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { EmailSyncMode } from "@prisma/client";
 import { jsonBody, mailErrorResponse, mailJsonResponse } from "@/app/api/mail/_utils";
 import { getMailApiContext, stringField } from "@/lib/mail/mail-service";
-import { enqueueAndRunMailSyncJob } from "@/lib/mail/mail-queue";
+import { enqueueAndStartMailSyncJob } from "@/lib/mail/mail-queue";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +18,10 @@ export async function POST(
     const mode = stringField(body.mode, 20) === EmailSyncMode.BACKFILL
       ? EmailSyncMode.BACKFILL
       : EmailSyncMode.RECENT;
-    const result = await enqueueAndRunMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, id, mode);
+    const result = await enqueueAndStartMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, id, mode);
     return mailJsonResponse({
       ok: true,
+      background: result.background ?? false,
       status: result.syncJob.status,
       lastError: result.syncJob.lastError,
       queued: !result.processed,

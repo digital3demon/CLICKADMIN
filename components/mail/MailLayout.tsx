@@ -196,7 +196,9 @@ export function MailLayout() {
   const [error, setError] = useState("");
   const listQueryKeyRef = useRef("");
   const listHasRowsRef = useRef(false);
-  const syncInFlightRef = useRef(false);
+  const listLoadSeqRef = useRef(0);
+  const syncKickRef = useRef(false);
+  const lastSyncJobRef = useRef<{ id: string; status: string } | null>(null);
   const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
 
   const activeAccount = useMemo(
@@ -246,8 +248,13 @@ export function MailLayout() {
     }
   }, []);
 
+  const listReady = Boolean(activeAccountId && (activeFolderId || activeLabelId));
+
   const loadEmails = useCallback(async (cursor: string | null = null, append = false) => {
     if (!activeAccountId) return;
+    if (!activeFolderId && !activeLabelId) return;
+    const queryAtStart = listQueryKey;
+    const loadSeq = ++listLoadSeqRef.current;
     const sameQuery = listQueryKeyRef.current === listQueryKey;
     if (!append && !sameQuery) {
       listHasRowsRef.current = false;
@@ -270,6 +277,7 @@ export function MailLayout() {
       const data = await jsonFetch<{ emails: MailEmailRow[]; nextCursor: string | null }>(
         `/api/mail/emails?${params.toString()}`,
       );
+      if (loadSeq !== listLoadSeqRef.current || queryAtStart !== listQueryKey) return;
       listQueryKeyRef.current = listQueryKey;
       setEmails((prev) => {
         const next = append
@@ -280,8 +288,10 @@ export function MailLayout() {
       });
       setNextCursor(data.nextCursor);
     } catch (err) {
+      if (loadSeq !== listLoadSeqRef.current || queryAtStart !== listQueryKey) return;
       setError(mailErrorMessage(err, "Ошибка загрузки писем"));
     } finally {
+      if (loadSeq !== listLoadSeqRef.current) return;
       if (append) setLoadingMore(false);
       else setLoadingEmails(false);
     }
@@ -289,6 +299,9 @@ export function MailLayout() {
 
   const refreshEmailsSilently = useCallback(async () => {
     if (!activeAccountId) return;
+    if (!activeFolderId && !activeLabelId) return;
+    const queryAtStart = listQueryKey;
+    const loadSeq = ++listLoadSeqRef.current;
     try {
       const params = new URLSearchParams({
         accountId: activeAccountId,
@@ -301,16 +314,15 @@ export function MailLayout() {
       const data = await jsonFetch<{ emails: MailEmailRow[]; nextCursor: string | null }>(
         `/api/mail/emails?${params.toString()}`,
       );
-      setEmails((prev) => {
-        const next = mergeEmailRows(data.emails, prev, filter);
-        listHasRowsRef.current = next.length > 0;
-        return next;
-      });
-      setNextCursor((prev) => prev ?? data.nextCursor);
+      if (loadSeq !== listLoadSeqRef.current || queryAtStart !== listQueryKey) return;
+      listQueryKeyRef.current = listQueryKey;
+      setEmails(data.emails);
+      listHasRowsRef.current = data.emails.length > 0;
+      setNextCursor(data.nextCursor);
     } catch {
       /* Тихое обновление не должно мешать чтению письма. */
     }
-  }, [activeAccountId, activeFolderId, activeLabelId, filter, search]);
+  }, [activeAccountId, activeFolderId, activeLabelId, filter, search, listQueryKey]);
 
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
@@ -349,13 +361,24 @@ export function MailLayout() {
   }, [activeAccount, activeLabelId]);
 
   useEffect(() => {
+    listQueryKeyRef.current = "";
+    listLoadSeqRef.current += 1;
+    setEmails([]);
+    setNextCursor(null);
+    setActiveEmailId("");
+    setDetail(null);
+    setSelectedIds(new Set());
+  }, [activeAccountId]);
+
+  useEffect(() => {
     writeLastMailAccountId(activeAccountId);
   }, [activeAccountId]);
 
   useEffect(() => {
+    if (!listReady) return;
     setNextCursor(null);
     void loadEmails(null, false);
-  }, [loadEmails]);
+  }, [listReady, loadEmails]);
 
   useEffect(() => {
     if (!activeAccountId) return;
@@ -367,8 +390,11 @@ export function MailLayout() {
   }, [activeAccountId, refreshEmailsSilently]);
 
   const syncActive = useCallback(async (options: { silent?: boolean } = {}) => {
-    if (!activeAccountId || syncInFlightRef.current) return;
-    syncInFlightRef.current = true;
+    if (!activeAccountId || syncKickRef.current) return;
+    syncKickRef.current = true;
+    window.setTimeout(() => {
+      syncKickRef.current = false;
+    }, 4000);
     if (!options.silent) {
       setSyncing(true);
       setError("");
@@ -378,21 +404,22 @@ export function MailLayout() {
       const data = await jsonFetch<{
         status?: string;
         lastError?: string | null;
+        background?: boolean;
         queued?: boolean;
         result?: { imported?: number; skipped?: number; folders?: number; folderStats?: MailSyncFolderStat[] } | null;
         rulesApply?: { skipped: boolean; processed: number; updated: number; labelsTouched: number };
         processed?: boolean;
       }>(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
       if (!options.silent) {
-        if (data.status === "FAILED") {
+        if (data.background || data.status === "RUNNING" || data.status === "QUEUED") {
+          setSyncStatus(
+            data.status === "QUEUED"
+              ? "Синхронизация в очереди"
+              : "Загружаем новые письма…",
+          );
+        } else if (data.status === "FAILED") {
           setSyncStatus("");
           setError(mailErrorMessage(data.lastError, "Синхронизация завершилась ошибкой"));
-        } else if (data.queued || (data.status === "RUNNING" && !data.processed)) {
-          setSyncStatus(
-            data.status === "RUNNING"
-              ? "Синхронизация уже выполняется — дождитесь завершения или обновите через 2 минуты"
-              : "Синхронизация в очереди",
-          );
         } else if (data.rulesApply && !data.rulesApply.skipped) {
           setSyncStatus(
             `Синхронизация завершена. Правила проверили ${data.rulesApply.processed} писем, обновили ${data.rulesApply.updated}.`,
@@ -407,12 +434,13 @@ export function MailLayout() {
           );
         }
       }
-      await loadAccounts();
-      await refreshEmailsSilently();
+      if (data.processed && !data.background) {
+        await loadAccounts();
+        await refreshEmailsSilently();
+      }
     } catch (err) {
       if (!options.silent) setError(mailErrorMessage(err, "Ошибка синхронизации"));
     } finally {
-      syncInFlightRef.current = false;
       if (!options.silent) setSyncing(false);
     }
   }, [activeAccountId, loadAccounts, refreshEmailsSilently]);
@@ -439,6 +467,7 @@ export function MailLayout() {
       try {
         const data = await jsonFetch<{
           jobs: Array<{
+            id: string;
             status: string;
             imported: number;
             skipped: number;
@@ -450,6 +479,15 @@ export function MailLayout() {
         if (cancelled) return;
         const [latest] = data.jobs;
         if (!latest) return;
+        const prev = lastSyncJobRef.current;
+        const finishedNow =
+          (latest.status === "SUCCEEDED" || latest.status === "FAILED") &&
+          (!prev || prev.id !== latest.id || prev.status !== latest.status);
+        if (latest.status === "SUCCEEDED" && finishedNow) {
+          void loadAccounts();
+          void refreshEmailsSilently();
+        }
+        lastSyncJobRef.current = { id: latest.id, status: latest.status };
         if (latest.status === "QUEUED") setSyncStatus("Синхронизация в очереди");
         else if (latest.status === "RUNNING") {
           const startedMs = latest.startedAt ? Date.parse(latest.startedAt) : NaN;
@@ -461,7 +499,7 @@ export function MailLayout() {
           } else if (runningMs >= MAIL_SYNC_RUNNING_WARN_MS) {
             setSyncStatus("Синхронизация занимает больше обычного — идёт опрос IMAP-папок…");
           } else {
-            setSyncStatus("Загружаем новые письма");
+            setSyncStatus("Загружаем новые письма…");
           }
         } else if (latest.status === "FAILED") setSyncStatus(mailErrorMessage(latest.lastError, "Синхронизация завершилась ошибкой"));
         else {
@@ -480,7 +518,7 @@ export function MailLayout() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeAccountId]);
+  }, [activeAccountId, loadAccounts, refreshEmailsSilently]);
 
   async function bulk(
     action: "read" | "unread" | "archive" | "trash" | "delete" | "flag" | "unflag" | "move",

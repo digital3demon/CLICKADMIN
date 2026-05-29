@@ -7,7 +7,14 @@ import { logger } from "@/lib/server/logger";
 
 const STALE_RUNNING_JOB_MS = 90_000;
 const MAX_MAIL_SYNC_JOB_MS = 8 * 60 * 1000;
-const MAIL_SYNC_EXECUTION_TIMEOUT_MS = 7 * 60 * 1000;
+const MAIL_SYNC_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Один IMAP-sync на ящик — без параллельных подключений и гонок курсора. */
+const activeMailSyncImapWork = new Map<string, Promise<unknown>>();
+
+function mailSyncAccountKey(tenantId: string, accountId: string): string {
+  return `${tenantId}:${accountId}`;
+}
 
 function mailSyncTimeoutError(): Error {
   return new Error("MAIL_SYNC_TIMEOUT");
@@ -80,7 +87,6 @@ export async function enqueueMailSyncJob(
     where: {
       tenantId,
       accountId,
-      createdByUserId: userId,
       mode,
       status: { in: [EmailSyncJobStatus.QUEUED, EmailSyncJobStatus.RUNNING] },
     },
@@ -112,10 +118,11 @@ export async function runMailSyncJob(
   const staleBefore = new Date(Date.now() - STALE_RUNNING_JOB_MS);
   const maxDurationBefore = new Date(Date.now() - MAX_MAIL_SYNC_JOB_MS);
   const syncJobPreview = await db.emailSyncJob.findFirst({
-    where: { id: syncJobId, tenantId, createdByUserId: userId },
+    where: { id: syncJobId, tenantId },
     select: { id: true, accountId: true },
   });
   if (!syncJobPreview) throw new Error("EMAIL_SYNC_JOB_NOT_FOUND");
+  const accountKey = mailSyncAccountKey(tenantId, syncJobPreview.accountId);
   await recoverStaleMailSyncJobs(db, { tenantId, accountId: syncJobPreview.accountId });
   const started = await db.emailSyncJob.updateMany({
     where: {
@@ -137,7 +144,7 @@ export async function runMailSyncJob(
     },
   });
   const syncJob = await db.emailSyncJob.findFirst({
-    where: { id: syncJobId, tenantId, createdByUserId: userId },
+    where: { id: syncJobId, tenantId },
   });
   if (!syncJob) throw new Error("EMAIL_SYNC_JOB_NOT_FOUND");
   if (!started.count) return { syncJob, processed: false, result: null };
@@ -151,15 +158,26 @@ export async function runMailSyncJob(
       .catch(() => undefined);
   }, 30_000);
 
+  const syncWork = syncAccountNow(db, tenantId, userId, role, syncJob.accountId, {
+    mode: syncJob.mode,
+  });
+  activeMailSyncImapWork.set(accountKey, syncWork);
+
   try {
     const result = await Promise.race([
-      syncAccountNow(db, tenantId, userId, role, syncJob.accountId, {
-        mode: syncJob.mode,
-      }),
+      syncWork,
       new Promise<never>((_resolve, reject) => {
         setTimeout(() => reject(mailSyncTimeoutError()), MAIL_SYNC_EXECUTION_TIMEOUT_MS);
       }),
     ]);
+    const stillRunning = await db.emailSyncJob.findFirst({
+      where: { id: syncJob.id, status: EmailSyncJobStatus.RUNNING },
+      select: { id: true },
+    });
+    if (!stillRunning) {
+      const current = await db.emailSyncJob.findFirst({ where: { id: syncJob.id, tenantId } });
+      return { syncJob: current ?? syncJob, processed: false, result: null };
+    }
     const updated = await db.emailSyncJob.update({
       where: { id: syncJob.id },
       data: {
@@ -189,9 +207,78 @@ export async function runMailSyncJob(
     return { syncJob: updated, processed: failedPermanently, result: null };
   } finally {
     clearInterval(heartbeatInterval);
+    await syncWork.catch(() => undefined);
+    if (activeMailSyncImapWork.get(accountKey) === syncWork) {
+      activeMailSyncImapWork.delete(accountKey);
+    }
   }
 }
 
+export type MailSyncJobRunResult = Awaited<ReturnType<typeof runMailSyncJob>>;
+
+export async function enqueueAndStartMailSyncJob(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+  role: string,
+  accountId: string,
+  mode: EmailSyncMode = EmailSyncMode.RECENT,
+  options: { wait?: boolean } = {},
+) {
+  const accountKey = mailSyncAccountKey(tenantId, accountId);
+  const inFlight = activeMailSyncImapWork.get(accountKey);
+  if (inFlight) {
+    const activeJob = await db.emailSyncJob.findFirst({
+      where: {
+        tenantId,
+        accountId,
+        mode,
+        status: { in: [EmailSyncJobStatus.QUEUED, EmailSyncJobStatus.RUNNING] },
+      },
+      orderBy: { queuedAt: "desc" },
+    });
+    const latestJob =
+      activeJob ??
+      (await db.emailSyncJob.findFirst({
+        where: { tenantId, accountId, mode },
+        orderBy: { queuedAt: "desc" },
+      }));
+    if (!latestJob) throw new Error("EMAIL_SYNC_JOB_NOT_FOUND");
+    if (options.wait) {
+      await inFlight.catch(() => undefined);
+      const finished = await db.emailSyncJob.findFirst({ where: { id: latestJob.id, tenantId } });
+      return {
+        syncJob: finished ?? latestJob,
+        enqueued: false,
+        processed: finished?.status === EmailSyncJobStatus.SUCCEEDED,
+        result: null,
+        background: false,
+      };
+    }
+    return {
+      syncJob: latestJob,
+      enqueued: false,
+      processed: false,
+      result: null,
+      background: true,
+    };
+  }
+
+  const queued = await enqueueMailSyncJob(db, tenantId, userId, accountId, mode);
+
+  const runPromise = runMailSyncJob(db, tenantId, userId, role, queued.syncJob.id);
+  if (options.wait) {
+    const processed = await runPromise;
+    return { ...queued, ...processed, background: false };
+  }
+
+  void runPromise.catch((err) => {
+    logger.error({ err, tenantId, accountId, syncJobId: queued.syncJob.id }, "background mail sync failed");
+  });
+  return { ...queued, processed: false, result: null, background: true };
+}
+
+/** Cron и ручной режим «дождаться результата». */
 export async function enqueueAndRunMailSyncJob(
   db: PrismaClient,
   tenantId: string,
@@ -200,7 +287,5 @@ export async function enqueueAndRunMailSyncJob(
   accountId: string,
   mode: EmailSyncMode = EmailSyncMode.RECENT,
 ) {
-  const queued = await enqueueMailSyncJob(db, tenantId, userId, accountId, mode);
-  const processed = await runMailSyncJob(db, tenantId, userId, role, queued.syncJob.id);
-  return { ...queued, ...processed };
+  return enqueueAndStartMailSyncJob(db, tenantId, userId, role, accountId, mode, { wait: true });
 }

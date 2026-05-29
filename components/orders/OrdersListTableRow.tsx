@@ -2,8 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
-import { Badge } from "@/components/ui";
-import { getKaitenColumnDisplayFromOrder, getOrderWarnings, resolveKaitenColumnTitleForDisplay } from "@/lib/order-status-display";
+import {
+  getKaitenColumnPillClassFromOrder,
+  getOrderWarnings,
+  resolveKaitenColumnTitleForDisplay,
+} from "@/lib/order-status-display";
 import { orderPathById } from "@/lib/order-public-ref";
 
 function targetInsideInteractive(target: EventTarget | null) {
@@ -65,7 +68,7 @@ export function OrdersListTableRow({
 }) {
   const router = useRouter();
   const href = orderPathById(orderId);
-  const kaitenDisplay = getKaitenColumnDisplayFromOrder({
+  const kaitenPillClass = getKaitenColumnPillClassFromOrder({
     kaitenColumnTitle,
     demoKanbanColumn,
   });
@@ -124,9 +127,11 @@ export function OrdersListTableRow({
                   className="max-w-[140px] shrink-0 truncate"
                   title={kaitenBadgeLabel}
                 >
-                  <Badge variant={kaitenDisplay.variant} className="truncate">
+                  <span
+                    className={`inline-flex max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${kaitenPillClass}`}
+                  >
                     {kaitenBadgeLabel}
-                  </Badge>
+                  </span>
                 </span>
               ) : null}
             </div>
