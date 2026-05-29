@@ -89,7 +89,7 @@ function mailSyncFolderSummary(stats: MailSyncFolderStat[] | undefined): string 
     .slice(0, 4)
     .map((stat) => {
       const label = stat.path.length > 18 ? `${stat.path.slice(0, 17)}…` : stat.path;
-      if (stat.error) return `${label}: ошибка`;
+      if (stat.error) return `${label}: ошибка ${stat.error.slice(0, 80)}`;
       const latest = stat.latest?.[0];
       const latestLabel = latest?.subject ? `, последний: «${latest.subject.slice(0, 42)}»` : "";
       return `${label}: ${stat.imported} новых/${stat.processed} проверено${latestLabel}`;
