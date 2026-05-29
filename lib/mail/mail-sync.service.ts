@@ -527,8 +527,13 @@ async function syncFolderUidValidity(
 }> {
   const lock = await client.getMailboxLock(folderPath);
   try {
-    const currentUidValidity = BigInt(client.mailbox?.uidValidity ?? 0);
-    const imapUidNext = client.mailbox?.uidNext ?? null;
+    const mailbox = client.mailbox;
+    if (!mailbox) {
+      return { folder, uidValidityMismatch: false, imapUidNext: null };
+    }
+
+    const currentUidValidity = BigInt(mailbox.uidValidity ?? 0);
+    const imapUidNext = mailbox.uidNext ?? null;
     let uidValidityMismatch = false;
     let updatedFolder = folder;
 
