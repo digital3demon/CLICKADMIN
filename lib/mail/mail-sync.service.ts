@@ -11,12 +11,12 @@ import { simpleParser, type ParsedMail } from "mailparser";
 import { logger } from "@/lib/server/logger";
 import {
   createImapClient,
-  ensureImapClientConnected,
   fetchFolderMessageSummariesBefore,
   fetchFolderMessagesBefore,
   fetchFolderMessages,
   fetchFolderMessagesSince,
   listImapFolders,
+  replaceImapClientIfNeeded,
   setMessageSeen,
   setMessageSeenOnClient,
   type ImapFetchedMessage,
@@ -670,7 +670,7 @@ export async function syncEmailAccount(
 ): Promise<{ imported: number; skipped: number; folders: number; folderStats: FolderSyncStat[] }> {
   const startedAt = Date.now();
   const mode = options.mode ?? EmailSyncMode.RECENT;
-  const client = createImapClient(account);
+  let client = createImapClient(account);
   let imported = 0;
   let skipped = 0;
   let folders = 0;
@@ -691,7 +691,7 @@ export async function syncEmailAccount(
     );
     for (const listed of listedFolders) {
       try {
-      await ensureImapClientConnected(client);
+      client = await replaceImapClientIfNeeded(account, client);
       let folder = await upsertFolder(db, account, listed);
       folders += 1;
       const { folder: folderAfterValidity, uidValidityMismatch, imapUidNext } =

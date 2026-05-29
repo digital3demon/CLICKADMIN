@@ -242,9 +242,15 @@ export async function fetchFolderMessageSummariesBefore(
   }
 }
 
-export async function ensureImapClientConnected(client: ImapFlow): Promise<void> {
-  if (client.usable) return;
-  await client.connect();
+export async function replaceImapClientIfNeeded(
+  account: MailConnectionAccount,
+  client: ImapFlow,
+): Promise<ImapFlow> {
+  if (client.usable) return client;
+  await client.logout().catch(() => undefined);
+  const next = createImapClient(account);
+  await next.connect();
+  return next;
 }
 
 /** Пометить \\Seen через уже открытую sync-сессию (не открывает второе IMAP-подключение). */
@@ -255,7 +261,9 @@ export async function setMessageSeenOnClient(
   seen: boolean,
 ): Promise<void> {
   if (!Number.isFinite(uid) || uid <= 0) return;
-  await ensureImapClientConnected(client);
+  if (!client.usable) {
+    throw new Error("IMAP connection not available for markRead");
+  }
   const lock = await client.getMailboxLock(folderPath);
   try {
     if (seen) {
