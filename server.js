@@ -44,7 +44,18 @@ function startMailBackgroundSync() {
       headers: {
         "x-internal-mail-sync-secret": process.env.INTERNAL_MAIL_SYNC_SECRET,
       },
-    }).catch(() => undefined);
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error(
+            `[cron] mail-sync failed: ${res.status} ${res.statusText}`,
+            await res.text().catch(() => ""),
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("[cron] mail-sync network error:", err?.message);
+      });
   };
   setTimeout(run, 10_000);
   setInterval(run, intervalMs);

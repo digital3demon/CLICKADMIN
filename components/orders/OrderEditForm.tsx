@@ -92,6 +92,7 @@ import {
   ORDER_CORRECTION_TRACK_VALUES,
 } from "@/lib/order-correction-track";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
+import { toast } from "@/components/ui/toast-store";
 import {
   OrderEditCustomizeToggle,
   OrderEditPageLayoutGrid,
@@ -432,7 +433,7 @@ const checkboxInputClassEdit =
   "h-3.5 w-3.5 shrink-0 rounded border-[var(--input-border)] text-[var(--sidebar-blue)] focus:ring-sky-500";
 /** Колонка сетки наряда (как секции в «Новом заказе», без «плавающего» центрирования). */
 const editColWrap =
-  "min-w-0 space-y-0 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] p-2.5 sm:p-3";
+  "min-w-0 space-y-0 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4";
 /** То же для верхней четырёхколоночной сетки: выравнивание по высоте строки. */
 const editMainCol = `${editColWrap} flex min-h-0 flex-col xl:h-full`;
 /** Заказ от клиента / комментарий от админов: без xl:h-full — иначе колонка тянется за соседями и авт высота textarea ломается. */
@@ -1098,12 +1099,10 @@ export function OrderEditForm({
     string | null
   >(null);
   const [savingOrderNumber, setSavingOrderNumber] = useState(false);
-  const [saveSideNotice, setSaveSideNotice] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [invoiceSaving, setInvoiceSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
 
   const flushInvoiceParsedToServer = useCallback(async () => {
     if (invoiceParsedAutosaveTimerRef.current != null) {
@@ -1627,7 +1626,7 @@ export function OrderEditForm({
         totalRub: null,
       };
       setInvoiceParseHint(null);
-      setOk(true);
+      toast.success("Файл счёта удалён");
       router.refresh();
     } catch {
       setError("Сеть или сервер недоступны");
@@ -1644,7 +1643,6 @@ export function OrderEditForm({
 
   const saveOrderNumberFromModal = useCallback(async () => {
     setOrderNumberModalError(null);
-    setSaveSideNotice(null);
     const next = orderNumberModalDraft.trim();
     if (!next) {
       setOrderNumberModalError("Укажите номер наряда");
@@ -1674,9 +1672,11 @@ export function OrderEditForm({
         return;
       }
       if (data.kaitenTitleSyncError) {
-        setSaveSideNotice(
-          `Номер обновлён. Заголовок в Kaiten не обновился: ${data.kaitenTitleSyncError}`,
-        );
+        toast.warning("Номер обновлён", {
+          description: `Заголовок в Kaiten не обновился: ${data.kaitenTitleSyncError}`,
+        });
+      } else {
+        toast.success("Номер наряда обновлён");
       }
       setOrderNumberDraft(next);
       closeOrderNumberModal();
@@ -1705,8 +1705,6 @@ export function OrderEditForm({
 
   const save = useCallback(async () => {
     setError(null);
-    setOk(false);
-    setSaveSideNotice(null);
     if (!isOrderPageFramed) {
       const nextOrderNumber = orderNumberDraft.trim();
       if (!nextOrderNumber) {
@@ -1820,18 +1818,23 @@ export function OrderEditForm({
         kaitenTitleSyncError?: string | null;
       };
       if (!res.ok) {
-        setError(data.error ?? "Не удалось сохранить");
+        const msg = data.error ?? "Не удалось сохранить";
+        setError(msg);
+        toast.error(msg);
         return;
       }
       if (data.kaitenTitleSyncError) {
-        setSaveSideNotice(
-          `Наряд сохранён. Заголовок в Kaiten не обновился: ${data.kaitenTitleSyncError}`,
-        );
+        toast.warning("Наряд сохранён", {
+          description: `Заголовок в Kaiten не обновился: ${data.kaitenTitleSyncError}`,
+        });
+      } else {
+        toast.success("Наряд сохранён");
       }
-      setOk(true);
       router.refresh();
     } catch {
-      setError("Сеть или сервер недоступны");
+      const msg = "Сеть или сервер недоступны";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -2748,7 +2751,7 @@ export function OrderEditForm({
     <MobileCollapsibleSection title="Документооборот">
     <div className="min-w-0 space-y-3">
       <div
-        className="scrollbar-none flex snap-x gap-1 overflow-x-auto border-b border-[var(--card-border)] p-1 pb-2 xl:flex-wrap xl:overflow-x-visible"
+        className="scrollbar-none flex snap-x gap-1 overflow-x-auto border-b border-[var(--card-border)] p-1 pb-2 lg:flex-wrap lg:overflow-x-visible"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         role="tablist"
         aria-label="Документы и карточка"
@@ -2875,7 +2878,7 @@ export function OrderEditForm({
                   disabled={!canEditClients}
                   onDone={async (res) => {
                     setError(null);
-                    setOk(true);
+                    toast.success("Счёт загружен");
                     if (res?.id) setInvoiceAttachmentId(res.id);
                     if (res?.invoiceIssued !== undefined) {
                       setInvoiceIssued(Boolean(res.invoiceIssued));
@@ -2887,8 +2890,8 @@ export function OrderEditForm({
                     await runParseInvoice();
                   }}
                   onFail={(msg) => {
-                    setOk(false);
                     setError(msg);
+                    toast.error(msg);
                   }}
                   className="w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
                 />
@@ -3316,16 +3319,6 @@ export function OrderEditForm({
           {error}
         </div>
       ) : null}
-      {ok ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800/70 dark:bg-emerald-950/45 dark:text-emerald-100">
-          Наряд сохранён.
-        </div>
-      ) : null}
-      {saveSideNotice ? (
-        <div className="rounded-md border border-amber-300/80 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-100">
-          {saveSideNotice}
-        </div>
-      ) : null}
 
       {initial.kaitenBlocked ? (
         <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-red-400/70 bg-red-950/40 px-3 py-2.5 text-sm text-red-50 shadow-sm dark:border-red-900/70 dark:bg-red-950/55">
@@ -3363,23 +3356,23 @@ export function OrderEditForm({
             </div>
           ) : null}
           {!isAccountant && !orderLayoutCustomize ? (
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 xl:items-start xl:gap-3">
-              <div className="min-w-0 space-y-3 xl:col-span-6">
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 xl:items-start">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-start lg:gap-3">
+              <div className="min-w-0 space-y-3 lg:col-span-6">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
                   {oeColCustomer}
                   {oeColDeadlines}
                 </div>
                 {oeMidConstructions}
                 {oeMidCorrections}
               </div>
-              <div className="min-w-0 space-y-3 xl:col-span-6">
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 xl:items-start">
+              <div className="min-w-0 space-y-3 lg:col-span-6">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
                   {oeColFiles}
                   {oeColClientNotes}
                 </div>
                 {oeMidProsthetics}
               </div>
-              <div className="min-w-0 xl:col-span-12">{oeBottomSecondary}</div>
+              <div className="min-w-0 lg:col-span-12">{oeBottomSecondary}</div>
             </div>
           ) : (
             <OrderEditPageLayoutGrid
@@ -3409,20 +3402,20 @@ export function OrderEditForm({
         </>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-4 xl:gap-3 xl:items-start">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4 lg:gap-3 lg:items-start">
             {oeColCustomer}
             {oeColDeadlines}
             {oeColFiles}
             {oeColClientNotes}
           </div>
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 xl:gap-3 xl:items-stretch">
-            <div className="min-w-0 xl:col-span-6 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:gap-3 lg:items-stretch">
+            <div className="min-w-0 lg:col-span-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
               {oeMidConstructions}
             </div>
-            <div className="min-w-0 xl:col-span-6 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+            <div className="min-w-0 lg:col-span-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
               {oeMidProsthetics}
             </div>
-            <div className="min-w-0 xl:col-span-6 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+            <div className="min-w-0 lg:col-span-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
               {oeMidCorrections}
             </div>
           </div>
@@ -3539,6 +3532,7 @@ export function OrderEditForm({
       <>
         <ModuleFrame
           title={orderPageFrame.title}
+          headerClassName="sticky top-0 z-40 -mx-3 bg-[var(--app-bg)] px-3 pb-2 pt-1 sm:-mx-6 sm:px-6 sm:pb-3 lg:-mx-10 lg:px-10"
           titleSubline={
             <button
               type="button"

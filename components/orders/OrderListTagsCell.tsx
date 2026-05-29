@@ -13,6 +13,8 @@ import {
 } from "@/lib/custom-list-tag-kaiten-unblock-label";
 import { LAB_WORK_STATUS_PILL_STYLES } from "@/lib/lab-work-status";
 import { kaitenStatusDisplay } from "@/lib/kaiten-column-title";
+import { getKaitenColumnDisplayFromOrder } from "@/lib/order-status-display";
+import { Badge } from "@/components/ui";
 import {
   LIST_TAG_FINANCE_CALCULATED,
   LIST_TAG_FINANCE_NOT_CALCULATED,
@@ -395,6 +397,10 @@ export function OrderListTagsCell({
     ? kanbanColumnLabelForNoKaitenPill(demoKanbanColumn, demoCardTypeName)
     : null;
   const kaitenColTrimmed = kaitenColumnTitle?.trim() ?? "";
+  const kaitenColumnDisplay = getKaitenColumnDisplayFromOrder({
+    kaitenColumnTitle: kaitenColTrimmed || null,
+    demoKanbanColumn,
+  });
   const kaitenFilterKey =
     kaitenColTrimmed.length > 0
       ? listTagKaitenColumnTitle(kaitenColTrimmed)
@@ -908,43 +914,58 @@ export function OrderListTagsCell({
         <Link
           href={href(kaitenFilterKey)}
           title="Показать наряды в этой колонке Kaiten"
-          className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm outline-none transition-opacity hover:opacity-90 focus-visible:outline-none ${
-            LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
-          } ${padTable}`}
+          className="inline-flex min-w-0 max-w-full items-center truncate text-left outline-none transition-opacity hover:opacity-90 focus-visible:outline-none"
         >
           {noKaitenKanbanStatus ? (
-            <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
-              <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
-              <span
-                className="truncate text-[9px] font-medium opacity-90 sm:text-[10px]"
-                title={noKaitenKanbanStatus}
-              >
-                {noKaitenKanbanStatus}
+            <span
+              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${
+                LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
+              } ${padTable}`}
+            >
+              <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
+                <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
+                <span
+                  className="truncate text-[9px] font-medium opacity-90 sm:text-[10px]"
+                  title={noKaitenKanbanStatus}
+                >
+                  {noKaitenKanbanStatus}
+                </span>
               </span>
             </span>
           ) : (
-            kaitenLabel
+            <Badge
+              variant={kaitenColumnDisplay.variant}
+              className={`truncate font-semibold uppercase tracking-wide shadow-sm ${padTable}`}
+            >
+              {kaitenLabel}
+            </Badge>
           )}
         </Link>
       ) : (
-        <span
-          title="Колонка доски Kaiten (обновляется в фоне на списке заказов)"
-          className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${
-            LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
-          } ${padTable}`}
-        >
+        <span title="Колонка доски Kaiten (обновляется в фоне на списке заказов)">
           {noKaitenKanbanStatus ? (
-            <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
-              <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
-              <span
-                className="truncate text-[9px] font-medium opacity-90 sm:text-[10px]"
-                title={noKaitenKanbanStatus}
-              >
-                {noKaitenKanbanStatus}
+            <span
+              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${
+                LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
+              } ${padTable}`}
+            >
+              <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
+                <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
+                <span
+                  className="truncate text-[9px] font-medium opacity-90 sm:text-[10px]"
+                  title={noKaitenKanbanStatus}
+                >
+                  {noKaitenKanbanStatus}
+                </span>
               </span>
             </span>
           ) : (
-            kaitenLabel
+            <Badge
+              variant={kaitenColumnDisplay.variant}
+              className={`truncate font-semibold uppercase tracking-wide shadow-sm ${padTable}`}
+            >
+              {kaitenLabel}
+            </Badge>
           )}
         </span>
       ),
@@ -1171,6 +1192,8 @@ export function OrderListTagsCell({
     kaitenBlockReason,
     kaitenFilterKey,
     kaitenLabel,
+    kaitenColumnDisplay.variant,
+    noKaitenKanbanStatus,
     pageSize,
     hideShipped,
     onlyShipped,

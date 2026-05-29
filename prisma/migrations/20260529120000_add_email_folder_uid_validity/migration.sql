@@ -1,0 +1,1 @@
+ALTER TABLE "EmailFolder" ADD COLUMN IF NOT EXISTS "uidValidity" BIGINT;

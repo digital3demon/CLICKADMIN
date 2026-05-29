@@ -16,6 +16,7 @@ import { SidebarDrafts } from "./SidebarDrafts";
 import { SidebarMessengers } from "./SidebarMessengers";
 import { SidebarPayments } from "./SidebarPayments";
 import { SidebarNav } from "./SidebarNav";
+import { CommandPalette } from "@/components/ui/CommandPalette";
 import { isWorkdaySkyWidgetEnabled } from "@/lib/ui-flags";
 import { ThemeToggle } from "./ThemeToggle";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
@@ -192,7 +193,7 @@ export function Sidebar() {
                 ? "Новый заказ"
                 : "Уже 5 окон нового заказа (включая свёрнутые полоски внизу экрана). Закройте лишние или разверните и очистите черновик."
             }
-            className={`pressable-tap mt-5 flex w-full items-center justify-center rounded-md px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-white transition-colors shell-short:mt-2 shell-short:px-2 shell-short:py-2 shell-short:text-[9px] shell-short:tracking-[0.06em] ${
+            className={`pressable-tap mt-5 flex w-full items-center rounded-md px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-white transition-colors shell-short:mt-2 shell-short:px-2 shell-short:py-2 shell-short:text-[9px] shell-short:tracking-[0.06em] ${
               canOpen
                 ? "cursor-pointer bg-[var(--sidebar-blue)] hover:bg-[var(--sidebar-blue-hover)]"
                 : "cursor-not-allowed bg-zinc-400 dark:bg-zinc-600"
@@ -201,7 +202,14 @@ export function Sidebar() {
               if (canOpen) openNewOrder();
             }}
           >
-            Новый заказ
+            <span className="flex-1 text-center">Новый заказ</span>
+            <kbd
+              className="ml-auto hidden shrink-0 items-center gap-0.5 text-[10px] font-mono normal-case tracking-normal text-white/70 opacity-60 lg:inline-flex"
+              aria-hidden
+            >
+              <span>⌘</span>
+              <span>N</span>
+            </kbd>
           </button>
         )}
       </div>
@@ -212,6 +220,11 @@ export function Sidebar() {
         id="sidebar-main-stack"
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
+        {isEffectiveKanbanOnly ? null : (
+          <div className="shrink-0 px-4 pb-2 pt-1 shell-short:px-3 shell-short:pb-1">
+            <CommandPalette />
+          </div>
+        )}
         <SidebarNav />
 
         {isEffectiveKanbanOnly ? null : (

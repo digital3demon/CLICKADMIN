@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
+import { Badge } from "@/components/ui";
+import { getKaitenColumnDisplayFromOrder, getOrderWarnings, resolveKaitenColumnTitleForDisplay } from "@/lib/order-status-display";
 import { orderPathById } from "@/lib/order-public-ref";
 
 function targetInsideInteractive(target: EventTarget | null) {
@@ -34,6 +36,10 @@ export function OrdersListTableRow({
   kaitenColumnTitle,
   hasUnreadChat = false,
   hasPrint = false,
+  hasCorrection = false,
+  hasProsthetics = false,
+  isLabOverdue = false,
+  demoKanbanColumn,
   tagsNode,
   indicatorsNode,
 }: {
@@ -50,11 +56,29 @@ export function OrdersListTableRow({
   kaitenColumnTitle?: string | null;
   hasUnreadChat?: boolean;
   hasPrint?: boolean;
+  hasCorrection?: boolean;
+  hasProsthetics?: boolean;
+  isLabOverdue?: boolean;
+  demoKanbanColumn?: string | null;
   tagsNode?: ReactNode;
   indicatorsNode?: ReactNode;
 }) {
   const router = useRouter();
   const href = orderPathById(orderId);
+  const kaitenDisplay = getKaitenColumnDisplayFromOrder({
+    kaitenColumnTitle,
+    demoKanbanColumn,
+  });
+  const kaitenBadgeLabel = resolveKaitenColumnTitleForDisplay({
+    kaitenColumnTitle,
+    demoKanbanColumn,
+  });
+  const orderWarnings = getOrderWarnings({
+    isOverdue: isLabOverdue,
+    hasCorrection,
+    hasProsthetics,
+    hasMention: hasUnreadChat,
+  });
 
   const go = (e: MouseEvent<HTMLElement>) => {
     if (e.button !== 0) return;
@@ -95,12 +119,14 @@ export function OrdersListTableRow({
               <span className="font-mono text-sm font-semibold text-[var(--text-strong)]">
                 № {orderNumber}
               </span>
-              {kaitenColumnTitle?.trim() ? (
+              {kaitenBadgeLabel ? (
                 <span
-                  className="max-w-[140px] shrink-0 truncate rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 text-xs text-[var(--text-secondary)]"
-                  title={kaitenColumnTitle}
+                  className="max-w-[140px] shrink-0 truncate"
+                  title={kaitenBadgeLabel}
                 >
-                  {kaitenColumnTitle}
+                  <Badge variant={kaitenDisplay.variant} className="truncate">
+                    {kaitenBadgeLabel}
+                  </Badge>
                 </span>
               ) : null}
             </div>
@@ -125,7 +151,15 @@ export function OrdersListTableRow({
                   <span className="font-medium text-[var(--text-secondary)]">
                     ЛАБ{" "}
                   </span>
-                  {labDate}
+                  <span
+                    className={
+                      isLabOverdue
+                        ? "font-semibold text-red-600"
+                        : undefined
+                    }
+                  >
+                    {labDate}
+                  </span>
                 </span>
               ) : null}
               {appointmentDate ? (
@@ -146,7 +180,7 @@ export function OrdersListTableRow({
               ) : null}
             </div>
 
-            {tagsNode || indicatorsNode || hasUnreadChat || hasPrint ? (
+            {tagsNode || indicatorsNode || hasUnreadChat || hasPrint || orderWarnings.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2">
                 {hasUnreadChat ? (
                   <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
@@ -159,6 +193,18 @@ export function OrdersListTableRow({
                     печать
                   </span>
                 ) : null}
+                {orderWarnings
+                  .filter((w) => w.label !== "Упоминание" || !hasUnreadChat)
+                  .map((w) => (
+                    <span
+                      key={w.label}
+                      title={w.label}
+                      className="text-[10px] font-bold leading-none"
+                      aria-label={w.label}
+                    >
+                      {w.icon}
+                    </span>
+                  ))}
                 {indicatorsNode}
                 {tagsNode}
               </div>

@@ -815,6 +815,7 @@ model EmailFolder {
   totalCount    Int             @default(0)
   lastSyncedUid Int?
   lastBackfillUid Int?
+  uidValidity   BigInt?
   syncLockedAt  DateTime?
   sortOrder     Int             @default(0)
   createdAt     DateTime        @default(now())

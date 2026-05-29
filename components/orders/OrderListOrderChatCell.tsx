@@ -26,42 +26,51 @@ export function OrderListOrderChatCell({
   orderId,
   orderNumber,
   labMentionHighlight,
+  embedded = false,
 }: {
   orderId: string;
   orderNumber: string;
   /** Показывать подсветку «упомянули лабораторию» (БД + ваш ack). */
   labMentionHighlight: boolean;
+  /** Встроенный режим — без обёртки `<td>` (объединённая колонка таблицы). */
+  embedded?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const adminMentionTag = useKanbanAdminMentionTag();
 
+  const content = (
+    <>
+      <button
+        type="button"
+        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-[var(--table-row-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sidebar-blue)] sm:h-6 sm:w-6 ${
+          labMentionHighlight
+            ? "animate-pulse text-amber-500 dark:text-amber-400"
+            : "text-[var(--text-secondary)] hover:text-[var(--app-text)]"
+        }`}
+        title={
+          labMentionHighlight
+            ? `В чате упомянули @${adminMentionTag}`
+            : "Чат Канбан/Кайтен"
+        }
+        aria-label="Чат Канбан/Кайтен"
+        onClick={() => setOpen(true)}
+      >
+        <ChatBubbleIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+      </button>
+      <OrderListKaitenChatModal
+        orderId={orderId}
+        orderNumber={orderNumber}
+        open={open}
+        onClose={() => setOpen(false)}
+      />
+    </>
+  );
+
+  if (embedded) return content;
+
   return (
     <td className="max-md:hidden min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5">
-      <>
-        <button
-          type="button"
-          className={`inline-flex h-6 w-6 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-[var(--table-row-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sidebar-blue)] sm:h-7 sm:w-7 ${
-            labMentionHighlight
-              ? "animate-pulse text-amber-500 dark:text-amber-400"
-              : "text-[var(--text-secondary)] hover:text-[var(--app-text)]"
-          }`}
-          title={
-            labMentionHighlight
-              ? `В чате упомянули @${adminMentionTag}`
-              : "Чат Канбан/Кайтен"
-          }
-          aria-label="Чат Канбан/Кайтен"
-          onClick={() => setOpen(true)}
-        >
-          <ChatBubbleIcon className="h-4 w-4 sm:h-[1.1rem] sm:w-[1.1rem]" />
-        </button>
-        <OrderListKaitenChatModal
-          orderId={orderId}
-          orderNumber={orderNumber}
-          open={open}
-          onClose={() => setOpen(false)}
-        />
-      </>
+      {content}
     </td>
   );
 }

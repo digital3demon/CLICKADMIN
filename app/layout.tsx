@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { ActiveUserGate } from "@/components/auth/ActiveUserGate";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppProviders } from "@/components/providers/AppProviders";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { fontBody, fontDisplay } from "@/lib/app-fonts";
 import {
@@ -67,6 +68,7 @@ export default async function RootLayout({
         <AppProviders>
           <ActiveUserGate />
           <AppShell>{children}</AppShell>
+          <ToastProvider />
         </AppProviders>
       </body>
     </html>

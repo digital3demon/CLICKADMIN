@@ -467,6 +467,18 @@ export async function testEmailAccountConnection(
   await testImapConnection(account);
 }
 
+export async function diagnoseEmailAccount(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+  role: string,
+  accountId: string,
+) {
+  const account = await requireUserEmailAccount(db, tenantId, userId, accountId, role);
+  const { diagnoseEmailAccountImap } = await import("@/lib/mail/mail-diagnose");
+  return diagnoseEmailAccountImap(db, account);
+}
+
 export async function syncAccountNow(
   db: PrismaClient,
   tenantId: string,

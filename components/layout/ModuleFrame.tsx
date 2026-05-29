@@ -20,6 +20,8 @@ type ModuleFrameProps = {
   rootClassName?: string;
   /** Размер/стиль заголовка (если не задан — `text-xl` / `lg:text-2xl`). */
   titleClassName?: string;
+  /** Доп. классы для `<header>` (например sticky-шапка на странице наряда). */
+  headerClassName?: string;
   children?: ReactNode;
 };
 
@@ -36,6 +38,7 @@ export function ModuleFrame({
   descriptionClassName,
   rootClassName,
   titleClassName,
+  headerClassName,
   children,
 }: ModuleFrameProps) {
   return (
@@ -50,7 +53,14 @@ export function ModuleFrame({
       {/*
         Шапка выше контента по z-index: выпадающие пилюли absolute иначе перекрываются карточками формы.
       */}
-      <header className="module-frame-header relative z-50 mb-6 max-w-full min-w-0 origin-top-left sm:mb-8 landscape:max-lg:mb-3 landscape:max-lg:sm:mb-4">
+      <header
+        className={[
+          "module-frame-header relative z-50 mb-6 max-w-full min-w-0 origin-top-left sm:mb-8 landscape:max-lg:mb-3 landscape:max-lg:sm:mb-4",
+          headerClassName ?? "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         {/*
           На lg подстрочник (напр. «Изменить номер») уходит на вторую строку (order + basis-full),
           чтобы в первой строке только h1 + пилюли + кнопки — тогда items-center совпадает с визуальным центром заголовка.

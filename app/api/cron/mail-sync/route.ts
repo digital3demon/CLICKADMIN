@@ -76,6 +76,7 @@ export async function GET(req: Request) {
           imported: result.result?.imported ?? result.syncJob.imported,
           skipped: result.result?.skipped ?? result.syncJob.skipped,
           folders: result.result?.folders ?? result.syncJob.folders,
+          folderStats: result.result?.folderStats ?? null,
           status: result.syncJob.status,
           elapsedMs: Date.now() - accountStartedAt,
         });
@@ -91,6 +92,27 @@ export async function GET(req: Request) {
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, accounts.length) }, () => worker()));
+
+  const totalImported = results.reduce((sum, row) => sum + Number(row.imported ?? 0), 0);
+  const totalSkipped = results.reduce((sum, row) => sum + Number(row.skipped ?? 0), 0);
+  const totalErrors = results.filter((row) => row.error || row.status === "FAILED").length;
+  const folderStats = results.flatMap((row) => {
+    const stats = row.folderStats;
+    return Array.isArray(stats) ? stats : [];
+  });
+
+  logger.info(
+    {
+      accountCount: accounts.length,
+      processed: results.filter((row) => row.processed).length,
+      totalImported,
+      totalSkipped,
+      totalErrors,
+      folderStats,
+      elapsedMs: Date.now() - startedAt,
+    },
+    "mail cron sync completed",
+  );
 
   return NextResponse.json({
     ok: true,

@@ -18,8 +18,8 @@ const ROW_KEYS: OrderEditRowKey[] = ["row1", "row2", "row3", "row4"];
 
 function rowGapClass(rowKey: OrderEditRowKey): string {
   return rowKey === "row1" || rowKey === "row2"
-    ? "gap-3 xl:gap-3"
-    : "gap-3 xl:gap-x-5";
+    ? "gap-3 lg:gap-3"
+    : "gap-3 lg:gap-x-5";
 }
 
 export function OrderEditCustomizeToggle({
@@ -73,10 +73,10 @@ export function OrderEditPageLayoutGrid({
   customizeMode,
   blocks,
 }: Props) {
-  const [xlUp, setXlUp] = useState(false);
+  const [lgUp, setLgUp] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1280px)");
-    const sync = () => setXlUp(mq.matches);
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setLgUp(mq.matches);
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
@@ -194,11 +194,11 @@ export function OrderEditPageLayoutGrid({
   );
 
   return (
-    <div className="max-w-full min-w-0 space-y-3 xl:space-y-5">
+    <div className="max-w-full min-w-0 space-y-3 lg:space-y-5">
       {customizeMode ? (
         <div className="rounded-md border border-dashed border-sky-400/60 bg-sky-500/5 px-3 py-2 text-xs text-[var(--text-body)]">
           Режим кастомизации: перетащите блок за ручку «⋮⋮»; границу между блоками
-          тяните на десктопе (ширина экрана xl+); цвет фона — в палитре у блока.
+          тяните на десктопе (ширина экрана lg+); цвет фона — в палитре у блока.
         </div>
       ) : null}
       {ROW_KEYS.map((rowKey) => {
@@ -207,7 +207,7 @@ export function OrderEditPageLayoutGrid({
           <div
             key={rowKey}
             data-order-layout-row={rowKey}
-            className={`grid grid-cols-1 ${rowGapClass(rowKey)} xl:grid-cols-12 xl:items-start`}
+            className={`grid grid-cols-1 ${rowGapClass(rowKey)} lg:grid-cols-12 lg:items-start`}
             onDragOver={customizeMode ? onDragOver : undefined}
             onDrop={
               customizeMode
@@ -225,7 +225,7 @@ export function OrderEditPageLayoutGrid({
                   key={cell.id}
                   className={`relative min-w-0 min-h-0 flex flex-col ${ring}`}
                   style={
-                    xlUp
+                    lgUp
                       ? {
                           gridColumn: `span ${cell.span} / span ${cell.span}`,
                         }
@@ -278,7 +278,7 @@ export function OrderEditPageLayoutGrid({
                   >
                     {blocks[cell.id]}
                   </div>
-                  {customizeMode && xlUp && idx < row.length - 1 ? (
+                  {customizeMode && lgUp && idx < row.length - 1 ? (
                     <div
                       role="separator"
                       aria-label="Изменить ширину границы между блоками"

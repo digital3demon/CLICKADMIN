@@ -4,7 +4,7 @@ import { EmailSyncJobStatus, EmailSyncMode, type PrismaClient } from "@prisma/cl
 import { syncAccountNow } from "@/lib/mail/mail-service";
 import { logger } from "@/lib/server/logger";
 
-const STALE_RUNNING_JOB_MS = 2 * 60 * 1000;
+const STALE_RUNNING_JOB_MS = 90_000;
 
 function mailSyncErrorMessage(err: unknown): string {
   if (!(err instanceof Error)) return "Синхронизация почты завершилась ошибкой";
@@ -91,6 +91,15 @@ export async function runMailSyncJob(
   if (!syncJob) throw new Error("EMAIL_SYNC_JOB_NOT_FOUND");
   if (!started.count) return { syncJob, processed: false, result: null };
 
+  const heartbeatInterval = setInterval(() => {
+    void db.emailSyncJob
+      .updateMany({
+        where: { id: syncJob.id, status: EmailSyncJobStatus.RUNNING },
+        data: { lockedAt: new Date() },
+      })
+      .catch(() => undefined);
+  }, 30_000);
+
   try {
     const result = await syncAccountNow(db, tenantId, userId, role, syncJob.accountId, {
       mode: syncJob.mode,
@@ -122,6 +131,8 @@ export async function runMailSyncJob(
     });
     logger.error({ err, tenantId, accountId: syncJob.accountId, syncJobId }, "mail sync job failed");
     return { syncJob: updated, processed: failedPermanently, result: null };
+  } finally {
+    clearInterval(heartbeatInterval);
   }
 }
 

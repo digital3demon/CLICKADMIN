@@ -31,12 +31,18 @@ import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
 const RECENT_MESSAGES_PER_FOLDER = 250;
 const BACKFILL_MESSAGES_PER_FOLDER = 120;
-const RECENT_SYNC_LOOKBACK_DAYS = 4;
+const RECENT_SYNC_LOOKBACK_DAYS = 7;
 
 type SyncCursorMode = "forward" | "backfill" | "lookback";
 type SyncFetchedMessage = {
   item: ImapFetchedMessage;
   cursorMode: SyncCursorMode;
+};
+
+export type FolderStrategyResults = {
+  since: { found: number; error?: string };
+  tail: { found: number; error?: string };
+  forward: { found: number; error?: string };
 };
 
 type FolderSyncStat = {
@@ -48,6 +54,12 @@ type FolderSyncStat = {
   lastSyncedUid: number | null;
   latest: ImapMessageSummary[];
   error?: string;
+  imapUidNext?: number | null;
+  dbLastSyncedUid?: number | null;
+  uidValidityMismatch?: boolean;
+  latestImapUids?: number[];
+  latestDbUids?: number[];
+  strategyResults?: FolderStrategyResults;
 };
 
 function normalizeFolderPath(value: string): string {
@@ -78,7 +90,10 @@ export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMo
 }
 
 function recentSyncSinceDate(now = new Date()): Date {
-  return new Date(now.getTime() - RECENT_SYNC_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const d = new Date(now);
+  d.setUTCDate(d.getUTCDate() - RECENT_SYNC_LOOKBACK_DAYS);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
 }
 
 async function* fetchRecentFolderMessages(
@@ -86,31 +101,59 @@ async function* fetchRecentFolderMessages(
   folderPath: string,
   startUid: number,
   maxMessages: number,
+  strategyResults?: FolderStrategyResults,
 ): AsyncGenerator<SyncFetchedMessage> {
   const yieldedUids = new Set<number>();
-  async function* unique(
+  if (strategyResults) {
+    strategyResults.since = { found: 0 };
+    strategyResults.tail = { found: 0 };
+    strategyResults.forward = { found: 0 };
+  }
+
+  async function* runStrategy(
     messages: AsyncGenerator<ImapFetchedMessage>,
     cursorMode: SyncCursorMode,
+    strategyKey: keyof FolderStrategyResults,
     strategy: string,
   ): AsyncGenerator<SyncFetchedMessage> {
+    let found = 0;
     try {
       for await (const item of messages) {
+        found += 1;
         if (yieldedUids.has(item.uid)) continue;
         yieldedUids.add(item.uid);
         yield { item, cursorMode };
       }
+      if (strategyResults) strategyResults[strategyKey] = { found };
     } catch (err) {
-      logger.warn({ err, folderPath, strategy }, "mail recent IMAP strategy failed");
+      const message = syncErrorMessage(err);
+      if (strategyResults) strategyResults[strategyKey] = { found, error: message };
+      logger.warn({ err, folderPath, strategy }, `mail recent IMAP strategy "${strategy}" failed`);
     }
   }
 
   // Date search catches today's mail even if the saved UID cursor/window is stale.
   // It must not move lastSyncedUid, because that would skip unprocessed UID gaps.
-  yield* unique(fetchFolderMessagesSince(client, folderPath, recentSyncSinceDate(), maxMessages), "lookback", "since");
+  yield* runStrategy(
+    fetchFolderMessagesSince(client, folderPath, recentSyncSinceDate(), maxMessages),
+    "lookback",
+    "since",
+    "since",
+  );
   // Yandex can occasionally miss fresh mail in date search or after a stale cursor.
   // Always scan the latest UID tail as a second non-cursor-moving safety net.
-  yield* unique(fetchFolderMessagesBefore(client, folderPath, null, maxMessages), "lookback", "latest-tail");
-  yield* unique(fetchFolderMessages(client, folderPath, startUid, maxMessages), "forward", "forward-cursor");
+  yield* runStrategy(
+    fetchFolderMessagesBefore(client, folderPath, null, maxMessages),
+    "lookback",
+    "tail",
+    "latest-tail",
+  );
+  yield* runStrategy(
+    fetchFolderMessages(client, folderPath, startUid, maxMessages),
+    "forward",
+    "forward",
+    "forward-cursor",
+  );
 }
 
 async function* markCursorMode(
@@ -472,6 +515,57 @@ async function upsertFolder(
   });
 }
 
+async function syncFolderUidValidity(
+  client: Parameters<typeof fetchFolderMessages>[0],
+  db: PrismaClient,
+  folderPath: string,
+  folder: Awaited<ReturnType<typeof upsertFolder>>,
+): Promise<{
+  folder: Awaited<ReturnType<typeof upsertFolder>>;
+  uidValidityMismatch: boolean;
+  imapUidNext: number | null;
+}> {
+  const lock = await client.getMailboxLock(folderPath);
+  try {
+    const currentUidValidity = BigInt(client.mailbox?.uidValidity ?? 0);
+    const imapUidNext = client.mailbox?.uidNext ?? null;
+    let uidValidityMismatch = false;
+    let updatedFolder = folder;
+
+    if (
+      folder.uidValidity != null &&
+      currentUidValidity > 0n &&
+      folder.uidValidity !== currentUidValidity
+    ) {
+      uidValidityMismatch = true;
+      logger.warn(
+        {
+          folderPath: folder.imapName,
+          previousUidValidity: folder.uidValidity.toString(),
+          currentUidValidity: currentUidValidity.toString(),
+        },
+        `mail UIDVALIDITY changed for folder ${folder.imapName}: ${folder.uidValidity} → ${currentUidValidity}. Resetting lastSyncedUid cursor.`,
+      );
+      updatedFolder = await db.emailFolder.update({
+        where: { id: folder.id },
+        data: {
+          lastSyncedUid: null,
+          uidValidity: currentUidValidity,
+        },
+      });
+    } else if ((folder.uidValidity == null || folder.uidValidity === 0n) && currentUidValidity > 0n) {
+      updatedFolder = await db.emailFolder.update({
+        where: { id: folder.id },
+        data: { uidValidity: currentUidValidity },
+      });
+    }
+
+    return { folder: updatedFolder, uidValidityMismatch, imapUidNext };
+  } finally {
+    lock.release();
+  }
+}
+
 async function refreshFolderCounters(
   db: PrismaClient,
   tenantId: string,
@@ -581,20 +675,51 @@ export async function syncEmailAccount(
     );
     for (const listed of listedFolders) {
       try {
-      const folder = await upsertFolder(db, account, listed);
+      let folder = await upsertFolder(db, account, listed);
       folders += 1;
-      if (!shouldSyncFolderForMode(folder.type, mode)) continue;
+      const { folder: folderAfterValidity, uidValidityMismatch, imapUidNext } =
+        await syncFolderUidValidity(client, db, listed.path, folder);
+      folder = folderAfterValidity;
+      const latest = await fetchFolderMessageSummariesBefore(client, listed.path, 5).catch((err) => {
+        logger.warn({ err, accountId: account.id, folderPath: listed.path }, "mail latest IMAP summaries failed");
+        return [] as ImapMessageSummary[];
+      });
+      const latestImapUids = latest.map((item) => item.uid);
+      if (!shouldSyncFolderForMode(folder.type, mode)) {
+        const latestInDb = await db.email.findMany({
+          where: { tenantId: account.tenantId, accountId: account.id, folderId: folder.id },
+          orderBy: { uid: "desc" },
+          take: 5,
+          select: { uid: true },
+        });
+        folderStats.push({
+          path: listed.path,
+          type: folder.type,
+          imported: 0,
+          skipped: 0,
+          processed: 0,
+          lastSyncedUid: folder.lastSyncedUid,
+          latest,
+          imapUidNext,
+          dbLastSyncedUid: folder.lastSyncedUid,
+          uidValidityMismatch,
+          latestImapUids,
+          latestDbUids: latestInDb.map((email) => email.uid).filter((uid): uid is number => uid != null),
+        });
+        continue;
+      }
       let maxUid = folder.lastSyncedUid ?? 0;
       let minBackfillUid = folder.lastBackfillUid ?? null;
       let processed = 0;
       let folderImported = 0;
       let folderSkipped = 0;
-      const latest = await fetchFolderMessageSummariesBefore(client, listed.path, 5).catch((err) => {
-        logger.warn({ err, accountId: account.id, folderPath: listed.path }, "mail latest IMAP summaries failed");
-        return [] as ImapMessageSummary[];
-      });
       const touchedFolderIds = new Set<string>([folder.id]);
       const touchedLabelIds = new Set<string>();
+      const strategyResults: FolderStrategyResults = {
+        since: { found: 0 },
+        tail: { found: 0 },
+        forward: { found: 0 },
+      };
       const maxMessages =
         mode === EmailSyncMode.BACKFILL
           ? BACKFILL_MESSAGES_PER_FOLDER
@@ -605,7 +730,13 @@ export async function syncEmailAccount(
               fetchFolderMessagesBefore(client, listed.path, folder.lastBackfillUid, maxMessages),
               "backfill",
             )
-          : fetchRecentFolderMessages(client, listed.path, maxUid + 1, maxMessages);
+          : fetchRecentFolderMessages(
+              client,
+              listed.path,
+              maxUid + 1,
+              maxMessages,
+              strategyResults,
+            );
       for await (const { item, cursorMode } of messages) {
         if (processed >= maxMessages * 3) break;
         processed += 1;
@@ -850,6 +981,12 @@ export async function syncEmailAccount(
       for (const labelId of touchedLabelIds) {
         await refreshLabelCounters(db, account.tenantId, labelId);
       }
+      const latestInDb = await db.email.findMany({
+        where: { tenantId: account.tenantId, accountId: account.id, folderId: folder.id },
+        orderBy: { uid: "desc" },
+        take: 5,
+        select: { uid: true },
+      });
       folderStats.push({
         path: listed.path,
         type: folder.type,
@@ -858,6 +995,12 @@ export async function syncEmailAccount(
         processed,
         lastSyncedUid: maxUid || folder.lastSyncedUid,
         latest,
+        imapUidNext,
+        dbLastSyncedUid: folder.lastSyncedUid,
+        uidValidityMismatch,
+        latestImapUids,
+        latestDbUids: latestInDb.map((email) => email.uid).filter((uid): uid is number => uid != null),
+        strategyResults: mode === EmailSyncMode.RECENT ? strategyResults : undefined,
       });
       } catch (err) {
         folderErrors += 1;

@@ -85,14 +85,18 @@ type MailSyncFolderStat = {
 function mailSyncFolderSummary(stats: MailSyncFolderStat[] | undefined): string {
   if (!Array.isArray(stats) || stats.length === 0) return "";
   const important = stats
-    .filter((stat) => stat.processed > 0 || stat.imported > 0 || stat.error)
-    .slice(0, 4)
+    .filter((stat) => stat.processed > 0 || stat.imported > 0 || stat.error || (stat.latest?.length ?? 0) > 0)
+    .slice(0, 12)
     .map((stat) => {
       const label = stat.path.length > 18 ? `${stat.path.slice(0, 17)}…` : stat.path;
       if (stat.error) return `${label}: ошибка ${stat.error.slice(0, 80)}`;
       const latest = stat.latest?.[0];
       const latestLabel = latest?.subject ? `, последний: «${latest.subject.slice(0, 42)}»` : "";
-      return `${label}: ${stat.imported} новых/${stat.processed} проверено${latestLabel}`;
+      const checkedLabel =
+        stat.processed > 0
+          ? `${stat.imported} новых/${stat.processed} проверено`
+          : "не импортируется в recent";
+      return `${label}: ${checkedLabel}${latestLabel}`;
     });
   return important.length ? ` Папки: ${important.join("; ")}.` : " Папки проверены, новых UID не найдено.";
 }
