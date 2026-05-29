@@ -33,6 +33,11 @@ import {
 import { ensureOrderDigitaldemonRules } from "@/lib/mail/order-digitaldemon-rules";
 import { emailDirectionForImapFolder, emailFolderListWhere } from "@/lib/mail/mail-folder-query";
 import { sendSmtpMessage } from "@/lib/mail/smtp-client";
+import {
+  planRecentFolderSync,
+  readCustomSyncCursor,
+  writeCustomSyncCursor,
+} from "@/lib/mail/mail-sync-rotation";
 
 const RECENT_MESSAGES_PER_FOLDER = 300;
 const RECENT_MESSAGES_CUSTOM_FOLDER = 100;
@@ -680,7 +685,15 @@ export async function syncEmailAccount(
   db: PrismaClient,
   account: EmailAccount,
   options: { mode?: EmailSyncMode } = {},
-): Promise<{ imported: number; skipped: number; folders: number; folderStats: FolderSyncStat[] }> {
+): Promise<{
+  imported: number;
+  skipped: number;
+  folders: number;
+  folderStats: FolderSyncStat[];
+  hasMoreCustomFolders: boolean;
+  customFoldersSynced: number;
+  customFolderTotal: number;
+}> {
   const startedAt = Date.now();
   const mode = options.mode ?? EmailSyncMode.RECENT;
   let client = createImapClient(account);
@@ -702,6 +715,23 @@ export async function syncEmailAccount(
     const listedFolders = (await listImapFolders(client)).sort(
       (a, b) => folderSyncPriority(a) - folderSyncPriority(b) || a.path.localeCompare(b.path),
     );
+    let messageSyncPaths: Set<string> | null = null;
+    let recentSyncPlan: ReturnType<typeof planRecentFolderSync> | null = null;
+    if (mode === EmailSyncMode.RECENT) {
+      const customOffset = await readCustomSyncCursor(db, account.tenantId, account.id);
+      recentSyncPlan = planRecentFolderSync(listedFolders, customOffset);
+      messageSyncPaths = recentSyncPlan.messageSyncPaths;
+      logger.info(
+        {
+          accountId: account.id,
+          customOffset,
+          customFoldersThisRun: recentSyncPlan.customFoldersThisRun,
+          customFolderTotal: recentSyncPlan.customFolderTotal,
+          hasMoreCustomFolders: recentSyncPlan.hasMoreCustomFolders,
+        },
+        "mail recent sync folder plan",
+      );
+    }
     for (const listed of listedFolders) {
       try {
       client = await replaceImapClientIfNeeded(account, client);
@@ -711,6 +741,23 @@ export async function syncEmailAccount(
         await syncFolderUidValidity(client, db, listed.path, folder);
       folder = folderAfterValidity;
       if (!shouldSyncFolderForMode(folder.type, mode)) {
+        folderStats.push({
+          path: listed.path,
+          type: folder.type,
+          imported: 0,
+          skipped: 0,
+          processed: 0,
+          lastSyncedUid: folder.lastSyncedUid,
+          latest: [],
+          imapUidNext,
+          dbLastSyncedUid: folder.lastSyncedUid,
+          uidValidityMismatch,
+          latestImapUids: [],
+          latestDbUids: [],
+        });
+        continue;
+      }
+      if (messageSyncPaths && !messageSyncPaths.has(listed.path)) {
         folderStats.push({
           path: listed.path,
           type: folder.type,
@@ -1061,6 +1108,24 @@ export async function syncEmailAccount(
       }
     }
 
+    const inboxFolder = await db.emailFolder.findFirst({
+      where: { tenantId: account.tenantId, accountId: account.id, type: EmailFolderType.INBOX },
+      select: { id: true },
+    });
+    if (inboxFolder) {
+      await refreshFolderCounters(db, account.tenantId, inboxFolder.id);
+    }
+
+    if (recentSyncPlan) {
+      await writeCustomSyncCursor(
+        db,
+        account.tenantId,
+        account.id,
+        recentSyncPlan.nextCustomOffset,
+      );
+    }
+
+    const hasMoreCustomFolders = recentSyncPlan?.hasMoreCustomFolders ?? false;
     await db.emailAccount.update({
       where: { id: account.id },
       data: {
@@ -1072,10 +1137,30 @@ export async function syncEmailAccount(
       },
     });
     logger.info(
-      { accountId: account.id, mode, imported, skipped, folders, folderErrors, folderStats, elapsedMs: Date.now() - startedAt },
+      {
+        accountId: account.id,
+        mode,
+        imported,
+        skipped,
+        folders,
+        folderErrors,
+        hasMoreCustomFolders,
+        customFoldersSynced: recentSyncPlan?.customFoldersThisRun ?? 0,
+        customFolderTotal: recentSyncPlan?.customFolderTotal ?? 0,
+        folderStats,
+        elapsedMs: Date.now() - startedAt,
+      },
       "mail sync completed",
     );
-    return { imported, skipped, folders, folderStats };
+    return {
+      imported,
+      skipped,
+      folders,
+      folderStats,
+      hasMoreCustomFolders,
+      customFoldersSynced: recentSyncPlan?.customFoldersThisRun ?? 0,
+      customFolderTotal: recentSyncPlan?.customFolderTotal ?? 0,
+    };
   } catch (err) {
     await db.emailAccount.update({
       where: { id: account.id },

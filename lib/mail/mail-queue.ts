@@ -6,8 +6,7 @@ import { syncAccountNow } from "@/lib/mail/mail-service";
 import { logger } from "@/lib/server/logger";
 
 const STALE_RUNNING_JOB_MS = 90_000;
-const MAX_MAIL_SYNC_JOB_MS = 8 * 60 * 1000;
-const MAIL_SYNC_EXECUTION_TIMEOUT_MS = 15 * 60 * 1000;
+const MAX_MAIL_SYNC_JOB_MS = 12 * 60 * 1000;
 
 /** Один IMAP-sync на ящик — без параллельных подключений и гонок курсора. */
 const activeMailSyncImapWork = new Map<string, Promise<unknown>>();
@@ -18,6 +17,21 @@ function mailSyncAccountKey(tenantId: string, accountId: string): string {
 
 function mailSyncTimeoutError(): Error {
   return new Error("MAIL_SYNC_TIMEOUT");
+}
+
+async function chainNextCustomFolderSyncJob(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+  role: string,
+  accountId: string,
+  mode: EmailSyncMode,
+): Promise<void> {
+  const chained = await enqueueMailSyncJob(db, tenantId, userId, accountId, mode);
+  if (!chained.enqueued) return;
+  void runMailSyncJob(db, tenantId, userId, role, chained.syncJob.id).catch((err) => {
+    logger.error({ err, tenantId, accountId, syncJobId: chained.syncJob.id }, "chained mail sync failed");
+  });
 }
 
 export async function recoverStaleMailSyncJobs(
@@ -164,12 +178,7 @@ export async function runMailSyncJob(
   activeMailSyncImapWork.set(accountKey, syncWork);
 
   try {
-    const result = await Promise.race([
-      syncWork,
-      new Promise<never>((_resolve, reject) => {
-        setTimeout(() => reject(mailSyncTimeoutError()), MAIL_SYNC_EXECUTION_TIMEOUT_MS);
-      }),
-    ]);
+    const result = await syncWork;
     const stillRunning = await db.emailSyncJob.findFirst({
       where: { id: syncJob.id, status: EmailSyncJobStatus.RUNNING },
       select: { id: true },
@@ -190,6 +199,19 @@ export async function runMailSyncJob(
         lockedAt: null,
       },
     });
+    if (
+      syncJob.mode === EmailSyncMode.RECENT &&
+      result.hasMoreCustomFolders
+    ) {
+      await chainNextCustomFolderSyncJob(
+        db,
+        tenantId,
+        syncJob.createdByUserId ?? userId,
+        role,
+        syncJob.accountId,
+        syncJob.mode,
+      );
+    }
     return { syncJob: updated, processed: true, result };
   } catch (err) {
     const message = mailSyncErrorMessage(err);

@@ -147,7 +147,7 @@ const MAIL_LIST_MAX_WIDTH = 920;
 const MAIL_DB_REFRESH_INTERVAL_MS = 15_000;
 const MAIL_ACTIVE_SYNC_INTERVAL_MS = 30_000;
 const MAIL_SYNC_RUNNING_WARN_MS = 2 * 60 * 1000;
-const MAIL_SYNC_RUNNING_STALE_MS = 8 * 60 * 1000;
+const MAIL_SYNC_RUNNING_STALE_MS = 12 * 60 * 1000;
 
 function readLastMailAccountId(): string {
   try {

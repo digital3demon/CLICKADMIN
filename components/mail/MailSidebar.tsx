@@ -64,7 +64,6 @@ function FolderButton({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `folder:${folder.id}` });
   const hasUnread = folder.unreadCount > 0;
-  const hasMessages = folder.totalCount > 0;
   return (
     <button
       ref={setNodeRef}
@@ -87,16 +86,12 @@ function FolderButton({
         ) : null}
       </span>
       {collapsed ? null : <span className="min-w-0 flex-1 truncate">{mailFolderDisplayName(folder)}</span>}
-      {!collapsed && hasMessages ? (
+      {!collapsed && hasUnread ? (
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
-            hasUnread
-              ? "bg-[var(--sidebar-blue)] text-white"
-              : "bg-[var(--surface-subtle)] text-[var(--text-secondary)]"
-          }`}
-          title={hasUnread ? `${folder.unreadCount} непрочитанных из ${folder.totalCount}` : `${folder.totalCount} писем`}
+          className="rounded-full bg-[var(--sidebar-blue)] px-2 py-0.5 text-xs font-semibold tabular-nums text-white"
+          title={`${folder.unreadCount} непрочитанных из ${folder.totalCount}`}
         >
-          {folder.totalCount > 999 ? "999+" : folder.totalCount}
+          {folder.unreadCount > 99 ? "99+" : folder.unreadCount}
         </span>
       ) : null}
     </button>
@@ -263,20 +258,12 @@ export function MailSidebar({
                 style={{ backgroundColor: label.color }}
               />
               <span className="min-w-0 flex-1 truncate">{label.name}</span>
-              {label.totalCount > 0 ? (
+              {label.unreadCount > 0 ? (
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
-                    label.unreadCount > 0
-                      ? "bg-[var(--sidebar-blue)] text-white"
-                      : "bg-[var(--surface-subtle)] text-[var(--text-secondary)]"
-                  }`}
-                  title={
-                    label.unreadCount > 0
-                      ? `${label.unreadCount} непрочитанных из ${label.totalCount}`
-                      : `${label.totalCount} писем`
-                  }
+                  className="rounded-full bg-[var(--sidebar-blue)] px-2 py-0.5 text-xs font-semibold tabular-nums text-white"
+                  title={`${label.unreadCount} непрочитанных из ${label.totalCount}`}
                 >
-                  {label.totalCount > 999 ? "999+" : label.totalCount}
+                  {label.unreadCount > 99 ? "99+" : label.unreadCount}
                 </span>
               ) : null}
             </button>
