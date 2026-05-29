@@ -86,12 +86,13 @@ export async function diagnoseEmailAccountImap(
       const lock = await client.getMailboxLock(listed.path);
       try {
         const mailbox = client.mailbox;
-        const imapUidNext = mailbox?.uidNext ?? null;
+        if (!mailbox) continue;
+        const imapUidNext = mailbox.uidNext ?? null;
         const imapUidValidity =
-          mailbox?.uidValidity != null && Number.isFinite(mailbox.uidValidity)
+          mailbox.uidValidity != null && Number.isFinite(mailbox.uidValidity)
             ? Number(mailbox.uidValidity)
             : null;
-        const imapMessages = mailbox?.exists ?? 0;
+        const imapMessages = mailbox.exists ?? 0;
 
         const foundUids = await client.search({ all: true }, { uid: true });
         const uids = Array.isArray(foundUids) ? foundUids : [];
