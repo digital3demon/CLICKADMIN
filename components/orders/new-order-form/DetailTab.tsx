@@ -527,7 +527,7 @@ export function DetailTab({
             role="dialog"
             aria-modal="true"
             aria-labelledby="price-list-modal-title"
-            className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl"
+            className="flex max-h-[90dvh] w-full max-w-[calc(100vw-1.5rem)] flex-col overflow-y-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl shell-desktop:max-h-[85vh] shell-desktop:max-w-3xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2
@@ -538,13 +538,13 @@ export function DetailTab({
             </h2>
             <input
               type="search"
-              className="mt-3 rounded-md border border-[var(--input-border)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
+              className="mt-3 rounded-md border border-[var(--input-border)] px-3 py-2 text-base text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] shell-desktop:text-sm"
               placeholder="Поиск по коду, названию, разделу…"
               value={priceSearch}
               onChange={(e) => setPriceSearch(e.target.value)}
               autoFocus
             />
-            <div className="mt-3 flex min-h-0 min-h-[40vh] flex-1 flex-col">
+            <div className="mt-3 flex min-h-0 min-h-[40dvh] flex-1 flex-col">
               {filteredPriceItems.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">
                   {priceItems.length === 0

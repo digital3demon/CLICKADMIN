@@ -61,7 +61,7 @@ const ORDERS_FRAME_ROOT =
 const ORDERS_TABLE_TH =
   "min-w-0 whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
 const ORDERS_TABLE_CLASS =
-  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] lg:min-w-0 lg:text-xs 2xl:text-[13px]";
+  "w-full min-w-0 table-fixed border-collapse text-left text-[10px] sm:text-[11px] shell-desktop:min-w-[56rem] shell-desktop:text-xs 2xl:text-[13px]";
 
 /** Поступление: дата прихода работы; без явной даты — как в наряде: дата занесения в CRM. */
 function formatAdmission(o: {
@@ -73,6 +73,15 @@ function formatAdmission(o: {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+  });
+}
+
+function formatOrderCardDate(d: Date | null | undefined): string | undefined {
+  if (!d) return undefined;
+  return d.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
   });
 }
 
@@ -646,7 +655,7 @@ export default async function OrdersPage({
           В списке только наряды с отметкой «Работа отправлена» (отгруженные).
         </div>
       ) : null}
-      <div className="w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] print:hidden">
+      <div className="hidden w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] shell-desktop:block print:hidden">
         <table className={ORDERS_TABLE_CLASS} aria-hidden="true">
           <OrdersTableColGroup />
           <thead>
@@ -698,12 +707,70 @@ export default async function OrdersPage({
                     : workSent
                       ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
                       : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
+                const renderTagsNode = () => (
+                  <OrderListTagsCell
+                    orderId={o.id}
+                    pageSize={pageSize}
+                    orderAttentionWarning={
+                      o.listCompositionMismatch ||
+                      o.listPendingChatCorrections
+                    }
+                    hideShipped={hideShippedActive}
+                    onlyShipped={onlyShippedActive}
+                    kaitenCardId={o.kaitenCardId}
+                    demoKanbanColumn={o.demoKanbanColumn}
+                    demoCardTypeName={o.kaitenCardType?.name ?? null}
+                    kaitenColumnTitle={o.kaitenColumnTitle}
+                    prostheticsOrdered={o.prostheticsOrdered}
+                    listPendingProstheticsRequests={
+                      o.listPendingProstheticsRequests
+                    }
+                    invoicePrinted={o.invoicePrinted}
+                    hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                    invoiceAttachmentId={o.invoiceAttachmentId}
+                    payment={o.payment}
+                    paymentPartialRub={o.paymentPartialRub}
+                    adminShippedOtpr={o.adminShippedOtpr}
+                    kaitenBlocked={o.kaitenBlocked === true}
+                    kaitenBlockReason={o.kaitenBlockReason}
+                    isUrgent={o.isUrgent}
+                    urgentCoefficient={o.urgentCoefficient}
+                    customTags={o.listCustomTags}
+                    listSearchQ={listSearchQ || undefined}
+                    periodFrom={fromUrl}
+                    periodTo={toUrl}
+                  />
+                );
                 return (
                 <OrdersListTableRow
                   key={o.id}
                   orderId={o.id}
                   orderNumber={o.orderNumber}
                   className={rowClass}
+                  clinicName={o.clinic?.name ?? "Частное лицо"}
+                  doctorName={personNameSurnameInitials(o.doctor.fullName)}
+                  patientName={
+                    o.patientName
+                      ? personNameSurnameInitials(o.patientName)
+                      : undefined
+                  }
+                  labDate={formatOrderCardDate(o.dueDate)}
+                  appointmentDate={formatOrderCardDate(
+                    o.appointmentDate ?? o.dueToAdminsAt,
+                  )}
+                  kaitenColumnTitle={o.kaitenColumnTitle}
+                  hasUnreadChat={o.listKaitenLabMentionHighlight}
+                  hasPrint={!workSent || Boolean(kaitenUrl ?? o.kaitenCardId)}
+                  indicatorsNode={
+                    workSent ? (
+                      <span className="inline-flex items-center rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/45 dark:text-emerald-200">
+                        отправлен
+                      </span>
+                    ) : null
+                  }
+                  tagsNode={
+                    <div className="min-w-0 flex-1">{renderTagsNode()}</div>
+                  }
                 >
                   <OrderListOrderChatCell
                     orderId={o.id}
@@ -825,38 +892,7 @@ export default async function OrdersPage({
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
                   <td className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5">
-                    <OrderListTagsCell
-                      orderId={o.id}
-                      pageSize={pageSize}
-                      orderAttentionWarning={
-                        o.listCompositionMismatch ||
-                        o.listPendingChatCorrections
-                      }
-                      hideShipped={hideShippedActive}
-                      onlyShipped={onlyShippedActive}
-                      kaitenCardId={o.kaitenCardId}
-                      demoKanbanColumn={o.demoKanbanColumn}
-                      demoCardTypeName={o.kaitenCardType?.name ?? null}
-                      kaitenColumnTitle={o.kaitenColumnTitle}
-                      prostheticsOrdered={o.prostheticsOrdered}
-                      listPendingProstheticsRequests={
-                        o.listPendingProstheticsRequests
-                      }
-                      invoicePrinted={o.invoicePrinted}
-                      hasInvoiceAttachment={o.invoiceAttachmentId != null}
-                      invoiceAttachmentId={o.invoiceAttachmentId}
-                      payment={o.payment}
-                      paymentPartialRub={o.paymentPartialRub}
-                      adminShippedOtpr={o.adminShippedOtpr}
-                      kaitenBlocked={o.kaitenBlocked === true}
-                      kaitenBlockReason={o.kaitenBlockReason}
-                      isUrgent={o.isUrgent}
-                      urgentCoefficient={o.urgentCoefficient}
-                      customTags={o.listCustomTags}
-                      listSearchQ={listSearchQ || undefined}
-                      periodFrom={fromUrl}
-                      periodTo={toUrl}
-                    />
+                    {renderTagsNode()}
                   </td>
                 </OrdersListTableRow>
               );

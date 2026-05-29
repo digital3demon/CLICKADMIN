@@ -25,16 +25,38 @@ export function OrdersListTableRow({
   orderNumber,
   className,
   children,
+  clinicName,
+  doctorName,
+  patientName,
+  labDate,
+  appointmentDate,
+  shipDate,
+  kaitenColumnTitle,
+  hasUnreadChat = false,
+  hasPrint = false,
+  tagsNode,
+  indicatorsNode,
 }: {
   orderId: string;
   orderNumber: string;
   className?: string;
   children: ReactNode;
+  clinicName?: string;
+  doctorName?: string;
+  patientName?: string;
+  labDate?: string;
+  appointmentDate?: string;
+  shipDate?: string;
+  kaitenColumnTitle?: string | null;
+  hasUnreadChat?: boolean;
+  hasPrint?: boolean;
+  tagsNode?: ReactNode;
+  indicatorsNode?: ReactNode;
 }) {
   const router = useRouter();
   const href = orderPathById(orderId);
 
-  const go = (e: MouseEvent<HTMLTableRowElement>) => {
+  const go = (e: MouseEvent<HTMLElement>) => {
     if (e.button !== 0) return;
     if (e.metaKey || e.ctrlKey) {
       window.open(href, "_blank", "noopener,noreferrer");
@@ -44,15 +66,106 @@ export function OrdersListTableRow({
   };
 
   return (
-    <tr
-      className={className ? `${className} cursor-pointer` : "cursor-pointer"}
-      onClick={(e) => {
-        if (targetInsideInteractive(e.target)) return;
-        go(e);
-      }}
-      title={`${orderNumber} — открыть наряд (клик по строке)`}
-    >
-      {children}
-    </tr>
+    <>
+      <tr
+        className={
+          className
+            ? `hidden shell-desktop:table-row print:table-row ${className} cursor-pointer`
+            : "hidden cursor-pointer shell-desktop:table-row print:table-row"
+        }
+        onClick={(e) => {
+          if (targetInsideInteractive(e.target)) return;
+          go(e);
+        }}
+        title={`${orderNumber} — открыть наряд (клик по строке)`}
+      >
+        {children}
+      </tr>
+      <tr className="border-b border-[var(--card-border)] shell-desktop:hidden print:hidden">
+        <td colSpan={99} className="p-0">
+          <div
+            className="cursor-pointer p-3 transition-colors duration-100 active:bg-[var(--surface-hover)]"
+            onClick={(e) => {
+              if (targetInsideInteractive(e.target)) return;
+              go(e);
+            }}
+            title={`${orderNumber} — открыть наряд (клик по строке)`}
+          >
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="font-mono text-sm font-semibold text-[var(--text-strong)]">
+                № {orderNumber}
+              </span>
+              {kaitenColumnTitle?.trim() ? (
+                <span
+                  className="max-w-[140px] shrink-0 truncate rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 text-xs text-[var(--text-secondary)]"
+                  title={kaitenColumnTitle}
+                >
+                  {kaitenColumnTitle}
+                </span>
+              ) : null}
+            </div>
+
+            {clinicName ? (
+              <div className="mb-0.5 truncate text-sm font-medium text-[var(--app-text)]">
+                {clinicName}
+              </div>
+            ) : null}
+
+            <div className="mb-1.5 flex flex-wrap gap-1.5 text-xs text-[var(--text-secondary)]">
+              {doctorName ? <span>{doctorName}</span> : null}
+              {doctorName && patientName ? (
+                <span className="text-[var(--text-muted)]">·</span>
+              ) : null}
+              {patientName ? <span>{patientName}</span> : null}
+            </div>
+
+            <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
+              {labDate ? (
+                <span>
+                  <span className="font-medium text-[var(--text-secondary)]">
+                    ЛАБ{" "}
+                  </span>
+                  {labDate}
+                </span>
+              ) : null}
+              {appointmentDate ? (
+                <span>
+                  <span className="font-medium text-[var(--text-secondary)]">
+                    Запись{" "}
+                  </span>
+                  {appointmentDate}
+                </span>
+              ) : null}
+              {shipDate ? (
+                <span>
+                  <span className="font-medium text-[var(--text-secondary)]">
+                    Отправка{" "}
+                  </span>
+                  {shipDate}
+                </span>
+              ) : null}
+            </div>
+
+            {tagsNode || indicatorsNode || hasUnreadChat || hasPrint ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {hasUnreadChat ? (
+                  <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                    <span aria-hidden>💬</span>
+                    чат
+                  </span>
+                ) : null}
+                {hasPrint ? (
+                  <span className="inline-flex items-center rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 text-xs text-[var(--text-secondary)]">
+                    печать
+                  </span>
+                ) : null}
+                {indicatorsNode}
+                {tagsNode}
+              </div>
+            ) : null}
+          </div>
+        </td>
+      </tr>
+    </>
   );
 }

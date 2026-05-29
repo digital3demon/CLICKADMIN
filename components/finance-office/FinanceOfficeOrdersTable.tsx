@@ -40,6 +40,23 @@ export type FinanceOfficeOrderTableRow = {
   listPendingProstheticsRequests: boolean;
 };
 
+function financeRemarksCount(o: FinanceOfficeOrderTableRow): number {
+  return [
+    o.financeCalculated,
+    o.listCompositionMismatch || o.listPendingChatCorrections,
+    o.kaitenColumnTitle || o.kaitenCardId || o.demoKanbanColumn,
+    o.prostheticsOrdered,
+    o.listPendingProstheticsRequests,
+    o.invoicePrinted,
+    o.invoiceAttachmentId,
+    o.payment,
+    o.adminShippedOtpr,
+    o.kaitenBlocked,
+    o.isUrgent,
+    ...o.listCustomTags,
+  ].filter(Boolean).length;
+}
+
 export function FinanceOfficeOrdersTable({
   orders,
   activeTag = null,
@@ -104,11 +121,12 @@ export function FinanceOfficeOrdersTable({
         </div>
       }
     >
-      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch]">
+      <div className="relative">
+      <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch]">
         <table className="w-max min-w-full border-collapse text-left text-sm">
           <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-              <th className="px-2 py-2 text-center normal-case">
+              <th className="w-[7.5rem] px-2 py-2 text-center normal-case max-xl:sticky max-xl:left-0 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">
                 <div className="flex flex-col items-center gap-1.5">
                   <button
                     type="button"
@@ -120,13 +138,13 @@ export function FinanceOfficeOrdersTable({
                   <span>Выбрать</span>
                 </div>
               </th>
-              <th className="px-2 py-2 text-center">№ наряда</th>
+              <th className="px-2 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
               <th className="px-2 py-2 text-center">Клиника</th>
               <th className="px-2 py-2 text-center">Врач</th>
               <th className="px-2 py-2 text-center">Пациент</th>
               <th className="px-2 py-2 text-center">Лаборатория</th>
-              <th className="w-[11rem] px-1.5 py-2 text-center normal-case">Реквизиты</th>
-              <th className="w-[7rem] px-1.5 py-2 text-center normal-case">Наше юрлицо</th>
+              <th className="w-[11rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Реквизиты</th>
+              <th className="w-[7rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Наше юрлицо</th>
               <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
               <th className="w-[10.5rem] px-1.5 py-2 text-center normal-case">Отметки</th>
             </tr>
@@ -134,6 +152,7 @@ export function FinanceOfficeOrdersTable({
           <tbody>
             {orders.map((o) => {
               const workSent = o.adminShippedOtpr;
+              const remarksCount = financeRemarksCount(o);
               return (
                 <tr
                   key={o.id}
@@ -143,7 +162,7 @@ export function FinanceOfficeOrdersTable({
                       : "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]"
                   }
                 >
-                  <td className="px-2 py-2 text-center">
+                  <td className="w-[7.5rem] px-2 py-2 text-center max-xl:sticky max-xl:left-0 max-xl:z-20 max-xl:bg-[var(--card-bg)] max-xl:shadow-[1px_0_0_var(--card-border)]">
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-[var(--input-border)]"
@@ -159,7 +178,7 @@ export function FinanceOfficeOrdersTable({
                       aria-label={`Выбрать наряд ${o.orderNumber}`}
                     />
                   </td>
-                  <td className="whitespace-nowrap px-2 py-2 font-mono font-semibold">
+                  <td className="whitespace-nowrap px-2 py-2 font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 max-xl:bg-[var(--card-bg)] max-xl:shadow-[1px_0_0_var(--card-border)]">
                     <Link href={orderPathById(o.id)} className="text-[var(--sidebar-blue)] hover:underline">
                       {o.orderNumber}
                     </Link>
@@ -188,10 +207,10 @@ export function FinanceOfficeOrdersTable({
                       createdAtIso={o.createdAt}
                     />
                   </td>
-                  <td className="w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-[11px] leading-snug text-[var(--text-secondary)]">
+                  <td className="w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
                     {o.counterpartyRequisitesText || "—"}
                   </td>
-                  <td className="w-[7rem] max-w-[7rem] break-words px-1.5 py-2 text-[11px] leading-snug text-[var(--text-secondary)]">
+                  <td className="w-[7rem] max-w-[7rem] break-words px-1.5 py-2 text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
                     {o.legalEntity || "—"}
                   </td>
                   <td
@@ -201,38 +220,57 @@ export function FinanceOfficeOrdersTable({
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
                   <td className="w-[10.5rem] max-w-[10.5rem] px-1.5 py-2">
-                    <OrderListTagsCell
-                      orderId={o.id}
-                      pageSize={500}
-                      orderAttentionWarning={
-                        o.listCompositionMismatch || o.listPendingChatCorrections
-                      }
-                      kaitenCardId={o.kaitenCardId}
-                      demoKanbanColumn={o.demoKanbanColumn}
-                      demoCardTypeName={o.kaitenCardType?.name ?? null}
-                      kaitenColumnTitle={o.kaitenColumnTitle}
-                      prostheticsOrdered={o.prostheticsOrdered}
-                      listPendingProstheticsRequests={o.listPendingProstheticsRequests}
-                      invoicePrinted={o.invoicePrinted}
-                      hasInvoiceAttachment={o.invoiceAttachmentId != null}
-                      invoiceAttachmentId={o.invoiceAttachmentId}
-                      payment={o.payment}
-                      paymentPartialRub={o.paymentPartialRub}
-                      adminShippedOtpr={o.adminShippedOtpr}
-                      kaitenBlocked={o.kaitenBlocked === true}
-                      kaitenBlockReason={o.kaitenBlockReason}
-                      isUrgent={o.isUrgent}
-                      urgentCoefficient={o.urgentCoefficient}
-                      customTags={o.listCustomTags}
-                      financeOfficeFilterContext={{ tab, periodFrom, periodTo, q }}
-                      financeCalculated={o.financeCalculated}
-                    />
+                    <div className="xl:hidden">
+                      {remarksCount > 0 ? (
+                        <span
+                          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 text-xs font-semibold text-[var(--text-strong)]"
+                          title={`Отметок: ${remarksCount}`}
+                        >
+                          {remarksCount}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-[var(--text-muted)]">—</span>
+                      )}
+                    </div>
+                    <div className="max-xl:hidden">
+                      <OrderListTagsCell
+                        orderId={o.id}
+                        pageSize={500}
+                        orderAttentionWarning={
+                          o.listCompositionMismatch || o.listPendingChatCorrections
+                        }
+                        kaitenCardId={o.kaitenCardId}
+                        demoKanbanColumn={o.demoKanbanColumn}
+                        demoCardTypeName={o.kaitenCardType?.name ?? null}
+                        kaitenColumnTitle={o.kaitenColumnTitle}
+                        prostheticsOrdered={o.prostheticsOrdered}
+                        listPendingProstheticsRequests={o.listPendingProstheticsRequests}
+                        invoicePrinted={o.invoicePrinted}
+                        hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                        invoiceAttachmentId={o.invoiceAttachmentId}
+                        payment={o.payment}
+                        paymentPartialRub={o.paymentPartialRub}
+                        adminShippedOtpr={o.adminShippedOtpr}
+                        kaitenBlocked={o.kaitenBlocked === true}
+                        kaitenBlockReason={o.kaitenBlockReason}
+                        isUrgent={o.isUrgent}
+                        urgentCoefficient={o.urgentCoefficient}
+                        customTags={o.listCustomTags}
+                        financeOfficeFilterContext={{ tab, periodFrom, periodTo, q }}
+                        financeCalculated={o.financeCalculated}
+                      />
+                    </div>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      </div>
+      <div
+        className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-12 bg-gradient-to-l from-[var(--card-bg)] to-transparent xl:hidden"
+        aria-hidden="true"
+      />
       </div>
     </StickyListChrome>
   );

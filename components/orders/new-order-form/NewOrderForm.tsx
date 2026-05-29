@@ -15,6 +15,7 @@ import {
   useMenuDismiss,
 } from "@/components/orders/LabStatusPillMenu";
 import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
+import { MobileAwareDialog } from "@/components/ui/MobileAwareDialog";
 import { createPortal } from "react-dom";
 import { OrderCorrectionDetails } from "@/components/orders/OrderCorrectionDetails";
 import {
@@ -883,15 +884,6 @@ export function NewOrderForm({
     }
   }, [newClientName, newClientAddress, newDoctorFio, loadClinics]);
 
-  useEffect(() => {
-    if (!addClientOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !addClientSaving) setAddClientOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [addClientOpen, addClientSaving]);
-
   const requestSave = useCallback(async () => {
     setSaveError(null);
     if (!isTestOrder && !doctorId) {
@@ -1280,30 +1272,41 @@ export function NewOrderForm({
         }}
       />
       {addClientOpen ? (
-        <div
-          className="fixed inset-0 z-[250] flex items-center justify-center bg-black/45 p-4"
-          role="presentation"
-          onClick={() => {
+        <MobileAwareDialog
+          open={addClientOpen}
+          onClose={() => {
             if (!addClientSaving) setAddClientOpen(false);
           }}
+          title="Новый клиент"
+          description="После сохранения поля «Заказчик» заполнятся автоматически."
+          size="md"
+          mobileVariant="bottom-sheet"
+          closeOnEscape={!addClientSaving}
+          closeOnBackdrop={!addClientSaving}
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+              <button
+                type="button"
+                disabled={addClientSaving}
+                className="rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm font-semibold text-[var(--text-strong)] hover:bg-[var(--card-bg)] disabled:opacity-50"
+                onClick={() => {
+                  if (!addClientSaving) setAddClientOpen(false);
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={addClientSaving}
+                className="rounded-full bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
+                onClick={() => void submitNewClient()}
+              >
+                {addClientSaving ? "Создание…" : "Создать и выбрать"}
+              </button>
+            </div>
+          }
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`${titleId}-new-client-title`}
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2
-              id={`${titleId}-new-client-title`}
-              className="text-base font-semibold text-[var(--app-text)]"
-            >
-              Новый клиент
-            </h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              После сохранения поля «Заказчик» заполнятся автоматически.
-            </p>
-            <div className="mt-4 space-y-3">
+            <div className="space-y-3">
               <div>
                 <label
                   htmlFor={`${titleId}-new-client-name`}
@@ -1370,30 +1373,9 @@ export function NewOrderForm({
                 {addClientError}
               </p>
             ) : null}
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                disabled={addClientSaving}
-                className="rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm font-semibold text-[var(--text-strong)] hover:bg-[var(--card-bg)] disabled:opacity-50"
-                onClick={() => {
-                  if (!addClientSaving) setAddClientOpen(false);
-                }}
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                disabled={addClientSaving}
-                className="rounded-full bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
-                onClick={() => void submitNewClient()}
-              >
-                {addClientSaving ? "Создание…" : "Создать и выбрать"}
-              </button>
-            </div>
-          </div>
-        </div>
+        </MobileAwareDialog>
       ) : null}
-      <header className="sticky top-0 z-20 shrink-0 space-y-2 overflow-visible border-b border-[var(--card-border)] bg-gradient-to-b from-[var(--surface-subtle)] to-[var(--card-bg)] px-3 py-3 max-md:pt-[max(0.75rem,env(safe-area-inset-top,0px))] sm:px-5">
+      <header className="sticky top-0 z-20 shrink-0 space-y-2 overflow-visible border-b border-[var(--card-border)] bg-gradient-to-b from-[var(--surface-subtle)] to-[var(--card-bg)] px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] shell-desktop:pt-3 sm:px-5">
         {continuationChoice ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
             <span>
@@ -1723,6 +1705,10 @@ export function NewOrderForm({
                     ) : null}
                   </div>
                 </FormSection>
+                <div
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
+                  aria-hidden="true"
+                />
 
                 <FormSection title="Пациент">
                   <FieldLabel htmlFor={`${titleId}-patient`}>ФИО</FieldLabel>
@@ -1852,6 +1838,10 @@ export function NewOrderForm({
                     </div>
                   </div>
                 </FormSection>
+                <div
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
+                  aria-hidden="true"
+                />
               </div>
 
               <div className="flex min-h-0 min-w-0 flex-col space-y-0 border-t border-[var(--card-border)] pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pr-6 lg:pt-0">
@@ -1919,6 +1909,10 @@ export function NewOrderForm({
                     </>
                   ) : null}
                 </FormSection>
+                <div
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
+                  aria-hidden="true"
+                />
 
                 <section className="mt-4 border-t border-[var(--card-border)] pt-4">
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)] sm:text-base">
@@ -1940,6 +1934,10 @@ export function NewOrderForm({
                   onChange={setComments}
                   className="mt-4"
                 />
+                <div
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
+                  aria-hidden="true"
+                />
               </div>
 
               <div className="flex min-h-0 min-w-0 flex-col space-y-0 border-t border-[var(--card-border)] pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
@@ -1959,6 +1957,10 @@ export function NewOrderForm({
                     onPendingChange={setPendingFiles}
                   />
                 </section>
+                <div
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
+                  aria-hidden="true"
+                />
               </div>
             </div>
 
@@ -1989,7 +1991,21 @@ export function NewOrderForm({
               doctorId={doctorId || null}
               onChange={setQuickOrder}
             />
+            <div
+              className="h-[calc(3.25rem+env(safe-area-inset-bottom))] shell-desktop:hidden"
+              aria-hidden="true"
+            />
         </div>
+      </div>
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shell-desktop:hidden">
+        <button
+          type="button"
+          onClick={() => void requestSave()}
+          disabled={saving}
+          className="min-h-[44px] w-full rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-60"
+        >
+          {saving ? "Сохранение…" : "Создать заказ"}
+        </button>
       </div>
     </div>
   );
@@ -2162,7 +2178,7 @@ function SourceEmailAttachmentRow({
             role="dialog"
             aria-modal="true"
             aria-label="Просмотр вложения"
-            className="flex h-[min(92dvh,900px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
+            className="flex max-h-[90dvh] w-full max-w-[calc(100vw-1.5rem)] flex-col overflow-y-auto rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl shell-desktop:h-[min(92dvh,900px)] shell-desktop:max-w-5xl shell-desktop:overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
@@ -2340,7 +2356,7 @@ function OrderSourceEmailsPanel({
             role="dialog"
             aria-modal="true"
             aria-label="Просмотр письма"
-            className="flex h-[min(92dvh,860px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
+            className="flex max-h-[90dvh] w-full max-w-[calc(100vw-1.5rem)] flex-col overflow-y-auto rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl shell-desktop:h-[min(92dvh,860px)] shell-desktop:max-w-5xl shell-desktop:overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 border-b border-[var(--card-border)] px-5 py-4">

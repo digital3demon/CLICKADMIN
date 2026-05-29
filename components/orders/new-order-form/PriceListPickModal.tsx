@@ -224,7 +224,7 @@ export function PriceListPickModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="price-pick-modal-title"
-        className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl"
+        className="flex max-h-[90dvh] w-full max-w-[calc(100vw-1.5rem)] flex-col overflow-y-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl shell-desktop:max-h-[85vh] shell-desktop:max-w-3xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3">
@@ -260,7 +260,7 @@ export function PriceListPickModal({
         </div>
         <input
           type="search"
-          className="mt-3 rounded-md border border-[var(--input-border)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
+          className="mt-3 rounded-md border border-[var(--input-border)] px-3 py-2 text-base text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] shell-desktop:text-sm"
           placeholder="Поиск по коду, названию, разделу…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -272,7 +272,7 @@ export function PriceListPickModal({
             <span className="font-semibold text-[var(--text-strong)]">{pickedCount}</span>
           </p>
         ) : null}
-        <div className="mt-3 flex min-h-0 min-h-[40vh] flex-1 flex-col overflow-hidden">
+        <div className="mt-3 flex min-h-0 min-h-[40dvh] flex-1 flex-col overflow-hidden">
           {loadError ? (
             <p className="text-sm text-red-600">{loadError}</p>
           ) : filtered.length === 0 ? (

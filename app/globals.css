@@ -456,3 +456,51 @@ body {
   box-shadow: 0 0 10px 3px color-mix(in srgb, currentColor 65%, transparent);
   animation: checklist-spark-fly 1.05s cubic-bezier(0.18, 0.82, 0.28, 1) forwards;
 }
+
+/* ============================================
+   MOBILE TOUCH IMPROVEMENTS
+   ============================================ */
+
+/* Убираем задержку тапа на всех интерактивных элементах */
+button,
+a,
+[role="button"],
+[role="tab"],
+[role="menuitem"],
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
+/* Минимальный размер touch target */
+@media (max-width: 1023px) {
+  button:not([data-no-touch-expand]),
+  [role="button"]:not([data-no-touch-expand]) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Плавный скролл везде */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Скрытие скроллбара для горизонтальных скроллов на мобиле */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe area переменные для удобства */
+:root {
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller";
@@ -26,6 +27,15 @@ function formatAdmission(o: {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+  });
+}
+
+function formatShipmentCardDate(d: Date | null | undefined): string | undefined {
+  if (!d) return undefined;
+  return d.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
   });
 }
 
@@ -109,9 +119,9 @@ export function ShipmentsOrdersTable({
           </>
         }
       >
-        <div className="min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] print:overflow-visible">
-        <table className="w-max max-w-full min-w-0 border-collapse text-left text-sm print:table-auto">
-          <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30 print:static">
+        <div className="scrollbar-none min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] print:overflow-visible">
+        <table className="w-full max-w-full min-w-0 border-collapse text-left text-sm shell-desktop:w-max print:table-auto">
+          <thead className="hidden shell-desktop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30 print:table-header-group print:static">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase leading-tight tracking-wide text-[var(--text-secondary)] print:bg-[var(--card-bg)]">
               <th
                 className="max-md:hidden min-w-0 whitespace-nowrap px-1 py-2 text-center normal-case print:hidden"
@@ -207,41 +217,85 @@ export function ShipmentsOrdersTable({
                     ? getKaitenCardWebUrl(o.kaitenCardId)
                     : null;
               const workSent = o.adminShippedOtpr;
-              return (
-                <tr
-                  key={o.id}
-                  className={
-                    workSent
-                      ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 print:border-zinc-400 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
-                      : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]"
+              const clinicName = o.clinic?.name ?? "Частное лицо";
+              const address = o.clinic?.address?.trim() || "";
+              const doctorName = personNameSurnameInitials(o.doctor.fullName);
+              const patientName = o.patientName
+                ? personNameSurnameInitials(o.patientName)
+                : "";
+              const labDate = formatShipmentCardDate(o.dueDate);
+              const appointmentDate = formatShipmentCardDate(
+                o.appointmentDate ?? o.dueToAdminsAt,
+              );
+              const rowClass = workSent
+                ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 print:border-zinc-400 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
+                : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
+              const renderPrintActions = () => (
+                <>
+                  <OrderNarjadPrintTrigger
+                    orderId={o.id}
+                    variant="icon"
+                    title="Печать наряда (PDF) — диалог печати"
+                  />
+                  <OrderStickerPrintLink orderId={o.id} />
+                  {kaitenUrl ? (
+                    <OrderKaitenQrModal
+                      url={kaitenUrl}
+                      compact
+                      variant={isDemo ? "kanban" : "kaiten"}
+                    />
+                  ) : o.kaitenCardId != null ? (
+                    <span
+                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
+                      title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
+                    >
+                      ⚠
+                    </span>
+                  ) : (
+                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-muted)] sm:h-6 sm:w-6">
+                      —
+                    </span>
+                  )}
+                </>
+              );
+              const renderTagsCell = () => (
+                <OrderListTagsCell
+                  orderId={o.id}
+                  pageSize={TAGS_PAGE_SIZE}
+                  orderAttentionWarning={
+                    o.listCompositionMismatch ||
+                    o.listPendingChatCorrections
                   }
+                  kaitenCardId={o.kaitenCardId}
+                  demoKanbanColumn={o.demoKanbanColumn}
+                  demoCardTypeName={o.kaitenCardType?.name ?? null}
+                  kaitenColumnTitle={o.kaitenColumnTitle}
+                  prostheticsOrdered={o.prostheticsOrdered}
+                  listPendingProstheticsRequests={
+                    o.listPendingProstheticsRequests
+                  }
+                  invoicePrinted={o.invoicePrinted}
+                  hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                  invoiceAttachmentId={o.invoiceAttachmentId}
+                  payment={o.payment}
+                  paymentPartialRub={o.paymentPartialRub}
+                  adminShippedOtpr={o.adminShippedOtpr}
+                  kaitenBlocked={o.kaitenBlocked === true}
+                  kaitenBlockReason={o.kaitenBlockReason}
+                  isUrgent={o.isUrgent}
+                  urgentCoefficient={o.urgentCoefficient}
+                  customTags={o.listCustomTags}
+                  shipmentsFilterContext={shipmentsTagFilterContext}
+                />
+              );
+              return (
+                <Fragment key={o.id}>
+                <tr
+                  className={`hidden shell-desktop:table-row print:table-row ${rowClass}`}
                 >
                   <td className="max-md:hidden min-w-0 px-0.5 py-2 align-middle print:hidden">
                     <div className="flex min-w-0 flex-nowrap items-center justify-center gap-0">
-                      <OrderNarjadPrintTrigger
-                        orderId={o.id}
-                        variant="icon"
-                        title="Печать наряда (PDF) — диалог печати"
-                      />
-                      <OrderStickerPrintLink orderId={o.id} />
-                      {kaitenUrl ? (
-                        <OrderKaitenQrModal
-                          url={kaitenUrl}
-                          compact
-                          variant={isDemo ? "kanban" : "kaiten"}
-                        />
-                      ) : o.kaitenCardId != null ? (
-                        <span
-                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
-                          title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
-                        >
-                          ⚠
-                        </span>
-                      ) : (
-                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-muted)] sm:h-6 sm:w-6">
-                          —
-                        </span>
-                      )}
+                      {renderPrintActions()}
                     </div>
                   </td>
                   <td className="min-w-0 whitespace-nowrap px-2 py-2 align-middle font-mono font-medium text-[var(--app-text)] print:px-1.5">
@@ -351,36 +405,92 @@ export function ShipmentsOrdersTable({
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
                   <td className="min-w-[11rem] px-2 py-2 align-top print:px-1.5">
-                    <OrderListTagsCell
-                      orderId={o.id}
-                      pageSize={TAGS_PAGE_SIZE}
-                      orderAttentionWarning={
-                        o.listCompositionMismatch ||
-                        o.listPendingChatCorrections
-                      }
-                      kaitenCardId={o.kaitenCardId}
-                      demoKanbanColumn={o.demoKanbanColumn}
-                      demoCardTypeName={o.kaitenCardType?.name ?? null}
-                      kaitenColumnTitle={o.kaitenColumnTitle}
-                      prostheticsOrdered={o.prostheticsOrdered}
-                      listPendingProstheticsRequests={
-                        o.listPendingProstheticsRequests
-                      }
-                      invoicePrinted={o.invoicePrinted}
-                      hasInvoiceAttachment={o.invoiceAttachmentId != null}
-                      invoiceAttachmentId={o.invoiceAttachmentId}
-                      payment={o.payment}
-                      paymentPartialRub={o.paymentPartialRub}
-                      adminShippedOtpr={o.adminShippedOtpr}
-                      kaitenBlocked={o.kaitenBlocked === true}
-                      kaitenBlockReason={o.kaitenBlockReason}
-                      isUrgent={o.isUrgent}
-                      urgentCoefficient={o.urgentCoefficient}
-                      customTags={o.listCustomTags}
-                      shipmentsFilterContext={shipmentsTagFilterContext}
-                    />
+                    {renderTagsCell()}
                   </td>
                 </tr>
+                <tr
+                  className="border-b border-[var(--card-border)] shell-desktop:hidden print:hidden"
+                >
+                  <td colSpan={99} className="p-0">
+                    <div className="p-3">
+                      <div className="mb-1.5 flex items-start justify-between gap-2">
+                        <Link
+                          href={orderPathById(o.id)}
+                          className="font-mono text-base font-bold text-[var(--sidebar-blue)] hover:underline"
+                          title={`${o.orderNumber} — открыть наряд`}
+                        >
+                          № {o.orderNumber}
+                        </Link>
+                        {labDate ? (
+                          <span className="mt-0.5 shrink-0 text-xs text-[var(--text-muted)]">
+                            {labDate}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mb-0.5 truncate text-sm font-medium text-[var(--app-text)]">
+                        {clinicName}
+                      </div>
+
+                      {address ? (
+                        <div
+                          className="mb-0.5 truncate text-xs text-[var(--text-secondary)]"
+                          title={address}
+                        >
+                          {address}
+                        </div>
+                      ) : null}
+
+                      <div className="mb-1.5 flex flex-wrap gap-1.5 text-xs text-[var(--text-secondary)]">
+                        {doctorName ? <span>{doctorName}</span> : null}
+                        {doctorName && patientName ? (
+                          <span className="text-[var(--text-muted)]">·</span>
+                        ) : null}
+                        {patientName ? <span>{patientName}</span> : null}
+                      </div>
+
+                      <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
+                        {labDate ? (
+                          <span>
+                            <span className="font-medium text-[var(--text-secondary)]">
+                              ЛАБ{" "}
+                            </span>
+                            {labDate}
+                          </span>
+                        ) : null}
+                        {appointmentDate ? (
+                          <span>
+                            <span className="font-medium text-[var(--text-secondary)]">
+                              Запись{" "}
+                            </span>
+                            {appointmentDate}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 [&_a]:inline-flex [&_a]:min-h-[44px] [&_a]:min-w-[44px] [&_a]:items-center [&_a]:justify-center [&_button]:min-h-[44px] [&_button]:min-w-[44px]">
+                        <Link
+                          href={orderPathById(o.id)}
+                          className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm font-medium text-[var(--text-strong)] active:bg-[var(--surface-hover)]"
+                          title={`${o.orderNumber} — открыть наряд`}
+                        >
+                          Открыть
+                        </Link>
+                        <div className="flex items-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1">
+                          {renderPrintActions()}
+                        </div>
+                        <div className="min-h-[44px] flex-1 rounded-lg bg-[var(--surface-subtle)] px-2 py-1">
+                          <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                        </div>
+                      </div>
+
+                      <div className="mt-2 text-xs text-[var(--text-secondary)]">
+                        {renderTagsCell()}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                </Fragment>
               );
             })}
           </tbody>

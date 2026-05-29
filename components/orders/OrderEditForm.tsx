@@ -131,6 +131,44 @@ import { orderPathById } from "@/lib/order-public-ref";
 
 type CourierOption = { id: string; name: string };
 
+function MobileCollapsibleSection({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px) and (min-height: 560px)");
+    const syncOpen = () => {
+      const details = detailsRef.current;
+      if (!details) return;
+      details.open = mq.matches || defaultOpen;
+    };
+    syncOpen();
+    mq.addEventListener("change", syncOpen);
+    return () => mq.removeEventListener("change", syncOpen);
+  }, [defaultOpen]);
+
+  return (
+    <details ref={detailsRef} className="group shell-desktop:contents">
+      <summary className="mb-2 flex cursor-pointer select-none list-none items-center justify-between rounded-lg bg-[var(--surface-subtle)] px-3 py-2.5 shell-desktop:hidden [&::-webkit-details-marker]:hidden">
+        <span className="text-sm font-medium text-[var(--text-strong)]">
+          {title}
+        </span>
+        <span className="text-[var(--text-muted)] transition-transform group-open:rotate-180">
+          ▾
+        </span>
+      </summary>
+      {children}
+    </details>
+  );
+}
+
 /** Лимит ожидания ответа при больших PDF и сетевых задержках (лимит файла до 1 ГБ). */
 const INVOICE_UPLOAD_CLIENT_TIMEOUT_MS = 300_000;
 
@@ -2196,6 +2234,9 @@ export function OrderEditForm({
   );
 
   const oeColDeadlines = (
+    <MobileCollapsibleSection
+      title={orderPageFrame ? "Сроки, оформление и курьер" : "Сроки и оформление"}
+    >
     <div className={editMainCol}>
       <section className="border-b border-[var(--card-border)] pb-2">
         <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
@@ -2394,9 +2435,11 @@ export function OrderEditForm({
         </div>
       </section>
     </div>
+    </MobileCollapsibleSection>
   );
 
   const oeColFiles = (
+    <MobileCollapsibleSection title="Исходные данные и файлы">
     <div className={editMainCol}>
       <section className="flex min-h-0 flex-1 flex-col">
         <h3 className="mb-1.5 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
@@ -2487,6 +2530,7 @@ export function OrderEditForm({
         </div>
       </section>
     </div>
+    </MobileCollapsibleSection>
   );
 
   const oeColClientNotes = (
@@ -2526,11 +2570,13 @@ export function OrderEditForm({
     <div
       className={`${editColWrap} flex min-h-0 flex-col xl:h-full`}
     >
-      <OrderChatCorrectionsPanel
-        orderId={initial.id}
-        corrections={initial.chatCorrections}
-        canAccept={canAcceptChatCorrections}
-      />
+      <div className="scrollbar-none -mx-3 overflow-x-auto px-3 shell-desktop:mx-0 shell-desktop:overflow-visible shell-desktop:px-0">
+        <OrderChatCorrectionsPanel
+          orderId={initial.id}
+          corrections={initial.chatCorrections}
+          canAccept={canAcceptChatCorrections}
+        />
+      </div>
     </div>
   );
 
@@ -2568,7 +2614,7 @@ export function OrderEditForm({
               min={0}
               max={100}
               step={0.1}
-              className="w-14 rounded border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-0.5 text-xs tabular-nums text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
+              className="w-14 rounded border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-0.5 text-base tabular-nums text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] shell-desktop:text-xs"
               value={compositionDiscountPercent}
               onChange={(e) => {
                 const v = Number(e.target.value.replace(",", "."));
@@ -2593,13 +2639,15 @@ export function OrderEditForm({
           </p>
         </div>
       </div>
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
-        <OrderConstructionsEditor
-          value={draftLines}
-          onChange={setDraftLines}
-          clinicId={clinicId || null}
-          doctorId={doctorId || null}
-        />
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto shell-desktop:overflow-y-auto">
+        <div className="scrollbar-none -mx-3 overflow-x-auto px-3 shell-desktop:mx-0 shell-desktop:overflow-visible shell-desktop:px-0">
+          <OrderConstructionsEditor
+            value={draftLines}
+            onChange={setDraftLines}
+            clinicId={clinicId || null}
+            doctorId={doctorId || null}
+          />
+        </div>
       </div>
     </div>
   );
@@ -2697,9 +2745,11 @@ export function OrderEditForm({
   }, [initial.id, router]);
 
   const oeBottomSecondary = (
+    <MobileCollapsibleSection title="Документооборот">
     <div className="min-w-0 space-y-3">
       <div
-        className="flex flex-wrap gap-1.5 border-b border-[var(--card-border)] pb-2"
+        className="scrollbar-none flex snap-x gap-1 overflow-x-auto border-b border-[var(--card-border)] p-1 pb-2 xl:flex-wrap xl:overflow-x-visible"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         role="tablist"
         aria-label="Документы и карточка"
       >
@@ -2719,8 +2769,8 @@ export function OrderEditForm({
               aria-selected={active}
               className={
                 active
-                  ? "rounded-full bg-[var(--sidebar-blue)] px-2.5 py-0.5 text-xs font-semibold text-white shadow-sm"
-                  : "rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-0.5 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--card-bg)]"
+                  ? "shrink-0 snap-start rounded-full bg-[var(--sidebar-blue)] px-2.5 py-0.5 text-xs font-semibold text-white shadow-sm"
+                  : "shrink-0 snap-start rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-0.5 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--card-bg)]"
               }
               onClick={() => setActiveTab(key)}
             >
@@ -3050,6 +3100,7 @@ export function OrderEditForm({
         </div>
       )}
     </div>
+    </MobileCollapsibleSection>
   );
 
   const openShipModalForMark = useCallback(() => {
@@ -3140,6 +3191,21 @@ export function OrderEditForm({
       openShipModalForMark,
       openShipModalForEdit,
     ],
+  );
+
+  const renderSaveButton = (mobileBar = false) => (
+    <button
+      type="button"
+      onClick={save}
+      disabled={saving || !doctorId.trim()}
+      className={
+        mobileBar
+          ? "min-h-[44px] w-full rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-95 disabled:opacity-50"
+          : "rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:opacity-95 disabled:opacity-50 sm:text-sm"
+      }
+    >
+      {saving ? "Сохранение…" : "Сохранить наряд"}
+    </button>
   );
 
   const formInner = (
@@ -3240,14 +3306,7 @@ export function OrderEditForm({
         </div>
         {!isOrderPageFramed ? (
           <div className="flex shrink-0 justify-end">
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving || !doctorId.trim()}
-              className="rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:opacity-95 disabled:opacity-50 sm:text-sm"
-            >
-              {saving ? "Сохранение…" : "Сохранить наряд"}
-            </button>
+            {renderSaveButton()}
           </div>
         ) : null}
       </div>
@@ -3370,6 +3429,13 @@ export function OrderEditForm({
         </>
       )}
     </div>
+    <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shell-desktop:hidden">
+      <div className="flex gap-2">{renderSaveButton(true)}</div>
+    </div>
+    <div
+      className="h-[calc(3.25rem+env(safe-area-inset-bottom))] shell-desktop:hidden"
+      aria-hidden="true"
+    />
     {shipModalOpen ? (
       <div
         className="fixed inset-0 z-[280] flex items-center justify-center bg-zinc-900/45 p-4"
@@ -3490,16 +3556,7 @@ export function OrderEditForm({
           }
           description={orderPageFrame.description ?? undefined}
           titleAccessory={orderPageHeaderAccessory}
-          titleRowEnd={
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving || !doctorId.trim()}
-              className="rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:opacity-95 disabled:opacity-50 sm:text-sm"
-            >
-              {saving ? "Сохранение…" : "Сохранить наряд"}
-            </button>
-          }
+          titleRowEnd={renderSaveButton()}
         >
           {formInner}
           <div className="mt-10 flex justify-start border-t border-[var(--card-border)] pt-6">

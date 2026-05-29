@@ -286,12 +286,12 @@ export function ToothChartModal({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-zinc-900/45 p-4"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-zinc-900/45 p-3 shell-desktop:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="tooth-chart-title"
     >
-      <div className="max-h-[min(92vh,720px)] w-full max-w-[820px] overflow-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl">
+      <div className="max-h-[90dvh] w-full max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl shell-desktop:max-h-[min(92vh,720px)] shell-desktop:max-w-[820px]">
         <div className="border-b border-[var(--card-border)] px-4 py-3 sm:px-5">
           <h2
             id="tooth-chart-title"
