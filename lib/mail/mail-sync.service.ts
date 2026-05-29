@@ -11,6 +11,7 @@ import { simpleParser, type ParsedMail } from "mailparser";
 import { logger } from "@/lib/server/logger";
 import {
   createImapClient,
+  fetchFolderMessageSummariesBefore,
   fetchFolderMessagesBefore,
   fetchFolderMessages,
   fetchFolderMessagesSince,
@@ -18,6 +19,7 @@ import {
   setMessageSeen,
   type ImapFetchedMessage,
   type ImapFolderInfo,
+  type ImapMessageSummary,
 } from "@/lib/mail/imap-client";
 import {
   deleteMailAttachmentBytes,
@@ -44,6 +46,7 @@ type FolderSyncStat = {
   skipped: number;
   processed: number;
   lastSyncedUid: number | null;
+  latest: ImapMessageSummary[];
   error?: string;
 };
 
@@ -581,6 +584,10 @@ export async function syncEmailAccount(
       let processed = 0;
       let folderImported = 0;
       let folderSkipped = 0;
+      const latest = await fetchFolderMessageSummariesBefore(client, listed.path, 5).catch((err) => {
+        logger.warn({ err, accountId: account.id, folderPath: listed.path }, "mail latest IMAP summaries failed");
+        return [] as ImapMessageSummary[];
+      });
       const touchedFolderIds = new Set<string>([folder.id]);
       const touchedLabelIds = new Set<string>();
       const maxMessages =
@@ -845,6 +852,7 @@ export async function syncEmailAccount(
         skipped: folderSkipped,
         processed,
         lastSyncedUid: maxUid || folder.lastSyncedUid,
+        latest,
       });
       } catch (err) {
         folderErrors += 1;
@@ -855,6 +863,7 @@ export async function syncEmailAccount(
           skipped: 0,
           processed: 0,
           lastSyncedUid: null,
+          latest: [],
           error: syncErrorMessage(err),
         });
         logger.error(

@@ -73,6 +73,30 @@ function mergeEmailRows(fresh: MailEmailRow[], existing: MailEmailRow[], filter:
     .sort(compareMailRowsByDateDesc);
 }
 
+type MailSyncFolderStat = {
+  path: string;
+  imported: number;
+  skipped: number;
+  processed: number;
+  latest?: Array<{ uid: number; subject: string | null; from: string | null; internalDate: string | null }>;
+  error?: string;
+};
+
+function mailSyncFolderSummary(stats: MailSyncFolderStat[] | undefined): string {
+  if (!Array.isArray(stats) || stats.length === 0) return "";
+  const important = stats
+    .filter((stat) => stat.processed > 0 || stat.imported > 0 || stat.error)
+    .slice(0, 4)
+    .map((stat) => {
+      const label = stat.path.length > 18 ? `${stat.path.slice(0, 17)}…` : stat.path;
+      if (stat.error) return `${label}: ошибка`;
+      const latest = stat.latest?.[0];
+      const latestLabel = latest?.subject ? `, последний: «${latest.subject.slice(0, 42)}»` : "";
+      return `${label}: ${stat.imported} новых/${stat.processed} проверено${latestLabel}`;
+    });
+  return important.length ? ` Папки: ${important.join("; ")}.` : " Папки проверены, новых UID не найдено.";
+}
+
 function mailRowDateMs(email: MailEmailRow): number {
   const raw = email.receivedAt || email.sentAt || email.createdAt;
   const time = raw ? new Date(raw).getTime() : 0;
@@ -349,7 +373,7 @@ export function MailLayout() {
         status?: string;
         lastError?: string | null;
         queued?: boolean;
-        result?: { imported?: number; skipped?: number; folders?: number } | null;
+        result?: { imported?: number; skipped?: number; folders?: number; folderStats?: MailSyncFolderStat[] } | null;
         rulesApply?: { skipped: boolean; processed: number; updated: number; labelsTouched: number };
       }>(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
       if (!options.silent) {
@@ -364,7 +388,12 @@ export function MailLayout() {
           );
         } else {
           const imported = data.result?.imported ?? 0;
-          setSyncStatus(imported > 0 ? `Синхронизация завершена. Новых писем: ${imported}.` : "Новых писем нет.");
+          const folderSummary = mailSyncFolderSummary(data.result?.folderStats);
+          setSyncStatus(
+            imported > 0
+              ? `Синхронизация завершена. Новых писем: ${imported}.${folderSummary}`
+              : `Новых писем нет.${folderSummary}`,
+          );
         }
       }
       await loadAccounts();
@@ -398,7 +427,13 @@ export function MailLayout() {
     async function loadSyncStatus() {
       try {
         const data = await jsonFetch<{
-          jobs: Array<{ status: string; imported: number; skipped: number; lastError: string | null }>;
+          jobs: Array<{
+            status: string;
+            imported: number;
+            skipped: number;
+            lastError: string | null;
+            stats?: { folderStats?: MailSyncFolderStat[] } | null;
+          }>;
         }>(`/api/mail/sync/status?accountId=${encodeURIComponent(activeAccountId)}`);
         if (cancelled) return;
         const [latest] = data.jobs;
@@ -406,7 +441,12 @@ export function MailLayout() {
         if (latest.status === "QUEUED") setSyncStatus("Синхронизация в очереди");
         else if (latest.status === "RUNNING") setSyncStatus("Загружаем новые письма");
         else if (latest.status === "FAILED") setSyncStatus(mailErrorMessage(latest.lastError, "Синхронизация завершилась ошибкой"));
-        else setSyncStatus(`Синхронизация завершена: ${latest.imported} новых, ${latest.skipped} уже были в CRM`);
+        else {
+          const folderSummary = mailSyncFolderSummary(latest.stats?.folderStats);
+          setSyncStatus(
+            `Синхронизация завершена: ${latest.imported} новых, ${latest.skipped} уже были в CRM.${folderSummary}`,
+          );
+        }
       } catch {
         /* status is informational */
       }

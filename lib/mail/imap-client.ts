@@ -26,6 +26,13 @@ export type ImapFetchedMessage = {
   source: Buffer;
 };
 
+export type ImapMessageSummary = {
+  uid: number;
+  subject: string | null;
+  from: string | null;
+  internalDate: Date | null;
+};
+
 export function recentWindowStartUid(
   requestedStartUid: number,
   uidNext: number | undefined,
@@ -189,6 +196,47 @@ export async function* fetchFolderMessagesBefore(
         source: Buffer.isBuffer(item.source) ? item.source : Buffer.from(item.source),
       };
     }
+  } finally {
+    lock.release();
+  }
+}
+
+export async function fetchFolderMessageSummariesBefore(
+  client: ImapFlow,
+  folderPath: string,
+  maxMessages: number,
+): Promise<ImapMessageSummary[]> {
+  const lock = await client.getMailboxLock(folderPath);
+  try {
+    const uidNext = client.mailbox ? client.mailbox.uidNext : undefined;
+    const endUid = Math.max(0, (uidNext ?? 1) - 1);
+    if (endUid < 1 || maxMessages <= 0) return [];
+    const startUid = Math.max(1, endUid - maxMessages + 1);
+    const summaries: ImapMessageSummary[] = [];
+    for await (const item of client.fetch(
+      `${startUid}:${endUid}`,
+      { uid: true, envelope: true, internalDate: true },
+      { uid: true },
+    )) {
+      if (!item.uid) continue;
+      const envelope = item.envelope as {
+        subject?: unknown;
+        from?: Array<{ name?: unknown; address?: unknown }>;
+      } | undefined;
+      const [from] = Array.isArray(envelope?.from) ? envelope.from : [];
+      summaries.push({
+        uid: item.uid,
+        subject: typeof envelope?.subject === "string" ? envelope.subject : null,
+        from: [from?.name, from?.address].filter((value) => typeof value === "string" && value).join(" ") || null,
+        internalDate:
+          item.internalDate instanceof Date
+            ? item.internalDate
+            : item.internalDate
+              ? new Date(item.internalDate)
+              : null,
+      });
+    }
+    return summaries.sort((a, b) => b.uid - a.uid);
   } finally {
     lock.release();
   }
