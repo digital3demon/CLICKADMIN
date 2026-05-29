@@ -1,12 +1,17 @@
 import { EmailDirection, EmailFolderType, type Prisma } from "@prisma/client";
 
-/** Список и счётчики «Входящих»: только INBOUND (без исходящих «Re:» из IMAP INBOX). */
+/**
+ * «Входящие» в UI — все входящие письма ящика (в т.ч. после правил в _Заказы),
+ * но без исходящих «Re:» / «Вы». Остальные папки — строго по folderId.
+ */
 export function emailFolderListWhere(
   tenantId: string,
-  folder: { id: string; type: EmailFolderType },
+  folder: { id: string; type: EmailFolderType; accountId?: string },
+  accountId?: string,
 ): Prisma.EmailWhereInput {
-  if (folder.type === EmailFolderType.INBOX) {
-    return { tenantId, folderId: folder.id, direction: EmailDirection.INBOUND };
+  const resolvedAccountId = accountId ?? folder.accountId;
+  if (folder.type === EmailFolderType.INBOX && resolvedAccountId) {
+    return { tenantId, accountId: resolvedAccountId, direction: EmailDirection.INBOUND };
   }
   return { tenantId, folderId: folder.id };
 }

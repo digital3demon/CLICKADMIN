@@ -3,12 +3,16 @@ import { EmailDirection, EmailFolderType } from "@prisma/client";
 import { emailDirectionForImapFolder, emailFolderListWhere } from "./mail-folder-query";
 
 describe("emailFolderListWhere", () => {
-  it("inbox lists only inbound messages in the inbox folder", () => {
+  it("inbox lists all inbound messages for the account", () => {
     expect(
-      emailFolderListWhere("tenant_1", { id: "folder_inbox", type: EmailFolderType.INBOX }),
+      emailFolderListWhere(
+        "tenant_1",
+        { id: "folder_inbox", type: EmailFolderType.INBOX },
+        "account_1",
+      ),
     ).toEqual({
       tenantId: "tenant_1",
-      folderId: "folder_inbox",
+      accountId: "account_1",
       direction: EmailDirection.INBOUND,
     });
   });

@@ -100,7 +100,7 @@ function MailRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={`group relative flex min-h-[96px] cursor-pointer items-center gap-2 border-b-2 border-white/10 px-3 py-2 transition dark:border-white/10 ${
+      className={`group relative flex min-h-[104px] cursor-pointer items-start gap-2 border-b-2 border-white/10 px-3 py-2.5 transition dark:border-white/10 ${
         active
           ? "bg-[var(--accent-selection-bg)]"
           : selected
@@ -115,7 +115,7 @@ function MailRow({
       }}
       onMouseLeave={onPreviewLeave}
     >
-      <div className="relative flex h-8 w-6 shrink-0 items-center justify-center">
+      <div className="relative mt-1 flex h-8 w-6 shrink-0 items-center justify-center">
         <button
           type="button"
           className={`absolute inset-0 flex items-center justify-center rounded-full transition ${
@@ -343,8 +343,9 @@ export function MailList({
   const rowVirtualizer = useVirtualizer({
     count: emails.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 118,
-    overscan: 10,
+    estimateSize: (index) => ((emails[index]?.labelAssignments?.length ?? 0) > 0 ? 132 : 108),
+    overscan: 8,
+    measureElement: (element) => element.getBoundingClientRect().height,
   });
   const selectedCount = selectedIds.size;
   const allSelected = useMemo(
@@ -460,6 +461,8 @@ export function MailList({
                 return (
                   <div
                     key={email.id}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
                     style={{
                       position: "absolute",
                       top: 0,

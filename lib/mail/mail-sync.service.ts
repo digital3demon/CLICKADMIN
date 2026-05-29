@@ -594,10 +594,10 @@ async function refreshFolderCounters(
 ): Promise<void> {
   const folder = await db.emailFolder.findFirst({
     where: { id: folderId, tenantId },
-    select: { id: true, type: true },
+    select: { id: true, type: true, accountId: true },
   });
   if (!folder) return;
-  const where = emailFolderListWhere(tenantId, folder);
+  const where = emailFolderListWhere(tenantId, folder, folder.accountId);
   const [totalCount, unreadCount] = await Promise.all([
     db.email.count({ where }),
     db.email.count({ where: { ...where, isRead: false } }),
