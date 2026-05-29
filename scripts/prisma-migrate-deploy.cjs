@@ -445,9 +445,24 @@ function runOneTimeMailSeenReconcile() {
   }
 }
 
-runOneTimeMailResetBeforeRules();
-runOrderMailRulesOnDeploy();
-runOneTimeMailSeenReconcile();
+function shouldSkipOptionalDeployHooks() {
+  const flag = String(process.env.SKIP_DEPLOY_HOOKS || "").trim();
+  if (flag === "1" || flag.toLowerCase() === "true") return true;
+  const ci = String(process.env.CI || "").trim().toLowerCase();
+  if (ci === "true" || ci === "1") return true;
+  if (String(process.env.TW_CLOUD_BUILD || "").trim() === "1") return true;
+  return false;
+}
+
+if (shouldSkipOptionalDeployHooks()) {
+  console.log(
+    "[migrate] post-deploy hooks пропущены (SKIP_DEPLOY_HOOKS / CI / TW_CLOUD_BUILD).",
+  );
+} else {
+  runOneTimeMailResetBeforeRules();
+  runOrderMailRulesOnDeploy();
+  runOneTimeMailSeenReconcile();
+}
 
 console.log("single db mode: OK.");
 process.exit(0);

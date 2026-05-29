@@ -10,6 +10,8 @@
     "dev": "next dev --turbo",
     "dev:webpack": "next dev",
     "build": "npx -y prisma@6.19.3 generate --schema=prisma/schema.prisma && node scripts/prisma-migrate-deploy.cjs && next build && node scripts/copy-standalone-assets.cjs && node scripts/verify-standalone-after-build.cjs",
+    "build:platform": "npx -y prisma@6.19.3 generate --schema=prisma/schema.prisma && next build && node scripts/copy-standalone-assets.cjs && node scripts/verify-standalone-after-build.cjs",
+    "start:platform": "node scripts/start-production.cjs",
     "sync:saas": "node scripts/sync-saas-from-lab.cjs",
     "sync:saas:watch": "node scripts/watch-sync-saas.cjs",
     "sync:saas:install-hook": "node scripts/install-saas-sync-git-hook.cjs",

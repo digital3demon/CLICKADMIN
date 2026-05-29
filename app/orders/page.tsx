@@ -60,7 +60,7 @@ const ORDERS_FRAME_ROOT =
 const ORDERS_TABLE_TH =
   "min-w-0 whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
 const ORDERS_TABLE_CLASS =
-  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] lg:min-w-0 lg:text-xs 2xl:text-[13px]";
+  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] md:min-w-[56rem] lg:min-w-0 lg:text-xs 2xl:text-[13px]";
 
 /** Поступление: дата прихода работы; без явной даты — как в наряде: дата занесения в CRM. */
 function formatAdmission(o: {
@@ -87,26 +87,54 @@ function formatOrderCardDate(d: Date | null | undefined): string | undefined {
 function OrdersTableColGroup() {
   return (
     <colgroup>
-      <col className="lg:w-[16%]" />
-      <col className="lg:w-[22%]" />
-      <col className="lg:w-[9%]" />
-      <col className="lg:w-[9%]" />
-      <col className="lg:w-[8%]" />
-      <col className="lg:w-[14%]" />
-      <col className="lg:w-[6%]" />
-      <col className="lg:w-[16%]" />
+      <col className="max-md:hidden lg:w-[3%]" />
+      <col className="max-md:hidden lg:w-[7.2%]" />
+      <col className="lg:w-[6.4%]" />
+      <col className="lg:w-[12.1%]" />
+      <col className="lg:w-[11.9%]" />
+      <col className="lg:w-[8.6%]" />
+      <col className="lg:w-[8.2%]" />
+      <col className="lg:w-[7.6%]" />
+      <col className="lg:w-[7.8%]" />
+      <col className="lg:w-[7.8%]" />
+      <col className="lg:w-[5.2%]" />
+      <col className="lg:w-[15%]" />
     </colgroup>
   );
 }
 
-function OrdersTableHeaderRow(_props: { isDemo: boolean }) {
+function OrdersTableHeaderRow({ isDemo }: { isDemo: boolean }) {
   return (
     <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs">
-      <th className={ORDERS_TABLE_TH} title="№ наряда, чат, печать и индикаторы">
+      <th
+        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
+        title="Чат карточки в Kaiten"
+      >
+        Чат
+      </th>
+      <th
+        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
+        aria-label={
+          isDemo
+            ? "Печать наряда, этикетки и QR на карточку канбана"
+            : "Печать наряда, этикетки и QR на карточку Kaiten"
+        }
+        title={
+          isDemo
+            ? "Печать наряда, этикетки и QR на карточку канбана"
+            : "Печать наряда, этикетки и QR на карточку Kaiten"
+        }
+      >
+        Печать
+      </th>
+      <th className={ORDERS_TABLE_TH} title="№ наряда">
         № наряда
       </th>
-      <th className={ORDERS_TABLE_TH} title="Клиника и адрес">
+      <th className={ORDERS_TABLE_TH} title="Клиника">
         Клиника
+      </th>
+      <th className={ORDERS_TABLE_TH} title="Адрес клиники">
+        Адрес
       </th>
       <th className={ORDERS_TABLE_TH} title="Врач">
         Врач
@@ -120,8 +148,11 @@ function OrdersTableHeaderRow(_props: { isDemo: boolean }) {
       >
         Поступление
       </th>
-      <th className={ORDERS_TABLE_TH} title="Срок лабораторный и запись пациента">
-        Сроки
+      <th className={ORDERS_TABLE_TH} title="Срок лабораторный">
+        ЛАБ
+      </th>
+      <th className={ORDERS_TABLE_TH} title="Запись: дата и время приёма пациента">
+        Запись
       </th>
       <th className={ORDERS_TABLE_TH} title="Отправка работы">
         Отправка
@@ -652,7 +683,7 @@ export default async function OrdersPage({
             {orders.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={12}
                   className="px-4 py-10 text-center text-sm text-[var(--text-muted)]"
                 >
                   {activeFilter
@@ -762,93 +793,76 @@ export default async function OrdersPage({
                     <div className="min-w-0 flex-1">{renderTagsNode()}</div>
                   }
                 >
-                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
-                    <div className="flex flex-col gap-0.5">
-                      <Link
-                        href={orderPathById(o.id)}
-                        className="font-mono text-xs font-semibold text-[var(--text-strong)] hover:text-[var(--sidebar-blue)] hover:underline"
-                        title={`${o.orderNumber} — открыть наряд`}
-                      >
-                        № {o.orderNumber}
-                      </Link>
-                      <div className="flex flex-wrap items-center gap-0.5">
-                        <OrderListOrderChatCell
+                  <OrderListOrderChatCell
+                    orderId={o.id}
+                    orderNumber={o.orderNumber}
+                    labMentionHighlight={o.listKaitenLabMentionHighlight}
+                  />
+                  <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-0.5 sm:py-1.5">
+                    <div className="flex min-w-0 flex-nowrap items-center justify-center gap-0">
+                      {!workSent ? (
+                        <OrderNarjadPrintTrigger
                           orderId={o.id}
-                          orderNumber={o.orderNumber}
-                          labMentionHighlight={o.listKaitenLabMentionHighlight}
-                          embedded
+                          variant="icon"
+                          title="Печать наряда (PDF) — диалог печати"
                         />
-                        {!workSent ? (
-                          <OrderNarjadPrintTrigger
-                            orderId={o.id}
-                            variant="icon"
-                            title="Печать наряда (PDF) — диалог печати"
-                          />
-                        ) : null}
-                        <OrderStickerPrintLink orderId={o.id} />
-                        {kaitenUrl ? (
-                          <OrderKaitenQrModal
-                            url={kaitenUrl}
-                            compact
-                            variant={
-                              o.kaitenCardId != null && !isDemo
-                                ? "kaiten"
-                                : "kanban"
-                            }
-                          />
-                        ) : o.kaitenCardId != null ? (
-                          <span
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
-                            title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
-                          >
-                            ⚠
-                          </span>
-                        ) : null}
-                        {hasCorrection ? (
-                          <span
-                            title="Корректировка"
-                            className="text-amber-500 text-[10px] font-bold leading-none"
-                            aria-label="Есть корректировка"
-                          >
-                            !!!
-                          </span>
-                        ) : null}
-                        {hasProsthetics ? (
-                          <span
-                            title="Заявка протетики"
-                            className="text-blue-500 text-[10px] font-bold leading-none"
-                            aria-label="Есть заявка протетики"
-                          >
-                            ???
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
-                    <div className="flex flex-col gap-0.5">
-                      {o.clinic ? (
-                        <Link
-                          href={`/clients/${o.clinic.id}`}
-                          title={o.clinic.name}
-                          className="truncate text-xs font-medium text-[var(--sidebar-blue)] hover:underline max-w-[160px]"
+                      ) : null}
+                      <OrderStickerPrintLink orderId={o.id} />
+                      {kaitenUrl ? (
+                        <OrderKaitenQrModal
+                          url={kaitenUrl}
+                          compact
+                          variant={o.kaitenCardId != null && !isDemo ? "kaiten" : "kanban"}
+                        />
+                      ) : o.kaitenCardId != null ? (
+                        <span
+                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
+                          title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
                         >
-                          {o.clinic.name}
-                        </Link>
+                          ⚠
+                        </span>
                       ) : (
-                        <span className="truncate text-xs font-medium text-[var(--text-secondary)] max-w-[160px]">
-                          Частное лицо
+                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-muted)] sm:h-6 sm:w-6">
+                          —
                         </span>
                       )}
-                      {o.clinic?.address?.trim() ? (
-                        <span
-                          className="truncate text-[10px] text-[var(--text-muted)] max-w-[160px]"
-                          title={o.clinic.address.trim()}
-                        >
-                          {o.clinic.address.trim()}
-                        </span>
-                      ) : null}
                     </div>
+                  </td>
+                  <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle font-mono font-medium text-[var(--app-text)] sm:px-1.5 sm:py-1.5">
+                    <Link
+                      href={orderPathById(o.id)}
+                      className="text-[var(--sidebar-blue)] hover:underline"
+                      title={`${o.orderNumber} — открыть наряд`}
+                    >
+                      {o.orderNumber}
+                    </Link>
+                  </td>
+                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
+                    {o.clinic ? (
+                      <Link
+                        href={`/clients/${o.clinic.id}`}
+                        title={o.clinic.name}
+                        className="block hyphens-auto break-words text-center text-[var(--sidebar-blue)] hover:underline"
+                      >
+                        {o.clinic.name}
+                      </Link>
+                    ) : (
+                      <span className="block break-words text-center text-[var(--text-secondary)]">
+                        Частное лицо
+                      </span>
+                    )}
+                  </td>
+                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5">
+                    {o.clinic?.address?.trim() ? (
+                      <span
+                        className="block hyphens-auto break-words text-center text-[var(--text-secondary)]"
+                        title={o.clinic.address.trim()}
+                      >
+                        {o.clinic.address.trim()}
+                      </span>
+                    ) : (
+                      <span className="block text-center text-[var(--text-muted)]">—</span>
+                    )}
                   </td>
                   <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
                     <Link
@@ -872,55 +886,25 @@ export default async function OrdersPage({
                   <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle text-center text-[11px] text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5 sm:text-xs">
                     {formatAdmission(o)}
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
-                    <div className="flex flex-col gap-1 text-[10px]">
-                      <div className="flex min-w-0 items-start gap-1">
-                        <span
-                          className={[
-                            "shrink-0 pt-0.5 text-[var(--text-muted)]",
-                            isLabOverdue ? "font-semibold text-red-600" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                        >
-                          ЛАБ
-                        </span>
-                        <div
-                          className={[
-                            "min-w-0 flex-1",
-                            isLabOverdue
-                              ? "[&_button]:text-red-600 [&_button]:font-semibold"
-                              : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                        >
-                          <OrderListDueCell
-                            orderId={o.id}
-                            dueIso={o.dueDate?.toISOString() ?? null}
-                            createdAtIso={o.createdAt.toISOString()}
-                            labHmSlots={labDueHmSlots}
-                          />
-                        </div>
-                      </div>
-                      <div className="flex min-w-0 items-start gap-1">
-                        <span className="shrink-0 pt-0.5 text-[var(--text-muted)]">
-                          Зап
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <OrderListDueCell
-                            variant="appointment"
-                            orderId={o.id}
-                            dueIso={
-                              o.appointmentDate?.toISOString() ??
-                              o.dueToAdminsAt?.toISOString() ??
-                              null
-                            }
-                            createdAtIso={o.createdAt.toISOString()}
-                          />
-                        </div>
-                      </div>
-                    </div>
+                  <td className="min-w-0 px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
+                    <OrderListDueCell
+                      orderId={o.id}
+                      dueIso={o.dueDate?.toISOString() ?? null}
+                      createdAtIso={o.createdAt.toISOString()}
+                      labHmSlots={labDueHmSlots}
+                    />
+                  </td>
+                  <td className="min-w-0 px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
+                    <OrderListDueCell
+                      variant="appointment"
+                      orderId={o.id}
+                      dueIso={
+                        o.appointmentDate?.toISOString() ??
+                        o.dueToAdminsAt?.toISOString() ??
+                        null
+                      }
+                      createdAtIso={o.createdAt.toISOString()}
+                    />
                   </td>
                   <td
                     data-shipped-cell
