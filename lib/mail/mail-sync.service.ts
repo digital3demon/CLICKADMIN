@@ -34,10 +34,10 @@ import { ensureOrderDigitaldemonRules } from "@/lib/mail/order-digitaldemon-rule
 import { emailDirectionForImapFolder, emailFolderListWhere } from "@/lib/mail/mail-folder-query";
 import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
-const RECENT_MESSAGES_PER_FOLDER = 250;
-const RECENT_MESSAGES_CUSTOM_FOLDER = 60;
+const RECENT_MESSAGES_PER_FOLDER = 300;
+const RECENT_MESSAGES_CUSTOM_FOLDER = 100;
 const BACKFILL_MESSAGES_PER_FOLDER = 120;
-const RECENT_SYNC_LOOKBACK_DAYS = 7;
+const RECENT_SYNC_LOOKBACK_DAYS = 14;
 
 function recentMessagesPerFolder(type: EmailFolderType): number {
   if (type === EmailFolderType.INBOX || type === EmailFolderType.SENT) return RECENT_MESSAGES_PER_FOLDER;
@@ -144,21 +144,18 @@ async function* fetchRecentFolderMessages(
     }
   }
 
-  // Date search catches today's mail even if the saved UID cursor/window is stale.
-  // It must not move lastSyncedUid, because that would skip unprocessed UID gaps.
-  yield* runStrategy(
-    fetchFolderMessagesSince(client, folderPath, recentSyncSinceDate(), maxMessages),
-    "lookback",
-    "since",
-    "since",
-  );
-  // Yandex can occasionally miss fresh mail in date search or after a stale cursor.
-  // Always scan the latest UID tail as a second non-cursor-moving safety net.
+  // Сначала «хвост» UID — свежие письма; иначе SINCE за 14 дней забивает лимит и May 28–29 не доходят.
   yield* runStrategy(
     fetchFolderMessagesBefore(client, folderPath, null, maxMessages),
     "lookback",
     "tail",
     "latest-tail",
+  );
+  yield* runStrategy(
+    fetchFolderMessagesSince(client, folderPath, recentSyncSinceDate(), maxMessages),
+    "lookback",
+    "since",
+    "since",
   );
   yield* runStrategy(
     fetchFolderMessages(client, folderPath, startUid, maxMessages),
@@ -768,19 +765,15 @@ export async function syncEmailAccount(
               strategyResults,
             );
       for await (const { item, cursorMode } of messages) {
-        if (processed >= maxMessages * 3) break;
+        if (mode !== EmailSyncMode.BACKFILL && processed >= maxMessages * 6) break;
         processed += 1;
-        if (cursorMode === "forward") maxUid = Math.max(maxUid, item.uid);
-        if (cursorMode === "backfill") {
-          minBackfillUid = minBackfillUid == null ? item.uid : Math.min(minBackfillUid, item.uid);
-        }
-
+        try {
         const exists = await db.email.findFirst({
           where: {
             tenantId: account.tenantId,
             accountId: account.id,
-            folderId: folder.id,
             uid: item.uid,
+            folder: { imapName: listed.path },
           },
           select: {
             id: true,
@@ -842,7 +835,7 @@ export async function syncEmailAccount(
         const from = firstAddress(parsed.from);
         const hasAttachments = parsed.attachments.length > 0;
         const ruleResult =
-          folder.type === EmailFolderType.INBOX
+          folder.type === EmailFolderType.INBOX || folder.type === EmailFolderType.CUSTOM
             ? await applyIncomingRules(db, account, activeRules, mailRuleMessageFromParsed(parsed))
             : {
                 isFlagged: false,
@@ -1007,6 +1000,12 @@ export async function syncEmailAccount(
         for (const labelId of ruleResult.labelIds) touchedLabelIds.add(labelId);
         imported += 1;
         folderImported += 1;
+        } finally {
+          if (cursorMode === "forward") maxUid = Math.max(maxUid, item.uid);
+          if (cursorMode === "backfill") {
+            minBackfillUid = minBackfillUid == null ? item.uid : Math.min(minBackfillUid, item.uid);
+          }
+        }
       }
 
       await db.emailFolder.update({
