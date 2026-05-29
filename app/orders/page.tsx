@@ -404,22 +404,40 @@ export default async function OrdersPage({
           .map((o) => o.id)}
         pollingEnabled={!isDemo}
       >
+      <div className={`${ORDERS_LIST_STACK} space-y-4`}>
+      <div className="lg:hidden">
+        <OrderPostingMonthBar
+          toolbarEnd={
+            <OrdersListShippedToolbar
+              pageSize={pageSize}
+              rawTag={rawTag}
+              listSearchQ={listSearchQ}
+              fromUrl={fromUrl}
+              toUrl={toUrl}
+              onlyShippedActive={onlyShippedActive}
+              hideShippedActive={hideShippedActive}
+            />
+          }
+        />
+      </div>
       <StickyListChrome
-        className={ORDERS_LIST_STACK}
+        className="w-full max-w-full min-w-0 self-start"
         toolbar={<div className="space-y-4">
-      <OrderPostingMonthBar
-        toolbarEnd={
-          <OrdersListShippedToolbar
-            pageSize={pageSize}
-            rawTag={rawTag}
-            listSearchQ={listSearchQ}
-            fromUrl={fromUrl}
-            toUrl={toUrl}
-            onlyShippedActive={onlyShippedActive}
-            hideShippedActive={hideShippedActive}
-          />
-        }
-      />
+      <div className="hidden lg:block">
+        <OrderPostingMonthBar
+          toolbarEnd={
+            <OrdersListShippedToolbar
+              pageSize={pageSize}
+              rawTag={rawTag}
+              listSearchQ={listSearchQ}
+              fromUrl={fromUrl}
+              toUrl={toUrl}
+              onlyShippedActive={onlyShippedActive}
+              hideShippedActive={hideShippedActive}
+            />
+          }
+        />
+      </div>
       {periodError ? (
         <div className="no-print w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
           {periodError} Фильтр по дате не применён.
@@ -975,6 +993,7 @@ export default async function OrdersPage({
         </div>
       ) : null}
       </StickyListChrome>
+      </div>
       </OrdersListKaitenChatShell>
       </div>
     </ModuleFrame>

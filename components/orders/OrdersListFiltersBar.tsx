@@ -1,5 +1,6 @@
 'use client'
 
+import { useId, useState } from 'react'
 import { DateRangePresets, FilterBadge } from '@/components/ui'
 import { useUrlFilters } from '@/lib/hooks/useUrlFilters'
 import { OrdersListPeriodForm } from '@/components/orders/OrdersListPeriodForm'
@@ -25,22 +26,25 @@ export function OrdersListFiltersBar({
   onlyShipped,
 }: Props) {
   const { activeCount, resetFilters, setFilters } = useUrlFilters()
+  const filtersPanelId = useId()
+  const [filtersOpen, setFiltersOpen] = useState(true)
 
   return (
     <div className="no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <FilterBadge count={activeCount} onReset={resetFilters} />
-      </div>
-      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:gap-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 xl:flex-nowrap">
         <OrdersListSearch
           initialValue={initialSearchQ}
           pageSize={pageSize}
           tag={tag}
           hideShipped={hideShipped}
           onlyShipped={onlyShipped}
-          className="w-full min-w-0 xl:max-w-2xl xl:flex-none"
+          className="min-w-0 w-full flex-1 basis-full xl:max-w-2xl xl:basis-auto"
         />
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div
+          id={filtersPanelId}
+          hidden={!filtersOpen}
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-2 basis-full xl:basis-auto xl:justify-center"
+        >
           <DateRangePresets
             currentFrom={appliedFrom ?? undefined}
             currentTo={appliedTo ?? undefined}
@@ -51,6 +55,15 @@ export function OrdersListFiltersBar({
             appliedFrom={appliedFrom}
             appliedTo={appliedTo}
             className="min-w-0"
+          />
+        </div>
+        <div className="ml-auto shrink-0">
+          <FilterBadge
+            count={activeCount}
+            onReset={resetFilters}
+            onToggle={() => setFiltersOpen((open) => !open)}
+            expanded={filtersOpen}
+            controlsId={filtersPanelId}
           />
         </div>
       </div>
