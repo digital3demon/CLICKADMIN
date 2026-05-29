@@ -539,7 +539,7 @@ async function syncFolderUidValidity(
 
     if (
       folder.uidValidity != null &&
-      currentUidValidity > 0n &&
+      currentUidValidity > BigInt(0) &&
       folder.uidValidity !== currentUidValidity
     ) {
       uidValidityMismatch = true;
@@ -558,7 +558,10 @@ async function syncFolderUidValidity(
           uidValidity: currentUidValidity,
         },
       });
-    } else if ((folder.uidValidity == null || folder.uidValidity === 0n) && currentUidValidity > 0n) {
+    } else if (
+      (folder.uidValidity == null || folder.uidValidity === BigInt(0)) &&
+      currentUidValidity > BigInt(0)
+    ) {
       updatedFolder = await db.emailFolder.update({
         where: { id: folder.id },
         data: { uidValidity: currentUidValidity },
