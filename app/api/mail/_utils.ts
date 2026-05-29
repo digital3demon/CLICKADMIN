@@ -3,6 +3,22 @@ import { logger } from "@/lib/server/logger";
 
 export function mailErrorResponse(err: unknown, fallback = "Ошибка почты") {
   const message = err instanceof Error ? err.message : "";
+  const prismaCode =
+    typeof err === "object" && err !== null && "code" in err
+      ? String((err as { code?: unknown }).code)
+      : "";
+  if (
+    message.includes("uidValidity") &&
+    (message.includes("does not exist") || message.includes("Unknown column") || prismaCode === "P2022")
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "База данных не обновлена: отсутствует колонка uidValidity. Выполните на сервере: node scripts/prisma-migrate-deploy.cjs",
+      },
+      { status: 500 },
+    );
+  }
   const known: Record<string, { status: number; error: string }> = {
     INVALID_EMAIL_ACCOUNT: { status: 400, error: "Укажите корректный email" },
     EMAIL_ACCOUNT_NOT_FOUND: { status: 404, error: "Почтовый аккаунт не найден" },
@@ -21,18 +37,27 @@ export function mailErrorResponse(err: unknown, fallback = "Ошибка поч�
   const mapped = known[message];
   if (mapped) return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   logger.error({ err }, fallback);
-  return NextResponse.json({ error: fallback }, { status: 500 });
+  const detail = message.trim();
+  return NextResponse.json({ error: detail || fallback }, { status: 500 });
 }
 
 export function jsonBody(req: Request): Promise<Record<string, unknown>> {
   return req.json().catch(() => ({}));
 }
 
-/** Prisma BigInt (uidValidity и др.) нельзя отдавать через NextResponse.json напрямую. */
+/** BigInt/Date из Prisma и IMAP нельзя отдавать через NextResponse.json напрямую. */
+export function sanitizeForMailJson<T>(value: T): T {
+  return JSON.parse(
+    JSON.stringify(value, (_key, v) => {
+      if (typeof v === "bigint") return v.toString();
+      if (v instanceof Date) return v.toISOString();
+      return v;
+    }),
+  ) as T;
+}
+
 export function mailJsonResponse(body: unknown, init?: ResponseInit): NextResponse {
-  const text = JSON.stringify(body, (_key, value) =>
-    typeof value === "bigint" ? value.toString() : value,
-  );
+  const text = JSON.stringify(sanitizeForMailJson(body));
   return new NextResponse(text, {
     ...init,
     headers: {

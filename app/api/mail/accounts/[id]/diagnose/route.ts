@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { mailErrorResponse } from "@/app/api/mail/_utils";
+import { mailErrorResponse, mailJsonResponse } from "@/app/api/mail/_utils";
 import { diagnoseEmailAccount, getMailApiContext } from "@/lib/mail/mail-service";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export async function GET(
       r.ctx.role,
       id,
     );
-    return NextResponse.json(result);
+    return mailJsonResponse(result);
   } catch (err) {
     return mailErrorResponse(err, "Не удалось выполнить диагностику почтового ящика");
   }

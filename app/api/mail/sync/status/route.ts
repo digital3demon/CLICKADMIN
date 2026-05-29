@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { mailJsonResponse } from "@/app/api/mail/_utils";
 import { getMailApiContext, mailAccountAccessWhere } from "@/lib/mail/mail-service";
 
 export const dynamic = "force-dynamic";
@@ -29,5 +30,5 @@ export async function GET(req: Request) {
     orderBy: [{ queuedAt: "desc" }],
     take: 10,
   });
-  return NextResponse.json({ jobs });
+  return mailJsonResponse({ jobs });
 }

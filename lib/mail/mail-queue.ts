@@ -1,6 +1,7 @@
 import "server-only";
 
 import { EmailSyncJobStatus, EmailSyncMode, type PrismaClient } from "@prisma/client";
+import { sanitizeForMailJson } from "@/app/api/mail/_utils";
 import { syncAccountNow } from "@/lib/mail/mail-service";
 import { logger } from "@/lib/server/logger";
 
@@ -111,7 +112,7 @@ export async function runMailSyncJob(
         imported: result.imported,
         skipped: result.skipped,
         folders: result.folders,
-        stats: result,
+        stats: sanitizeForMailJson(result),
         finishedAt: new Date(),
         lockedAt: null,
       },

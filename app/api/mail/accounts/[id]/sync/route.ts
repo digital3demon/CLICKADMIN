@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { EmailSyncMode } from "@prisma/client";
-import { jsonBody, mailErrorResponse } from "@/app/api/mail/_utils";
+import { jsonBody, mailErrorResponse, mailJsonResponse } from "@/app/api/mail/_utils";
 import { getMailApiContext, stringField } from "@/lib/mail/mail-service";
 import { enqueueAndRunMailSyncJob } from "@/lib/mail/mail-queue";
 
@@ -19,7 +19,7 @@ export async function POST(
       ? EmailSyncMode.BACKFILL
       : EmailSyncMode.RECENT;
     const result = await enqueueAndRunMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, id, mode);
-    return NextResponse.json({
+    return mailJsonResponse({
       ok: true,
       status: result.syncJob.status,
       lastError: result.syncJob.lastError,

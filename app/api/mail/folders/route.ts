@@ -5,6 +5,7 @@ import {
   getMailApiContext,
   listEmailFolders,
   stringField,
+  toMailFolderDto,
 } from "@/lib/mail/mail-service";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
     const name = stringField(body.name, 120);
     const color = stringField(body.color, 20);
     const folder = await createEmailFolder(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, accountId, name, color);
-    return NextResponse.json({ folder });
+    return mailJsonResponse({ folder: toMailFolderDto(folder) });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось создать папку");
   }

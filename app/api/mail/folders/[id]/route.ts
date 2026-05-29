@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { jsonBody, mailErrorResponse } from "@/app/api/mail/_utils";
+import { jsonBody, mailErrorResponse, mailJsonResponse } from "@/app/api/mail/_utils";
 import {
   getMailApiContext,
   mailAccountAccessWhere,
   normalizeMailColor,
   stringField,
+  toMailFolderDto,
 } from "@/lib/mail/mail-service";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,7 @@ export async function PATCH(
         ...(color ? { color } : {}),
       },
     });
-    return NextResponse.json({ folder });
+    return mailJsonResponse({ folder: toMailFolderDto(folder) });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось переименовать папку");
   }
