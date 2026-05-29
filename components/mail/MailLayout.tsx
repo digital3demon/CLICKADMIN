@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { MailComposer } from "@/components/mail/MailComposer";
 import { MailHeader } from "@/components/mail/MailHeader";
@@ -139,13 +139,6 @@ function compareMailRowsByDateDesc(a: MailEmailRow, b: MailEmailRow): number {
   return b.id.localeCompare(a.id);
 }
 
-const MAIL_UI_SCALE = 0.85;
-const MAIL_UI_SCALE_STYLE: CSSProperties & { zoom: number } = {
-  zoom: MAIL_UI_SCALE,
-  width: `${100 / MAIL_UI_SCALE}%`,
-  height: `calc(100dvh / ${MAIL_UI_SCALE})`,
-  minHeight: `calc(100dvh / ${MAIL_UI_SCALE})`,
-};
 const LAST_MAIL_ACCOUNT_STORAGE_KEY = "dental-crm:last-mail-account-id";
 const MAIL_LIST_WIDTH_STORAGE_KEY = "dental-crm:mail-list-width";
 const MAIL_LIST_DEFAULT_WIDTH = 600;
@@ -511,7 +504,7 @@ export function MailLayout() {
           (!prev || prev.id !== latest.id || prev.status !== latest.status);
         if (latest.status === "SUCCEEDED" && finishedNow) {
           void loadAccounts();
-          void refreshEmailsSilently();
+          void loadEmails(null, false);
         }
         lastSyncJobRef.current = { id: latest.id, status: latest.status };
         if (latest.status === "QUEUED") setSyncStatus("Синхронизация в очереди");
@@ -544,7 +537,7 @@ export function MailLayout() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeAccountId, loadAccounts, refreshEmailsSilently]);
+  }, [activeAccountId, loadAccounts, loadEmails]);
 
   async function bulk(
     action: "read" | "unread" | "archive" | "trash" | "delete" | "flag" | "unflag" | "move",
@@ -726,10 +719,7 @@ export function MailLayout() {
   }
 
   return (
-    <div
-      className="flex min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]"
-      style={MAIL_UI_SCALE_STYLE}
-    >
+    <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
       <MailHeader
         accounts={accounts}
         activeAccountId={activeAccountId}

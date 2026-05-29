@@ -7,7 +7,7 @@ import { logger } from "@/lib/server/logger";
 
 const STALE_RUNNING_JOB_MS = 90_000;
 const MAX_MAIL_SYNC_JOB_MS = 8 * 60 * 1000;
-const MAIL_SYNC_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000;
+const MAIL_SYNC_EXECUTION_TIMEOUT_MS = 15 * 60 * 1000;
 
 /** Один IMAP-sync на ящик — без параллельных подключений и гонок курсора. */
 const activeMailSyncImapWork = new Map<string, Promise<unknown>>();

@@ -35,7 +35,7 @@ import { emailDirectionForImapFolder, emailFolderListWhere } from "@/lib/mail/ma
 import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
 const RECENT_MESSAGES_PER_FOLDER = 250;
-const RECENT_MESSAGES_CUSTOM_FOLDER = 120;
+const RECENT_MESSAGES_CUSTOM_FOLDER = 60;
 const BACKFILL_MESSAGES_PER_FOLDER = 120;
 const RECENT_SYNC_LOOKBACK_DAYS = 7;
 
@@ -97,7 +97,6 @@ export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMo
   return (
     type === EmailFolderType.INBOX ||
     type === EmailFolderType.SENT ||
-    type === EmailFolderType.ARCHIVE ||
     type === EmailFolderType.CUSTOM
   );
 }
@@ -182,6 +181,7 @@ function folderSyncPriority(folder: ImapFolderInfo): number {
   const type = inferFolderType(folder.path);
   if (type === EmailFolderType.INBOX) return 0;
   if (type === EmailFolderType.SENT) return 10;
+  if (type === EmailFolderType.CUSTOM && /^_|\/_/i.test(folder.path)) return 15;
   if (type === EmailFolderType.CUSTOM) return 20;
   if (type === EmailFolderType.ARCHIVE) return 40;
   if (type === EmailFolderType.SPAM || type === EmailFolderType.TRASH) return 80;
@@ -730,10 +730,13 @@ export async function syncEmailAccount(
         });
         continue;
       }
-      const latest = await fetchFolderMessageSummariesBefore(client, listed.path, 5).catch((err) => {
-        logger.warn({ err, accountId: account.id, folderPath: listed.path }, "mail latest IMAP summaries failed");
-        return [] as ImapMessageSummary[];
-      });
+      const latest =
+        mode === EmailSyncMode.RECENT && folder.type !== EmailFolderType.INBOX
+          ? []
+          : await fetchFolderMessageSummariesBefore(client, listed.path, 5).catch((err) => {
+              logger.warn({ err, accountId: account.id, folderPath: listed.path }, "mail latest IMAP summaries failed");
+              return [] as ImapMessageSummary[];
+            });
       const latestImapUids = latest.map((item) => item.uid);
       let maxUid = folder.lastSyncedUid ?? 0;
       let minBackfillUid = folder.lastBackfillUid ?? null;

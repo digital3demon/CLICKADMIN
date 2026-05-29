@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState, type MouseEvent } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import type { MailEmailRow, MailFilter, MailFolder, MailLabel } from "@/components/mail/types";
 import { mailFolderDisplayName } from "@/components/mail/types";
 import { mailListDateLabel, mailPrimaryDateValue } from "@/components/mail/date-format";
@@ -340,13 +339,6 @@ export function MailList({
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const [hoverPreview, setHoverPreview] = useState<{ email: MailEmailRow; x: number; y: number } | null>(null);
-  const rowVirtualizer = useVirtualizer({
-    count: emails.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: (index) => ((emails[index]?.labelAssignments?.length ?? 0) > 0 ? 132 : 108),
-    overscan: 8,
-    measureElement: (element) => element.getBoundingClientRect().height,
-  });
   const selectedCount = selectedIds.size;
   const allSelected = useMemo(
     () => emails.length > 0 && emails.every((e) => selectedIds.has(e.id)),
@@ -450,45 +442,23 @@ export function MailList({
           <div className="p-8 text-sm text-[var(--text-muted)]">В этой папке пока нет писем.</div>
         ) : (
           <>
-            <div
-              style={{
-                height: `${rowVirtualizer.getTotalSize()}px`,
-                position: "relative",
-              }}
-            >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const email = emails[virtualRow.index]!;
-                return (
-                  <div
-                    key={email.id}
-                    data-index={virtualRow.index}
-                    ref={rowVirtualizer.measureElement}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                  >
-                    <MailRow
-                      email={email}
-                      active={email.id === activeEmailId}
-                      selected={selectedIds.has(email.id)}
-                      onOpen={() => onOpen(email.id)}
-                      onToggleSelect={() => onToggleSelect(email.id)}
-                      onAction={(action) => onEmailAction(email.id, action)}
-                      onLabelClick={onLabelClick}
-                      hoverPreviewEnabled={hoverPreviewEnabled}
-                      onPreviewMove={(nextEmail, event) => {
-                        setHoverPreview({ email: nextEmail, x: event.clientX, y: event.clientY });
-                      }}
-                      onPreviewLeave={() => setHoverPreview(null)}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+            {emails.map((email) => (
+              <MailRow
+                key={email.id}
+                email={email}
+                active={email.id === activeEmailId}
+                selected={selectedIds.has(email.id)}
+                onOpen={() => onOpen(email.id)}
+                onToggleSelect={() => onToggleSelect(email.id)}
+                onAction={(action) => onEmailAction(email.id, action)}
+                onLabelClick={onLabelClick}
+                hoverPreviewEnabled={hoverPreviewEnabled}
+                onPreviewMove={(nextEmail, event) => {
+                  setHoverPreview({ email: nextEmail, x: event.clientX, y: event.clientY });
+                }}
+                onPreviewLeave={() => setHoverPreview(null)}
+              />
+            ))}
             {hasMore ? (
               <div className="border-t border-[var(--card-border)] p-3">
                 <button
