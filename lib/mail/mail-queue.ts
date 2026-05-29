@@ -6,8 +6,49 @@ import { syncAccountNow } from "@/lib/mail/mail-service";
 import { logger } from "@/lib/server/logger";
 
 const STALE_RUNNING_JOB_MS = 90_000;
+const MAX_MAIL_SYNC_JOB_MS = 8 * 60 * 1000;
+const MAIL_SYNC_EXECUTION_TIMEOUT_MS = 7 * 60 * 1000;
+
+function mailSyncTimeoutError(): Error {
+  return new Error("MAIL_SYNC_TIMEOUT");
+}
+
+export async function recoverStaleMailSyncJobs(
+  db: PrismaClient,
+  filter: { tenantId: string; accountId?: string },
+): Promise<number> {
+  const maxDurationBefore = new Date(Date.now() - MAX_MAIL_SYNC_JOB_MS);
+  const updated = await db.emailSyncJob.updateMany({
+    where: {
+      tenantId: filter.tenantId,
+      ...(filter.accountId ? { accountId: filter.accountId } : {}),
+      status: EmailSyncJobStatus.RUNNING,
+      OR: [
+        { startedAt: { lt: maxDurationBefore } },
+        { startedAt: null, lockedAt: { lt: maxDurationBefore } },
+      ],
+    },
+    data: {
+      status: EmailSyncJobStatus.FAILED,
+      lastError:
+        "Синхронизация прервана: превышено максимальное время выполнения. Нажмите «Обновить» ещё раз.",
+      finishedAt: new Date(),
+      lockedAt: null,
+    },
+  });
+  if (updated.count > 0) {
+    logger.warn(
+      { tenantId: filter.tenantId, accountId: filter.accountId, count: updated.count },
+      "mail sync recovered stale RUNNING jobs",
+    );
+  }
+  return updated.count;
+}
 
 function mailSyncErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message === "MAIL_SYNC_TIMEOUT") {
+    return "Синхронизация не успела завершиться вовремя. Повторите — загрузка продолжится с последних папок.";
+  }
   if (!(err instanceof Error)) return "Синхронизация почты завершилась ошибкой";
   const details = err as Error & {
     code?: unknown;
@@ -34,6 +75,7 @@ export async function enqueueMailSyncJob(
   accountId: string,
   mode: EmailSyncMode = EmailSyncMode.RECENT,
 ) {
+  await recoverStaleMailSyncJobs(db, { tenantId, accountId });
   const existing = await db.emailSyncJob.findFirst({
     where: {
       tenantId,
@@ -68,6 +110,13 @@ export async function runMailSyncJob(
   syncJobId: string,
 ) {
   const staleBefore = new Date(Date.now() - STALE_RUNNING_JOB_MS);
+  const maxDurationBefore = new Date(Date.now() - MAX_MAIL_SYNC_JOB_MS);
+  const syncJobPreview = await db.emailSyncJob.findFirst({
+    where: { id: syncJobId, tenantId, createdByUserId: userId },
+    select: { id: true, accountId: true },
+  });
+  if (!syncJobPreview) throw new Error("EMAIL_SYNC_JOB_NOT_FOUND");
+  await recoverStaleMailSyncJobs(db, { tenantId, accountId: syncJobPreview.accountId });
   const started = await db.emailSyncJob.updateMany({
     where: {
       id: syncJobId,
@@ -76,6 +125,7 @@ export async function runMailSyncJob(
         { status: EmailSyncJobStatus.QUEUED },
         { status: EmailSyncJobStatus.RUNNING, lockedAt: null },
         { status: EmailSyncJobStatus.RUNNING, lockedAt: { lt: staleBefore } },
+        { status: EmailSyncJobStatus.RUNNING, startedAt: { lt: maxDurationBefore } },
       ],
     },
     data: {
@@ -102,9 +152,14 @@ export async function runMailSyncJob(
   }, 30_000);
 
   try {
-    const result = await syncAccountNow(db, tenantId, userId, role, syncJob.accountId, {
-      mode: syncJob.mode,
-    });
+    const result = await Promise.race([
+      syncAccountNow(db, tenantId, userId, role, syncJob.accountId, {
+        mode: syncJob.mode,
+      }),
+      new Promise<never>((_resolve, reject) => {
+        setTimeout(() => reject(mailSyncTimeoutError()), MAIL_SYNC_EXECUTION_TIMEOUT_MS);
+      }),
+    ]);
     const updated = await db.emailSyncJob.update({
       where: { id: syncJob.id },
       data: {
