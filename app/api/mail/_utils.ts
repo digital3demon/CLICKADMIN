@@ -27,3 +27,19 @@ export function mailErrorResponse(err: unknown, fallback = "Ошибка поч�
 export function jsonBody(req: Request): Promise<Record<string, unknown>> {
   return req.json().catch(() => ({}));
 }
+
+/** Prisma BigInt (uidValidity и др.) нельзя отдавать через NextResponse.json напрямую. */
+export function mailJsonResponse(body: unknown, init?: ResponseInit): NextResponse {
+  const text = JSON.stringify(body, (_key, value) =>
+    typeof value === "bigint" ? value.toString() : value,
+  );
+  return new NextResponse(text, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers instanceof Headers
+        ? Object.fromEntries(init.headers.entries())
+        : init?.headers),
+    },
+  });
+}

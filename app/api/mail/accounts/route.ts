@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { jsonBody, mailErrorResponse } from "@/app/api/mail/_utils";
+import { jsonBody, mailErrorResponse, mailJsonResponse } from "@/app/api/mail/_utils";
 import {
   getMailApiContext,
   listEmailAccounts,
@@ -12,10 +12,14 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
-  const url = new URL(req.url);
-  const lite = url.searchParams.get("lite") === "1";
-  const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, { lite });
-  return NextResponse.json({ accounts, currentUser: { role: r.ctx.role } });
+  try {
+    const url = new URL(req.url);
+    const lite = url.searchParams.get("lite") === "1";
+    const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, { lite });
+    return mailJsonResponse({ accounts, currentUser: { role: r.ctx.role } });
+  } catch (err) {
+    return mailErrorResponse(err, "Не удалось загрузить почтовые аккаунты");
+  }
 }
 
 export async function POST(req: Request) {

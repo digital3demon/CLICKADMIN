@@ -94,8 +94,8 @@ export function OrdersListTableRow({
       <tr
         className={
           className
-            ? `hidden shell-desktop:table-row print:table-row ${className} cursor-pointer`
-            : "hidden cursor-pointer shell-desktop:table-row print:table-row"
+            ? `hidden md:table-row print:table-row ${className} cursor-pointer`
+            : "hidden cursor-pointer md:table-row print:table-row"
         }
         onClick={(e) => {
           if (targetInsideInteractive(e.target)) return;
@@ -105,7 +105,7 @@ export function OrdersListTableRow({
       >
         {children}
       </tr>
-      <tr className="border-b border-[var(--card-border)] shell-desktop:hidden print:hidden">
+      <tr className="border-b border-[var(--card-border)] md:hidden print:hidden">
         <td colSpan={99} className="p-0">
           <div
             className="cursor-pointer p-3 transition-colors duration-100 active:bg-[var(--surface-hover)]"

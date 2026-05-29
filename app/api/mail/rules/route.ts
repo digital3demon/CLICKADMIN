@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { jsonBody, mailErrorResponse } from "@/app/api/mail/_utils";
+import { jsonBody, mailErrorResponse, mailJsonResponse } from "@/app/api/mail/_utils";
 import {
   createEmailRule,
   getMailApiContext,
@@ -12,10 +12,14 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
-  const url = new URL(req.url);
-  const accountId = url.searchParams.get("accountId")?.trim() || null;
-  const rules = await listEmailRules(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, accountId);
-  return NextResponse.json({ rules });
+  try {
+    const url = new URL(req.url);
+    const accountId = url.searchParams.get("accountId")?.trim() || null;
+    const rules = await listEmailRules(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, accountId);
+    return mailJsonResponse({ rules });
+  } catch (err) {
+    return mailErrorResponse(err, "Не удалось загрузить правила почты");
+  }
 }
 
 export async function POST(req: Request) {

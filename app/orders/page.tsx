@@ -60,7 +60,7 @@ const ORDERS_FRAME_ROOT =
 const ORDERS_TABLE_TH =
   "min-w-0 whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
 const ORDERS_TABLE_CLASS =
-  "w-full min-w-0 table-fixed border-collapse text-left text-[10px] sm:text-[11px] shell-desktop:min-w-[40rem] shell-desktop:text-xs 2xl:text-[13px]";
+  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] lg:min-w-0 lg:text-xs 2xl:text-[13px]";
 
 /** Поступление: дата прихода работы; без явной даты — как в наряде: дата занесения в CRM. */
 function formatAdmission(o: {
@@ -614,7 +614,7 @@ export default async function OrdersPage({
           В списке только наряды с отметкой «Работа отправлена» (отгруженные).
         </div>
       ) : null}
-      <div className="hidden w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] shell-desktop:block print:hidden">
+      <div className="hidden w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] md:block print:hidden">
         <table className={ORDERS_TABLE_CLASS} aria-hidden="true">
           <OrdersTableColGroup />
           <thead>

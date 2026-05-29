@@ -317,7 +317,7 @@ export async function listEmailAccounts(
   if (!options.lite) {
     await Promise.all(
       uniqueAccounts.map(async (account) => {
-        const accountWithFolders = account as typeof account & { folders?: EmailFolder[] };
+        const accountWithFolders = account as typeof account & { folders?: EmailFolderRow[] };
         if (!Array.isArray(accountWithFolders.folders)) return;
         const [totalCount, unreadCount] = await Promise.all([
           db.email.count({ where: { tenantId, accountId: account.id, direction: EmailDirection.INBOUND } }),
@@ -325,17 +325,27 @@ export async function listEmailAccounts(
             where: { tenantId, accountId: account.id, direction: EmailDirection.INBOUND, isRead: false },
           }),
         ]);
-        accountWithFolders.folders = accountWithFolders.folders.map((folder) =>
-          folder.type === EmailFolderType.INBOX ? { ...folder, totalCount, unreadCount } : folder,
-        );
+        (account as typeof account & { folders?: MailFolderDto[] }).folders =
+          accountWithFolders.folders.map((folder) => {
+            const dto = toMailFolderDto(folder);
+            return folder.type === EmailFolderType.INBOX
+              ? { ...dto, totalCount, unreadCount }
+              : dto;
+          });
       }),
     );
   }
   return uniqueAccounts.map(({ encryptedAppPassword, ...account }) => {
-    const safeAccount = account as typeof account & { folders?: unknown[]; labels?: unknown[] };
+    const safeAccount = account as typeof account & {
+      folders?: MailFolderDto[] | EmailFolderRow[];
+      labels?: unknown[];
+    };
+    const folders = (safeAccount.folders ?? []).map((folder) =>
+      toMailFolderDto(folder as EmailFolderRow),
+    );
     return {
       ...safeAccount,
-      folders: safeAccount.folders ?? [],
+      folders,
       labels: safeAccount.labels ?? [],
       hasPassword: Boolean(encryptedAppPassword),
     };
@@ -492,19 +502,32 @@ export async function syncAccountNow(
   return syncEmailAccount(db, account, options);
 }
 
+type EmailFolderRow = Awaited<
+  ReturnType<PrismaClient["emailFolder"]["findMany"]>
+>[number];
+
+export type MailFolderDto = Omit<EmailFolder, "uidValidity">;
+
+/** uidValidity (BigInt) только для синка; в API не отдаём — ломает JSON. */
+export function toMailFolderDto(folder: EmailFolderRow): MailFolderDto {
+  const { uidValidity: _uidValidity, ...rest } = folder;
+  return rest;
+}
+
 export async function listEmailFolders(
   db: PrismaClient,
   tenantId: string,
   userId: string,
   role: string,
   accountId: string,
-) {
+): Promise<MailFolderDto[]> {
   await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   await ensureSystemFolders(db, tenantId, accountId);
-  return db.emailFolder.findMany({
+  const folders = await db.emailFolder.findMany({
     where: { tenantId, accountId },
     orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }],
   });
+  return folders.map(toMailFolderDto);
 }
 
 export async function createEmailFolder(
