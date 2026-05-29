@@ -60,6 +60,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
   const includeComments = opts?.includeComments === true;
   /** Без очереди 90ms между запросами — иначе фоновый опрос списка растягивается на десятки секунд. 429 обрабатывается в kaitenFetch. */
   const burst = { burst: true } as const;
+  const successfullyCheckedOrderIds = new Set<string>();
 
   const rows = await db.order.findMany({
     where: { id: { in: uniq } },
@@ -175,6 +176,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
         errorCount += 1;
         continue;
       }
+      successfullyCheckedOrderIds.add(row.id);
       const columnTitle = kaitenColumnTitleFromBoard(cardObj, colList);
       const meta = kaitenBlockedMetaFromCard(cardObj);
       const blocked = meta.blocked;
@@ -212,6 +214,8 @@ export async function syncKaitenColumnTitlesForOrderIds(
         await db.order.update({
           where: { id: row.id },
           data: {
+            kaitenSyncedAt: new Date(),
+            kaitenSyncError: null,
             kaitenColumnTitle: columnTitle,
             kaitenBlocked: blocked,
             kaitenBlockReason: reasonDb,
@@ -237,6 +241,13 @@ export async function syncKaitenColumnTitlesForOrderIds(
         clicklabByOrderId[r.id] = false;
       }
     }
+  }
+
+  if (successfullyCheckedOrderIds.size > 0) {
+    await db.order.updateMany({
+      where: { id: { in: [...successfullyCheckedOrderIds] } },
+      data: { kaitenSyncedAt: new Date(), kaitenSyncError: null },
+    });
   }
 
   return {

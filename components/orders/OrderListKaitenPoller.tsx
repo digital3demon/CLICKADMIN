@@ -5,8 +5,6 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 
 const WINDOW = 10;
-/** Каждый тик — синк с комментариями (упоминания лаборатории, корректировки из чата). */
-const FULL_COMMENT_SYNC_EVERY_N_TICKS = 3;
 
 function isRateLimited(res: Response, data: { error?: string }): boolean {
   if (res.status === 429) return true;
@@ -39,7 +37,6 @@ export function OrderListKaitenPoller({
   );
   const offsetRef = useRef(0);
   const backoffRef = useRef(0);
-  const tickIndexRef = useRef(0);
   const mentionStateRef = useRef("");
   /** Синк с Kaiten длится десятки секунд — не запускаем новый POST, пока предыдущий не завершён. */
   const inFlightRef = useRef(false);
@@ -51,9 +48,7 @@ export function OrderListKaitenPoller({
     if (inFlightRef.current) return;
     inFlightRef.current = true;
 
-    tickIndexRef.current += 1;
-    const includeComments =
-      tickIndexRef.current % FULL_COMMENT_SYNC_EVERY_N_TICKS === 0;
+    const includeComments = true;
 
     const n = ids.length;
     let batch: string[];

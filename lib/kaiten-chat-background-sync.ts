@@ -4,9 +4,9 @@ import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-colum
 import { logger } from "@/lib/server/logger";
 
 const CURSOR_KEY = "kaitenChatBackgroundCursorV1";
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 60;
-const DEFAULT_PER_TENANT_LIMIT = 20;
+const DEFAULT_LIMIT = 40;
+const MAX_LIMIT = 120;
+const DEFAULT_PER_TENANT_LIMIT = 40;
 const SYNC_HELPER_CHUNK_SIZE = 10;
 const memoryCursorByTenant = new Map<string, CursorState>();
 
@@ -128,6 +128,15 @@ async function selectTenantOrderBatch(
     archivedAt: null,
     kaitenCardId: { not: null },
   } satisfies Prisma.OrderWhereInput;
+  const staleFirst = await db.order.findMany({
+    where: baseWhere,
+    orderBy: [{ kaitenSyncedAt: "asc" }, { id: "asc" }],
+    take,
+    select: { id: true },
+  });
+  if (staleFirst.length > 0) {
+    return { rows: staleFirst, persistentCursor: persistent };
+  }
   const afterCursor = cursor.lastOrderId
     ? await db.order.findMany({
         where: { ...baseWhere, id: { gt: cursor.lastOrderId } },
