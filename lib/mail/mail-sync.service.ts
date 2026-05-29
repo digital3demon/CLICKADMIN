@@ -37,6 +37,16 @@ type SyncFetchedMessage = {
   cursorMode: SyncCursorMode;
 };
 
+type FolderSyncStat = {
+  path: string;
+  type: EmailFolderType;
+  imported: number;
+  skipped: number;
+  processed: number;
+  lastSyncedUid: number | null;
+  error?: string;
+};
+
 function normalizeFolderPath(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -56,7 +66,12 @@ export function inferFolderType(path: string): EmailFolderType {
 
 export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMode): boolean {
   if (mode === EmailSyncMode.BACKFILL) return true;
-  return type === EmailFolderType.INBOX || type === EmailFolderType.SENT || type === EmailFolderType.CUSTOM;
+  return (
+    type === EmailFolderType.INBOX ||
+    type === EmailFolderType.SENT ||
+    type === EmailFolderType.ARCHIVE ||
+    type === EmailFolderType.CUSTOM
+  );
 }
 
 function recentSyncSinceDate(now = new Date()): Date {
@@ -534,7 +549,7 @@ export async function syncEmailAccount(
   db: PrismaClient,
   account: EmailAccount,
   options: { mode?: EmailSyncMode } = {},
-): Promise<{ imported: number; skipped: number; folders: number }> {
+): Promise<{ imported: number; skipped: number; folders: number; folderStats: FolderSyncStat[] }> {
   const startedAt = Date.now();
   const mode = options.mode ?? EmailSyncMode.RECENT;
   const client = createImapClient(account);
@@ -542,6 +557,7 @@ export async function syncEmailAccount(
   let skipped = 0;
   let folders = 0;
   let folderErrors = 0;
+  const folderStats: FolderSyncStat[] = [];
 
   await ensureOrderDigitaldemonRules(db, account).catch((err) =>
     logger.error({ err, accountId: account.id }, "order mail rules ensure failed"),
@@ -563,6 +579,8 @@ export async function syncEmailAccount(
       let maxUid = folder.lastSyncedUid ?? 0;
       let minBackfillUid = folder.lastBackfillUid ?? null;
       let processed = 0;
+      let folderImported = 0;
+      let folderSkipped = 0;
       const touchedFolderIds = new Set<string>([folder.id]);
       const touchedLabelIds = new Set<string>();
       const maxMessages =
@@ -614,6 +632,7 @@ export async function syncEmailAccount(
             for (const assignment of exists.labelAssignments) touchedLabelIds.add(assignment.labelId);
           }
           skipped += 1;
+          folderSkipped += 1;
           continue;
         }
 
@@ -639,9 +658,11 @@ export async function syncEmailAccount(
               },
             });
             imported += 1;
+            folderImported += 1;
           } catch (error) {
             if (!isUniqueConstraintError(error)) throw error;
             skipped += 1;
+            folderSkipped += 1;
           }
           continue;
         }
@@ -713,6 +734,7 @@ export async function syncEmailAccount(
             touchedLabelIds.add(labelId);
           }
           skipped += 1;
+          folderSkipped += 1;
           continue;
         }
         if (ruleResult.forwardTo.length > 0) {
@@ -787,17 +809,20 @@ export async function syncEmailAccount(
           await Promise.all(attachmentCreates.map((a) => deleteMailAttachmentBytes(a.diskRelPath)));
           if (isUniqueConstraintError(error)) {
             skipped += 1;
+            folderSkipped += 1;
             continue;
           }
           throw error;
         }
         if (!email) {
           skipped += 1;
+          folderSkipped += 1;
           continue;
         }
         if (ruleResult.folderId) touchedFolderIds.add(ruleResult.folderId);
         for (const labelId of ruleResult.labelIds) touchedLabelIds.add(labelId);
         imported += 1;
+        folderImported += 1;
       }
 
       await db.emailFolder.update({
@@ -813,8 +838,25 @@ export async function syncEmailAccount(
       for (const labelId of touchedLabelIds) {
         await refreshLabelCounters(db, account.tenantId, labelId);
       }
+      folderStats.push({
+        path: listed.path,
+        type: folder.type,
+        imported: folderImported,
+        skipped: folderSkipped,
+        processed,
+        lastSyncedUid: maxUid || folder.lastSyncedUid,
+      });
       } catch (err) {
         folderErrors += 1;
+        folderStats.push({
+          path: listed.path,
+          type: inferFolderType(listed.path),
+          imported: 0,
+          skipped: 0,
+          processed: 0,
+          lastSyncedUid: null,
+          error: syncErrorMessage(err),
+        });
         logger.error(
           { err, accountId: account.id, folderPath: listed.path, mode },
           "mail folder sync failed",
@@ -833,10 +875,10 @@ export async function syncEmailAccount(
       },
     });
     logger.info(
-      { accountId: account.id, mode, imported, skipped, folders, folderErrors, elapsedMs: Date.now() - startedAt },
+      { accountId: account.id, mode, imported, skipped, folders, folderErrors, folderStats, elapsedMs: Date.now() - startedAt },
       "mail sync completed",
     );
-    return { imported, skipped, folders };
+    return { imported, skipped, folders, folderStats };
   } catch (err) {
     await db.emailAccount.update({
       where: { id: account.id },

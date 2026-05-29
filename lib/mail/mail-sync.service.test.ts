@@ -26,7 +26,7 @@ describe("shouldSyncFolderForMode", () => {
     expect(shouldSyncFolderForMode(EmailFolderType.INBOX, EmailSyncMode.RECENT)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.SENT, EmailSyncMode.RECENT)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.CUSTOM, EmailSyncMode.RECENT)).toBe(true);
-    expect(shouldSyncFolderForMode(EmailFolderType.ARCHIVE, EmailSyncMode.RECENT)).toBe(false);
+    expect(shouldSyncFolderForMode(EmailFolderType.ARCHIVE, EmailSyncMode.RECENT)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.SPAM, EmailSyncMode.RECENT)).toBe(false);
     expect(shouldSyncFolderForMode(EmailFolderType.TRASH, EmailSyncMode.RECENT)).toBe(false);
     expect(shouldSyncFolderForMode(EmailFolderType.DRAFTS, EmailSyncMode.RECENT)).toBe(false);
