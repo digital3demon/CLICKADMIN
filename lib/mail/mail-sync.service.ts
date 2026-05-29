@@ -69,14 +69,25 @@ async function* fetchRecentFolderMessages(
   startUid: number,
   maxMessages: number,
 ): AsyncGenerator<SyncFetchedMessage> {
+  const yieldedUids = new Set<number>();
+  async function* unique(
+    messages: AsyncGenerator<ImapFetchedMessage>,
+    cursorMode: SyncCursorMode,
+  ): AsyncGenerator<SyncFetchedMessage> {
+    for await (const item of messages) {
+      if (yieldedUids.has(item.uid)) continue;
+      yieldedUids.add(item.uid);
+      yield { item, cursorMode };
+    }
+  }
+
   // Date search catches today's mail even if the saved UID cursor/window is stale.
   // It must not move lastSyncedUid, because that would skip unprocessed UID gaps.
-  for await (const item of fetchFolderMessagesSince(client, folderPath, recentSyncSinceDate(), maxMessages)) {
-    yield { item, cursorMode: "lookback" };
-  }
-  for await (const item of fetchFolderMessages(client, folderPath, startUid, maxMessages)) {
-    yield { item, cursorMode: "forward" };
-  }
+  yield* unique(fetchFolderMessagesSince(client, folderPath, recentSyncSinceDate(), maxMessages), "lookback");
+  // Yandex can occasionally miss fresh mail in date search or after a stale cursor.
+  // Always scan the latest UID tail as a second non-cursor-moving safety net.
+  yield* unique(fetchFolderMessagesBefore(client, folderPath, null, maxMessages), "lookback");
+  yield* unique(fetchFolderMessages(client, folderPath, startUid, maxMessages), "forward");
 }
 
 async function* markCursorMode(
@@ -566,7 +577,7 @@ export async function syncEmailAccount(
             )
           : fetchRecentFolderMessages(client, listed.path, maxUid + 1, maxMessages);
       for await (const { item, cursorMode } of messages) {
-        if (processed >= maxMessages * 2) break;
+        if (processed >= maxMessages * 3) break;
         processed += 1;
         if (cursorMode === "forward") maxUid = Math.max(maxUid, item.uid);
         if (cursorMode === "backfill") {

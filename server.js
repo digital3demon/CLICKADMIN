@@ -29,8 +29,16 @@ function startMailBackgroundSync() {
     15_000,
     Number(process.env.MAIL_BACKGROUND_SYNC_INTERVAL_MS || 30_000),
   );
+  const limit = Math.max(
+    1,
+    Math.min(100, Number(process.env.MAIL_BACKGROUND_SYNC_LIMIT || 50)),
+  );
+  const concurrency = Math.max(
+    1,
+    Math.min(8, Number(process.env.MAIL_BACKGROUND_SYNC_CONCURRENCY || 4)),
+  );
   const port = process.env.PORT || "3000";
-  const url = `http://127.0.0.1:${port}/api/cron/mail-sync`;
+  const url = `http://127.0.0.1:${port}/api/cron/mail-sync?limit=${limit}&concurrency=${concurrency}`;
   const run = () => {
     fetch(url, {
       headers: {

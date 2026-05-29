@@ -6,6 +6,11 @@ import { logger } from "@/lib/server/logger";
 
 export const dynamic = "force-dynamic";
 
+const MAIL_SYNC_DEFAULT_LIMIT = 50;
+const MAIL_SYNC_MAX_LIMIT = 100;
+const MAIL_SYNC_DEFAULT_CONCURRENCY = 4;
+const MAIL_SYNC_MAX_CONCURRENCY = 8;
+
 function isAuthorized(req: Request): boolean {
   const auth = req.headers.get("authorization")?.trim();
   const cronSecret = process.env.CRON_SECRET?.trim();
@@ -23,9 +28,14 @@ export async function GET(req: Request) {
 
   const startedAt = Date.now();
   const db = await getOrdersPrisma();
+  const url = new URL(req.url);
   const limit = Math.min(
-    50,
-    Math.max(1, Number(new URL(req.url).searchParams.get("limit") || 20)),
+    MAIL_SYNC_MAX_LIMIT,
+    Math.max(1, Number(url.searchParams.get("limit") || MAIL_SYNC_DEFAULT_LIMIT)),
+  );
+  const concurrency = Math.min(
+    MAIL_SYNC_MAX_CONCURRENCY,
+    Math.max(1, Number(url.searchParams.get("concurrency") || MAIL_SYNC_DEFAULT_CONCURRENCY)),
   );
   const accounts = await db.emailAccount.findMany({
     where: {
@@ -37,38 +47,56 @@ export async function GET(req: Request) {
     take: limit,
   });
 
-  const results = [];
-  for (const account of accounts) {
-    if (!account.createdByUserId) continue;
-    try {
-      const result = await enqueueAndRunMailSyncJob(
-        db,
-        account.tenantId,
-        account.createdByUserId,
-        "OWNER",
-        account.id,
-        EmailSyncMode.RECENT,
-      );
-      results.push({
+  const results: Array<Record<string, unknown>> = [];
+  let cursor = 0;
+  async function worker() {
+    for (;;) {
+      const account = accounts[cursor++];
+      if (!account) return;
+      if (!account.createdByUserId) continue;
+      const accountStartedAt = Date.now();
+      const lastSyncAt = account.lastSyncAt?.toISOString() ?? null;
+      const baseResult = {
         accountId: account.id,
-        processed: result.processed,
-        imported: result.result?.imported ?? result.syncJob.imported,
-        skipped: result.result?.skipped ?? result.syncJob.skipped,
-        status: result.syncJob.status,
-      });
-    } catch (err) {
-      logger.error({ err, accountId: account.id }, "background mail sync failed");
-      results.push({
-        accountId: account.id,
-        processed: false,
-        error: err instanceof Error ? err.message : "mail sync failed",
-      });
+        lastSyncAt,
+      };
+
+      try {
+        const result = await enqueueAndRunMailSyncJob(
+          db,
+          account.tenantId,
+          account.createdByUserId,
+          "OWNER",
+          account.id,
+          EmailSyncMode.RECENT,
+        );
+        results.push({
+          ...baseResult,
+          processed: result.processed,
+          imported: result.result?.imported ?? result.syncJob.imported,
+          skipped: result.result?.skipped ?? result.syncJob.skipped,
+          folders: result.result?.folders ?? result.syncJob.folders,
+          status: result.syncJob.status,
+          elapsedMs: Date.now() - accountStartedAt,
+        });
+      } catch (err) {
+        logger.error({ err, accountId: account.id }, "background mail sync failed");
+        results.push({
+          ...baseResult,
+          processed: false,
+          error: err instanceof Error ? err.message : "mail sync failed",
+          elapsedMs: Date.now() - accountStartedAt,
+        });
+      }
     }
   }
+  await Promise.all(Array.from({ length: Math.min(concurrency, accounts.length) }, () => worker()));
 
   return NextResponse.json({
     ok: true,
     accountCount: accounts.length,
+    limit,
+    concurrency,
     elapsedMs: Date.now() - startedAt,
     results,
   });

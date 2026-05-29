@@ -98,7 +98,7 @@ const MAIL_LIST_DEFAULT_WIDTH = 600;
 const MAIL_LIST_MIN_WIDTH = 420;
 const MAIL_LIST_MAX_WIDTH = 920;
 const MAIL_DB_REFRESH_INTERVAL_MS = 15_000;
-const MAIL_ACTIVE_SYNC_INTERVAL_MS = 60_000;
+const MAIL_ACTIVE_SYNC_INTERVAL_MS = 30_000;
 
 function readLastMailAccountId(): string {
   try {
@@ -406,7 +406,7 @@ export function MailLayout() {
         if (latest.status === "QUEUED") setSyncStatus("Синхронизация в очереди");
         else if (latest.status === "RUNNING") setSyncStatus("Загружаем новые письма");
         else if (latest.status === "FAILED") setSyncStatus(mailErrorMessage(latest.lastError, "Синхронизация завершилась ошибкой"));
-        else setSyncStatus(`Синхронизация завершена: ${latest.imported} новых, ${latest.skipped} пропущено`);
+        else setSyncStatus(`Синхронизация завершена: ${latest.imported} новых, ${latest.skipped} уже были в CRM`);
       } catch {
         /* status is informational */
       }
