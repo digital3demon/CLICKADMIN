@@ -292,6 +292,7 @@ export async function listEmailAccounts(
           lastSyncAt: true,
           lastSyncError: true,
           allowedRoles: true,
+          hoverPreviewEnabled: true,
           createdByUserId: true,
           encryptedAppPassword: true,
         },
@@ -419,15 +420,21 @@ export async function updateEmailAccountAccessRoles(
   role: string,
   accountId: string,
   allowedRolesInput: unknown,
+  hoverPreviewEnabledInput?: unknown,
 ) {
   if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
   const allowedRoles = normalizeAllowedMailRoles(allowedRolesInput);
+  const hoverPreviewEnabled =
+    typeof hoverPreviewEnabledInput === "boolean" ? hoverPreviewEnabledInput : undefined;
   const updated = await db.emailAccount.updateMany({
     where: { id: accountId, tenantId },
-    data: { allowedRoles },
+    data: {
+      allowedRoles,
+      ...(hoverPreviewEnabled === undefined ? {} : { hoverPreviewEnabled }),
+    },
   });
   if (!updated.count) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
-  return { id: accountId, allowedRoles };
+  return { id: accountId, allowedRoles, hoverPreviewEnabled };
 }
 
 export async function deleteEmailAccount(

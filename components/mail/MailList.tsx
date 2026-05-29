@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState, type MouseEvent } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -55,6 +55,18 @@ function labelTextColor(bg: string): string {
   return luminance > 0.58 ? "#111827" : "#ffffff";
 }
 
+function emailAttachmentCount(email: MailEmailRow): number {
+  return email._count?.attachments ?? (email.hasAttachments ? 1 : 0);
+}
+
+function attachmentCountLabel(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} вложение`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} вложения`;
+  return `${count} вложений`;
+}
+
 function MailRow({
   email,
   active,
@@ -63,6 +75,9 @@ function MailRow({
   onToggleSelect,
   onAction,
   onLabelClick,
+  hoverPreviewEnabled,
+  onPreviewMove,
+  onPreviewLeave,
 }: {
   email: MailEmailRow;
   active: boolean;
@@ -71,6 +86,9 @@ function MailRow({
   onToggleSelect: () => void;
   onAction: (action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
   onLabelClick: (labelId: string) => void;
+  hoverPreviewEnabled: boolean;
+  onPreviewMove: (email: MailEmailRow, event: MouseEvent<HTMLDivElement>) => void;
+  onPreviewLeave: () => void;
 }) {
   const sender = senderName(email);
   const labels = email.labelAssignments?.map((item) => item.label) ?? [];
@@ -92,6 +110,10 @@ function MailRow({
               : "bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)]"
       } ${isDragging ? "opacity-60 shadow-lg" : ""}`}
       onClick={onOpen}
+      onMouseMove={(event) => {
+        if (hoverPreviewEnabled) onPreviewMove(email, event);
+      }}
+      onMouseLeave={onPreviewLeave}
     >
       <div className="relative flex h-8 w-6 shrink-0 items-center justify-center">
         <button
@@ -291,6 +313,7 @@ export function MailList({
   onEmailAction,
   onLabelClick,
   canMarkAllRead,
+  hoverPreviewEnabled,
 }: {
   folder: MailFolder | null;
   label: MailLabel | null;
@@ -313,8 +336,10 @@ export function MailList({
   onEmailAction: (id: string, action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
   onLabelClick: (labelId: string) => void;
   canMarkAllRead: boolean;
+  hoverPreviewEnabled: boolean;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
+  const [hoverPreview, setHoverPreview] = useState<{ email: MailEmailRow; x: number; y: number } | null>(null);
   const rowVirtualizer = useVirtualizer({
     count: emails.length,
     getScrollElement: () => parentRef.current,
@@ -326,6 +351,12 @@ export function MailList({
     () => emails.length > 0 && emails.every((e) => selectedIds.has(e.id)),
     [emails, selectedIds],
   );
+  const previewLeft = hoverPreview
+    ? Math.max(8, Math.min(hoverPreview.x + 14, (typeof window === "undefined" ? 1200 : window.innerWidth) - 268))
+    : 0;
+  const previewTop = hoverPreview
+    ? Math.max(8, Math.min(hoverPreview.y + 14, (typeof window === "undefined" ? 800 : window.innerHeight) - 140))
+    : 0;
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col border-r border-[var(--card-border)] bg-[var(--card-bg)]">
@@ -445,6 +476,11 @@ export function MailList({
                       onToggleSelect={() => onToggleSelect(email.id)}
                       onAction={(action) => onEmailAction(email.id, action)}
                       onLabelClick={onLabelClick}
+                      hoverPreviewEnabled={hoverPreviewEnabled}
+                      onPreviewMove={(nextEmail, event) => {
+                        setHoverPreview({ email: nextEmail, x: event.clientX, y: event.clientY });
+                      }}
+                      onPreviewLeave={() => setHoverPreview(null)}
                     />
                   </div>
                 );
@@ -465,6 +501,19 @@ export function MailList({
           </>
         )}
       </div>
+      {hoverPreviewEnabled && hoverPreview ? (
+        <div
+          className="pointer-events-none fixed z-50 w-64 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 text-xs text-[var(--text-body)] shadow-xl"
+          style={{ left: previewLeft, top: previewTop }}
+        >
+          <p className="line-clamp-5 whitespace-pre-wrap leading-5">
+            {hoverPreview.email.preview || "Нет текстового предпросмотра"}
+          </p>
+          <p className="mt-2 border-t border-[var(--card-border)] pt-2 text-[11px] font-semibold text-[var(--text-muted)]">
+            {attachmentCountLabel(emailAttachmentCount(hoverPreview.email))}
+          </p>
+        </div>
+      ) : null}
     </section>
   );
 }

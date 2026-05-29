@@ -59,6 +59,7 @@ export type MailAccount = {
   lastSyncAt: string | null;
   lastSyncError: string | null;
   allowedRoles: string[];
+  hoverPreviewEnabled: boolean;
   folders: MailFolder[];
   labels: MailLabel[];
   _count?: { emails: number };

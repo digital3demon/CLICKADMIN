@@ -90,8 +90,8 @@ export function FinanceOfficeOrdersTable({
 
   return (
     <StickyListChrome
-      className="w-full min-w-0 overflow-y-visible"
-      toolbarClassName="pb-3"
+      className="w-full max-w-full min-w-0 overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm"
+      toolbarClassName="rounded-t-lg bg-[var(--card-bg)] pb-0"
       toolbar={
         <div className="space-y-4">
           {toolbar}
@@ -104,7 +104,7 @@ export function FinanceOfficeOrdersTable({
         </div>
       }
     >
-      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm [-webkit-overflow-scrolling:touch]">
+      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch]">
         <table className="w-max min-w-full border-collapse text-left text-sm">
           <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">

@@ -782,6 +782,7 @@ model EmailAccount {
   smtpPort             Int      @default(465)
   smtpSecure           Boolean  @default(true)
   isActive             Boolean  @default(true)
+  hoverPreviewEnabled  Boolean  @default(true)
   lastSyncAt           DateTime?
   lastSyncError        String?
   createdAt            DateTime @default(now())

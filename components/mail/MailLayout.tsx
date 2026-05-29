@@ -757,6 +757,7 @@ export function MailLayout() {
                   setSelectedIds(new Set());
                 }}
                 canMarkAllRead={currentUserRole === "OWNER"}
+                hoverPreviewEnabled={activeAccount?.hoverPreviewEnabled ?? true}
               />
               <div
                 role="separator"

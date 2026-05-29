@@ -169,6 +169,7 @@ export function MailSettingsClient() {
   const [error, setError] = useState("");
   const [accountDetailsLoading, setAccountDetailsLoading] = useState(false);
   const [selectedAccessRoles, setSelectedAccessRoles] = useState<string[]>(["OWNER"]);
+  const [hoverPreviewEnabled, setHoverPreviewEnabled] = useState(true);
   const [accessSaving, setAccessSaving] = useState(false);
   const [ruleFolderChoice, setRuleFolderChoice] = useState("");
   const [ruleLabelChoice, setRuleLabelChoice] = useState("");
@@ -228,7 +229,8 @@ export function MailSettingsClient() {
 
   useEffect(() => {
     setSelectedAccessRoles(Array.from(new Set(["OWNER", ...(activeAccount?.allowedRoles || [])])));
-  }, [activeAccount?.id, activeAccount?.allowedRoles]);
+    setHoverPreviewEnabled(activeAccount?.hoverPreviewEnabled ?? true);
+  }, [activeAccount?.id, activeAccount?.allowedRoles, activeAccount?.hoverPreviewEnabled]);
 
   useEffect(() => {
     void loadAccounts().catch((err) =>
@@ -304,12 +306,12 @@ export function MailSettingsClient() {
       await jsonFetch(`/api/mail/accounts/${activeAccount.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ allowedRoles }),
+        body: JSON.stringify({ allowedRoles, hoverPreviewEnabled }),
       });
-      setStatus("Доступ к ящику обновлён");
+      setStatus("Настройки ящика обновлены");
       setAccounts((prev) =>
         prev.map((account) =>
-          account.id === activeAccount.id ? { ...account, allowedRoles } : account,
+          account.id === activeAccount.id ? { ...account, allowedRoles, hoverPreviewEnabled } : account,
         ),
       );
     } catch (err) {
@@ -585,7 +587,7 @@ export function MailSettingsClient() {
                 onClick={() => void saveAccountAccess()}
                 className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:cursor-wait disabled:opacity-60"
               >
-                {accessSaving ? "Сохраняю..." : "Сохранить доступ"}
+                {accessSaving ? "Сохраняю..." : "Сохранить настройки"}
               </button>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -611,6 +613,21 @@ export function MailSettingsClient() {
                 );
               })}
             </div>
+            <label className="mt-4 flex items-start gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-3 text-sm text-[var(--app-text)]">
+              <input
+                type="checkbox"
+                checked={hoverPreviewEnabled}
+                disabled={accessSaving}
+                onChange={(event) => setHoverPreviewEnabled(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-[var(--input-border)]"
+              />
+              <span>
+                <span className="block font-medium">Показывать предпросмотр письма при наведении</span>
+                <span className="mt-1 block text-xs text-[var(--text-secondary)]">
+                  В списке писем появится небольшая подсказка около курсора: текст письма и количество вложений.
+                </span>
+              </span>
+            </label>
           </div>
         ) : activeAccount ? (
           <div className="mt-5 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4 text-sm text-[var(--text-secondary)]">
