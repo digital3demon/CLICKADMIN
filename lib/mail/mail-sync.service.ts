@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   EmailFolderType,
   EmailSyncMode,
+  EmailDirection,
   type EmailAccount,
   type EmailRule,
   type PrismaClient,
@@ -30,6 +31,7 @@ import {
   writeMailAttachmentBytes,
 } from "@/lib/mail/mail-attachment-storage";
 import { ensureOrderDigitaldemonRules } from "@/lib/mail/order-digitaldemon-rules";
+import { emailDirectionForImapFolder, emailFolderListWhere } from "@/lib/mail/mail-folder-query";
 import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
 const RECENT_MESSAGES_PER_FOLDER = 250;
@@ -590,9 +592,15 @@ async function refreshFolderCounters(
   tenantId: string,
   folderId: string,
 ): Promise<void> {
+  const folder = await db.emailFolder.findFirst({
+    where: { id: folderId, tenantId },
+    select: { id: true, type: true },
+  });
+  if (!folder) return;
+  const where = emailFolderListWhere(tenantId, folder);
   const [totalCount, unreadCount] = await Promise.all([
-    db.email.count({ where: { tenantId, folderId } }),
-    db.email.count({ where: { tenantId, folderId, isRead: false } }),
+    db.email.count({ where }),
+    db.email.count({ where: { ...where, isRead: false } }),
   ]);
   await db.emailFolder.update({
     where: { id: folderId },
@@ -842,7 +850,19 @@ export async function syncEmailAccount(
                 folderId: null,
                 forwardTo: [],
               };
-        const targetFolderId = ruleResult.folderId ?? folder.id;
+        const direction = emailDirectionForImapFolder(folder.type, from.address, account.email);
+        let targetFolderId = ruleResult.folderId ?? folder.id;
+        if (
+          !ruleResult.folderId &&
+          direction === EmailDirection.OUTBOUND &&
+          folder.type === EmailFolderType.INBOX
+        ) {
+          const sentFolder = await db.emailFolder.findFirst({
+            where: { tenantId: account.tenantId, accountId: account.id, type: EmailFolderType.SENT },
+            select: { id: true },
+          });
+          if (sentFolder) targetFolderId = sentFolder.id;
+        }
         await applyExplicitRuleSeenOnServer(account, folder, item, ruleResult.isRead, client);
         const isRead = item.flags.has("\\Seen") || ruleResult.isRead;
         const duplicateByMessageId = parsed.messageId
@@ -938,8 +958,7 @@ export async function syncEmailAccount(
               folderId: targetFolderId,
               uid: item.uid,
               messageId: parsed.messageId ?? null,
-              direction:
-                folder.type === EmailFolderType.SENT ? "OUTBOUND" : "INBOUND",
+              direction,
               isRead,
               readAt: isRead ? item.internalDate ?? new Date() : null,
               isFlagged: item.flags.has("\\Flagged") || ruleResult.isFlagged,

@@ -22,6 +22,7 @@ import {
   setMessagesSeen,
   testImapConnection,
 } from "@/lib/mail/imap-client";
+import { emailFolderListWhere } from "@/lib/mail/mail-folder-query";
 import {
   deleteMailAttachmentBytes,
   newMailAttachmentId,
@@ -244,9 +245,15 @@ export async function refreshFolderCounters(
   tenantId: string,
   folderId: string,
 ): Promise<void> {
+  const folder = await db.emailFolder.findFirst({
+    where: { id: folderId, tenantId },
+    select: { id: true, type: true },
+  });
+  if (!folder) return;
+  const where = emailFolderListWhere(tenantId, folder);
   const [totalCount, unreadCount] = await Promise.all([
-    db.email.count({ where: { tenantId, folderId } }),
-    db.email.count({ where: { tenantId, folderId, isRead: false } }),
+    db.email.count({ where }),
+    db.email.count({ where: { ...where, isRead: false } }),
   ]);
   await db.emailFolder.update({ where: { id: folderId }, data: { totalCount, unreadCount } });
 }
@@ -705,9 +712,10 @@ export async function listEmails(
     : null;
   const rows = await db.email.findMany({
     where: {
-      tenantId,
       accountId: input.accountId,
-      ...(input.folderId && folder ? { folderId: input.folderId } : {}),
+      ...(input.folderId && folder
+        ? emailFolderListWhere(tenantId, folder)
+        : { tenantId }),
       ...(input.labelId
         ? {
             labelAssignments: {
