@@ -242,6 +242,32 @@ export async function fetchFolderMessageSummariesBefore(
   }
 }
 
+export async function ensureImapClientConnected(client: ImapFlow): Promise<void> {
+  if (client.usable) return;
+  await client.connect();
+}
+
+/** Пометить \\Seen через уже открытую sync-сессию (не открывает второе IMAP-подключение). */
+export async function setMessageSeenOnClient(
+  client: ImapFlow,
+  folderPath: string,
+  uid: number,
+  seen: boolean,
+): Promise<void> {
+  if (!Number.isFinite(uid) || uid <= 0) return;
+  await ensureImapClientConnected(client);
+  const lock = await client.getMailboxLock(folderPath);
+  try {
+    if (seen) {
+      await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
+    } else {
+      await client.messageFlagsRemove(String(uid), ["\\Seen"], { uid: true });
+    }
+  } finally {
+    lock.release();
+  }
+}
+
 export async function setMessageSeen(
   account: MailConnectionAccount,
   folderPath: string,

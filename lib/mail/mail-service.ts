@@ -786,6 +786,7 @@ export async function listEmails(
   return {
     emails: emails.map((email) => ({
       ...email,
+      folder: email.folder ? toMailFolderDto(email.folder) : null,
       hasLinkedOrder: email._count.sourceOrderLinks > 0,
       linkedOrderNumber: email.sourceOrderLinks[0]?.order.orderNumber ?? null,
     })),
@@ -942,6 +943,7 @@ export async function getEmailDetail(
   return {
     ...email,
     account: safeAccount,
+    folder: email.folder ? toMailFolderDto(email.folder) : null,
     isRead: markRead ? true : email.isRead,
     readAt: markRead && !email.isRead ? new Date() : email.readAt,
     hasLinkedOrder: email._count.sourceOrderLinks > 0,

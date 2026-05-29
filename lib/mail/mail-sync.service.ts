@@ -11,16 +11,19 @@ import { simpleParser, type ParsedMail } from "mailparser";
 import { logger } from "@/lib/server/logger";
 import {
   createImapClient,
+  ensureImapClientConnected,
   fetchFolderMessageSummariesBefore,
   fetchFolderMessagesBefore,
   fetchFolderMessages,
   fetchFolderMessagesSince,
   listImapFolders,
   setMessageSeen,
+  setMessageSeenOnClient,
   type ImapFetchedMessage,
   type ImapFolderInfo,
   type ImapMessageSummary,
 } from "@/lib/mail/imap-client";
+import type { ImapFlow } from "imapflow";
 import {
   deleteMailAttachmentBytes,
   newMailAttachmentId,
@@ -608,10 +611,15 @@ async function applyExplicitRuleSeenOnServer(
   folder: { imapName: string },
   item: ImapFetchedMessage,
   shouldMarkRead: boolean,
+  syncClient?: ImapFlow,
 ): Promise<void> {
   if (!shouldMarkRead || item.flags.has("\\Seen")) return;
   try {
-    await setMessageSeen(account, folder.imapName, item.uid, true);
+    if (syncClient) {
+      await setMessageSeenOnClient(syncClient, folder.imapName, item.uid, true);
+    } else {
+      await setMessageSeen(account, folder.imapName, item.uid, true);
+    }
     item.flags.add("\\Seen");
   } catch (err) {
     logger.warn(
@@ -683,6 +691,7 @@ export async function syncEmailAccount(
     );
     for (const listed of listedFolders) {
       try {
+      await ensureImapClientConnected(client);
       let folder = await upsertFolder(db, account, listed);
       folders += 1;
       const { folder: folderAfterValidity, uidValidityMismatch, imapUidNext } =
@@ -832,7 +841,7 @@ export async function syncEmailAccount(
                 forwardTo: [],
               };
         const targetFolderId = ruleResult.folderId ?? folder.id;
-        await applyExplicitRuleSeenOnServer(account, folder, item, ruleResult.isRead);
+        await applyExplicitRuleSeenOnServer(account, folder, item, ruleResult.isRead, client);
         const isRead = item.flags.has("\\Seen") || ruleResult.isRead;
         const duplicateByMessageId = parsed.messageId
           ? await db.email.findFirst({
