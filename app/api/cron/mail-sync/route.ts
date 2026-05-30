@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { EmailSyncMode } from "@prisma/client";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { enqueueAndRunMailSyncJob } from "@/lib/mail/mail-queue";
+import { enqueueAndStartMailSyncJob } from "@/lib/mail/mail-queue";
 import { logger } from "@/lib/server/logger";
 
 export const dynamic = "force-dynamic";
 
 const MAIL_SYNC_DEFAULT_LIMIT = 50;
 const MAIL_SYNC_MAX_LIMIT = 100;
-const MAIL_SYNC_DEFAULT_CONCURRENCY = 4;
-const MAIL_SYNC_MAX_CONCURRENCY = 8;
+const MAIL_SYNC_DEFAULT_CONCURRENCY = 1;
+const MAIL_SYNC_MAX_CONCURRENCY = 4;
 
 function isAuthorized(req: Request): boolean {
   const auth = req.headers.get("authorization")?.trim();
@@ -62,7 +62,7 @@ export async function GET(req: Request) {
       };
 
       try {
-        const result = await enqueueAndRunMailSyncJob(
+        const result = await enqueueAndStartMailSyncJob(
           db,
           account.tenantId,
           account.createdByUserId,
@@ -72,12 +72,15 @@ export async function GET(req: Request) {
         );
         results.push({
           ...baseResult,
+          enqueued: result.enqueued,
           processed: result.processed,
+          background: result.background ?? false,
           imported: result.result?.imported ?? result.syncJob.imported,
           skipped: result.result?.skipped ?? result.syncJob.skipped,
           folders: result.result?.folders ?? result.syncJob.folders,
           folderStats: result.result?.folderStats ?? null,
           status: result.syncJob.status,
+          lastError: result.syncJob.lastError,
           elapsedMs: Date.now() - accountStartedAt,
         });
       } catch (err) {

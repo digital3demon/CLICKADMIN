@@ -236,6 +236,25 @@ function isUniqueConstraintError(error: unknown): boolean {
   );
 }
 
+async function emailUidFolderTaken(
+  db: PrismaClient,
+  accountId: string,
+  folderId: string,
+  uid: number,
+  excludeEmailId: string,
+): Promise<boolean> {
+  const conflict = await db.email.findFirst({
+    where: {
+      accountId,
+      folderId,
+      uid,
+      NOT: { id: excludeEmailId },
+    },
+    select: { id: true },
+  });
+  return Boolean(conflict);
+}
+
 function syncErrorMessage(err: unknown): string {
   if (!(err instanceof Error)) return "Ошибка синхронизации";
   const details = err as Error & { code?: unknown; responseText?: unknown };
@@ -907,6 +926,19 @@ export async function syncEmailAccount(
           }
           if ((item.flags.has("\\Flagged") || ruleResult.isFlagged) && !duplicateByMessageId.isFlagged) {
             duplicateData.isFlagged = true;
+          }
+          if (duplicateData.folderId || duplicateData.uid) {
+            const nextFolderId =
+              typeof duplicateData.folderId === "string" ? duplicateData.folderId : duplicateByMessageId.folderId;
+            const nextUid = typeof duplicateData.uid === "number" ? duplicateData.uid : duplicateByMessageId.uid;
+            if (
+              nextFolderId &&
+              typeof nextUid === "number" &&
+              (await emailUidFolderTaken(db, account.id, nextFolderId, nextUid, duplicateByMessageId.id))
+            ) {
+              delete duplicateData.folderId;
+              delete duplicateData.uid;
+            }
           }
           if (Object.keys(duplicateData).length > 0) {
             try {

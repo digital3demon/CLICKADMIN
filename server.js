@@ -26,8 +26,8 @@ function startMailBackgroundSync() {
     return;
   }
   const intervalMs = Math.max(
-    15_000,
-    Number(process.env.MAIL_BACKGROUND_SYNC_INTERVAL_MS || 30_000),
+    60_000,
+    Number(process.env.MAIL_BACKGROUND_SYNC_INTERVAL_MS || 120_000),
   );
   const limit = Math.max(
     1,
@@ -35,15 +35,23 @@ function startMailBackgroundSync() {
   );
   const concurrency = Math.max(
     1,
-    Math.min(8, Number(process.env.MAIL_BACKGROUND_SYNC_CONCURRENCY || 4)),
+    Math.min(4, Number(process.env.MAIL_BACKGROUND_SYNC_CONCURRENCY || 1)),
   );
   const port = process.env.PORT || "3000";
   const url = `http://127.0.0.1:${port}/api/cron/mail-sync?limit=${limit}&concurrency=${concurrency}`;
+  let inFlight = false;
   const run = () => {
+    if (inFlight) {
+      console.warn("[cron] mail-sync skipped: previous run still in flight");
+      return;
+    }
+    inFlight = true;
+    const timeoutMs = Math.max(15_000, Math.min(120_000, intervalMs - 5_000));
     fetch(url, {
       headers: {
         "x-internal-mail-sync-secret": process.env.INTERNAL_MAIL_SYNC_SECRET,
       },
+      signal: AbortSignal.timeout(timeoutMs),
     })
       .then(async (res) => {
         if (!res.ok) {
@@ -55,9 +63,12 @@ function startMailBackgroundSync() {
       })
       .catch((err) => {
         console.error("[cron] mail-sync network error:", err?.message);
+      })
+      .finally(() => {
+        inFlight = false;
       });
   };
-  setTimeout(run, 10_000);
+  setTimeout(run, 30_000);
   setInterval(run, intervalMs);
 }
 
