@@ -33,6 +33,7 @@ export type ImapMessageSummary = {
   internalDate: Date | null;
 };
 
+/** Не даём RECENT-forward уходить дальше maxMessages UID от «головы» ящика — иначе тянет архив вместо свежих. */
 export function recentWindowStartUid(
   requestedStartUid: number,
   uidNext: number | undefined,
@@ -40,7 +41,8 @@ export function recentWindowStartUid(
 ): number {
   const startUid = Math.max(1, requestedStartUid);
   if (!uidNext || uidNext <= 1 || maxMessages <= 0) return startUid;
-  return startUid;
+  const recentFloor = Math.max(1, uidNext - maxMessages);
+  return Math.max(startUid, recentFloor);
 }
 
 function envTimeoutMs(name: string, fallback: number): number {
@@ -104,6 +106,7 @@ export async function* fetchFolderMessages(
       client.mailbox ? client.mailbox.uidNext : undefined,
       maxMessages,
     );
+    let yielded = 0;
     for await (const item of client.fetch(
       `${effectiveStartUid}:*`,
       { uid: true, flags: true, internalDate: true, source: true },
@@ -121,6 +124,8 @@ export async function* fetchFolderMessages(
               : null,
         source: Buffer.isBuffer(item.source) ? item.source : Buffer.from(item.source),
       };
+      yielded += 1;
+      if (maxMessages > 0 && yielded >= maxMessages) break;
     }
   } finally {
     lock.release();
