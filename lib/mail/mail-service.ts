@@ -34,6 +34,7 @@ import {
   decodeMailListCursor,
   encodeMailListCursor,
 } from "@/lib/mail/mail-list-cursor";
+import { previewFromMailBody, previewFromText, textFromHtml } from "@/lib/mail/mail-preview";
 import { sendSmtpMessage, type MailSendAttachment } from "@/lib/mail/smtp-client";
 import { syncEmailAccount } from "@/lib/mail/mail-sync.service";
 
@@ -128,23 +129,7 @@ export function stringField(value: unknown, max = 2000): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-export function previewFromText(text: string, max = 320): string | null {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  return normalized ? normalized.slice(0, max) : null;
-}
-
-export function textFromHtml(html: string): string {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+export { previewFromText, textFromHtml, previewFromMailBody } from "@/lib/mail/mail-preview";
 
 import { sanitizeMailHtml } from "@/lib/mail/sanitize-mail-html";
 
@@ -437,6 +422,7 @@ export async function updateEmailAccountAccessRoles(
   return { id: accountId, allowedRoles, hoverPreviewEnabled };
 }
 
+/** Удаляет ящик и всю CRM-копию почты (письма, папки, метки, правила, jobs). Яндекс.Почта не затрагивается. */
 export async function deleteEmailAccount(
   db: PrismaClient,
   tenantId: string,
@@ -445,15 +431,26 @@ export async function deleteEmailAccount(
   accountId: string,
 ): Promise<void> {
   if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
-  const updated = await db.emailAccount.updateMany({
+  const account = await db.emailAccount.findFirst({
     where: { id: accountId, tenantId },
-    data: {
-      isActive: false,
-      lastSyncError: null,
-      allowedRoles: [UserRole.OWNER],
-    },
+    select: { id: true },
   });
-  if (!updated.count) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+
+  const { forceResetMailSyncJobs } = await import("@/lib/mail/mail-queue");
+  await forceResetMailSyncJobs(db, { tenantId, accountId });
+
+  const attachments = await db.emailAttachment.findMany({
+    where: { tenantId, email: { accountId } },
+    select: { diskRelPath: true },
+  });
+  await Promise.all(
+    attachments.map((row) =>
+      deleteMailAttachmentBytes(row.diskRelPath).catch(() => undefined),
+    ),
+  );
+
+  await db.emailAccount.delete({ where: { id: accountId } });
 }
 
 export async function testEmailAccountConnection(
@@ -772,6 +769,7 @@ export async function listEmails(
   return {
     emails: emails.map((email) => ({
       ...email,
+      preview: email.preview ?? previewFromMailBody(email.textBody, email.htmlBody),
       folder: email.folder ? toMailFolderDto(email.folder) : null,
       hasLinkedOrder: email._count.sourceOrderLinks > 0,
       linkedOrderNumber: email.sourceOrderLinks[0]?.order.orderNumber ?? null,

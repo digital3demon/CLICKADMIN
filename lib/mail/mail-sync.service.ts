@@ -34,6 +34,7 @@ import {
 } from "@/lib/mail/mail-attachment-storage";
 import { ensureOrderDigitaldemonRules } from "@/lib/mail/order-digitaldemon-rules";
 import { emailDirectionForImapFolder, emailFolderListWhere } from "@/lib/mail/mail-folder-query";
+import { previewFromMailBody } from "@/lib/mail/mail-preview";
 import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 
 const RECENT_MESSAGES_PER_FOLDER = 300;
@@ -214,18 +215,7 @@ function firstAddress(value: ParsedMail["from"]): { name: string | null; address
   };
 }
 
-export function previewFrom(text: string | undefined): string | null {
-  const normalized = (text ?? "")
-    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
-    .replace(/\[([^\]]+)]\((?:https?:\/\/|cid:)[^)]*\)/gi, "$1")
-    .replace(/\[(?:https?:\/\/|cid:)[^\]]+]/gi, " ")
-    .replace(/https?:\/\/\S+/gi, " ")
-    // JS \b не считает кириллицу word-символами, поэтому границы задаём через \p{L}.
-    .replace(/(?<!\p{L})(?:логотип|logo)(?!\p{L})/giu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return normalized ? normalized.slice(0, 320) : null;
-}
+export { previewFrom, previewFromMailBody } from "@/lib/mail/mail-preview";
 
 function isUniqueConstraintError(error: unknown): boolean {
   return (
@@ -234,6 +224,15 @@ function isUniqueConstraintError(error: unknown): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === "P2002"
   );
+}
+
+async function parseMailForSync(item: ImapFetchedMessage): Promise<ParsedMail | null> {
+  try {
+    return await simpleParser(item.source);
+  } catch (err) {
+    logger.error({ err, uid: item.uid }, "mail message parse failed");
+    return null;
+  }
 }
 
 async function emailUidFolderTaken(
@@ -274,15 +273,6 @@ function headersToJson(headers: ParsedMail["headers"]): Record<string, string> {
     out[key] = Array.isArray(value) ? value.join(", ") : String(value ?? "");
   }
   return out;
-}
-
-async function parseMailForSync(item: ImapFetchedMessage): Promise<ParsedMail | null> {
-  try {
-    return await simpleParser(item.source);
-  } catch (err) {
-    logger.error({ err, uid: item.uid }, "mail message parse failed");
-    return null;
-  }
 }
 
 export type MailRuleConditionField = "from" | "toCc" | "subject" | "body" | "attachmentName";
@@ -817,6 +807,9 @@ export async function syncEmailAccount(
             id: true,
             isRead: true,
             isFlagged: true,
+            preview: true,
+            textBody: true,
+            htmlBody: true,
             labelAssignments: { select: { labelId: true } },
           },
         });
@@ -830,6 +823,10 @@ export async function syncEmailAccount(
           }
           if (exists.isFlagged !== flaggedOnServer) {
             data.isFlagged = flaggedOnServer;
+          }
+          if (!exists.preview) {
+            const backfilledPreview = previewFromMailBody(exists.textBody, exists.htmlBody);
+            if (backfilledPreview) data.preview = backfilledPreview;
           }
           if (Object.keys(data).length > 0) {
             await db.email.update({ where: { id: exists.id }, data });
@@ -1015,7 +1012,7 @@ export async function syncEmailAccount(
               to: addressList(parsed.to),
               cc: addressList(parsed.cc),
               subject: parsed.subject ?? null,
-              preview: previewFrom(parsed.text),
+              preview: previewFromMailBody(parsed.text, typeof parsed.html === "string" ? parsed.html : null),
               textBody: parsed.text ?? null,
               htmlBody: typeof parsed.html === "string" ? parsed.html : null,
               rawHeaders: headersToJson(parsed.headers),

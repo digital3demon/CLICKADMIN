@@ -3,7 +3,6 @@ import { EmailFolderType, EmailSyncMode } from "@prisma/client";
 import {
   evaluateIncomingRules,
   inferFolderType,
-  previewFrom,
   ruleMatches,
   shouldSyncFolderForMode,
 } from "./mail-sync.service";
@@ -36,16 +35,6 @@ describe("shouldSyncFolderForMode", () => {
     expect(shouldSyncFolderForMode(EmailFolderType.INBOX, EmailSyncMode.BACKFILL)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.SENT, EmailSyncMode.BACKFILL)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.ARCHIVE, EmailSyncMode.BACKFILL)).toBe(true);
-  });
-});
-
-describe("previewFrom", () => {
-  it("removes logo alt text and image urls from previews", () => {
-    expect(
-      previewFrom(
-        "Логотип [https://yastatic.net/logo.png] ЗДРАВСТВУЙТЕ, ваш доступ включён",
-      ),
-    ).toBe("ЗДРАВСТВУЙТЕ, ваш доступ включён");
   });
 });
 
