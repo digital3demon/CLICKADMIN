@@ -18,7 +18,16 @@ export async function POST(
     const mode = stringField(body.mode, 20) === EmailSyncMode.BACKFILL
       ? EmailSyncMode.BACKFILL
       : EmailSyncMode.RECENT;
-    const result = await enqueueAndStartMailSyncJob(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, id, mode);
+    const force = body.force === true || body.force === "true" || body.force === 1 || body.force === "1";
+    const result = await enqueueAndStartMailSyncJob(
+      r.ctx.db,
+      r.ctx.tenantId,
+      r.ctx.userId,
+      r.ctx.role,
+      id,
+      mode,
+      { force },
+    );
     return mailJsonResponse({
       ok: true,
       background: result.background ?? false,

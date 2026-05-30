@@ -15,6 +15,8 @@ import {
   fetchFolderMessageSummariesBefore,
   fetchFolderMessagesBefore,
   fetchFolderMessages,
+  forceReconnectImapClient,
+  isImapConnectionError,
   listImapFolders,
   replaceImapClientIfNeeded,
   setMessageSeen,
@@ -22,6 +24,7 @@ import {
   type ImapFetchedMessage,
   type ImapFolderInfo,
   type ImapMessageSummary,
+  type MailConnectionAccount,
 } from "@/lib/mail/imap-client";
 import type { ImapFlow } from "imapflow";
 import {
@@ -99,8 +102,11 @@ export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMo
   );
 }
 
+type ImapClientHolder = { client: ImapFlow };
+
 async function* fetchRecentFolderMessages(
-  client: Parameters<typeof fetchFolderMessages>[0],
+  account: MailConnectionAccount,
+  holder: ImapClientHolder,
   folderPath: string,
   startUid: number,
   maxMessages: number,
@@ -114,37 +120,52 @@ async function* fetchRecentFolderMessages(
   }
 
   async function* runStrategy(
-    messages: AsyncGenerator<ImapFetchedMessage>,
+    createMessages: (client: ImapFlow) => AsyncGenerator<ImapFetchedMessage>,
     cursorMode: SyncCursorMode,
     strategyKey: keyof FolderStrategyResults,
     strategy: string,
   ): AsyncGenerator<SyncFetchedMessage> {
     let found = 0;
-    try {
-      for await (const item of messages) {
-        found += 1;
-        if (yieldedUids.has(item.uid)) continue;
-        yieldedUids.add(item.uid);
-        yield { item, cursorMode };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        holder.client = await replaceImapClientIfNeeded(account, holder.client);
+        if (attempt > 0) {
+          holder.client = await forceReconnectImapClient(account, holder.client);
+        }
+        for await (const item of createMessages(holder.client)) {
+          found += 1;
+          if (yieldedUids.has(item.uid)) continue;
+          yieldedUids.add(item.uid);
+          yield { item, cursorMode };
+        }
+        if (strategyResults) strategyResults[strategyKey] = { found };
+        return;
+      } catch (err) {
+        if (attempt === 0 && isImapConnectionError(err)) {
+          logger.warn(
+            { err, folderPath, strategy, attempt },
+            "mail recent IMAP strategy connection error, retrying",
+          );
+          continue;
+        }
+        const message = syncErrorMessage(err);
+        if (strategyResults) strategyResults[strategyKey] = { found, error: message };
+        logger.warn({ err, folderPath, strategy }, `mail recent IMAP strategy "${strategy}" failed`);
+        return;
       }
-      if (strategyResults) strategyResults[strategyKey] = { found };
-    } catch (err) {
-      const message = syncErrorMessage(err);
-      if (strategyResults) strategyResults[strategyKey] = { found, error: message };
-      logger.warn({ err, folderPath, strategy }, `mail recent IMAP strategy "${strategy}" failed`);
     }
   }
 
   // RECENT: хвост UID (свежие) + forward в узком окне у uidNext. SINCE убран — за 14 дней
   // забивает лимит старыми письмами и мешает дойти до новых в других папках.
   yield* runStrategy(
-    fetchFolderMessagesBefore(client, folderPath, null, maxMessages),
+    (client) => fetchFolderMessagesBefore(client, folderPath, null, maxMessages),
     "lookback",
     "tail",
     "latest-tail",
   );
   yield* runStrategy(
-    fetchFolderMessages(client, folderPath, startUid, maxMessages),
+    (client) => fetchFolderMessages(client, folderPath, startUid, maxMessages),
     "forward",
     "forward",
     "forward-cursor",
@@ -678,6 +699,7 @@ export async function syncEmailAccount(
   const startedAt = Date.now();
   const mode = options.mode ?? EmailSyncMode.RECENT;
   let client = createImapClient(account);
+  const imapClientHolder: ImapClientHolder = { client };
   let imported = 0;
   let skipped = 0;
   let folders = 0;
@@ -699,6 +721,7 @@ export async function syncEmailAccount(
     for (const listed of listedFolders) {
       try {
       client = await replaceImapClientIfNeeded(account, client);
+      imapClientHolder.client = client;
       let folder = await upsertFolder(db, account, listed);
       folders += 1;
       const { folder: folderAfterValidity, uidValidityMismatch, imapUidNext } =
@@ -752,12 +775,14 @@ export async function syncEmailAccount(
               "backfill",
             )
           : fetchRecentFolderMessages(
-              client,
+              account,
+              imapClientHolder,
               listed.path,
               maxUid + 1,
               maxMessages,
               strategyResults,
             );
+      client = imapClientHolder.client;
       for await (const { item, cursorMode } of messages) {
         if (mode !== EmailSyncMode.BACKFILL && folderImported >= maxMessages) break;
         processed += 1;
@@ -1001,6 +1026,7 @@ export async function syncEmailAccount(
           }
         }
       }
+      client = imapClientHolder.client;
 
       await db.emailFolder.update({
         where: { id: folder.id },

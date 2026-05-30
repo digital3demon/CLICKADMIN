@@ -147,7 +147,7 @@ const MAIL_LIST_MAX_WIDTH = 920;
 const MAIL_DB_REFRESH_INTERVAL_MS = 15_000;
 const MAIL_ACTIVE_SYNC_INTERVAL_MS = 30_000;
 const MAIL_SYNC_RUNNING_WARN_MS = 2 * 60 * 1000;
-const MAIL_SYNC_RUNNING_STALE_MS = 12 * 60 * 1000;
+const MAIL_SYNC_RUNNING_STALE_MS = 15 * 60 * 1000;
 
 function readLastMailAccountId(): string {
   try {
@@ -409,32 +409,44 @@ export function MailLayout() {
   }, [activeAccountId, refreshEmailsSilently]);
 
   const syncActive = useCallback(async (options: { silent?: boolean } = {}) => {
-    if (!activeAccountId || syncKickRef.current) return;
-    syncKickRef.current = true;
-    window.setTimeout(() => {
-      syncKickRef.current = false;
-    }, 4000);
+    if (!activeAccountId) return;
+    if (options.silent && syncKickRef.current) return;
+    if (options.silent) {
+      syncKickRef.current = true;
+      window.setTimeout(() => {
+        syncKickRef.current = false;
+      }, 4000);
+    }
     if (!options.silent) {
       setSyncing(true);
       setError("");
-      setSyncStatus("Проверяем новые письма...");
+      setSyncStatus("Запускаем синхронизацию…");
     }
+    let keepSyncing = false;
     try {
       const data = await jsonFetch<{
         status?: string;
         lastError?: string | null;
         background?: boolean;
         queued?: boolean;
+        enqueued?: boolean;
         result?: { imported?: number; skipped?: number; folders?: number; folderStats?: MailSyncFolderStat[] } | null;
         rulesApply?: { skipped: boolean; processed: number; updated: number; labelsTouched: number };
         processed?: boolean;
-      }>(`/api/mail/accounts/${activeAccountId}/sync`, { method: "POST" });
+      }>(`/api/mail/accounts/${activeAccountId}/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: !options.silent }),
+      });
       if (!options.silent) {
         if (data.background || data.status === "RUNNING" || data.status === "QUEUED") {
+          keepSyncing = true;
           setSyncStatus(
-            data.status === "QUEUED"
-              ? "Синхронизация в очереди"
-              : "Загружаем новые письма…",
+            data.enqueued === false && data.status === "RUNNING"
+              ? "Синхронизация уже выполняется…"
+              : data.status === "QUEUED"
+                ? "Синхронизация в очереди"
+                : "Загружаем новые письма…",
           );
         } else if (data.status === "FAILED") {
           setSyncStatus("");
@@ -460,7 +472,7 @@ export function MailLayout() {
     } catch (err) {
       if (!options.silent) setError(mailErrorMessage(err, "Ошибка синхронизации"));
     } finally {
-      if (!options.silent) setSyncing(false);
+      if (!options.silent && !keepSyncing) setSyncing(false);
     }
   }, [activeAccountId, loadAccounts, refreshEmailsSilently]);
 
@@ -503,12 +515,16 @@ export function MailLayout() {
           (latest.status === "SUCCEEDED" || latest.status === "FAILED") &&
           (!prev || prev.id !== latest.id || prev.status !== latest.status);
         if (latest.status === "SUCCEEDED" && finishedNow) {
+          setSyncing(false);
           void loadAccounts();
           void loadEmails(null, false);
         }
         lastSyncJobRef.current = { id: latest.id, status: latest.status };
-        if (latest.status === "QUEUED") setSyncStatus("Синхронизация в очереди");
-        else if (latest.status === "RUNNING") {
+        if (latest.status === "QUEUED") {
+          setSyncing(true);
+          setSyncStatus("Синхронизация в очереди");
+        } else if (latest.status === "RUNNING") {
+          setSyncing(true);
           const startedMs = latest.startedAt ? Date.parse(latest.startedAt) : NaN;
           const runningMs = Number.isFinite(startedMs) ? Date.now() - startedMs : 0;
           if (runningMs >= MAIL_SYNC_RUNNING_STALE_MS) {
@@ -520,8 +536,11 @@ export function MailLayout() {
           } else {
             setSyncStatus("Загружаем новые письма…");
           }
-        } else if (latest.status === "FAILED") setSyncStatus(mailErrorMessage(latest.lastError, "Синхронизация завершилась ошибкой"));
-        else {
+        } else if (latest.status === "FAILED") {
+          setSyncing(false);
+          setSyncStatus(mailErrorMessage(latest.lastError, "Синхронизация завершилась ошибкой"));
+        } else {
+          setSyncing(false);
           const folderSummary = mailSyncFolderSummary(latest.stats?.folderStats);
           setSyncStatus(
             `Синхронизация завершена: ${latest.imported} новых, ${latest.skipped} уже были в CRM.${folderSummary}`,

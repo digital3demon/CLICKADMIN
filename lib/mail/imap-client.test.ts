@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { recentWindowStartUid } from "./imap-client";
+import { isImapConnectionError, recentWindowStartUid } from "./imap-client";
 
 vi.mock("server-only", () => ({}));
+
+describe("isImapConnectionError", () => {
+  it("detects imapflow connection failures", () => {
+    expect(isImapConnectionError(new Error("Connection not available"))).toBe(true);
+    expect(isImapConnectionError(new Error("Socket timeout"))).toBe(true);
+    expect(isImapConnectionError(new Error("IMAP-команда отклонена сервером"))).toBe(false);
+  });
+});
 
 describe("recentWindowStartUid", () => {
   it("does not scan the whole mailbox when cursor is at the beginning", () => {

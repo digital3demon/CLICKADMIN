@@ -252,6 +252,27 @@ export async function replaceImapClientIfNeeded(
   client: ImapFlow,
 ): Promise<ImapFlow> {
   if (client.usable) return client;
+  return forceReconnectImapClient(account, client);
+}
+
+export function isImapConnectionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("connection not available") ||
+    msg.includes("not authenticated") ||
+    msg.includes("connection closed") ||
+    msg.includes("connection ended") ||
+    msg.includes("econnreset") ||
+    msg.includes("socket hang up") ||
+    msg.includes("socket timeout")
+  );
+}
+
+export async function forceReconnectImapClient(
+  account: MailConnectionAccount,
+  client: ImapFlow,
+): Promise<ImapFlow> {
   await client.logout().catch(() => undefined);
   const next = createImapClient(account);
   await next.connect();
