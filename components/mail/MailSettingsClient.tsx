@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MailAccount, MailFolder } from "@/components/mail/types";
 import { mailFolderDisplayName } from "@/components/mail/types";
 import { ALL_USER_ROLES, USER_ROLE_LABELS } from "@/lib/user-role-labels";
@@ -58,11 +58,22 @@ function ruleConditionParts(conditions: Record<string, unknown>): string[] {
   ].filter(Boolean);
 }
 
-async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { ...init, cache: "no-store" });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
+async function jsonFetch<T>(url: string, init?: RequestInit, timeoutMs = 45_000): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, cache: "no-store", signal: controller.signal });
+    const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Сервер не ответил вовремя. Попробуйте обновить страницу.");
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function ruleSummary(rule: EmailRule, account: MailAccount | null): { conditions: string; actions: string } {
@@ -167,12 +178,15 @@ export function MailSettingsClient() {
   const [currentUserRole, setCurrentUserRole] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [accountsLoading, setAccountsLoading] = useState(true);
   const [accountDetailsLoading, setAccountDetailsLoading] = useState(false);
+  const [rulesLoading, setRulesLoading] = useState(false);
   const [selectedAccessRoles, setSelectedAccessRoles] = useState<string[]>(["OWNER"]);
   const [hoverPreviewEnabled, setHoverPreviewEnabled] = useState(true);
   const [accessSaving, setAccessSaving] = useState(false);
   const [ruleFolderChoice, setRuleFolderChoice] = useState("");
   const [ruleLabelChoice, setRuleLabelChoice] = useState("");
+  const accessDraftAccountIdRef = useRef("");
 
   const activeAccount = useMemo(
     () => accounts.find((a) => a.id === accountId) ?? accounts[0] ?? null,
@@ -181,17 +195,22 @@ export function MailSettingsClient() {
 
   const loadAccounts = useCallback(async () => {
     setError("");
-    const accountsData = await jsonFetch<{
-      accounts: MailAccount[];
-      currentUser?: { role?: string };
-    }>("/api/mail/accounts?lite=1");
-    setAccounts(accountsData.accounts);
-    setCurrentUserRole(accountsData.currentUser?.role || "");
-    setAccountId((prev) =>
-      prev && accountsData.accounts.some((account) => account.id === prev)
-        ? prev
-        : accountsData.accounts[0]?.id || "",
-    );
+    setAccountsLoading(true);
+    try {
+      const accountsData = await jsonFetch<{
+        accounts: MailAccount[];
+        currentUser?: { role?: string };
+      }>("/api/mail/accounts?lite=1");
+      setAccounts(accountsData.accounts);
+      setCurrentUserRole(accountsData.currentUser?.role || "");
+      setAccountId((prev) =>
+        prev && accountsData.accounts.some((account) => account.id === prev)
+          ? prev
+          : accountsData.accounts[0]?.id || "",
+      );
+    } finally {
+      setAccountsLoading(false);
+    }
   }, []);
 
   const loadAccountDetails = useCallback(async (nextAccountId: string) => {
@@ -228,9 +247,12 @@ export function MailSettingsClient() {
   const canManageAccountAccess = currentUserRole === "OWNER";
 
   useEffect(() => {
-    setSelectedAccessRoles(Array.from(new Set(["OWNER", ...(activeAccount?.allowedRoles || [])])));
-    setHoverPreviewEnabled(activeAccount?.hoverPreviewEnabled ?? true);
-  }, [activeAccount?.id, activeAccount?.allowedRoles, activeAccount?.hoverPreviewEnabled]);
+    if (!activeAccount) return;
+    if (accessDraftAccountIdRef.current === activeAccount.id) return;
+    accessDraftAccountIdRef.current = activeAccount.id;
+    setSelectedAccessRoles(Array.from(new Set(["OWNER", ...(activeAccount.allowedRoles || [])])));
+    setHoverPreviewEnabled(activeAccount.hoverPreviewEnabled ?? true);
+  }, [activeAccount]);
 
   useEffect(() => {
     void loadAccounts().catch((err) =>
@@ -239,10 +261,23 @@ export function MailSettingsClient() {
   }, [loadAccounts]);
 
   useEffect(() => {
-    void Promise.all([loadAccountDetails(accountId), loadRules(accountId)]).catch((err) =>
-      setError(err instanceof Error ? err.message : "Ошибка загрузки данных ящика"),
+    if (!accountId) return;
+    void loadAccountDetails(accountId).catch((err) =>
+      setError(err instanceof Error ? err.message : "Ошибка загрузки папок и меток"),
     );
-  }, [accountId, loadAccountDetails, loadRules]);
+  }, [accountId, loadAccountDetails]);
+
+  useEffect(() => {
+    if (!accountId) {
+      setRules([]);
+      setRulesLoading(false);
+      return;
+    }
+    setRulesLoading(true);
+    void loadRules(accountId)
+      .catch((err) => setError(err instanceof Error ? err.message : "Ошибка загрузки правил"))
+      .finally(() => setRulesLoading(false));
+  }, [accountId, loadRules]);
 
   async function saveAccount(formData: FormData) {
     setError("");
@@ -267,18 +302,22 @@ export function MailSettingsClient() {
   async function deleteAccount(account: MailAccount) {
     if (!canManageAccountAccess) return;
     const label = account.displayName || account.email;
-    const confirmText = `Отключить ящик «${label}» в CRM? Письма в Яндекс.Почте и история в базе не удаляются.`;
+    const confirmText =
+      `Удалить ящик «${label}» из CRM?\n\n` +
+      `Будут удалены все письма, папки, метки и правила этого ящика в базе CRM. ` +
+      `Письма в Яндекс.Почте останутся. После удаления подключите ящик заново — синхронизация начнётся с чистой копии.`;
     if (!window.confirm(confirmText)) return;
 
     setError("");
-    setStatus("Отключаю ящик...");
+    setStatus("Удаляю ящик и копию писем в CRM…");
     try {
       await jsonFetch(`/api/mail/accounts/${account.id}`, { method: "DELETE" });
-      setStatus("Ящик отключён");
+      setStatus("Ящик удалён из CRM");
+      accessDraftAccountIdRef.current = "";
       setAccountId((prev) => (prev === account.id ? "" : prev));
       await loadAccounts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось отключить ящик");
+      setError(err instanceof Error ? err.message : "Не удалось удалить ящик");
     }
   }
 
@@ -314,6 +353,7 @@ export function MailSettingsClient() {
           account.id === activeAccount.id ? { ...account, allowedRoles, hoverPreviewEnabled } : account,
         ),
       );
+      accessDraftAccountIdRef.current = activeAccount.id;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить доступ к ящику");
     } finally {
@@ -486,6 +526,11 @@ export function MailSettingsClient() {
 
   return (
     <div className="space-y-6">
+      {accountsLoading ? (
+        <div className="rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+          Загружаем список ящиков…
+        </div>
+      ) : null}
       {error ? (
         <div className="rounded-xl border border-red-300/50 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
           {error}
@@ -526,7 +571,7 @@ export function MailSettingsClient() {
                   onClick={() => void deleteAccount(activeAccount)}
                   className="h-10 rounded-xl border border-red-400/40 px-3 text-sm font-semibold text-red-600 hover:bg-red-500/10 dark:text-red-300"
                 >
-                  Отключить ящик
+                  Удалить ящик из CRM
                 </button>
               ) : null}
             </div>
@@ -606,7 +651,8 @@ export function MailSettingsClient() {
                       checked={checked}
                       disabled={isOwnerRole || accessSaving}
                       onChange={() => toggleAccessRole(role.value)}
-                      className="h-4 w-4 rounded border-[var(--input-border)]"
+                      onClick={(event) => event.stopPropagation()}
+                      className="h-4 w-4 shrink-0 rounded border-[var(--input-border)]"
                     />
                     <span>{role.label}</span>
                   </label>
@@ -628,6 +674,23 @@ export function MailSettingsClient() {
                 </span>
               </span>
             </label>
+            <div className="mt-4 rounded-xl border border-red-400/30 bg-red-500/5 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-[var(--app-text)]">Удалить ящик из CRM</h4>
+                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                    Удаляются все письма, папки, метки и правила этой копии в CRM. В Яндекс.Почте письма останутся.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void deleteAccount(activeAccount)}
+                  className="rounded-xl border border-red-400/40 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-500/10 dark:text-red-300"
+                >
+                  Удалить ящик
+                </button>
+              </div>
+            </div>
           </div>
         ) : activeAccount ? (
           <div className="mt-5 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4 text-sm text-[var(--text-secondary)]">
@@ -650,7 +713,7 @@ export function MailSettingsClient() {
           <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-3">
             {accountDetailsLoading ? (
               <div className="rounded-xl border border-dashed border-[var(--card-border)] p-6 text-sm text-[var(--text-muted)]">
-                Загружаем папки выбранного ящика...
+                Загружаем папки выбранного ящика…
               </div>
             ) : activeAccount?.folders.length ? (
               activeAccount.folders.map((folder) => {
@@ -734,9 +797,9 @@ export function MailSettingsClient() {
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_32rem]">
           <div className="space-y-3">
-            {accountDetailsLoading ? (
+            {rulesLoading ? (
               <div className="rounded-xl border border-dashed border-[var(--card-border)] p-6 text-sm text-[var(--text-muted)]">
-                Загружаем правила выбранного ящика...
+                Загружаем правила выбранного ящика…
               </div>
             ) : rules.length > 0 ? (
               rules.map((rule) => {
