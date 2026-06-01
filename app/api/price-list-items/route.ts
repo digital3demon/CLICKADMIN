@@ -39,6 +39,7 @@ export async function GET(req: Request) {
         priceRub: true,
         leadWorkingDays: true,
         description: true,
+        variablePrice: true,
       },
     });
     if (!clinicId && !doctorId) {
@@ -79,6 +80,7 @@ type PostBody = {
   priceRub?: number;
   leadWorkingDays?: number | null;
   description?: string | null;
+  variablePrice?: boolean;
   sortOrder?: number;
   /** Каталог; если не указан — активный для нарядов */
   priceListId?: string | null;
@@ -114,6 +116,7 @@ export async function POST(req: Request) {
         : 0;
     const description =
       typeof body.description === "string" ? body.description.trim() || null : null;
+    const variablePrice = body.variablePrice === true;
     const sectionTitle =
       typeof body.sectionTitle === "string"
         ? body.sectionTitle.trim() || null
@@ -163,6 +166,7 @@ export async function POST(req: Request) {
         priceRub,
         leadWorkingDays: lead,
         description,
+        variablePrice,
         isActive: true,
         sortOrder,
       },

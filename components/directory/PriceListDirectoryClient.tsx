@@ -18,6 +18,7 @@ type Row = {
   sectionTitle: string | null;
   subsectionTitle: string | null;
   priceRub: number;
+  variablePrice: boolean;
   leadWorkingDays: number | null;
   description: string | null;
 };
@@ -31,6 +32,7 @@ type EditDraft = {
   subsectionTitle: string;
   description: string;
   priceRub: string;
+  variablePrice: boolean;
   leadWorkingDays: string;
 };
 
@@ -48,6 +50,7 @@ function draftFromRow(row: Row): EditDraft {
     subsectionTitle: row.subsectionTitle ?? "",
     description: row.description ?? "",
     priceRub: String(row.priceRub),
+    variablePrice: row.variablePrice === true,
     leadWorkingDays:
       row.leadWorkingDays == null ? "" : String(row.leadWorkingDays),
   };
@@ -68,6 +71,7 @@ function draftChanged(row: Row, draft: EditDraft): boolean {
     draft.subsectionTitle.trim() !== (row.subsectionTitle ?? "") ||
     draft.description.trim() !== (row.description ?? "") ||
     (normalizeIntText(draft.priceRub) ?? 0) !== row.priceRub ||
+    draft.variablePrice !== (row.variablePrice === true) ||
     normalizeIntText(draft.leadWorkingDays) !== row.leadWorkingDays
   );
 }
@@ -422,6 +426,7 @@ export function PriceListDirectoryClient() {
           sectionTitle: draft.sectionTitle.trim() || null,
           subsectionTitle: draft.subsectionTitle.trim() || null,
           description: draft.description.trim() || null,
+          variablePrice: draft.variablePrice,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -733,7 +738,7 @@ export function PriceListDirectoryClient() {
                 {correctionError ? (
                   <p className="mb-3 text-sm text-red-600">{correctionError}</p>
                 ) : null}
-                <table className="min-w-[1180px] w-full border-collapse text-sm">
+                <table className="min-w-[1240px] w-full border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-[var(--card-border)] text-left text-xs uppercase tracking-wide text-[var(--text-muted)]">
                       <th className="px-2 py-2">Код</th>
@@ -741,6 +746,12 @@ export function PriceListDirectoryClient() {
                       <th className="px-2 py-2">Раздел</th>
                       <th className="px-2 py-2">Описание</th>
                       <th className="px-2 py-2">Цена</th>
+                      <th
+                        className="px-2 py-2 text-center"
+                        title="Вариативная цена — в наряде можно менять вручную"
+                      >
+                        ВАР
+                      </th>
                       <th className="px-2 py-2">Срок</th>
                       <th className="px-2 py-2">Действия</th>
                     </tr>
@@ -818,6 +829,20 @@ export function PriceListDirectoryClient() {
                                 updateDraft(row.id, { priceRub: e.target.value })
                               }
                               className="h-9 w-28 rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={draft.variablePrice}
+                              title="Вариативная цена"
+                              aria-label="Вариативная цена"
+                              onChange={(e) =>
+                                updateDraft(row.id, {
+                                  variablePrice: e.target.checked,
+                                })
+                              }
+                              className="h-4 w-4 rounded border-[var(--input-border)]"
                             />
                           </td>
                           <td className="px-2 py-2">

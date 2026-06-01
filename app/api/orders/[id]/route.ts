@@ -299,6 +299,7 @@ async function hydrateOrderResponse<T extends OrderForHydration>(
             name: true,
             priceRub: true,
             leadWorkingDays: true,
+            variablePrice: true,
           },
         })
       : Promise.resolve([]),

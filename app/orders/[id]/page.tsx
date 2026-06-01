@@ -174,7 +174,14 @@ export default async function OrderEditPage({
   const priceItems = priceListItemIds.length
     ? await pricingPrisma.priceListItem.findMany({
         where: { id: { in: priceListItemIds } },
-        select: { id: true, code: true, name: true, priceRub: true, leadWorkingDays: true },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          priceRub: true,
+          leadWorkingDays: true,
+          variablePrice: true,
+        },
       })
     : [];
   const priceItemById = new Map(priceItems.map((x) => [x.id, x]));

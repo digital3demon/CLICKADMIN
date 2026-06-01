@@ -32,6 +32,8 @@ export type DetailPriceListLine = {
   label?: string;
   /** true — цена подставлена из индивидуальных условий клиники */
   isIndividualPrice?: boolean;
+  /** В прайсе отмечено «ВАР» — цену в наряде можно менять вручную */
+  variablePrice?: boolean;
   teethFdi?: string[];
   /** null / undefined — не указано */
   jawArch?: JawArch | null;

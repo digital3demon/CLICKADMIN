@@ -522,6 +522,7 @@ export type OrderEditInitial = {
       name: string;
       priceRub: number;
       leadWorkingDays?: number | null;
+      variablePrice?: boolean;
     } | null;
     materialId: string | null;
     shade: string | null;
@@ -1035,6 +1036,7 @@ export function OrderEditForm({
           priceListItemId: meta.id,
           priceListCode: meta.code,
           priceListName: meta.name,
+          priceListVariablePrice: false,
           materialId: "",
           shade: "",
           quantity: 1,

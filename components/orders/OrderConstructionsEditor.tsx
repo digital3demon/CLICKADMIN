@@ -9,6 +9,7 @@ import {
 } from "@/components/orders/new-order-form/PriceListPickModal";
 import { PriceListLineToothModal } from "@/components/orders/new-order-form/PriceListLineToothModal";
 import { parseDraftDiscountPercentString } from "@/lib/format-order-construction";
+import { isPriceListUnitPriceEditable } from "@/lib/pricing/variable-price-item";
 
 const inp =
   "w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]";
@@ -33,6 +34,8 @@ export type DraftConstructionLine = {
   priceListItemId: string;
   priceListCode: string;
   priceListName: string;
+  /** Из прайса: цену за ед. можно менять в наряде */
+  priceListVariablePrice: boolean;
   materialId: string;
   shade: string;
   quantity: number;
@@ -54,6 +57,7 @@ function emptyLine(kind: DraftConstructionKind): DraftConstructionLine {
     priceListItemId: "",
     priceListCode: "",
     priceListName: "",
+    priceListVariablePrice: false,
     materialId: "",
     shade: "",
     quantity: 1,
@@ -82,6 +86,7 @@ export function constructionsToDraft(
       name: string;
       priceRub: number;
       leadWorkingDays?: number | null;
+      variablePrice?: boolean;
     } | null;
     materialId: string | null;
     shade: string | null;
@@ -113,6 +118,7 @@ export function constructionsToDraft(
         priceListItemId: r.priceListItemId,
         priceListCode: pl?.code ?? "",
         priceListName: pl?.name ?? "",
+        priceListVariablePrice: pl?.variablePrice === true,
         materialId: r.materialId ?? "",
         shade: r.shade ?? "",
         quantity: r.quantity,
@@ -135,6 +141,7 @@ export function constructionsToDraft(
         priceListItemId: "",
         priceListCode: "",
         priceListName: "",
+        priceListVariablePrice: false,
         materialId: r.materialId ?? "",
         shade: r.shade ?? "",
         quantity: r.quantity,
@@ -158,6 +165,7 @@ export function constructionsToDraft(
         priceListItemId: "",
         priceListCode: "",
         priceListName: "",
+        priceListVariablePrice: false,
         materialId: r.materialId ?? "",
         shade: r.shade ?? "",
         quantity: r.quantity,
@@ -179,6 +187,7 @@ export function constructionsToDraft(
       priceListItemId: "",
       priceListCode: "",
       priceListName: "",
+      priceListVariablePrice: false,
       materialId: r.materialId ?? "",
       shade: r.shade ?? "",
       quantity: r.quantity,
@@ -358,6 +367,7 @@ export function OrderConstructionsEditor({
         line.priceListCode = "";
       }
       line.unitPrice = String(row.priceRub);
+      line.priceListVariablePrice = row.variablePrice === true;
       line.lineDiscountPercent = "0";
       line.leadWorkingDays = row.leadWorkingDays;
       onChange([...value, line]);
@@ -598,6 +608,9 @@ export function OrderConstructionsEditor({
       <div className="grid min-w-0 grid-cols-1 gap-3 pb-1 pt-1 sm:grid-cols-2">
         {value.map((row, idx) => {
           if (row.kind !== "priceList") return null;
+          const priceEditable = isPriceListUnitPriceEditable({
+            variablePrice: row.priceListVariablePrice,
+          });
           return (
             <div
               key={`pl-${idx}`}
@@ -652,11 +665,24 @@ export function OrderConstructionsEditor({
                       type="number"
                       min={0}
                       step={0.01}
-                      className={`${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`}
+                      className={
+                        priceEditable
+                          ? financeInputClass
+                          : `${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`
+                      }
                       value={row.unitPrice}
                       placeholder="—"
-                      readOnly
-                      title="Цена из прайса/индивидуальной цены. Меняется только скидкой и срочностью."
+                      readOnly={!priceEditable}
+                      title={
+                        priceEditable
+                          ? "Вариативная цена — укажите сумму для этой позиции"
+                          : "Цена из прайса/индивидуальной цены. Меняется только скидкой и срочностью."
+                      }
+                      onChange={
+                        priceEditable
+                          ? (e) => patch(idx, { unitPrice: e.target.value })
+                          : undefined
+                      }
                     />
                   </label>
                   <label className="min-w-0 flex flex-col gap-0.5 text-[10px] font-medium lowercase tracking-wide text-[var(--text-muted)]">

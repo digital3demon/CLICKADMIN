@@ -1695,6 +1695,8 @@ model PriceListItem {
   subsectionTitle String?
   /// Цена в рублях
   priceRub        Int
+  /// В наряде цену за ед. можно менять вручную (напр. доставка)
+  variablePrice   Boolean   @default(false)
   /// Срок в рабочих днях (как в Excel)
   leadWorkingDays Int?
   description     String?

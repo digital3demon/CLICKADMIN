@@ -10,6 +10,7 @@ import {
 import { ToothChartModal } from "./ToothChartModal";
 import { PriceListTabbedBody } from "@/components/price-list/PriceListTabbedBody";
 import { detailPriceListLabelLooksLikeCorrectionKp } from "@/lib/pricing/correction-price-item";
+import { isPriceListUnitPriceEditable } from "@/lib/pricing/variable-price-item";
 
 type ConstructionTypeRow = {
   id: string;
@@ -27,6 +28,7 @@ type PriceListApiRow = {
   subsectionTitle?: string | null;
   description?: string | null;
   priceRub: number;
+  variablePrice?: boolean;
   leadWorkingDays: number | null;
 };
 
@@ -250,6 +252,7 @@ export function DetailTab({
           label: `${it.code} · ${it.name}`,
           quantity: 1,
           unitPrice: it.priceRub,
+          variablePrice: it.variablePrice === true,
         },
       ]);
       setPriceListOpen(false);
@@ -429,42 +432,52 @@ export function DetailTab({
                   </label>
                   <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
                     Цена ₽ / ед.
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      className={
+                    {(() => {
+                      const correctionKp =
                         line.kind === "priceList" &&
-                        detailPriceListLabelLooksLikeCorrectionKp(line.label)
-                          ? `${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`
-                          : financeInputClass
-                      }
-                      value={line.unitPrice ?? ""}
-                      placeholder="—"
-                      readOnly={
-                        line.kind === "priceList" &&
-                        detailPriceListLabelLooksLikeCorrectionKp(line.label)
-                      }
-                      title={
-                        line.kind === "priceList" &&
-                        detailPriceListLabelLooksLikeCorrectionKp(line.label)
-                          ? "Для коррекции / переделки сумму меняет только скидка на строке (в составе заказа)"
-                          : undefined
-                      }
-                      onChange={(e) => {
-                        if (
-                          line.kind === "priceList" &&
-                          detailPriceListLabelLooksLikeCorrectionKp(line.label)
-                        ) {
-                          return;
-                        }
-                        const v = e.target.value.trim();
-                        patchLineFinance(line.id, {
-                          unitPrice:
-                            v === "" ? null : Math.max(0, Number(v) || 0),
+                        detailPriceListLabelLooksLikeCorrectionKp(line.label);
+                      const priceEditable =
+                        line.kind !== "priceList" ||
+                        isPriceListUnitPriceEditable({
+                          variablePrice:
+                            line.kind === "priceList"
+                              ? line.variablePrice
+                              : false,
+                          blockAsCorrectionKp: correctionKp,
                         });
-                      }}
-                    />
+                      return (
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          className={
+                            priceEditable
+                              ? financeInputClass
+                              : `${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`
+                          }
+                          value={line.unitPrice ?? ""}
+                          placeholder="—"
+                          readOnly={!priceEditable}
+                          title={
+                            correctionKp
+                              ? "Для коррекции / переделки сумму меняет только скидка на строке (в составе заказа)"
+                              : line.kind === "priceList" && line.variablePrice
+                                ? "Вариативная цена — укажите сумму для этой позиции"
+                                : line.kind === "priceList"
+                                  ? "Цена из прайса. Меняется только скидкой и срочностью."
+                                  : undefined
+                          }
+                          onChange={(e) => {
+                            if (!priceEditable) return;
+                            const v = e.target.value.trim();
+                            patchLineFinance(line.id, {
+                              unitPrice:
+                                v === "" ? null : Math.max(0, Number(v) || 0),
+                            });
+                          }}
+                        />
+                      );
+                    })()}
                   </label>
                   {line.kind !== "priceList" ? (
                     <>

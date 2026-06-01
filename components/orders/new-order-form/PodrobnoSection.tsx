@@ -12,6 +12,7 @@ import {
   type DetailLine,
   newDetailLineId,
 } from "./detail-lines";
+import { isPriceListUnitPriceEditable } from "@/lib/pricing/variable-price-item";
 
 type ConstructionTypeRow = { id: string; name: string };
 
@@ -106,6 +107,7 @@ export function PodrobnoSection({
           quantity: 1,
           unitPrice: row.priceRub,
           isIndividualPrice: row.isIndividualPrice === true,
+          variablePrice: row.variablePrice === true,
         },
       ]);
     },
@@ -211,6 +213,9 @@ export function PodrobnoSection({
       {priceLines.length === 0 ? null : (
         <div className="flex gap-3 overflow-x-auto overscroll-x-contain pb-1 pt-1 [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]">
           {priceLines.map((line) => {
+            const priceEditable = isPriceListUnitPriceEditable({
+              variablePrice: line.variablePrice,
+            });
             return (
             <div
               key={line.id}
@@ -270,11 +275,30 @@ export function PodrobnoSection({
                     type="number"
                     min={0}
                     step={0.01}
-                    className={`${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`}
+                    className={
+                      priceEditable
+                        ? financeInputClass
+                        : `${financeInputClass} cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--text-secondary)]`
+                    }
                     value={line.unitPrice ?? ""}
                     placeholder="—"
-                    readOnly
-                    title="Цена из прайса/индивидуальной цены. Меняется только скидкой и срочностью."
+                    readOnly={!priceEditable}
+                    title={
+                      priceEditable
+                        ? "Вариативная цена — укажите сумму для этой позиции"
+                        : "Цена из прайса/индивидуальной цены. Меняется только скидкой и срочностью."
+                    }
+                    onChange={
+                      priceEditable
+                        ? (e) => {
+                            const v = e.target.value.trim();
+                            patchPriceLine(line.id, {
+                              unitPrice:
+                                v === "" ? null : Math.max(0, Number(v) || 0),
+                            });
+                          }
+                        : undefined
+                    }
                   />
                 </label>
               </div>

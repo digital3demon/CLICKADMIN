@@ -13,6 +13,7 @@ export type PriceListPickRow = {
   description?: string | null;
   priceRub: number;
   isIndividualPrice?: boolean;
+  variablePrice?: boolean;
   leadWorkingDays: number | null;
 };
 

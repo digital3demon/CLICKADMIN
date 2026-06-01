@@ -16,6 +16,7 @@ type PatchBody = {
   priceRub?: number;
   leadWorkingDays?: number | null;
   description?: string | null;
+  variablePrice?: boolean;
 };
 
 async function canCorrectActivePrice() {
@@ -76,6 +77,7 @@ export async function PATCH(req: Request, { params }: RouteProps) {
         { status: 400 },
       );
     }
+    const variablePrice = body.variablePrice === true;
 
     const prisma = getPricingPrismaClient();
     const activePriceListId = await getActivePriceListId(prisma);
@@ -111,6 +113,7 @@ export async function PATCH(req: Request, { params }: RouteProps) {
         priceRub,
         leadWorkingDays,
         description,
+        variablePrice,
       },
       select: {
         id: true,
@@ -121,6 +124,7 @@ export async function PATCH(req: Request, { params }: RouteProps) {
         priceRub: true,
         leadWorkingDays: true,
         description: true,
+        variablePrice: true,
       },
     });
 
