@@ -140,6 +140,10 @@ function compareMailRowsByDateDesc(a: MailEmailRow, b: MailEmailRow): number {
 }
 
 const LAST_MAIL_ACCOUNT_STORAGE_KEY = "dental-crm:last-mail-account-id";
+const LAST_MAIL_FOLDER_STORAGE_PREFIX = "dental-crm:last-mail-folder:";
+const MAIL_LIST_CACHE_PREFIX = "dental-crm:mail-list-cache:";
+const MAIL_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAIL_LIST_INITIAL_SYNC_DELAY_MS = 4_000;
 const MAIL_LIST_WIDTH_STORAGE_KEY = "dental-crm:mail-list-width";
 const MAIL_LIST_DEFAULT_WIDTH = 600;
 const MAIL_LIST_MIN_WIDTH = 420;
@@ -162,6 +166,55 @@ function writeLastMailAccountId(accountId: string): void {
     if (accountId) window.localStorage.setItem(LAST_MAIL_ACCOUNT_STORAGE_KEY, accountId);
   } catch {
     /* localStorage can be unavailable in private contexts. */
+  }
+}
+
+function readLastMailFolderId(accountId: string): string {
+  try {
+    return window.localStorage.getItem(`${LAST_MAIL_FOLDER_STORAGE_PREFIX}${accountId}`) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeLastMailFolderId(accountId: string, folderId: string): void {
+  try {
+    if (accountId && folderId) {
+      window.localStorage.setItem(`${LAST_MAIL_FOLDER_STORAGE_PREFIX}${accountId}`, folderId);
+    }
+  } catch {
+    /* localStorage can be unavailable in private contexts. */
+  }
+}
+
+type MailListCachePayload = {
+  emails: MailEmailRow[];
+  nextCursor: string | null;
+  savedAt: number;
+};
+
+function readMailListCache(queryKey: string): MailListCachePayload | null {
+  try {
+    const raw = window.sessionStorage.getItem(`${MAIL_LIST_CACHE_PREFIX}${queryKey}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MailListCachePayload;
+    if (!parsed || !Array.isArray(parsed.emails) || Date.now() - parsed.savedAt > MAIL_LIST_CACHE_TTL_MS) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeMailListCache(queryKey: string, emails: MailEmailRow[], nextCursor: string | null): void {
+  try {
+    window.sessionStorage.setItem(
+      `${MAIL_LIST_CACHE_PREFIX}${queryKey}`,
+      JSON.stringify({ emails, nextCursor, savedAt: Date.now() } satisfies MailListCachePayload),
+    );
+  } catch {
+    /* sessionStorage quota or private mode */
   }
 }
 
@@ -279,6 +332,12 @@ export function MailLayout() {
       listHasRowsRef.current = false;
       setEmails([]);
       setNextCursor(null);
+      const cached = readMailListCache(listQueryKey);
+      if (cached?.emails.length) {
+        listHasRowsRef.current = true;
+        setEmails(cached.emails);
+        setNextCursor(cached.nextCursor);
+      }
     }
     if (append) setLoadingMore(true);
     else setLoadingEmails(!listHasRowsRef.current);
@@ -306,6 +365,7 @@ export function MailLayout() {
         return next;
       });
       setNextCursor(data.nextCursor);
+      if (!append) writeMailListCache(listQueryKey, data.emails, data.nextCursor);
     } catch (err) {
       if (loadSeq !== listLoadSeqRef.current || queryAtStart !== listQueryKey) return;
       setError(mailErrorMessage(err, "Ошибка загрузки писем"));
@@ -374,10 +434,17 @@ export function MailLayout() {
     if (activeLabelId && activeAccount.labels.some((label) => label.id === activeLabelId)) return;
     if (activeLabelId) setActiveLabelId("");
     const folder = inboxFolder(activeAccount);
-    setActiveFolderId((prev) =>
-      prev && activeAccount.folders.some((f) => f.id === prev) ? prev : folder?.id || "",
-    );
+    const savedFolderId = readLastMailFolderId(activeAccount.id);
+    setActiveFolderId((prev) => {
+      if (prev && activeAccount.folders.some((f) => f.id === prev)) return prev;
+      if (savedFolderId && activeAccount.folders.some((f) => f.id === savedFolderId)) return savedFolderId;
+      return folder?.id || "";
+    });
   }, [activeAccount, activeLabelId]);
+
+  useEffect(() => {
+    if (activeAccountId && activeFolderId) writeLastMailFolderId(activeAccountId, activeFolderId);
+  }, [activeAccountId, activeFolderId]);
 
   useEffect(() => {
     listQueryKeyRef.current = "";
@@ -482,10 +549,11 @@ export function MailLayout() {
       if (document.visibilityState !== "visible") return;
       void syncActive({ silent: true });
     };
-    run();
+    const firstTimer = window.setTimeout(run, MAIL_LIST_INITIAL_SYNC_DELAY_MS);
     const timer = window.setInterval(run, MAIL_ACTIVE_SYNC_INTERVAL_MS);
     window.addEventListener("focus", run);
     return () => {
+      window.clearTimeout(firstTimer);
       window.clearInterval(timer);
       window.removeEventListener("focus", run);
     };

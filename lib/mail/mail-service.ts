@@ -7,6 +7,7 @@ import {
   type EmailAccount,
   type EmailFolder,
   type EmailSyncMode,
+  type Prisma,
   type PrismaClient,
 } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -685,6 +686,78 @@ export async function deleteEmailRule(
   });
 }
 
+const emailListSelect = {
+  id: true,
+  accountId: true,
+  folderId: true,
+  direction: true,
+  isRead: true,
+  isFlagged: true,
+  hasAttachments: true,
+  fromName: true,
+  fromAddress: true,
+  subject: true,
+  preview: true,
+  textBody: true,
+  htmlBody: true,
+  receivedAt: true,
+  sentAt: true,
+  createdAt: true,
+  labelAssignments: {
+    select: {
+      label: {
+        select: {
+          id: true,
+          accountId: true,
+          name: true,
+          color: true,
+          unreadCount: true,
+          totalCount: true,
+          sortOrder: true,
+        },
+      },
+    },
+  },
+  sourceOrderLinks: {
+    take: 1,
+    orderBy: { createdAt: "desc" as const },
+    select: {
+      order: { select: { orderNumber: true } },
+    },
+  },
+  _count: {
+    select: { attachments: true, sourceOrderLinks: true },
+  },
+} satisfies Prisma.EmailSelect;
+
+type EmailListRow = Prisma.EmailGetPayload<{ select: typeof emailListSelect }>;
+
+export function mapEmailListRow(email: EmailListRow) {
+  return {
+    id: email.id,
+    accountId: email.accountId,
+    folderId: email.folderId,
+    direction: email.direction,
+    isRead: email.isRead,
+    isFlagged: email.isFlagged,
+    hasAttachments: email.hasAttachments,
+    fromName: email.fromName,
+    fromAddress: email.fromAddress,
+    subject: email.subject,
+    preview: email.preview ?? previewFromMailBody(email.textBody, email.htmlBody),
+    receivedAt: email.receivedAt,
+    sentAt: email.sentAt,
+    createdAt: email.createdAt,
+    hasLinkedOrder: email._count.sourceOrderLinks > 0,
+    linkedOrderNumber: email.sourceOrderLinks[0]?.order.orderNumber ?? null,
+    labelAssignments: email.labelAssignments,
+    _count: {
+      attachments: email._count.attachments,
+      sourceOrderLinks: email._count.sourceOrderLinks,
+    },
+  };
+}
+
 export async function listEmails(
   db: PrismaClient,
   tenantId: string,
@@ -755,27 +828,12 @@ export async function listEmails(
     },
     orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
     take: take + 1,
-    include: {
-      folder: true,
-      labelAssignments: { include: { label: true } },
-      sourceOrderLinks: {
-        take: 1,
-        orderBy: { createdAt: "desc" },
-        select: { order: { select: { orderNumber: true } } },
-      },
-      _count: { select: { attachments: true, sourceOrderLinks: true } },
-    },
+    select: emailListSelect,
   });
   const emails = rows.slice(0, take);
   const last = emails.at(-1);
   return {
-    emails: emails.map((email) => ({
-      ...email,
-      preview: email.preview ?? previewFromMailBody(email.textBody, email.htmlBody),
-      folder: email.folder ? toMailFolderDto(email.folder) : null,
-      hasLinkedOrder: email._count.sourceOrderLinks > 0,
-      linkedOrderNumber: email.sourceOrderLinks[0]?.order.orderNumber ?? null,
-    })),
+    emails: emails.map(mapEmailListRow),
     nextCursor:
       rows.length > take && last
         ? encodeMailListCursor(last.receivedAt ?? last.sentAt ?? last.createdAt, last.id, last.isFlagged)
