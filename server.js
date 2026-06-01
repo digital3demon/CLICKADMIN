@@ -26,8 +26,8 @@ function startMailBackgroundSync() {
     return;
   }
   const intervalMs = Math.max(
-    60_000,
-    Number(process.env.MAIL_BACKGROUND_SYNC_INTERVAL_MS || 120_000),
+    45_000,
+    Number(process.env.MAIL_BACKGROUND_SYNC_INTERVAL_MS || 60_000),
   );
   const limit = Math.max(
     1,
@@ -68,7 +68,7 @@ function startMailBackgroundSync() {
         inFlight = false;
       });
   };
-  setTimeout(run, 30_000);
+  setTimeout(run, 20_000);
   setInterval(run, intervalMs);
 }
 

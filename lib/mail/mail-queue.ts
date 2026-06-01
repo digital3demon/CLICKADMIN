@@ -2,7 +2,7 @@ import "server-only";
 
 import { EmailSyncJobStatus, EmailSyncMode, type PrismaClient } from "@prisma/client";
 import { sanitizeForMailJson } from "@/app/api/mail/_utils";
-import { syncAccountNow } from "@/lib/mail/mail-service";
+import { syncAccountNow, type MailSyncScope } from "@/lib/mail/mail-service";
 import { logger } from "@/lib/server/logger";
 
 const STALE_RUNNING_JOB_MS = 90_000;
@@ -108,12 +108,23 @@ function mailSyncErrorMessage(err: unknown): string {
   return err.message || "Синхронизация почты завершилась ошибкой";
 }
 
+const PRIORITY_PREEMPT_FULL_SYNC_MS = 5 * 60 * 1000;
+
+function mailSyncJobScopeFromKey(jobKey: string, fallback: MailSyncScope = "all"): MailSyncScope {
+  const parts = jobKey.split(":");
+  if (parts.length >= 5 && (parts[3] === "priority" || parts[3] === "all")) {
+    return parts[3];
+  }
+  return fallback;
+}
+
 export async function enqueueMailSyncJob(
   db: PrismaClient,
   tenantId: string,
   userId: string,
   accountId: string,
   mode: EmailSyncMode = EmailSyncMode.RECENT,
+  scope: MailSyncScope = "all",
 ) {
   await recoverStaleMailSyncJobs(db, { tenantId, accountId });
   const existing = await db.emailSyncJob.findFirst({
@@ -133,7 +144,7 @@ export async function enqueueMailSyncJob(
       accountId,
       createdByUserId: userId,
       mode,
-      jobKey: `${tenantId}:${accountId}:${mode}:${Date.now()}`,
+      jobKey: `${tenantId}:${accountId}:${mode}:${scope}:${Date.now()}`,
       status: EmailSyncJobStatus.QUEUED,
     },
   });
@@ -147,6 +158,7 @@ export async function runMailSyncJob(
   userId: string,
   role: string,
   syncJobId: string,
+  options: { scope?: MailSyncScope } = {},
 ) {
   const staleBefore = new Date(Date.now() - STALE_RUNNING_JOB_MS);
   const maxDurationBefore = new Date(Date.now() - MAX_MAIL_SYNC_JOB_MS);
@@ -195,6 +207,7 @@ export async function runMailSyncJob(
 
   const syncWork = syncAccountNow(db, tenantId, userId, role, syncJob.accountId, {
     mode: syncJob.mode,
+    scope: options.scope ?? mailSyncJobScopeFromKey(syncJob.jobKey),
   });
   activeMailSyncImapWork.set(accountKey, syncWork);
 
@@ -253,12 +266,33 @@ export async function enqueueAndStartMailSyncJob(
   role: string,
   accountId: string,
   mode: EmailSyncMode = EmailSyncMode.RECENT,
-  options: { wait?: boolean; force?: boolean } = {},
+  options: { wait?: boolean; force?: boolean; scope?: MailSyncScope } = {},
 ) {
   const accountKey = mailSyncAccountKey(tenantId, accountId);
+  const scope = options.scope ?? "all";
 
   if (options.force) {
     await forceResetMailSyncJobs(db, { tenantId, accountId });
+  } else if (scope === "priority") {
+    const running = await db.emailSyncJob.findFirst({
+      where: {
+        tenantId,
+        accountId,
+        mode,
+        status: EmailSyncJobStatus.RUNNING,
+      },
+      orderBy: { queuedAt: "desc" },
+    });
+    if (
+      running &&
+      mailSyncJobScopeFromKey(running.jobKey) === "all" &&
+      running.startedAt &&
+      Date.now() - running.startedAt.getTime() > PRIORITY_PREEMPT_FULL_SYNC_MS
+    ) {
+      await forceResetMailSyncJobs(db, { tenantId, accountId });
+    } else {
+      await recoverStaleMailSyncJobs(db, { tenantId, accountId });
+    }
   } else {
     await recoverStaleMailSyncJobs(db, { tenantId, accountId });
   }
@@ -300,9 +334,11 @@ export async function enqueueAndStartMailSyncJob(
     }
   }
 
-  const queued = await enqueueMailSyncJob(db, tenantId, userId, accountId, mode);
+  const queued = await enqueueMailSyncJob(db, tenantId, userId, accountId, mode, scope);
 
-  const runPromise = runMailSyncJob(db, tenantId, userId, role, queued.syncJob.id);
+  const runPromise = runMailSyncJob(db, tenantId, userId, role, queued.syncJob.id, {
+    scope,
+  });
   if (options.wait) {
     const processed = await runPromise;
     return { ...queued, ...processed, background: false };

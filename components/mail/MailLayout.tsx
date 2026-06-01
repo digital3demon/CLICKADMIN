@@ -144,8 +144,8 @@ const MAIL_LIST_WIDTH_STORAGE_KEY = "dental-crm:mail-list-width";
 const MAIL_LIST_DEFAULT_WIDTH = 600;
 const MAIL_LIST_MIN_WIDTH = 420;
 const MAIL_LIST_MAX_WIDTH = 920;
-const MAIL_DB_REFRESH_INTERVAL_MS = 15_000;
-const MAIL_ACTIVE_SYNC_INTERVAL_MS = 30_000;
+const MAIL_DB_REFRESH_INTERVAL_MS = 10_000;
+const MAIL_ACTIVE_SYNC_INTERVAL_MS = 20_000;
 const MAIL_SYNC_RUNNING_WARN_MS = 2 * 60 * 1000;
 const MAIL_SYNC_RUNNING_STALE_MS = 15 * 60 * 1000;
 
@@ -436,7 +436,7 @@ export function MailLayout() {
       }>(`/api/mail/accounts/${activeAccountId}/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: !options.silent }),
+        body: JSON.stringify({ force: !options.silent, scope: options.silent ? "priority" : "all" }),
       });
       if (!options.silent) {
         if (data.background || data.status === "RUNNING" || data.status === "QUEUED") {

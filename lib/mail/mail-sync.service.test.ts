@@ -5,6 +5,7 @@ import {
   inferFolderType,
   ruleMatches,
   shouldSyncFolderForMode,
+  shouldSyncFolderForRecent,
 } from "./mail-sync.service";
 
 vi.mock("server-only", () => ({}));
@@ -35,6 +36,15 @@ describe("shouldSyncFolderForMode", () => {
     expect(shouldSyncFolderForMode(EmailFolderType.INBOX, EmailSyncMode.BACKFILL)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.SENT, EmailSyncMode.BACKFILL)).toBe(true);
     expect(shouldSyncFolderForMode(EmailFolderType.ARCHIVE, EmailSyncMode.BACKFILL)).toBe(true);
+  });
+});
+
+describe("shouldSyncFolderForRecent", () => {
+  it("limits priority recent sync to inbox and sent", () => {
+    expect(shouldSyncFolderForRecent(EmailFolderType.INBOX, EmailSyncMode.RECENT, "priority")).toBe(true);
+    expect(shouldSyncFolderForRecent(EmailFolderType.SENT, EmailSyncMode.RECENT, "priority")).toBe(true);
+    expect(shouldSyncFolderForRecent(EmailFolderType.CUSTOM, EmailSyncMode.RECENT, "priority")).toBe(false);
+    expect(shouldSyncFolderForRecent(EmailFolderType.CUSTOM, EmailSyncMode.RECENT, "all")).toBe(true);
   });
 });
 

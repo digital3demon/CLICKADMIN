@@ -94,6 +94,8 @@ export function inferFolderType(path: string): EmailFolderType {
   return EmailFolderType.CUSTOM;
 }
 
+export type MailSyncScope = "all" | "priority";
+
 export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMode): boolean {
   if (mode === EmailSyncMode.BACKFILL) return true;
   return (
@@ -101,6 +103,26 @@ export function shouldSyncFolderForMode(type: EmailFolderType, mode: EmailSyncMo
     type === EmailFolderType.SENT ||
     type === EmailFolderType.CUSTOM
   );
+}
+
+/** priority: только INBOX+SENT — быстрый фоновый sync без сотен CUSTOM-папок. */
+export function shouldSyncFolderForRecent(
+  type: EmailFolderType,
+  mode: EmailSyncMode,
+  scope: MailSyncScope = "all",
+): boolean {
+  if (!shouldSyncFolderForMode(type, mode)) return false;
+  if (mode !== EmailSyncMode.RECENT || scope === "all") return true;
+  return type === EmailFolderType.INBOX || type === EmailFolderType.SENT;
+}
+
+function recentScanLimitPerFolder(type: EmailFolderType, scope: MailSyncScope): number {
+  if (scope === "priority") {
+    return type === EmailFolderType.INBOX ? 120 : 80;
+  }
+  if (type === EmailFolderType.CUSTOM) return 60;
+  if (type === EmailFolderType.INBOX || type === EmailFolderType.SENT) return 180;
+  return 120;
 }
 
 type ImapClientHolder = { client: ImapFlow };
@@ -695,7 +717,7 @@ async function ensureFolderForLabel(
 export async function syncEmailAccount(
   db: PrismaClient,
   account: EmailAccount,
-  options: { mode?: EmailSyncMode } = {},
+  options: { mode?: EmailSyncMode; scope?: MailSyncScope } = {},
 ): Promise<{
   imported: number;
   skipped: number;
@@ -704,9 +726,11 @@ export async function syncEmailAccount(
   hasMoreCustomFolders: boolean;
   customFoldersSynced: number;
   customFolderTotal: number;
+  scope: MailSyncScope;
 }> {
   const startedAt = Date.now();
   const mode = options.mode ?? EmailSyncMode.RECENT;
+  const scope = options.scope ?? "all";
   let client = createImapClient(account);
   const imapClientHolder: ImapClientHolder = { client };
   let imported = 0;
@@ -736,7 +760,7 @@ export async function syncEmailAccount(
       const { folder: folderAfterValidity, uidValidityMismatch, imapUidNext } =
         await syncFolderUidValidity(client, db, listed.path, folder);
       folder = folderAfterValidity;
-      if (!shouldSyncFolderForMode(folder.type, mode)) {
+      if (!shouldSyncFolderForRecent(folder.type, mode, scope)) {
         folderStats.push({
           path: listed.path,
           type: folder.type,
@@ -792,8 +816,10 @@ export async function syncEmailAccount(
               strategyResults,
             );
       client = imapClientHolder.client;
+      const scanLimit = mode === EmailSyncMode.RECENT ? recentScanLimitPerFolder(folder.type, scope) : 0;
       for await (const { item, cursorMode } of messages) {
         if (mode !== EmailSyncMode.BACKFILL && folderImported >= maxMessages) break;
+        if (scanLimit > 0 && processed >= scanLimit) break;
         processed += 1;
         try {
         const exists = await db.email.findFirst({
@@ -1136,6 +1162,7 @@ export async function syncEmailAccount(
         skipped,
         folders,
         folderErrors,
+        scope,
         folderStats,
         elapsedMs: Date.now() - startedAt,
       },
@@ -1149,6 +1176,7 @@ export async function syncEmailAccount(
       hasMoreCustomFolders: false,
       customFoldersSynced: 0,
       customFolderTotal: 0,
+      scope,
     };
   } catch (err) {
     await db.emailAccount.update({

@@ -69,6 +69,7 @@ export async function GET(req: Request) {
           "OWNER",
           account.id,
           EmailSyncMode.RECENT,
+          { scope: "priority" },
         );
         results.push({
           ...baseResult,

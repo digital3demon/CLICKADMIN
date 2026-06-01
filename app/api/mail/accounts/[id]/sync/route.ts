@@ -19,6 +19,10 @@ export async function POST(
       ? EmailSyncMode.BACKFILL
       : EmailSyncMode.RECENT;
     const force = body.force === true || body.force === "true" || body.force === 1 || body.force === "1";
+    const scope =
+      stringField(body.scope, 20) === "all" || force
+        ? "all"
+        : "priority";
     const result = await enqueueAndStartMailSyncJob(
       r.ctx.db,
       r.ctx.tenantId,
@@ -26,7 +30,7 @@ export async function POST(
       r.ctx.role,
       id,
       mode,
-      { force },
+      { force, scope },
     );
     return mailJsonResponse({
       ok: true,

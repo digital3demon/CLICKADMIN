@@ -36,7 +36,7 @@ import {
 } from "@/lib/mail/mail-list-cursor";
 import { previewFromMailBody, previewFromText, textFromHtml } from "@/lib/mail/mail-preview";
 import { sendSmtpMessage, type MailSendAttachment } from "@/lib/mail/smtp-client";
-import { syncEmailAccount } from "@/lib/mail/mail-sync.service";
+import { syncEmailAccount, type MailSyncScope } from "@/lib/mail/mail-sync.service";
 
 export type MailApiContext = {
   tenantId: string;
@@ -476,13 +476,15 @@ export async function diagnoseEmailAccount(
   return diagnoseEmailAccountImap(db, account);
 }
 
+export type { MailSyncScope } from "@/lib/mail/mail-sync.service";
+
 export async function syncAccountNow(
   db: PrismaClient,
   tenantId: string,
   userId: string,
   role: string,
   accountId: string,
-  options: { mode?: EmailSyncMode } = {},
+  options: { mode?: EmailSyncMode; scope?: MailSyncScope } = {},
 ) {
   const account = await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   await ensureSystemFolders(db, tenantId, account.id);
