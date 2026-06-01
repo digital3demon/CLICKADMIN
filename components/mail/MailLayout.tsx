@@ -8,6 +8,7 @@ import { MailList } from "@/components/mail/MailList";
 import { MailSidebar } from "@/components/mail/MailSidebar";
 import { MailViewer } from "@/components/mail/MailViewer";
 import { useNewOrderPanel } from "@/components/orders/new-order-panel-context";
+import { readMailBootstrapSnapshot, writeMailBootstrapSnapshot } from "@/lib/mail/mail-list-cache";
 import type {
   MailAccount,
   MailEmailDetail,
@@ -143,7 +144,7 @@ const LAST_MAIL_ACCOUNT_STORAGE_KEY = "dental-crm:last-mail-account-id";
 const LAST_MAIL_FOLDER_STORAGE_PREFIX = "dental-crm:last-mail-folder:";
 const MAIL_LIST_CACHE_PREFIX = "dental-crm:mail-list-cache:";
 const MAIL_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
-const MAIL_LIST_INITIAL_SYNC_DELAY_MS = 4_000;
+const MAIL_LIST_INITIAL_SYNC_DELAY_MS = 12_000;
 const MAIL_LIST_WIDTH_STORAGE_KEY = "dental-crm:mail-list-width";
 const MAIL_LIST_DEFAULT_WIDTH = 600;
 const MAIL_LIST_MIN_WIDTH = 420;
@@ -241,15 +242,32 @@ function writeMailListWidth(width: number): void {
   }
 }
 
+function createInitialMailState() {
+  const snapshot = readMailBootstrapSnapshot();
+  const savedAccountId = readLastMailAccountId();
+  const accountId = snapshot?.accountId || savedAccountId || "";
+  const folderId =
+    snapshot?.folderId || (accountId ? readLastMailFolderId(accountId) : "") || "";
+  return {
+    accounts: snapshot?.accounts ?? [],
+    activeAccountId: accountId,
+    activeFolderId: folderId,
+    emails: snapshot?.emails ?? [],
+    nextCursor: snapshot?.nextCursor ?? null,
+    hasCachedRows: (snapshot?.emails.length ?? 0) > 0,
+  };
+}
+
 export function MailLayout() {
   const { open: openNewOrder, canOpen: canOpenNewOrder, canCreate: canCreateOrder } = useNewOrderPanel();
-  const [accounts, setAccounts] = useState<MailAccount[]>([]);
+  const initialMailState = useMemo(() => createInitialMailState(), []);
+  const [accounts, setAccounts] = useState<MailAccount[]>(initialMailState.accounts);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState("");
-  const [activeAccountId, setActiveAccountId] = useState("");
-  const [activeFolderId, setActiveFolderId] = useState("");
+  const [activeAccountId, setActiveAccountId] = useState(initialMailState.activeAccountId);
+  const [activeFolderId, setActiveFolderId] = useState(initialMailState.activeFolderId);
   const [activeLabelId, setActiveLabelId] = useState("");
-  const [emails, setEmails] = useState<MailEmailRow[]>([]);
+  const [emails, setEmails] = useState<MailEmailRow[]>(initialMailState.emails);
   const [activeEmailId, setActiveEmailId] = useState("");
   const [detail, setDetail] = useState<MailEmailDetail | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -257,7 +275,7 @@ export function MailLayout() {
   const [search, setSearch] = useState("");
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(initialMailState.nextCursor);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState("");
@@ -269,8 +287,9 @@ export function MailLayout() {
   const [mailListWidth, setMailListWidth] = useState(MAIL_LIST_DEFAULT_WIDTH);
   const [error, setError] = useState("");
   const listQueryKeyRef = useRef("");
-  const listHasRowsRef = useRef(false);
+  const listHasRowsRef = useRef(initialMailState.hasCachedRows);
   const listLoadSeqRef = useRef(0);
+  const bootstrapDoneRef = useRef(false);
   const syncKickRef = useRef(false);
   const lastSyncJobRef = useRef<{ id: string; status: string } | null>(null);
   const syncStatusPollFastRef = useRef(false);
@@ -307,20 +326,93 @@ export function MailLayout() {
     [activeAccountId, activeFolderId, activeLabelId, filter, search],
   );
 
-  const loadAccounts = useCallback(async () => {
-    try {
-      const data = await jsonFetch<{ accounts: MailAccount[]; currentUser?: { role: string } }>("/api/mail/accounts");
-      setAccounts(data.accounts);
-      setCurrentUserRole(data.currentUser?.role ?? "");
-      setActiveAccountId((prev) => {
-        if (prev && data.accounts.some((account) => account.id === prev)) return prev;
-        const saved = readLastMailAccountId();
-        if (saved && data.accounts.some((account) => account.id === saved)) return saved;
-        return data.accounts[0]?.id || "";
+  const persistBootstrapCache = useCallback(
+    (
+      payload: {
+        accounts: MailAccount[];
+        accountId: string | null;
+        folderId: string | null;
+        emails: MailEmailRow[];
+        nextCursor: string | null;
+      },
+      activeFilter: MailFilter,
+    ) => {
+      if (!payload.accountId || !payload.folderId || !payload.emails.length) return;
+      writeMailBootstrapSnapshot({
+        accounts: payload.accounts,
+        accountId: payload.accountId,
+        folderId: payload.folderId,
+        filter: activeFilter,
+        emails: payload.emails,
+        nextCursor: payload.nextCursor,
       });
-    } finally {
-      setAccountsLoaded(true);
-    }
+    },
+    [],
+  );
+
+  const runBootstrap = useCallback(
+    async (options: { accountId?: string; folderId?: string; filter?: MailFilter } = {}) => {
+      try {
+        const bootstrapFilter = options.filter ?? "all";
+        const params = new URLSearchParams({ take: "80", filter: bootstrapFilter });
+        if (options.accountId) params.set("accountId", options.accountId);
+        if (options.folderId) params.set("folderId", options.folderId);
+        const data = await jsonFetch<{
+          accounts: MailAccount[];
+          accountId: string | null;
+          folderId: string | null;
+          emails: MailEmailRow[];
+          nextCursor: string | null;
+          currentUser?: { role: string };
+        }>(`/api/mail/bootstrap?${params.toString()}`);
+        setAccounts(data.accounts);
+        setCurrentUserRole(data.currentUser?.role ?? "");
+        if (data.accountId) {
+          setActiveAccountId((prev) => {
+            if (prev && data.accounts.some((account) => account.id === prev)) return prev;
+            const saved = readLastMailAccountId();
+            if (saved && data.accounts.some((account) => account.id === saved)) return saved;
+            return data.accountId || prev;
+          });
+        }
+        if (data.folderId) {
+          setActiveFolderId((prev) => {
+            if (prev && data.accounts.some((account) => account.folders.some((folder) => folder.id === prev))) {
+              return prev;
+            }
+            const account = data.accounts.find((item) => item.id === data.accountId);
+            const saved = account ? readLastMailFolderId(account.id) : "";
+            if (saved && account?.folders.some((folder) => folder.id === saved)) return saved;
+            return data.folderId || prev;
+          });
+        }
+        if (bootstrapFilter === "all" && data.emails.length && data.accountId && data.folderId) {
+          listQueryKeyRef.current = JSON.stringify({
+            accountId: data.accountId,
+            folderId: data.folderId,
+            labelId: "",
+            filter: "all",
+            search: "",
+          });
+          listHasRowsRef.current = true;
+          setEmails(data.emails);
+          setNextCursor(data.nextCursor);
+          persistBootstrapCache(data, "all");
+        }
+      } finally {
+        setAccountsLoaded(true);
+        bootstrapDoneRef.current = true;
+      }
+    },
+    [persistBootstrapCache],
+  );
+
+  const loadAccounts = useCallback(async () => {
+    const data = await jsonFetch<{ accounts: MailAccount[]; currentUser?: { role: string } }>(
+      "/api/mail/accounts?tree=1",
+    );
+    setAccounts(data.accounts);
+    setCurrentUserRole(data.currentUser?.role ?? "");
   }, []);
 
   const listReady = Boolean(activeAccountId && (activeFolderId || activeLabelId));
@@ -368,7 +460,21 @@ export function MailLayout() {
         return next;
       });
       setNextCursor(data.nextCursor);
-      if (!append) writeMailListCache(listQueryKey, data.emails, data.nextCursor);
+      if (!append) {
+        writeMailListCache(listQueryKey, data.emails, data.nextCursor);
+        if (!activeLabelId && !search.trim() && filter === "all" && activeAccountId && activeFolderId) {
+          persistBootstrapCache(
+            {
+              accounts,
+              accountId: activeAccountId,
+              folderId: activeFolderId,
+              emails: data.emails,
+              nextCursor: data.nextCursor,
+            },
+            filter,
+          );
+        }
+      }
     } catch (err) {
       if (loadSeq !== listLoadSeqRef.current || queryAtStart !== listQueryKey) return;
       setError(mailErrorMessage(err, "Ошибка загрузки писем"));
@@ -377,7 +483,7 @@ export function MailLayout() {
       if (append) setLoadingMore(false);
       else setLoadingEmails(false);
     }
-  }, [activeAccountId, activeFolderId, activeLabelId, filter, search, listQueryKey]);
+  }, [activeAccountId, activeFolderId, activeLabelId, filter, search, listQueryKey, accounts, persistBootstrapCache]);
 
   const refreshEmailsSilently = useCallback(async () => {
     if (!activeAccountId) return;
@@ -425,8 +531,11 @@ export function MailLayout() {
   }, [filter]);
 
   useEffect(() => {
-    void loadAccounts().catch((err) => setError(mailErrorMessage(err, "Ошибка")));
-  }, [loadAccounts]);
+    void runBootstrap({
+      accountId: initialMailState.activeAccountId || undefined,
+      folderId: initialMailState.activeFolderId || undefined,
+    }).catch((err) => setError(mailErrorMessage(err, "Ошибка")));
+  }, [runBootstrap, initialMailState.activeAccountId, initialMailState.activeFolderId]);
 
   useEffect(() => {
     setMailListWidth(readMailListWidth());
@@ -450,14 +559,27 @@ export function MailLayout() {
   }, [activeAccountId, activeFolderId]);
 
   useEffect(() => {
-    listQueryKeyRef.current = "";
-    listLoadSeqRef.current += 1;
-    setEmails([]);
-    setNextCursor(null);
+    if (!activeAccountId) return;
+    setActiveLabelId("");
     setActiveEmailId("");
     setDetail(null);
     setSelectedIds(new Set());
-  }, [activeAccountId]);
+    const cached = readMailListCache(
+      JSON.stringify({
+        accountId: activeAccountId,
+        folderId: readLastMailFolderId(activeAccountId),
+        labelId: "",
+        filter,
+        search: "",
+      }),
+    );
+    if (!cached?.emails.length) {
+      listHasRowsRef.current = false;
+      setEmails([]);
+      setNextCursor(null);
+    }
+    listQueryKeyRef.current = "";
+  }, [activeAccountId, filter]);
 
   useEffect(() => {
     writeLastMailAccountId(activeAccountId);
@@ -465,9 +587,12 @@ export function MailLayout() {
 
   useEffect(() => {
     if (!listReady) return;
+    if (!bootstrapDoneRef.current && listHasRowsRef.current && !activeLabelId && !search.trim() && filter === "all") {
+      return;
+    }
     setNextCursor(null);
     void loadEmails(null, false);
-  }, [listReady, loadEmails]);
+  }, [listReady, loadEmails, activeLabelId, search, filter]);
 
   useEffect(() => {
     if (!activeAccountId) return;
@@ -550,6 +675,7 @@ export function MailLayout() {
     if (!activeAccountId) return;
     const run = () => {
       if (document.visibilityState !== "visible") return;
+      if (!accountsLoaded) return;
       void syncActive({ silent: true });
     };
     const firstTimer = window.setTimeout(run, MAIL_LIST_INITIAL_SYNC_DELAY_MS);
@@ -560,7 +686,7 @@ export function MailLayout() {
       window.clearInterval(timer);
       window.removeEventListener("focus", run);
     };
-  }, [activeAccountId, syncActive]);
+  }, [activeAccountId, syncActive, accountsLoaded]);
 
   useEffect(() => {
     if (!activeAccountId) return;

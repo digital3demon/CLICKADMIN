@@ -436,12 +436,17 @@ export function MailList({
       ) : null}
 
       <div ref={parentRef} className="min-h-0 flex-1 overflow-auto">
-        {loading ? (
+        {loading && emails.length === 0 ? (
           <div className="p-8 text-sm text-[var(--text-muted)]">Загрузка писем...</div>
         ) : emails.length === 0 ? (
           <div className="p-8 text-sm text-[var(--text-muted)]">В этой папке пока нет писем.</div>
         ) : (
           <>
+            {loading ? (
+              <div className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2 text-xs text-[var(--text-muted)]">
+                Обновляем список…
+              </div>
+            ) : null}
             {emails.map((email) => (
               <MailRow
                 key={email.id}

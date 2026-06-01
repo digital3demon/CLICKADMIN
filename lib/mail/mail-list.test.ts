@@ -5,7 +5,7 @@ import { mapEmailListRow } from "./mail-service";
 vi.mock("server-only", () => ({}));
 
 describe("mapEmailListRow", () => {
-  it("does not expose htmlBody in list rows and builds preview from html", () => {
+  it("does not expose htmlBody in list rows and uses stored preview", () => {
     const row = mapEmailListRow({
       id: "email_1",
       accountId: "acc_1",
@@ -17,9 +17,7 @@ describe("mapEmailListRow", () => {
       fromName: "Тест",
       fromAddress: "test@example.ru",
       subject: "Тема",
-      preview: null,
-      textBody: null,
-      htmlBody: "<p>Текст из HTML</p>",
+      preview: "Текст из preview",
       receivedAt: new Date("2026-05-30T12:00:00.000Z"),
       sentAt: null,
       createdAt: new Date("2026-05-30T12:00:00.000Z"),
@@ -27,7 +25,7 @@ describe("mapEmailListRow", () => {
       sourceOrderLinks: [],
       _count: { attachments: 2, sourceOrderLinks: 0 },
     });
-    expect(row.preview).toBe("Текст из HTML");
+    expect(row.preview).toBe("Текст из preview");
     expect("htmlBody" in row).toBe(false);
     expect("textBody" in row).toBe(false);
   });

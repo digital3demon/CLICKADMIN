@@ -15,7 +15,11 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const lite = url.searchParams.get("lite") === "1";
-    const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, { lite });
+    const tree = url.searchParams.get("tree") === "1";
+    const accounts = await listEmailAccounts(r.ctx.db, r.ctx.tenantId, r.ctx.userId, r.ctx.role, {
+      lite: lite && !tree,
+      tree,
+    });
     return mailJsonResponse({ accounts, currentUser: { role: r.ctx.role } });
   } catch (err) {
     return mailErrorResponse(err, "Не удалось загрузить почтовые аккаунты");

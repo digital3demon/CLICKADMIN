@@ -58,15 +58,24 @@ function ruleConditionParts(conditions: Record<string, unknown>): string[] {
   ].filter(Boolean);
 }
 
-async function jsonFetch<T>(url: string, init?: RequestInit, timeoutMs = 45_000): Promise<T> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+async function jsonFetch<T>(
+  url: string,
+  init?: RequestInit,
+  timeoutMs = 20_000,
+): Promise<T> {
+  const timeoutController = new AbortController();
+  const timer = window.setTimeout(() => timeoutController.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...init, cache: "no-store", signal: controller.signal });
+    const res = await fetch(url, {
+      ...init,
+      cache: "no-store",
+      signal: init?.signal ?? timeoutController.signal,
+    });
     const data = (await res.json().catch(() => ({}))) as T & { error?: string };
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
   } catch (err) {
+    if (init?.signal?.aborted) throw err;
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error("Сервер не ответил вовремя. Попробуйте обновить страницу.");
     }
@@ -186,6 +195,7 @@ export function MailSettingsClient() {
   const [accessSaving, setAccessSaving] = useState(false);
   const [ruleFolderChoice, setRuleFolderChoice] = useState("");
   const [ruleLabelChoice, setRuleLabelChoice] = useState("");
+  const [showAllCustomFolders, setShowAllCustomFolders] = useState(false);
   const accessDraftAccountIdRef = useRef("");
 
   const activeAccount = useMemo(
@@ -213,19 +223,21 @@ export function MailSettingsClient() {
     }
   }, []);
 
-  const loadAccountDetails = useCallback(async (nextAccountId: string) => {
+  const loadAccountDetails = useCallback(async (nextAccountId: string, signal?: AbortSignal) => {
     if (!nextAccountId) return;
     setAccountDetailsLoading(true);
     try {
-      const [foldersData, labelsData] = await Promise.all([
-        jsonFetch<{ folders: MailFolder[] }>(`/api/mail/folders?accountId=${encodeURIComponent(nextAccountId)}`),
-        jsonFetch<{ labels: MailAccount["labels"] }>(`/api/mail/labels?accountId=${encodeURIComponent(nextAccountId)}`),
-      ]);
+      const data = await jsonFetch<{ accounts: MailAccount[] }>(
+        "/api/mail/accounts?tree=1",
+        { signal },
+      );
+      const account = data.accounts.find((item) => item.id === nextAccountId);
+      if (!account) return;
       setAccounts((prev) =>
-        prev.map((account) =>
-          account.id === nextAccountId
-            ? { ...account, folders: foldersData.folders, labels: labelsData.labels }
-            : account,
+        prev.map((item) =>
+          item.id === nextAccountId
+            ? { ...item, folders: account.folders, labels: account.labels }
+            : item,
         ),
       );
     } finally {
@@ -233,18 +245,30 @@ export function MailSettingsClient() {
     }
   }, []);
 
-  const loadRules = useCallback(async (nextAccountId: string) => {
+  const loadRules = useCallback(async (nextAccountId: string, signal?: AbortSignal) => {
     if (!nextAccountId) {
       setRules([]);
       return;
     }
     const rulesData = await jsonFetch<{ rules: EmailRule[] }>(
       `/api/mail/rules?accountId=${encodeURIComponent(nextAccountId)}`,
+      { signal },
     );
     setRules(rulesData.rules);
   }, []);
 
   const canManageAccountAccess = currentUserRole === "OWNER";
+
+  const customFolderCount = activeAccount?.folders.filter((folder) => folder.type === "CUSTOM").length ?? 0;
+  const visibleFolders = useMemo(() => {
+    if (!activeAccount?.folders.length) return [];
+    const system = activeAccount.folders.filter((folder) => folder.type !== "CUSTOM");
+    const custom = activeAccount.folders.filter((folder) => folder.type === "CUSTOM");
+    if (showAllCustomFolders || custom.length <= 8) return [...system, ...custom];
+    return [...system, ...custom.slice(0, 8)];
+  }, [activeAccount, showAllCustomFolders]);
+  const hiddenCustomFolderCount =
+    showAllCustomFolders || customFolderCount <= 8 ? 0 : customFolderCount - 8;
 
   useEffect(() => {
     if (!activeAccount) return;
@@ -252,6 +276,7 @@ export function MailSettingsClient() {
     accessDraftAccountIdRef.current = activeAccount.id;
     setSelectedAccessRoles(Array.from(new Set(["OWNER", ...(activeAccount.allowedRoles || [])])));
     setHoverPreviewEnabled(activeAccount.hoverPreviewEnabled ?? true);
+    setShowAllCustomFolders(false);
   }, [activeAccount]);
 
   useEffect(() => {
@@ -262,9 +287,17 @@ export function MailSettingsClient() {
 
   useEffect(() => {
     if (!accountId) return;
-    void loadAccountDetails(accountId).catch((err) =>
-      setError(err instanceof Error ? err.message : "Ошибка загрузки папок и меток"),
-    );
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void loadAccountDetails(accountId, controller.signal).catch((err) => {
+        if (controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : "Ошибка загрузки папок и меток");
+      });
+    }, 80);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
   }, [accountId, loadAccountDetails]);
 
   useEffect(() => {
@@ -273,10 +306,24 @@ export function MailSettingsClient() {
       setRulesLoading(false);
       return;
     }
+    let cancelled = false;
+    const controller = new AbortController();
     setRulesLoading(true);
-    void loadRules(accountId)
-      .catch((err) => setError(err instanceof Error ? err.message : "Ошибка загрузки правил"))
-      .finally(() => setRulesLoading(false));
+    const timer = window.setTimeout(() => {
+      void loadRules(accountId, controller.signal)
+        .catch((err) => {
+          if (controller.signal.aborted) return;
+          setError(err instanceof Error ? err.message : "Ошибка загрузки правил");
+        })
+        .finally(() => {
+          if (!cancelled) setRulesLoading(false);
+        });
+    }, 1200);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
   }, [accountId, loadRules]);
 
   async function saveAccount(formData: FormData) {
@@ -716,7 +763,8 @@ export function MailSettingsClient() {
                 Загружаем папки выбранного ящика…
               </div>
             ) : activeAccount?.folders.length ? (
-              activeAccount.folders.map((folder) => {
+              <>
+                {visibleFolders.map((folder) => {
                 const editable = folder.type === "CUSTOM";
                 return (
                   <form
@@ -752,7 +800,17 @@ export function MailSettingsClient() {
                     </button>
                   </form>
                 );
-              })
+              })}
+                {hiddenCustomFolderCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllCustomFolders(true)}
+                    className="rounded-xl border border-dashed border-[var(--card-border)] px-4 py-3 text-sm text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+                  >
+                    Показать ещё {hiddenCustomFolderCount} пользовательских папок
+                  </button>
+                ) : null}
+              </>
             ) : (
               <div className="rounded-xl border border-dashed border-[var(--card-border)] p-6 text-sm text-[var(--text-muted)]">
                 Выберите аккаунт, чтобы настроить папки.

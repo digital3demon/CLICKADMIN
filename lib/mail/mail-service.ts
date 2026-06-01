@@ -258,40 +258,88 @@ export async function refreshLabelCounters(
   await db.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
 }
 
+const mailFolderTreeSelect = {
+  id: true,
+  imapName: true,
+  displayName: true,
+  color: true,
+  type: true,
+  unreadCount: true,
+  totalCount: true,
+  sortOrder: true,
+  parentId: true,
+} as const;
+
+const mailLabelTreeSelect = {
+  id: true,
+  name: true,
+  color: true,
+  unreadCount: true,
+  totalCount: true,
+  sortOrder: true,
+} as const;
+
+const mailAccountTreeSelect = {
+  id: true,
+  email: true,
+  displayName: true,
+  isActive: true,
+  lastSyncAt: true,
+  lastSyncError: true,
+  allowedRoles: true,
+  hoverPreviewEnabled: true,
+  createdByUserId: true,
+  encryptedAppPassword: true,
+  folders: {
+    select: mailFolderTreeSelect,
+    orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] satisfies Prisma.EmailFolderOrderByWithRelationInput[],
+  },
+  labels: {
+    select: mailLabelTreeSelect,
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }] satisfies Prisma.EmailLabelOrderByWithRelationInput[],
+  },
+} satisfies Prisma.EmailAccountSelect;
+
 export async function listEmailAccounts(
   db: PrismaClient,
   tenantId: string,
   userId: string,
   role: string,
-  options: { lite?: boolean } = {},
+  options: { lite?: boolean; tree?: boolean } = {},
 ) {
   const accountWhere = userAccountWhere(tenantId, userId, role);
   const accountOrderBy = [{ email: "asc" as const }, { createdAt: "desc" as const }];
-  const accounts = options.lite
+  const accounts = options.tree
     ? await db.emailAccount.findMany({
         where: accountWhere,
         orderBy: accountOrderBy,
-        select: {
-          id: true,
-          email: true,
-          displayName: true,
-          isActive: true,
-          lastSyncAt: true,
-          lastSyncError: true,
-          allowedRoles: true,
-          hoverPreviewEnabled: true,
-          createdByUserId: true,
-          encryptedAppPassword: true,
-        },
+        select: mailAccountTreeSelect,
       })
-    : await db.emailAccount.findMany({
-        where: accountWhere,
-        orderBy: accountOrderBy,
-        include: {
-          folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
-          labels: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
-        },
-      });
+    : options.lite
+      ? await db.emailAccount.findMany({
+          where: accountWhere,
+          orderBy: accountOrderBy,
+          select: {
+            id: true,
+            email: true,
+            displayName: true,
+            isActive: true,
+            lastSyncAt: true,
+            lastSyncError: true,
+            allowedRoles: true,
+            hoverPreviewEnabled: true,
+            createdByUserId: true,
+            encryptedAppPassword: true,
+          },
+        })
+      : await db.emailAccount.findMany({
+          where: accountWhere,
+          orderBy: accountOrderBy,
+          include: {
+            folders: { orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] },
+            labels: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+          },
+        });
   const byEmail = new Map<string, (typeof accounts)[number]>();
   for (const account of accounts) {
     const key = account.email.trim().toLowerCase();
@@ -301,7 +349,7 @@ export async function listEmailAccounts(
     }
   }
   const uniqueAccounts = [...byEmail.values()];
-  if (!options.lite) {
+  if (!options.lite && !options.tree) {
     await Promise.all(
       uniqueAccounts.map(async (account) => {
         const accountWithFolders = account as typeof account & { folders?: EmailFolderRow[] };
@@ -328,10 +376,87 @@ export async function listEmailAccounts(
   });
 }
 
+export function resolveDefaultInboxFolderId(
+  account: { folders: Array<{ id: string; type: EmailFolderType; sortOrder: number; totalCount?: number; unreadCount?: number }> },
+): string | null {
+  const inboxes = account.folders.filter((folder) => folder.type === EmailFolderType.INBOX);
+  return (
+    inboxes.find((folder) => (folder.totalCount ?? 0) > 0 || (folder.unreadCount ?? 0) > 0)?.id ??
+    inboxes[0]?.id ??
+    account.folders.slice().sort((a, b) => a.sortOrder - b.sortOrder)[0]?.id ??
+    null
+  );
+}
+
+export async function mailBootstrap(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+  role: string,
+  input: {
+    accountId?: string | null;
+    folderId?: string | null;
+    filter?: EmailFilter;
+    take?: number;
+  } = {},
+) {
+  const accounts = await listEmailAccounts(db, tenantId, userId, role, { tree: true });
+  const accountId =
+    input.accountId && accounts.some((account) => account.id === input.accountId)
+      ? input.accountId
+      : accounts[0]?.id ?? null;
+  const account = accountId ? accounts.find((item) => item.id === accountId) ?? null : null;
+  const folderId =
+    input.folderId && account?.folders.some((folder) => folder.id === input.folderId)
+      ? input.folderId
+      : account
+        ? resolveDefaultInboxFolderId(account)
+        : null;
+  if (accountId && account && !account.folders.length) {
+    await ensureSystemFolders(db, tenantId, accountId);
+    const refreshed = await listEmailAccounts(db, tenantId, userId, role, { tree: true });
+    const nextAccount = refreshed.find((item) => item.id === accountId) ?? account;
+    const nextFolderId = resolveDefaultInboxFolderId(nextAccount);
+    const list =
+      nextFolderId && accountId
+        ? await listEmails(db, tenantId, userId, role, {
+            accountId,
+            folderId: nextFolderId,
+            filter: input.filter ?? "all",
+            take: input.take ?? 80,
+          })
+        : null;
+    return {
+      accounts: refreshed,
+      accountId,
+      folderId: nextFolderId,
+      emails: list?.emails ?? [],
+      nextCursor: list?.nextCursor ?? null,
+    };
+  }
+  const list =
+    accountId && folderId
+      ? await listEmails(db, tenantId, userId, role, {
+          accountId,
+          folderId,
+          filter: input.filter ?? "all",
+          take: input.take ?? 80,
+        })
+      : null;
+  return {
+    accounts,
+    accountId,
+    folderId,
+    emails: list?.emails ?? [],
+    nextCursor: list?.nextCursor ?? null,
+  };
+}
+
 export async function mailUnreadSummary(db: PrismaClient, tenantId: string, userId: string, role: string) {
   const result = await db.emailFolder.aggregate({
     where: {
       tenantId,
+      type: EmailFolderType.INBOX,
       account: mailAccountAccessWhere(tenantId, userId, role),
     },
     _sum: { unreadCount: true },
@@ -699,8 +824,6 @@ const emailListSelect = {
   fromAddress: true,
   subject: true,
   preview: true,
-  textBody: true,
-  htmlBody: true,
   receivedAt: true,
   sentAt: true,
   createdAt: true,
@@ -745,7 +868,7 @@ export function mapEmailListRow(email: EmailListRow) {
     fromName: email.fromName,
     fromAddress: email.fromAddress,
     subject: email.subject,
-    preview: email.preview ?? previewFromMailBody(email.textBody, email.htmlBody),
+    preview: email.preview?.trim() || null,
     receivedAt: email.receivedAt,
     sentAt: email.sentAt,
     createdAt: email.createdAt,
