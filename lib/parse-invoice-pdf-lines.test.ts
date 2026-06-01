@@ -82,7 +82,35 @@ describe("extractLinesFromRuInvoiceTable", () => {
   });
 });
 
+/** Реальный счёт КЛИКЛАБ №1014 (01.06.2026), наряд 2605-310. */
+const SAMPLE_CLICKLAB_1014 = `
+Счет на оплату № 1014 от 01 июня 2026 г.
+Основание: Договор №2603-011 от 24.03.26 / 2605-401 Карпова О. Петрова С.М.
+№ Товары (работы, услуги) Кол-во Ед. Цена Сумма
+1 -7209 Каппа ретенционная/Элайнер 1 шт 4 761,90 4 761,90
+Итого: 4 761,90
+Сумма НДС 5%: 238,10
+Всего к оплате: 5 000,00
+Всего наименований 1, на сумму 5 000,00 руб.
+`;
+
 describe("parseInvoiceExtractedText", () => {
+  it("счёт №1014: одна позиция -7209 и всего 5000 ₽", () => {
+    const r = parseInvoiceExtractedText(SAMPLE_CLICKLAB_1014, {
+      fileName: "Счет на оплату № 1014 от 01 июня 2026 г.pdf",
+    });
+    expect(r.totalRub).toBe(5000);
+    expect(r.lines).toHaveLength(1);
+    expect(r.lines[0]).toMatchObject({
+      code: "-7209",
+      name: "Каппа ретенционная/Элайнер",
+      qty: 1,
+      lineTotalRub: 4762,
+    });
+    expect(r.suggestedInvoiceNumber).toBe("1014");
+    expect(r.warnings).toHaveLength(0);
+  });
+
   it("сводка для «ВЫСТАВЛЕНО»: только код и наименование по строкам; сумма отдельно", () => {
     const r = parseInvoiceExtractedText(SAMPLE_CLICKLAB, {
       fileName: "bill.pdf",

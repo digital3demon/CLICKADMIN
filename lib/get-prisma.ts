@@ -11,6 +11,7 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { ensureClinicPriceOverrideTable } from "@/lib/ensure-clinic-price-override-table";
 import { ensureClinicSourceDoctorColumn } from "@/lib/ensure-clinic-source-doctor-column";
 import { ensureOrderAttachmentDiskRelPathColumn } from "@/lib/ensure-order-attachment-disk-column";
+import { ensureSqlitePragmas } from "@/lib/ensure-sqlite-pragmas";
 import { getDemoPrisma } from "@/lib/prisma-demo";
 import { getDemoDatabaseUrl } from "@/lib/prisma-demo";
 import { prisma } from "@/lib/prisma";
@@ -25,6 +26,7 @@ async function prepareClient(
   options?: { sqliteCompat?: boolean },
 ): Promise<PrismaClient> {
   if (options?.sqliteCompat) {
+    await ensureSqlitePragmas(client);
     await ensureClinicPriceOverrideTable(client);
     await ensureClinicSourceDoctorColumn(client);
     await ensureOrderAttachmentDiskRelPathColumn(client);

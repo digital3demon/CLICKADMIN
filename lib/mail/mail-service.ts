@@ -329,13 +329,14 @@ export async function listEmailAccounts(
 }
 
 export async function mailUnreadSummary(db: PrismaClient, tenantId: string, userId: string, role: string) {
-  const accounts = await listEmailAccounts(db, tenantId, userId, role, { lite: true });
-  const accountIds = accounts.map((account) => account.id);
-  if (!accountIds.length) return { unreadCount: 0 };
-  const unreadCount = await db.email.count({
-    where: { tenantId, accountId: { in: accountIds }, isRead: false },
+  const result = await db.emailFolder.aggregate({
+    where: {
+      tenantId,
+      account: mailAccountAccessWhere(tenantId, userId, role),
+    },
+    _sum: { unreadCount: true },
   });
-  return { unreadCount };
+  return { unreadCount: Math.max(0, result._sum.unreadCount ?? 0) };
 }
 
 export async function upsertEmailAccount(

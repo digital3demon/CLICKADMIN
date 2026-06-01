@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { normalizeInvoiceNumberFieldRu } from "@/lib/format-invoice-number-ru";
 import { readOrderAttachmentBytes } from "@/lib/order-attachment-storage";
 import type { InvoiceParsedLineV1 } from "@/lib/invoice-parsed-types";
@@ -67,31 +67,30 @@ export async function applyInvoiceParseToOrder(
       suggestedNorm &&
       !(order.invoiceNumber && String(order.invoiceNumber).trim());
 
-    const linesJson =
-      parsed.lines.length > 0 ? JSON.stringify(parsed.lines) : null;
     const totalRub = parsed.totalRub;
     const summaryText = parsed.summaryText?.trim()
       ? parsed.summaryText.trim()
       : null;
 
+    const data: Prisma.OrderUpdateInput = {
+      invoiceParsedLines:
+        parsed.lines.length > 0
+          ? (parsed.lines as Prisma.InputJsonValue)
+          : Prisma.DbNull,
+      invoiceParsedTotalRub: totalRub,
+      invoiceParsedSummaryText: summaryText,
+    };
     if (fillNumber && suggestedNorm) {
-      await prisma.$executeRawUnsafe(
-        `UPDATE "Order" SET "invoiceNumber" = ?, "invoiceParsedLines" = ?, "invoiceParsedTotalRub" = ?, "invoiceParsedSummaryText" = ? WHERE "id" = ?`,
-        suggestedNorm,
-        linesJson,
-        totalRub,
-        summaryText,
-        orderId,
-      );
-    } else {
-      await prisma.$executeRawUnsafe(
-        `UPDATE "Order" SET "invoiceParsedLines" = ?, "invoiceParsedTotalRub" = ?, "invoiceParsedSummaryText" = ? WHERE "id" = ?`,
-        linesJson,
-        totalRub,
-        summaryText,
-        orderId,
-      );
+      data.invoiceNumber = suggestedNorm;
     }
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data,
+    });
+
+    const linesJson =
+      parsed.lines.length > 0 ? JSON.stringify(parsed.lines) : null;
 
     return {
       ok: true,
@@ -103,7 +102,8 @@ export async function applyInvoiceParseToOrder(
       suggestedInvoiceNumber: parsed.suggestedInvoiceNumber,
       invoiceNumberApplied: Boolean(fillNumber),
     };
-  } catch {
+  } catch (e) {
+    console.error("[applyInvoiceParseToOrder]", orderId, e);
     return { ok: false, error: "parse_failed" };
   }
 }

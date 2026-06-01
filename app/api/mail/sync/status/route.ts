@@ -29,6 +29,17 @@ export async function GET(req: Request) {
     },
     orderBy: [{ queuedAt: "desc" }],
     take: 10,
+    select: {
+      id: true,
+      status: true,
+      imported: true,
+      skipped: true,
+      lastError: true,
+      startedAt: true,
+      finishedAt: true,
+      queuedAt: true,
+      accountId: true,
+    },
   });
   return mailJsonResponse({ jobs });
 }

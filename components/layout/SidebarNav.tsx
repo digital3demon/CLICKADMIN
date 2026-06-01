@@ -172,26 +172,6 @@ export function SidebarNav() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadMailUnread() {
-      try {
-        const res = await fetch("/api/mail/unread", { cache: "no-store", credentials: "include" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { unreadCount?: number };
-        if (!cancelled) setMailUnreadCount(Math.max(0, Number(data.unreadCount) || 0));
-      } catch {
-        if (!cancelled) setMailUnreadCount(0);
-      }
-    }
-    void loadMailUnread();
-    const timer = window.setInterval(() => void loadMailUnread(), 30_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
   const navItems = useMemo(() => {
     if (role == null) {
       return baseNavItems;
@@ -218,6 +198,41 @@ export function SidebarNav() {
     }
     return [...baseNavItems];
   }, [role, moduleAccess]);
+
+  const mailNavVisible = useMemo(
+    () => navItems.some((item) => item.href === "/mail"),
+    [navItems],
+  );
+
+  useEffect(() => {
+    if (!mailNavVisible) {
+      setMailUnreadCount(0);
+      return;
+    }
+    let cancelled = false;
+    async function loadMailUnread() {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/mail/unread", { cache: "no-store", credentials: "include" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { unreadCount?: number };
+        if (!cancelled) setMailUnreadCount(Math.max(0, Number(data.unreadCount) || 0));
+      } catch {
+        if (!cancelled) setMailUnreadCount(0);
+      }
+    }
+    void loadMailUnread();
+    const timer = window.setInterval(() => void loadMailUnread(), 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadMailUnread();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [mailNavVisible]);
 
   useEffect(() => {
     const allowed = new Set(navItems.map((i) => i.href));
