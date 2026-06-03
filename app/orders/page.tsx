@@ -434,6 +434,7 @@ export default async function OrdersPage({
           .filter((o) => o.kaitenCardId != null)
           .map((o) => o.id)}
         pollingEnabled={!isDemo}
+        searchActive={Boolean(listSearchQ)}
       >
       <div className={`${ORDERS_LIST_STACK} space-y-4`}>
       <div className="lg:hidden">
