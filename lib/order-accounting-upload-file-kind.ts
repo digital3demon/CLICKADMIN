@@ -13,3 +13,8 @@ export function looksLikePaymentSlipImageFile(file: File): boolean {
   const n = (file.name || "").trim();
   return /\.(jpe?g|png|gif|webp|bmp|tif|heic|heif)$/i.test(n);
 }
+
+/** Платёжка: скрин/фото или PDF банковской выписки (без разбора как счёт). */
+export function looksLikePaymentSlipFile(file: File): boolean {
+  return looksLikePaymentSlipImageFile(file) || looksLikePdfFile(file);
+}

@@ -201,7 +201,10 @@ function OrderInvoiceFileDrop({
   disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const zoneRef = useRef<HTMLDivElement>(null);
+  const dragDepthRef = useRef(0);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   /** Сообщение прямо под зоной загрузки (ошибка «в шапке» формы легко не заметить). */
   const [localHint, setLocalHint] = useState<string | null>(null);
 
@@ -278,14 +281,19 @@ function OrderInvoiceFileDrop({
   return (
     <div className="min-w-0 space-y-1.5">
     <div
+      ref={zoneRef}
       tabIndex={disabled ? -1 : 0}
       role="group"
       aria-label="Загрузка файла счёта"
       title={
         disabled
           ? "Нет права на изменение данных клиентов"
-          : "Клик — выбрать файл; перетащите файл сюда; при фокусе — Ctrl+V из буфера"
+          : "Перетащите PDF на зону; при наведении — Ctrl+V; клик — выбор файла"
       }
+      onMouseEnter={() => {
+        if (disabled || busy) return;
+        zoneRef.current?.focus({ preventScroll: true });
+      }}
       onKeyDown={(e) => {
         if (disabled) return;
         if (e.key === "Enter" || e.key === " ") {
@@ -301,15 +309,32 @@ function OrderInvoiceFileDrop({
           void upload(fl);
         }
       }}
+      onDragEnter={(e) => {
+        if (disabled) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepthRef.current += 1;
+        if (e.dataTransfer?.types.includes("Files")) setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (disabled) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) setDragOver(false);
+      }}
       onDragOver={(e) => {
         if (disabled) return;
         e.preventDefault();
         e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
       }}
       onDrop={(e) => {
         if (disabled) return;
         e.preventDefault();
         e.stopPropagation();
+        dragDepthRef.current = 0;
+        setDragOver(false);
         const fl = e.dataTransfer?.files;
         if (fl?.length) void upload(fl);
       }}
@@ -319,8 +344,11 @@ function OrderInvoiceFileDrop({
       }}
       className={[
         disabled ? "pointer-events-none cursor-not-allowed opacity-50" : null,
+        dragOver
+          ? "border-[var(--sidebar-blue)] bg-sky-50/80 text-[var(--sidebar-blue)] dark:bg-sky-950/40"
+          : null,
         className ??
-          "max-w-[11rem] cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-center text-[10px] font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:max-w-[13rem] sm:text-xs",
+          "max-w-[11rem] cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-center text-[10px] font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none transition-colors hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:max-w-[13rem] sm:text-xs",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -336,7 +364,11 @@ function OrderInvoiceFileDrop({
           if (fl?.length) void upload(fl);
         }}
       />
-      {busy ? "Загрузка…" : "Файл счёта · ↓ или Ctrl+V"}
+      {busy
+        ? "Загрузка…"
+        : dragOver
+          ? "Отпустите файл"
+          : "Файл счёта · ↓ или Ctrl+V"}
     </div>
       {localHint ? (
         <p

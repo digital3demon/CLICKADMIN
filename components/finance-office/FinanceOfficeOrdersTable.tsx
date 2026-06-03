@@ -146,7 +146,7 @@ export function FinanceOfficeOrdersTable({
               <th className="w-[11rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Реквизиты</th>
               <th className="w-[7rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Наше юрлицо</th>
               <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
-              <th className="w-[10.5rem] px-1.5 py-2 text-center normal-case">Отметки</th>
+              <th className="w-[12rem] px-1.5 py-2 text-center normal-case">Отметки</th>
             </tr>
           </thead>
           <tbody>
@@ -219,7 +219,7 @@ export function FinanceOfficeOrdersTable({
                   >
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
-                  <td className="w-[10.5rem] max-w-[10.5rem] px-1.5 py-2">
+                  <td className="w-[12rem] max-w-[12rem] align-top px-1.5 py-2">
                     <div className="xl:hidden">
                       {remarksCount > 0 ? (
                         <span

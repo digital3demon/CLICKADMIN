@@ -1214,6 +1214,83 @@ export function OrderListTagsCell({
   const useLeadingIconStrip =
     orderAttentionWarning || stripProstheticsPending;
   const prostheticsPendingHref = filterListHref(LIST_TAG_PROSTHETICS_PENDING);
+  const inFinanceOffice = Boolean(financeOfficeFilterContext);
+  const useStackedLeadingIcons = useLeadingIconStrip && inFinanceOffice;
+  const leadingIconCount =
+    (orderAttentionWarning ? 1 : 0) + (stripProstheticsPending ? 1 : 0);
+  const iconShellClass = inFinanceOffice
+    ? "h-7 w-7"
+    : "h-[2.75rem] w-[2.75rem] sm:h-[3.25rem] sm:w-[3.25rem]";
+  const iconGlyphClass = inFinanceOffice
+    ? "h-4 w-4"
+    : "h-6 w-6 sm:h-7 sm:w-7";
+  const tagsBesideIconsMaxWidthClass =
+    leadingIconCount >= 2
+      ? "max-w-[calc(100%-5.5rem)] sm:max-w-[calc(100%-6.5rem)]"
+      : "max-w-[calc(100%-2.75rem)] sm:max-w-[calc(100%-3rem)]";
+  const orderAttentionFilterHref = financeOfficeFilterContext
+    ? filterListHref(LIST_TAG_ORDER_ATTENTION)
+    : shipmentsFilterContext
+      ? shipmentsListHref({
+          tab: shipmentsFilterContext.tab,
+          tag: LIST_TAG_ORDER_ATTENTION,
+          from: shipmentsFilterContext.periodFrom ?? undefined,
+          to: shipmentsFilterContext.periodTo ?? undefined,
+        })
+      : ordersListHref({
+          limit: pageSize,
+          tag: LIST_TAG_ORDER_ATTENTION,
+          hideShipped: hideShipped === true,
+          onlyShipped: onlyShipped === true,
+          q: listSearchQ?.trim() ? listSearchQ.trim() : undefined,
+          from: periodFrom?.trim() || undefined,
+          to: periodTo?.trim() || undefined,
+        });
+
+  const leadingIconStrip = (
+    <>
+      {orderAttentionWarning ? (
+        <Link
+          href={orderAttentionFilterHref}
+          className="shrink-0 self-start text-inherit no-underline outline-none focus-visible:outline-none"
+          title={
+            shipmentsFilterContext
+              ? "Показать в отгрузках наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
+              : financeOfficeFilterContext
+                ? "Показать в ФинОтделе наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
+                : "Показать в списке заказов все наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
+          }
+          aria-label="Фильтр: внимание — корректировки или расхождение сумм"
+        >
+          <span
+            className={`flex ${iconShellClass} shrink-0 items-center justify-center rounded-full border border-amber-400/90 bg-amber-100 shadow-sm dark:border-amber-700 dark:bg-amber-950/70`}
+          >
+            <OrderAttentionWarningGlyph className={iconGlyphClass} />
+          </span>
+        </Link>
+      ) : null}
+      {stripProstheticsPending ? (
+        <Link
+          href={prostheticsPendingHref}
+          title={
+            shipmentsFilterContext
+              ? "Показать в отгрузках наряды с открытыми заявками по протетике из чата («???»)"
+              : financeOfficeFilterContext
+                ? "Показать в ФинОтделе наряды с открытыми заявками по протетике из чата («???»)"
+                : "Показать наряды с открытыми заявками по протетике из чата («???»)"
+          }
+          aria-label="Протетика: заявки из чата"
+          className="shrink-0 self-start text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none"
+        >
+          <span
+            className={`flex ${iconShellClass} shrink-0 items-center justify-center rounded-full border border-sky-400/90 bg-sky-100 shadow-sm dark:border-sky-600 dark:bg-sky-950/75`}
+          >
+            <ProstheticsPendingGearGlyph className={iconGlyphClass} />
+          </span>
+        </Link>
+      ) : null}
+    </>
+  );
 
   const blockReasonHit =
     Boolean(kaitenCardId) &&
@@ -1294,70 +1371,36 @@ export function OrderListTagsCell({
       `}</style>
       <div
         className={
-          useLeadingIconStrip
-            ? "order-list-tags-root flex w-full min-w-0 max-w-full items-start gap-x-2"
-            : "order-list-tags-root flex w-full min-w-0 max-w-full flex-col"
+          useStackedLeadingIcons
+            ? "order-list-tags-root flex w-full min-w-0 max-w-full flex-col gap-1.5"
+            : useLeadingIconStrip
+              ? "order-list-tags-root flex w-full min-w-0 max-w-full items-start gap-x-2"
+              : "order-list-tags-root flex w-full min-w-0 max-w-full flex-col"
         }
         title="Отметки переносятся по ширине колонки таблицы"
       >
-        {useLeadingIconStrip ? (
+        {useStackedLeadingIcons ? (
+          <>
+            <div className="flex w-full min-w-0 items-center justify-between gap-x-1">
+              <div className="flex shrink-0 flex-row flex-nowrap items-center gap-x-1">
+                {leadingIconStrip}
+              </div>
+              <div className="shrink-0">{addTagButton}</div>
+            </div>
+            <div className="min-w-0 w-full">{tagCloudPack}</div>
+          </>
+        ) : useLeadingIconStrip ? (
           <>
             <div className="flex shrink-0 flex-row flex-nowrap items-start gap-x-1.5 self-start sm:gap-x-2">
-              {orderAttentionWarning ? (
-                <Link
-                  href={
-                    shipmentsFilterContext
-                      ? shipmentsListHref({
-                          tab: shipmentsFilterContext.tab,
-                          tag: LIST_TAG_ORDER_ATTENTION,
-                          from: shipmentsFilterContext.periodFrom ?? undefined,
-                          to: shipmentsFilterContext.periodTo ?? undefined,
-                        })
-                      : ordersListHref({
-                          limit: pageSize,
-                          tag: LIST_TAG_ORDER_ATTENTION,
-                          hideShipped: hideShipped === true,
-                          onlyShipped: onlyShipped === true,
-                          q: listSearchQ?.trim() ? listSearchQ.trim() : undefined,
-                          from: periodFrom?.trim() || undefined,
-                          to: periodTo?.trim() || undefined,
-                        })
-                  }
-                  className="shrink-0 self-start text-inherit no-underline outline-none focus-visible:outline-none"
-                  title={
-                    shipmentsFilterContext
-                      ? "Показать в отгрузках наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
-                      : "Показать в списке заказов все наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
-                  }
-                  aria-label="Фильтр: внимание — корректировки или расхождение сумм"
-                >
-                  <span className="flex h-[2.75rem] w-[2.75rem] shrink-0 items-center justify-center rounded-full border border-amber-400/90 bg-amber-100 shadow-sm dark:border-amber-700 dark:bg-amber-950/70 sm:h-[3.25rem] sm:w-[3.25rem]">
-                    <OrderAttentionWarningGlyph className="h-6 w-6 sm:h-7 sm:w-7" />
-                  </span>
-                </Link>
-              ) : null}
-              {stripProstheticsPending ? (
-                <Link
-                  href={prostheticsPendingHref}
-                  title={
-                    shipmentsFilterContext
-                      ? "Показать в отгрузках наряды с открытыми заявками по протетике из чата («???»)"
-                      : "Показать наряды с открытыми заявками по протетике из чата («???»)"
-                  }
-                  aria-label="Протетика: заявки из чата"
-                  className="shrink-0 self-start text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none"
-                >
-                  <span className="flex h-[2.75rem] w-[2.75rem] shrink-0 items-center justify-center rounded-full border border-sky-400/90 bg-sky-100 shadow-sm dark:border-sky-600 dark:bg-sky-950/75 sm:h-[3.25rem] sm:w-[3.25rem]">
-                    <ProstheticsPendingGearGlyph className="h-6 w-6 sm:h-7 sm:w-7" />
-                  </span>
-                </Link>
-              ) : null}
+              {leadingIconStrip}
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-x-1.5">
-              <div className="min-w-0 max-w-[calc(100%-2.75rem)] flex-1 sm:max-w-[calc(100%-3rem)]">
+            <div className="flex min-w-0 flex-1 items-start gap-x-1.5">
+              <div
+                className={`min-w-0 ${tagsBesideIconsMaxWidthClass} flex-1`}
+              >
                 {tagCloudPack}
               </div>
-              <div className="shrink-0 self-center">{addTagButton}</div>
+              <div className="shrink-0 self-start">{addTagButton}</div>
             </div>
           </>
         ) : (
