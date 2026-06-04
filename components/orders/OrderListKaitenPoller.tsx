@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
-import { kaitenFastLivePollIntervalMs } from "@/lib/kaiten-rate-limit";
 
 const WINDOW = 10;
 /** Без поиска: live-синк только для очень узкого списка. */
@@ -206,16 +205,6 @@ export function OrderListKaitenPoller({
       cancelled = true;
     };
   }, [idsKey, pullKaitenChatFeedLiveForVisible, router, tick]);
-
-  /**
-   * Повтор live-синка только при поиске и ≤3 строк — раз в 12+ с (env), не каждые 4 с.
-   */
-  useEffect(() => {
-    if (!searchActive || ids.length === 0 || ids.length > 3) return;
-    const pollMs = kaitenFastLivePollIntervalMs();
-    const id = window.setInterval(() => void runFastLiveThenRefresh(), pollMs);
-    return () => window.clearInterval(id);
-  }, [idsKey, searchActive, ids.length, runFastLiveThenRefresh]);
 
   useEffect(() => {
     if (ids.length === 0) return;

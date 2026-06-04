@@ -1,5 +1,8 @@
 import { getKaitenEnvConfig, type KaitenBoardTarget } from "@/lib/kaiten-config";
-import { kaitenSafeRequestSpacingMs } from "@/lib/kaiten-rate-limit";
+import {
+  KAITEN_MIN_GAP_MS,
+  kaitenSafeRequestSpacingMs,
+} from "@/lib/kaiten-rate-limit";
 import type { KaitenTrackLane } from "@prisma/client";
 
 export type KaitenAuth = { apiBase: string; token: string };
@@ -7,9 +10,8 @@ export type KaitenAuth = { apiBase: string; token: string };
 /** Опции HTTP к Kaiten. */
 export type KaitenHttpOpts = {
   /**
-   * Без паузы в глобальной очереди между запросами — для короткой цепочки из одного
-   * действия пользователя (блок/разблок из тегов, загрузка вкладки «Кайтен» в наряде). Снижает суммарное время
-   * с секунд до сетевой задержки; для фоновой синхронизации не использовать.
+   * Приоритет в общей очереди: сохранение наряда, PATCH карточки, вкладка «Кайтен».
+   * Фоновый опрос списка — без burst (не забивать лимит ~5 req/s).
    */
   burst?: boolean;
 };
@@ -33,22 +35,56 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Очередь + пауза между запросами — меньше всплесков и 429 от Kaiten. */
-let kaitenRequestTail: Promise<unknown> = Promise.resolve();
+let lastKaitenRequestAt = 0;
+type KaitenQueueJob = { urgent: boolean; run: () => Promise<void> };
+const kaitenQueue: KaitenQueueJob[] = [];
+let kaitenQueueDraining = false;
 
-function withKaitenSpacing<T>(fn: () => Promise<T>): Promise<T> {
-  const gap = spacingMs();
-  const run = kaitenRequestTail.catch(() => undefined).then(() => fn());
-  kaitenRequestTail = run.finally(() => sleep(gap));
-  return run;
+async function awaitKaitenGap(urgent: boolean): Promise<void> {
+  const gap = urgent ? KAITEN_MIN_GAP_MS : spacingMs();
+  const wait = gap - (Date.now() - lastKaitenRequestAt);
+  if (wait > 0) await sleep(wait);
+  lastKaitenRequestAt = Date.now();
+}
+
+async function drainKaitenQueue(): Promise<void> {
+  if (kaitenQueueDraining) return;
+  kaitenQueueDraining = true;
+  try {
+    while (kaitenQueue.length > 0) {
+      const urgentIdx = kaitenQueue.findIndex((j) => j.urgent);
+      const job = kaitenQueue.splice(urgentIdx >= 0 ? urgentIdx : 0, 1)[0]!;
+      await awaitKaitenGap(job.urgent);
+      await job.run();
+    }
+  } finally {
+    kaitenQueueDraining = false;
+    if (kaitenQueue.length > 0) void drainKaitenQueue();
+  }
+}
+
+/** Общая очередь к Kaiten: urgent (burst) обгоняет фоновый синк списка. */
+function scheduleKaiten<T>(fn: () => Promise<T>, urgent: boolean): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    kaitenQueue.push({
+      urgent,
+      run: async () => {
+        try {
+          resolve(await fn());
+        } catch (e) {
+          reject(e);
+        }
+      },
+    });
+    void drainKaitenQueue();
+  });
 }
 
 /**
- * Та же глобальная очередь с паузой, что и у kaitenFetch — для PUT файлов на карточку
- * и др. запросов вне kaitenFetch (иначе всплеск 429).
+ * Очередь с приоритетом пользователя — PUT файлов на карточку и т.п.
  */
 export function enqueueKaitenRequest<T>(fn: () => Promise<T>): Promise<T> {
-  return withKaitenSpacing(fn);
+  return scheduleKaiten(fn, true);
 }
 
 function retryAfterFromHeader(h: string | null): number | null {
@@ -106,25 +142,64 @@ async function kaitenFetch(
   init?: RequestInit,
   opts?: KaitenHttpOpts,
 ): Promise<{ ok: boolean; status: number; json: unknown; text: string }> {
-  const max = 5;
-  let last: { ok: boolean; status: number; json: unknown; text: string } | null = null;
-  for (let attempt = 0; attempt < max; attempt++) {
-    const r =
-      opts?.burst === true
-        ? await kaitenFetchOnce(auth, path, init)
-        : await withKaitenSpacing(() => kaitenFetchOnce(auth, path, init));
-    last = { ok: r.ok, status: r.status, json: r.json, text: r.text };
-    if (!shouldRetryKaitenStatus(r.status)) return last;
-    if (attempt === max - 1) return last;
-    const wait =
-      r.retryAfterMs ??
-      Math.min(
-        20_000,
-        Math.max(500, Math.round(700 * (attempt + 1) ** 2 + (r.status === 502 ? 400 : 0))),
-      );
-    await sleep(wait);
+  const urgent = opts?.burst === true;
+  return scheduleKaiten(async () => {
+    const max = 5;
+    let last: { ok: boolean; status: number; json: unknown; text: string } | null =
+      null;
+    for (let attempt = 0; attempt < max; attempt++) {
+      if (attempt > 0) await awaitKaitenGap(urgent);
+      const r = await kaitenFetchOnce(auth, path, init);
+      last = { ok: r.ok, status: r.status, json: r.json, text: r.text };
+      if (!shouldRetryKaitenStatus(r.status)) return last;
+      if (attempt === max - 1) return last;
+      const wait =
+        r.retryAfterMs ??
+        Math.min(
+          20_000,
+          Math.max(500, Math.round(700 * (attempt + 1) ** 2 + (r.status === 502 ? 400 : 0))),
+        );
+      await sleep(wait);
+    }
+    return last!;
+  }, urgent);
+}
+
+/** POST /cards — создание карточки при сохранении наряда. */
+export async function kaitenCreateCard(
+  auth: KaitenAuth,
+  body: Record<string, unknown>,
+  opts?: KaitenHttpOpts,
+): Promise<{
+  ok: boolean;
+  status: number;
+  card: Record<string, unknown> | null;
+  error: string | null;
+}> {
+  const r = await kaitenFetch(
+    auth,
+    "/cards",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    { burst: true, ...opts },
+  );
+  if (!r.ok || r.json == null || typeof r.json !== "object") {
+    return {
+      ok: false,
+      status: r.status,
+      card: null,
+      error: typeof r.text === "string" ? r.text.slice(0, 800) : "Kaiten error",
+    };
   }
-  return last!;
+  return {
+    ok: true,
+    status: r.status,
+    card: r.json as Record<string, unknown>,
+    error: null,
+  };
 }
 
 export async function kaitenGetCard(

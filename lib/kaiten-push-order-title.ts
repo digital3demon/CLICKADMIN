@@ -126,7 +126,7 @@ export async function pushKaitenCardTitleForOrderIfLinked(
     asap: head.asap,
   };
 
-  const res = await kaitenPatchCard(auth, head.kaitenCardId, patch);
+  const res = await kaitenPatchCard(auth, head.kaitenCardId, patch, { burst: true });
   if (!res.ok) {
     return {
       ok: false,

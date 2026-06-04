@@ -3,19 +3,21 @@ import { kaitenColumnTitleFromBoard } from "@/lib/kaiten-column-title";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { getKaitenEnvConfig } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
-import { kaitenListBoardColumns, getKaitenRestAuth } from "@/lib/kaiten-rest";
+import {
+  getKaitenRestAuth,
+  kaitenCreateCard,
+  kaitenListBoardColumns,
+  kaitenListBoardLanes,
+} from "@/lib/kaiten-rest";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
+
 async function fetchFirstLaneId(
-  apiBase: string,
-  token: string,
+  auth: NonNullable<ReturnType<typeof getKaitenRestAuth>>,
   boardId: number,
 ): Promise<number | null> {
-  const res = await fetch(`${apiBase}/boards/${boardId}/lanes`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) return null;
-  const lanes = (await res.json()) as { id?: number }[];
-  const id = lanes[0]?.id;
+  const lanes = await kaitenListBoardLanes(auth, boardId, { burst: true });
+  if (!lanes.ok || lanes.lanes.length === 0) return null;
+  const id = lanes.lanes[0]?.id;
   return typeof id === "number" ? id : null;
 }
 
@@ -165,13 +167,18 @@ export async function syncNewOrderToKaiten(
       };
     }
 
+    const auth = getKaitenRestAuth();
+    if (!auth) {
+      return {
+        ok: false,
+        error: "Kaiten не настроен (KAITEN_API_TOKEN)",
+        httpStatus: 503,
+      };
+    }
+
     let laneId = boardTarget.laneId;
     if (laneId == null) {
-      laneId = await fetchFirstLaneId(
-        cfg.apiBase,
-        cfg.token,
-        boardTarget.boardId!,
-      );
+      laneId = await fetchFirstLaneId(auth, boardTarget.boardId!);
     }
 
     const description = buildKaitenCardDescription(
@@ -214,20 +221,10 @@ export async function syncNewOrderToKaiten(
     // Срок лабораторный (dueDate) только в title — в поле due_date карточки Kaiten не передаём.
     // Флаг «срочно» в Kaiten — поле asap (см. developers.kaiten.ru).
 
-    const res = await fetch(`${cfg.apiBase}/cards`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${cfg.token}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-
-    const rawText = await res.text();
-    if (!res.ok) {
-      const tail = rawText.length > 600 ? "…" : "";
-      const errMsg = `Kaiten ${res.status}: ${rawText.slice(0, 600)}${tail}`;
+    const created = await kaitenCreateCard(auth, body, { burst: true });
+    if (!created.ok) {
+      const rawText = created.error ?? "";
+      const errMsg = `Kaiten ${created.status}: ${rawText}`;
       try {
         await ordersPrisma.order.update({
           where: { id: orderId },
@@ -247,32 +244,23 @@ export async function syncNewOrderToKaiten(
       };
     }
 
-    let cardId: number | null = null;
-    let cardRecord: Record<string, unknown> | null = null;
-    try {
-      const data = JSON.parse(rawText) as Record<string, unknown>;
-      if (data != null && typeof data === "object") {
-        cardRecord = data;
-        cardId = parseKaitenCardIdFromCreateResponse(data);
-      }
-    } catch {
-      cardId = null;
-    }
+    const cardRecord = created.card;
+    const cardId =
+      cardRecord != null ? parseKaitenCardIdFromCreateResponse(cardRecord) : null;
 
     let titleUpdate: { kaitenColumnTitle: string | null } | undefined;
     let sortUpdate: { kaitenCardSortOrder: number | null } | undefined;
     if (cardRecord != null && cardId != null) {
-      const auth = getKaitenRestAuth();
-      if (auth) {
-        const cols = await kaitenListBoardColumns(auth, boardTarget.boardId!);
-        if (cols.ok) {
-          titleUpdate = {
-            kaitenColumnTitle: kaitenColumnTitleFromBoard(
-              cardRecord,
-              cols.columns,
-            ),
-          };
-        }
+      const cols = await kaitenListBoardColumns(auth, boardTarget.boardId!, {
+        burst: true,
+      });
+      if (cols.ok) {
+        titleUpdate = {
+          kaitenColumnTitle: kaitenColumnTitleFromBoard(
+            cardRecord,
+            cols.columns,
+          ),
+        };
       }
       const so = kaitenSortOrderFromCard(cardRecord);
       if (so != null) sortUpdate = { kaitenCardSortOrder: so };

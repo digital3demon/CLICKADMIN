@@ -58,8 +58,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
   let errorCount = 0;
   let kaitenLabMentionDbChanged = false;
   const includeComments = opts?.includeComments === true;
-  /** Без очереди 90ms между запросами — иначе фоновый опрос списка растягивается на десятки секунд. 429 обрабатывается в kaitenFetch. */
-  const burst = { burst: true } as const;
+  /** Фон: с паузой в очереди kaitenFetch (~5 req/s). burst не использовать — блокирует сохранение нарядов. */
   const successfullyCheckedOrderIds = new Set<string>();
 
   const rows = await db.order.findMany({
