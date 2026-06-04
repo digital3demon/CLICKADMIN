@@ -15,7 +15,8 @@ import { OrdersListShippedToolbar } from "@/components/orders/OrdersListShippedT
 import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePref";
 import { OrdersListFiltersBar } from "@/components/orders/OrdersListFiltersBar";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
-import { StickyListChrome } from "@/components/layout/StickyListChrome";
+import { OrdersListChrome } from "@/components/orders/OrdersListChrome";
+import { harmonyRowIndicator } from "@/lib/harmony-list-pill";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { getSiteOrigin } from "@/lib/site-origin-server";
@@ -452,7 +453,7 @@ export default async function OrdersPage({
           }
         />
       </div>
-      <StickyListChrome
+      <OrdersListChrome
         className="w-full max-w-full min-w-0 self-start"
         toolbar={<div className="space-y-4">
       <div className="hidden lg:block">
@@ -674,7 +675,7 @@ export default async function OrdersPage({
       </div>
         </div>}
       >
-      <div className="w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
+      <div className="orders-harmony-table-shell w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
         <table className={ORDERS_TABLE_CLASS}>
           <OrdersTableColGroup />
           <thead className="sr-only">
@@ -721,12 +722,22 @@ export default async function OrdersPage({
                 const hasCorrection = o.listPendingChatCorrections;
                 const hasProsthetics =
                   o.listPendingProstheticsRequests && !o.prostheticsOrdered;
-                const rowClass =
-                  blocked
-                    ? "border-b-2 border-red-800/45 bg-gradient-to-r from-red-950/40 via-red-950/25 to-red-900/15 text-[var(--app-text)] dark:border-red-900/60 dark:from-red-950/50 dark:via-red-950/35 dark:to-red-950/20 [&>td:not(:first-child):not(:last-child)]:text-red-950/95 dark:[&>td:not(:first-child):not(:last-child)]:text-red-50/90"
-                    : workSent
-                      ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
-                      : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
+                const rowClass = blocked
+                  ? "border-b-2 border-red-800/45 bg-gradient-to-r from-red-950/40 via-red-950/25 to-red-900/15 text-[var(--app-text)] dark:border-red-900/60 dark:from-red-950/50 dark:via-red-950/35 dark:to-red-950/20 [&>td:not(:first-child):not(:last-child)]:text-red-950/95 dark:[&>td:not(:first-child):not(:last-child)]:text-red-50/90"
+                  : workSent
+                    ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
+                    : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
+                const harmonyRowState = blocked
+                  ? "blocked"
+                  : workSent
+                    ? "shipped"
+                    : "default";
+                const rowHarmonyIndicator = harmonyRowIndicator({
+                  kaitenBlocked: blocked,
+                  isLabOverdue,
+                  kaitenColumnTitle: o.kaitenColumnTitle,
+                  demoKanbanColumn: o.demoKanbanColumn,
+                });
                 const renderTagsNode = () => (
                   <OrderListTagsCell
                     orderId={o.id}
@@ -767,6 +778,8 @@ export default async function OrdersPage({
                   orderId={o.id}
                   orderNumber={o.orderNumber}
                   className={rowClass}
+                  harmonyRowIndicator={rowHarmonyIndicator}
+                  harmonyRowState={harmonyRowState}
                   clinicName={o.clinic?.name ?? "Частное лицо"}
                   doctorName={personNameSurnameInitials(o.doctor.fullName)}
                   patientName={
@@ -977,7 +990,7 @@ export default async function OrdersPage({
           ) : null}
         </div>
       ) : null}
-      </StickyListChrome>
+      </OrdersListChrome>
       </div>
       </OrdersListKaitenChatShell>
       </div>

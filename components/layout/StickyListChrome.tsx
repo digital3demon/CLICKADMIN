@@ -13,12 +13,15 @@ export function StickyListChrome({
   children,
   className,
   toolbarClassName,
+  harmonyUnifiedCard = false,
   offsetVarName = "--sticky-list-toolbar-height",
 }: {
   toolbar: ReactNode;
   children: ReactNode;
   className?: string;
   toolbarClassName?: string;
+  /** Гармония: фильтры и таблица в одной карточке */
+  harmonyUnifiedCard?: boolean;
   offsetVarName?: `--${string}`;
 }) {
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -41,6 +44,34 @@ export function StickyListChrome({
       window.removeEventListener("resize", update);
     };
   }, []);
+
+  if (harmonyUnifiedCard) {
+    return (
+      <div
+        className={[className, "orders-harmony-unified-card card-shadow"]
+          .filter(Boolean)
+          .join(" ")}
+        style={
+          {
+            [offsetVarName]: `${toolbarHeight}px`,
+          } as CSSProperties
+        }
+      >
+        <div
+          ref={toolbarRef}
+          className={[
+            "orders-harmony-unified-toolbar sticky top-0 z-40 pb-0",
+            toolbarClassName ?? "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {toolbar}
+        </div>
+        <div className="orders-harmony-unified-body min-w-0">{children}</div>
+      </div>
+    );
+  }
 
   return (
     <div

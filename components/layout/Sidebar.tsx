@@ -22,6 +22,9 @@ import { ThemeToggle } from "./ThemeToggle";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
 import { profileAvatarEmoji } from "@/lib/profile-avatar-presets";
 import { CRM_PROFILE_UPDATED_EVENT } from "@/lib/crm-client-events";
+import { useUiDesign } from "@/lib/hooks/useUiDesign";
+import { fontDisplay } from "@/lib/app-fonts";
+import { LogOut } from "lucide-react";
 
 const WorkdaySunMoon = dynamic(
   () =>
@@ -40,6 +43,8 @@ const WorkdaySunMoon = dynamic(
 );
 
 export function Sidebar() {
+  const uiDesign = useUiDesign();
+  const isHarmony = uiDesign === "harmony";
   const router = useRouter();
   const { open: openNewOrder, canOpen, canCreate } = useNewOrderPanel();
   const [sessionUser, setSessionUser] = useState<{
@@ -154,16 +159,32 @@ export function Sidebar() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 w-full flex-col text-[var(--sidebar-text-strong)]">
-      <div className="relative min-w-0 shrink-0 px-5 pb-5 pt-6 shell-short:px-4 shell-short:pb-2 shell-short:pt-3">
+      <div
+        className={
+          isHarmony
+            ? "relative min-w-0 shrink-0 px-5 pb-5 pt-6 shell-short:px-4 shell-short:pb-2 shell-short:pt-4"
+            : "relative min-w-0 shrink-0 px-5 pb-5 pt-6 shell-short:px-4 shell-short:pb-2 shell-short:pt-3"
+        }
+      >
         {isWorkdaySkyWidgetEnabled() ? (
           <div
-            className="pointer-events-none absolute -left-1 -top-1 z-0 h-[7.5rem] w-[7.75rem] overflow-hidden rounded-br-[2.75rem] shell-short:h-[4.25rem] shell-short:w-[4.5rem] shell-short:rounded-br-[1.25rem]"
+            className={
+              isHarmony
+                ? "pointer-events-none absolute -left-2 -top-2 z-0 h-[4.5rem] w-[4.75rem] overflow-hidden rounded-br-[1.5rem] opacity-80"
+                : "pointer-events-none absolute -left-1 -top-1 z-0 h-[7.5rem] w-[7.75rem] overflow-hidden rounded-br-[2.75rem] shell-short:h-[4.25rem] shell-short:w-[4.5rem] shell-short:rounded-br-[1.25rem]"
+            }
             aria-hidden
           >
-            <div className="-ml-2 -mt-2 pointer-events-auto shell-short:-ml-1 shell-short:-mt-1">
+            <div
+              className={
+                isHarmony
+                  ? "-ml-1 -mt-1 pointer-events-auto scale-[0.45] origin-top-left"
+                  : "-ml-2 -mt-2 pointer-events-auto shell-short:-ml-1 shell-short:-mt-1"
+              }
+            >
               <WorkdaySunMoon
                 variant="corner"
-                className="text-[var(--sidebar-blue)] opacity-[0.94] shell-short:scale-[0.55] shell-short:origin-top-left"
+                className={`text-[var(--sidebar-blue)] opacity-[0.94] ${isHarmony ? "" : "shell-short:scale-[0.55] shell-short:origin-top-left"}`}
               />
             </div>
           </div>
@@ -171,15 +192,38 @@ export function Sidebar() {
 
         <Link
           href="/"
-          className="relative z-10 mx-auto block w-full min-w-0 max-w-full text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+          className={
+            isHarmony
+              ? "relative z-10 mb-8 flex items-center gap-3 outline-offset-2 transition-opacity hover:opacity-80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+              : "relative z-10 mx-auto block w-full min-w-0 max-w-full text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+          }
           title={`На стартовый экран · ${APP_DISPLAY_NAME}`}
         >
-          <span
-            className={`relative z-20 block w-full min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[1.35rem] font-light leading-snug tracking-[0.04em] text-[var(--sidebar-text-strong)] shell-short:text-[1.05rem] shell-short:leading-tight shell-short:tracking-[0.02em] [@media(min-width:1024px)_and_(min-height:560px)]:text-[clamp(0.62rem,calc(((100vw/7)-2.75rem)/9),1.12rem)] [@media(min-width:1024px)_and_(min-height:560px)]:leading-tight [@media(min-width:1024px)_and_(min-height:560px)]:tracking-[0.05em] ${brandDisplayFont.className}`}
-            style={{ textShadow: "var(--sidebar-title-shadow)" }}
-          >
-            {APP_DISPLAY_NAME}
-          </span>
+          {isHarmony ? (
+            <>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--sidebar-blue)] text-white card-shadow">
+                <img
+                  src="/favicons/favicon-blue-48.png"
+                  alt=""
+                  className="h-5 w-5"
+                  width={20}
+                  height={20}
+                />
+              </span>
+              <span
+                className={`${fontDisplay.className} text-[17px] font-semibold tracking-tight text-[var(--sidebar-text-strong)]`}
+              >
+                {APP_DISPLAY_NAME}
+              </span>
+            </>
+          ) : (
+            <span
+              className={`relative z-20 block w-full min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[1.35rem] font-light leading-snug tracking-[0.04em] text-[var(--sidebar-text-strong)] shell-short:text-[1.05rem] shell-short:leading-tight shell-short:tracking-[0.02em] [@media(min-width:1024px)_and_(min-height:560px)]:text-[clamp(0.62rem,calc(((100vw/7)-2.75rem)/9),1.12rem)] [@media(min-width:1024px)_and_(min-height:560px)]:leading-tight [@media(min-width:1024px)_and_(min-height:560px)]:tracking-[0.05em] ${brandDisplayFont.className}`}
+              style={{ textShadow: "var(--sidebar-title-shadow)" }}
+            >
+              {APP_DISPLAY_NAME}
+            </span>
+          )}
         </Link>
 
         {isEffectiveKanbanOnly ? null : (
@@ -193,7 +237,11 @@ export function Sidebar() {
                 ? "Новый заказ"
                 : "Уже 5 окон нового заказа (включая свёрнутые полоски внизу экрана). Закройте лишние или разверните и очистите черновик."
             }
-            className={`pressable-tap mt-5 flex w-full items-center rounded-md px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-white transition-colors shell-short:mt-2 shell-short:px-2 shell-short:py-2 shell-short:text-[9px] shell-short:tracking-[0.06em] ${
+            className={`${isHarmony ? "pressable" : "pressable-tap"} ${isHarmony ? "mt-0" : "mt-5"} flex w-full items-center justify-between text-white shell-short:mt-2 ${
+              isHarmony
+                ? "rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-wider card-shadow"
+                : "rounded-md px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wide shell-short:px-2 shell-short:py-2 shell-short:text-[9px] shell-short:tracking-[0.06em]"
+            } transition-colors ${
               canOpen
                 ? "cursor-pointer bg-[var(--sidebar-blue)] hover:bg-[var(--sidebar-blue-hover)]"
                 : "cursor-not-allowed bg-zinc-400 dark:bg-zinc-600"
@@ -202,9 +250,13 @@ export function Sidebar() {
               if (canOpen) openNewOrder();
             }}
           >
-            <span className="flex-1 text-center">Новый заказ</span>
+            <span className={isHarmony ? "" : "flex-1 text-center"}>Новый заказ</span>
             <kbd
-              className="ml-auto hidden shrink-0 items-center gap-0.5 text-[10px] font-mono normal-case tracking-normal text-white/70 opacity-60 lg:inline-flex"
+              className={`hidden shrink-0 items-center gap-0.5 text-[10px] font-sans font-medium tracking-normal lg:inline-flex ${
+                isHarmony
+                  ? "rounded-md bg-white/20 px-1.5 py-0.5 text-white/90"
+                  : "ml-auto font-mono normal-case text-white/70 opacity-60"
+              }`}
               aria-hidden
             >
               <span>⌘</span>
@@ -245,8 +297,18 @@ export function Sidebar() {
         )}
       </div>
 
-      <div className="mt-auto shrink-0 border-t border-[var(--sidebar-border)] px-4 py-3 dark:bg-black/25 shell-short:px-3 shell-short:py-2">
-        <div className="flex items-start gap-2 shell-short:gap-1.5">
+      <div
+        className={`mt-auto shrink-0 border-t border-[var(--sidebar-border)] px-4 py-3 shell-short:px-3 shell-short:py-2 ${
+          isHarmony ? "" : "dark:bg-black/25"
+        }`}
+      >
+        <div
+          className={
+            isHarmony
+              ? "flex items-center justify-between gap-2 p-2"
+              : "flex items-start gap-2 shell-short:gap-1.5"
+          }
+        >
           {sessionUser ? (
             <>
               <Link
@@ -292,9 +354,26 @@ export function Sidebar() {
           ) : (
             <div className="min-w-0 flex-1" />
           )}
-          <ThemeToggle compact={shellShort} />
+          {isHarmony ? (
+            <button
+              type="button"
+              title={isDemo ? "Выйти из демо и сбросить демо-базу" : "Выйти"}
+              aria-label={isDemo ? "Выйти из демо" : "Выйти"}
+              onClick={() => void logout()}
+              className="rounded-lg p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
+            >
+              <LogOut className="h-4 w-4" aria-hidden />
+            </button>
+          ) : (
+            <ThemeToggle compact={shellShort} />
+          )}
         </div>
-        {singleUserMode ? null : (
+        {isHarmony ? (
+          <div className="mt-2 flex justify-center">
+            <ThemeToggle compact={shellShort} />
+          </div>
+        ) : null}
+        {singleUserMode ? null : isHarmony ? null : (
           <button
             type="button"
             title={isDemo ? "Выйти из демо и сбросить демо-базу" : "Выйти"}

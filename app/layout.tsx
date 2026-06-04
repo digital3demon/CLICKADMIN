@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/ui/ToastProvider";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { fontBody, fontDisplay } from "@/lib/app-fonts";
 import { THEME_BOOTSTRAP_INLINE_SCRIPT } from "@/lib/theme-storage";
+import { UI_DESIGN_BOOTSTRAP_INLINE_SCRIPT } from "@/lib/ui-design";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -48,6 +49,9 @@ export default async function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_INLINE_SCRIPT }}
+        />
+        <script
+          dangerouslySetInnerHTML={{ __html: UI_DESIGN_BOOTSTRAP_INLINE_SCRIPT }}
         />
       </head>
       <body className={`${fontBody.className} antialiased`}>

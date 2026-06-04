@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
+import { useUiDesign } from "@/lib/hooks/useUiDesign";
+import { Button } from "@/components/ui/Button";
 
 type SettingsPayload = {
   postingYearMonth: string;
@@ -15,6 +17,10 @@ type Props = {
 };
 
 export function OrderPostingMonthBar({ toolbarEnd }: Props) {
+  const isHarmony = useUiDesign() === "harmony";
+  const cardShell = isHarmony
+    ? "flex w-full min-w-0 flex-col overflow-visible rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 card-shadow"
+    : "flex w-full min-w-0 flex-col overflow-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]";
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -165,8 +171,8 @@ export function OrderPostingMonthBar({ toolbarEnd }: Props) {
   }
 
   return (
-    <div className="flex w-full min-w-0 flex-col overflow-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-      <div className="flex min-w-0 flex-col gap-3 px-4 py-3.5 xl:flex-row xl:items-center xl:justify-start xl:gap-6">
+    <div className={cardShell}>
+      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
       <div className="min-w-0 text-base text-[var(--text-strong)] xl:max-w-[24rem] xl:shrink-0">
         <p className="text-lg font-semibold text-[var(--app-text)]">
           Нумерация нарядов
@@ -202,23 +208,25 @@ export function OrderPostingMonthBar({ toolbarEnd }: Props) {
           <p className="mt-2 text-sm text-red-600">{error}</p>
         ) : null}
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-        <button
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           disabled={busy}
           onClick={() => void load()}
-          className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3.5 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
         >
           Обновить
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="primary"
+          size="sm"
           disabled={busy}
           onClick={() => void advance()}
-          className="rounded-md bg-[var(--sidebar-blue)] px-3.5 py-2 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
         >
           Старт нового месяца
-        </button>
+        </Button>
         {toolbarEnd}
       </div>
       </div>

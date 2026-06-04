@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./design-harmony.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -31,6 +32,11 @@
  *   font-display: swap;
  * }
  */
+
+:root,
+html[data-ui="classic"] {
+  --app-sidebar-w: calc(100% / 7);
+}
 
 :root {
   color-scheme: light;

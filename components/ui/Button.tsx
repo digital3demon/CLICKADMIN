@@ -1,6 +1,7 @@
 'use client'
 
 import { forwardRef } from 'react'
+import { useUiDesign } from '@/lib/hooks/useUiDesign'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'warning'
 type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
@@ -76,6 +77,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const isDisabled = disabled || loading
+    const isHarmony = useUiDesign() === 'harmony'
+    const harmonyShape =
+      isHarmony && (variant === 'primary' || variant === 'secondary')
+        ? 'rounded-xl pressable'
+        : ''
+    const harmonyPrimary =
+      isHarmony && variant === 'primary' ? 'uppercase tracking-wide font-bold' : ''
 
     return (
       <button
@@ -88,7 +96,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'disabled:cursor-not-allowed',
           'touch-action-manipulation',
           variantClasses[variant],
-          sizeClasses[size],
+          isHarmony && size === 'md' ? 'h-9 px-4 text-sm gap-2 rounded-xl' : sizeClasses[size],
+          harmonyShape,
+          harmonyPrimary,
           fullWidth ? 'w-full' : '',
           className,
         ]

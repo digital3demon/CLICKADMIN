@@ -15,6 +15,8 @@ import {
   coalesceSidebarNavOrder,
   normalizeSidebarNavOrder,
 } from "@/lib/sidebar-nav-order";
+import { useUiDesign } from "@/lib/hooks/useUiDesign";
+import { sidebarNavIconForHref } from "@/lib/sidebar-nav-icons";
 
 function isNavActive(pathname: string, href: string): boolean {
   if (href === "/orders") {
@@ -310,14 +312,90 @@ export function SidebarNav() {
     [navItems, orderHrefs, persistOrder],
   );
 
+  const uiDesign = useUiDesign();
+  const isHarmony = uiDesign === "harmony";
+
+  const navDividerAfter = new Set([
+    "/orders/history",
+    "/clients",
+  ]);
+
   return (
     <nav
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-5 pb-3 pt-5 shell-short:px-4 shell-short:pb-2 shell-short:pt-3"
+      className={
+        isHarmony
+          ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-3 pt-3 custom-scrollbar shell-short:px-2"
+          : "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-5 pb-3 pt-5 shell-short:px-4 shell-short:pb-2 shell-short:pt-3"
+      }
       aria-label="Разделы"
     >
-      <ul className="flex flex-col gap-0">
+      <ul className={isHarmony ? "flex flex-col gap-1" : "flex flex-col gap-0"}>
         {orderedNav.map((item) => {
           const active = isNavActive(pathname, item.href);
+          const Icon = isHarmony ? sidebarNavIconForHref(item.href) : null;
+          const showDivider = isHarmony && navDividerAfter.has(item.href);
+
+          if (isHarmony) {
+            return (
+              <li key={item.href} className="list-none">
+                {showDivider ? (
+                  <div
+                    className="mx-3 my-2 h-px bg-[var(--sidebar-border)]"
+                    aria-hidden
+                  />
+                ) : null}
+                <div
+                  className="group flex items-stretch gap-0.5"
+                  onDragOver={onDragOver}
+                  onDrop={onDrop(item.href)}
+                >
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(e) => {
+                      onDragStart(item.href);
+                      e.dataTransfer.setData("text/plain", item.href);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragEnd={onDragEnd}
+                    className="flex w-6 shrink-0 cursor-grab items-center justify-center rounded-lg border-0 bg-transparent text-[var(--text-muted)] opacity-40 hover:opacity-100 active:cursor-grabbing"
+                    title="Перетащите, чтобы изменить порядок в меню"
+                    aria-label={`Изменить порядок: ${item.label}`}
+                  >
+                    <DragHandleIcon />
+                  </button>
+                  <Link
+                    href={item.href}
+                    draggable={false}
+                    className={[
+                      "relative flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-[color-mix(in_srgb,var(--sidebar-blue)_12%,transparent)] text-[var(--sidebar-blue)]"
+                        : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]",
+                    ].join(" ")}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    {Icon ? (
+                      <Icon
+                        className={`h-5 w-5 shrink-0 ${active ? "text-[var(--sidebar-blue)]" : "text-[var(--text-muted)]"}`}
+                        aria-hidden
+                      />
+                    ) : null}
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    {item.href === "/mail" && mailUnreadCount > 0 ? (
+                      <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-bold text-[var(--sidebar-blue-hover)] tabular-nums">
+                        {mailUnreadCount > 99 ? "99+" : mailUnreadCount}
+                      </span>
+                    ) : null}
+                    {active ? (
+                      <span className="nav-active-marker-harmony" aria-hidden />
+                    ) : null}
+                  </Link>
+                </div>
+              </li>
+            );
+          }
+
           return (
             <li
               key={item.href}

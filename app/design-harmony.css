@@ -1,0 +1,487 @@
+/*
+ * Harmony UI — только при html[data-ui="harmony"].
+ * Classic (:root, html.dark без data-ui) не переопределяется.
+ */
+
+html[data-ui="harmony"] {
+  --app-sidebar-w: 260px;
+  --status-red: #ef4444;
+  --status-green: #10b981;
+  --status-yellow: #f59e0b;
+
+  /* Light harmony (без .dark) */
+  --sidebar-blue: #2563eb;
+  --sidebar-blue-hover: #1d4ed8;
+  --sidebar-bg: #f3f4f6;
+  --sidebar-border: #e5e7eb;
+  --sidebar-text: #6b7280;
+  --sidebar-text-strong: #111827;
+  --sidebar-title-shadow: none;
+  --app-bg: #f9fafb;
+  --app-text: #111827;
+  --text-strong: #030712;
+  --text-body: #374151;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+  --border-subtle: #f3f4f6;
+  --surface-subtle: #f9fafb;
+  --surface-muted: rgba(249, 250, 251, 0.94);
+  --surface-hover: #f3f4f6;
+  --table-row-hover: rgba(243, 244, 246, 0.9);
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 12%, transparent);
+  --text-placeholder: #9ca3af;
+  --border-strong: #9ca3af;
+}
+
+html[data-ui="harmony"].dark {
+  --sidebar-blue: #3b82f6;
+  --sidebar-blue-hover: #60a5fa;
+  --sidebar-bg: #1f2937;
+  --sidebar-border: #374151;
+  --sidebar-text: #d1d5db;
+  --sidebar-text-strong: #f9fafb;
+  --sidebar-title-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+  --app-bg: #111827;
+  --app-text: #f9fafb;
+  --text-strong: #fafafa;
+  --text-body: #d1d5db;
+  --text-secondary: #d1d5db;
+  --text-muted: #9ca3af;
+  --card-bg: #1f2937;
+  --card-border: #374151;
+  --border-subtle: #374151;
+  --surface-subtle: #1f2937;
+  --surface-muted: rgba(31, 41, 55, 0.92);
+  --surface-hover: #273345;
+  --table-row-hover: #273345;
+  --input-bg: #111827;
+  --input-border: #4b5563;
+  --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 22%, transparent);
+  --text-placeholder: #9ca3af;
+  --border-strong: #6b7280;
+}
+
+html[data-ui="harmony"].dark body {
+  background-color: #0f1419;
+}
+
+/* Утилиты harmony */
+html[data-ui="harmony"] .card-shadow {
+  box-shadow:
+    0 4px 12px -2px rgba(0, 0, 0, 0.35),
+    0 2px 4px -2px rgba(0, 0, 0, 0.25);
+}
+
+html[data-ui="harmony"]:not(.dark) .card-shadow {
+  box-shadow:
+    0 4px 12px -2px rgba(15, 23, 42, 0.08),
+    0 2px 4px -2px rgba(15, 23, 42, 0.06);
+}
+
+html[data-ui="harmony"] .sticky-shadow {
+  box-shadow:
+    0 10px 15px -3px rgba(17, 24, 39, 0.5),
+    0 4px 6px -4px rgba(17, 24, 39, 0.35);
+}
+
+html[data-ui="harmony"] .pressable {
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+html[data-ui="harmony"] .pressable:hover:not(:disabled) {
+  transform: scale(0.99);
+  opacity: 0.95;
+}
+
+html[data-ui="harmony"] .pressable:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+html[data-ui="harmony"] .input-elegant {
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--app-text);
+  transition: all 0.2s ease;
+}
+
+html[data-ui="harmony"] .input-elegant:focus {
+  outline: none;
+  border-color: var(--sidebar-blue);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--sidebar-blue) 18%, transparent);
+}
+
+html[data-ui="harmony"] .table-row-elegant {
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid var(--card-border);
+}
+
+html[data-ui="harmony"] .table-row-elegant:hover {
+  background-color: var(--table-row-hover);
+}
+
+html[data-ui="harmony"] .custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html[data-ui="harmony"] .custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html[data-ui="harmony"] .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 10px;
+}
+
+html[data-ui="harmony"] .nav-active-marker-harmony {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 3px;
+  background: linear-gradient(to right, var(--sidebar-blue-hover), var(--sidebar-blue));
+  border-radius: 9999px 9999px 0 0;
+  opacity: 0.9;
+}
+
+html[data-ui="harmony"] .harmony-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 6px;
+  padding: 0.125rem 0.5rem;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+html[data-ui="harmony"] .harmony-status-pill--blue {
+  background: color-mix(in srgb, var(--sidebar-blue) 12%, transparent);
+  color: var(--sidebar-blue-hover);
+  border: 1px solid color-mix(in srgb, var(--sidebar-blue) 22%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--yellow {
+  background: color-mix(in srgb, var(--status-yellow) 12%, transparent);
+  color: var(--status-yellow);
+  border: 1px solid color-mix(in srgb, var(--status-yellow) 22%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--green {
+  background: color-mix(in srgb, var(--status-green) 12%, transparent);
+  color: var(--status-green);
+  border: 1px solid color-mix(in srgb, var(--status-green) 22%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--red {
+  background: color-mix(in srgb, var(--status-red) 12%, transparent);
+  color: var(--status-red);
+  border: 1px solid color-mix(in srgb, var(--status-red) 22%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--gray {
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  color: var(--text-secondary);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--red-solid {
+  background: var(--status-red);
+  color: #fff;
+  border: 1px solid var(--status-red);
+}
+
+html[data-ui="harmony"] .harmony-blocked-tag {
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--status-red) 35%, transparent);
+  background: color-mix(in srgb, var(--status-red) 10%, transparent);
+  color: var(--status-red);
+}
+
+html[data-ui="harmony"] .harmony-row-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+}
+
+html[data-ui="harmony"] .harmony-row-indicator--red {
+  background: var(--status-red);
+}
+
+html[data-ui="harmony"] .harmony-row-indicator--yellow {
+  background: var(--status-yellow);
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr.orders-harmony-row,
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr.orders-harmony-row--blocked,
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr.orders-harmony-row--shipped {
+  position: relative;
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-indicator]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  pointer-events: none;
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-indicator="red"]::before {
+  background: var(--status-red);
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-indicator="yellow"]::before {
+  background: var(--status-yellow);
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row] {
+  border-bottom-width: 1px !important;
+  border-bottom-color: var(--card-border) !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: inherit !important;
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row] > td {
+  color: inherit !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="blocked"] {
+  background: color-mix(in srgb, var(--status-red) 6%, var(--card-bg)) !important;
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="shipped"] > td:not([data-shipped-cell]):not(:first-child):not(:last-child) {
+  opacity: 0.45 !important;
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="default"]:hover {
+  background: var(--table-row-hover) !important;
+}
+
+html[data-ui="harmony"] .orders-harmony-unified-card {
+  border-radius: 1rem;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  overflow: hidden;
+}
+
+html[data-ui="harmony"] .orders-harmony-unified-toolbar {
+  background: var(--card-bg);
+  padding: 1rem 1rem 0.75rem;
+}
+
+html[data-ui="harmony"] .orders-harmony-sticky-toolbar .space-y-4 > *:last-child {
+  margin-bottom: 0;
+}
+
+html[data-ui="harmony"] .orders-harmony-unified-body .orders-harmony-table-shell {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  border-top: 1px solid var(--card-border);
+}
+
+html[data-ui="harmony"] .orders-harmony-unified-body .hidden.rounded-t-lg {
+  display: none !important;
+}
+
+html[data-ui="harmony"] .harmony-login-shell {
+  max-width: 28rem;
+}
+
+html[data-ui="harmony"] .harmony-login-shell > h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+html[data-ui="harmony"] .harmony-login-card {
+  border-radius: 1rem;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow:
+    0 4px 12px -2px rgba(0, 0, 0, 0.35),
+    0 2px 4px -2px rgba(0, 0, 0, 0.25);
+}
+
+html[data-ui="harmony"]:not(.dark) .harmony-login-card {
+  box-shadow:
+    0 4px 12px -2px rgba(15, 23, 42, 0.08),
+    0 2px 4px -2px rgba(15, 23, 42, 0.06);
+}
+
+html[data-ui="harmony"] .harmony-login-card .input-elegant,
+html[data-ui="harmony"] .harmony-login-card input:not([type="checkbox"]):not([type="radio"]) {
+  border-radius: 0.5rem;
+}
+
+html[data-ui="harmony"] .order-edit-harmony-shell .rounded-lg.border {
+  border-radius: 0.75rem;
+}
+
+html[data-ui="harmony"] .order-edit-harmony-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-ui="harmony"] .order-edit-harmony-shell select,
+html[data-ui="harmony"] .order-edit-harmony-shell textarea {
+  border-radius: 0.5rem;
+}
+
+html[data-ui="harmony"] .order-edit-harmony-toolbar {
+  border-radius: 0.75rem;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+html[data-ui="harmony"] .order-edit-harmony-grid > .rounded-lg.border,
+html[data-ui="harmony"] .order-edit-harmony-shell > .rounded-lg.border {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+html[data-ui="harmony"] .harmony-module-inner {
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  padding: 2rem;
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell {
+  border-radius: 1rem;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  overflow: hidden;
+  box-shadow:
+    0 4px 12px -2px rgba(0, 0, 0, 0.35),
+    0 2px 4px -2px rgba(0, 0, 0, 0.25);
+}
+
+html[data-ui="harmony"]:not(.dark) .orders-harmony-table-shell {
+  box-shadow:
+    0 4px 12px -2px rgba(15, 23, 42, 0.08),
+    0 2px 4px -2px rgba(15, 23, 42, 0.06);
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell thead {
+  background: var(--app-bg);
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell thead th {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr {
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid var(--card-border);
+}
+
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr:hover {
+  background: var(--table-row-hover);
+}
+
+html[data-ui="harmony"] #sidebar-main-stack > div:first-child {
+  margin-bottom: 0.5rem;
+}
+
+/* Формы: новый заказ / карточка — общие поля */
+html[data-ui="harmony"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-ui="harmony"] select,
+html[data-ui="harmony"] textarea {
+  border-radius: 0.75rem;
+}
+
+html[data-ui="harmony"] .new-order-panel-surface {
+  border-radius: 1rem;
+  border-color: var(--card-border);
+  background: var(--card-bg);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Почта, клиенты: карточки и панели наследуют токены */
+html[data-ui="harmony"] .rounded-xl.border,
+html[data-ui="harmony"] .rounded-lg.border {
+  border-color: var(--card-border);
+}
+
+/* Kanban harmony — light */
+html[data-ui="harmony"] .kanban-root {
+  --kanban-workspace-bg: #f3f4f6;
+  --kanban-rail-bg: #e5e7eb;
+  --kanban-column-bg: #ffffff;
+  --kanban-card-bg: #ffffff;
+  --kanban-border: #d1d5db;
+  --kanban-text: #111827;
+  --kanban-text-muted: #6b7280;
+  --kanban-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --kanban-shadow-elevated: 0 4px 14px rgba(15, 23, 42, 0.1);
+  --kanban-accent: #3b82f6;
+  --kaiten-modal-bg: #ffffff;
+  --kaiten-modal-aside: #f9fafb;
+  --kaiten-modal-border: #e5e7eb;
+  --kaiten-modal-text: #111827;
+  --kaiten-modal-muted: #6b7280;
+  --kaiten-modal-input: #ffffff;
+  --kaiten-modal-control: #f3f4f6;
+  --kaiten-accent: #3b82f6;
+  --kanban-cal-mini-bg: #e5e7eb;
+}
+
+html[data-ui="harmony"].dark .kanban-root {
+  --kanban-workspace-bg: #111827;
+  --kanban-rail-bg: #1f2937;
+  --kanban-column-bg: #1f2937;
+  --kanban-card-bg: #273345;
+  --kanban-border: #374151;
+  --kanban-text: #f9fafb;
+  --kanban-text-muted: #9ca3af;
+  --kanban-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 16px rgba(0, 0, 0, 0.28);
+  --kanban-shadow-elevated: 0 8px 28px rgba(0, 0, 0, 0.4);
+  --kanban-accent: #60a5fa;
+  --kaiten-modal-bg: #1f2937;
+  --kaiten-modal-aside: #111827;
+  --kaiten-modal-border: #374151;
+  --kaiten-modal-text: #f9fafb;
+  --kaiten-modal-muted: #9ca3af;
+  --kaiten-modal-input: #111827;
+  --kaiten-modal-control: #273345;
+  --kaiten-accent: #60a5fa;
+  --kanban-cal-mini-bg: #374151;
+}
+
+/* New order panel offset */
+html[data-ui="harmony"] .new-order-stage-shell {
+  left: 0;
+}
+
+@media (min-width: 1024px) and (min-height: 560px) {
+  html[data-ui="harmony"] .new-order-stage-shell {
+    left: 260px;
+  }
+
+  html[data-ui="harmony"] .new-order-collapsed-strip {
+    left: calc(260px + 0.75rem);
+  }
+}

@@ -7,7 +7,13 @@ import {
   getOrderWarnings,
   resolveKaitenColumnTitleForDisplay,
 } from "@/lib/order-status-display";
+import {
+  kaitenOrderToHarmonyTone,
+  resolveListPillClass,
+} from "@/lib/harmony-list-pill";
+import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { orderPathById } from "@/lib/order-public-ref";
+import type { HarmonyRowIndicator } from "@/lib/harmony-list-pill";
 
 function targetInsideInteractive(target: EventTarget | null) {
   if (target == null || !(target instanceof Node)) return false;
@@ -43,6 +49,8 @@ export function OrdersListTableRow({
   hasProsthetics = false,
   isLabOverdue = false,
   demoKanbanColumn,
+  harmonyRowIndicator = null,
+  harmonyRowState = "default",
   tagsNode,
   indicatorsNode,
 }: {
@@ -63,10 +71,13 @@ export function OrdersListTableRow({
   hasProsthetics?: boolean;
   isLabOverdue?: boolean;
   demoKanbanColumn?: string | null;
+  harmonyRowIndicator?: HarmonyRowIndicator;
+  harmonyRowState?: "blocked" | "shipped" | "default";
   tagsNode?: ReactNode;
   indicatorsNode?: ReactNode;
 }) {
   const router = useRouter();
+  const isHarmony = useUiDesign() === "harmony";
   const href = orderPathById(orderId);
   const kaitenPillClass = getKaitenColumnPillClassFromOrder({
     kaitenColumnTitle,
@@ -76,6 +87,13 @@ export function OrdersListTableRow({
     kaitenColumnTitle,
     demoKanbanColumn,
   });
+  const kaitenHarmonyTone = kaitenOrderToHarmonyTone({
+    kaitenColumnTitle,
+    demoKanbanColumn,
+  });
+  const mobileKaitenPillClass = isHarmony
+    ? resolveListPillClass(true, "", kaitenHarmonyTone)
+    : `inline-flex max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${kaitenPillClass}`;
   const orderWarnings = getOrderWarnings({
     isOverdue: isLabOverdue,
     hasCorrection,
@@ -100,6 +118,8 @@ export function OrdersListTableRow({
             ? `hidden md:table-row print:table-row ${className} cursor-pointer`
             : "hidden cursor-pointer md:table-row print:table-row"
         }
+        data-harmony-indicator={harmonyRowIndicator ?? undefined}
+        data-harmony-row={harmonyRowState}
         onClick={(e) => {
           if (targetInsideInteractive(e.target)) return;
           go(e);
@@ -127,11 +147,7 @@ export function OrdersListTableRow({
                   className="max-w-[140px] shrink-0 truncate"
                   title={kaitenBadgeLabel}
                 >
-                  <span
-                    className={`inline-flex max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${kaitenPillClass}`}
-                  >
-                    {kaitenBadgeLabel}
-                  </span>
+                  <span className={mobileKaitenPillClass}>{kaitenBadgeLabel}</span>
                 </span>
               ) : null}
             </div>

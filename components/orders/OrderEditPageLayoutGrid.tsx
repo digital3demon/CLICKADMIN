@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import type {
   OrderEditBlockId,
   OrderEditLayoutV1,
@@ -73,6 +74,7 @@ export function OrderEditPageLayoutGrid({
   customizeMode,
   blocks,
 }: Props) {
+  const isHarmony = useUiDesign() === "harmony";
   const [lgUp, setLgUp] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
@@ -194,7 +196,9 @@ export function OrderEditPageLayoutGrid({
   );
 
   return (
-    <div className="max-w-full min-w-0 space-y-3 lg:space-y-5">
+    <div
+      className={`max-w-full min-w-0 ${isHarmony ? "order-edit-harmony-grid space-y-4 lg:space-y-5" : "space-y-3 lg:space-y-5"}`}
+    >
       {customizeMode ? (
         <div className="rounded-md border border-dashed border-sky-400/60 bg-sky-500/5 px-3 py-2 text-xs text-[var(--text-body)]">
           Режим кастомизации: перетащите блок за ручку «⋮⋮»; границу между блоками

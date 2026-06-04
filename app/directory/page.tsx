@@ -134,6 +134,20 @@ export default async function DirectoryHubPage() {
         ) : null}
         {session ? (
           <Link
+            href="/directory/appearance"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">
+              Оформление
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Старый или новый дизайн «Гармония» — переключение с перезагрузкой
+              страницы.
+            </p>
+          </Link>
+        ) : null}
+        {session ? (
+          <Link
             href="/directory/print"
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
           >

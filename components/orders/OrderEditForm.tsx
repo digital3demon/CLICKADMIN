@@ -92,6 +92,7 @@ import {
   ORDER_CORRECTION_TRACK_VALUES,
 } from "@/lib/order-correction-track";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
+import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { toast } from "@/components/ui/toast-store";
 import {
   OrderEditCustomizeToggle,
@@ -655,6 +656,7 @@ export function OrderEditForm({
 }) {
   const isOrderPageFramed = orderPageFrame != null;
   const isAccountant = viewerRole === "ACCOUNTANT";
+  const isHarmony = useUiDesign() === "harmony";
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<EditTab>(() =>
     normalizeSecondaryTab(initialActiveTab),
@@ -3262,7 +3264,9 @@ export function OrderEditForm({
           </button>
         </div>
       ) : null}
-    <div className="w-full min-w-0 space-y-4">
+    <div
+      className={`w-full min-w-0 space-y-4 ${isHarmony ? "order-edit-harmony-shell" : ""}`}
+    >
       {initial.continuesFromOrder ? (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
           <span className="font-medium">Продолжение работы: </span>
@@ -3296,7 +3300,13 @@ export function OrderEditForm({
           </p>
         </div>
       ) : null}
-      <div className="flex flex-col gap-2 rounded-lg border border-[var(--card-border)] bg-gradient-to-b from-[var(--surface-subtle)] to-[var(--card-bg)] px-3 py-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:px-4">
+      <div
+        className={
+          isHarmony
+            ? "order-edit-harmony-toolbar flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:px-4"
+            : "flex flex-col gap-2 rounded-lg border border-[var(--card-border)] bg-gradient-to-b from-[var(--surface-subtle)] to-[var(--card-bg)] px-3 py-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:px-4"
+        }
+      >
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-3 sm:gap-y-2">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2">
               <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs text-[var(--text-strong)] sm:text-sm">
@@ -3390,7 +3400,9 @@ export function OrderEditForm({
             </div>
           ) : null}
           {!isAccountant && !orderLayoutCustomize ? (
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-start lg:gap-3">
+            <div
+              className={`grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-start lg:gap-3 ${isHarmony ? "order-edit-harmony-grid lg:gap-4" : ""}`}
+            >
               <div className="min-w-0 space-y-3 lg:col-span-6">
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
                   {oeColCustomer}

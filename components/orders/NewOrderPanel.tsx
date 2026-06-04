@@ -25,10 +25,10 @@ const easeSnappy = [0.2, 0.85, 0.25, 1] as const;
 
 /** Свернутые кнопки: на телефоне на всю ширину контента, на md — справа от сайдбара. */
 const collapsedStripClass =
-  "left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] shell-desktop:left-[calc(100%/7+0.75rem)] shell-desktop:right-3";
+  "new-order-collapsed-strip left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] shell-desktop:left-[calc(100%/7+0.75rem)] shell-desktop:right-3";
 
 /** Обычная модалка: на десктопе не перекрывает левое меню CRM. */
-const mainStageClass = "left-0 shell-desktop:left-[calc(100%/7)]";
+const mainStageClass = "new-order-stage-shell left-0 shell-desktop:left-[calc(100%/7)]";
 /** Заказ из почты занимает весь экран, чтобы справа поместить широкую колонку писем. */
 const mailOrderStageClass = "left-0";
 const mailOrderViewportMargin = "1rem";
@@ -158,7 +158,7 @@ export function NewOrderPanel() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className={`pointer-events-auto flex w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:rounded-xl ${
+                className={`new-order-panel-surface pointer-events-auto flex w-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl max-h-[100dvh] max-md:max-h-[100dvh] max-md:rounded-none md:rounded-xl ${
                   hasSourceEmails ? "" : "max-w-[min(99vw,1320px)]"
                 }`}
                 style={hasSourceEmails ? { maxWidth: mailOrderWidth, maxHeight: mailOrderMaxHeight } : undefined}

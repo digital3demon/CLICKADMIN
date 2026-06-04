@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
+import { useUiDesign } from "@/lib/hooks/useUiDesign";
 
 const inputClass =
-  "mt-1 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500";
+  "input-elegant mt-1 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500";
 
 export function LoginPageClient() {
+  const isHarmony = useUiDesign() === "harmony";
   const router = useRouter();
   const sp = useSearchParams();
   const nextPath = sp.get("next")?.trim() || "/orders";
@@ -170,8 +172,17 @@ export function LoginPageClient() {
     }
   }, [loginEmail, loginPwd, goNext]);
 
+  const sectionClass = isHarmony
+    ? "harmony-login-card mt-8 p-6"
+    : "mt-8 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm";
+  const demoSectionClass = isHarmony
+    ? "harmony-login-card mt-8 border-dashed p-6"
+    : "mt-8 rounded-xl border border-dashed border-sky-300/80 bg-sky-50/40 px-5 py-5 shadow-sm dark:border-sky-800/50 dark:bg-sky-950/25";
+
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-12">
+    <div
+      className={`mx-auto flex min-h-screen flex-col justify-center px-4 py-12 ${isHarmony ? "harmony-login-shell max-w-md" : "max-w-lg"}`}
+    >
       <h1 className="text-2xl font-semibold text-[var(--app-text)]">Вход в CRM</h1>
       <p className="mt-2 text-sm text-[var(--text-secondary)]">
         Вход по почте и паролю. Первый раз после приглашения —{" "}
@@ -197,7 +208,7 @@ export function LoginPageClient() {
       ) : null}
 
       {singleUserMode === true ? (
-        <section className="mt-8 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+        <section className={sectionClass}>
           <h2 className="text-base font-semibold text-[var(--app-text)]">
             Однопользовательский режим
           </h2>
@@ -217,7 +228,7 @@ export function LoginPageClient() {
       ) : null}
 
       {singleUserMode === false && needsBootstrap === true ? (
-        <section className="mt-8 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+        <section className={sectionClass}>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             Первый запуск — создайте владельца
           </h2>
@@ -266,7 +277,7 @@ export function LoginPageClient() {
       ) : null}
 
       {singleUserMode === false && needsBootstrap === false ? (
-        <section className="mt-8 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+        <section className={sectionClass}>
           <h2 className="text-base font-semibold text-[var(--app-text)]">Вход</h2>
           <label className="mt-3 block text-sm font-medium text-[var(--text-body)]">
             Почта
@@ -300,7 +311,7 @@ export function LoginPageClient() {
       ) : null}
 
       {singleUserMode === false && needsBootstrap === false ? (
-        <section className="mt-8 rounded-xl border border-dashed border-sky-300/80 bg-sky-50/40 px-5 py-5 shadow-sm dark:border-sky-800/50 dark:bg-sky-950/25">
+        <section className={demoSectionClass}>
           <h2 className="text-base font-semibold text-[var(--app-text)]">
             Демо-режим
           </h2>

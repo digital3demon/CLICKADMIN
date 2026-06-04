@@ -1,5 +1,7 @@
 'use client'
 
+import { useUiDesign } from '@/lib/hooks/useUiDesign'
+
 interface DateRangePresetsProps {
   onSelect: (from: string, to: string) => void
   currentFrom?: string
@@ -55,10 +57,16 @@ export function DateRangePresets({
   currentFrom,
   currentTo,
 }: DateRangePresetsProps) {
+  const isHarmony = useUiDesign() === 'harmony'
+
   return (
-    <div className="inline-flex items-center gap-1 p-0.5
-                    rounded-lg border border-[var(--card-border)]
-                    bg-[var(--card-bg)]">
+    <div
+      className={
+        isHarmony
+          ? 'inline-flex flex-shrink-0 items-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--app-bg)] p-1'
+          : 'inline-flex items-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-0.5'
+      }
+    >
       {PRESETS.map(({ key, label }) => {
         const range = getPresetRange(key)
         const isActive =

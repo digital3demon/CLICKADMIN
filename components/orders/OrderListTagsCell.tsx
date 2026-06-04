@@ -58,6 +58,13 @@ import {
   urgentSelectionFromOrder,
 } from "@/lib/order-urgency";
 import { OrderPaymentModalAccountingUpload } from "@/components/orders/OrderPaymentModalAccountingUpload";
+import { useUiDesign } from "@/lib/hooks/useUiDesign";
+import {
+  kaitenOrderToHarmonyTone,
+  paymentValueToHarmonyTone,
+  resolveListPillClass,
+  type HarmonyPillTone,
+} from "@/lib/harmony-list-pill";
 
 type CustomRow = { id: string; label: string };
 
@@ -384,6 +391,7 @@ export function OrderListTagsCell({
   financeCalculated = null,
 }: Props) {
   const router = useRouter();
+  const isHarmony = useUiDesign() === "harmony";
   const kaitenLabel = kaitenStatusDisplay({
     kaitenColumnTitle,
     kaitenCardId,
@@ -626,6 +634,11 @@ export function OrderListTagsCell({
           ? LIST_TAG_PAYMENT_PAID
           : null;
   const paymentPillToneClass = paymentPillClass(currentPayment);
+  const paymentHarmonyTone = paymentValueToHarmonyTone(currentPayment);
+  const kaitenHarmonyTone = kaitenOrderToHarmonyTone({
+    kaitenColumnTitle: kaitenColTrimmed || null,
+    demoKanbanColumn,
+  });
   const urgentSelectionValue = urgentSelectionFromOrder(
     isUrgent,
     urgentCoefficient,
@@ -862,6 +875,17 @@ export function OrderListTagsCell({
   const tagCloudItems = useMemo(() => {
     const href = filterListHref;
     const items: TagCloudItem[] = [];
+    const listPill = (classic: string, tone: HarmonyPillTone) =>
+      resolveListPillClass(isHarmony, classic, tone);
+    const kaitenStatusPillClass = (classicRounded: string) => {
+      const tone = noKaitenKanbanStatus ? "gray" : kaitenHarmonyTone;
+      return isHarmony
+        ? `${listPill("", tone)} ${padTable}`
+        : `${classicRounded} ${padTable}`;
+    };
+    const paymentStatusPillClass = isHarmony
+      ? `${listPill("", paymentHarmonyTone)} min-w-0 max-w-full shrink truncate ${padTable}`
+      : `min-w-0 max-w-full shrink truncate rounded-full border font-semibold shadow-sm ${paymentPillToneClass} ${padTable}`;
 
     if (kaitenBlocked) {
       const blockedSlot = kaitenBlockedTagSlot(kaitenBlockReason);
@@ -873,7 +897,11 @@ export function OrderListTagsCell({
             <Link
               href={href(LIST_TAG_KAITEN_BLOCKED)}
               title="Показать наряды, заблокированные в Kaiten"
-              className={`inline-flex w-full min-w-0 max-w-full flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`}
+              className={
+                isHarmony
+                  ? `harmony-blocked-tag inline-flex w-full min-w-0 max-w-full flex-col items-stretch gap-y-1 text-left font-semibold outline-none focus-visible:outline-none ${padTable}`
+                  : `inline-flex w-full min-w-0 max-w-full flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`
+              }
             >
               <span className="inline-flex shrink-0 items-center gap-1 leading-tight">
                 <span aria-hidden className="shrink-0">
@@ -917,9 +945,9 @@ export function OrderListTagsCell({
         >
           {noKaitenKanbanStatus ? (
             <span
-              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${
-                LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
-              } ${padTable}`}
+              className={kaitenStatusPillClass(
+                `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
+              )}
             >
               <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
                 <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
@@ -933,7 +961,9 @@ export function OrderListTagsCell({
             </span>
           ) : (
             <span
-              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass} ${padTable}`}
+              className={kaitenStatusPillClass(
+                `inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass}`,
+              )}
             >
               {kaitenLabel}
             </span>
@@ -943,9 +973,9 @@ export function OrderListTagsCell({
         <span title="Колонка доски Kaiten (обновляется в фоне на списке заказов)">
           {noKaitenKanbanStatus ? (
             <span
-              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${
-                LAB_WORK_STATUS_PILL_STYLES.TO_SCAN
-              } ${padTable}`}
+              className={kaitenStatusPillClass(
+                `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
+              )}
             >
               <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
                 <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
@@ -959,7 +989,9 @@ export function OrderListTagsCell({
             </span>
           ) : (
             <span
-              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass} ${padTable}`}
+              className={kaitenStatusPillClass(
+                `inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass}`,
+              )}
             >
               {kaitenLabel}
             </span>
@@ -1107,7 +1139,7 @@ export function OrderListTagsCell({
           {paymentFilterTag ? (
             <Link
               href={href(paymentFilterTag)}
-              className={`min-w-0 max-w-full shrink truncate rounded-full border font-semibold shadow-sm outline-none focus-visible:outline-none ${paymentPillToneClass} ${padTable}`}
+              className={`outline-none focus-visible:outline-none ${paymentStatusPillClass}`}
               title={
                 shipmentsFilterContext
                   ? "Показать в отгрузках наряды с этим статусом оплаты"
@@ -1117,11 +1149,7 @@ export function OrderListTagsCell({
               {paymentPill}
             </Link>
           ) : (
-            <span
-              className={`min-w-0 max-w-full shrink truncate rounded-full border font-semibold shadow-sm ${paymentPillToneClass} ${padTable}`}
-            >
-              {paymentPill}
-            </span>
+            <span className={paymentStatusPillClass}>{paymentPill}</span>
           )}
           <button
             type="button"
@@ -1198,6 +1226,9 @@ export function OrderListTagsCell({
     periodFrom,
     periodTo,
     paymentFilterTag,
+    isHarmony,
+    kaitenHarmonyTone,
+    paymentHarmonyTone,
     paymentPill,
     paymentPillToneClass,
     paymentPartialRub,

@@ -8,7 +8,7 @@ import { OrderBackgroundUploadToast } from "@/components/orders/OrderBackgroundU
 import { useGlobalHotkeys } from "@/lib/hooks/useGlobalHotkeys";
 import { Sidebar } from "./Sidebar";
 
-const SIDEBAR_W = "calc(100% / 7)";
+const SIDEBAR_W_CLASSIC = "calc(100% / 7)";
 
 function MenuToggleIcon({ open }: { open: boolean }) {
   if (open) {
@@ -87,7 +87,7 @@ export function AppShell({ children }: AppShellProps) {
       className="min-h-screen w-full"
       style={
         {
-          "--app-sidebar-w": SIDEBAR_W,
+          "--app-sidebar-w": SIDEBAR_W_CLASSIC,
         } as CSSProperties
       }
     >
@@ -108,7 +108,7 @@ export function AppShell({ children }: AppShellProps) {
 
       <main
         className={[
-          "relative z-0 ml-0 min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-clip bg-[var(--app-bg)] pt-[env(safe-area-inset-top,0px)] pe-[env(safe-area-inset-right,0px)] transition-[margin-left,width,padding,opacity] duration-200 ease-out shell-desktop:z-auto shell-desktop:ml-[calc(100%/7)] shell-desktop:w-[calc(100%*6/7)] shell-desktop:max-w-none shell-desktop:ps-0 shell-desktop:pe-0 shell-desktop:pt-0",
+          "relative z-0 ml-0 min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-clip bg-[var(--app-bg)] pt-[env(safe-area-inset-top,0px)] pe-[env(safe-area-inset-right,0px)] transition-[margin-left,width,padding,opacity] duration-200 ease-out shell-desktop:z-auto shell-desktop:ml-[var(--app-sidebar-w)] shell-desktop:w-[calc(100%-var(--app-sidebar-w))] shell-desktop:max-w-none shell-desktop:ps-0 shell-desktop:pe-0 shell-desktop:pt-0 custom-scrollbar",
           mobileNavOpen
             ? "max-lg:pointer-events-none max-lg:select-none max-lg:opacity-40 [@media(min-width:1024px)_and_(max-height:559px)]:pointer-events-none [@media(min-width:1024px)_and_(max-height:559px)]:select-none [@media(min-width:1024px)_and_(max-height:559px)]:opacity-40"
             : "",
@@ -130,7 +130,7 @@ export function AppShell({ children }: AppShellProps) {
         id="app-primary-nav"
         className={`fixed left-0 top-0 z-[70] flex h-[100dvh] min-w-0 flex-col overflow-x-hidden border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shadow-[4px_0_24px_rgba(0,0,0,0.12)] transition-transform duration-200 ease-out dark:shadow-[4px_0_28px_rgba(0,0,0,0.45)] shell-desktop:translate-x-0 shell-desktop:shadow-none ${
           mobileNavOpen ? "translate-x-0" : "-translate-x-full shell-desktop:translate-x-0"
-        } w-[min(20rem,calc(100vw-2.5rem))] shell-desktop:w-[calc(100%/7)]`}
+        } w-[min(20rem,calc(100vw-2.5rem))] shell-desktop:w-[var(--app-sidebar-w)]`}
         aria-label="Основное меню"
       >
         <Sidebar />

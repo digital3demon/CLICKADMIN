@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useHotkey } from '@/lib/hooks/useHotkey'
+import { useUiDesign } from '@/lib/hooks/useUiDesign'
+import { Search } from 'lucide-react'
 import { orderPathById } from '@/lib/order-public-ref'
 
 interface SearchResult {
@@ -19,6 +21,7 @@ interface SearchResult {
 }
 
 export function CommandPalette() {
+  const isHarmony = useUiDesign() === 'harmony'
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult | null>(null)
@@ -132,19 +135,32 @@ export function CommandPalette() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 h-8 px-3 rounded-lg
-                   border border-[var(--card-border)] bg-[var(--input-bg)]
-                   text-sm text-[var(--text-muted)] w-full
-                   hover:bg-[var(--surface-hover)] transition-colors"
+        className={
+          isHarmony
+            ? 'input-elegant flex h-auto w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text-muted)] hover:border-[var(--text-muted)]'
+            : `inline-flex h-8 w-full items-center gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)]`
+        }
         aria-label="Поиск (Ctrl+K)"
       >
-        <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
-          <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-          <path d="M10.5 10.5l2.5 2.5" stroke="currentColor"
-                strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
-        <span className="flex-1 text-left text-xs">Поиск...</span>
-        <kbd className="text-[10px] font-mono opacity-60">⌘K</kbd>
+        {isHarmony ? (
+          <Search className="h-[18px] w-[18px] shrink-0" aria-hidden />
+        ) : (
+          <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
+            <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M10.5 10.5l2.5 2.5" stroke="currentColor"
+                  strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        )}
+        <span className="flex-1 text-left text-xs sm:text-sm">Поиск...</span>
+        <kbd
+          className={
+            isHarmony
+              ? 'rounded border border-[var(--card-border)] bg-[var(--sidebar-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]'
+              : 'font-mono text-[10px] opacity-60'
+          }
+        >
+          ⌘K
+        </kbd>
       </button>
 
       <AnimatePresence>

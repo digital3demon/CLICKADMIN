@@ -3,6 +3,7 @@
 import { useId, useState } from 'react'
 import { DateRangePresets, FilterBadge } from '@/components/ui'
 import { useUrlFilters } from '@/lib/hooks/useUrlFilters'
+import { useUiDesign } from '@/lib/hooks/useUiDesign'
 import { OrdersListPeriodForm } from '@/components/orders/OrdersListPeriodForm'
 import { OrdersListSearch } from '@/components/orders/OrdersListSearch'
 
@@ -26,11 +27,18 @@ export function OrdersListFiltersBar({
   onlyShipped,
 }: Props) {
   const { activeCount, resetFilters, setFilters } = useUrlFilters()
+  const isHarmony = useUiDesign() === 'harmony'
   const filtersPanelId = useId()
   const [filtersOpen, setFiltersOpen] = useState(true)
 
   return (
-    <div className="no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+    <div
+      className={
+        isHarmony
+          ? 'no-print sticky top-0 z-30 w-full min-w-0 border-b border-[var(--card-border)] bg-[var(--card-bg)] p-4 sticky-shadow'
+          : 'no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]'
+      }
+    >
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 xl:flex-nowrap">
         <OrdersListSearch
           initialValue={initialSearchQ}
