@@ -954,7 +954,7 @@ export function MailLayout() {
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
+    <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
       <MailHeader
         accounts={accounts}
         activeAccountId={activeAccountId}
@@ -1023,7 +1023,7 @@ export function MailLayout() {
         </div>
       ) : (
         <DndContext onDragEnd={handleDragEnd}>
-          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
             <MailSidebar
               account={activeAccount}
               activeFolderId={activeFolderId}
@@ -1066,7 +1066,7 @@ export function MailLayout() {
               }}
             />
             <div
-              className="relative flex min-h-0 min-w-0 flex-1 xl:flex-none"
+              className="relative flex h-full min-h-0 min-w-0 shrink-0 xl:flex-none"
               style={{ width: mailListWidth, flexBasis: mailListWidth }}
             >
               <MailList
@@ -1125,7 +1125,7 @@ export function MailLayout() {
                 <span className="h-12 w-1 rounded-full bg-[var(--sidebar-blue)]/0 transition group-hover:bg-[var(--sidebar-blue)]/40" />
               </div>
             </div>
-            <div className="hidden min-w-0 flex-1 overflow-hidden xl:flex">
+            <div className="hidden h-full min-h-0 min-w-0 flex-1 overflow-hidden xl:flex">
               <MailViewer
                 email={detail}
                 loading={loadingDetail}

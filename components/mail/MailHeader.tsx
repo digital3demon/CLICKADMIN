@@ -44,7 +44,7 @@ export function MailHeader({
   }, [accountMenuOpen]);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--card-border)] bg-[var(--app-bg)]/95 px-4 py-2 backdrop-blur">
+    <header className="z-30 shrink-0 border-b border-[var(--card-border)] bg-[var(--app-bg)] px-4 py-2">
       <div className="flex items-center gap-3">
         <div className="flex min-w-[210px] items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--sidebar-blue)] text-base font-black text-white shadow-sm">

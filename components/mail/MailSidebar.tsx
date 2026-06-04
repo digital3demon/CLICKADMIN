@@ -130,7 +130,7 @@ export function MailSidebar({
   const [labelsOpen, setLabelsOpen] = useState(true);
   return (
     <aside
-      className={`hidden min-h-0 shrink-0 overflow-y-auto border-r border-[var(--card-border)] bg-[var(--surface-muted)] py-4 transition-[width] duration-200 lg:block ${
+      className={`hidden h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-[var(--card-border)] bg-[var(--surface-muted)] py-4 transition-[width] duration-200 lg:flex ${
         collapsed ? "w-[72px] px-2" : "w-[280px] px-4"
       }`}
     >
@@ -163,6 +163,7 @@ export function MailSidebar({
         )}
       </button>
 
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       {collapsed ? (
         <nav className="space-y-1">
           {[...systemFolders, ...customFolders].map((folder) => (
@@ -274,22 +275,26 @@ export function MailSidebar({
         </div> : null}
       </div>}
 
-      {collapsed ? null : <div className="mt-auto space-y-2 pt-6">
-        <button
-          type="button"
-          onClick={onCreateFolder}
-          className="w-full rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] shadow-sm transition hover:bg-[var(--surface-hover)]"
-        >
-          Создать папку
-        </button>
-        <button
-          type="button"
-          onClick={onCreateLabel}
-          className="w-full rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] shadow-sm transition hover:bg-[var(--surface-hover)]"
-        >
-          Создать метку
-        </button>
-      </div>}
+      </div>
+
+      {collapsed ? null : (
+        <div className="mt-3 shrink-0 space-y-2 border-t border-[var(--card-border)] pt-4">
+          <button
+            type="button"
+            onClick={onCreateFolder}
+            className="w-full rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] shadow-sm transition hover:bg-[var(--surface-hover)]"
+          >
+            Создать папку
+          </button>
+          <button
+            type="button"
+            onClick={onCreateLabel}
+            className="w-full rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-body)] shadow-sm transition hover:bg-[var(--surface-hover)]"
+          >
+            Создать метку
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

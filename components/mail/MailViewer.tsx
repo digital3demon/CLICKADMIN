@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MailEmailDetail } from "@/components/mail/types";
 import { mailFullDateLabel, mailPrimaryDateValue } from "@/components/mail/date-format";
 import { sanitizeMailHtml } from "@/lib/mail/sanitize-mail-html";
@@ -38,14 +38,16 @@ export function MailViewer({
 }) {
   const [quickReply, setQuickReply] = useState("");
   const [bodyFrameHeight, setBodyFrameHeight] = useState(360);
+  const scrollRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setBodyFrameHeight(360);
+    scrollRef.current?.scrollTo({ top: 0, left: 0 });
   }, [email?.id]);
 
   if (loading) {
     return (
-      <section className="hidden min-w-0 flex-1 bg-[var(--app-bg)] p-8 text-sm text-[var(--text-muted)] xl:block">
+      <section className="hidden h-full min-w-0 flex-1 bg-[var(--app-bg)] p-8 text-sm text-[var(--text-muted)] xl:flex xl:items-center xl:justify-center">
         Открываем письмо...
       </section>
     );
@@ -76,7 +78,7 @@ export function MailViewer({
         .replaceAll(">", "&gt;")}</pre>`;
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--card-bg)]">
+    <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--card-bg)]">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-5 py-3">
         <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" onClick={() => onReply("", "reply")}>
           Ответить
@@ -101,7 +103,10 @@ export function MailViewer({
         </button>
       </div>
 
-      <article className="min-h-0 flex-1 overflow-auto overflow-x-hidden">
+      <article
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-auto overflow-x-hidden overscroll-contain"
+      >
         <div className="border-b border-[var(--card-border)] px-6 py-6">
           <h1 className="text-2xl font-semibold leading-tight tracking-[-0.03em] text-[var(--app-text)]">
             {email.subject || "(без темы)"}

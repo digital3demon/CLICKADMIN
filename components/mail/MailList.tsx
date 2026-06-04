@@ -352,7 +352,7 @@ export function MailList({
     : 0;
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col border-r border-[var(--card-border)] bg-[var(--card-bg)]">
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-r border-[var(--card-border)] bg-[var(--card-bg)]">
       <div className="border-b border-[var(--card-border)] bg-[var(--card-bg)] px-5 py-4">
         <div className="flex flex-col gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
@@ -435,7 +435,7 @@ export function MailList({
         </div>
       ) : null}
 
-      <div ref={parentRef} className="min-h-0 flex-1 overflow-auto">
+      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
         {loading && emails.length === 0 ? (
           <div className="p-8 text-sm text-[var(--text-muted)]">Загрузка писем...</div>
         ) : emails.length === 0 ? (
