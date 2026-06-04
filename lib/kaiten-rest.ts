@@ -1,4 +1,5 @@
 import { getKaitenEnvConfig, type KaitenBoardTarget } from "@/lib/kaiten-config";
+import { kaitenSafeRequestSpacingMs } from "@/lib/kaiten-rate-limit";
 import type { KaitenTrackLane } from "@prisma/client";
 
 export type KaitenAuth = { apiBase: string; token: string };
@@ -25,10 +26,7 @@ export function getKaitenRestAuth(): KaitenAuth | null {
 }
 
 function spacingMs(): number {
-  const raw = process.env.KAITEN_REQUEST_SPACING_MS;
-  const n = raw != null && raw.trim() ? Number.parseInt(raw.trim(), 10) : 150;
-  if (!Number.isFinite(n) || n < 0) return 150;
-  return Math.min(n, 2000);
+  return kaitenSafeRequestSpacingMs();
 }
 
 function sleep(ms: number): Promise<void> {
