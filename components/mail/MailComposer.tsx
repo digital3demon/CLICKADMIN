@@ -187,7 +187,7 @@ export function MailComposer({
         </div>
 
         <div
-          className="min-h-0 flex-1 overflow-auto"
+          className="custom-scrollbar min-h-0 flex-1 overflow-auto"
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();

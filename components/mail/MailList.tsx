@@ -435,7 +435,10 @@ export function MailList({
         </div>
       ) : null}
 
-      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+      <div
+        ref={parentRef}
+        className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
+      >
         {loading && emails.length === 0 ? (
           <div className="p-8 text-sm text-[var(--text-muted)]">Загрузка писем...</div>
         ) : emails.length === 0 ? (

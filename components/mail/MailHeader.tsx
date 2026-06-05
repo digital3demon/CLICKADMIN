@@ -67,7 +67,7 @@ export function MailHeader({
             {accountMenuOpen ? (
               <div className="absolute left-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2 shadow-xl">
                 {accounts.length > 0 ? (
-                  <div className="max-h-72 overflow-auto">
+                  <div className="custom-scrollbar max-h-72 overflow-auto">
                     {accounts.map((account) => {
                       const current = account.id === activeAccountId;
                       return (

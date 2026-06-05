@@ -163,7 +163,7 @@ export function MailSidebar({
         )}
       </button>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
       {collapsed ? (
         <nav className="space-y-1">
           {[...systemFolders, ...customFolders].map((folder) => (

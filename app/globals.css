@@ -72,6 +72,8 @@ html[data-ui="classic"] {
   --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 14%, transparent);
   --text-placeholder: #8b95a5;
   --border-strong: #9aa3b2;
+  --scrollbar-thumb: color-mix(in srgb, var(--text-muted) 38%, var(--app-bg));
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text-muted) 52%, var(--app-bg));
 }
 
 /*
@@ -108,6 +110,8 @@ html.dark {
   --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 22%, transparent);
   --text-placeholder: #71717a;
   --border-strong: #63636d;
+  --scrollbar-thumb: color-mix(in srgb, var(--text-muted) 28%, var(--app-bg));
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text-muted) 40%, var(--app-bg));
 }
 
 /* Полотно за сайдбаром — на тик темнее основной зоны */
@@ -501,6 +505,30 @@ label {
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* Приглушённые полосы прокрутки (classic и harmony через --scrollbar-thumb) */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Safe area переменные для удобства */

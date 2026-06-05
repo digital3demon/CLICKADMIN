@@ -105,7 +105,7 @@ export function MailViewer({
 
       <article
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-auto overflow-x-hidden overscroll-contain"
+        className="custom-scrollbar min-h-0 flex-1 overflow-auto overflow-x-hidden overscroll-contain"
       >
         <div className="border-b border-[var(--card-border)] px-6 py-6">
           <h1 className="text-2xl font-semibold leading-tight tracking-[-0.03em] text-[var(--app-text)]">

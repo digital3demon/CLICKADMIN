@@ -1,72 +1,80 @@
 /*
  * Harmony UI — только при html[data-ui="harmony"].
- * Classic (:root, html.dark без data-ui) не переопределяется.
+ * Палитра от классической темы; карточки чуть светлее полотна.
  */
 
 html[data-ui="harmony"] {
   --app-sidebar-w: 260px;
-  --status-red: #ef4444;
-  --status-green: #10b981;
-  --status-yellow: #f59e0b;
+  --status-red: #dc2626;
+  --status-green: #16a34a;
+  --status-yellow: #d97706;
 
-  /* Light harmony (без .dark) */
   --sidebar-blue: #2563eb;
   --sidebar-blue-hover: #1d4ed8;
-  --sidebar-bg: #f3f4f6;
-  --sidebar-border: #e5e7eb;
-  --sidebar-text: #6b7280;
-  --sidebar-text-strong: #111827;
-  --sidebar-title-shadow: none;
-  --app-bg: #f9fafb;
-  --app-text: #111827;
-  --text-strong: #030712;
-  --text-body: #374151;
-  --text-secondary: #4b5563;
-  --text-muted: #6b7280;
-  --card-bg: #ffffff;
-  --card-border: #e5e7eb;
-  --border-subtle: #f3f4f6;
-  --surface-subtle: #f9fafb;
-  --surface-muted: rgba(249, 250, 251, 0.94);
-  --surface-hover: #f3f4f6;
-  --table-row-hover: rgba(243, 244, 246, 0.9);
-  --input-bg: #ffffff;
-  --input-border: #d1d5db;
-  --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 12%, transparent);
-  --text-placeholder: #9ca3af;
-  --border-strong: #9ca3af;
+  --sidebar-bg: #e4e9f0;
+  --sidebar-border: #cfd8e3;
+  --sidebar-text: #5a6578;
+  --sidebar-text-strong: #1e293b;
+  --sidebar-title-shadow: 0 0 10px var(--sidebar-bg), 0 0 16px var(--sidebar-bg),
+    0 1px 1px rgba(255, 255, 255, 0.35);
+  --marker-yellow: color-mix(in srgb, var(--sidebar-blue) 24%, transparent);
+  --marker-yellow-edge: color-mix(in srgb, var(--sidebar-blue) 40%, transparent);
+  --app-bg: #e8ecf2;
+  --app-text: #1e293b;
+  --text-strong: #172033;
+  --text-body: #475569;
+  --text-secondary: #5c6578;
+  --text-muted: #787f8f;
+  --card-bg: #f2f5fa;
+  --card-border: #d7dee8;
+  --border-subtle: #e2e8f0;
+  --surface-subtle: #ebeef4;
+  --surface-muted: rgba(235, 238, 244, 0.94);
+  --surface-hover: #e4e9f1;
+  --table-row-hover: rgba(220, 228, 238, 0.65);
+  --input-bg: #f3f5f9;
+  --input-border: #c4ccd8;
+  --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 14%, transparent);
+  --text-placeholder: #8b95a5;
+  --border-strong: #9aa3b2;
+  --scrollbar-thumb: color-mix(in srgb, var(--text-muted) 38%, var(--app-bg));
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text-muted) 52%, var(--app-bg));
 }
 
 html[data-ui="harmony"].dark {
   --sidebar-blue: #3b82f6;
-  --sidebar-blue-hover: #60a5fa;
-  --sidebar-bg: #1f2937;
-  --sidebar-border: #374151;
-  --sidebar-text: #d1d5db;
-  --sidebar-text-strong: #f9fafb;
+  --sidebar-blue-hover: #2563eb;
+  --sidebar-bg: #26262c;
+  --sidebar-border: #3a3a42;
+  --sidebar-text: #a1a1aa;
+  --sidebar-text-strong: #f4f4f5;
   --sidebar-title-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
-  --app-bg: #111827;
-  --app-text: #f9fafb;
+  --marker-yellow: color-mix(in srgb, var(--sidebar-blue) 30%, transparent);
+  --marker-yellow-edge: color-mix(in srgb, var(--sidebar-blue) 48%, transparent);
+  --app-bg: #2e2e34;
+  --app-text: #eceef2;
   --text-strong: #fafafa;
-  --text-body: #d1d5db;
-  --text-secondary: #d1d5db;
-  --text-muted: #9ca3af;
-  --card-bg: #1f2937;
-  --card-border: #374151;
-  --border-subtle: #374151;
-  --surface-subtle: #1f2937;
-  --surface-muted: rgba(31, 41, 55, 0.92);
-  --surface-hover: #273345;
-  --table-row-hover: #273345;
-  --input-bg: #111827;
-  --input-border: #4b5563;
+  --text-body: #d4d4d8;
+  --text-secondary: #a8a8b0;
+  --text-muted: #84848e;
+  --card-bg: #3c3c44;
+  --card-border: #4a4a54;
+  --border-subtle: #3e3e46;
+  --surface-subtle: #34343c;
+  --surface-muted: rgba(52, 52, 60, 0.92);
+  --surface-hover: #45454e;
+  --table-row-hover: rgba(69, 69, 78, 0.55);
+  --input-bg: #34343c;
+  --input-border: #505058;
   --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 22%, transparent);
-  --text-placeholder: #9ca3af;
-  --border-strong: #6b7280;
+  --text-placeholder: #71717a;
+  --border-strong: #63636d;
+  --scrollbar-thumb: color-mix(in srgb, var(--text-muted) 28%, var(--app-bg));
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text-muted) 40%, var(--app-bg));
 }
 
 html[data-ui="harmony"].dark body {
-  background-color: #0f1419;
+  background-color: #2a2a30;
 }
 
 /* Утилиты harmony */
@@ -78,14 +86,14 @@ html[data-ui="harmony"] .card-shadow {
 
 html[data-ui="harmony"]:not(.dark) .card-shadow {
   box-shadow:
-    0 4px 12px -2px rgba(15, 23, 42, 0.08),
-    0 2px 4px -2px rgba(15, 23, 42, 0.06);
+    0 4px 12px -2px rgba(26, 32, 44, 0.07),
+    0 2px 4px -2px rgba(26, 32, 44, 0.05);
 }
 
 html[data-ui="harmony"] .sticky-shadow {
   box-shadow:
-    0 10px 15px -3px rgba(17, 24, 39, 0.5),
-    0 4px 6px -4px rgba(17, 24, 39, 0.35);
+    0 10px 15px -3px rgba(0, 0, 0, 0.45),
+    0 4px 6px -4px rgba(0, 0, 0, 0.3);
 }
 
 html[data-ui="harmony"] .pressable {
@@ -125,20 +133,6 @@ html[data-ui="harmony"] .table-row-elegant {
 
 html[data-ui="harmony"] .table-row-elegant:hover {
   background-color: var(--table-row-hover);
-}
-
-html[data-ui="harmony"] .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-html[data-ui="harmony"] .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-html[data-ui="harmony"] .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--card-border);
-  border-radius: 10px;
 }
 
 html[data-ui="harmony"] .harmony-status-pill {
@@ -262,7 +256,7 @@ html[data-ui="harmony"] .orders-harmony-unified-toolbar {
 html[data-ui="harmony"]:not(.dark) .orders-harmony-unified-toolbar {
   box-shadow:
     0 1px 0 var(--card-border),
-    0 4px 12px -4px rgba(15, 23, 42, 0.08);
+    0 4px 12px -4px rgba(26, 32, 44, 0.07);
 }
 
 html[data-ui="harmony"] .orders-harmony-unified-body {
@@ -324,8 +318,8 @@ html[data-ui="harmony"] .harmony-login-card {
 
 html[data-ui="harmony"]:not(.dark) .harmony-login-card {
   box-shadow:
-    0 4px 12px -2px rgba(15, 23, 42, 0.08),
-    0 2px 4px -2px rgba(15, 23, 42, 0.06);
+    0 4px 12px -2px rgba(26, 32, 44, 0.07),
+    0 2px 4px -2px rgba(26, 32, 44, 0.05);
 }
 
 html[data-ui="harmony"] .harmony-login-card .input-elegant,
@@ -387,8 +381,8 @@ html[data-ui="harmony"] .orders-harmony-table-shell {
 
 html[data-ui="harmony"]:not(.dark) .orders-harmony-table-shell {
   box-shadow:
-    0 4px 12px -2px rgba(15, 23, 42, 0.08),
-    0 2px 4px -2px rgba(15, 23, 42, 0.06);
+    0 4px 12px -2px rgba(26, 32, 44, 0.07),
+    0 2px 4px -2px rgba(26, 32, 44, 0.05);
 }
 
 html[data-ui="harmony"] .orders-harmony-table-shell thead {
@@ -439,49 +433,49 @@ html[data-ui="harmony"] .rounded-lg.border {
   border-color: var(--card-border);
 }
 
-/* Kanban harmony — light */
+/* Kanban harmony — палитра classic .kanban-root */
 html[data-ui="harmony"] .kanban-root {
-  --kanban-workspace-bg: #f3f4f6;
-  --kanban-rail-bg: #e5e7eb;
-  --kanban-column-bg: #ffffff;
+  --kanban-workspace-bg: var(--app-bg);
+  --kanban-rail-bg: #f5f7fb;
+  --kanban-column-bg: #fafbfc;
   --kanban-card-bg: #ffffff;
-  --kanban-border: #d1d5db;
-  --kanban-text: #111827;
-  --kanban-text-muted: #6b7280;
-  --kanban-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-  --kanban-shadow-elevated: 0 4px 14px rgba(15, 23, 42, 0.1);
-  --kanban-accent: #3b82f6;
-  --kaiten-modal-bg: #ffffff;
-  --kaiten-modal-aside: #f9fafb;
-  --kaiten-modal-border: #e5e7eb;
-  --kaiten-modal-text: #111827;
-  --kaiten-modal-muted: #6b7280;
+  --kanban-border: #e2e6ec;
+  --kanban-text: #2d3436;
+  --kanban-text-muted: #636e72;
+  --kanban-shadow: 0 1px 3px rgba(26, 32, 44, 0.06);
+  --kanban-shadow-elevated: 0 4px 14px rgba(26, 32, 44, 0.08);
+  --kanban-accent: #6366f1;
+  --kaiten-modal-bg: #f8fafc;
+  --kaiten-modal-aside: #f1f5f9;
+  --kaiten-modal-border: #e2e8f0;
+  --kaiten-modal-text: #0f172a;
+  --kaiten-modal-muted: #64748b;
   --kaiten-modal-input: #ffffff;
-  --kaiten-modal-control: #f3f4f6;
-  --kaiten-accent: #3b82f6;
-  --kanban-cal-mini-bg: #e5e7eb;
+  --kaiten-modal-control: #f1f5f9;
+  --kaiten-accent: #8b5cf6;
+  --kanban-cal-mini-bg: #eef1f6;
 }
 
 html[data-ui="harmony"].dark .kanban-root {
-  --kanban-workspace-bg: #111827;
-  --kanban-rail-bg: #1f2937;
-  --kanban-column-bg: #1f2937;
-  --kanban-card-bg: #273345;
-  --kanban-border: #374151;
-  --kanban-text: #f9fafb;
-  --kanban-text-muted: #9ca3af;
-  --kanban-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 16px rgba(0, 0, 0, 0.28);
-  --kanban-shadow-elevated: 0 8px 28px rgba(0, 0, 0, 0.4);
-  --kanban-accent: #60a5fa;
-  --kaiten-modal-bg: #1f2937;
-  --kaiten-modal-aside: #111827;
-  --kaiten-modal-border: #374151;
-  --kaiten-modal-text: #f9fafb;
-  --kaiten-modal-muted: #9ca3af;
-  --kaiten-modal-input: #111827;
-  --kaiten-modal-control: #273345;
-  --kaiten-accent: #60a5fa;
-  --kanban-cal-mini-bg: #374151;
+  --kanban-workspace-bg: var(--app-bg);
+  --kanban-rail-bg: #2a2a30;
+  --kanban-column-bg: #3a3a42;
+  --kanban-card-bg: #44444c;
+  --kanban-border: #52525c;
+  --kanban-text: #f4f4f5;
+  --kanban-text-muted: #b4b4bc;
+  --kanban-shadow: 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.28);
+  --kanban-shadow-elevated: 0 8px 28px rgba(0, 0, 0, 0.35);
+  --kanban-accent: var(--sidebar-blue);
+  --kaiten-modal-bg: #383840;
+  --kaiten-modal-aside: #303038;
+  --kaiten-modal-border: #52525c;
+  --kaiten-modal-text: #f4f4f5;
+  --kaiten-modal-muted: #c4c9d4;
+  --kaiten-modal-input: #34343c;
+  --kaiten-modal-control: #404048;
+  --kaiten-accent: #a78bfa;
+  --kanban-cal-mini-bg: #4a4a52;
 }
 
 /* New order panel offset */
