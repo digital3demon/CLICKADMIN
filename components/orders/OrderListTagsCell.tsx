@@ -903,12 +903,7 @@ export function OrderListTagsCell({
                   : `inline-flex w-full min-w-0 max-w-full flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`
               }
             >
-              <span className="inline-flex shrink-0 items-center gap-1 leading-tight">
-                <span aria-hidden className="shrink-0">
-                  ⛔
-                </span>
-                <span className="leading-tight">Заблокировано</span>
-              </span>
+              <span className="leading-tight">Заблокировано</span>
               {kaitenBlockReason?.trim() ? (
                 <span className="w-full min-w-0 whitespace-pre-wrap break-words text-left text-[10px] font-normal leading-snug text-red-900/95 dark:text-red-100/90 sm:text-[11px]">
                   {kaitenBlockReason.trim()}

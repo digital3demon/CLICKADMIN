@@ -141,18 +141,6 @@ html[data-ui="harmony"] .custom-scrollbar::-webkit-scrollbar-thumb {
   border-radius: 10px;
 }
 
-html[data-ui="harmony"] .nav-active-marker-harmony {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 40px;
-  height: 3px;
-  background: linear-gradient(to right, var(--sidebar-blue-hover), var(--sidebar-blue));
-  border-radius: 9999px 9999px 0 0;
-  opacity: 0.9;
-}
-
 html[data-ui="harmony"] .harmony-status-pill {
   display: inline-flex;
   align-items: center;
@@ -207,50 +195,25 @@ html[data-ui="harmony"] .harmony-blocked-tag {
   border: 1px solid color-mix(in srgb, var(--status-red) 35%, transparent);
   background: color-mix(in srgb, var(--status-red) 10%, transparent);
   color: var(--status-red);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
-html[data-ui="harmony"] .harmony-row-indicator {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
+/* Без боковых полосок ::before — иначе строки без индикатора визуально смещены влево */
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr {
+  position: static;
 }
 
-html[data-ui="harmony"] .harmony-row-indicator--red {
-  background: var(--status-red);
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr::before,
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr::after {
+  content: none !important;
+  display: none !important;
 }
 
-html[data-ui="harmony"] .harmony-row-indicator--yellow {
-  background: var(--status-yellow);
-}
-
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr.orders-harmony-row,
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr.orders-harmony-row--blocked,
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr.orders-harmony-row--shipped {
-  position: relative;
-}
-
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-indicator]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  pointer-events: none;
-}
-
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-indicator="red"]::before {
-  background: var(--status-red);
-}
-
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-indicator="yellow"]::before {
-  background: var(--status-yellow);
-}
-
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr.orders-harmony-data-row,
 html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row] {
   border-bottom-width: 1px !important;
   border-bottom-color: var(--card-border) !important;
@@ -281,12 +244,29 @@ html[data-ui="harmony"] .orders-harmony-unified-card {
   border-radius: 1rem;
   border: 1px solid var(--card-border);
   background: var(--card-bg);
-  overflow: hidden;
+  /* overflow:hidden ломает position:sticky у toolbar и шапки таблицы */
+  overflow: visible;
 }
 
 html[data-ui="harmony"] .orders-harmony-unified-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 45;
   background: var(--card-bg);
   padding: 1rem 1rem 0.75rem;
+  box-shadow:
+    0 1px 0 var(--card-border),
+    0 4px 12px -4px rgba(0, 0, 0, 0.35);
+}
+
+html[data-ui="harmony"]:not(.dark) .orders-harmony-unified-toolbar {
+  box-shadow:
+    0 1px 0 var(--card-border),
+    0 4px 12px -4px rgba(15, 23, 42, 0.08);
+}
+
+html[data-ui="harmony"] .orders-harmony-unified-body {
+  border-radius: 0 0 1rem 1rem;
 }
 
 html[data-ui="harmony"] .orders-harmony-sticky-toolbar .space-y-4 > *:last-child {
@@ -298,6 +278,42 @@ html[data-ui="harmony"] .orders-harmony-unified-body .orders-harmony-table-shell
   border-radius: 0;
   box-shadow: none;
   border-top: 1px solid var(--card-border);
+}
+
+html[data-ui="harmony"] .orders-list-mirror-thead {
+  display: none !important;
+}
+
+/* Как в отгрузках: на md+ шапка таблицы в потоке страницы, не дубль в toolbar */
+@media (min-width: 768px) {
+  html[data-ui="harmony"] .orders-harmony-table-shell {
+    overflow-x: visible;
+    overflow-y: visible;
+  }
+
+  html[data-ui="harmony"] .orders-harmony-table-shell thead.orders-list-thead {
+    display: table-header-group;
+    position: sticky;
+    top: var(--sticky-list-toolbar-height, 0px);
+    z-index: 30;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: normal;
+    border-width: 0;
+  }
+
+  html[data-ui="harmony"] .orders-harmony-table-shell thead.orders-list-thead tr {
+    display: table-row;
+  }
+
+  html[data-ui="harmony"] .orders-harmony-table-shell thead.orders-list-thead th {
+    position: static;
+  }
 }
 
 html[data-ui="harmony"] .orders-harmony-unified-body .hidden.rounded-t-lg {
@@ -358,16 +374,29 @@ html[data-ui="harmony"] .order-edit-harmony-shell > .rounded-lg.border {
 
 html[data-ui="harmony"] .harmony-module-inner {
   width: 100%;
-  max-width: 1600px;
-  margin-inline: auto;
-  padding: 2rem;
+  max-width: none;
+  margin-inline: 0;
+  padding: 1rem 1.25rem 1.75rem 0.75rem;
+}
+
+@media (min-width: 640px) {
+  html[data-ui="harmony"] .harmony-module-inner {
+    padding: 1.25rem 1.5rem 2rem 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  html[data-ui="harmony"] .harmony-module-inner {
+    padding: 1.5rem 1.75rem 2.25rem 1rem;
+  }
 }
 
 html[data-ui="harmony"] .orders-harmony-table-shell {
   border-radius: 1rem;
   border: 1px solid var(--card-border);
   background: var(--card-bg);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
   box-shadow:
     0 4px 12px -2px rgba(0, 0, 0, 0.35),
     0 2px 4px -2px rgba(0, 0, 0, 0.25);
@@ -391,12 +420,13 @@ html[data-ui="harmony"] .orders-harmony-table-shell thead th {
   color: var(--text-muted);
 }
 
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr {
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr.orders-harmony-data-row {
   transition: background-color 0.2s ease;
   border-bottom: 1px solid var(--card-border);
 }
 
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr:hover {
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr.orders-harmony-data-row:hover,
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="default"]:hover {
   background: var(--table-row-hover);
 }
 

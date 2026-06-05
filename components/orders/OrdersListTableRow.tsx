@@ -13,7 +13,6 @@ import {
 } from "@/lib/harmony-list-pill";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { orderPathById } from "@/lib/order-public-ref";
-import type { HarmonyRowIndicator } from "@/lib/harmony-list-pill";
 
 function targetInsideInteractive(target: EventTarget | null) {
   if (target == null || !(target instanceof Node)) return false;
@@ -49,7 +48,6 @@ export function OrdersListTableRow({
   hasProsthetics = false,
   isLabOverdue = false,
   demoKanbanColumn,
-  harmonyRowIndicator = null,
   harmonyRowState = "default",
   tagsNode,
   indicatorsNode,
@@ -71,7 +69,6 @@ export function OrdersListTableRow({
   hasProsthetics?: boolean;
   isLabOverdue?: boolean;
   demoKanbanColumn?: string | null;
-  harmonyRowIndicator?: HarmonyRowIndicator;
   harmonyRowState?: "blocked" | "shipped" | "default";
   tagsNode?: ReactNode;
   indicatorsNode?: ReactNode;
@@ -110,16 +107,17 @@ export function OrdersListTableRow({
     router.push(href);
   };
 
+  const desktopRowClass = isHarmony
+    ? "orders-harmony-data-row hidden cursor-pointer md:table-row print:table-row"
+    : className
+      ? `hidden md:table-row print:table-row ${className} cursor-pointer`
+      : "hidden cursor-pointer md:table-row print:table-row";
+
   return (
     <>
       <tr
-        className={
-          className
-            ? `hidden md:table-row print:table-row ${className} cursor-pointer`
-            : "hidden cursor-pointer md:table-row print:table-row"
-        }
-        data-harmony-indicator={harmonyRowIndicator ?? undefined}
-        data-harmony-row={harmonyRowState}
+        className={desktopRowClass}
+        {...(isHarmony ? { "data-harmony-row": harmonyRowState } : {})}
         onClick={(e) => {
           if (targetInsideInteractive(e.target)) return;
           go(e);

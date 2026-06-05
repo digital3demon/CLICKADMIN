@@ -60,7 +60,7 @@ export function StickyListChrome({
         <div
           ref={toolbarRef}
           className={[
-            "orders-harmony-unified-toolbar sticky top-0 z-40 pb-0",
+            "orders-harmony-unified-toolbar pb-0",
             toolbarClassName ?? "",
           ]
             .filter(Boolean)

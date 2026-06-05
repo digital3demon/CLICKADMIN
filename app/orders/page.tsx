@@ -16,7 +16,6 @@ import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePr
 import { OrdersListFiltersBar } from "@/components/orders/OrdersListFiltersBar";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
 import { OrdersListChrome } from "@/components/orders/OrdersListChrome";
-import { harmonyRowIndicator } from "@/lib/harmony-list-pill";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { getSiteOrigin } from "@/lib/site-origin-server";
@@ -665,7 +664,7 @@ export default async function OrdersPage({
           В списке только наряды с отметкой «Работа отправлена» (отгруженные).
         </div>
       ) : null}
-      <div className="hidden w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] md:block print:hidden">
+      <div className="orders-list-mirror-thead hidden w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] md:block print:hidden">
         <table className={ORDERS_TABLE_CLASS} aria-hidden="true">
           <OrdersTableColGroup />
           <thead>
@@ -675,10 +674,10 @@ export default async function OrdersPage({
       </div>
         </div>}
       >
-      <div className="orders-harmony-table-shell w-full min-w-0 overflow-x-auto overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full">
+      <div className="orders-harmony-table-shell w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] print:max-w-none print:w-full">
         <table className={ORDERS_TABLE_CLASS}>
           <OrdersTableColGroup />
-          <thead className="sr-only">
+          <thead className="orders-list-thead sr-only">
             <OrdersTableHeaderRow isDemo={isDemo} />
           </thead>
           <tbody>
@@ -732,12 +731,6 @@ export default async function OrdersPage({
                   : workSent
                     ? "shipped"
                     : "default";
-                const rowHarmonyIndicator = harmonyRowIndicator({
-                  kaitenBlocked: blocked,
-                  isLabOverdue,
-                  kaitenColumnTitle: o.kaitenColumnTitle,
-                  demoKanbanColumn: o.demoKanbanColumn,
-                });
                 const renderTagsNode = () => (
                   <OrderListTagsCell
                     orderId={o.id}
@@ -778,7 +771,6 @@ export default async function OrdersPage({
                   orderId={o.id}
                   orderNumber={o.orderNumber}
                   className={rowClass}
-                  harmonyRowIndicator={rowHarmonyIndicator}
                   harmonyRowState={harmonyRowState}
                   clinicName={o.clinic?.name ?? "Частное лицо"}
                   doctorName={personNameSurnameInitials(o.doctor.fullName)}

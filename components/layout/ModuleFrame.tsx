@@ -48,7 +48,7 @@ export function ModuleFrame({
     <div
       className={[
         isHarmony
-          ? "harmony-module-inner flex min-h-full min-w-0 max-w-full flex-col overflow-x-clip gap-6"
+          ? "harmony-module-inner flex min-h-full min-w-0 max-w-full flex-col gap-6"
           : "flex min-h-full min-w-0 max-w-full flex-col overflow-x-clip px-3 pb-8 pt-6 sm:px-6 sm:pt-8 md:px-8 md:pb-10 lg:px-10 lg:pt-10 landscape:max-lg:px-4 landscape:max-lg:pb-4 landscape:max-lg:pt-4 landscape:max-lg:sm:px-5",
         rootClassName ?? "",
       ]

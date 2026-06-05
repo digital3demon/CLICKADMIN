@@ -71,6 +71,19 @@ function moveHref(list: string[], fromHref: string, toHref: string): string[] {
   return next;
 }
 
+/** Вставить пункт сразу после `afterHref` (для зоны drop под строкой меню). */
+function moveHrefAfter(list: string[], fromHref: string, afterHref: string): string[] {
+  const from = list.indexOf(fromHref);
+  const after = list.indexOf(afterHref);
+  if (from < 0 || after < 0 || from === after) return list;
+  const next = [...list];
+  const [removed] = next.splice(from, 1);
+  let insertAt = after + 1;
+  if (from < after) insertAt -= 1;
+  next.splice(insertAt, 0, removed);
+  return next;
+}
+
 function DragHandleIcon() {
   return (
     <span className="flex flex-col gap-[3px] py-1" aria-hidden>
@@ -312,13 +325,23 @@ export function SidebarNav() {
     [navItems, orderHrefs, persistOrder],
   );
 
+  const onDropAfter = useCallback(
+    (afterHref: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      const from =
+        dragHrefRef.current ??
+        (e.dataTransfer.getData("text/plain") || null);
+      dragHrefRef.current = null;
+      if (!from || from === afterHref) return;
+      const allowed = new Set(navItems.map((i) => i.href));
+      const base = coalesceSidebarNavOrder(orderHrefs, allowed);
+      persistOrder(moveHrefAfter(base, from, afterHref));
+    },
+    [navItems, orderHrefs, persistOrder],
+  );
+
   const uiDesign = useUiDesign();
   const isHarmony = uiDesign === "harmony";
-
-  const navDividerAfter = new Set([
-    "/orders/history",
-    "/clients",
-  ]);
 
   return (
     <nav
@@ -330,18 +353,19 @@ export function SidebarNav() {
       aria-label="Разделы"
     >
       <ul className={isHarmony ? "flex flex-col gap-1" : "flex flex-col gap-0"}>
-        {orderedNav.map((item) => {
+        {orderedNav.map((item, index) => {
           const active = isNavActive(pathname, item.href);
           const Icon = isHarmony ? sidebarNavIconForHref(item.href) : null;
-          const showDivider = isHarmony && navDividerAfter.has(item.href);
 
           if (isHarmony) {
             return (
               <li key={item.href} className="list-none">
-                {showDivider ? (
+                {index > 0 ? (
                   <div
-                    className="mx-3 my-2 h-px bg-[var(--sidebar-border)]"
+                    className="h-2 shrink-0"
                     aria-hidden
+                    onDragOver={onDragOver}
+                    onDrop={onDrop(item.href)}
                   />
                 ) : null}
                 <div
@@ -387,11 +411,14 @@ export function SidebarNav() {
                         {mailUnreadCount > 99 ? "99+" : mailUnreadCount}
                       </span>
                     ) : null}
-                    {active ? (
-                      <span className="nav-active-marker-harmony" aria-hidden />
-                    ) : null}
                   </Link>
                 </div>
+                <div
+                  className="h-2 shrink-0"
+                  aria-hidden
+                  onDragOver={onDragOver}
+                  onDrop={onDropAfter(item.href)}
+                />
               </li>
             );
           }

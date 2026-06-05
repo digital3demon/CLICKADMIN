@@ -298,14 +298,16 @@ export function Sidebar() {
       </div>
 
       <div
-        className={`mt-auto shrink-0 border-t border-[var(--sidebar-border)] px-4 py-3 shell-short:px-3 shell-short:py-2 ${
-          isHarmony ? "" : "dark:bg-black/25"
+        className={`mt-auto shrink-0 border-t border-[var(--sidebar-border)] ${
+          isHarmony
+            ? "px-3 py-2"
+            : "px-4 py-3 shell-short:px-3 shell-short:py-2 dark:bg-black/25"
         }`}
       >
         <div
           className={
             isHarmony
-              ? "flex items-center justify-between gap-2 p-2"
+              ? "flex items-center gap-1.5"
               : "flex items-start gap-2 shell-short:gap-1.5"
           }
         >
@@ -313,7 +315,11 @@ export function Sidebar() {
             <>
               <Link
                 href="/directory/profile"
-                className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--sidebar-border)] bg-black/10 text-xl outline-offset-2 transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)] dark:bg-white/10"
+                className={
+                  isHarmony
+                    ? "flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--sidebar-border)] bg-black/10 text-base outline-offset-2 transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)] dark:bg-white/10"
+                    : "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--sidebar-border)] bg-black/10 text-xl outline-offset-2 transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)] dark:bg-white/10"
+                }
                 title="Настройка профиля"
                 aria-label="Настройка профиля"
               >
@@ -332,47 +338,65 @@ export function Sidebar() {
                   <span aria-hidden>{profileAvatarEmoji(sessionUser.avatarPresetId)}</span>
                 )}
               </Link>
-              <div className="min-w-0 flex-1 px-1 text-xs leading-snug text-[var(--sidebar-text)] shell-short:text-[10px]">
-              <div className="font-medium text-[var(--sidebar-text-strong)]">
-                {sessionUser.displayName}
-              </div>
-              <div className="truncate opacity-90" title={sessionUser.email}>
-                {sessionUser.email}
-              </div>
-              {singleUserMode ? (
-                <div className="mt-1 text-[10px] text-[var(--sidebar-text)] opacity-80">
-                  Одна рабочая станция, без входа
+              <div
+                className={
+                  isHarmony
+                    ? "min-w-0 flex-1 leading-tight"
+                    : "min-w-0 flex-1 px-1 text-xs leading-snug text-[var(--sidebar-text)] shell-short:text-[10px]"
+                }
+              >
+                <div
+                  className={
+                    isHarmony
+                      ? "truncate text-xs font-medium text-[var(--sidebar-text-strong)]"
+                      : "font-medium text-[var(--sidebar-text-strong)]"
+                  }
+                  title={sessionUser.displayName}
+                >
+                  {sessionUser.displayName}
                 </div>
-              ) : null}
-              {isDemo ? (
-                <div className="mt-1 rounded-md border border-amber-400/50 bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-950 dark:text-amber-100">
-                  Демо: отдельная база. «Выйти» — сброс демо к исходным данным.
+                <div
+                  className={
+                    isHarmony
+                      ? "truncate text-[10px] text-[var(--text-muted)]"
+                      : "truncate opacity-90"
+                  }
+                  title={sessionUser.email}
+                >
+                  {sessionUser.email}
                 </div>
-              ) : null}
-            </div>
+                {!isHarmony && singleUserMode ? (
+                  <div className="mt-1 text-[10px] text-[var(--sidebar-text)] opacity-80">
+                    Одна рабочая станция, без входа
+                  </div>
+                ) : null}
+                {!isHarmony && isDemo ? (
+                  <div className="mt-1 rounded-md border border-amber-400/50 bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-950 dark:text-amber-100">
+                    Демо: отдельная база. «Выйти» — сброс демо к исходным данным.
+                  </div>
+                ) : null}
+              </div>
             </>
           ) : (
             <div className="min-w-0 flex-1" />
           )}
           {isHarmony ? (
-            <button
-              type="button"
-              title={isDemo ? "Выйти из демо и сбросить демо-базу" : "Выйти"}
-              aria-label={isDemo ? "Выйти из демо" : "Выйти"}
-              onClick={() => void logout()}
-              className="rounded-lg p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
-            >
-              <LogOut className="h-4 w-4" aria-hidden />
-            </button>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <ThemeToggle compact />
+              <button
+                type="button"
+                title={isDemo ? "Выйти из демо и сбросить демо-базу" : "Выйти"}
+                aria-label={isDemo ? "Выйти из демо" : "Выйти"}
+                onClick={() => void logout()}
+                className="rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
+              >
+                <LogOut className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
           ) : (
             <ThemeToggle compact={shellShort} />
           )}
         </div>
-        {isHarmony ? (
-          <div className="mt-2 flex justify-center">
-            <ThemeToggle compact={shellShort} />
-          </div>
-        ) : null}
         {singleUserMode ? null : isHarmony ? null : (
           <button
             type="button"

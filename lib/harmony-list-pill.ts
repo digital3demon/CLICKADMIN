@@ -1,8 +1,5 @@
 import type { BadgeVariant } from "@/components/ui/Badge";
-import {
-  getKaitenColumnDisplayFromOrder,
-  resolveKaitenColumnTitleForDisplay,
-} from "@/lib/order-status-display";
+import { getKaitenColumnDisplayFromOrder } from "@/lib/order-status-display";
 import {
   canonicalOrderPayment,
   ORDER_PAYMENT_NOT_PAID,
@@ -59,21 +56,4 @@ export function kaitenOrderToHarmonyTone(opts: {
 }): HarmonyPillTone {
   const display = getKaitenColumnDisplayFromOrder(opts);
   return BADGE_TO_HARMONY[display.variant] ?? "blue";
-}
-
-export type HarmonyRowIndicator = "red" | "yellow" | null;
-
-export function harmonyRowIndicator(opts: {
-  kaitenBlocked: boolean;
-  isLabOverdue: boolean;
-  kaitenColumnTitle?: string | null;
-  demoKanbanColumn?: string | null;
-}): HarmonyRowIndicator {
-  if (opts.kaitenBlocked) return "red";
-  if (opts.isLabOverdue) return "yellow";
-  const title = resolveKaitenColumnTitleForDisplay(opts);
-  if (!title) return null;
-  const tone = kaitenOrderToHarmonyTone(opts);
-  if (tone === "yellow") return "yellow";
-  return null;
 }
