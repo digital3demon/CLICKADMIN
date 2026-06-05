@@ -82,6 +82,16 @@ export function canCreateOrders(
   return false;
 }
 
+/** Редактирование шаблонов этикеток и сохранение настроек печати. */
+export function canEditStickerPrintSettings(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (role === "OWNER") return true;
+  if (moduleAccess?.CONFIG_PRINT_EDIT === true) return true;
+  return false;
+}
+
 /** Модуль «Просчёт работ» / себестоимость. */
 export function canAccessCostingModule(
   role: UserRole,

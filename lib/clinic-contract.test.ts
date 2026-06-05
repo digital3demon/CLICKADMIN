@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractContractNumberFromDocumentText,
+  extractContractTemplatePlaceholders,
   formatContractNumber,
   formatYearMonthYYMM,
   parseGeneratedContractNumber,
@@ -39,5 +40,33 @@ describe("extractContractNumberFromDocumentText", () => {
 
   it("возвращает null на пустом вводе", () => {
     expect(extractContractNumberFromDocumentText("")).toBeNull();
+  });
+});
+
+describe("extractContractTemplatePlaceholders", () => {
+  it("находит плейсхолдер в синем и красном run", async () => {
+    const { Document, Packer, Paragraph, TextRun } = await import("docx");
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({ text: "«ИНН заказчика»", color: "2563EB" }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({ text: "«дата»", color: "FF0000" }),
+              ],
+            }),
+          ],
+        },
+      ],
+    });
+    const buf = Buffer.from(await Packer.toBuffer(doc));
+    const labels = await extractContractTemplatePlaceholders(buf);
+    expect(labels).toContain("ИНН заказчика");
+    expect(labels).toContain("дата");
   });
 });

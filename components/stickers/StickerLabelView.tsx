@@ -6,6 +6,7 @@ import { STICKER_BLOCK_DEFS } from "@/lib/sticker-template";
 
 export type StickerLabelData = {
   clinicLine: string;
+  addressLine: string;
   doctorLine: string;
   patientLine: string;
   orderNumber: string;
@@ -18,6 +19,8 @@ function fieldValue(data: StickerLabelData, id: StickerTemplateBlock["id"]): str
   switch (id) {
     case "clinic":
       return data.clinicLine;
+    case "address":
+      return data.addressLine;
     case "doctor":
       return data.doctorLine;
     case "patient":

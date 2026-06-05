@@ -1,6 +1,6 @@
-import type { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { canEditStickerPrintSettings } from "@/lib/auth/permissions";
+import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
 import {
@@ -12,30 +12,25 @@ import { getTenantStickerPrintSettings } from "@/lib/sticker-print-settings.serv
 
 export const dynamic = "force-dynamic";
 
-function canEditPrintSettings(role: UserRole): boolean {
-  return (
-    role === "OWNER" ||
-    role === "SENIOR_ADMINISTRATOR" ||
-    role === "ADMINISTRATOR"
-  );
-}
-
 export async function GET() {
-  const s = await getSessionFromCookies();
-  if (!s?.sub) {
+  const { session, access } = await getSessionWithModuleAccess();
+  if (!session?.sub) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
-  const tenantId = await requireSessionTenantId(s);
+  if (access?.CONFIG_PRINT !== true) {
+    return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+  }
+  const tenantId = await requireSessionTenantId(session);
   const settings = await getTenantStickerPrintSettings(tenantId);
   return NextResponse.json(settings);
 }
 
 export async function PATCH(req: Request) {
-  const s = await getSessionFromCookies();
-  if (!s?.sub) {
+  const { session, access } = await getSessionWithModuleAccess();
+  if (!session?.sub) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
-  if (!canEditPrintSettings(s.role as UserRole)) {
+  if (!canEditStickerPrintSettings(session.role, access)) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
 
@@ -46,7 +41,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
   const settings: StickerPrintSettingsV2 = normalizeStickerPrintSettingsV2(body);
-  const tenantId = await requireSessionTenantId(s);
+  const tenantId = await requireSessionTenantId(session);
   await (await getPrisma()).tenantClientState.upsert({
     where: {
       tenantId_key: {

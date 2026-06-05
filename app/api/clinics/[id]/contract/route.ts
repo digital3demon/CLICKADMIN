@@ -10,6 +10,11 @@ import {
   parseGeneratedContractNumber,
   type ContractTemplateField,
 } from "@/lib/clinic-contract";
+import {
+  extractContractNumberFromPdfBuffer,
+  fillContractPdfFromFields,
+} from "@/lib/clinic-contract-pdf";
+import { resolveTenantContractTemplates } from "@/lib/contract-template-resolve";
 import { getPrisma } from "@/lib/get-prisma";
 
 const MAX_DOCX_SIZE_BYTES = 12 * 1024 * 1024;
@@ -54,9 +59,17 @@ function pickContractNumber(fields: ContractTemplateField[]): string {
   return synthetic || "";
 }
 
-function composeAttachmentName(contractNumber: string): string {
+function composeAttachmentBase(contractNumber: string): string {
   const clean = contractNumber.replace(/[^\w\-./]+/g, "_").slice(0, 60) || "dogovor";
-  return `dogovor-${clean}.docx`;
+  return `dogovor-${clean}`;
+}
+
+function composePdfName(contractNumber: string): string {
+  return `${composeAttachmentBase(contractNumber)}.pdf`;
+}
+
+function composeDocxName(contractNumber: string): string {
+  return `${composeAttachmentBase(contractNumber)}.docx`;
 }
 
 function toDbBytes(buf: Buffer): Uint8Array<ArrayBuffer> {
@@ -108,13 +121,16 @@ async function syncContractSequenceIfNeeded(
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
   if (!id?.trim()) {
     return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
   }
+
+  const url = new URL(req.url);
+  const format = url.searchParams.get("format")?.toLowerCase() || "pdf";
 
   const prisma = await getPrisma();
   const clinic = await prisma.clinic.findUnique({
@@ -126,6 +142,9 @@ export async function GET(
           data: true,
           mimeType: true,
           fileName: true,
+          docxData: true,
+          docxMimeType: true,
+          docxFileName: true,
         },
       },
     },
@@ -137,11 +156,35 @@ export async function GET(
     return NextResponse.json({ error: "Договор не загружен" }, { status: 404 });
   }
 
-  const fallbackName = composeAttachmentName(clinic.contractNumber || "dogovor");
-  const fileName = clinic.contractDoc.fileName.trim() || fallbackName;
-  const mime =
-    clinic.contractDoc.mimeType ||
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const num = clinic.contractNumber || "dogovor";
+
+  if (format === "docx") {
+    const docxBytes = clinic.contractDoc.docxData;
+    if (!docxBytes || docxBytes.length === 0) {
+      return NextResponse.json(
+        { error: "DOCX-версия договора не сохранена" },
+        { status: 404 },
+      );
+    }
+    const fileName =
+      clinic.contractDoc.docxFileName?.trim() || composeDocxName(num);
+    const mime =
+      clinic.contractDoc.docxMimeType ||
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    return new NextResponse(new Uint8Array(docxBytes), {
+      status: 200,
+      headers: {
+        "Content-Type": mime,
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+        "Cache-Control": "private, no-store",
+      },
+    });
+  }
+
+  const fileName =
+    clinic.contractDoc.fileName.trim() ||
+    composePdfName(num);
+  const mime = clinic.contractDoc.mimeType || "application/pdf";
 
   return new NextResponse(new Uint8Array(clinic.contractDoc.data), {
     status: 200,
@@ -207,11 +250,14 @@ export async function POST(
         { status: 400 },
       );
     }
-    if (!/\.docx$/i.test(file.name)) {
-      return NextResponse.json({ error: "Нужен файл .docx" }, { status: 400 });
+    if (!/\.docx$/i.test(file.name) && !/\.pdf$/i.test(file.name)) {
+      return NextResponse.json({ error: "Нужен файл .pdf или .docx" }, { status: 400 });
     }
     const bytes = Buffer.from(await file.arrayBuffer());
-    const extractedNumber = await extractContractNumberFromDocxBuffer(bytes);
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+    const extractedNumber = isPdf
+      ? await extractContractNumberFromPdfBuffer(bytes)
+      : await extractContractNumberFromDocxBuffer(bytes);
     const nextNumber = extractedNumber?.trim() || null;
     const updated = await prisma.clinic.update({
       where: { id },
@@ -228,19 +274,49 @@ export async function POST(
       create: {
         clinicId: id,
         fileName:
-          file.name.trim() || composeAttachmentName(nextNumber || "dogovor"),
+          file.name.trim() ||
+          (isPdf
+            ? composePdfName(nextNumber || "dogovor")
+            : composeDocxName(nextNumber || "dogovor")),
         mimeType:
           file.type ||
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          (isPdf
+            ? "application/pdf"
+            : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         data: toDbBytes(bytes),
+        ...(isPdf
+          ? {}
+          : {
+              docxData: toDbBytes(bytes),
+              docxMimeType:
+                file.type ||
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              docxFileName:
+                file.name.trim() || composeDocxName(nextNumber || "dogovor"),
+            }),
       },
       update: {
         fileName:
-          file.name.trim() || composeAttachmentName(nextNumber || "dogovor"),
+          file.name.trim() ||
+          (isPdf
+            ? composePdfName(nextNumber || "dogovor")
+            : composeDocxName(nextNumber || "dogovor")),
         mimeType:
           file.type ||
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          (isPdf
+            ? "application/pdf"
+            : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         data: toDbBytes(bytes),
+        ...(isPdf
+          ? {}
+          : {
+              docxData: toDbBytes(bytes),
+              docxMimeType:
+                file.type ||
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              docxFileName:
+                file.name.trim() || composeDocxName(nextNumber || "dogovor"),
+            }),
       },
     });
     if (nextNumber) {
@@ -265,15 +341,8 @@ export async function POST(
   }
 
   if (body.action === "prefill") {
-    const template = await prisma.contractTemplateSettings.findUnique({
-      where: { id: clinic.tenantId },
-      select: {
-        fileName: true,
-        docxBytes: true,
-        placeholders: true,
-      },
-    });
-    if (!template?.docxBytes) {
+    const templates = await resolveTenantContractTemplates(prisma, clinic.tenantId);
+    if (!templates.pdf && !templates.docx) {
       return NextResponse.json(
         {
           error:
@@ -282,6 +351,11 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    const settings = await prisma.contractTemplateSettings.findUnique({
+      where: { id: clinic.tenantId },
+      select: { placeholders: true },
+    });
 
     const now = new Date();
     const currentYm = formatYearMonthYYMM(now);
@@ -292,16 +366,25 @@ export async function POST(
     const nextSeq =
       counter && counter.yearMonth === currentYm ? counter.lastSequence + 1 : 1;
     const nextNumber = formatContractNumber(currentYm, nextSeq);
-    const placeholders =
-      Array.isArray(template.placeholders) && template.placeholders.length > 0
-        ? template.placeholders
-            .map((x) => String(x ?? "").trim())
-            .filter((x) => x.length > 0)
-        : await extractContractTemplatePlaceholders(Buffer.from(template.docxBytes));
+    const stored = settings?.placeholders;
+    let placeholders: string[] =
+      Array.isArray(stored) && stored.length > 0
+        ? stored.map((x) => String(x ?? "").trim()).filter((x) => x.length > 0)
+        : [];
+    if (placeholders.length === 0 && templates.pdf) {
+      const { buildContractPlaceholderListFromPdf } = await import(
+        "@/lib/clinic-contract-pdf"
+      );
+      placeholders = await buildContractPlaceholderListFromPdf(templates.pdf);
+    }
+    if (placeholders.length === 0 && templates.docx) {
+      placeholders = await extractContractTemplatePlaceholders(templates.docx);
+    }
     const fields = buildContractTemplateFields(placeholders, clinic, nextNumber, now);
     return NextResponse.json({
       ok: true,
-      templateFileName: template.fileName,
+      templateFileName: templates.pdfFileName,
+      hasDocxTemplate: Boolean(templates.docx),
       fields,
     });
   }
@@ -314,13 +397,10 @@ export async function POST(
         { status: 400 },
       );
     }
-    const template = await prisma.contractTemplateSettings.findUnique({
-      where: { id: clinic.tenantId },
-      select: { docxBytes: true },
-    });
-    if (!template?.docxBytes) {
+    const templates = await resolveTenantContractTemplates(prisma, clinic.tenantId);
+    if (!templates.pdf) {
       return NextResponse.json(
-        { error: "Шаблон договора не загружен в конфигурации" },
+        { error: "PDF-шаблон договора не загружен в конфигурации" },
         { status: 400 },
       );
     }
@@ -349,11 +429,24 @@ export async function POST(
       pickFieldValue(fields, (k) => k.includes("реквизит")) ||
       fallbackValues.requisitesLine;
 
-    const generated = await generateContractDocxFromTemplateFields(
-      Buffer.from(template.docxBytes),
+    const now = new Date();
+    const pdfGenerated = await fillContractPdfFromFields(
+      templates.pdf,
       fields,
-      fallbackValues,
+      clinic,
+      contractNumber,
+      now,
     );
+
+    let docxGenerated: Buffer | null = null;
+    if (templates.docx) {
+      docxGenerated = await generateContractDocxFromTemplateFields(
+        templates.docx,
+        fields,
+        fallbackValues,
+      );
+    }
+
     await prisma.clinic.update({
       where: { id },
       data: {
@@ -365,16 +458,24 @@ export async function POST(
       where: { clinicId: id },
       create: {
         clinicId: id,
-        fileName: composeAttachmentName(contractNumber),
-        mimeType:
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(generated),
+        fileName: composePdfName(contractNumber),
+        mimeType: "application/pdf",
+        data: toDbBytes(pdfGenerated),
+        docxFileName: docxGenerated ? composeDocxName(contractNumber) : null,
+        docxMimeType: docxGenerated
+          ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          : null,
+        docxData: docxGenerated ? toDbBytes(docxGenerated) : null,
       },
       update: {
-        fileName: composeAttachmentName(contractNumber),
-        mimeType:
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        data: toDbBytes(generated),
+        fileName: composePdfName(contractNumber),
+        mimeType: "application/pdf",
+        data: toDbBytes(pdfGenerated),
+        docxFileName: docxGenerated ? composeDocxName(contractNumber) : null,
+        docxMimeType: docxGenerated
+          ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          : null,
+        docxData: docxGenerated ? toDbBytes(docxGenerated) : null,
       },
     });
     await syncContractSequenceIfNeeded(clinic.tenantId, contractNumber);

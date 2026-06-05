@@ -51,6 +51,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CONFIG_USERS",
   "CONFIG_USER_INVITES",
   "CONFIG_PRINT",
+  "CONFIG_PRINT_EDIT",
   "CONFIG_APPEARANCE",
 ];
 
@@ -93,6 +94,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CONFIG_USERS: "Пользователи",
   CONFIG_USER_INVITES: "Приглашения пользователей",
   CONFIG_PRINT: "Конфиг: печать (этикетки)",
+  CONFIG_PRINT_EDIT: "Конфиг: редактирование этикеток",
   CONFIG_APPEARANCE: "Конфиг: оформление интерфейса",
 };
 
@@ -202,6 +204,10 @@ export function defaultModuleAllowed(
     case "CONFIG_PRINT":
     case "CONFIG_APPEARANCE":
       return true;
+    case "CONFIG_PRINT_EDIT":
+      return (
+        role === "ADMINISTRATOR" || role === "SENIOR_ADMINISTRATOR"
+      );
     case "CONFIG_PRICING_CORRECTION":
       return false;
     case "CONFIG_COSTING":

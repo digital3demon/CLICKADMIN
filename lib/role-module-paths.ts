@@ -7,6 +7,22 @@ export function clientsBranchModuleForMethod(method: string): "CLIENTS_VIEW" | "
   return HTTP_READ_METHODS.has(method.toUpperCase()) ? "CLIENTS_VIEW" : "CLIENTS_EDIT";
 }
 
+/** API настроек печати: GET — просмотр, PATCH — редактирование шаблонов. */
+export function printSettingsModuleForMethod(
+  method: string,
+): "CONFIG_PRINT" | "CONFIG_PRINT_EDIT" {
+  return HTTP_READ_METHODS.has(method.toUpperCase())
+    ? "CONFIG_PRINT"
+    : "CONFIG_PRINT_EDIT";
+}
+
+export function isPrintSettingsApiPath(pathname: string): boolean {
+  return (
+    pathname === "/api/tenant/print-settings" ||
+    pathname.startsWith("/api/tenant/print-settings/")
+  );
+}
+
 type Rule = { prefix: string; module: AppModule };
 
 /**
@@ -89,6 +105,21 @@ const RULES: Rule[] = [
 /**
  * null — для этого пути проверка по модулям не применяется.
  */
+/** Учитывает ветвление CLIENTS и API настроек печати по HTTP-методу. */
+export function requiredModuleForPath(
+  pathname: string,
+  base: AppModule | null,
+  method?: string,
+): AppModule | null {
+  if (base == null) return null;
+  const m = (method ?? "GET").toUpperCase();
+  if (base === "CLIENTS") return clientsBranchModuleForMethod(m);
+  if (base === "CONFIG_PRINT" && isPrintSettingsApiPath(pathname)) {
+    return printSettingsModuleForMethod(m);
+  }
+  return base;
+}
+
 export function getModuleForPathname(pathname: string): AppModule | null {
   if (pathname === "/") {
     return null;

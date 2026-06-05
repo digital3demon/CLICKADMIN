@@ -290,12 +290,20 @@ export function ClinicCommercialTermsPanel({
         </h2>
         <div className="flex flex-wrap gap-2">
           {hasContractDoc ? (
-            <a
-              href={`/api/clinics/${clinicId}/contract`}
-              className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] hover:bg-[var(--table-row-hover)]`}
-            >
-              Скачать договор
-            </a>
+            <>
+              <a
+                href={`/api/clinics/${clinicId}/contract?format=pdf`}
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] hover:bg-[var(--table-row-hover)]`}
+              >
+                Скачать PDF
+              </a>
+              <a
+                href={`/api/clinics/${clinicId}/contract?format=docx`}
+                className={`${btnBase} border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] hover:bg-[var(--table-row-hover)]`}
+              >
+                Скачать DOCX
+              </a>
+            </>
           ) : null}
           {!editing ? (
             canEditClients ? (

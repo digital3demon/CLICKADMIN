@@ -7,6 +7,7 @@ import { createDefaultPreset } from "@/lib/sticker-template";
 export type StickerRow = {
   id: string;
   clinicLine: string;
+  addressLine: string;
   doctorLine: string;
   patientLine: string;
   orderNumber: string;

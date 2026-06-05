@@ -13,6 +13,13 @@ import { cleanLegalFullName } from "@/lib/document-workflow-markers";
  */
 
 const TEMPLATE_REL_PATH = "data/templates/typical-contract-ooo.docx";
+
+/** Цвета плейсхолдеров в DOCX: синий CRM + legacy красный. */
+const PLACEHOLDER_COLOR_VALS = ["FF0000", "2563EB", "2F5496"] as const;
+
+function runHasPlaceholderColor(runXml: string): boolean {
+  return PLACEHOLDER_COLOR_VALS.some((c) => runXml.includes(`w:val="${c}"`));
+}
 const MONTHS_RU = [
   "января",
   "февраля",
@@ -171,7 +178,7 @@ function applyNumberAndDate(
 function replaceRedRequisitesOnly(xml: string, reqLineEscaped: string): string {
   return xml.replace(/<w:r[^>]*>([\s\S]*?)<\/w:r>/g, (full, inner) => {
     if (!inner.includes("<w:t>реквизиты</w:t>")) return full;
-    if (!inner.includes('w:val="FF0000"')) return full;
+    if (!runHasPlaceholderColor(full)) return full;
     return full.replace(
       /<w:t>реквизиты<\/w:t>/,
       `<w:t>${reqLineEscaped}</w:t>`,
@@ -196,9 +203,9 @@ function applyTemplateBody(xml: string, v: ClinicContractDraftValues): string {
   return s;
 }
 
-function extractRedRuns(xml: string): string[] {
+function extractPlaceholderRuns(xml: string): string[] {
   const runs = [...xml.matchAll(/<w:r[^>]*>[\s\S]*?<\/w:r>/g)].map((m) => m[0]);
-  return runs.filter((r) => r.includes('w:val="FF0000"'));
+  return runs.filter((r) => runHasPlaceholderColor(r));
 }
 
 function normalizePlaceholderKey(label: string): string {
@@ -231,7 +238,7 @@ export async function extractContractTemplatePlaceholders(
   for (const name of files) {
     const xml = await zip.file(name)?.async("string");
     if (!xml) continue;
-    for (const run of extractRedRuns(xml)) {
+    for (const run of extractPlaceholderRuns(xml)) {
       const text = [...run.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
         .map((m) => decodeXmlEntities(m[1]))
         .join("");
@@ -310,7 +317,7 @@ function applyPlaceholderMapToXml(
 ): string {
   if (placeholderMap.size === 0) return xml;
   return xml.replace(/<w:r[^>]*>[\s\S]*?<\/w:r>/g, (run) => {
-    if (!run.includes('w:val="FF0000"')) return run;
+    if (!runHasPlaceholderColor(run)) return run;
     return run.replace(/<w:t([^>]*)>([\s\S]*?)<\/w:t>/g, (_full, attrs, rawText) => {
       const decoded = decodeXmlEntities(rawText);
       const replaced = decoded.replace(

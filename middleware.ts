@@ -12,8 +12,8 @@ import {
   getAuthSecretKey,
 } from "@/lib/auth/jwt";
 import {
-  clientsBranchModuleForMethod,
   getModuleForPathname,
+  requiredModuleForPath,
 } from "@/lib/role-module-paths";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import type { UserRole } from "@prisma/client";
@@ -553,8 +553,7 @@ export async function middleware(req: NextRequest) {
   if (!session.demo && !isSingleUserPortable() && effectiveTenantId) {
     const access = await getEffectiveModuleAccess(effectiveTenantId, role);
     const mod = getModuleForPathname(pathname);
-    const requiredModule =
-      mod === "CLIENTS" ? clientsBranchModuleForMethod(req.method) : mod;
+    const requiredModule = requiredModuleForPath(pathname, mod, req.method);
     if (requiredModule != null && access[requiredModule] !== true) {
       if (pathname.startsWith("/api/")) {
         const out = NextResponse.json(

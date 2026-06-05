@@ -119,6 +119,24 @@ export async function PUT(req: Request) {
       { status: 400 },
     );
   }
+  if (module === "CONFIG_PRINT_EDIT" && body.allowed === true && !accBefore.CONFIG_PRINT) {
+    return NextResponse.json(
+      {
+        error:
+          "Сначала включите «Конфиг: печать (этикетки)» для этой роли.",
+      },
+      { status: 400 },
+    );
+  }
+  if (module === "CONFIG_PRINT" && body.allowed === false && accBefore.CONFIG_PRINT_EDIT) {
+    return NextResponse.json(
+      {
+        error:
+          "Сначала отключите «Конфиг: редактирование этикеток» для этой роли.",
+      },
+      { status: 400 },
+    );
+  }
 
   if (body.allowed && isKanbanCardSubmodule(module)) {
     const acc = await getEffectiveModuleAccess(tenantId, role);

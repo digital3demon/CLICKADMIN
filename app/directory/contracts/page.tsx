@@ -18,7 +18,7 @@ export default async function DirectoryContractsPage() {
   return (
     <ModuleFrame
       title="Шаблон договора"
-      description="Загрузка типового .docx шаблона договора и автоматическое распознавание полей замены по красному тексту в кавычках."
+      description="PDF-шаблон с полями формы (редактируемый договор) и опциональный DOCX. Поля подставляются из карточки клиники при генерации."
     >
       <ContractTemplateDirectoryClient />
       <p className="mt-8 text-sm">

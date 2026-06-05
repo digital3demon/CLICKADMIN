@@ -170,6 +170,7 @@ export default async function ShipmentsStickersPrintPage({
       const qrDataUrl = tok ? roundedQrDataUrl(hubUrl) : "";
 
       const clinicLine = (o.clinic?.name || "Частная практика").trim() || "—";
+      const addressLine = (o.clinic?.address || "").trim() || "—";
       const doctorLine = personNameSurnameInitials(o.doctor.fullName) || o.doctor.fullName.trim();
       const patientLine =
         personNameSurnameInitials(o.patientName) || (o.patientName || "").trim() || "—";
@@ -177,6 +178,7 @@ export default async function ShipmentsStickersPrintPage({
       return {
         id: o.id,
         clinicLine,
+        addressLine,
         doctorLine,
         patientLine,
         orderNumber: o.orderNumber,

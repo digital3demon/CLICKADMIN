@@ -234,14 +234,17 @@ model Clinic {
   @@index([tenantId])
 }
 
-/// Храним финальный docx по клинике отдельно, чтобы не грузить байты в обычной карточке.
+/// Финальный договор по клинике: PDF (data) + опциональная копия DOCX.
 model ClinicContractDoc {
-  clinicId   String   @id
-  clinic     Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  fileName   String
-  mimeType   String
-  data       Bytes
-  updatedAt  DateTime @updatedAt
+  clinicId     String   @id
+  clinic       Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  fileName     String
+  mimeType     String
+  data         Bytes
+  docxFileName String?
+  docxMimeType String?
+  docxData     Bytes?
+  updatedAt    DateTime @updatedAt
 }
 
 /// Автоматически сформированная сверка (конец периода, МСК 20:00, cron).
@@ -583,8 +586,10 @@ enum AppModule {
   CONFIG_USERS
   /// Только приглашения пользователей
   CONFIG_USER_INVITES
-  /// Конфиг: шаблоны печати этикеток
+  /// Конфиг: шаблоны печати этикеток (просмотр / пресеты)
   CONFIG_PRINT
+  /// Конфиг: редактирование шаблонов этикеток и сохранение настроек печати
+  CONFIG_PRINT_EDIT
   /// Конфиг: оформление интерфейса (классика / Гармония)
   CONFIG_APPEARANCE
 }
@@ -1077,13 +1082,17 @@ model ContractNumberSettings {
   updatedAt        DateTime @updatedAt
 }
 
-/// Один ряд на тенант: загруженный шаблон договора (.docx) и список red-quoted плейсхолдеров.
+/// Один ряд на тенант: PDF-шаблон (AcroForm) + опциональный DOCX; placeholders — имена полей.
 model ContractTemplateSettings {
   id           String   @id
   tenant       Tenant   @relation(fields: [id], references: [id], onDelete: Cascade)
-  fileName     String
-  mimeType     String
-  docxBytes    Bytes
+  pdfFileName  String?
+  pdfBytes     Bytes?
+  docxFileName String?
+  docxBytes    Bytes?
+  /// Legacy upload metadata (до PDF); при чтении предпочитаем pdf/docxFileName.
+  fileName     String?
+  mimeType     String?
   placeholders Json?
   updatedAt    DateTime @updatedAt
 }

@@ -6,7 +6,10 @@ import {
   defaultModuleAllowed,
 } from "@/lib/role-module-defaults";
 import { hasDirectoryHubAccess } from "@/lib/role-module-nav";
-import { clientsBranchModuleForMethod, getModuleForPathname } from "@/lib/role-module-paths";
+import {
+  getModuleForPathname,
+  requiredModuleForPath,
+} from "@/lib/role-module-paths";
 
 /**
  * Эффективный набор флагов по модулям: переопределения в БД или дефолт из
@@ -69,7 +72,7 @@ export function isPathAllowedByModuleAccess(
   }
   const m = getModuleForPathname(pathname);
   if (m == null) return true;
-  const need =
-    m === "CLIENTS" ? clientsBranchModuleForMethod(method ?? "GET") : m;
+  const need = requiredModuleForPath(pathname, m, method);
+  if (need == null) return true;
   return access[need] === true;
 }

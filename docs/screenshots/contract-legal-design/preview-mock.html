@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Договор — Legal Design preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", system-ui, sans-serif; margin: 0; background: #f8fafc; color: #111827; }
+    .page { max-width: 820px; margin: 24px auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 40px 48px 48px; position: relative; overflow: hidden; }
+    .arc { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 80px; height: 18px; background: #2563eb; border-radius: 0 0 40px 40px; }
+    h1 { font-size: 28px; margin: 24px 0 20px; }
+    .row { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+    .field { flex: 1; min-width: 180px; }
+    .field label { font-size: 11px; color: #6b7280; display: block; margin-bottom: 4px; }
+    .field input { width: 100%; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+    .card { border: 1.5px solid #2563eb; border-radius: 12px; padding: 16px; position: relative; }
+    .card::before { content: ""; position: absolute; top: 10px; left: 10px; width: 8px; height: 8px; background: #2563eb; border-radius: 50%; }
+    .card h2 { font-size: 13px; margin: 0 0 10px 20px; }
+    .section { display: grid; grid-template-columns: 140px 4px 1fr; gap: 16px; margin-bottom: 20px; }
+    .section h3 { font-size: 11px; margin: 0; line-height: 1.35; }
+    .line { background: #2563eb; border-radius: 2px; }
+    .section p { font-size: 10px; line-height: 1.5; margin: 0; color: #374151; }
+    .note { margin-top: 32px; font-size: 12px; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="arc"></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <h1>ДОГОВОР</h1>
+      <div class="field" style="max-width:140px">
+        <label>№</label>
+        <input value="2605-042" readonly />
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>место</label><input value="г. Санкт-Петербург" readonly /></div>
+      <div class="field"><label>дата</label><input value="«29» мая 2026 г." readonly /></div>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <h2>Заказчик</h2>
+        <input value="32 Практика" readonly style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:6px;margin-bottom:6px" />
+        <input value="ИНН …" readonly style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:6px" />
+      </div>
+      <div class="card">
+        <h2>Поставщик</h2>
+        <p style="font-size:11px;margin:8px 0 0 20px">ООО «КЛИКЛАБ»</p>
+      </div>
+    </div>
+    <div class="section">
+      <h3>1. Предмет и действие договора</h3>
+      <div class="line"></div>
+      <p>1.1. Поставщик изготавливает зуботехнические изделия… 1.2. Заказчик принимает и оплачивает изделия на условиях договора.</p>
+    </div>
+    <p class="note">Макет для скриншота. Реальный PDF: sample-filled-20260529.pdf (редактируемые поля формы).</p>
+  </div>
+</body>
+</html>

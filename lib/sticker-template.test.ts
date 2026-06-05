@@ -13,7 +13,8 @@ describe("normalizeStickerPrintSettingsV2", () => {
     expect(out.presets).toHaveLength(1);
     expect(out.presets[0]?.widthMm).toBe(100);
     expect(out.presets[0]?.heightMm).toBe(50);
-    expect(out.presets[0]?.blocks.length).toBe(6);
+    expect(out.presets[0]?.blocks.length).toBe(7);
+    expect(out.presets[0]?.blocks.some((b) => b.id === "address")).toBe(true);
     expect(out.presets[0]?.blocks.every((b) => b.visible)).toBe(true);
   });
 

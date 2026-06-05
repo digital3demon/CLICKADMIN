@@ -35,6 +35,7 @@ const inputClass =
 
 const previewData: StickerLabelData = {
   clinicLine: "Частное лицо",
+  addressLine: "г. Москва, ул. Примерная, д. 1",
   doctorLine: "Иванов И. И.",
   patientLine: "Петров П. П.",
   orderNumber: "2605-048",

@@ -3,7 +3,7 @@
  * Подставляет данные клиники с максимально полным набором реквизитов из БД.
  *
  * Запуск: node --env-file=.env scripts/generate-test-contract.cjs
- * Выход:  data/exports/Тестовый-договор-<slug>.docx
+ * Выход:  data/templates/out/Тестовый-договор-<slug>.docx и .pdf
  */
 
 const fs = require("fs");
@@ -17,7 +17,8 @@ const TEMPLATE = path.join(
   __dirname,
   "../data/templates/typical-contract-ooo.docx",
 );
-const OUT_DIR = path.join(__dirname, "../data/exports");
+const OUT_DIR = path.join(__dirname, "../data/templates/out");
+const PDF_TPL = path.join(__dirname, "../data/templates/typical-contract-ooo.pdf");
 
 function score(c) {
   const f = [
@@ -124,7 +125,12 @@ function applyNumberAndDate(xml, contractNo, contractDate) {
 function replaceRedRequisitesOnly(xml, reqLineEscaped) {
   return xml.replace(/<w:r[^>]*>([\s\S]*?)<\/w:r>/g, (full, inner) => {
     if (!inner.includes("<w:t>реквизиты</w:t>")) return full;
-    if (!inner.includes('w:val="FF0000"')) return full;
+    if (
+      !inner.includes('w:val="FF0000"') &&
+      !inner.includes('w:val="2563EB"')
+    ) {
+      return full;
+    }
     return full.replace(
       /<w:t>реквизиты<\/w:t>/,
       `<w:t>${reqLineEscaped}</w:t>`,
@@ -237,7 +243,49 @@ function applyDocumentBody(xml, c, contractNo, contractDate) {
 
   console.log("Клиника:", c.name);
   console.log("Заполненность полей (из 12):", score(c));
-  console.log("Файл:", writtenPath);
+  console.log("DOCX:", writtenPath);
+
+  if (fs.existsSync(PDF_TPL)) {
+    const fontkit = require("@pdf-lib/fontkit");
+    const { PDFDocument, rgb } = require("pdf-lib");
+    const pdfDoc = await PDFDocument.load(fs.readFileSync(PDF_TPL), {
+      ignoreEncryption: true,
+    });
+    pdfDoc.registerFontkit(fontkit);
+    const fontsDir = path.join(__dirname, "../data/fonts");
+    const regular = await pdfDoc.embedFont(
+      fs.readFileSync(path.join(fontsDir, "NotoSans-Regular.ttf")),
+      { subset: true },
+    );
+    const form = pdfDoc.getForm();
+    const map = {
+      contract_number: contractNo,
+      contract_place: "г. Санкт-Петербург",
+      contract_date: contractDate,
+      client_name: orgNameForPreamble(c),
+      client_inn: c.inn || "—",
+      client_kpp: c.kpp || "",
+      client_ogrn: c.ogrn || "",
+      client_ceo: c.ceoName || "—",
+      client_email: c.email || "—",
+      client_address: c.legalAddress || "",
+      client_requisites: buildRequisitesLine(c),
+    };
+    for (const field of form.getFields()) {
+      const name = field.getName();
+      if (!name || map[name] == null) continue;
+      try {
+        form.getTextField(name).setText(String(map[name]));
+      } catch {
+        /* */
+      }
+    }
+    form.updateFieldAppearances(regular);
+    const pdfOut = path.join(OUT_DIR, `Тестовый-договор-${slug}.pdf`);
+    fs.writeFileSync(pdfOut, await pdfDoc.save());
+    console.log("PDF:", pdfOut);
+  }
+
   await prisma.$disconnect();
 })().catch((e) => {
   console.error(e);
