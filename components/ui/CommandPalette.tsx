@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useHotkey } from '@/lib/hooks/useHotkey'
 import { useUiDesign } from '@/lib/hooks/useUiDesign'
 import { Search } from 'lucide-react'
 import { orderPathById } from '@/lib/order-public-ref'
@@ -29,24 +28,6 @@ export function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
-
-  useHotkey({
-    key: 'k',
-    modifiers: ['ctrl'],
-    onTrigger: () => setOpen(true),
-    ignoreInInputs: false,
-  })
-
-  useHotkey({
-    key: 'Escape',
-    onTrigger: () => {
-      setOpen(false)
-      setQuery('')
-      setResults(null)
-    },
-    enabled: open,
-    ignoreInInputs: false,
-  })
 
   useEffect(() => {
     if (open) {
@@ -117,6 +98,12 @@ export function CommandPalette() {
   )
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setOpen(false)
+      setQuery('')
+      setResults(null)
+      return
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setSelectedIndex((i) => Math.min(i + 1, flatResults.length - 1))
@@ -140,7 +127,7 @@ export function CommandPalette() {
             ? 'input-elegant flex h-auto w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text-muted)] hover:border-[var(--text-muted)]'
             : `inline-flex h-8 w-full items-center gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)]`
         }
-        aria-label="Поиск (Ctrl+K)"
+        aria-label="Поиск"
       >
         {isHarmony ? (
           <Search className="h-[18px] w-[18px] shrink-0" aria-hidden />
@@ -152,15 +139,6 @@ export function CommandPalette() {
           </svg>
         )}
         <span className="flex-1 text-left text-xs sm:text-sm">Поиск...</span>
-        <kbd
-          className={
-            isHarmony
-              ? 'rounded border border-[var(--card-border)] bg-[var(--sidebar-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]'
-              : 'font-mono text-[10px] opacity-60'
-          }
-        >
-          ⌘K
-        </kbd>
       </button>
 
       <AnimatePresence>
@@ -220,10 +198,6 @@ export function CommandPalette() {
                           d="M4 12a8 8 0 018-8v8H4z"/>
                   </svg>
                 )}
-                <kbd className="text-[10px] font-mono text-[var(--text-muted)]
-                               border border-[var(--card-border)] rounded px-1 py-0.5">
-                  Esc
-                </kbd>
               </div>
 
               <div className="max-h-[60vh] overflow-y-auto py-2">
@@ -279,19 +253,6 @@ export function CommandPalette() {
                 )}
               </div>
 
-              {flatResults.length > 1 && (
-                <div className="flex items-center gap-3 px-4 py-2
-                                border-t border-[var(--card-border)]">
-                  <span className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
-                    <kbd className="border border-[var(--card-border)] rounded px-1">↑↓</kbd>
-                    навигация
-                  </span>
-                  <span className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
-                    <kbd className="border border-[var(--card-border)] rounded px-1">Enter</kbd>
-                    открыть
-                  </span>
-                </div>
-              )}
             </motion.div>
           </div>
         )}

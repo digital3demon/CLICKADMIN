@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderCorrectionToastStack } from "@/components/orders/OrderCorrectionToastStack";
 import { OrderBackgroundUploadToast } from "@/components/orders/OrderBackgroundUploadToast";
-import { useGlobalHotkeys } from "@/lib/hooks/useGlobalHotkeys";
 import { Sidebar } from "./Sidebar";
 
 const SIDEBAR_W_CLASSIC = "calc(100% / 7)";
@@ -45,7 +44,6 @@ type AppShellProps = {
  */
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
-  useGlobalHotkeys();
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 

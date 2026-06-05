@@ -58,16 +58,6 @@ export function Sidebar() {
   } | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [singleUserMode, setSingleUserMode] = useState(false);
-  const [shellShort, setShellShort] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-height: 560px)");
-    const apply = () => setShellShort(mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
 
   const loadSessionUser = useCallback(async (signal?: AbortSignal) => {
     const res = await fetch("/api/auth/session", {
@@ -251,17 +241,6 @@ export function Sidebar() {
             }}
           >
             <span className={isHarmony ? "" : "flex-1 text-center"}>Новый заказ</span>
-            <kbd
-              className={`hidden shrink-0 items-center gap-0.5 text-[10px] font-sans font-medium tracking-normal lg:inline-flex ${
-                isHarmony
-                  ? "rounded-md bg-white/20 px-1.5 py-0.5 text-white/90"
-                  : "ml-auto font-mono normal-case text-white/70 opacity-60"
-              }`}
-              aria-hidden
-            >
-              <span>⌘</span>
-              <span>N</span>
-            </kbd>
           </button>
         )}
       </div>
@@ -298,29 +277,23 @@ export function Sidebar() {
       </div>
 
       <div
-        className={`mt-auto shrink-0 border-t border-[var(--sidebar-border)] ${
-          isHarmony
-            ? "px-3 py-2"
-            : "px-4 py-3 shell-short:px-3 shell-short:py-2 dark:bg-black/25"
+        className={`mt-auto shrink-0 border-t border-[var(--sidebar-border)] px-3 py-2 ${
+          isHarmony ? "" : "dark:bg-black/25"
         }`}
       >
-        <div
-          className={
-            isHarmony
-              ? "flex items-center gap-1.5"
-              : "flex items-start gap-2 shell-short:gap-1.5"
-          }
-        >
+        <div className="flex items-center gap-1.5">
           {sessionUser ? (
             <>
               <Link
                 href="/directory/profile"
-                className={
-                  isHarmony
-                    ? "flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--sidebar-border)] bg-black/10 text-base outline-offset-2 transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)] dark:bg-white/10"
-                    : "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--sidebar-border)] bg-black/10 text-xl outline-offset-2 transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)] dark:bg-white/10"
+                className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--sidebar-border)] bg-black/10 text-base outline-offset-2 transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)] dark:bg-white/10"
+                title={
+                  singleUserMode
+                    ? "Настройка профиля · одна рабочая станция, без входа"
+                    : isDemo
+                      ? "Настройка профиля · демо-режим"
+                      : "Настройка профиля"
                 }
-                title="Настройка профиля"
                 aria-label="Настройка профиля"
               >
                 {sessionUser.avatarCustomUploadedAt ? (
@@ -338,76 +311,43 @@ export function Sidebar() {
                   <span aria-hidden>{profileAvatarEmoji(sessionUser.avatarPresetId)}</span>
                 )}
               </Link>
-              <div
-                className={
-                  isHarmony
-                    ? "min-w-0 flex-1 leading-tight"
-                    : "min-w-0 flex-1 px-1 text-xs leading-snug text-[var(--sidebar-text)] shell-short:text-[10px]"
-                }
-              >
+              <div className="min-w-0 flex-1 leading-tight">
                 <div
-                  className={
-                    isHarmony
-                      ? "truncate text-xs font-medium text-[var(--sidebar-text-strong)]"
-                      : "font-medium text-[var(--sidebar-text-strong)]"
-                  }
+                  className="truncate text-xs font-medium text-[var(--sidebar-text-strong)]"
                   title={sessionUser.displayName}
                 >
                   {sessionUser.displayName}
                 </div>
                 <div
-                  className={
-                    isHarmony
-                      ? "truncate text-[10px] text-[var(--text-muted)]"
-                      : "truncate opacity-90"
-                  }
+                  className="truncate text-[10px] text-[var(--text-muted)]"
                   title={sessionUser.email}
                 >
                   {sessionUser.email}
                 </div>
-                {!isHarmony && singleUserMode ? (
-                  <div className="mt-1 text-[10px] text-[var(--sidebar-text)] opacity-80">
-                    Одна рабочая станция, без входа
-                  </div>
-                ) : null}
-                {!isHarmony && isDemo ? (
-                  <div className="mt-1 rounded-md border border-amber-400/50 bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-950 dark:text-amber-100">
-                    Демо: отдельная база. «Выйти» — сброс демо к исходным данным.
-                  </div>
-                ) : null}
               </div>
             </>
           ) : (
             <div className="min-w-0 flex-1" />
           )}
-          {isHarmony ? (
-            <div className="flex shrink-0 items-center gap-0.5">
-              <ThemeToggle compact />
+          <div className="flex shrink-0 items-center gap-0.5">
+            <ThemeToggle compact />
+            {singleUserMode ? null : (
               <button
                 type="button"
-                title={isDemo ? "Выйти из демо и сбросить демо-базу" : "Выйти"}
+                title={
+                  isDemo
+                    ? "Выйти из демо и сбросить демо-базу к исходным данным"
+                    : "Выйти"
+                }
                 aria-label={isDemo ? "Выйти из демо" : "Выйти"}
                 onClick={() => void logout()}
-                className="rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
+                className="rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] dark:hover:bg-white/10"
               >
                 <LogOut className="h-4 w-4" aria-hidden />
               </button>
-            </div>
-          ) : (
-            <ThemeToggle compact={shellShort} />
-          )}
+            )}
+          </div>
         </div>
-        {singleUserMode ? null : isHarmony ? null : (
-          <button
-            type="button"
-            title={isDemo ? "Выйти из демо и сбросить демо-базу" : "Выйти"}
-            aria-label={isDemo ? "Выйти из демо" : "Выйти"}
-            onClick={() => void logout()}
-            className="mt-2 w-full rounded-md px-2 py-2.5 text-left text-sm font-medium text-[var(--sidebar-text-strong)] transition-colors hover:bg-black/[0.06] dark:hover:bg-white/10"
-          >
-            {isDemo ? "Выйти из демо" : "Выйти"}
-          </button>
-        )}
       </div>
     </div>
   );

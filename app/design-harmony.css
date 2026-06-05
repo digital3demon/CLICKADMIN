@@ -280,39 +280,22 @@ html[data-ui="harmony"] .orders-harmony-unified-body .orders-harmony-table-shell
   border-top: 1px solid var(--card-border);
 }
 
-html[data-ui="harmony"] .orders-list-mirror-thead {
-  display: none !important;
+/* Шапка в toolbar (mirror), не sticky на <thead> — иначе «уезжает» между строками */
+html[data-ui="harmony"] .orders-harmony-unified-toolbar .orders-list-mirror-thead {
+  margin-inline: -1rem;
+  width: calc(100% + 2rem);
+  max-width: none;
+  border-radius: 0;
+  border-width: 1px 0 0;
+  border-color: var(--card-border);
+  box-shadow: none;
+  background: var(--surface-subtle);
 }
 
-/* Как в отгрузках: на md+ шапка таблицы в потоке страницы, не дубль в toolbar */
 @media (min-width: 768px) {
   html[data-ui="harmony"] .orders-harmony-table-shell {
     overflow-x: visible;
     overflow-y: visible;
-  }
-
-  html[data-ui="harmony"] .orders-harmony-table-shell thead.orders-list-thead {
-    display: table-header-group;
-    position: sticky;
-    top: var(--sticky-list-toolbar-height, 0px);
-    z-index: 30;
-    width: auto;
-    height: auto;
-    margin: 0;
-    padding: 0;
-    overflow: visible;
-    clip: auto;
-    clip-path: none;
-    white-space: normal;
-    border-width: 0;
-  }
-
-  html[data-ui="harmony"] .orders-harmony-table-shell thead.orders-list-thead tr {
-    display: table-row;
-  }
-
-  html[data-ui="harmony"] .orders-harmony-table-shell thead.orders-list-thead th {
-    position: static;
   }
 }
 

@@ -677,7 +677,7 @@ export default async function OrdersPage({
       <div className="orders-harmony-table-shell w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] print:max-w-none print:w-full">
         <table className={ORDERS_TABLE_CLASS}>
           <OrdersTableColGroup />
-          <thead className="orders-list-thead sr-only">
+          <thead className="sr-only">
             <OrdersTableHeaderRow isDemo={isDemo} />
           </thead>
           <tbody>

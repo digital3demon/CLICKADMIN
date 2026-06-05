@@ -35,7 +35,7 @@ export function OrdersListFiltersBar({
     <div
       className={
         isHarmony
-          ? 'no-print sticky top-0 z-30 w-full min-w-0 border-b border-[var(--card-border)] bg-[var(--card-bg)] p-4 sticky-shadow'
+          ? 'no-print w-full min-w-0 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 card-shadow'
           : 'no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]'
       }
     >
