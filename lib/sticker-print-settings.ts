@@ -1,5 +1,3 @@
-export const STICKER_PRINT_SETTINGS_KEY = "stickerPrintSettingsV1";
-
 export const STICKER_PRINT_SIZE_LIMITS = {
   widthMin: 25,
   widthMax: 120,

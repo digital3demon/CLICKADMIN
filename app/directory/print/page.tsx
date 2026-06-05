@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { UserRole } from "@prisma/client";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { PrintTenantSettings } from "@/components/directory/PrintTenantSettings";
@@ -15,13 +16,16 @@ function canEditPrintSettings(role: UserRole | undefined): boolean {
 }
 
 export default async function DirectoryPrintPage() {
-  const { session } = await getSessionWithModuleAccess();
+  const { session, access } = await getSessionWithModuleAccess();
+  if (!session) redirect("/login?next=/directory/print");
+  if (access?.CONFIG_PRINT !== true) redirect("/directory");
+
   return (
     <ModuleFrame
       title="Печать"
-      description="Настройки печатных макетов: этикетки отгрузки, размеры под термопринтер и предпросмотр."
+      description="Шаблоны этикеток отгрузки: блоки, шрифты, пресеты для всей организации."
     >
-      <PrintTenantSettings canEdit={canEditPrintSettings(session?.role)} />
+      <PrintTenantSettings canEdit={canEditPrintSettings(session.role)} />
       <p className="mt-8 text-sm">
         <Link
           href="/directory"

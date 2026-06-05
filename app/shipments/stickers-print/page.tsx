@@ -18,7 +18,7 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSiteOrigin } from "@/lib/site-origin-server";
 import { prisma } from "@/lib/prisma";
-import { getTenantStickerPrintSettings } from "@/lib/sticker-print-settings.server";
+import { getTenantActiveStickerPreset } from "@/lib/sticker-print-settings.server";
 
 export const dynamic = "force-dynamic";
 
@@ -117,7 +117,7 @@ export default async function ShipmentsStickersPrintPage({
   }
 
   const { orders, error } = await loadOrdersForShipmentsStickersPrint(ordersDb, tenantId, sp);
-  const printSettings = await getTenantStickerPrintSettings(tenantId);
+  const printPreset = await getTenantActiveStickerPreset(tenantId);
 
   if (error) {
     return (
@@ -212,8 +212,7 @@ export default async function ShipmentsStickersPrintPage({
       <ShipmentsStickersPrintToolbar
         rows={rows}
         backHref={back}
-        widthMm={printSettings.widthMm}
-        heightMm={printSettings.heightMm}
+        preset={printPreset}
         autoPrint={sp.print === "1"}
       />
       {!originForQr ? (

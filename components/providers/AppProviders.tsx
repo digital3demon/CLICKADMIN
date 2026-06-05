@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { UiDesignProvider } from "@/components/providers/UiDesignProvider";
 import { NewOrderPanelProvider } from "@/components/orders/new-order-panel-context";
 
 const NewOrderPanelLazy = dynamic(
@@ -16,10 +17,12 @@ const NewOrderPanelLazy = dynamic(
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
-      <NewOrderPanelProvider>
-        {children}
-        <NewOrderPanelLazy />
-      </NewOrderPanelProvider>
+      <UiDesignProvider>
+        <NewOrderPanelProvider>
+          {children}
+          <NewOrderPanelLazy />
+        </NewOrderPanelProvider>
+      </UiDesignProvider>
     </ThemeProvider>
   );
 }

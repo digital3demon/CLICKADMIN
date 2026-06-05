@@ -4,9 +4,10 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
 import {
-  normalizeStickerPrintSettings,
+  normalizeStickerPrintSettingsV2,
   STICKER_PRINT_SETTINGS_KEY,
-} from "@/lib/sticker-print-settings";
+  type StickerPrintSettingsV2,
+} from "@/lib/sticker-template";
 import { getTenantStickerPrintSettings } from "@/lib/sticker-print-settings.server";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ export async function PATCH(req: Request) {
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
-  const settings = normalizeStickerPrintSettings(body);
+  const settings: StickerPrintSettingsV2 = normalizeStickerPrintSettingsV2(body);
   const tenantId = await requireSessionTenantId(s);
   await (await getPrisma()).tenantClientState.upsert({
     where: {

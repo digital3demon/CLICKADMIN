@@ -1,39 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
 import { ShipmentsStickersPrintButton } from "@/components/shipments/ShipmentsStickersPrintButton";
 import {
   ShipmentsStickersSheet,
   type StickerRow,
 } from "@/components/shipments/ShipmentsStickersSheet";
+import type { StickerTemplatePreset } from "@/lib/sticker-template";
 
 export function ShipmentsStickersPrintToolbar({
   rows,
   backHref,
-  widthMm,
-  heightMm,
+  preset,
   autoPrint = false,
 }: {
   rows: StickerRow[];
   backHref: string;
-  widthMm: number;
-  heightMm: number;
+  preset: StickerTemplatePreset;
   autoPrint?: boolean;
 }) {
-  const hint = useMemo(() => {
-    const r = widthMm / heightMm;
-    if (r >= 1.32) {
-      return "При таком соотношении сторон врач и пациент выводятся в одну строку.";
-    }
-    return "Внизу слева компактный QR и «Отсканируй меня», справа — крупный логотип.";
-  }, [widthMm, heightMm]);
-
-  const layoutNote = useMemo(() => {
-    const r = widthMm / heightMm;
-    const wide = r >= 1.32;
-    return `Текущий макет: ${widthMm}×${heightMm} мм${wide ? " · врач и пациент в ряд" : ""}.`;
-  }, [widthMm, heightMm]);
+  const { widthMm, heightMm, name } = preset;
 
   return (
     <>
@@ -52,9 +38,10 @@ export function ShipmentsStickersPrintToolbar({
           Настройки печати
         </Link>
       </div>
-      <p className="no-print mb-2 text-xs text-[var(--text-secondary)]">{layoutNote}</p>
-      <p className="no-print mb-3 max-w-2xl text-xs text-[var(--text-secondary)]">{hint}</p>
-      <ShipmentsStickersSheet rows={rows} widthMm={widthMm} heightMm={heightMm} />
+      <p className="no-print mb-3 max-w-2xl text-xs text-[var(--text-secondary)]">
+        Макет: {name} · {widthMm}×{heightMm} мм. В диалоге печати — масштаб 100 %.
+      </p>
+      <ShipmentsStickersSheet rows={rows} preset={preset} />
     </>
   );
 }

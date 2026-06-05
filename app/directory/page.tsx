@@ -29,6 +29,10 @@ export default async function DirectoryHubPage() {
   const showOrdersImportExport = a?.CONFIG_ORDERS_IMPORT_EXPORT === true;
   const showContractTemplate = a?.CONFIG_CONTRACT_TEMPLATE === true;
   const showMail = session?.role === "OWNER";
+  const showPrint = a?.CONFIG_PRINT === true;
+  const showAppearance = a?.CONFIG_APPEARANCE === true;
+  const showAccessMatrix =
+    session?.role === "OWNER" && !isSingleUserPortable();
 
   return (
     <ModuleFrame
@@ -146,7 +150,7 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
-        {session ? (
+        {showPrint ? (
           <Link
             href="/directory/print"
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
@@ -155,7 +159,7 @@ export default async function DirectoryHubPage() {
               Печать
             </h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Размер этикетки отгрузки под термопринтер и предпросмотр макета.
+              Шаблоны этикеток: блоки, шрифты, пресеты для всей организации.
             </p>
           </Link>
         ) : null}
@@ -200,7 +204,7 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
-        {session?.role === "OWNER" && !isSingleUserPortable() ? (
+        {showAccessMatrix ? (
           <Link
             href="/directory/access"
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"

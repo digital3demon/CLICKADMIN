@@ -50,6 +50,8 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CONFIG_COSTING",
   "CONFIG_USERS",
   "CONFIG_USER_INVITES",
+  "CONFIG_PRINT",
+  "CONFIG_APPEARANCE",
 ];
 
 export const APP_MODULE_LABELS: Record<AppModule, string> = {
@@ -90,6 +92,8 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CONFIG_COSTING: "Просчёт работ",
   CONFIG_USERS: "Пользователи",
   CONFIG_USER_INVITES: "Приглашения пользователей",
+  CONFIG_PRINT: "Конфиг: печать (этикетки)",
+  CONFIG_APPEARANCE: "Конфиг: оформление интерфейса",
 };
 
 /** Все роли, кроме владельца (у владельца по определению полный доступ). */
@@ -195,6 +199,8 @@ export function defaultModuleAllowed(
     case "CONFIG_COURIERS":
     case "CONFIG_ORDERS_IMPORT_EXPORT":
     case "CONFIG_CONTRACT_TEMPLATE":
+    case "CONFIG_PRINT":
+    case "CONFIG_APPEARANCE":
       return true;
     case "CONFIG_PRICING_CORRECTION":
       return false;

@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   DEFAULT_UI_DESIGN,
-  isUiDesign,
   writeUiDesignToLocalStorage,
   type UiDesign,
 } from "@/lib/ui-design";
@@ -30,26 +29,6 @@ export function DesignAppearanceClient() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const res = await fetch("/api/me/ui-design", {
-          cache: "no-store",
-          credentials: "include",
-        });
-        if (!res.ok) return;
-        const j = (await res.json()) as { design?: unknown };
-        const d =
-          typeof j.design === "string" ? j.design : null;
-        if (isUiDesign(d)) {
-          writeUiDesignToLocalStorage(d);
-        }
-      } catch {
-        /* offline */
-      }
-    })();
-  }, []);
-
   const apply = useCallback(
     async (design: UiDesign) => {
       if (design === active) return;
@@ -71,7 +50,8 @@ export function DesignAppearanceClient() {
           return;
         }
         writeUiDesignToLocalStorage(design);
-        window.location.reload();
+        setPending(null);
+        setBusy(false);
       } catch {
         setError("Сеть недоступна");
         setPending(null);
@@ -84,8 +64,8 @@ export function DesignAppearanceClient() {
   return (
     <div className="max-w-xl space-y-6">
       <p className="text-sm text-[var(--text-secondary)]">
-        Выбор сохраняется для вашего пользователя и применяется после перезагрузки
-        страницы. Старый дизайн остаётся доступен в любой момент.
+        Выбор сохраняется для вашего пользователя и применяется сразу на всех
+        страницах. Старый дизайн остаётся доступен в любой момент.
       </p>
 
       <div

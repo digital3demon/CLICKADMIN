@@ -1,10 +1,15 @@
 import { getPrisma } from "@/lib/get-prisma";
 import {
-  normalizeStickerPrintSettings,
+  getActiveStickerPreset,
+  normalizeStickerPrintSettingsV2,
   STICKER_PRINT_SETTINGS_KEY,
-} from "@/lib/sticker-print-settings";
+  type StickerPrintSettingsV2,
+  type StickerTemplatePreset,
+} from "@/lib/sticker-template";
 
-export async function getTenantStickerPrintSettings(tenantId: string) {
+export async function getTenantStickerPrintSettings(
+  tenantId: string,
+): Promise<StickerPrintSettingsV2> {
   const row = await (await getPrisma()).tenantClientState.findUnique({
     where: {
       tenantId_key: {
@@ -14,5 +19,12 @@ export async function getTenantStickerPrintSettings(tenantId: string) {
     },
     select: { value: true },
   });
-  return normalizeStickerPrintSettings(row?.value ?? null);
+  return normalizeStickerPrintSettingsV2(row?.value ?? null);
+}
+
+export async function getTenantActiveStickerPreset(
+  tenantId: string,
+): Promise<StickerTemplatePreset> {
+  const settings = await getTenantStickerPrintSettings(tenantId);
+  return getActiveStickerPreset(settings);
 }

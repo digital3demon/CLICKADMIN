@@ -5,6 +5,7 @@ import {
   ALL_APP_MODULES,
   defaultModuleAllowed,
 } from "@/lib/role-module-defaults";
+import { hasDirectoryHubAccess } from "@/lib/role-module-nav";
 import { clientsBranchModuleForMethod, getModuleForPathname } from "@/lib/role-module-paths";
 
 /**
@@ -56,6 +57,9 @@ export function isPathAllowedByModuleAccess(
   access: Record<AppModule, boolean>,
   method?: string,
 ): boolean {
+  if (pathname === "/directory") {
+    return hasDirectoryHubAccess(access);
+  }
   if (pathname === "/directory/kanban-boards" || pathname.startsWith("/directory/kanban-boards/")) {
     return (
       access.CONFIG_KANBAN_BOARDS === true ||
