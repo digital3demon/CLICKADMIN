@@ -4,14 +4,14 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import type { AppModule, UserRole } from "@prisma/client";
+import type { UserRole } from "@prisma/client";
 import { canCreateOrders } from "@/lib/auth/permissions";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import type { OrderDraftSnapshot } from "@/lib/order-draft-snapshot";
 import { isDraftWorthy } from "@/lib/order-draft-snapshot";
 import {
@@ -79,47 +79,15 @@ function newId() {
 }
 
 export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
+  const { user, ready: createAccessReady } = useSessionUser();
   const [panels, setPanels] = useState<NewOrderPanelItem[]>([]);
-  const [canCreate, setCanCreate] = useState(false);
-  const [createAccessReady, setCreateAccessReady] = useState(false);
-  const [sessionRole, setSessionRole] = useState<UserRole | null>(null);
   const gettersRef = useRef(new Map<string, PanelSnapshotGetter>());
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/auth/session", { cache: "no-store" });
-        const j = (await res.json()) as {
-          user?: {
-            role?: UserRole;
-            actualRole?: UserRole;
-            moduleAccess?: Record<string, boolean> | null;
-          } | null;
-        };
-        if (cancelled) return;
-        const role = j.user?.role ?? null;
-        const actualRole = j.user?.actualRole ?? role;
-        setSessionRole(role);
-        const moduleAccess =
-          (j.user?.moduleAccess as Partial<Record<AppModule, boolean>> | null | undefined) ??
-          null;
-        setCanCreate(
-          actualRole === "OWNER" || (role ? canCreateOrders(role, moduleAccess) : false),
-        );
-      } catch {
-        if (!cancelled) {
-          setCanCreate(false);
-          setSessionRole(null);
-        }
-      } finally {
-        if (!cancelled) setCreateAccessReady(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const sessionRole = user?.role ?? null;
+  const canCreate =
+    user != null &&
+    (user.actualRole === "OWNER" ||
+      canCreateOrders(user.role, user.moduleAccess));
 
   const registerPanelSnapshot = useCallback(
     (panelId: string, getter: PanelSnapshotGetter) => {

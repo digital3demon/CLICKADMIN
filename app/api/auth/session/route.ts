@@ -16,48 +16,36 @@ export async function GET() {
     return NextResponse.json({ user: null, singleUser: isSingleUserPortable() });
   }
 
-  let avatarPresetId: string | null = null;
-  let mentionHandle: string | null = null;
-  let avatarCustomUploadedAt: string | null = null;
-  /** Актуальное имя из БД; JWT (`s.name`) при сохранении профиля не переписывается. */
-  let displayNameFromDb: string | null = null;
-  let tenantDatabaseEnabled = false;
-  let tenantDatabaseReady = false;
-  let kanbanAdminMentionTag: string | null = null;
-  try {
-    const db = await getPrisma();
-    const row = await db.user.findUnique({
-      where: { id: s.sub },
-      select: {
-        displayName: true,
-        avatarPresetId: true,
-        mentionHandle: true,
-        avatarCustomUploadedAt: true,
-      },
-    });
-    displayNameFromDb = row?.displayName?.trim() ? row.displayName.trim() : null;
-    avatarPresetId = row?.avatarPresetId ?? null;
-    mentionHandle = row?.mentionHandle ?? null;
-    avatarCustomUploadedAt = row?.avatarCustomUploadedAt?.toISOString() ?? null;
-    const tid = await getTenantIdForSession(s);
-    if (tid) {
-      const tenantRow = await db.tenant.findUnique({
-        where: { id: tid },
-        select: { kanbanAdminMentionTag: true },
-      });
-      const raw = tenantRow?.kanbanAdminMentionTag?.trim();
-      kanbanAdminMentionTag = raw ? raw : null;
-    }
-  } catch {
-    /* prisma / колонки — игнорируем, сессия всё равно валидна */
-  }
-  const routing = await getSessionTenantRouting(s).catch(() => null);
-  if (routing) {
-    tenantDatabaseEnabled = routing.tenantDatabaseEnabled;
-    tenantDatabaseReady = routing.tenantDatabaseReady;
-  }
+  const db = await getPrisma();
+  const tid = s.tid ?? (await getTenantIdForSession(s).catch(() => null));
 
-  const mod = await getEffectiveModuleAccess(s.tid, s.role);
+  const [row, routing, mod, tenantRow] = await Promise.all([
+    db.user
+      .findUnique({
+        where: { id: s.sub },
+        select: {
+          displayName: true,
+          avatarPresetId: true,
+          mentionHandle: true,
+          avatarCustomUploadedAt: true,
+        },
+      })
+      .catch(() => null),
+    getSessionTenantRouting(s).catch(() => null),
+    getEffectiveModuleAccess(s.tid, s.role),
+    tid
+      ? db.tenant
+          .findUnique({
+            where: { id: tid },
+            select: { kanbanAdminMentionTag: true },
+          })
+          .catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  const displayNameFromDb = row?.displayName?.trim() ? row.displayName.trim() : null;
+  const kanbanAdminMentionTag = tenantRow?.kanbanAdminMentionTag?.trim() || null;
+
   return NextResponse.json({
     user: {
       id: s.sub,
@@ -66,11 +54,11 @@ export async function GET() {
       role: s.role,
       actualRole: s.actualRole ?? s.role,
       viewAsRole: s.actualRole ? s.role : null,
-      avatarPresetId,
-      mentionHandle,
-      avatarCustomUploadedAt,
-      tenantDatabaseEnabled,
-      tenantDatabaseReady,
+      avatarPresetId: row?.avatarPresetId ?? null,
+      mentionHandle: row?.mentionHandle ?? null,
+      avatarCustomUploadedAt: row?.avatarCustomUploadedAt?.toISOString() ?? null,
+      tenantDatabaseEnabled: routing?.tenantDatabaseEnabled ?? false,
+      tenantDatabaseReady: routing?.tenantDatabaseReady ?? false,
       moduleAccess: moduleAccessForResponse(mod),
     },
     tenant: {

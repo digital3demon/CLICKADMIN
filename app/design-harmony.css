@@ -173,9 +173,45 @@ html[data-ui="harmony"] .harmony-status-pill--red {
 }
 
 html[data-ui="harmony"] .harmony-status-pill--gray {
-  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 12%, var(--card-bg));
   color: var(--text-secondary);
-  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--stone {
+  background: color-mix(in srgb, var(--text-muted) 16%, var(--card-bg));
+  color: var(--text-body);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 24%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--violet {
+  background: color-mix(in srgb, #7c3aed 11%, var(--card-bg));
+  color: color-mix(in srgb, #6d28d9 72%, var(--text-body));
+  border: 1px solid color-mix(in srgb, #7c3aed 20%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--teal {
+  background: color-mix(in srgb, #0d9488 11%, var(--card-bg));
+  color: color-mix(in srgb, #0f766e 70%, var(--text-body));
+  border: 1px solid color-mix(in srgb, #0d9488 20%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--cyan {
+  background: color-mix(in srgb, #0891b2 11%, var(--card-bg));
+  color: color-mix(in srgb, #0e7490 70%, var(--text-body));
+  border: 1px solid color-mix(in srgb, #0891b2 20%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--indigo {
+  background: color-mix(in srgb, #4f46e5 11%, var(--card-bg));
+  color: color-mix(in srgb, #4338ca 72%, var(--text-body));
+  border: 1px solid color-mix(in srgb, #4f46e5 20%, transparent);
+}
+
+html[data-ui="harmony"] .harmony-status-pill--purple {
+  background: color-mix(in srgb, #9333ea 11%, var(--card-bg));
+  color: color-mix(in srgb, #7e22ce 72%, var(--text-body));
+  border: 1px solid color-mix(in srgb, #9333ea 20%, transparent);
 }
 
 html[data-ui="harmony"] .harmony-status-pill--red-solid {

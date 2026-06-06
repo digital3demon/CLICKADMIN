@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import type { UserRole } from "@prisma/client";
+import type { PayrollUserTrack, UserRole } from "@prisma/client";
 import {
   ALL_USER_ROLES,
   INVITABLE_ROLES,
   USER_ROLE_LABELS,
 } from "@/lib/user-role-labels";
+import {
+  PAYROLL_USER_TRACK_LABELS,
+  PAYROLL_USER_TRACK_VALUES,
+} from "@/lib/payroll-tracks";
 
 export type UserDirectoryRow = {
   id: string;
@@ -15,6 +19,7 @@ export type UserDirectoryRow = {
   phone: string | null;
   displayName: string;
   role: UserRole;
+  payrollTrack: PayrollUserTrack | null;
   createdAt: string;
   lastLoginAt: string | null;
   isActive: boolean;
@@ -71,13 +76,16 @@ export function UsersDirectoryClient({
     id: string;
     displayName: string;
     role: UserRole;
+    payrollTrack: PayrollUserTrack | null;
   } | null>(null);
   const [rolePick, setRolePick] = useState<UserRole>("ADMINISTRATOR");
+  const [trackPick, setTrackPick] = useState<PayrollUserTrack>("DIGITAL");
 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [inviteByEmail, setInviteByEmail] = useState(false);
   const [role, setRole] = useState<UserRole>("ADMINISTRATOR");
+  const [inviteTrack, setInviteTrack] = useState<PayrollUserTrack>("DIGITAL");
 
   const reload = useCallback(async () => {
     const res = await fetch("/api/users", { cache: "no-store" });
@@ -102,16 +110,24 @@ export function UsersDirectoryClient({
   }, []);
 
   const patchUserRole = useCallback(
-    async (id: string, nextRole: UserRole): Promise<boolean> => {
+    async (
+      id: string,
+      patch: { role?: UserRole; payrollTrack?: PayrollUserTrack | null },
+    ): Promise<boolean> => {
       setError(null);
       setOkMsg(null);
       setRoleBusyId(id);
       try {
+        const body: { role?: UserRole; payrollTrack?: PayrollUserTrack | null } =
+          {};
+        if (patch.role !== undefined) body.role = patch.role;
+        if (patch.payrollTrack !== undefined) body.payrollTrack = patch.payrollTrack;
+        if (Object.keys(body).length === 0) return true;
         const res = await fetch(`/api/users/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ role: nextRole }),
+          body: JSON.stringify(body),
         });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) {
@@ -189,7 +205,9 @@ export function UsersDirectoryClient({
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(
-          inviteByEmail ? { email, role } : { phone, role },
+          inviteByEmail
+            ? { email, role, payrollTrack: role === "USER" ? inviteTrack : null }
+            : { phone, role, payrollTrack: role === "USER" ? inviteTrack : null },
         ),
       });
       const j = (await res.json().catch(() => ({}))) as {
@@ -224,6 +242,7 @@ export function UsersDirectoryClient({
       setEmail("");
       setPhone("");
       setRole("ADMINISTRATOR");
+      setInviteTrack("DIGITAL");
       setInviteOpen(false);
       await reload();
     } catch {
@@ -231,7 +250,7 @@ export function UsersDirectoryClient({
     } finally {
       setBusy(false);
     }
-  }, [email, phone, inviteByEmail, reload, role]);
+  }, [email, phone, inviteByEmail, inviteTrack, reload, role]);
 
   return (
     <div>
@@ -296,6 +315,11 @@ export function UsersDirectoryClient({
                     <span className="font-medium text-[var(--app-text)]">
                       {USER_ROLE_LABELS[u.role]}
                     </span>
+                    {u.role === "USER" && u.payrollTrack ? (
+                      <span className="text-xs text-[var(--text-muted)]">
+                        {PAYROLL_USER_TRACK_LABELS[u.payrollTrack]}
+                      </span>
+                    ) : null}
                     {canChangeUserRoles ? (
                       <button
                         type="button"
@@ -305,10 +329,12 @@ export function UsersDirectoryClient({
                           setError(null);
                           setOkMsg(null);
                           setRolePick(u.role);
+                          setTrackPick(u.payrollTrack ?? "DIGITAL");
                           setRoleModal({
                             id: u.id,
                             displayName: u.displayName,
                             role: u.role,
+                            payrollTrack: u.payrollTrack,
                           });
                         }}
                       >
@@ -423,9 +449,26 @@ export function UsersDirectoryClient({
                 ))}
               </select>
             </label>
+            {rolePick === "USER" ? (
+              <label className="mt-3 block text-sm font-medium text-[var(--text-body)]">
+                Направление (для ФОТ)
+                <select
+                  className={inputClass}
+                  value={trackPick}
+                  disabled={roleBusyId === roleModal.id}
+                  onChange={(e) => setTrackPick(e.target.value as PayrollUserTrack)}
+                >
+                  {PAYROLL_USER_TRACK_VALUES.map((track) => (
+                    <option key={track} value={track}>
+                      {PAYROLL_USER_TRACK_LABELS[track]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <p className="mt-3 text-xs leading-relaxed text-[var(--text-muted)]">
-              Кнопка «Сменить роль» подтверждает изменение. Права доступа обновятся
-              сразу после успешного ответа сервера.
+              Для роли «Пользователь» укажите направление: от него зависит набор плашек
+              в блоке «Что сделано».
             </p>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
@@ -439,17 +482,34 @@ export function UsersDirectoryClient({
               <button
                 type="button"
                 disabled={
-                  roleBusyId === roleModal.id || rolePick === roleModal.role
+                  roleBusyId === roleModal.id ||
+                  (rolePick === roleModal.role &&
+                    (rolePick !== "USER" ||
+                      trackPick === (roleModal.payrollTrack ?? "DIGITAL")))
                 }
                 onClick={() => {
                   void (async () => {
-                    const ok = await patchUserRole(roleModal.id, rolePick);
+                    const roleChanged = rolePick !== roleModal.role;
+                    const trackChanged =
+                      rolePick === "USER" &&
+                      trackPick !== (roleModal.payrollTrack ?? "DIGITAL");
+                    const patch: {
+                      role?: UserRole;
+                      payrollTrack?: PayrollUserTrack | null;
+                    } = {};
+                    if (roleChanged) patch.role = rolePick;
+                    if (rolePick === "USER" && (trackChanged || roleChanged)) {
+                      patch.payrollTrack = trackPick;
+                    } else if (roleChanged && rolePick !== "USER") {
+                      patch.payrollTrack = null;
+                    }
+                    const ok = await patchUserRole(roleModal.id, patch);
                     if (ok) setRoleModal(null);
                   })();
                 }}
                 className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
               >
-                {roleBusyId === roleModal.id ? "Сохранение…" : "Сменить роль"}
+                {roleBusyId === roleModal.id ? "Сохранение…" : "Сохранить"}
               </button>
             </div>
           </div>
@@ -535,6 +595,22 @@ export function UsersDirectoryClient({
                 ))}
               </select>
             </label>
+            {role === "USER" ? (
+              <label className="mt-3 block text-sm font-medium text-[var(--text-body)]">
+                Направление (для ФОТ)
+                <select
+                  className={inputClass}
+                  value={inviteTrack}
+                  onChange={(e) => setInviteTrack(e.target.value as PayrollUserTrack)}
+                >
+                  {PAYROLL_USER_TRACK_VALUES.map((track) => (
+                    <option key={track} value={track}>
+                      {PAYROLL_USER_TRACK_LABELS[track]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <div className="mt-5 flex justify-end gap-2">
               <button

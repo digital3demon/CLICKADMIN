@@ -5,6 +5,7 @@ import { AppProviders } from "@/components/providers/AppProviders";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { fontBody, fontDisplay } from "@/lib/app-fonts";
+import { getClientSessionBootstrap } from "@/lib/auth/client-session-bootstrap.server";
 import { THEME_BOOTSTRAP_INLINE_SCRIPT } from "@/lib/theme-storage";
 import { UI_DESIGN_BOOTSTRAP_INLINE_SCRIPT } from "@/lib/ui-design";
 import "./globals.css";
@@ -39,6 +40,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const htmlClassName = [fontBody.variable, fontDisplay.variable].join(" ");
+  const sessionBootstrap = await getClientSessionBootstrap();
 
   return (
     <html
@@ -55,7 +57,7 @@ export default async function RootLayout({
         />
       </head>
       <body className={`${fontBody.className} antialiased`}>
-        <AppProviders>
+        <AppProviders sessionBootstrap={sessionBootstrap}>
           <ActiveUserGate />
           <AppShell>{children}</AppShell>
           <ToastProvider />

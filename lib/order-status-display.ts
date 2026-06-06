@@ -14,25 +14,25 @@ interface StatusDisplay {
 
 const LAB_STATUS_BADGE_VARIANT: Record<LabWorkStatus, BadgeVariant> = {
   TO_SCAN: 'gray',
-  TO_EXECUTION: 'blue',
+  TO_EXECUTION: 'gray',
   APPROVAL: 'purple',
-  PRODUCTION: 'yellow',
+  PRODUCTION: 'default',
   ASSEMBLY: 'green',
   PROCESSING: 'blue',
   MANUAL: 'purple',
   TO_REVIEW: 'purple',
-  TO_ADMINS: 'yellow',
+  TO_ADMINS: 'green',
 }
 
 /** Колонки воронки лаборатории (как в Kaiten / CRM-канбане) → цвет. */
 const KAITEN_COLUMN_DISPLAY: Record<string, StatusDisplay> = (() => {
   const map: Record<string, StatusDisplay> = {
-    Новые: { variant: 'blue' },
-    'В работе': { variant: 'yellow' },
+    Новые: { variant: 'gray' },
+    'В работе': { variant: 'purple' },
     Готово: { variant: 'green' },
-    Отправлено: { variant: 'purple' },
-    Корректировка: { variant: 'red' },
-    Стоп: { variant: 'red' },
+    Отправлено: { variant: 'blue' },
+    Корректировка: { variant: 'gray' },
+    Стоп: { variant: 'gray' },
     Ожидание: { variant: 'gray' },
   }
   for (const status of LAB_WORK_STATUS_ORDER) {
@@ -61,7 +61,7 @@ export function resolveKaitenColumnTitleForDisplay(opts: {
   return DEMO_KANBAN_COL_RU[demo] ?? demo
 }
 
-function resolveLabWorkStatusForColumnTitle(
+export function labWorkStatusFromColumnTitle(
   columnTitle: string | null | undefined,
 ): LabWorkStatus | null {
   const norm = normalizeKanbanColumnTitle(columnTitle ?? '')
@@ -89,7 +89,7 @@ function resolveLabWorkStatusForColumnTitle(
 export function getKaitenColumnPillClassName(
   columnTitle: string | null | undefined,
 ): string {
-  const status = resolveLabWorkStatusForColumnTitle(columnTitle)
+  const status = labWorkStatusFromColumnTitle(columnTitle)
   if (status) return LAB_WORK_STATUS_PILL_STYLES[status]
   return LAB_WORK_STATUS_PILL_STYLES.TO_EXECUTION
 }
@@ -109,7 +109,7 @@ export function getKaitenColumnDisplay(
   const exact = KAITEN_COLUMN_DISPLAY[columnTitle.trim()]
   if (exact) return exact
 
-  const status = resolveLabWorkStatusForColumnTitle(columnTitle)
+  const status = labWorkStatusFromColumnTitle(columnTitle)
   if (status) return { variant: LAB_STATUS_BADGE_VARIANT[status] }
 
   const norm = normalizeKanbanColumnTitle(columnTitle)
@@ -117,7 +117,7 @@ export function getKaitenColumnDisplay(
     if (normalizeKanbanColumnTitle(key) === norm) return value
   }
 
-  return { variant: 'blue' }
+  return { variant: 'gray' }
 }
 
 export function getKaitenColumnDisplayFromOrder(opts: {

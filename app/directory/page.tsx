@@ -70,7 +70,7 @@ export default async function DirectoryHubPage() {
           >
             <h2 className="text-lg font-semibold text-[var(--app-text)]">ФОТ</h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Суммы сделочных начислений по позициям прайса для блока «Что сделано».
+              Цены техникам по прайсу: ручная настройка и импорт из Excel.
             </p>
           </Link>
         ) : null}

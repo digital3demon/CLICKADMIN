@@ -1,5 +1,10 @@
 import type { BadgeVariant } from "@/components/ui/Badge";
-import { getKaitenColumnDisplayFromOrder } from "@/lib/order-status-display";
+import {
+  getKaitenColumnDisplayFromOrder,
+  labWorkStatusFromColumnTitle,
+  resolveKaitenColumnTitleForDisplay,
+} from "@/lib/order-status-display";
+import type { LabWorkStatus } from "@/lib/lab-work-status";
 import {
   canonicalOrderPayment,
   ORDER_PAYMENT_NOT_PAID,
@@ -15,7 +20,26 @@ export type HarmonyPillTone =
   | "green"
   | "red"
   | "gray"
-  | "redSolid";
+  | "redSolid"
+  | "stone"
+  | "violet"
+  | "teal"
+  | "cyan"
+  | "indigo"
+  | "purple";
+
+/** Этапы лаборатории в списке заказов (Harmony): без красного и сигнальных тонов. */
+export const LAB_WORK_STATUS_HARMONY_TONE: Record<LabWorkStatus, HarmonyPillTone> = {
+  TO_SCAN: "stone",
+  TO_EXECUTION: "gray",
+  APPROVAL: "violet",
+  PRODUCTION: "stone",
+  ASSEMBLY: "teal",
+  PROCESSING: "cyan",
+  MANUAL: "indigo",
+  TO_REVIEW: "purple",
+  TO_ADMINS: "green",
+};
 
 const BADGE_TO_HARMONY: Record<BadgeVariant, HarmonyPillTone> = {
   blue: "blue",
@@ -54,6 +78,9 @@ export function kaitenOrderToHarmonyTone(opts: {
   kaitenColumnTitle?: string | null;
   demoKanbanColumn?: string | null;
 }): HarmonyPillTone {
+  const title = resolveKaitenColumnTitleForDisplay(opts);
+  const labStatus = labWorkStatusFromColumnTitle(title);
+  if (labStatus) return LAB_WORK_STATUS_HARMONY_TONE[labStatus];
   const display = getKaitenColumnDisplayFromOrder(opts);
-  return BADGE_TO_HARMONY[display.variant] ?? "blue";
+  return BADGE_TO_HARMONY[display.variant] ?? "gray";
 }

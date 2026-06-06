@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PAYROLL_WORK_KIND_LABELS, PAYROLL_WORK_KIND_VALUES, type PayrollWorkKindValue } from "@/lib/payroll";
+import { PayrollImportExportPanel } from "@/components/payroll/PayrollImportExportPanel";
+import { PayrollTrackMapPanel } from "@/components/payroll/PayrollTrackMapPanel";
 
 type PriceItem = {
   id: string;
@@ -182,6 +184,9 @@ export function PayrollConfigClient() {
 
   return (
     <div className="space-y-4">
+      <PayrollTrackMapPanel />
+      <PayrollImportExportPanel onApplied={() => void load()} />
+
       <div className="flex flex-wrap items-center gap-3">
         <input
           value={query}

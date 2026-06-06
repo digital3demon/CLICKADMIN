@@ -3,6 +3,11 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
 import { isPayrollUserRole, PAYROLL_WORK_KIND_LABELS } from "@/lib/payroll";
+import {
+  isPayrollKindVisibleForTrack,
+  shouldFilterPayrollOptionsByTrack,
+} from "@/lib/payroll-tracks";
+import { getPayrollKindTrackMap } from "@/lib/payroll-tracks.server";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +21,16 @@ export async function GET() {
   }
   const tenantId = await requireSessionTenantId(session);
   const prisma = await getPrisma();
+  const filterByTrack = shouldFilterPayrollOptionsByTrack(session.role);
+  const [kindTrackMap, sessionUser] = await Promise.all([
+    filterByTrack ? getPayrollKindTrackMap(prisma, tenantId) : Promise.resolve(null),
+    filterByTrack
+      ? prisma.user.findFirst({
+          where: { id: session.sub, tenantId },
+          select: { payrollTrack: true },
+        })
+      : Promise.resolve(null),
+  ]);
   const rows = await prisma.payrollPriceItemConfig.findMany({
     where: {
       tenantId,
@@ -43,9 +58,20 @@ export async function GET() {
       },
     },
   });
+  const visibleRows =
+    filterByTrack && kindTrackMap
+      ? rows.filter((r) =>
+          isPayrollKindVisibleForTrack(
+            r.kind,
+            sessionUser?.payrollTrack,
+            kindTrackMap,
+          ),
+        )
+      : rows;
+
   return NextResponse.json(
     {
-      items: rows.map((r) => ({
+      items: visibleRows.map((r) => ({
         payrollConfigId: r.id,
         priceListItemId: r.priceListItemId,
         kind: r.kind,

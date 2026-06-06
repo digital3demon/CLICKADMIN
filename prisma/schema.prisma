@@ -622,6 +622,14 @@ enum PayrollWorkKind {
   UNCATEGORIZED
 }
 
+/// Чем занимается пользователь с ролью USER (для фильтра плашек ФОТ).
+enum PayrollUserTrack {
+  DIGITAL
+  MANUAL
+  DIGITAL_MANUAL
+  SHOP_FLOOR
+}
+
 enum EmailDirection {
   INBOUND
   OUTBOUND
@@ -658,6 +666,8 @@ model User {
   email                     String
   displayName               String
   role                      UserRole
+  /// Направление работы (роль USER): фильтр плашек «Что сделано» по категориям ФОТ.
+  payrollTrack              PayrollUserTrack?
   /// Bcrypt-хэш пароля (вход после активации приглашения)
   passwordHash              String?
   /// Bcrypt одноразового кода приглашения; null после установки пароля

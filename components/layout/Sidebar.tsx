@@ -3,12 +3,12 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import type { AppModule, UserRole } from "@prisma/client";
+import { useCallback } from "react";
 import {
   canAccessSidebarPayments,
   isKanbanOnlyUser,
 } from "@/lib/auth/permissions";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { brandDisplayFont } from "@/lib/brand-font";
 import { useNewOrderPanel } from "@/components/orders/new-order-panel-context";
@@ -19,9 +19,8 @@ import { SidebarNav } from "./SidebarNav";
 import { CommandPalette } from "@/components/ui/CommandPalette";
 import { isWorkdaySkyWidgetEnabled } from "@/lib/ui-flags";
 import { ThemeToggle } from "./ThemeToggle";
-import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
 import { profileAvatarEmoji } from "@/lib/profile-avatar-presets";
-import { CRM_PROFILE_UPDATED_EVENT } from "@/lib/crm-client-events";
+import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { fontDisplay } from "@/lib/app-fonts";
 import { LogOut } from "lucide-react";
@@ -46,80 +45,10 @@ export function Sidebar() {
   const uiDesign = useUiDesign();
   const isHarmony = uiDesign === "harmony";
   const router = useRouter();
-  const { open: openNewOrder, canOpen, canCreate } = useNewOrderPanel();
-  const [sessionUser, setSessionUser] = useState<{
-    email: string;
-    displayName: string;
-    role: UserRole;
-    actualRole: UserRole;
-    avatarPresetId: string | null;
-    avatarCustomUploadedAt: string | null;
-    moduleAccess: Partial<Record<AppModule, boolean>> | null;
-  } | null>(null);
-  const [isDemo, setIsDemo] = useState(false);
-  const [singleUserMode, setSingleUserMode] = useState(false);
-
-  const loadSessionUser = useCallback(async (signal?: AbortSignal) => {
-    const res = await fetch("/api/auth/session", {
-      cache: "no-store",
-      ...(signal ? { signal } : {}),
-    });
-    const j = (await res.json()) as {
-      singleUser?: boolean;
-      demo?: boolean;
-      user?: {
-        email?: string;
-        displayName?: string;
-        role?: UserRole;
-        actualRole?: UserRole;
-        avatarPresetId?: string | null;
-        avatarCustomUploadedAt?: string | null;
-        moduleAccess?: Record<string, boolean> | null;
-      } | null;
-    };
-    setSingleUserMode(Boolean(j.singleUser));
-    setIsDemo(Boolean(j.demo));
-    writeClientStorageBucket(j.demo ? "demo" : "live");
-    const u = j.user;
-    if (u?.email && u.displayName != null && u.role) {
-      setSessionUser({
-        email: u.email,
-        displayName: u.displayName,
-        role: u.role,
-        actualRole: u.actualRole ?? u.role,
-        avatarPresetId: u.avatarPresetId ?? null,
-        avatarCustomUploadedAt: u.avatarCustomUploadedAt ?? null,
-        moduleAccess: (u.moduleAccess as Partial<Record<AppModule, boolean>> | null) ?? null,
-      });
-    } else {
-      setSessionUser(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    const ac = new AbortController();
-    void (async () => {
-      try {
-        await loadSessionUser(ac.signal);
-      } catch (e) {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        setSessionUser(null);
-        setSingleUserMode(false);
-        setIsDemo(false);
-        writeClientStorageBucket("live");
-      }
-    })();
-    return () => ac.abort();
-  }, [loadSessionUser]);
-
-  useEffect(() => {
-    const onProfileUpdated = () => {
-      void loadSessionUser();
-    };
-    window.addEventListener(CRM_PROFILE_UPDATED_EVENT, onProfileUpdated);
-    return () =>
-      window.removeEventListener(CRM_PROFILE_UPDATED_EVENT, onProfileUpdated);
-  }, [loadSessionUser]);
+  const { open: openNewOrder, canOpen, canCreate, createAccessReady } =
+    useNewOrderPanel();
+  const { user: sessionUser, isDemo, singleUser: singleUserMode, refresh } =
+    useSessionUser();
   const isActualOwner = sessionUser?.actualRole === "OWNER";
   const isEffectiveKanbanOnly =
     sessionUser != null &&
@@ -219,9 +148,11 @@ export function Sidebar() {
         {isEffectiveKanbanOnly ? null : (
           <button
             type="button"
-            disabled={!canOpen}
+            disabled={createAccessReady && !canOpen}
             title={
-              !canCreate
+              !createAccessReady
+                ? "Новый заказ"
+                : !canCreate
                 ? "Нет доступа к созданию нового заказа"
                 : canOpen
                 ? "Новый заказ"
@@ -232,12 +163,12 @@ export function Sidebar() {
                 ? "rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-wider card-shadow"
                 : "rounded-md px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wide shell-short:px-2 shell-short:py-2 shell-short:text-[9px] shell-short:tracking-[0.06em]"
             } transition-colors ${
-              canOpen
+              !createAccessReady || canOpen
                 ? "cursor-pointer bg-[var(--sidebar-blue)] hover:bg-[var(--sidebar-blue-hover)]"
                 : "cursor-not-allowed bg-zinc-400 dark:bg-zinc-600"
             }`}
             onClick={() => {
-              if (canOpen) openNewOrder();
+              if (!createAccessReady || canOpen) openNewOrder();
             }}
           >
             <span className={isHarmony ? "" : "flex-1 text-center"}>Новый заказ</span>
@@ -302,9 +233,7 @@ export function Sidebar() {
                     alt=""
                     className="h-full w-full object-cover"
                     onError={() => {
-                      setSessionUser((prev) =>
-                        prev ? { ...prev, avatarCustomUploadedAt: null } : null,
-                      );
+                      void refresh();
                     }}
                   />
                 ) : (

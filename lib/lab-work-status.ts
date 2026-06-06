@@ -28,26 +28,29 @@ export const LAB_WORK_STATUS_LABELS: Record<LabWorkStatus, string> = {
   TO_ADMINS: "Сдана админам",
 };
 
-/** Цвет пилюли статуса в шапке наряда / меню */
+/**
+ * Пилюли этапов лаборатории: приглушённые тона, без красного и «сигнальных» (жёлтый/оранжевый).
+ * «К исполнению» — светло-серый; «Сдана админам» — зелёный.
+ */
 export const LAB_WORK_STATUS_PILL_STYLES: Record<LabWorkStatus, string> = {
   TO_SCAN:
-    "bg-slate-100 text-slate-950 ring-1 ring-slate-400/55 hover:bg-slate-200/90",
+    "bg-slate-200/80 text-slate-700 ring-1 ring-slate-300/55 hover:bg-slate-200 dark:bg-slate-700/40 dark:text-slate-200 dark:ring-slate-500/40",
   TO_EXECUTION:
-    "bg-sky-100 text-sky-950 ring-1 ring-sky-400/55 hover:bg-sky-200/90",
+    "bg-zinc-200/75 text-zinc-600 ring-1 ring-zinc-300/50 hover:bg-zinc-200/90 dark:bg-zinc-700/35 dark:text-zinc-300 dark:ring-zinc-500/35",
   APPROVAL:
-    "bg-violet-100 text-violet-950 ring-1 ring-violet-400/55 hover:bg-violet-200/90",
+    "bg-violet-100/90 text-violet-800 ring-1 ring-violet-300/50 hover:bg-violet-100 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-600/40",
   PRODUCTION:
-    "bg-amber-100 text-amber-950 ring-1 ring-amber-400/60 hover:bg-amber-200/90",
+    "bg-stone-200/80 text-stone-700 ring-1 ring-stone-300/50 hover:bg-stone-200 dark:bg-stone-700/35 dark:text-stone-300 dark:ring-stone-500/35",
   ASSEMBLY:
-    "bg-teal-100 text-teal-950 ring-1 ring-teal-400/55 hover:bg-teal-200/90",
+    "bg-teal-100/85 text-teal-800 ring-1 ring-teal-300/45 hover:bg-teal-100 dark:bg-teal-950/30 dark:text-teal-300 dark:ring-teal-600/35",
   PROCESSING:
-    "bg-cyan-100 text-cyan-950 ring-1 ring-cyan-400/55 hover:bg-cyan-200/90",
+    "bg-cyan-100/80 text-cyan-800 ring-1 ring-cyan-300/45 hover:bg-cyan-100 dark:bg-cyan-950/30 dark:text-cyan-300 dark:ring-cyan-600/35",
   MANUAL:
-    "bg-indigo-100 text-indigo-950 ring-1 ring-indigo-400/55 hover:bg-indigo-200/90",
+    "bg-indigo-100/85 text-indigo-800 ring-1 ring-indigo-300/45 hover:bg-indigo-100 dark:bg-indigo-950/35 dark:text-indigo-300 dark:ring-indigo-600/40",
   TO_REVIEW:
-    "bg-fuchsia-100 text-fuchsia-950 ring-1 ring-fuchsia-400/55 hover:bg-fuchsia-200/90",
+    "bg-purple-100/85 text-purple-800 ring-1 ring-purple-300/45 hover:bg-purple-100 dark:bg-purple-950/35 dark:text-purple-300 dark:ring-purple-600/40",
   TO_ADMINS:
-    "bg-orange-100 text-orange-950 ring-1 ring-orange-400/55 hover:bg-orange-200/90",
+    "bg-emerald-100/90 text-emerald-800 ring-1 ring-emerald-400/45 hover:bg-emerald-100 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-600/40",
 };
 
 export function isLabWorkStatus(v: string): v is LabWorkStatus {

@@ -12,11 +12,16 @@ import {
 } from "@/lib/phone-normalize";
 import { sendInviteActivationEmail } from "@/lib/email/send-invite-email";
 import { PLACEHOLDER_INVITED_DISPLAY_NAME } from "@/lib/user-invite-defaults";
+import {
+  parsePayrollUserTrack,
+  payrollTrackRequiredForRole,
+} from "@/lib/payroll-tracks";
 
 type Body = {
   email?: string;
   phone?: string;
   role?: string;
+  payrollTrack?: string;
 };
 
 function normEmail(v: string): string {
@@ -50,6 +55,17 @@ export async function POST(req: Request) {
   if (!isInvitableRole(roleRaw)) {
     return NextResponse.json({ error: "Выберите роль из списка" }, { status: 400 });
   }
+  const payrollTrack = parsePayrollUserTrack(body.payrollTrack);
+  if (payrollTrackRequiredForRole(roleRaw) && !payrollTrack) {
+    return NextResponse.json(
+      { error: "Для роли «Пользователь» укажите направление (Цифра, Мануал и т.д.)" },
+      { status: 400 },
+    );
+  }
+  const payrollTrackData =
+    payrollTrackRequiredForRole(roleRaw) && payrollTrack
+      ? { payrollTrack }
+      : { payrollTrack: null as null };
 
   /** Приглашение по телефону — вход только через Telegram с этим номером. */
   if (phoneRaw) {
@@ -104,6 +120,7 @@ export async function POST(req: Request) {
         phone: norm,
         displayName: PLACEHOLDER_INVITED_DISPLAY_NAME,
         role: roleRaw,
+        ...payrollTrackData,
         inviteCodeHash: null,
         passwordHash: null,
         isActive: true,
@@ -111,6 +128,7 @@ export async function POST(req: Request) {
       update: {
         phone: norm,
         role: roleRaw,
+        ...payrollTrackData,
         inviteCodeHash: null,
         passwordHash: null,
         isActive: true,
@@ -166,12 +184,14 @@ export async function POST(req: Request) {
       email,
       displayName: PLACEHOLDER_INVITED_DISPLAY_NAME,
       role: roleRaw,
+      ...payrollTrackData,
       inviteCodeHash,
       passwordHash: null,
       isActive: true,
     },
     update: {
       role: roleRaw,
+      ...payrollTrackData,
       inviteCodeHash,
       passwordHash: null,
       isActive: true,

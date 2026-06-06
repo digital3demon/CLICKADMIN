@@ -9,6 +9,11 @@ import {
   PAYROLL_WORK_KIND_LABELS,
   normalizePayrollQuantity,
 } from "@/lib/payroll";
+import {
+  isPayrollKindVisibleForTrack,
+  shouldFilterPayrollOptionsByTrack,
+} from "@/lib/payroll-tracks";
+import { getPayrollKindTrackMap } from "@/lib/payroll-tracks.server";
 
 export const dynamic = "force-dynamic";
 
@@ -188,7 +193,7 @@ export async function POST(req: Request) {
     }),
     prisma.user.findFirst({
       where: { id: userId, tenantId, isActive: true },
-      select: { id: true },
+      select: { id: true, role: true, payrollTrack: true },
     }),
     prisma.payrollPriceItemConfig.findFirst({
       where: { id: payrollConfigId, tenantId },
@@ -209,6 +214,21 @@ export async function POST(req: Request) {
   }
   if (config.amountRub <= 0) {
     return NextResponse.json({ error: "Для выбранной плашки не задана сумма" }, { status: 400 });
+  }
+  if (targetUser && shouldFilterPayrollOptionsByTrack(targetUser.role)) {
+    const kindTrackMap = await getPayrollKindTrackMap(prisma, tenantId);
+    if (
+      !isPayrollKindVisibleForTrack(
+        config.kind,
+        targetUser.payrollTrack,
+        kindTrackMap,
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Эта категория ФОТ недоступна для направления пользователя" },
+        { status: 403 },
+      );
+    }
   }
   const amountRub = config.amountRub * quantity;
 
