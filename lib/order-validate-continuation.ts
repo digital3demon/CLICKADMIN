@@ -1,5 +1,9 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { patientSurnamesMatch } from "@/lib/order-continuation-match";
+
+type OrderContinuationLinkRow = Prisma.OrderGetPayload<{
+  select: { continuesFromOrderId: true };
+}> | null;
 
 async function wouldCreateContinuationCycle(
   prisma: PrismaClient,
@@ -14,7 +18,7 @@ async function wouldCreateContinuationCycle(
     if (cursor === currentOrderId) return true;
     if (seen.has(cursor)) break;
     seen.add(cursor);
-    const row = await prisma.order.findUnique({
+    const row: OrderContinuationLinkRow = await prisma.order.findUnique({
       where: { id: cursor },
       select: { continuesFromOrderId: true },
     });
