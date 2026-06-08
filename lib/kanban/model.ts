@@ -15,7 +15,6 @@ import type { UserRole } from "@prisma/client";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
-import { buildKanbanContinuationLine } from "@/lib/order-continuation-display";
 
 export const STORAGE_KEY = "kanban-app-state-v3";
 export const STORAGE_KEY_LEGACY = "kanban-app-state-v2";
@@ -1943,18 +1942,29 @@ function moveLinkedCardToColumn(
   toCol.cards.unshift(card);
 }
 
+function applyContinuesFromOrderToKanbanCard(
+  card: KanbanCard,
+  row: KaitenLinkedOrderForKanban,
+): void {
+  if (row.continuesFromOrder) {
+    card.continuesFromOrderId = row.continuesFromOrder.id;
+    card.continuesFromOrderNumber = row.continuesFromOrder.orderNumber;
+  } else {
+    card.continuesFromOrderId = null;
+    card.continuesFromOrderNumber = null;
+  }
+  card.continuationFollowups = (row.continuationFollowups ?? []).map((child) => ({
+    orderId: child.id,
+    orderNumber: child.orderNumber,
+  }));
+}
+
+/** Текст описания карточки CRM-канбана (без строки «продолжение» — она в UI отдельной ссылкой). */
 function linkedOrderKanbanDescription(
   row: KaitenLinkedOrderForKanban,
   demo: boolean,
 ): string {
   const blocks: string[] = [];
-  if (row.continuesFromOrder) {
-    const line = buildKanbanContinuationLine({
-      orderNumber: row.continuesFromOrder.orderNumber,
-      orderId: row.continuesFromOrder.id,
-    });
-    if (line) blocks.push(line);
-  }
   const client = row.clientOrderText?.trim();
   const notes = row.notes?.trim();
   if (client) blocks.push(`Заказ от клиента:\n${client}`);
@@ -2208,6 +2218,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         }
         found.card.title = title;
         found.card.description = desc;
+        applyContinuesFromOrderToKanbanCard(found.card, row);
         found.card.kaitenCardId = row.kaitenCardId ?? null;
         found.card.linkedOrderId = row.id;
         found.card.dueDate = dueStr;
@@ -2247,8 +2258,9 @@ export function mergeKaitenLinkedOrdersIntoAppState(
               userId: "",
               at: nowIso,
             },
-          ],
-        });
+        ],
+      });
+        applyContinuesFromOrderToKanbanCard(card, row);
         mergeOrderAttachmentsIntoLinkedCard(card, row.id, row);
         targetCol.cards.unshift(card);
       }
@@ -2300,11 +2312,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         ? String(row.kaitenCardTitleMirror).trim()
         : titleFromOrder;
     const dueStr = row.dueDate ? String(row.dueDate).slice(0, 10) : "";
-    const descFromOrder = linkedOrderKanbanDescription(row, false);
-    const desc =
-      row.kaitenCardDescriptionMirror != null
-        ? String(row.kaitenCardDescriptionMirror)
-        : descFromOrder;
+    const desc = linkedOrderKanbanDescription(row, false);
     const effType = resolveLinkedOrderCardTypeId(targetBoard, row, false);
     const fallbackTypeId = effType || (targetBoard.cardTypes?.[0]?.id ?? "");
     const lane = normalizeKaitenTrackLaneForBoard(row.kaitenTrackLane);
@@ -2334,6 +2342,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       }
       foundEff.card.title = title;
       foundEff.card.description = desc;
+      applyContinuesFromOrderToKanbanCard(foundEff.card, row);
       foundEff.card.kaitenCardId = row.kaitenCardId ?? null;
       foundEff.card.linkedOrderId = row.id;
       foundEff.card.dueDate = dueStr;
@@ -2375,6 +2384,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
           },
         ],
       });
+      applyContinuesFromOrderToKanbanCard(card, row);
       mergeOrderAttachmentsIntoLinkedCard(card, row.id, row);
       targetCol.cards.unshift(card);
     }

@@ -11,9 +11,40 @@ import {
 } from "@/lib/kaiten-rest";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import {
-  buildKaitenContinuationLine,
-  type ContinuationParentRef,
+  activeContinuationChildrenWhere,
+  buildKaitenContinuationBlockLines,
+  mapContinuationChildrenRefs,
+  type ContinuationOrderRef,
 } from "@/lib/order-continuation-display";
+import type { PrismaClient } from "@prisma/client";
+
+async function resolveContinuationParentForOrder(
+  prisma: PrismaClient,
+  order: {
+    continuesFromOrderId: string | null;
+    continuesFromOrder: {
+      orderNumber: string;
+      kaitenCardId: number | null;
+    } | null;
+  },
+): Promise<ContinuationOrderRef | null> {
+  if (order.continuesFromOrder) {
+    return {
+      orderNumber: order.continuesFromOrder.orderNumber,
+      kaitenCardId: order.continuesFromOrder.kaitenCardId,
+    };
+  }
+  if (!order.continuesFromOrderId) return null;
+  const parent = await prisma.order.findUnique({
+    where: { id: order.continuesFromOrderId },
+    select: { orderNumber: true, kaitenCardId: true },
+  });
+  if (!parent) return null;
+  return {
+    orderNumber: parent.orderNumber,
+    kaitenCardId: parent.kaitenCardId,
+  };
+}
 
 async function fetchFirstLaneId(
   auth: NonNullable<ReturnType<typeof getKaitenRestAuth>>,
@@ -29,13 +60,13 @@ async function fetchFirstLaneId(
 export function buildKaitenCardDescription(
   clientOrderText: string | null,
   notes: string | null,
-  continuationParent?: ContinuationParentRef | null,
+  continuationParent?: ContinuationOrderRef | null,
+  continuationChildren?: ContinuationOrderRef[] | null,
 ): string {
-  const parts: string[] = [];
-  if (continuationParent) {
-    const line = buildKaitenContinuationLine(continuationParent);
-    if (line) parts.push(line);
-  }
+  const parts: string[] = buildKaitenContinuationBlockLines(
+    continuationParent,
+    continuationChildren,
+  );
   const client = clientOrderText?.trim() ?? "";
   const comm = notes?.trim() ?? "";
   if (client) {
@@ -115,8 +146,18 @@ export async function syncNewOrderToKaiten(
         kaitenDecideLater: true,
         kaitenCardTypeId: true,
         kaitenTrackLane: true,
+        continuesFromOrderId: true,
         continuesFromOrder: {
           select: {
+            orderNumber: true,
+            kaitenCardId: true,
+          },
+        },
+        continuationOrders: {
+          where: activeContinuationChildrenWhere,
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
             orderNumber: true,
             kaitenCardId: true,
           },
@@ -196,15 +237,15 @@ export async function syncNewOrderToKaiten(
       laneId = await fetchFirstLaneId(auth, boardTarget.boardId!);
     }
 
+    const continuationParent = await resolveContinuationParentForOrder(
+      ordersPrisma,
+      order,
+    );
     const description = buildKaitenCardDescription(
       order.clientOrderText,
       order.notes,
-      order.continuesFromOrder
-        ? {
-            orderNumber: order.continuesFromOrder.orderNumber,
-            kaitenCardId: order.continuesFromOrder.kaitenCardId,
-          }
-        : null,
+      continuationParent,
+      mapContinuationChildrenRefs(order.continuationOrders),
     );
 
     const colOverride = options?.columnId;

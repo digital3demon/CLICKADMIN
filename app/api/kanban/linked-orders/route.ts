@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ConstructionCategory, OrderStatus, Prisma } from "@prisma/client";
+import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getClientsPrisma, getOrdersPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
@@ -67,6 +68,15 @@ export async function GET() {
         clientOrderText: true,
         notes: true,
         continuesFromOrder: {
+          select: {
+            id: true,
+            orderNumber: true,
+            kaitenCardId: true,
+          },
+        },
+        continuationOrders: {
+          where: activeContinuationChildrenWhere,
+          orderBy: { createdAt: "desc" },
           select: {
             id: true,
             orderNumber: true,
@@ -187,6 +197,11 @@ export async function GET() {
               kaitenCardId: o.continuesFromOrder.kaitenCardId ?? null,
             }
           : null,
+        continuationFollowups: o.continuationOrders.map((child) => ({
+          id: child.id,
+          orderNumber: child.orderNumber,
+          kaitenCardId: child.kaitenCardId ?? null,
+        })),
         attachments,
       };
     });

@@ -7,6 +7,7 @@ import {
   orderAttentionListSupersetWhere,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
+import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
 
 const shipmentOrderSelect = {
@@ -23,6 +24,8 @@ const shipmentOrderSelect = {
   kaitenCardTitleLabel: true,
   kaitenCardTitleMirror: true,
   kaitenCardId: true,
+  kaitenChatHasLabMention: true,
+  kaitenLabMentionSignalAt: true,
   demoKanbanColumn: true,
   kaitenColumnTitle: true,
   prostheticsOrdered: true,
@@ -86,6 +89,7 @@ export type ShipmentOrderRow = Omit<
   listCompositionMismatch: boolean;
   listPendingChatCorrections: boolean;
   listPendingProstheticsRequests: boolean;
+  listKaitenLabMentionHighlight: boolean;
 };
 
 /** Наряды с непустым dueDate (срок лаборатории) в полуинтервале [start, endExclusive) — МСК-окно отгрузки; опционально пересечение с фильтром по отметке (`tag=`). */
@@ -94,7 +98,7 @@ export async function fetchShipmentOrdersInDueRange(
   tenantId: string,
   start: Date,
   endExclusive: Date,
-  opts?: { listTag?: string | null },
+  opts?: { listTag?: string | null; userId?: string | null },
 ) {
   const tagDecoded =
     opts?.listTag != null && String(opts.listTag).trim()
@@ -276,13 +280,16 @@ export async function fetchShipmentOrdersInDueRange(
       }),
       listPendingChatCorrections: (chatCorrections?.length ?? 0) > 0,
       listPendingProstheticsRequests: (prostheticsRequests?.length ?? 0) > 0,
+      listKaitenLabMentionHighlight: false,
     };
   });
 
-  if (parsedTag?.kind === "orderAttention") {
-    return mapped.filter(
-      (r) => r.listCompositionMismatch || r.listPendingChatCorrections,
-    );
-  }
-  return mapped;
+  const filtered =
+    parsedTag?.kind === "orderAttention"
+      ? mapped.filter(
+          (r) => r.listCompositionMismatch || r.listPendingChatCorrections,
+        )
+      : mapped;
+
+  return hydrateOrderKaitenLabMentionHighlight(db, opts?.userId, filtered);
 }

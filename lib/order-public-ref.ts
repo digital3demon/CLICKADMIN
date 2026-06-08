@@ -75,3 +75,11 @@ export function decodeOrderPublicRef(ref: string): string | null {
 export function orderPathById(orderId: string): string {
   return `/orders/${encodeOrderPublicRef(orderId)}`;
 }
+
+/** Id наряда из пути `/orders/or_…` (или legacy hex). */
+export function orderIdFromOrderPath(path: string): string | null {
+  const raw = String(path || "").trim();
+  const m = raw.match(/^\/orders\/([^/?#]+)/);
+  if (!m?.[1]) return null;
+  return decodeOrderPublicRef(m[1]);
+}

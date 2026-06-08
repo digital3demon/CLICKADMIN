@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 
 type Props = {
-  /** Полный URL (Kaiten или страница канбана CRM) */
+  /** URL для QR-кода (при наличии Kaiten — ссылка на карточку Kaiten) */
   url: string | null;
+  /** Ссылка на карточку в канбане CRM (вторая строка в диалоге) */
+  kanbanUrl?: string | null;
   /** Текст кнопки в полной шапке наряда */
   labelFull?: string;
   /** Компактный режим: только иконка в таблице */
@@ -16,16 +18,28 @@ type Props = {
 
 export function OrderKaitenQrModal({
   url,
+  kanbanUrl = null,
   labelFull = "QR Kaiten",
   compact = false,
   variant = "kaiten",
 }: Props) {
-  const isKanban = variant === "kanban";
-  const btnTitle = isKanban
+  const isKanbanOnly = variant === "kanban";
+  const showDualLinks = !isKanbanOnly && Boolean(kanbanUrl?.trim());
+  const btnTitle = isKanbanOnly
     ? "QR-код со ссылкой на карточку в канбане CRM"
-    : "QR-код со ссылкой на карточку в Kaiten";
-  const dialogAria = isKanban ? "QR-код канбана CRM" : "QR-код Kaiten";
-  const dialogHeading = isKanban ? "Карточка в канбане CRM" : "Карточка Kaiten";
+    : showDualLinks
+      ? "QR-код Kaiten; в диалоге — ссылки на Kaiten и канбан"
+      : "QR-код со ссылкой на карточку в Kaiten";
+  const dialogAria = isKanbanOnly
+    ? "QR-код канбана CRM"
+    : showDualLinks
+      ? "QR-код Kaiten и ссылки на Kaiten и канбан"
+      : "QR-код Kaiten";
+  const dialogHeading = isKanbanOnly
+    ? "Карточка в канбане CRM"
+    : showDualLinks
+      ? "Карточка Kaiten / канбан"
+      : "Карточка Kaiten";
   const [open, setOpen] = useState(false);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +86,9 @@ export function OrderKaitenQrModal({
     ? "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-6 sm:w-6"
     : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-sm";
 
+  const kaitenHref = isKanbanOnly ? null : url;
+  const kanbanHref = kanbanUrl?.trim() || (isKanbanOnly ? url : null);
+
   return (
     <>
       <button
@@ -104,7 +121,11 @@ export function OrderKaitenQrModal({
           >
             <p className="text-sm font-semibold text-[var(--app-text)]">{dialogHeading}</p>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
-              Отсканируйте код или откройте ссылку ниже.
+              {isKanbanOnly
+                ? "Отсканируйте код или откройте ссылку на канбан ниже."
+                : showDualLinks
+                  ? "QR-код ведёт в Kaiten. Ниже — ссылки на Kaiten и канбан CRM."
+                  : "Отсканируйте код или откройте ссылку ниже."}
             </p>
             <div className="mt-4 flex justify-center">
               {error ? (
@@ -121,15 +142,37 @@ export function OrderKaitenQrModal({
                 <p className="text-sm text-[var(--text-muted)]">Формирование QR…</p>
               )}
             </div>
-            <div className="mt-4 break-all border-t border-[var(--border-subtle)] pt-4">
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
-              >
-                {url}
-              </a>
+            <div className="mt-4 space-y-3 border-t border-[var(--border-subtle)] pt-4">
+              {kaitenHref ? (
+                <div>
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Kaiten
+                  </p>
+                  <a
+                    href={kaitenHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 block break-all text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
+                  >
+                    {kaitenHref}
+                  </a>
+                </div>
+              ) : null}
+              {kanbanHref ? (
+                <div>
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Канбан CRM
+                  </p>
+                  <a
+                    href={kanbanHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 block break-all text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
+                  >
+                    {kanbanHref}
+                  </a>
+                </div>
+              ) : null}
             </div>
             <button
               type="button"

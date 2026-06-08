@@ -32,6 +32,8 @@ import {
   textIncludesMentionToken,
 } from "@/lib/kanban-comment-mentions";
 import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
+import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
+import Link from "next/link";
 import { normalizeProductionMentionTag } from "@/lib/kanban-production-mention-tag";
 import {
   isProductionRoutingCandidateFile,
@@ -1868,6 +1870,33 @@ export function KanbanCardModal({
                 <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-sky-800/90 dark:text-sky-300/90">
                   Описание и детали заказа
                 </div>
+                {card.continuesFromOrderId && card.continuesFromOrderNumber ? (
+                  <p className="mb-2 text-sm text-[var(--kaiten-modal-text)]">
+                    <span className="font-medium">Продолжение работы </span>
+                    <Link
+                      href={kanbanOrderDeepLinkPath(card.continuesFromOrderId)}
+                      className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
+                    >
+                      {card.continuesFromOrderNumber}
+                    </Link>
+                  </p>
+                ) : null}
+                {(card.continuationFollowups ?? []).map((child) => (
+                  <p
+                    key={child.orderId}
+                    className="mb-2 text-sm text-[var(--kaiten-modal-text)]"
+                  >
+                    <span className="font-medium">
+                      У этой работы есть продолжение{" "}
+                    </span>
+                    <Link
+                      href={kanbanOrderDeepLinkPath(child.orderId)}
+                      className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
+                    >
+                      {child.orderNumber}
+                    </Link>
+                  </p>
+                ))}
                 <div className="grid min-h-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] sm:items-start">
                   <textarea
                     ref={descTextareaRef}

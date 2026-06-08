@@ -6,6 +6,11 @@ import { getKaitenEnvConfig, listConfiguredKaitenTrackLanes } from "@/lib/kaiten
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import {
+  activeContinuationChildrenWhere,
+  kaitenDescriptionWithContinuationPrefix,
+  mapContinuationChildrenRefs,
+} from "@/lib/order-continuation-display";
+import {
   findKaitenColumnIdByTitle,
   kaitenColumnTitleFromBoard,
 } from "@/lib/kaiten-column-title";
@@ -843,6 +848,11 @@ export async function POST(
       columnId: b.columnId,
     });
     if (result.ok) {
+      try {
+        await pushKaitenCardTitleForOrderIfLinked(idTrim);
+      } catch (e) {
+        console.error("[kaiten POST create] push head after create", e);
+      }
       if (createTitle && result.kaitenCardId) {
         const auth = getKaitenRestAuth();
         if (auth) {
@@ -1030,6 +1040,21 @@ export async function PATCH(
       kaitenCardDescriptionMirror: true,
       kaitenCardTitleManual: true,
       kaitenCardDescriptionManual: true,
+      continuesFromOrder: {
+        select: {
+          orderNumber: true,
+          kaitenCardId: true,
+        },
+      },
+      continuationOrders: {
+        where: activeContinuationChildrenWhere,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          orderNumber: true,
+          kaitenCardId: true,
+        },
+      },
     },
   });
   if (!order) {
@@ -1127,7 +1152,16 @@ export async function PATCH(
   }
 
   if (typeof body.description === "string") {
-    const d = body.description;
+    const d = kaitenDescriptionWithContinuationPrefix(
+      body.description,
+      order.continuesFromOrder
+        ? {
+            orderNumber: order.continuesFromOrder.orderNumber,
+            kaitenCardId: order.continuesFromOrder.kaitenCardId,
+          }
+        : null,
+      mapContinuationChildrenRefs(order.continuationOrders),
+    );
     if (d.length > 400_000) {
       return NextResponse.json({ error: "Слишком длинное описание" }, { status: 400 });
     }

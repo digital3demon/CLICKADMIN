@@ -29,7 +29,7 @@ export type QuickOrderTile = {
 export type QuickOrderState = {
   v: typeof QUICK_ORDER_VERSION;
   tiles: QuickOrderTile[];
-  continueWork: { href: string; label: string } | null;
+  continueWork: { href: string; label: string; orderId?: string } | null;
 };
 
 function newEntityId(prefix: string): string {
@@ -99,14 +99,18 @@ export function accentTileBackground(hex: string, dark: boolean): string {
 
 function parseContinueWork(
   raw: unknown,
-): { href: string; label: string } | null {
+): { href: string; label: string; orderId?: string } | null {
   if (raw == null || typeof raw !== "object") return null;
-  const o = raw as { href?: unknown; label?: unknown };
+  const o = raw as { href?: unknown; label?: unknown; orderId?: unknown };
   if (typeof o.href !== "string" || typeof o.label !== "string") return null;
   const href = o.href.trim();
   const label = o.label.trim();
   if (!href || !label) return null;
-  return { href, label };
+  const orderId =
+    typeof o.orderId === "string" && o.orderId.trim()
+      ? o.orderId.trim()
+      : undefined;
+  return orderId ? { href, label, orderId } : { href, label };
 }
 
 function normalizeOption(raw: unknown): QuickOrderTileOption | null {

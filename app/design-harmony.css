@@ -262,8 +262,8 @@ html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="b
   background: color-mix(in srgb, var(--status-red) 6%, var(--card-bg)) !important;
 }
 
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="shipped"] > td:not([data-shipped-cell]):not(:first-child):not(:last-child) {
-  opacity: 0.45 !important;
+html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="shipped"] {
+  background: color-mix(in srgb, var(--status-green) 8%, var(--card-bg)) !important;
 }
 
 html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="default"]:hover {

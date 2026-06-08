@@ -11,13 +11,8 @@ import {
   encodeOrdersListCursor,
 } from "@/lib/orders-list-cursor";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
-import { kaitenLabMentionPendingForUser } from "@/lib/order-kaiten-lab-mention-pending";
+import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
-
-const LAB_MENTION_ACK_ROLES: UserRole[] = [
-  "ADMINISTRATOR",
-  "SENIOR_ADMINISTRATOR",
-];
 
 /** Поля списка заказов (страница «Заказы» и GET /api/orders). */
 export const ordersListPageSelect = {
@@ -115,43 +110,7 @@ async function hydrateKaitenLabMentionForOrdersList(
   userId: string | null | undefined,
   rows: OrderListPageRow[],
 ): Promise<OrderListPageRow[]> {
-  if (rows.length === 0) return rows;
-  const ids = rows.map((r) => r.id);
-  const globalAcks = await db.orderKaitenLabMentionAck.findMany({
-    where: {
-      orderId: { in: ids },
-      user: { role: { in: LAB_MENTION_ACK_ROLES } },
-    },
-    select: { orderId: true, ackAt: true },
-  });
-  const ackMap = new Map<string, Date>();
-  for (const a of globalAcks) {
-    const prev = ackMap.get(a.orderId);
-    if (!prev || a.ackAt.getTime() > prev.getTime()) {
-      ackMap.set(a.orderId, a.ackAt);
-    }
-  }
-  const uid = String(userId || "").trim();
-  if (uid) {
-    const ownAcks = await db.orderKaitenLabMentionAck.findMany({
-      where: { orderId: { in: ids }, userId: uid },
-      select: { orderId: true, ackAt: true },
-    });
-    for (const a of ownAcks) {
-      const prev = ackMap.get(a.orderId);
-      if (!prev || a.ackAt.getTime() > prev.getTime()) {
-        ackMap.set(a.orderId, a.ackAt);
-      }
-    }
-  }
-  return rows.map((r) => ({
-    ...r,
-    listKaitenLabMentionHighlight: kaitenLabMentionPendingForUser({
-      kaitenChatHasLabMention: r.kaitenChatHasLabMention,
-      kaitenLabMentionSignalAt: r.kaitenLabMentionSignalAt ?? null,
-      ackAt: ackMap.get(r.id) ?? null,
-    }),
-  }));
+  return hydrateOrderKaitenLabMentionHighlight(db, userId, rows);
 }
 
 async function fetchOrdersListPageAttentionFiltered(

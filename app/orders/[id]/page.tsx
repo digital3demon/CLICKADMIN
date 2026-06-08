@@ -26,6 +26,7 @@ import { fetchWorkspaceActivePriceListName } from "@/lib/order-price-list-from-c
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { decodeOrderPublicRef } from "@/lib/order-public-ref";
+import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +127,7 @@ export default async function OrderEditPage({
     courierDelivery,
     kaitenCardType,
     continuesFromOrder,
+    continuationFollowups,
   ] = await Promise.all([
     order.clinicId
       ? clientsPrisma.clinic.findUnique({
@@ -167,6 +169,14 @@ export default async function OrderEditPage({
           select: { id: true, orderNumber: true },
         })
       : Promise.resolve(null),
+    ordersPrisma.order.findMany({
+      where: {
+        continuesFromOrderId: order.id,
+        ...activeContinuationChildrenWhere,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, orderNumber: true },
+    }),
   ]);
   const priceListItemIds = Array.from(
     new Set(order.constructions.map((c) => c.priceListItemId).filter(Boolean)),
@@ -327,6 +337,10 @@ export default async function OrderEditPage({
           orderNumber: continuesFromOrder.orderNumber,
         }
       : null,
+    continuationFollowups: continuationFollowups.map((child) => ({
+      id: child.id,
+      orderNumber: child.orderNumber,
+    })),
     chatCorrections: order.chatCorrections.map((c) => ({
       id: c.id,
       text: c.text,

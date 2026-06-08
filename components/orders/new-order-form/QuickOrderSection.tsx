@@ -318,7 +318,7 @@ export function QuickOrderSection({
         onPick={(o: PickedOrder) => {
           onChange({
             ...q,
-            continueWork: { href: o.href, label: o.label },
+            continueWork: { href: o.href, label: o.label, orderId: o.id },
           });
           setSearchOpen(false);
         }}

@@ -46,6 +46,7 @@ import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
 import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { orderPathById } from "@/lib/order-public-ref";
+import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
 export const dynamic = "force-dynamic";
 
 /** Контент списка на всю ширину рабочей области (таблица сама делит колонки). */
@@ -702,12 +703,14 @@ export default async function OrdersPage({
               </tr>
             ) : (
               orders.map((o) => {
-                const kaitenUrl =
+                const kaitenWebUrl =
                   o.kaitenCardId != null
                     ? getKaitenCardWebUrl(o.kaitenCardId)
-                    : siteOrigin
-                      ? `${siteOrigin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(o.id)}`
-                      : null;
+                    : null;
+                const kanbanWebUrl = siteOrigin
+                  ? `${siteOrigin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(o.id)}`
+                  : null;
+                const kaitenUrl = kaitenWebUrl ?? kanbanWebUrl;
                 const workSent = o.adminShippedOtpr;
                 const blocked = o.kaitenBlocked === true;
                 const labDateFormatted = formatOrderCardDate(o.dueDate);
@@ -724,7 +727,7 @@ export default async function OrdersPage({
                 const rowClass = blocked
                   ? "border-b-2 border-red-800/45 bg-gradient-to-r from-red-950/40 via-red-950/25 to-red-900/15 text-[var(--app-text)] dark:border-red-900/60 dark:from-red-950/50 dark:via-red-950/35 dark:to-red-950/20 [&>td:not(:first-child):not(:last-child)]:text-red-950/95 dark:[&>td:not(:first-child):not(:last-child)]:text-red-50/90"
                   : workSent
-                    ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
+                    ? ORDER_SHIPPED_ROW_CLASS
                     : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
                 const harmonyRowState = blocked
                   ? "blocked"
@@ -817,6 +820,9 @@ export default async function OrdersPage({
                       {kaitenUrl ? (
                         <OrderKaitenQrModal
                           url={kaitenUrl}
+                          kanbanUrl={
+                            kaitenWebUrl && kanbanWebUrl ? kanbanWebUrl : null
+                          }
                           compact
                           variant={o.kaitenCardId != null && !isDemo ? "kaiten" : "kanban"}
                         />

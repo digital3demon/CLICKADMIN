@@ -39,6 +39,7 @@ import {
 } from "@/lib/order-correction-track";
 import {
   pushKaitenCardTitleForOrderIfLinked,
+  pushKaitenHeadForContinuationParents,
   refreshOrderKaitenHeadMirrors,
 } from "@/lib/kaiten-push-order-title";
 import { normalizeInvoiceNumberFieldRu } from "@/lib/format-invoice-number-ru";
@@ -1158,6 +1159,18 @@ export async function PATCH(
       await recordOrderRevision(orderId, { kind: "SAVE" });
     } catch (e) {
       console.error("[PATCH order] revision log", e);
+    }
+
+    if (body.continuesFromOrderId !== undefined) {
+      const nextParentId =
+        body.continuesFromOrderId === null ||
+        String(body.continuesFromOrderId).trim() === ""
+          ? null
+          : String(body.continuesFromOrderId).trim();
+      void pushKaitenHeadForContinuationParents([
+        existing.continuesFromOrderId,
+        nextParentId,
+      ]);
     }
 
     const touchedKaitenHead = KAITEN_HEAD_PATCH_FIELDS.some(

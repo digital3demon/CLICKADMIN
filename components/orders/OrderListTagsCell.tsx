@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import {
   customListTagLabelMeansKaitenBlock,
   type KaitenBlockFromListTagResult,
@@ -11,9 +19,6 @@ import {
   customListTagLabelMeansKaitenUnblock,
   type KaitenUnblockFromListTagResult,
 } from "@/lib/custom-list-tag-kaiten-unblock-label";
-import { LAB_WORK_STATUS_PILL_STYLES } from "@/lib/lab-work-status";
-import { kaitenStatusDisplay } from "@/lib/kaiten-column-title";
-import { getKaitenColumnPillClassFromOrder } from "@/lib/order-status-display";
 import {
   LIST_TAG_FINANCE_CALCULATED,
   LIST_TAG_FINANCE_NOT_CALCULATED,
@@ -57,10 +62,10 @@ import {
   URGENT_UNSET,
   urgentSelectionFromOrder,
 } from "@/lib/order-urgency";
+import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderPaymentModalAccountingUpload } from "@/components/orders/OrderPaymentModalAccountingUpload";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
-  kaitenOrderToHarmonyTone,
   paymentValueToHarmonyTone,
   resolveListPillClass,
   type HarmonyPillTone,
@@ -159,6 +164,47 @@ function tagCloudCellClass(slot: TagSlotSize): string {
 }
 const TAG_EDIT_BUTTON_CLASS =
   "order-list-tag-edit rounded leading-none hover:opacity-90";
+
+function useOverlayDismiss(open: boolean, close: () => void) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, close]);
+}
+
+function renderTagsOverlay(
+  open: boolean,
+  ariaLabel: string,
+  onClose: () => void,
+  children: ReactNode,
+  dialogClassName = "w-full max-w-sm",
+) {
+  if (!open || typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/40 p-4"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+        className={`${dialogClassName} rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl`}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 /** Жёлтый треугольник с «!» (как знак внимания), без клика. */
 /** Белый контур шестерёнки на «небесной» пилюле — как стек уведомлений по протетике. */
@@ -342,24 +388,6 @@ function paymentPillClass(paymentValue: string): string {
   return "border-rose-300 bg-rose-50 text-rose-950 dark:border-rose-700/70 dark:bg-rose-950/40 dark:text-rose-100";
 }
 
-function kanbanColumnLabelForNoKaitenPill(
-  demoKanbanColumn: string | null | undefined,
-  demoCardTypeName: string | null | undefined,
-): string | null {
-  const raw = String(demoKanbanColumn || "").trim();
-  if (!raw) return null;
-  const ru =
-    raw === "NEW"
-      ? "Новые"
-      : raw === "IN_PROGRESS"
-        ? "В работе"
-        : raw === "DONE"
-          ? "Готово"
-          : raw;
-  const typeName = String(demoCardTypeName || "").trim();
-  return typeName ? `${ru} · ${typeName}` : ru;
-}
-
 export function OrderListTagsCell({
   orderId,
   pageSize,
@@ -392,22 +420,7 @@ export function OrderListTagsCell({
 }: Props) {
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
-  const kaitenLabel = kaitenStatusDisplay({
-    kaitenColumnTitle,
-    kaitenCardId,
-    demoKanbanColumn,
-    demoCardTypeName,
-  });
-  const hasKaitenColumnLabel = String(kaitenColumnTitle || "").trim().length > 0;
-  const showNoKaitenPill = !hasKaitenColumnLabel && kaitenCardId == null;
-  const noKaitenKanbanStatus = showNoKaitenPill
-    ? kanbanColumnLabelForNoKaitenPill(demoKanbanColumn, demoCardTypeName)
-    : null;
   const kaitenColTrimmed = kaitenColumnTitle?.trim() ?? "";
-  const kaitenPillClass = getKaitenColumnPillClassFromOrder({
-    kaitenColumnTitle: kaitenColTrimmed || null,
-    demoKanbanColumn,
-  });
   const kaitenFilterKey =
     kaitenColTrimmed.length > 0
       ? listTagKaitenColumnTitle(kaitenColTrimmed)
@@ -431,6 +444,17 @@ export function OrderListTagsCell({
     setBlockReasonDraft("");
     setErr(null);
   }, []);
+
+  const closePayment = useCallback(() => {
+    setPaymentOpen(false);
+    setPaymentPartialPrompt(false);
+  }, []);
+
+  const closeUrgent = useCallback(() => setUrgentOpen(false), []);
+
+  useOverlayDismiss(addOpen, closeAdd);
+  useOverlayDismiss(paymentOpen, closePayment);
+  useOverlayDismiss(urgentOpen, closeUrgent);
 
   const submitAdd = useCallback(async (labelOverride?: string) => {
     const label = (labelOverride ?? newLabel).trim();
@@ -635,10 +659,6 @@ export function OrderListTagsCell({
           : null;
   const paymentPillToneClass = paymentPillClass(currentPayment);
   const paymentHarmonyTone = paymentValueToHarmonyTone(currentPayment);
-  const kaitenHarmonyTone = kaitenOrderToHarmonyTone({
-    kaitenColumnTitle: kaitenColTrimmed || null,
-    demoKanbanColumn,
-  });
   const urgentSelectionValue = urgentSelectionFromOrder(
     isUrgent,
     urgentCoefficient,
@@ -877,12 +897,6 @@ export function OrderListTagsCell({
     const items: TagCloudItem[] = [];
     const listPill = (classic: string, tone: HarmonyPillTone) =>
       resolveListPillClass(isHarmony, classic, tone);
-    const kaitenStatusPillClass = (classicRounded: string) => {
-      const tone = noKaitenKanbanStatus ? "gray" : kaitenHarmonyTone;
-      return isHarmony
-        ? `${listPill("", tone)} ${padTable}`
-        : `${classicRounded} ${padTable}`;
-    };
     const paymentStatusPillClass = isHarmony
       ? `${listPill("", paymentHarmonyTone)} min-w-0 max-w-full shrink truncate ${padTable}`
       : `min-w-0 max-w-full shrink truncate rounded-full border font-semibold shadow-sm ${paymentPillToneClass} ${padTable}`;
@@ -929,71 +943,21 @@ export function OrderListTagsCell({
       });
     }
 
-    items.push({
-      key: "kaiten",
-      slot: "large",
-      node: kaitenFilterKey ? (
-        <Link
-          href={href(kaitenFilterKey)}
-          title="Показать наряды в этой колонке Kaiten"
-          className="inline-flex min-w-0 max-w-full items-center truncate text-left outline-none transition-opacity hover:opacity-90 focus-visible:outline-none"
-        >
-          {noKaitenKanbanStatus ? (
-            <span
-              className={kaitenStatusPillClass(
-                `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
-              )}
-            >
-              <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
-                <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
-                <span
-                  className="truncate text-[9px] font-medium opacity-90 sm:text-[10px]"
-                  title={noKaitenKanbanStatus}
-                >
-                  {noKaitenKanbanStatus}
-                </span>
-              </span>
-            </span>
-          ) : (
-            <span
-              className={kaitenStatusPillClass(
-                `inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass}`,
-              )}
-            >
-              {kaitenLabel}
-            </span>
-          )}
-        </Link>
-      ) : (
-        <span title="Колонка доски Kaiten (обновляется в фоне на списке заказов)">
-          {noKaitenKanbanStatus ? (
-            <span
-              className={kaitenStatusPillClass(
-                `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-left font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
-              )}
-            >
-              <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
-                <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
-                <span
-                  className="truncate text-[9px] font-medium opacity-90 sm:text-[10px]"
-                  title={noKaitenKanbanStatus}
-                >
-                  {noKaitenKanbanStatus}
-                </span>
-              </span>
-            </span>
-          ) : (
-            <span
-              className={kaitenStatusPillClass(
-                `inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-left font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass}`,
-              )}
-            >
-              {kaitenLabel}
-            </span>
-          )}
-        </span>
-      ),
-    });
+    if (!shipmentsFilterContext) {
+      items.push({
+        key: "kaiten",
+        slot: "large",
+        node: (
+          <OrderListKaitenColumnTag
+            kaitenCardId={kaitenCardId}
+            demoKanbanColumn={demoKanbanColumn}
+            demoCardTypeName={demoCardTypeName}
+            kaitenColumnTitle={kaitenColumnTitle}
+            filterHref={kaitenFilterKey ? href(kaitenFilterKey) : null}
+          />
+        ),
+      });
+    }
 
     if (financeOfficeFilterContext && financeCalculated != null) {
       const financeTag = financeCalculated
@@ -1211,9 +1175,11 @@ export function OrderListTagsCell({
     kaitenBlocked,
     kaitenBlockReason,
     kaitenFilterKey,
-    kaitenLabel,
-    kaitenPillClass,
-    noKaitenKanbanStatus,
+    kaitenCardId,
+    demoKanbanColumn,
+    demoCardTypeName,
+    kaitenColumnTitle,
+    shipmentsFilterContext,
     pageSize,
     hideShipped,
     onlyShipped,
@@ -1222,7 +1188,6 @@ export function OrderListTagsCell({
     periodTo,
     paymentFilterTag,
     isHarmony,
-    kaitenHarmonyTone,
     paymentHarmonyTone,
     paymentPill,
     paymentPillToneClass,
@@ -1241,7 +1206,8 @@ export function OrderListTagsCell({
     orderAttentionWarning || stripProstheticsPending;
   const prostheticsPendingHref = filterListHref(LIST_TAG_PROSTHETICS_PENDING);
   const inFinanceOffice = Boolean(financeOfficeFilterContext);
-  const useStackedLeadingIcons = useLeadingIconStrip && inFinanceOffice;
+  const useStackedLeadingIcons =
+    useLeadingIconStrip && (inFinanceOffice || Boolean(shipmentsFilterContext));
   const leadingIconCount =
     (orderAttentionWarning ? 1 : 0) + (stripProstheticsPending ? 1 : 0);
   const iconShellClass = inFinanceOffice
@@ -1398,10 +1364,10 @@ export function OrderListTagsCell({
       <div
         className={
           useStackedLeadingIcons
-            ? "order-list-tags-root flex w-full min-w-0 max-w-full flex-col gap-1.5"
+            ? "order-list-tags-root flex w-full min-w-0 max-w-full flex-col gap-1.5 overflow-hidden"
             : useLeadingIconStrip
-              ? "order-list-tags-root flex w-full min-w-0 max-w-full items-start gap-x-2"
-              : "order-list-tags-root flex w-full min-w-0 max-w-full flex-col"
+              ? "order-list-tags-root flex w-full min-w-0 max-w-full items-start gap-x-2 overflow-hidden"
+              : "order-list-tags-root flex w-full min-w-0 max-w-full flex-col overflow-hidden"
         }
         title="Отметки переносятся по ширине колонки таблицы"
       >
@@ -1439,22 +1405,8 @@ export function OrderListTagsCell({
         )}
       </div>
 
-      {addOpen ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
-          role="presentation"
-          onClick={(e) => {
-            e.stopPropagation();
-            closeAdd();
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Новый тег"
-            className="w-full max-w-sm rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {renderTagsOverlay(addOpen, "Новый тег", closeAdd, (
+        <>
             <p className="text-base font-semibold text-[var(--app-text)]">
               Тег для списка
             </p>
@@ -1563,26 +1515,11 @@ export function OrderListTagsCell({
                 {busy ? "…" : "Добавить"}
               </button>
             </div>
-          </div>
-        </div>
-      ) : null}
+        </>
+      ))}
 
-      {urgentOpen ? (
-        <div
-          className="fixed inset-0 z-[205] flex items-center justify-center bg-black/40 p-4"
-          role="presentation"
-          onClick={(e) => {
-            e.stopPropagation();
-            setUrgentOpen(false);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Срочность"
-            className="w-full max-w-sm rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {renderTagsOverlay(urgentOpen, "Срочность", closeUrgent, (
+        <>
             <p className="text-base font-semibold text-[var(--app-text)]">
               Срочность
             </p>
@@ -1613,32 +1550,20 @@ export function OrderListTagsCell({
               <button
                 type="button"
                 className="rounded-md border border-[var(--card-border)] px-4 py-2 text-base text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-                onClick={() => setUrgentOpen(false)}
+                onClick={closeUrgent}
               >
                 Закрыть
               </button>
             </div>
-          </div>
-        </div>
-      ) : null}
+        </>
+      ))}
 
-      {paymentOpen ? (
-        <div
-          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/40 p-4"
-          role="presentation"
-          onClick={(e) => {
-            e.stopPropagation();
-            setPaymentOpen(false);
-            setPaymentPartialPrompt(false);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Статус оплаты"
-            className="w-full max-w-md rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {renderTagsOverlay(
+        paymentOpen,
+        "Статус оплаты",
+        closePayment,
+        (
+          <>
             <p className="text-base font-semibold text-[var(--app-text)]">
               Статус оплаты
             </p>
@@ -1747,17 +1672,15 @@ export function OrderListTagsCell({
               <button
                 type="button"
                 className="rounded-md border border-[var(--card-border)] px-4 py-2 text-base text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-                onClick={() => {
-                  setPaymentOpen(false);
-                  setPaymentPartialPrompt(false);
-                }}
+                onClick={closePayment}
               >
                 Закрыть
               </button>
             </div>
-          </div>
-        </div>
-      ) : null}
+          </>
+        ),
+        "w-full max-w-md",
+      )}
     </Fragment>
   );
 }

@@ -601,6 +601,7 @@ export type OrderEditInitial = {
   invoiceAttachmentCreatedAt: string | null;
   /** Отмечен при создании как продолжение отгруженного наряда */
   continuesFromOrder: { id: string; orderNumber: string } | null;
+  continuationFollowups: { id: string; orderNumber: string }[];
   /** Корректировки из чата (префикс «!!!») */
   chatCorrections: Array<{
     id: string;
@@ -2635,7 +2636,7 @@ export function OrderEditForm({
         </h3>
         {continuesFromOrderId && continuesFromOrderNumber ? (
           <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
-            <span className="font-medium">Связан с нарядом </span>
+            <span className="font-medium">Продолжение работы </span>
             <Link
               href={orderPathById(continuesFromOrderId)}
               className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
@@ -2658,6 +2659,26 @@ export function OrderEditForm({
             Укажите предыдущий наряд того же врача и пациента (по фамилии).
           </p>
         )}
+        {initial.continuationFollowups.length > 0 ? (
+          <div className="mt-2 space-y-1.5">
+            {initial.continuationFollowups.map((child) => (
+              <p
+                key={child.id}
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
+              >
+                <span className="font-medium">
+                  У этой работы есть продолжение{" "}
+                </span>
+                <Link
+                  href={orderPathById(child.id)}
+                  className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
+                >
+                  {child.orderNumber}
+                </Link>
+              </p>
+            ))}
+          </div>
+        ) : null}
         <button
           type="button"
           className="mt-2 self-start rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--app-text)] hover:bg-[var(--surface-hover)]"
@@ -3383,6 +3404,11 @@ export function OrderEditForm({
               {initial.kaitenCardUrl || kanbanCardUrl ? (
                 <OrderKaitenQrModal
                   url={initial.kaitenCardUrl || kanbanCardUrl}
+                  kanbanUrl={
+                    initial.kaitenCardUrl && kanbanCardUrl
+                      ? kanbanCardUrl
+                      : null
+                  }
                   labelFull={
                     initial.kaitenCardUrl
                       ? isDemoMode

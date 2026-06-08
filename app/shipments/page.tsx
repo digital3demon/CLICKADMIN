@@ -130,7 +130,7 @@ export default async function ShipmentsPage({
       tenantId,
       start,
       endExclusive,
-      { listTag: listTagForFetch },
+      { listTag: listTagForFetch, userId: session?.sub },
     );
     const clearHref = shipmentsListHref({
       tab: "today",
@@ -188,7 +188,7 @@ export default async function ShipmentsPage({
       tenantId,
       start,
       endExclusive,
-      { listTag: listTagForFetch },
+      { listTag: listTagForFetch, userId: session?.sub },
     );
     const clearHref = shipmentsListHref({
       tab: "tomorrow",
@@ -258,7 +258,7 @@ export default async function ShipmentsPage({
           tenantId,
           start,
           endExclusive,
-          { listTag: listTagForFetch },
+          { listTag: listTagForFetch, userId: session?.sub },
         );
       }
     }

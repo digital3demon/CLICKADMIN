@@ -40,6 +40,12 @@ export type KaitenLinkedOrderForKanban = {
     orderNumber: string;
     kaitenCardId: number | null;
   } | null;
+  /** Наряды-продолжения этой работы. */
+  continuationFollowups?: {
+    id: string;
+    orderNumber: string;
+    kaitenCardId: number | null;
+  }[];
   /** Вложения наряда (без счёта-фактуры) — показываются в модалке канбана как «Файлы». */
   attachments?: {
     id: string;

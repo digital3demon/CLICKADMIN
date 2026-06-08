@@ -1,5 +1,9 @@
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { buildKaitenCardDescription } from "@/lib/kaiten-order-sync";
+import {
+  activeContinuationChildrenWhere,
+  mapContinuationChildrenRefs,
+} from "@/lib/order-continuation-display";
 import { getKaitenRestAuth, kaitenPatchCard } from "@/lib/kaiten-rest";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
@@ -21,6 +25,11 @@ type HeadSelect = {
     orderNumber: string;
     kaitenCardId: number | null;
   } | null;
+  continuationOrders: {
+    id: string;
+    orderNumber: string;
+    kaitenCardId: number | null;
+  }[];
 };
 
 async function loadOrderForKaitenHead(
@@ -44,6 +53,15 @@ async function loadOrderForKaitenHead(
       notes: true,
       continuesFromOrder: {
         select: {
+          orderNumber: true,
+          kaitenCardId: true,
+        },
+      },
+      continuationOrders: {
+        where: activeContinuationChildrenWhere,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
           orderNumber: true,
           kaitenCardId: true,
         },
@@ -84,6 +102,7 @@ async function computeKaitenHeadForOrder(orderId: string): Promise<{
           kaitenCardId: order.continuesFromOrder.kaitenCardId,
         }
       : null,
+    mapContinuationChildrenRefs(order.continuationOrders),
   );
   const descriptionMirror = description.trim() ? description : null;
 
@@ -133,6 +152,23 @@ export async function refreshOrderKaitenHeadMirrors(
 export type KaitenHeadPushResult =
   | { ok: true; title: string; descriptionMirror: string | null }
   | { ok: false; error: string };
+
+/** Обновить Kaiten-шапку у нарядов-родителей при смене связи продолжения. */
+export async function pushKaitenHeadForContinuationParents(
+  parentOrderIds: Iterable<string | null | undefined>,
+): Promise<void> {
+  const seen = new Set<string>();
+  for (const raw of parentOrderIds) {
+    const id = raw?.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    try {
+      await pushKaitenCardTitleForOrderIfLinked(id);
+    } catch (e) {
+      console.error("[kaiten] push head for continuation parent", id, e);
+    }
+  }
+}
 
 export async function pushKaitenCardTitleForOrderIfLinked(
   orderId: string,

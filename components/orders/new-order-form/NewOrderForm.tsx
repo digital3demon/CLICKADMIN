@@ -124,7 +124,7 @@ import {
 } from "@/lib/crm-upload-limits";
 import { enqueueOrderAttachmentFiles } from "@/lib/order-attachment-background-queue";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
-import { orderPathById } from "@/lib/order-public-ref";
+import { orderIdFromOrderPath, orderPathById } from "@/lib/order-public-ref";
 
 type DoctorRow = {
   id: string;
@@ -1040,9 +1040,17 @@ export function NewOrderForm({
               correctionTrack != null ? correctionReason.trim() || null : null,
             correctionPaid:
               correctionTrack != null ? correctionPaid : false,
-            ...(continuationChoice
-              ? { continuesFromOrderId: continuationChoice.id }
-              : {}),
+            ...(() => {
+              const continuesFromOrderIdForSave =
+                continuationChoice?.id ??
+                (quickOrder.continueWork?.orderId?.trim() ||
+                  (quickOrder.continueWork?.href
+                    ? orderIdFromOrderPath(quickOrder.continueWork.href)
+                    : null));
+              return continuesFromOrderIdForSave
+                ? { continuesFromOrderId: continuesFromOrderIdForSave }
+                : {};
+            })(),
             ...(kaiten.kaitenDecideLater
               ? kaiten.createKanbanWithoutKaiten === true
                 ? {

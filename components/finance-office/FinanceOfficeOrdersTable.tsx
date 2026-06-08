@@ -8,6 +8,7 @@ import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
+import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
 
 export type FinanceOfficeOrderTableRow = {
   id: string;
@@ -158,7 +159,7 @@ export function FinanceOfficeOrdersTable({
                   key={o.id}
                   className={
                     workSent
-                      ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
+                      ? ORDER_SHIPPED_ROW_CLASS
                       : "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]"
                   }
                 >

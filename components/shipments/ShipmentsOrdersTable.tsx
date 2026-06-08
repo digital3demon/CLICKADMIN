@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Fragment } from "react";
 import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
+import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
 import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
@@ -16,6 +17,10 @@ import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { clampOrdersPageSize } from "@/lib/orders-list-cursor";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { orderPathById } from "@/lib/order-public-ref";
+import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
+import { listTagKaitenColumnTitle } from "@/lib/order-list-tag-filter";
+import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
+import { shipmentsListHref } from "@/lib/shipments-list-query";
 
 const TAGS_PAGE_SIZE = clampOrdersPageSize(null);
 
@@ -32,6 +37,12 @@ function ShipmentsTableHeaderRow({
 }) {
   return (
     <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs print:bg-[var(--card-bg)]">
+      <th
+        className={`${SHIPMENTS_TABLE_TH} max-md:hidden normal-case print:hidden`}
+        title="Чат карточки в Kaiten"
+      >
+        Чат
+      </th>
       <th
         className={`${SHIPMENTS_TABLE_TH} max-md:hidden normal-case print:hidden`}
         aria-label="Печать наряда, этикетки и QR"
@@ -109,8 +120,9 @@ function ShipmentsTableColGroup({
   if (showAccountantColumns) {
     return (
       <colgroup>
-        <col className="max-md:hidden lg:w-[6%]" />
-        <col className="lg:w-[5.5%]" />
+        <col className="max-md:hidden lg:w-[3%]" />
+        <col className="max-md:hidden lg:w-[5.5%]" />
+        <col className="lg:w-[7.2%]" />
         <col className="lg:w-[10%]" />
         <col className="lg:w-[10%]" />
         <col className="lg:w-[7.5%]" />
@@ -127,8 +139,9 @@ function ShipmentsTableColGroup({
   }
   return (
     <colgroup>
-      <col className="max-md:hidden lg:w-[7.2%]" />
-      <col className="lg:w-[6.4%]" />
+      <col className="max-md:hidden lg:w-[3%]" />
+      <col className="max-md:hidden lg:w-[6.6%]" />
+        <col className="lg:w-[7.2%]" />
       <col className="lg:w-[12.1%]" />
       <col className="lg:w-[11.9%]" />
       <col className="lg:w-[8.6%]" />
@@ -137,7 +150,7 @@ function ShipmentsTableColGroup({
       <col className="lg:w-[7.8%]" />
       <col className="lg:w-[7.8%]" />
       <col className="lg:w-[5.2%]" />
-      <col className="lg:w-[18%]" />
+      <col className="lg:w-[20%]" />
     </colgroup>
   );
 }
@@ -276,12 +289,18 @@ export function ShipmentsOrdersTable({
           </thead>
           <tbody>
             {orders.map((o) => {
-              const kaitenUrl =
-                isDemo && siteOrigin
+              const kanbanWebUrl =
+                siteOrigin != null
                   ? `${siteOrigin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(o.id)}`
-                  : o.kaitenCardId != null
-                    ? getKaitenCardWebUrl(o.kaitenCardId)
-                    : null;
+                  : null;
+              const kaitenWebUrl =
+                !isDemo && o.kaitenCardId != null
+                  ? getKaitenCardWebUrl(o.kaitenCardId)
+                  : null;
+              const kaitenUrl =
+                isDemo && kanbanWebUrl
+                  ? kanbanWebUrl
+                  : kaitenWebUrl ?? kanbanWebUrl;
               const workSent = o.adminShippedOtpr;
               const clinicName = o.clinic?.name ?? "Частное лицо";
               const address = o.clinic?.address?.trim() || "";
@@ -294,8 +313,17 @@ export function ShipmentsOrdersTable({
                 o.appointmentDate ?? o.dueToAdminsAt,
               );
               const rowClass = workSent
-                ? "border-b-2 border-emerald-400/55 bg-emerald-300/55 text-emerald-950/90 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100/85 print:border-zinc-400 [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:opacity-[0.28] [&>td:not(:first-child):not(:last-child):not([data-shipped-cell])]:saturate-[0.65] [&>td:last-child]:opacity-[0.88]"
+                ? `${ORDER_SHIPPED_ROW_CLASS} print:border-zinc-400 print:bg-transparent`
                 : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
+              const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
+              const kaitenStatusFilterHref = kaitenColTrimmed
+                ? shipmentsListHref({
+                    tab: shipmentsTagFilterContext.tab,
+                    tag: listTagKaitenColumnTitle(kaitenColTrimmed),
+                    from: shipmentsTagFilterContext.periodFrom ?? undefined,
+                    to: shipmentsTagFilterContext.periodTo ?? undefined,
+                  })
+                : null;
               const renderPrintActions = () => (
                 <>
                   <OrderNarjadPrintTrigger
@@ -307,6 +335,9 @@ export function ShipmentsOrdersTable({
                   {kaitenUrl ? (
                     <OrderKaitenQrModal
                       url={kaitenUrl}
+                      kanbanUrl={
+                        kaitenWebUrl && kanbanWebUrl ? kanbanWebUrl : null
+                      }
                       compact
                       variant={isDemo ? "kanban" : "kaiten"}
                     />
@@ -359,19 +390,34 @@ export function ShipmentsOrdersTable({
                 <tr
                   className={`hidden shell-desktop:table-row print:table-row ${rowClass}`}
                 >
+                  <OrderListOrderChatCell
+                    orderId={o.id}
+                    orderNumber={o.orderNumber}
+                    labMentionHighlight={o.listKaitenLabMentionHighlight}
+                  />
                   <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:py-1.5 print:hidden">
                     <div className="flex min-w-0 flex-nowrap items-center justify-center gap-0">
                       {renderPrintActions()}
                     </div>
                   </td>
-                  <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle font-mono font-medium text-[var(--app-text)] sm:px-1.5 sm:py-1.5 print:px-1.5">
-                    <Link
-                      href={orderPathById(o.id)}
-                      className="text-[var(--sidebar-blue)] hover:underline"
-                      title={`${o.orderNumber} — открыть наряд`}
-                    >
-                      {o.orderNumber}
-                    </Link>
+                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5 print:px-1.5">
+                    <div className="flex min-h-[2.5rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
+                      <Link
+                        href={orderPathById(o.id)}
+                        className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
+                        title={`${o.orderNumber} — открыть наряд`}
+                      >
+                        {o.orderNumber}
+                      </Link>
+                      <OrderListKaitenColumnTag
+                        kaitenCardId={o.kaitenCardId}
+                        demoKanbanColumn={o.demoKanbanColumn}
+                        demoCardTypeName={o.kaitenCardType?.name ?? null}
+                        kaitenColumnTitle={o.kaitenColumnTitle}
+                        filterHref={kaitenStatusFilterHref}
+                        placement="underOrderNumber"
+                      />
+                    </div>
                   </td>
                   <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     {o.clinic ? (
@@ -470,8 +516,10 @@ export function ShipmentsOrdersTable({
                   >
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5 print:px-1.5">
-                    <div className="min-w-0">{renderTagsCell()}</div>
+                  <td className="min-w-0 max-w-0 overflow-hidden px-1 py-1 align-top sm:px-1.5 sm:py-1.5 print:px-1.5">
+                    <div className="min-w-0 max-w-full overflow-hidden">
+                      {renderTagsCell()}
+                    </div>
                   </td>
                 </tr>
                 <tr
@@ -480,13 +528,23 @@ export function ShipmentsOrdersTable({
                   <td colSpan={99} className="p-0">
                     <div className="p-3">
                       <div className="mb-1.5 flex items-start justify-between gap-2">
-                        <Link
-                          href={orderPathById(o.id)}
-                          className="font-mono text-base font-bold text-[var(--sidebar-blue)] hover:underline"
-                          title={`${o.orderNumber} — открыть наряд`}
-                        >
-                          № {o.orderNumber}
-                        </Link>
+                        <div className="flex min-w-0 flex-col items-start gap-1">
+                          <Link
+                            href={orderPathById(o.id)}
+                            className="font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
+                            title={`${o.orderNumber} — открыть наряд`}
+                          >
+                            № {o.orderNumber}
+                          </Link>
+                          <OrderListKaitenColumnTag
+                            kaitenCardId={o.kaitenCardId}
+                            demoKanbanColumn={o.demoKanbanColumn}
+                            demoCardTypeName={o.kaitenCardType?.name ?? null}
+                            kaitenColumnTitle={o.kaitenColumnTitle}
+                            filterHref={kaitenStatusFilterHref}
+                            placement="underOrderNumber"
+                          />
+                        </div>
                         {labDate ? (
                           <span className="mt-0.5 shrink-0 text-xs text-[var(--text-muted)]">
                             {labDate}
@@ -542,6 +600,14 @@ export function ShipmentsOrdersTable({
                         >
                           Открыть
                         </Link>
+                        <div className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+                          <OrderListOrderChatCell
+                            orderId={o.id}
+                            orderNumber={o.orderNumber}
+                            labMentionHighlight={o.listKaitenLabMentionHighlight}
+                            embedded
+                          />
+                        </div>
                         <div className="flex items-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1">
                           {renderPrintActions()}
                         </div>

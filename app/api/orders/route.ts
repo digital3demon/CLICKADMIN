@@ -12,6 +12,10 @@ import { withApiTiming } from "@/lib/server/api-timing";
 import { logger } from "@/lib/server/logger";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
+import {
+  pushKaitenCardTitleForOrderIfLinked,
+  pushKaitenHeadForContinuationParents,
+} from "@/lib/kaiten-push-order-title";
 import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
 import {
   createOrderFromBody,
@@ -115,6 +119,11 @@ export async function POST(req: Request) {
         );
       }
       const orderId = result.order.id;
+      if (result.order.continuesFromOrderId) {
+        void pushKaitenHeadForContinuationParents([
+          result.order.continuesFromOrderId,
+        ]);
+      }
       if (shouldScheduleKaitenSyncAfterOrderCreate(body)) {
         const syncKaiten = async (): Promise<string | null> => {
           const maxKaitenAttempts = 3;
@@ -135,6 +144,36 @@ export async function POST(req: Request) {
             }
             if (syncResult.ok) {
               invalidateKaitenSnapshotCache(orderId);
+              try {
+                const push = await pushKaitenCardTitleForOrderIfLinked(orderId);
+                if (!push.ok) {
+                  logger.error(
+                    { err: push.error, msg: "kaiten_head_after_create" },
+                    "POST /api/orders",
+                  );
+                }
+              } catch (e) {
+                logger.error(
+                  { err: e, msg: "kaiten_head_after_create" },
+                  "POST /api/orders",
+                );
+              }
+              try {
+                const row = await ordersPrisma.order.findUnique({
+                  where: { id: orderId },
+                  select: { continuesFromOrderId: true },
+                });
+                if (row?.continuesFromOrderId) {
+                  await pushKaitenHeadForContinuationParents([
+                    row.continuesFromOrderId,
+                  ]);
+                }
+              } catch (e) {
+                logger.error(
+                  { err: e, msg: "kaiten_parent_after_child_create" },
+                  "POST /api/orders",
+                );
+              }
               try {
                 await syncUnpushedOrderAttachmentsToKaiten(
                   orderId,
