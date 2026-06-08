@@ -8,7 +8,8 @@ import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
 import { OrderStickerPrintLink } from "@/components/orders/OrderStickerPrintLink";
 import { ShipmentsPrintButton } from "@/components/shipments/ShipmentsPrintButton";
-import { StickyListChrome } from "@/components/layout/StickyListChrome";
+import { ShipmentsListChrome } from "@/components/shipments/ShipmentsListChrome";
+import { ShipmentsTableMirrorScroll } from "@/components/shipments/ShipmentsTableMirrorScroll";
 import type { ShipmentOrderRow } from "@/lib/fetch-shipments-orders";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
@@ -23,6 +24,82 @@ const SHIPMENTS_TABLE_TH =
 
 const SHIPMENTS_TABLE_CLASS =
   "w-full min-w-[56rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] md:min-w-[56rem] lg:min-w-0 lg:text-xs 2xl:text-[13px]";
+
+function ShipmentsTableHeaderRow({
+  showAccountantColumns,
+}: {
+  showAccountantColumns: boolean;
+}) {
+  return (
+    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs print:bg-[var(--card-bg)]">
+      <th
+        className={`${SHIPMENTS_TABLE_TH} max-md:hidden normal-case print:hidden`}
+        aria-label="Печать наряда, этикетки и QR"
+        title="Печать наряда, этикетки и QR на карточку Kaiten"
+      >
+        Печать
+      </th>
+      <th className={SHIPMENTS_TABLE_TH} title="№ наряда">
+        № наряда
+      </th>
+      <th className={SHIPMENTS_TABLE_TH} title="Клиника">
+        Клиника
+      </th>
+      <th className={SHIPMENTS_TABLE_TH} title="Адрес клиники">
+        Адрес
+      </th>
+      <th className={SHIPMENTS_TABLE_TH} title="Врач">
+        Врач
+      </th>
+      <th className={SHIPMENTS_TABLE_TH} title="Пациент">
+        Пациент
+      </th>
+      <th
+        className={SHIPMENTS_TABLE_TH}
+        title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
+      >
+        Поступление
+      </th>
+      <th className={SHIPMENTS_TABLE_TH} title="Срок лабораторный">
+        ЛАБ
+      </th>
+      <th
+        className={SHIPMENTS_TABLE_TH}
+        title="Запись: дата и время приёма пациента"
+      >
+        Запись
+      </th>
+      {showAccountantColumns ? (
+        <>
+          <th
+            className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
+            title="ИНН, КПП, банк, р/с и др. по карточке клиники или ИП врача"
+          >
+            Реквизиты
+          </th>
+          <th
+            className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
+            title="С какого юрлица лаборатории ведётся наряд (поле в наряде)"
+          >
+            Наше юрлицо
+          </th>
+        </>
+      ) : null}
+      <th
+        className={`${SHIPMENTS_TABLE_TH} normal-case print:hidden`}
+        title="Отправка работы"
+      >
+        Отправка
+      </th>
+      <th
+        className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
+        title="Отметки: как на странице «Заказы»"
+      >
+        Отметки
+      </th>
+    </tr>
+  );
+}
 
 function ShipmentsTableColGroup({
   showAccountantColumns,
@@ -126,6 +203,9 @@ export function ShipmentsOrdersTable({
     );
   }
 
+  const mirrorScrollId = "shipments-table-mirror-scroll";
+  const bodyScrollId = "shipments-table-body-scroll";
+
   return (
     <div className="w-full min-w-0">
       {!isDemo ? (
@@ -135,7 +215,11 @@ export function ShipmentsOrdersTable({
             .map((o) => o.id)}
         />
       ) : null}
-      <StickyListChrome
+      <ShipmentsTableMirrorScroll
+        mirrorId={mirrorScrollId}
+        bodyId={bodyScrollId}
+      />
+      <ShipmentsListChrome
         className="shipments-print-area w-full max-w-full min-w-0 overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm print:max-w-none print:w-full print:overflow-visible print:border-zinc-400 print:shadow-none"
         toolbarClassName="rounded-t-lg bg-[var(--card-bg)] pb-0 print:static"
         toolbar={
@@ -163,80 +247,32 @@ export function ShipmentsOrdersTable({
             </p>
           ) : null}
         </div>
+        <div
+          id={mirrorScrollId}
+          className="orders-list-mirror-thead hidden w-full min-w-0 overflow-x-auto overflow-y-hidden border-t border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border)] [-webkit-overflow-scrolling:touch] shell-desktop:block print:hidden"
+        >
+          <table className={SHIPMENTS_TABLE_CLASS} aria-hidden="true">
+            <ShipmentsTableColGroup showAccountantColumns={showAccountantColumns} />
+            <thead>
+              <ShipmentsTableHeaderRow
+                showAccountantColumns={showAccountantColumns}
+              />
+            </thead>
+          </table>
+        </div>
           </>
         }
       >
-        <div className="orders-harmony-table-shell scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full print:overflow-visible">
+        <div
+          id={bodyScrollId}
+          className="orders-harmony-table-shell scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full print:overflow-visible"
+        >
         <table className={SHIPMENTS_TABLE_CLASS}>
           <ShipmentsTableColGroup showAccountantColumns={showAccountantColumns} />
-          <thead className="hidden shell-desktop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30 print:table-header-group print:static">
-            <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs print:bg-[var(--card-bg)]">
-              <th
-                className={`${SHIPMENTS_TABLE_TH} max-md:hidden normal-case print:hidden`}
-                aria-label="Печать наряда, этикетки и QR"
-                title="Печать наряда, этикетки и QR на карточку Kaiten"
-              >
-                Печать
-              </th>
-              <th className={SHIPMENTS_TABLE_TH} title="№ наряда">
-                № наряда
-              </th>
-              <th className={SHIPMENTS_TABLE_TH} title="Клиника">
-                Клиника
-              </th>
-              <th className={SHIPMENTS_TABLE_TH} title="Адрес клиники">
-                Адрес
-              </th>
-              <th className={SHIPMENTS_TABLE_TH} title="Врач">
-                Врач
-              </th>
-              <th className={SHIPMENTS_TABLE_TH} title="Пациент">
-                Пациент
-              </th>
-              <th
-                className={SHIPMENTS_TABLE_TH}
-                title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
-              >
-                Поступление
-              </th>
-              <th className={SHIPMENTS_TABLE_TH} title="Срок лабораторный">
-                ЛАБ
-              </th>
-              <th
-                className={SHIPMENTS_TABLE_TH}
-                title="Запись: дата и время приёма пациента"
-              >
-                Запись
-              </th>
-              {showAccountantColumns ? (
-                <>
-                  <th
-                    className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
-                    title="ИНН, КПП, банк, р/с и др. по карточке клиники или ИП врача"
-                  >
-                    Реквизиты
-                  </th>
-                  <th
-                    className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
-                    title="С какого юрлица лаборатории ведётся наряд (поле в наряде)"
-                  >
-                    Наше юрлицо
-                  </th>
-                </>
-              ) : null}
-              <th
-                className={`${SHIPMENTS_TABLE_TH} normal-case print:hidden`}
-                title="Отправка работы"
-              >
-                Отправка
-              </th>
-              <th
-                className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
-                title="Отметки: как на странице «Заказы»"
-              >
-                Отметки
-              </th>
-            </tr>
+          <thead className="shipments-table-thead-a11y sr-only print:static print:table-header-group">
+            <ShipmentsTableHeaderRow
+              showAccountantColumns={showAccountantColumns}
+            />
           </thead>
           <tbody>
             {orders.map((o) => {
@@ -526,7 +562,7 @@ export function ShipmentsOrdersTable({
           </tbody>
         </table>
         </div>
-      </StickyListChrome>
+      </ShipmentsListChrome>
     </div>
   );
 }
