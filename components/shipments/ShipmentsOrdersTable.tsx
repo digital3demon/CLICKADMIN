@@ -318,10 +318,10 @@ export function ShipmentsOrdersTable({
               const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
               const kaitenStatusFilterHref = kaitenColTrimmed
                 ? shipmentsListHref({
-                    tab: shipmentsTagFilterContext.tab,
+                    tab: shipmentsTagFilterContext?.tab ?? "today",
                     tag: listTagKaitenColumnTitle(kaitenColTrimmed),
-                    from: shipmentsTagFilterContext.periodFrom ?? undefined,
-                    to: shipmentsTagFilterContext.periodTo ?? undefined,
+                    from: shipmentsTagFilterContext?.periodFrom ?? undefined,
+                    to: shipmentsTagFilterContext?.periodTo ?? undefined,
                   })
                 : null;
               const renderPrintActions = () => (
