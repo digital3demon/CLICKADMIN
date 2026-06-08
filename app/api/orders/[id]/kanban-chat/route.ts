@@ -11,14 +11,22 @@ import {
   kaitenJsonIntId,
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
-import { getKaitenRestAuth, kaitenCreateComment, kaitenListComments } from "@/lib/kaiten-rest";
+import {
+  getKaitenRestAuth,
+  kaitenCreateComment,
+  kaitenListComments,
+} from "@/lib/kaiten-rest";
 import {
   createOrderChatCorrectionIfNeeded,
   syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
-import { upsertKaitenCommentsToCard } from "@/lib/kanban/chat-sync";
+import {
+  commentBodyDedupKey,
+  compactCardComments,
+  upsertKaitenCommentsToCard,
+} from "@/lib/kanban/chat-sync";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
@@ -63,6 +71,10 @@ async function syncCrmCommentToKaiten(
   row: CardComment,
 ): Promise<CardComment> {
   const next = normalizeCardComment(row);
+  if (String(next.externalCommentId || "").trim()) {
+    next.syncStatus = "synced";
+    return next;
+  }
   if (card.kaitenCardId == null || !Number.isFinite(card.kaitenCardId)) {
     next.syncStatus = "local";
     return next;
@@ -75,6 +87,23 @@ async function syncCrmCommentToKaiten(
   const parentExternalId = next.externalParentId
     ? kaitenJsonIntId(next.externalParentId)
     : null;
+  const bodyKey = commentBodyDedupKey(next.text);
+  const authorExpected = (next.authorLabel || "CRM").trim();
+  const listed = await kaitenListComments(auth, card.kaitenCardId);
+  if (listed.ok && bodyKey) {
+    for (const raw of listed.comments) {
+      const parsed = parseKaitenListComment(raw);
+      if (!parsed || commentBodyDedupKey(parsed.text) !== bodyKey) continue;
+      const authorGot = (parsed.authorName || "").trim();
+      if (authorGot && authorExpected && authorGot !== authorExpected) continue;
+      const externalId = kaitenJsonIntId(parsed.id);
+      if (externalId == null) continue;
+      next.syncStatus = "synced";
+      next.syncedAt = nowIso();
+      next.externalCommentId = String(externalId);
+      return next;
+    }
+  }
   const posted = await kaitenCreateComment(
     auth,
     card.kaitenCardId,
@@ -232,8 +261,9 @@ export async function GET(
             parentId: c.parentId,
           })),
         );
-        if (merged.changed) {
-          card.comments = merged.next;
+        const compacted = compactCardComments(merged.next);
+        if (merged.changed || compacted.length !== (card.comments || []).length) {
+          card.comments = compacted;
           card.updatedAt = nowIso();
           await saveTenantKanbanStateWithRetry(tenantId, state, statePayload.updatedAt);
         }
@@ -256,7 +286,9 @@ export async function GET(
       }
     }
   }
-  const comments = normalizeCardCommentsForApi(card.comments || []);
+  const comments = normalizeCardCommentsForApi(
+    compactCardComments(card.comments || []),
+  );
   const cardImages = (card.files || [])
     .filter((f) => String(f.mime || "").toLowerCase().startsWith("image/"))
     .map((f) => ({
@@ -318,6 +350,9 @@ export async function POST(
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
   }
 
+  const draftCommentId = retryCommentId || newCommentId();
+  const textBodyKey = commentBodyDedupKey(text);
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const loaded = await loadTenantKanbanState(tenantId);
     const state = loaded.state;
@@ -365,51 +400,74 @@ export async function POST(
     const parent = parentId
       ? (card.comments || []).find((c) => String(c.id || "").trim() === parentId)
       : null;
-    const createdAt = nowIso();
-    const commentId = newCommentId();
-    const localComment: CardComment = normalizeCardComment({
-      id: commentId,
-      userId: session.sub,
-      text,
-      createdAt,
-      parentId,
-      authorLabel,
-      source: "CRM",
-      syncStatus:
-        card.kaitenCardId != null && Number.isFinite(card.kaitenCardId) ? "pending" : "local",
-      syncedAt: null,
-      externalCommentId: null,
-      externalParentId: parent?.externalCommentId ?? null,
-    });
-    card.comments = [...(card.comments || []), localComment];
-    card.updatedAt = createdAt;
-
-    if (action === "correction") {
-      await createOrderChatCorrectionIfNeeded(
-        ordersPrisma,
-        order.id,
-        `!!! ${text}`,
-        "DEMO_KANBAN",
-      );
-    } else if (action === "prosthetics") {
-      await createOrderProstheticsRequestIfNeeded(
-        ordersPrisma,
-        order.id,
-        `??? ${text}`,
-        "DEMO_KANBAN",
+    let row = (card.comments || []).find((c) => String(c.id || "").trim() === draftCommentId);
+    if (!row && textBodyKey) {
+      row = (card.comments || []).find(
+        (c) =>
+          c.source === "CRM" &&
+          !String(c.externalCommentId || "").trim() &&
+          c.userId === session.sub &&
+          (c.syncStatus === "pending" || c.syncStatus === "failed") &&
+          commentBodyDedupKey(c.text) === textBodyKey,
       );
     }
+    const createdAt = row?.createdAt || nowIso();
+    if (!row) {
+      row = normalizeCardComment({
+        id: draftCommentId,
+        userId: session.sub,
+        text,
+        createdAt,
+        parentId,
+        authorLabel,
+        source: "CRM",
+        syncStatus:
+          card.kaitenCardId != null && Number.isFinite(card.kaitenCardId) ? "pending" : "local",
+        syncedAt: null,
+        externalCommentId: null,
+        externalParentId: parent?.externalCommentId ?? null,
+      });
+      card.comments = [...(card.comments || []), row];
+      card.updatedAt = createdAt;
 
-    const row = (card.comments || []).find((c) => c.id === commentId);
-    if (row) {
-      const synced = await syncCrmCommentToKaiten(card, row);
-      Object.assign(row, synced);
+      if (action === "correction") {
+        await createOrderChatCorrectionIfNeeded(
+          ordersPrisma,
+          order.id,
+          `!!! ${text}`,
+          "DEMO_KANBAN",
+        );
+      } else if (action === "prosthetics") {
+        await createOrderProstheticsRequestIfNeeded(
+          ordersPrisma,
+          order.id,
+          `??? ${text}`,
+          "DEMO_KANBAN",
+        );
+      }
     }
 
     const saved = await saveTenantKanbanStateWithRetry(tenantId, next, loaded.updatedAt);
     if (!saved) continue;
-    const created = (card.comments || []).find((c) => c.id === commentId) ?? localComment;
-    return NextResponse.json({ ok: true, comment: created });
+
+    if (!String(row.externalCommentId || "").trim()) {
+      const synced = await syncCrmCommentToKaiten(card, row);
+      Object.assign(row, synced);
+      card.updatedAt = nowIso();
+      card.comments = compactCardComments(card.comments || []);
+      const loadedAfterSave = await loadTenantKanbanState(tenantId);
+      const savedAfterSync = await saveTenantKanbanStateWithRetry(
+        tenantId,
+        next,
+        loadedAfterSave.updatedAt,
+      );
+      if (!savedAfterSync) {
+        if (row.syncStatus === "synced") row.syncStatus = "failed";
+        continue;
+      }
+    }
+
+    return NextResponse.json({ ok: true, comment: row });
   }
 
   return NextResponse.json(

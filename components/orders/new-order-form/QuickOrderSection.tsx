@@ -25,6 +25,7 @@ type QuickOrderSectionProps = {
   value: QuickOrderState;
   clinicId?: string | null;
   doctorId?: string | null;
+  patientName?: string;
   onChange: (next: QuickOrderState) => void;
 };
 
@@ -32,6 +33,7 @@ export function QuickOrderSection({
   value: q,
   clinicId = null,
   doctorId = null,
+  patientName = "",
   onChange,
 }: QuickOrderSectionProps) {
   const { resolvedDark } = useTheme();
@@ -310,6 +312,9 @@ export function QuickOrderSection({
       <ContinueWorkSearchDialog
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
+        doctorId={doctorId}
+        patientName={patientName}
+        clinicId={clinicId}
         onPick={(o: PickedOrder) => {
           onChange({
             ...q,

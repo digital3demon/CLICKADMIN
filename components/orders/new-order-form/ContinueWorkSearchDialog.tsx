@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { orderPathById } from "@/lib/order-public-ref";
+import { useEffect, useMemo, useState } from "react";
 
 export type PickedOrder = {
   id: string;
@@ -13,24 +14,29 @@ type ContinueWorkSearchDialogProps = {
   open: boolean;
   onClose: () => void;
   onPick: (order: PickedOrder) => void;
+  doctorId: string | null;
+  patientName: string;
+  clinicId?: string | null;
+  excludeOrderId?: string | null;
 };
 
-type MockRow = { id: string; number: string; patient: string };
+type ApiOrder = {
+  id: string;
+  orderNumber: string;
+  patientName: string | null;
+  clinicName: string | null;
+  adminShippedOtpr: boolean;
+};
 
-/** Заглушка: позже заменить на запрос к API списка нарядов */
-const MOCK_ORDERS: MockRow[] = [
-  { id: "m1", number: "2603-102", patient: "Иванов А.А." },
-  { id: "m2", number: "2603-088", patient: "Петрова М.И." },
-  { id: "m3", number: "2602-441", patient: "Сидоров К.К." },
-  { id: "m4", number: "2601-015", patient: "Анонимный пациент" },
-];
-
-function toPicked(o: MockRow): PickedOrder {
+function toPicked(o: ApiOrder): PickedOrder {
+  const patient = (o.patientName ?? "").trim() || "—";
+  const clinic = o.clinicName?.trim();
+  const suffix = clinic ? `${patient} · ${clinic}` : patient;
   return {
     id: o.id,
-    number: o.number,
-    label: `Наряд ${o.number} · ${o.patient}`,
-    href: `/orders?continue=${encodeURIComponent(o.id)}&ref=${encodeURIComponent(o.number)}`,
+    number: o.orderNumber,
+    label: `Наряд ${o.orderNumber} · ${suffix}`,
+    href: orderPathById(o.id),
   };
 }
 
@@ -38,19 +44,75 @@ export function ContinueWorkSearchDialog({
   open,
   onClose,
   onPick,
+  doctorId,
+  patientName,
+  clinicId = null,
+  excludeOrderId = null,
 }: ContinueWorkSearchDialogProps) {
   const [query, setQuery] = useState("");
+  const [orders, setOrders] = useState<ApiOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = MOCK_ORDERS.map(toPicked);
-    if (!q) return list;
-    return list.filter(
-      (o) =>
-        o.number.toLowerCase().includes(q) ||
-        o.label.toLowerCase().includes(q),
-    );
-  }, [query]);
+  const canSearch = Boolean(doctorId?.trim() && patientName.trim());
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setOrders([]);
+      setFetchError(null);
+      return;
+    }
+    if (!canSearch) {
+      setOrders([]);
+      setFetchError("Укажите врача и пациента");
+      return;
+    }
+
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setLoading(true);
+        setFetchError(null);
+        try {
+          const params = new URLSearchParams({
+            doctorId: doctorId!.trim(),
+            patientName: patientName.trim(),
+          });
+          if (clinicId) params.set("clinicId", clinicId);
+          if (excludeOrderId) params.set("excludeOrderId", excludeOrderId);
+          if (query.trim()) params.set("q", query.trim());
+          const res = await fetch(
+            `/api/orders/continuation-search?${params.toString()}`,
+            { signal: ac.signal },
+          );
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            orders?: ApiOrder[];
+          };
+          if (!res.ok) {
+            setFetchError(data.error ?? "Не удалось выполнить поиск");
+            setOrders([]);
+            return;
+          }
+          setOrders(data.orders ?? []);
+        } catch (e) {
+          if (ac.signal.aborted) return;
+          setFetchError("Сеть или сервер недоступны");
+          setOrders([]);
+        } finally {
+          if (!ac.signal.aborted) setLoading(false);
+        }
+      })();
+    }, query.trim() ? 250 : 0);
+
+    return () => {
+      ac.abort();
+      window.clearTimeout(timer);
+    };
+  }, [open, canSearch, doctorId, patientName, clinicId, excludeOrderId, query]);
+
+  const filtered = useMemo(() => orders.map(toPicked), [orders]);
 
   if (!open) return null;
 
@@ -93,7 +155,15 @@ export function ContinueWorkSearchDialog({
           />
         </div>
         <ul className="min-h-0 flex-1 overflow-y-auto p-2">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <li className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">
+              Поиск…
+            </li>
+          ) : fetchError ? (
+            <li className="px-3 py-6 text-center text-sm text-red-600" role="alert">
+              {fetchError}
+            </li>
+          ) : filtered.length === 0 ? (
             <li className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">
               Ничего не найдено
             </li>
@@ -110,7 +180,7 @@ export function ContinueWorkSearchDialog({
                   </span>
                   <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
                     {o.label.includes("·")
-                      ? o.label.split("·")[1]?.trim()
+                      ? o.label.split("·").slice(1).join("·").trim()
                       : ""}
                   </span>
                 </button>

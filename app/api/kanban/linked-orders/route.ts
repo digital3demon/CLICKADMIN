@@ -66,6 +66,13 @@ export async function GET() {
         demoKanbanColumn: true,
         clientOrderText: true,
         notes: true,
+        continuesFromOrder: {
+          select: {
+            id: true,
+            orderNumber: true,
+            kaitenCardId: true,
+          },
+        },
         invoiceAttachmentId: true,
         attachments: {
           orderBy: { createdAt: "desc" },
@@ -173,6 +180,13 @@ export async function GET() {
             : null,
         clientOrderText: o.clientOrderText ?? null,
         notes: o.notes ?? null,
+        continuesFromOrder: o.continuesFromOrder
+          ? {
+              id: o.continuesFromOrder.id,
+              orderNumber: o.continuesFromOrder.orderNumber,
+              kaitenCardId: o.continuesFromOrder.kaitenCardId ?? null,
+            }
+          : null,
         attachments,
       };
     });

@@ -49,9 +49,18 @@ async function validateDocx() {
   const zip = await JSZip.loadAsync(fs.readFileSync(DOCX));
   const xml = await zip.file("word/document.xml")?.async("string");
   if (!xml) return false;
-  const red = (xml.match(/w:val="FF0000"/g) || []).length;
+  const red = (xml.match(/w:val="FF0000"/gi) || []).length;
   const blue = (xml.match(/w:val="2563EB"/gi) || []).length;
-  console.log("DOCX placeholder colors: red", red, "blue", blue);
+  const twoCol = xml.includes('w:num="2"');
+  console.log("DOCX placeholder colors: red", red, "blue", blue, "two-columns", twoCol);
+  if (blue < 1) {
+    console.warn("  нет синих плейсхолдеров — запустите node scripts/build-contract-docx-template.cjs");
+    return false;
+  }
+  if (!twoCol) {
+    console.warn("  нет двух колонок в sectPr");
+    return false;
+  }
   return true;
 }
 

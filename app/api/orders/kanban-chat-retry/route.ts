@@ -91,7 +91,7 @@ export async function POST(req: Request) {
     for (let i = 0; i < list.length; i += 1) {
       const cm = list[i] as CardComment;
       if (cm.source !== "CRM") continue;
-      if (!(cm.syncStatus === "failed" || cm.syncStatus === "pending")) continue;
+      if (cm.syncStatus !== "failed") continue;
       if (cm.externalCommentId) continue;
       const parentExternalId = cm.externalParentId ? kaitenJsonIntId(cm.externalParentId) : null;
       cm.syncStatus = "retried";

@@ -1989,6 +1989,7 @@ export function NewOrderForm({
               value={quickOrder}
               clinicId={effectiveClinicIdForPrice}
               doctorId={doctorId || null}
+              patientName={patientName}
               onChange={setQuickOrder}
             />
             <div

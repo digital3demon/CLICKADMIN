@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { upsertKaitenCommentsToCard } from "./chat-sync";
+import {
+  compactCardComments,
+  mergeKaitenSnapshotIntoCardComments,
+  upsertKaitenCommentsToCard,
+} from "./chat-sync";
 import type { CardComment } from "./types";
 
 describe("kanban chat sync", () => {
@@ -78,5 +82,130 @@ describe("kanban chat sync", () => {
     expect(first.next.length).toBe(1);
     expect(second.next.length).toBe(1);
     expect(second.changed).toBe(false);
+  });
+
+  it("absorbs orphan CRM comment when kaiten comment with same text arrives", () => {
+    const current: CardComment[] = [
+      {
+        id: "cm-local",
+        userId: "u1",
+        text: "сфоткайте пожалуйста основание",
+        createdAt: "2026-05-07T10:00:00.000Z",
+        source: "CRM",
+        syncStatus: "pending",
+      },
+    ];
+    const merged = upsertKaitenCommentsToCard(current, [
+      {
+        id: 5001,
+        text: "сфоткайте пожалуйста основание",
+        created: "2026-05-07T10:00:01.000Z",
+        authorName: "Марк",
+        parentId: null,
+      },
+    ]);
+    expect(merged.next.length).toBe(1);
+    expect(merged.next[0]?.id).toBe("cm-local");
+    expect(merged.next[0]?.externalCommentId).toBe("5001");
+    expect(merged.next[0]?.syncStatus).toBe("synced");
+  });
+
+  it("compactCardComments removes duplicate CRM rows with same text", () => {
+    const rows: CardComment[] = [
+      {
+        id: "cm-1",
+        userId: "u1",
+        text: "сфоткайте пожалуйста основание",
+        createdAt: "2026-05-07T10:00:00.000Z",
+        authorLabel: "Марк",
+        source: "CRM",
+        syncStatus: "local",
+      },
+      {
+        id: "cm-2",
+        userId: "u1",
+        text: "сфоткайте пожалуйста основание",
+        createdAt: "2026-05-07T10:01:00.000Z",
+        authorLabel: "Марк",
+        source: "CRM",
+        syncStatus: "local",
+      },
+      {
+        id: "kt-9001",
+        userId: "",
+        text: "сфоткайте пожалуйста основание",
+        createdAt: "2026-05-07T10:02:00.000Z",
+        authorLabel: "Марк",
+        externalCommentId: "9001",
+        source: "KAITEN",
+        syncStatus: "synced",
+      },
+    ];
+    const out = compactCardComments(rows);
+    expect(out.length).toBe(1);
+    expect(out[0]?.externalCommentId).toBe("9001");
+  });
+
+  it("compactCardComments collapses several Kaiten posts with same body", () => {
+    const rows: CardComment[] = [
+      {
+        id: "kt-101",
+        userId: "",
+        text: "сфоткайте пожалуйста основание",
+        createdAt: "2026-05-07T10:00:00.000Z",
+        authorLabel: "Марк",
+        externalCommentId: "101",
+        source: "KAITEN",
+        syncStatus: "synced",
+      },
+      {
+        id: "kt-102",
+        userId: "",
+        text: "сфоткайте пожалуйста основание",
+        createdAt: "2026-05-07T10:00:30.000Z",
+        authorLabel: "Марк",
+        externalCommentId: "102",
+        source: "KAITEN",
+        syncStatus: "synced",
+      },
+      {
+        id: "kt-103",
+        userId: "",
+        text: "сфоткайте пожалуйста основание",
+        createdAt: "2026-05-07T10:01:00.000Z",
+        authorLabel: "Марк",
+        externalCommentId: "103",
+        source: "KAITEN",
+        syncStatus: "synced",
+      },
+    ];
+    expect(compactCardComments(rows).length).toBe(1);
+  });
+
+  it("mergeKaitenSnapshotIntoCardComments keeps single row after poll", () => {
+    const existing: CardComment[] = [
+      {
+        id: "cm-local",
+        userId: "u1",
+        text: "Привет",
+        createdAt: "2026-05-07T10:00:00.000Z",
+        source: "CRM",
+        syncStatus: "pending",
+      },
+    ];
+    const snapshot: CardComment[] = [
+      {
+        id: "kt-6001",
+        userId: "u1",
+        text: "Привет",
+        createdAt: "2026-05-07T10:00:01.000Z",
+        externalCommentId: "6001",
+        source: "KAITEN",
+        syncStatus: "synced",
+      },
+    ];
+    const merged = mergeKaitenSnapshotIntoCardComments(existing, snapshot);
+    expect(merged.length).toBe(1);
+    expect(merged[0]?.id).toBe("cm-local");
   });
 });

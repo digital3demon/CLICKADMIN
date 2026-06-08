@@ -17,6 +17,10 @@ type HeadSelect = {
   urgentCoefficient: number | null;
   clientOrderText: string | null;
   notes: string | null;
+  continuesFromOrder: {
+    orderNumber: string;
+    kaitenCardId: number | null;
+  } | null;
 };
 
 async function loadOrderForKaitenHead(
@@ -38,6 +42,12 @@ async function loadOrderForKaitenHead(
       urgentCoefficient: true,
       clientOrderText: true,
       notes: true,
+      continuesFromOrder: {
+        select: {
+          orderNumber: true,
+          kaitenCardId: true,
+        },
+      },
     },
   });
 }
@@ -68,6 +78,12 @@ async function computeKaitenHeadForOrder(orderId: string): Promise<{
   const description = buildKaitenCardDescription(
     order.clientOrderText,
     order.notes,
+    order.continuesFromOrder
+      ? {
+          orderNumber: order.continuesFromOrder.orderNumber,
+          kaitenCardId: order.continuesFromOrder.kaitenCardId,
+        }
+      : null,
   );
   const descriptionMirror = description.trim() ? description : null;
 

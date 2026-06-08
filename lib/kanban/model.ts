@@ -15,6 +15,7 @@ import type { UserRole } from "@prisma/client";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
+import { buildKanbanContinuationLine } from "@/lib/order-continuation-display";
 
 export const STORAGE_KEY = "kanban-app-state-v3";
 export const STORAGE_KEY_LEGACY = "kanban-app-state-v2";
@@ -1947,6 +1948,13 @@ function linkedOrderKanbanDescription(
   demo: boolean,
 ): string {
   const blocks: string[] = [];
+  if (row.continuesFromOrder) {
+    const line = buildKanbanContinuationLine({
+      orderNumber: row.continuesFromOrder.orderNumber,
+      orderId: row.continuesFromOrder.id,
+    });
+    if (line) blocks.push(line);
+  }
   const client = row.clientOrderText?.trim();
   const notes = row.notes?.trim();
   if (client) blocks.push(`Заказ от клиента:\n${client}`);

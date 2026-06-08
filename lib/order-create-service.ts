@@ -276,7 +276,6 @@ export async function createOrderFromBody(
     const v = await validateContinuesFromOrderId(ordersPrisma, {
       continuesFromOrderId: rawContinuation,
       doctorId,
-      clinicId: resolvedClinicId,
       patientName: patientTrim ?? "",
     });
     if (!v.ok) return fail(400, v.error);

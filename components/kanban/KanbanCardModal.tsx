@@ -23,6 +23,7 @@ import {
   postOrderKaitenComment,
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
+import { mergeKaitenSnapshotIntoCardComments } from "@/lib/kanban/chat-sync";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
 import {
@@ -403,7 +404,10 @@ export function KanbanCardModal({
         onApply((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
-          fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
+          fc.card.comments = withImagePlaceholders(
+            mergeKaitenSnapshotIntoCardComments(fc.card.comments || [], snap.comments),
+            fc.card,
+          );
         });
       })();
     };
@@ -799,7 +803,10 @@ export function KanbanCardModal({
         onApply((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
-          fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
+          fc.card.comments = withImagePlaceholders(
+            mergeKaitenSnapshotIntoCardComments(fc.card.comments || [], snap.comments),
+            fc.card,
+          );
           pushActivity(fc.card, "Комментарий от админов", chatActor, b, act);
         });
         return true;

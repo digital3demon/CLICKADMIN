@@ -41,13 +41,16 @@
 
 Плейсхолдеры в `«кавычках»`, цвет **синий** `2563EB` или legacy **красный** `FF0000`.
 
-## Сборка шаблона PDF
+## Сборка шаблонов
 
 ```powershell
 Set-Location "c:\Users\sevas\Documents\Курсор проекты\dental-lab-crm"
+node scripts/build-contract-docx-template.cjs
 node scripts/build-contract-pdf-template.cjs
 node scripts/validate-contract-template.cjs
 ```
+
+DOCX: скрипт `build-contract-docx-template.cjs` переводит плейсхолдеры в синий `2563EB`, добавляет шапку Legal Design и две колонки в `sectPr`. Исходник сохраняется в `typical-contract-ooo.legacy.docx`.
 
 ## Проверка
 

@@ -24,3 +24,4 @@ data/imports/*.xls
 data/imports/*.pdf
 # Сгенерированные тестовые договоры (scripts/generate-test-contract.cjs)
 data/templates/out/
+data/templates/*.legacy.docx

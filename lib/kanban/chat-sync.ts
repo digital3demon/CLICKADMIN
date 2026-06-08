@@ -77,6 +77,113 @@ function createdIso(value: string | undefined): string {
   return d.toISOString();
 }
 
+/** Нормализация тела для схлопывания дублей CRM/Kaiten с одним текстом. */
+export function commentBodyDedupKey(text: string): string {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function commentKeepScore(row: CardComment): number {
+  if (row.source === "CRM" && row.syncStatus === "synced") return 5;
+  if (row.source === "CRM" && String(row.externalCommentId || "").trim()) return 4;
+  if (row.source === "KAITEN" && row.syncStatus === "synced") return 3;
+  if (String(row.id || "").startsWith("kt-")) return 2;
+  if (row.source === "CRM") return 1;
+  return 0;
+}
+
+function commentsNearDuplicate(a: CardComment, b: CardComment): boolean {
+  const bodyA = commentBodyDedupKey(a.text);
+  const bodyB = commentBodyDedupKey(b.text);
+  if (!bodyA || bodyA !== bodyB) return false;
+  if ((a.authorLabel || "").trim() !== (b.authorLabel || "").trim()) return false;
+  const ta = new Date(a.createdAt || "").getTime();
+  const tb = new Date(b.createdAt || "").getTime();
+  if (!Number.isFinite(ta) || !Number.isFinite(tb)) return true;
+  return Math.abs(ta - tb) <= 20 * 60 * 1000;
+}
+
+/**
+ * Убирает дубли: один externalCommentId, схлопывает повторы CRM без external id
+ * с уже известным Kaiten-комментарием (тот же текст и автор, ±20 мин).
+ */
+export function compactCardComments(comments: CardComment[]): CardComment[] {
+  const rows = (comments || []).map((row) => normalizeCardComment(row));
+  const byExternalId = new Map<string, CardComment>();
+  const withoutExternal: CardComment[] = [];
+
+  for (const row of rows) {
+    if (row.imageFileId) {
+      withoutExternal.push(row);
+      continue;
+    }
+    const ext = String(row.externalCommentId || "").trim();
+    if (!ext && String(row.id || "").startsWith("kt-")) {
+      const fromId = row.id.slice(3);
+      if (fromId) {
+        row.externalCommentId = fromId;
+        row.source = "KAITEN";
+        row.syncStatus = "synced";
+      }
+    }
+    const extResolved = String(row.externalCommentId || "").trim();
+    if (extResolved) {
+      const prev = byExternalId.get(extResolved);
+      if (!prev || commentKeepScore(row) > commentKeepScore(prev)) {
+        byExternalId.set(extResolved, row);
+      }
+      continue;
+    }
+    withoutExternal.push(row);
+  }
+
+  const kept = [...byExternalId.values()];
+  const out: CardComment[] = [...kept];
+
+  for (const row of withoutExternal) {
+    if (row.imageFileId) {
+      const dupImg = out.some((x) => x.imageFileId === row.imageFileId);
+      if (!dupImg) out.push(row);
+      continue;
+    }
+    const duplicate = out.some((existing) => commentsNearDuplicate(existing, row));
+    if (duplicate) continue;
+    out.push(row);
+  }
+
+  out.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  const final: CardComment[] = [];
+  for (const row of out) {
+    if (row.imageFileId) {
+      final.push(row);
+      continue;
+    }
+    const dupeIdx = final.findIndex((existing) => commentsNearDuplicate(existing, row));
+    if (dupeIdx < 0) {
+      final.push(row);
+      continue;
+    }
+    const prev = final[dupeIdx]!;
+    const rowScore = commentKeepScore(row);
+    const prevScore = commentKeepScore(prev);
+    if (rowScore > prevScore) {
+      final[dupeIdx] = row;
+      continue;
+    }
+    if (
+      rowScore === prevScore &&
+      String(row.externalCommentId || row.id) <
+        String(prev.externalCommentId || prev.id)
+    ) {
+      final[dupeIdx] = row;
+    }
+  }
+  final.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  return final;
+}
+
 /**
  * Upsert комментариев из Kaiten в CRM-карточку.
  * Anti-loop: сообщения с source=CRM и тем же externalCommentId не дублируются.
@@ -121,6 +228,27 @@ export function upsertKaitenCommentsToCard(
       }
       continue;
     }
+    const incomingBodyKey = commentBodyDedupKey(row.text ?? "");
+    const orphanCrm =
+      incomingBodyKey.length > 0
+        ? next.find(
+            (c) =>
+              c.source === "CRM" &&
+              !String(c.externalCommentId || "").trim() &&
+              commentBodyDedupKey(c.text) === incomingBodyKey,
+          )
+        : undefined;
+    if (orphanCrm) {
+      orphanCrm.externalCommentId = extId;
+      orphanCrm.externalParentId = row.parentId != null ? String(row.parentId) : null;
+      orphanCrm.authorLabel = row.authorName?.trim() || orphanCrm.authorLabel;
+      orphanCrm.createdAt = createdIso(row.created);
+      orphanCrm.syncStatus = "synced";
+      orphanCrm.syncedAt = new Date().toISOString();
+      byExternalId.set(extId, orphanCrm);
+      changed = true;
+      continue;
+    }
     const created: CardComment = {
       id: `kt-${extId}`,
       userId: "",
@@ -158,6 +286,31 @@ export function upsertKaitenCommentsToCard(
     }
   }
 
-  next.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
-  return { next, changed };
+  const compacted = compactCardComments(next);
+  if (compacted.length !== next.length) changed = true;
+  return { next: compacted, changed };
+}
+
+/** Снапшот Kaiten (poll) → merge в локальные комментарии карточки без слепой замены. */
+export function mergeKaitenSnapshotIntoCardComments(
+  existing: CardComment[],
+  snapshot: CardComment[],
+): CardComment[] {
+  const incoming: KaitenCommentForSync[] = [];
+  for (const row of snapshot || []) {
+    const fromExt = String(row.externalCommentId || "").trim();
+    const fromId =
+      fromExt ||
+      (String(row.id || "").startsWith("kt-") ? String(row.id).slice(3) : "");
+    const kid = Number(fromId);
+    if (!Number.isFinite(kid)) continue;
+    incoming.push({
+      id: Math.trunc(kid),
+      text: row.text ?? "",
+      created: row.createdAt,
+      authorName: row.authorLabel,
+      parentId: row.externalParentId ? Number(row.externalParentId) : null,
+    });
+  }
+  return upsertKaitenCommentsToCard(existing, incoming).next;
 }

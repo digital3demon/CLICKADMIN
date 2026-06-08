@@ -10,6 +10,10 @@ import {
   kaitenListBoardLanes,
 } from "@/lib/kaiten-rest";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
+import {
+  buildKaitenContinuationLine,
+  type ContinuationParentRef,
+} from "@/lib/order-continuation-display";
 
 async function fetchFirstLaneId(
   auth: NonNullable<ReturnType<typeof getKaitenRestAuth>>,
@@ -21,14 +25,19 @@ async function fetchFirstLaneId(
   return typeof id === "number" ? id : null;
 }
 
-/** Описание карточки Kaiten: заказ от клиента и комментарий от админов (раздельные блоки). */
+/** Описание карточки Kaiten: продолжение работы, заказ от клиента и комментарий от админов. */
 export function buildKaitenCardDescription(
   clientOrderText: string | null,
   notes: string | null,
+  continuationParent?: ContinuationParentRef | null,
 ): string {
+  const parts: string[] = [];
+  if (continuationParent) {
+    const line = buildKaitenContinuationLine(continuationParent);
+    if (line) parts.push(line);
+  }
   const client = clientOrderText?.trim() ?? "";
   const comm = notes?.trim() ?? "";
-  const parts: string[] = [];
   if (client) {
     parts.push(`Заказ от клиента:\n${client}`);
   }
@@ -106,6 +115,12 @@ export async function syncNewOrderToKaiten(
         kaitenDecideLater: true,
         kaitenCardTypeId: true,
         kaitenTrackLane: true,
+        continuesFromOrder: {
+          select: {
+            orderNumber: true,
+            kaitenCardId: true,
+          },
+        },
       },
     });
 
@@ -184,6 +199,12 @@ export async function syncNewOrderToKaiten(
     const description = buildKaitenCardDescription(
       order.clientOrderText,
       order.notes,
+      order.continuesFromOrder
+        ? {
+            orderNumber: order.continuesFromOrder.orderNumber,
+            kaitenCardId: order.continuesFromOrder.kaitenCardId,
+          }
+        : null,
     );
 
     const colOverride = options?.columnId;

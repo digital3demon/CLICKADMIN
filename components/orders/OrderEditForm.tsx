@@ -130,6 +130,10 @@ import { CORRECTION_PRICE_ITEM_CODE } from "@/lib/pricing/correction-price-item"
 import { fetchCorrectionPriceListMeta } from "@/lib/pricing/fetch-correction-price-list-meta";
 import { normalizeProductionCalendarCountry } from "@/lib/production-calendar";
 import { orderPathById } from "@/lib/order-public-ref";
+import {
+  ContinueWorkSearchDialog,
+  type PickedOrder,
+} from "@/components/orders/new-order-form/ContinueWorkSearchDialog";
 
 type CourierOption = { id: string; name: string };
 
@@ -717,6 +721,22 @@ export function OrderEditForm({
   );
   const [doctorId, setDoctorId] = useState(initial.doctorId);
   const [patientName, setPatientName] = useState(initial.patientName ?? "");
+  const [continuesFromOrderId, setContinuesFromOrderId] = useState<string | null>(
+    () => initial.continuesFromOrder?.id ?? null,
+  );
+  const [continuesFromOrderNumber, setContinuesFromOrderNumber] = useState<
+    string | null
+  >(() => initial.continuesFromOrder?.orderNumber ?? null);
+  const [continuationSearchOpen, setContinuationSearchOpen] = useState(false);
+
+  useEffect(() => {
+    setContinuesFromOrderId(initial.continuesFromOrder?.id ?? null);
+    setContinuesFromOrderNumber(initial.continuesFromOrder?.orderNumber ?? null);
+  }, [
+    initial.id,
+    initial.continuesFromOrder?.id,
+    initial.continuesFromOrder?.orderNumber,
+  ]);
   /** По умолчанию поля заказчика заблокированы — снимается кнопкой «Изменить». */
   const [customerEditClinic, setCustomerEditClinic] = useState(false);
   const [customerEditDoctor, setCustomerEditDoctor] = useState(false);
@@ -1849,6 +1869,9 @@ export function OrderEditForm({
           compositionDiscountPercent,
           financeCalculated,
           prosthetics,
+          ...(continuesFromOrderId !== (initial.continuesFromOrder?.id ?? null)
+            ? { continuesFromOrderId }
+            : {}),
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -1927,6 +1950,8 @@ export function OrderEditForm({
     compositionDiscountPercent,
     financeCalculated,
     prosthetics,
+    continuesFromOrderId,
+    initial.continuesFromOrder?.id,
     router,
   ]);
 
@@ -2604,6 +2629,43 @@ export function OrderEditForm({
           placeholder="Текст комментария от админов…"
         />
       </div>
+      <div className="mt-3 flex shrink-0 flex-col border-t border-[var(--card-border)] pt-3">
+        <h3 className="shrink-0 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
+          Продолжение работы
+        </h3>
+        {continuesFromOrderId && continuesFromOrderNumber ? (
+          <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+            <span className="font-medium">Связан с нарядом </span>
+            <Link
+              href={orderPathById(continuesFromOrderId)}
+              className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
+            >
+              {continuesFromOrderNumber}
+            </Link>
+            <button
+              type="button"
+              className="ml-3 text-xs font-medium text-sky-900 underline decoration-sky-600/50 underline-offset-2 hover:decoration-sky-900"
+              onClick={() => {
+                setContinuesFromOrderId(null);
+                setContinuesFromOrderNumber(null);
+              }}
+            >
+              Снять связь
+            </button>
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Укажите предыдущий наряд того же врача и пациента (по фамилии).
+          </p>
+        )}
+        <button
+          type="button"
+          className="mt-2 self-start rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--app-text)] hover:bg-[var(--surface-hover)]"
+          onClick={() => setContinuationSearchOpen(true)}
+        >
+          Найти наряд…
+        </button>
+      </div>
     </div>
   );
 
@@ -3270,17 +3332,6 @@ export function OrderEditForm({
     <div
       className={`w-full min-w-0 space-y-4 ${isHarmony ? "order-edit-harmony-shell" : ""}`}
     >
-      {initial.continuesFromOrder ? (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
-          <span className="font-medium">Продолжение работы: </span>
-          <Link
-            href={orderPathById(initial.continuesFromOrder.id)}
-            className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
-          >
-            наряд {initial.continuesFromOrder.orderNumber}
-          </Link>
-        </div>
-      ) : null}
       {!isOrderPageFramed ? (
         <div className="max-w-md">
           <label className="block" htmlFor="oe-order-number">
@@ -3679,6 +3730,21 @@ export function OrderEditForm({
             </div>
           </div>
         ) : null}
+        <ContinueWorkSearchDialog
+          open={continuationSearchOpen}
+          onClose={() => setContinuationSearchOpen(false)}
+          doctorId={doctorId.trim() || null}
+          patientName={patientName}
+          clinicId={
+            clinicId === ORDER_CLINIC_PRIVATE ? null : clinicId.trim() || null
+          }
+          excludeOrderId={initial.id}
+          onPick={(o: PickedOrder) => {
+            setContinuesFromOrderId(o.id);
+            setContinuesFromOrderNumber(o.number);
+            setContinuationSearchOpen(false);
+          }}
+        />
         {archiveConfirmOpen ? (
           <div
             className="fixed inset-0 z-[290] flex items-center justify-center bg-zinc-900/45 p-4"

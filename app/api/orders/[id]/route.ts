@@ -58,6 +58,7 @@ import {
 import { parseOptionalDateTime } from "@/lib/parse-optional-date-time";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { savePatchedOrder } from "@/lib/order-patch-service";
+import { validateContinuesFromOrderId } from "@/lib/order-validate-continuation";
 
 function demoKanbanColumnLine(v: DemoKanbanColumn | null): string {
   if (v == null) return "не задана";
@@ -198,6 +199,8 @@ type PatchBody = {
   kaitenCardTypeName?: string | null;
   /** Вид работы в шапке Kaiten (между врачом и сроком); пусто — тип карточки. */
   kaitenCardTitleLabel?: string | null;
+  /** Связь «продолжение работы» с другим нарядом; null — снять. */
+  continuesFromOrderId?: string | null;
 };
 
 /** Поля шапки наряда, влияющие на заголовок/описание/срочность карточки Kaiten и зеркала канбана. */
@@ -213,6 +216,7 @@ const KAITEN_HEAD_PATCH_FIELDS: (keyof PatchBody)[] = [
   "clinicId",
   "kaitenCardTypeId",
   "kaitenCardTitleLabel",
+  "continuesFromOrderId",
 ];
 
 const orderInclude = {
@@ -466,6 +470,8 @@ export async function PATCH(
       tenantId: true,
       clinicId: true,
       doctorId: true,
+      patientName: true,
+      continuesFromOrderId: true,
       legalEntity: true,
       payment: true,
       paymentPartialRub: true,
@@ -1059,6 +1065,33 @@ export async function PATCH(
         );
       }
       scalarData.kaitenCardTypeId = resolvedId;
+    }
+  }
+
+  if (body.continuesFromOrderId !== undefined) {
+    const raw =
+      body.continuesFromOrderId === null
+        ? ""
+        : String(body.continuesFromOrderId).trim();
+    if (!raw) {
+      scalarData.continuesFromOrderId = null;
+    } else {
+      const effectivePatient =
+        body.patientName !== undefined
+          ? body.patientName === null
+            ? ""
+            : String(body.patientName).trim()
+          : (existing.patientName ?? "");
+      const v = await validateContinuesFromOrderId(ordersPrisma, {
+        continuesFromOrderId: raw,
+        doctorId: nextDoctorId,
+        patientName: effectivePatient,
+        currentOrderId: orderId,
+      });
+      if (!v.ok) {
+        return NextResponse.json({ error: v.error }, { status: 400 });
+      }
+      scalarData.continuesFromOrderId = raw;
     }
   }
 

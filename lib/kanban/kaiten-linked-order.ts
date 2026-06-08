@@ -34,6 +34,12 @@ export type KaitenLinkedOrderForKanban = {
   /** Текст заказа от клиента и комментарий от админов — в описание карточки канбана */
   clientOrderText: string | null;
   notes: string | null;
+  /** Родительский наряд для «продолжения работы». */
+  continuesFromOrder?: {
+    id: string;
+    orderNumber: string;
+    kaitenCardId: number | null;
+  } | null;
   /** Вложения наряда (без счёта-фактуры) — показываются в модалке канбана как «Файлы». */
   attachments?: {
     id: string;

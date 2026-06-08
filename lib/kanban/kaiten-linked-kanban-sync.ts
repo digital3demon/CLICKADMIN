@@ -60,6 +60,9 @@ export async function fetchOrderKaitenCommentsForKanban(
         userId: displayUserId,
         text: typeof r.text === "string" ? r.text : "",
         createdAt,
+        externalCommentId: String(kid),
+        source: "KAITEN",
+        syncStatus: "synced",
         ...(author ? { authorLabel: author } : {}),
       });
     }
