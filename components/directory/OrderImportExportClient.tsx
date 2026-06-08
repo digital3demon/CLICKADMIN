@@ -5,6 +5,10 @@ import {
   PrefixSearchCombobox,
   type PrefixComboboxOption,
 } from "@/components/ui/PrefixSearchCombobox";
+import {
+  comboboxSearchPrefixesFromText,
+  textMatchesListQuery,
+} from "@/lib/prefix-search-match";
 
 type PreviewIssue = { field: string; message: string };
 type RefOption = { id: string; name: string };
@@ -136,7 +140,12 @@ function findRefId(name: string, list: RefOption[]): string | null {
   if (!q) return null;
   const exact = list.find((x) => norm(x.name) === q);
   if (exact) return exact.id;
-  const hits = list.filter((x) => norm(x.name).includes(q) || q.includes(norm(x.name)));
+  const hits = list.filter(
+    (x) =>
+      textMatchesListQuery(x.name, q) ||
+      norm(x.name).includes(q) ||
+      q.includes(norm(x.name)),
+  );
   return hits.length === 1 ? hits[0].id : null;
 }
 
@@ -145,7 +154,12 @@ function findPrice(token: string, list: PriceRefOption[]): PriceRefOption | null
   if (!q) return null;
   const exact = list.find((x) => norm(x.label) === q);
   if (exact) return exact;
-  const hits = list.filter((x) => norm(x.label).includes(q) || q.includes(norm(x.label)));
+  const hits = list.filter(
+    (x) =>
+      textMatchesListQuery(x.label, q) ||
+      norm(x.label).includes(q) ||
+      q.includes(norm(x.label)),
+  );
   return hits.length === 1 ? hits[0] : null;
 }
 
@@ -175,17 +189,11 @@ export function OrderImportExportClient() {
   }, [rows, rowFilter]);
   const priceComboboxOptions = useMemo<PrefixComboboxOption[]>(
     () =>
-      priceOptions.map((p) => {
-        const tokens = p.label
-          .split(/\s+/)
-          .map((t) => t.trim())
-          .filter((t) => t.length >= 2);
-        return {
-          value: p.id,
-          label: p.label,
-          searchPrefixes: Array.from(new Set([p.label, ...tokens])),
-        };
-      }),
+      priceOptions.map((p) => ({
+        value: p.id,
+        label: p.label,
+        searchPrefixes: comboboxSearchPrefixesFromText(p.label),
+      })),
     [priceOptions],
   );
 

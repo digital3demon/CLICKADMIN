@@ -33,6 +33,7 @@ import {
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 import {
   clinicComboboxSearchPrefixes,
+  doctorComboboxSearchPrefixes,
   clinicSelectLabel,
   orderDoctorsForClinicCombobox,
   ORDER_CLINIC_PRIVATE,
@@ -1311,7 +1312,11 @@ export function OrderEditForm({
 
   const doctorComboboxOptions = useMemo(
     () =>
-      doctorsForClinic.map((d) => ({ value: d.id, label: d.fullName })),
+      doctorsForClinic.map((d) => ({
+        value: d.id,
+        label: d.fullName,
+        searchPrefixes: doctorComboboxSearchPrefixes(d.fullName),
+      })),
     [doctorsForClinic],
   );
 

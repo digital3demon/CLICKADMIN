@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
+import { comboboxOptionMatchesPrefixQuery } from "@/lib/prefix-search-match";
 
 export type PrefixComboboxOption = {
   value: string;
@@ -30,25 +31,6 @@ type Props = {
   /** Первая строка списка — сброс значения */
   emptyOptionLabel?: string;
 };
-
-/** Сравнение «строка начинается с запроса» (кириллица, без учёта регистра). */
-function stringStartsWithQuery(hay: string, query: string): boolean {
-  const q = query.trim().toLocaleLowerCase("ru-RU");
-  if (!q) return true;
-  return hay.toLocaleLowerCase("ru-RU").startsWith(q);
-}
-
-function optionMatchesPrefixQuery(
-  o: PrefixComboboxOption,
-  query: string,
-): boolean {
-  if (stringStartsWithQuery(o.label, query)) return true;
-  for (const p of o.searchPrefixes ?? []) {
-    const s = p?.trim();
-    if (s && stringStartsWithQuery(s, query)) return true;
-  }
-  return false;
-}
 
 export function PrefixSearchCombobox({
   id,
@@ -90,7 +72,7 @@ export function PrefixSearchCombobox({
   }, [options, value]);
 
   const filtered = useMemo(() => {
-    return withEmpty.filter((o) => optionMatchesPrefixQuery(o, searchQuery));
+    return withEmpty.filter((o) => comboboxOptionMatchesPrefixQuery(o, searchQuery));
   }, [withEmpty, searchQuery]);
 
   useEffect(() => {

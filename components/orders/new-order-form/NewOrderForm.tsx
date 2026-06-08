@@ -34,6 +34,7 @@ import {
 } from "@/lib/order-correction-track";
 import {
   clinicComboboxSearchPrefixes,
+  doctorComboboxSearchPrefixes,
   clinicSelectLabel,
   orderDoctorsForClinicCombobox,
   ORDER_CLINIC_PRIVATE,
@@ -801,7 +802,11 @@ export function NewOrderForm({
 
   const doctorComboboxOptions = useMemo(
     () =>
-      doctorsForClinicVisible.map((d) => ({ value: d.id, label: d.fullName })),
+      doctorsForClinicVisible.map((d) => ({
+        value: d.id,
+        label: d.fullName,
+        searchPrefixes: doctorComboboxSearchPrefixes(d.fullName),
+      })),
     [doctorsForClinicVisible],
   );
 

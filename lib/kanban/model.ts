@@ -1195,11 +1195,17 @@ function normalizeBoardTitleForSystemLookup(title: string | null | undefined): s
   return String(title || "").trim().toLowerCase();
 }
 
+/** Снимок для client-state: поиск эфемерен и не должен восстанавливаться после ухода с доски. */
+export function kanbanStateForPersistence(state: KanbanAppState): KanbanAppState {
+  return { ...state, search: "" };
+}
+
 export function mergeKanbanStatePreservingLocalBoards(
   localState: KanbanAppState,
   remoteState: KanbanAppState,
 ): KanbanAppState {
   const merged = structuredClone(remoteState);
+  merged.search = localState.search ?? "";
   const remoteById = new Set(merged.boards.map((b) => b.id));
   const remoteByTitle = new Set(
     merged.boards.map((b) => normalizeBoardTitleForSystemLookup(b.title)),

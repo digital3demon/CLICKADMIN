@@ -1,5 +1,6 @@
 import type { BillingLegalForm } from "@prisma/client";
 import { cleanLegalFullName } from "@/lib/document-workflow-markers";
+import { comboboxSearchPrefixesFromText } from "@/lib/prefix-search-match";
 
 /** Значение поля «Клиника» в наряде: заказ без привязки к клинике (частная практика). */
 export const ORDER_CLINIC_PRIVATE = "__private__";
@@ -55,11 +56,14 @@ export function clinicSelectLabel(clinic: {
 
 /** Доп. строки для префиксного поиска в комбобоксе: адрес, юр. наименование, ООО/ИП (кириллица и латиница). */
 export function clinicComboboxSearchPrefixes(clinic: {
+  name?: string | null;
   address?: string | null;
   legalFullName?: string | null;
   billingLegalForm?: BillingLegalForm | null;
 }): string[] {
   const parts: string[] = [];
+  const name = clinic.name?.trim();
+  if (name) parts.push(name);
   const ad = clinic.address?.trim();
   if (ad) parts.push(ad);
   const lf = cleanLegalFullName(clinic.legalFullName);
@@ -70,5 +74,13 @@ export function clinicComboboxSearchPrefixes(clinic: {
   } else if (f === "IP") {
     parts.push("ИП", "IP");
   }
-  return parts;
+  return [
+    ...parts,
+    ...comboboxSearchPrefixesFromText(name, ad, lf),
+  ];
+}
+
+/** Фрагменты ФИО (в т.ч. латиница после «/») для комбобокса врача. */
+export function doctorComboboxSearchPrefixes(fullName: string): string[] {
+  return comboboxSearchPrefixesFromText(fullName);
 }

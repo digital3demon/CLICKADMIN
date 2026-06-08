@@ -8,6 +8,7 @@ import {
   PrefixSearchCombobox,
   type PrefixComboboxOption,
 } from "@/components/ui/PrefixSearchCombobox";
+import { comboboxSearchPrefixesFromText } from "@/lib/prefix-search-match";
 
 /** Значение фильтра «производитель не указан» в combobox */
 const MANUFACTURER_EMPTY_VALUE = "__MAN_EMPTY__";
@@ -237,9 +238,12 @@ export function InventoryWarehouseClient() {
     return warehousesFilteredByType.map((w) => {
       const type = w.warehouseType?.trim();
       const label = type ? `${w.name} (${type})` : w.name;
-      const prefixes = [w.name, w.warehouseType ?? "", w.notes ?? ""].filter(
-        (s) => s && String(s).trim().length > 0,
-      ) as string[];
+      const prefixes = [
+        w.name,
+        w.warehouseType ?? "",
+        w.notes ?? "",
+        ...comboboxSearchPrefixesFromText(w.name, w.warehouseType, w.notes),
+      ].filter((s) => s && String(s).trim().length > 0);
       return { value: w.id, label, searchPrefixes: prefixes };
     });
   }, [warehousesFilteredByType]);
@@ -314,9 +318,12 @@ export function InventoryWarehouseClient() {
       const sku = it.sku?.trim();
       const inactive = !it.isActive ? " (снята с учёта)" : "";
       const label = `${sku ? `${sku} · ` : ""}${it.name}${inactive}`;
-      const prefixes = [it.name, sku ?? "", it.manufacturer?.trim() ?? ""].filter(
-        Boolean,
-      ) as string[];
+      const prefixes = [
+        it.name,
+        sku ?? "",
+        it.manufacturer?.trim() ?? "",
+        ...comboboxSearchPrefixesFromText(it.name, sku, it.manufacturer),
+      ].filter(Boolean) as string[];
       return { value: it.id, label, searchPrefixes: prefixes };
     });
   }, [filteredItemsForArticle]);

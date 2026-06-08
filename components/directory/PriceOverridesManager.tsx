@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { textMatchesListQuery } from "@/lib/prefix-search-match";
 
 type TargetType = "CLINIC" | "DOCTOR" | "DOCTOR_CLINIC";
 
@@ -86,15 +87,15 @@ export function PriceOverridesManager() {
   }, [targetReady, targetType, clinics, doctors, clinicId, doctorId]);
 
   const filteredClinics = useMemo(() => {
-    const q = clinicSearch.trim().toLowerCase();
+    const q = clinicSearch.trim();
     if (!q) return clinics;
-    return clinics.filter((x) => x.name.toLowerCase().includes(q));
+    return clinics.filter((x) => textMatchesListQuery(x.name, q));
   }, [clinicSearch, clinics]);
 
   const filteredDoctors = useMemo(() => {
-    const q = doctorSearch.trim().toLowerCase();
+    const q = doctorSearch.trim();
     if (!q) return doctors;
-    return doctors.filter((x) => x.name.toLowerCase().includes(q));
+    return doctors.filter((x) => textMatchesListQuery(x.name, q));
   }, [doctorSearch, doctors]);
 
   const rowIdSet = useMemo(

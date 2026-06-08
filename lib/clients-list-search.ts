@@ -1,5 +1,6 @@
 import type { BillingLegalForm } from "@prisma/client";
 import { cleanLegalFullName } from "@/lib/document-workflow-markers";
+import { fieldsMatchListQuery } from "@/lib/prefix-search-match";
 
 /** Нормализация строки поиска (пусто = не фильтровать). */
 export function normalizeClientsSearchQuery(raw: string | undefined): string {
@@ -175,24 +176,21 @@ export function clinicMatchesSearch(
   },
   needle: string,
 ): boolean {
-  const n = normalizeClientsSearchQuery(needle).toLowerCase();
-  if (!n) return true;
-  const hay = [
-    c.name,
-    c.address,
-    cleanLegalFullName(c.legalFullName),
-    ...billingLegalFormSearchBits(c.billingLegalForm),
-    c.email,
-    c.phone,
-    c.phoneAccounting,
-    c.phoneManagement,
-    c.inn,
-    c.ceoName,
-  ]
-    .filter((x) => x != null && String(x).trim() !== "")
-    .join("\n")
-    .toLowerCase();
-  return hay.includes(n);
+  return fieldsMatchListQuery(
+    [
+      c.name,
+      c.address,
+      cleanLegalFullName(c.legalFullName),
+      ...billingLegalFormSearchBits(c.billingLegalForm),
+      c.email,
+      c.phone,
+      c.phoneAccounting,
+      c.phoneManagement,
+      c.inn,
+      c.ceoName,
+    ],
+    needle,
+  );
 }
 
 export function doctorMatchesSearch(
@@ -220,33 +218,31 @@ export function doctorMatchesSearch(
   },
   needle: string,
 ): boolean {
-  const n = normalizeClientsSearchQuery(needle).toLowerCase();
-  if (!n) return true;
-  const clinics = d.clinicLinks
-    .flatMap((l) => {
-      const c = l.clinic;
-      const bits = [c.name, cleanLegalFullName(c.legalFullName), ...billingLegalFormSearchBits(c.billingLegalForm)];
-      return bits.filter((x) => x != null && String(x).trim() !== "");
-    })
-    .join("\n");
-  const hay = [
-    d.fullName,
-    d.lastName,
-    d.firstName,
-    d.patronymic,
-    d.formerLastName,
-    d.specialty,
-    d.city,
-    d.email,
-    d.clinicWorkEmail,
-    d.phone,
-    d.preferredContact,
-    d.telegramUsername,
-    d.particulars,
-    clinics,
-  ]
-    .filter((x) => x != null && String(x).trim() !== "")
-    .join("\n")
-    .toLowerCase();
-  return hay.includes(n);
+  const clinicFields = d.clinicLinks.flatMap((l) => {
+    const c = l.clinic;
+    return [
+      c.name,
+      cleanLegalFullName(c.legalFullName),
+      ...billingLegalFormSearchBits(c.billingLegalForm),
+    ];
+  });
+  return fieldsMatchListQuery(
+    [
+      d.fullName,
+      d.lastName,
+      d.firstName,
+      d.patronymic,
+      d.formerLastName,
+      d.specialty,
+      d.city,
+      d.email,
+      d.clinicWorkEmail,
+      d.phone,
+      d.preferredContact,
+      d.telegramUsername,
+      d.particulars,
+      ...clinicFields,
+    ],
+    needle,
+  );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { PrefixSearchCombobox } from "@/components/ui/PrefixSearchCombobox";
+import { doctorComboboxSearchPrefixes } from "@/lib/clients-order-ui";
 import { useRouter } from "next/navigation";
 import { startTransition, useCallback, useMemo, useState } from "react";
 
@@ -62,7 +63,12 @@ export function ClinicDoctorLinkPanel({
   const available = (doctors ?? []).filter((d) => !linkedSet.has(d.id));
 
   const doctorComboboxOptions = useMemo(
-    () => available.map((d) => ({ value: d.id, label: d.fullName })),
+    () =>
+      available.map((d) => ({
+        value: d.id,
+        label: d.fullName,
+        searchPrefixes: doctorComboboxSearchPrefixes(d.fullName),
+      })),
     [available],
   );
 

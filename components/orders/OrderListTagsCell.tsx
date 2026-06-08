@@ -1206,20 +1206,12 @@ export function OrderListTagsCell({
     orderAttentionWarning || stripProstheticsPending;
   const prostheticsPendingHref = filterListHref(LIST_TAG_PROSTHETICS_PENDING);
   const inFinanceOffice = Boolean(financeOfficeFilterContext);
-  const useStackedLeadingIcons =
-    useLeadingIconStrip && (inFinanceOffice || Boolean(shipmentsFilterContext));
-  const leadingIconCount =
-    (orderAttentionWarning ? 1 : 0) + (stripProstheticsPending ? 1 : 0);
   const iconShellClass = inFinanceOffice
     ? "h-7 w-7"
     : "h-[2.75rem] w-[2.75rem] sm:h-[3.25rem] sm:w-[3.25rem]";
   const iconGlyphClass = inFinanceOffice
     ? "h-4 w-4"
     : "h-6 w-6 sm:h-7 sm:w-7";
-  const tagsBesideIconsMaxWidthClass =
-    leadingIconCount >= 2
-      ? "max-w-[calc(100%-5.5rem)] sm:max-w-[calc(100%-6.5rem)]"
-      : "max-w-[calc(100%-2.75rem)] sm:max-w-[calc(100%-3rem)]";
   const orderAttentionFilterHref = financeOfficeFilterContext
     ? filterListHref(LIST_TAG_ORDER_ATTENTION)
     : shipmentsFilterContext
@@ -1318,6 +1310,13 @@ export function OrderListTagsCell({
     </div>
   );
 
+  const tagsWithAddButton = (
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1 gap-y-1.5">
+      {tagCloudPack}
+      <div className="shrink-0">{addTagButton}</div>
+    </div>
+  );
+
   return (
     <Fragment>
       <style>{`
@@ -1363,45 +1362,21 @@ export function OrderListTagsCell({
       `}</style>
       <div
         className={
-          useStackedLeadingIcons
+          useLeadingIconStrip
             ? "order-list-tags-root flex w-full min-w-0 max-w-full flex-col gap-1.5 overflow-hidden"
-            : useLeadingIconStrip
-              ? "order-list-tags-root flex w-full min-w-0 max-w-full items-start gap-x-2 overflow-hidden"
-              : "order-list-tags-root flex w-full min-w-0 max-w-full flex-col overflow-hidden"
+            : "order-list-tags-root flex w-full min-w-0 max-w-full flex-col overflow-hidden"
         }
         title="Отметки переносятся по ширине колонки таблицы"
       >
-        {useStackedLeadingIcons ? (
+        {useLeadingIconStrip ? (
           <>
-            <div className="flex w-full min-w-0 items-center justify-between gap-x-1">
-              <div className="flex shrink-0 flex-row flex-nowrap items-center gap-x-1">
-                {leadingIconStrip}
-              </div>
-              <div className="shrink-0">{addTagButton}</div>
-            </div>
-            <div className="min-w-0 w-full">{tagCloudPack}</div>
-          </>
-        ) : useLeadingIconStrip ? (
-          <>
-            <div className="flex shrink-0 flex-row flex-nowrap items-start gap-x-1.5 self-start sm:gap-x-2">
+            <div className="flex w-full min-w-0 shrink-0 flex-row flex-nowrap items-center gap-x-1 sm:gap-x-1.5">
               {leadingIconStrip}
             </div>
-            <div className="flex min-w-0 flex-1 items-start gap-x-1.5">
-              <div
-                className={`min-w-0 ${tagsBesideIconsMaxWidthClass} flex-1`}
-              >
-                {tagCloudPack}
-              </div>
-              <div className="shrink-0 self-start">{addTagButton}</div>
-            </div>
+            {tagsWithAddButton}
           </>
         ) : (
-          <div className="flex w-full min-w-0 items-center gap-x-1.5">
-            <div className="min-w-0 max-w-[calc(100%-2.75rem)] flex-1 sm:max-w-[calc(100%-3rem)]">
-              {tagCloudPack}
-            </div>
-            <div className="shrink-0 self-center">{addTagButton}</div>
-          </div>
+          tagsWithAddButton
         )}
       </div>
 

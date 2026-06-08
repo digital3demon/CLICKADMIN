@@ -39,6 +39,7 @@ import {
   KANBAN_BOARD_MY_CARDS_ID,
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
+  kanbanStateForPersistence,
   mergeKanbanStatePreservingLocalBoards,
   withActiveBoard,
 } from "@/lib/kanban/model";
@@ -501,21 +502,34 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     if (!appState || !kanbanStateReady) return;
     saveKanbanState(appState, isDemo);
+    const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
+    const scope = isDemo ? "user" : "tenant";
+    const payload = kanbanStateForPersistence(appState);
     if (kanbanStateSaveTimerRef.current) {
       clearTimeout(kanbanStateSaveTimerRef.current);
     }
     kanbanStateSaveTimerRef.current = setTimeout(() => {
       kanbanStateSaveTimerRef.current = null;
-      const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
-      const scope = isDemo ? "user" : "tenant";
-      void writeClientState(scope, key, appState);
+      void writeClientState(scope, key, payload);
     }, 550);
     return () => {
       if (kanbanStateSaveTimerRef.current) {
         clearTimeout(kanbanStateSaveTimerRef.current);
+        kanbanStateSaveTimerRef.current = null;
       }
     };
   }, [appState, isDemo, kanbanStateReady]);
+
+  useEffect(() => {
+    const demo = isDemo;
+    return () => {
+      const cur = appStateRef.current;
+      if (!cur) return;
+      const key = demo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
+      const scope = demo ? "user" : "tenant";
+      void writeClientState(scope, key, kanbanStateForPersistence(cur));
+    };
+  }, [isDemo]);
 
   useEffect(() => {
     if (isDemo || !appState || !kanbanStateReady || !archiveSettingsReadyRef.current) return;

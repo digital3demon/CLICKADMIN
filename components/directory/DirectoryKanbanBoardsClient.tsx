@@ -16,6 +16,7 @@ import {
   KANBAN_BOARD_PRODUCTION_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
   loadKanbanState,
+  kanbanStateForPersistence,
   mergeKanbanStatePreservingLocalBoards,
   migrateBoard,
   normalizeBoardCardTypes,
@@ -120,18 +121,20 @@ export function DirectoryKanbanBoardsClient({
   useEffect(() => {
     if (!kanbanStateReady) return;
     saveKanbanState(appState, isDemo);
+    const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
+    const scope = isDemo ? "user" : "tenant";
+    const payload = kanbanStateForPersistence(appState);
     if (kanbanStateSaveTimerRef.current) {
       clearTimeout(kanbanStateSaveTimerRef.current);
     }
     kanbanStateSaveTimerRef.current = setTimeout(() => {
       kanbanStateSaveTimerRef.current = null;
-      const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
-      const scope = isDemo ? "user" : "tenant";
-      void writeClientState(scope, key, appState);
+      void writeClientState(scope, key, payload);
     }, 450);
     return () => {
       if (kanbanStateSaveTimerRef.current) {
         clearTimeout(kanbanStateSaveTimerRef.current);
+        kanbanStateSaveTimerRef.current = null;
       }
     };
   }, [appState, isDemo, kanbanStateReady]);

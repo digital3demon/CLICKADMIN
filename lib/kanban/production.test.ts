@@ -5,6 +5,7 @@ import {
   defaultAppState,
   ensureProductionBoardInState,
   KANBAN_BOARD_PRODUCTION_ID,
+  kanbanStateForPersistence,
   mergeKanbanStatePreservingLocalBoards,
 } from "./model";
 import {
@@ -46,6 +47,22 @@ describe("kanban production routing", () => {
     const production = state.boards.find((b) => b.id === KANBAN_BOARD_PRODUCTION_ID);
     expect(production?.title).toBe("Производство");
     expect(production?.allowProductionRoleAccess).toBe(true);
+  });
+
+  it("keeps cleared local search when remote snapshot still has a query", () => {
+    const local = defaultAppState();
+    local.search = "";
+    const remote = defaultAppState();
+    remote.search = "013";
+    const merged = mergeKanbanStatePreservingLocalBoards(local, remote);
+    expect(merged.search).toBe("");
+  });
+
+  it("strips search before persisting kanban state", () => {
+    const state = defaultAppState();
+    state.search = "013";
+    expect(kanbanStateForPersistence(state).search).toBe("");
+    expect(state.search).toBe("013");
   });
 
   it("does not drop local production cards when remote state has no production board", () => {
