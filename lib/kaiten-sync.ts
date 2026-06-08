@@ -1,6 +1,8 @@
-import type { PrismaClient } from "@prisma/client";
+import { OrderAttachmentScope, type PrismaClient } from "@prisma/client";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { readOrderAttachmentBytes } from "@/lib/order-attachment-storage";
+import { isOrderAttachmentEligibleForKaitenPush } from "@/lib/kaiten-attachment-eligibility";
+import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import {
   enqueueKaitenRequest,
   getKaitenRestAuth,
@@ -8,6 +10,13 @@ import {
   kaitenGetCard,
   shouldRetryKaitenStatus,
 } from "@/lib/kaiten-rest";
+
+export class KaitenRateLimitError extends Error {
+  constructor(message = "Kaiten rate limit (429)") {
+    super(message);
+    this.name = "KaitenRateLimitError";
+  }
+}
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -156,9 +165,11 @@ export async function pushAttachmentToKaiten(
     }
     if (!shouldRetryKaitenStatus(res.status) || attempt === maxAttempts - 1) {
       const tail = lastText.length > 400 ? "…" : "";
-      throw new Error(
-        `Kaiten ${res.status}: ${lastText.slice(0, 400)}${tail}`,
-      );
+      const msg = `Kaiten ${res.status}: ${lastText.slice(0, 400)}${tail}`;
+      if (isKaitenRateLimitedStatus(res.status)) {
+        throw new KaitenRateLimitError(msg);
+      }
+      throw new Error(msg);
     }
     const ra = res.headers.get("retry-after");
     let wait = 500 * (attempt + 1) ** 2;
@@ -176,6 +187,77 @@ export async function pushAttachmentToKaiten(
  * Повторная выгрузка в Kaiten для вложений без uploadedToKaitenAt (карта уже есть).
  * Нужен после сценария «сначала файлы, карточка ещё не создалась» или сбоев/429.
  */
+/** После тяжёлого cron-синка — меньше файлов за проход, чтобы не добить лимит. */
+const DEFAULT_BACKGROUND_ATTACHMENT_PUSH_LIMIT = 5;
+
+/**
+ * Фоновая догрузка вложений без uploadedToKaitenAt (счета и платёжки пропускаются).
+ */
+export async function syncAllUnpushedAttachmentsInBackground(
+  db?: PrismaClient,
+  limit = DEFAULT_BACKGROUND_ATTACHMENT_PUSH_LIMIT,
+): Promise<{
+  attempted: number;
+  pushed: number;
+  failed: number;
+  rateLimited: boolean;
+}> {
+  const auth = getKaitenRestAuth();
+  if (!auth) {
+    return { attempted: 0, pushed: 0, failed: 0, rateLimited: false };
+  }
+
+  const prisma = db ?? (await getOrdersPrisma());
+  const cap = Math.min(Math.max(1, Math.trunc(limit)), 20);
+  const rows = await prisma.orderAttachment.findMany({
+    where: {
+      uploadedToKaitenAt: null,
+      scope: { not: OrderAttachmentScope.PAYMENT_SLIP },
+      order: { kaitenCardId: { not: null } },
+    },
+    select: {
+      id: true,
+      orderId: true,
+      scope: true,
+      order: { select: { invoiceAttachmentId: true } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: cap * 3,
+  });
+
+  const eligible = rows
+    .filter((r) => isOrderAttachmentEligibleForKaitenPush(r))
+    .slice(0, cap);
+
+  let pushed = 0;
+  let failed = 0;
+  let rateLimited = false;
+  for (const r of eligible) {
+    try {
+      await pushAttachmentToKaiten(r.orderId, r.id, prisma);
+      pushed += 1;
+    } catch (e) {
+      failed += 1;
+      if (e instanceof KaitenRateLimitError) {
+        rateLimited = true;
+        console.warn(
+          "[kaiten-sync] syncAllUnpushedAttachmentsInBackground rate limited",
+          r.orderId,
+          r.id,
+        );
+        break;
+      }
+      console.error(
+        "[kaiten-sync] syncAllUnpushedAttachmentsInBackground",
+        r.orderId,
+        r.id,
+        e,
+      );
+    }
+  }
+  return { attempted: eligible.length, pushed, failed, rateLimited };
+}
+
 export async function syncUnpushedOrderAttachmentsToKaiten(
   orderId: string,
   db?: PrismaClient,
@@ -189,13 +271,25 @@ export async function syncUnpushedOrderAttachmentsToKaiten(
 
   const rows = await prisma.orderAttachment.findMany({
     where: { orderId, uploadedToKaitenAt: null },
-    select: { id: true },
+    select: {
+      id: true,
+      scope: true,
+      order: { select: { invoiceAttachmentId: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
   for (const r of rows) {
+    if (!isOrderAttachmentEligibleForKaitenPush(r)) continue;
     try {
       await pushAttachmentToKaiten(orderId, r.id, prisma);
     } catch (e) {
+      if (e instanceof KaitenRateLimitError) {
+        console.warn(
+          "[kaiten-sync] syncUnpushedOrderAttachmentsToKaiten rate limited",
+          orderId,
+        );
+        break;
+      }
       console.error(
         "[kaiten-sync] syncUnpushedOrderAttachmentsToKaiten",
         orderId,

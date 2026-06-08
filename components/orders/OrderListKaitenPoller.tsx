@@ -3,8 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
+import { kaitenFastLivePollIntervalMs } from "@/lib/kaiten-rate-limit";
 
 const WINDOW = 10;
+/** На широком списке — лёгкий импорт !!!/??? без includeComments в titles-sync. */
+const LIGHT_COMMENT_PULL_MAX = 2;
 /** Без поиска: live-синк только для очень узкого списка. */
 const FAST_LIVE_SYNC_MAX_DEFAULT = 3;
 /** С активным q: не больше 5 нарядов за проход, строго по одному (без параллели). */
@@ -108,9 +111,8 @@ export function OrderListKaitenPoller({
     if (inFlightRef.current || fastInFlightRef.current) return;
     inFlightRef.current = true;
 
-    const includeComments =
-      ids.length > fastLiveMax &&
-      (searchActive ? ids.length > FAST_LIVE_SYNC_MAX_SEARCH : true);
+    /** Тяжёлый sync комментариев — только cron и fast-live для узкого списка. */
+    const includeComments = false;
 
     const n = ids.length;
     let batch: string[];
@@ -140,9 +142,31 @@ export function OrderListKaitenPoller({
         kaitenLabMentionDbChanged?: boolean;
       };
       if (!res.ok || isRateLimited(res, data)) {
-        backoffRef.current = Date.now() + 90_000;
+        const waitMs = parseRetryAfterMs(res.headers.get("Retry-After"));
+        backoffRef.current = Date.now() + waitMs;
         fastBackoffRef.current = backoffRef.current;
         return;
+      }
+      let lightCommentsImported = false;
+      if (ids.length > fastLiveMax) {
+        for (const orderId of batch.slice(0, LIGHT_COMMENT_PULL_MAX)) {
+          if (Date.now() < backoffRef.current) break;
+          try {
+            const ccRes = await fetch(
+              `/api/orders/${encodeURIComponent(orderId)}/chat-corrections`,
+              { credentials: "include", cache: "no-store" },
+            );
+            if (ccRes.status === 429) {
+              const waitMs = parseRetryAfterMs(ccRes.headers.get("Retry-After"));
+              backoffRef.current = Date.now() + waitMs;
+              fastBackoffRef.current = backoffRef.current;
+              break;
+            }
+            if (ccRes.ok) lightCommentsImported = true;
+          } catch {
+            /* ignore */
+          }
+        }
       }
       void fetch("/api/orders/kanban-chat-retry", {
         method: "POST",
@@ -169,7 +193,8 @@ export function OrderListKaitenPoller({
         data.newCorrectionsImported ||
         data.newProstheticsImported ||
         data.kaitenLabMentionDbChanged === true ||
-        mentionChanged
+        mentionChanged ||
+        lightCommentsImported
       ) {
         router.refresh();
       }
@@ -227,6 +252,23 @@ export function OrderListKaitenPoller({
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [ids, tick]);
+
+  useEffect(() => {
+    if (ids.length === 0 || ids.length > fastLiveMax) return;
+    const fastMs = kaitenFastLivePollIntervalMs();
+    /** Сдвиг на пол-интервала — не совпадать с основным tick списка. */
+    const t0 = window.setTimeout(
+      () => void runFastLiveThenRefresh(),
+      Math.floor(fastMs / 2),
+    );
+    const id = window.setInterval(() => {
+      void runFastLiveThenRefresh();
+    }, fastMs);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearInterval(id);
+    };
+  }, [ids.length, fastLiveMax, runFastLiveThenRefresh]);
 
   return null;
 }

@@ -301,6 +301,7 @@ export default async function OrderEditPage({
     })),
     prosthetics: prostheticsFromDb(order.prosthetics),
     kaitenCardId: order.kaitenCardId,
+    kaitenCardTitleLabel: order.kaitenCardTitleLabel,
     kaitenDecideLater: order.kaitenDecideLater,
     kaitenSyncError: order.kaitenSyncError,
     kaitenCardTypeId: order.kaitenCardTypeId,

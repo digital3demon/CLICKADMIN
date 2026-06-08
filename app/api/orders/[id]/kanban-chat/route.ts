@@ -12,8 +12,12 @@ import {
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
 import { getKaitenRestAuth, kaitenCreateComment, kaitenListComments } from "@/lib/kaiten-rest";
-import { createOrderChatCorrectionIfNeeded } from "@/lib/order-chat-correction-db";
+import {
+  createOrderChatCorrectionIfNeeded,
+  syncOrderChatCorrectionsFromKaitenComments,
+} from "@/lib/order-chat-correction-db";
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
+import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { upsertKaitenCommentsToCard } from "@/lib/kanban/chat-sync";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
@@ -76,6 +80,7 @@ async function syncCrmCommentToKaiten(
     card.kaitenCardId,
     buildKaitenCommentTextWithCrmAuthor(next.authorLabel || "CRM", next.text),
     parentExternalId,
+    { burst: true },
   );
   if (!posted.ok) {
     next.syncStatus = "failed";
@@ -231,6 +236,22 @@ export async function GET(
           card.comments = merged.next;
           card.updatedAt = nowIso();
           await saveTenantKanbanStateWithRetry(tenantId, state, statePayload.updatedAt);
+        }
+        const ordersPrisma = await getOrdersPrisma();
+        const crmComments = parsed.map((c) => ({ id: c.id, text: c.text }));
+        try {
+          await syncOrderChatCorrectionsFromKaitenComments(
+            ordersPrisma,
+            orderId,
+            crmComments,
+          );
+          await syncOrderProstheticsRequestsFromKaitenComments(
+            ordersPrisma,
+            orderId,
+            crmComments,
+          );
+        } catch (e) {
+          console.error("[kanban-chat GET] Kaiten trigger import", orderId, e);
         }
       }
     }

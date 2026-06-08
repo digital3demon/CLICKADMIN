@@ -33,15 +33,17 @@ import {
   dedupeParsedKaitenComments,
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
-import {
-  kaitenCommentsForSyncFromSnapshotPayload,
-  syncOrderChatCorrectionsFromKaitenComments,
-} from "@/lib/order-chat-correction-db";
+import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
+import { pushKaitenCardTitleForOrderIfLinked } from "@/lib/kaiten-push-order-title";
 import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
+import {
+  kaitenMirrorFieldsFromCard,
+  kaitenUrgentPatchFromCard,
+} from "@/lib/kaiten-inbound-order-fields";
 import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
@@ -65,29 +67,7 @@ function legacyKaitenTypeName(id: string): string | null {
   return typeof hit === "string" && hit.trim() ? hit.trim() : null;
 }
 
-function mirrorFieldsFromKaitenCard(card: Record<string, unknown>): {
-  kaitenCardTitleMirror?: string | null;
-  kaitenCardDescriptionMirror?: string | null;
-  kaitenCardSortOrder?: number | null;
-} {
-  const out: {
-    kaitenCardTitleMirror?: string | null;
-    kaitenCardDescriptionMirror?: string | null;
-    kaitenCardSortOrder?: number | null;
-  } = {};
-  if ("title" in card) {
-    const t = typeof card.title === "string" ? card.title.trim() : "";
-    out.kaitenCardTitleMirror = t.length ? t : null;
-  }
-  if ("description" in card) {
-    out.kaitenCardDescriptionMirror =
-      typeof card.description === "string" ? card.description : null;
-  }
-  if ("sort_order" in card) {
-    out.kaitenCardSortOrder = kaitenSortOrderFromCard(card);
-  }
-  return out;
-}
+const mirrorFieldsFromKaitenCard = kaitenMirrorFieldsFromCard;
 
 type PatchBody = {
   title?: string;
@@ -317,72 +297,6 @@ function isTransientKaitenHttpStatus(status: number): boolean {
   return false;
 }
 
-/** Синхрон корректировок/протетики из чата Kaiten — не блокирует ответ вкладки. */
-function scheduleKaitenCommentSyncFromSnapshot(
-  prisma: Awaited<ReturnType<typeof getOrdersPrisma>>,
-  auth: NonNullable<ReturnType<typeof getKaitenRestAuth>>,
-  orderId: string,
-  cardId: number,
-  cachedSnapshot: Record<string, unknown>,
-): void {
-  void (async () => {
-    try {
-      const mentionCtx = await prisma.order.findFirst({
-        where: { id: orderId.trim() },
-        select: { tenant: { select: { kanbanAdminMentionTag: true } } },
-      });
-      const labTag = mentionCtx?.tenant?.kanbanAdminMentionTag;
-
-      const comm = await kaitenListComments(auth, cardId);
-      if (comm.ok) {
-        const parsed = dedupeParsedKaitenComments(
-          comm.comments
-            .map(parseKaitenListComment)
-            .filter((x): x is NonNullable<typeof x> => x != null),
-        ).map((c) => ({ id: c.id, text: c.text }));
-        await syncOrderChatCorrectionsFromKaitenComments(
-          prisma,
-          orderId.trim(),
-          parsed,
-        );
-        await syncOrderProstheticsRequestsFromKaitenComments(
-          prisma,
-          orderId.trim(),
-          parsed,
-        );
-        await syncKaitenLabMentionFromParsedComments(
-          prisma,
-          orderId.trim(),
-          parsed,
-          labTag,
-        );
-      } else {
-        const snapComments = kaitenCommentsForSyncFromSnapshotPayload(
-          cachedSnapshot,
-        );
-        await syncOrderChatCorrectionsFromKaitenComments(
-          prisma,
-          orderId.trim(),
-          snapComments,
-        );
-        await syncOrderProstheticsRequestsFromKaitenComments(
-          prisma,
-          orderId.trim(),
-          snapComments,
-        );
-        await syncKaitenLabMentionFromParsedComments(
-          prisma,
-          orderId.trim(),
-          snapComments,
-          labTag,
-        );
-      }
-    } catch (e) {
-      console.error("[kaiten GET] correction sync (background)", e);
-    }
-  })();
-}
-
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -415,6 +329,11 @@ export async function GET(
       id: true,
       kaitenCardId: true,
       kaitenTrackLane: true,
+      isUrgent: true,
+      kaitenCardTitleMirror: true,
+      kaitenCardDescriptionMirror: true,
+      kaitenCardTitleManual: true,
+      kaitenCardDescriptionManual: true,
       tenant: { select: { kanbanAdminMentionTag: true } },
     },
   });
@@ -436,13 +355,6 @@ export async function GET(
   if (!bypassCache) {
     const cached = getKaitenSnapshotCache(orderId.trim());
     if (cached != null) {
-      scheduleKaitenCommentSyncFromSnapshot(
-        ordersPrisma,
-        auth,
-        orderId.trim(),
-        order.kaitenCardId,
-        cached as Record<string, unknown>,
-      );
       return NextResponse.json(cached, {
         headers: { "X-Kaiten-Snapshot-Cache": "hit" },
       });
@@ -684,6 +596,16 @@ export async function GET(
           : blockMeta.blockedAtIso
             ? { kaitenBlockedAt: new Date(blockMeta.blockedAtIso) }
             : {};
+      const mirror = mirrorFieldsFromKaitenCard(cardObj);
+      const titleDrifted =
+        !order.kaitenCardTitleManual &&
+        (mirror.kaitenCardTitleMirror ?? "") !==
+          (order.kaitenCardTitleMirror ?? "") &&
+        Boolean(mirror.kaitenCardTitleMirror);
+      const descDrifted =
+        !order.kaitenCardDescriptionManual &&
+        (mirror.kaitenCardDescriptionMirror ?? "") !==
+          (order.kaitenCardDescriptionMirror ?? "");
       await ordersPrisma.order.update({
         where: { id: orderIdTrim },
         data: {
@@ -691,7 +613,10 @@ export async function GET(
           kaitenBlocked: kBlocked,
           kaitenBlockReason: kBlockReason,
           ...blockedAtPatch,
-          ...mirrorFieldsFromKaitenCard(cardObj),
+          ...mirror,
+          ...kaitenUrgentPatchFromCard(cardObj, order.isUrgent),
+          ...(titleDrifted ? { kaitenCardTitleManual: true } : {}),
+          ...(descDrifted ? { kaitenCardDescriptionManual: true } : {}),
         },
       });
       await syncKaitenLabMentionFromParsedComments(
@@ -1045,6 +970,11 @@ export async function POST(
       );
     }
     invalidateKaitenSnapshotCache(idTrim);
+    try {
+      await syncUnpushedOrderAttachmentsToKaiten(idTrim, ordersPrisma);
+    } catch (e) {
+      console.error("[kaiten POST link] syncUnpushed", e);
+    }
     return NextResponse.json({ ok: true, kaitenCardId: cardId });
   }
 
@@ -1095,6 +1025,11 @@ export async function PATCH(
       id: true,
       kaitenCardId: true,
       kaitenTrackLane: true,
+      isUrgent: true,
+      kaitenCardTitleMirror: true,
+      kaitenCardDescriptionMirror: true,
+      kaitenCardTitleManual: true,
+      kaitenCardDescriptionManual: true,
     },
   });
   if (!order) {
@@ -1326,7 +1261,9 @@ export async function PATCH(
   } | null = null;
 
   if (Object.keys(patch).length > 0) {
-    updated = await kaitenPatchCard(auth, order.kaitenCardId, patch);
+    updated = await kaitenPatchCard(auth, order.kaitenCardId, patch, {
+      burst: true,
+    });
     if (!updated.ok || !updated.card) {
       return NextResponse.json(
         { error: updated.error ?? "Kaiten не принял изменения" },
@@ -1414,6 +1351,17 @@ export async function PATCH(
   );
 
   try {
+    const cardObj = updated.card as Record<string, unknown>;
+    const titleChangedInKaiten =
+      body.title !== undefined ||
+      (typeof cardObj.title === "string" &&
+        cardObj.title.trim() !== (order.kaitenCardTitleMirror ?? "").trim());
+    const descChangedInKaiten =
+      body.description !== undefined ||
+      (typeof cardObj.description === "string" &&
+        cardObj.description.trim() !==
+          (order.kaitenCardDescriptionMirror ?? "").trim());
+
     await ordersPrisma.order.update({
       where: { id: order.id },
       data: {
@@ -1421,7 +1369,10 @@ export async function PATCH(
         kaitenSyncError: null,
         ...(laneToStore != null ? { kaitenTrackLane: laneToStore } : {}),
         ...(titleUpdate ?? {}),
-        ...mirrorFieldsFromKaitenCard(updated.card as Record<string, unknown>),
+        ...mirrorFieldsFromKaitenCard(cardObj),
+        ...kaitenUrgentPatchFromCard(cardObj, order.isUrgent),
+        ...(titleChangedInKaiten ? { kaitenCardTitleManual: true } : {}),
+        ...(descChangedInKaiten ? { kaitenCardDescriptionManual: true } : {}),
         ...(blockRow != null
           ? {
               kaitenBlocked: blockRow.kaitenBlocked,
@@ -1446,6 +1397,17 @@ export async function PATCH(
   }
 
   invalidateKaitenSnapshotCache(orderId.trim());
+
+  if (
+    body.kaitenCardTypeId !== undefined &&
+    order.kaitenCardTitleManual !== true
+  ) {
+    try {
+      await pushKaitenCardTitleForOrderIfLinked(orderId.trim());
+    } catch (e) {
+      console.error("[kaiten PATCH] title push after type change", e);
+    }
+  }
 
   return NextResponse.json({
     ok: true,

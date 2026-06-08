@@ -1,10 +1,31 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPayrollConfigXlsxBuffer,
   buildPayrollImportPreview,
+  PAYROLL_KIND_COLUMN_HEADERS,
+  PAYROLL_XLSX_CATEGORIZED_KINDS,
   parsePayrollAmountCell,
   parsePayrollWorksheetRows,
 } from "@/lib/payroll-xlsx";
 import ExcelJS from "exceljs";
+
+describe("buildPayrollConfigXlsxBuffer", () => {
+  it("всегда включает столбцы категорий CAD / CAD Хирургия / Мануал / Обработка", async () => {
+    const buffer = await buildPayrollConfigXlsxBuffer({
+      priceItems: [{ id: "p1", code: "1001", name: "Коронка" }],
+      configs: [],
+    });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+    const ws = wb.worksheets[0]!;
+    const header = ws.getRow(2);
+    expect(header.getCell(1).value).toBe("Код");
+    expect(header.getCell(2).value).toBe("Позиция");
+    PAYROLL_XLSX_CATEGORIZED_KINDS.forEach((kind, i) => {
+      expect(header.getCell(3 + i).value).toBe(PAYROLL_KIND_COLUMN_HEADERS[kind]);
+    });
+  });
+});
 
 describe("parsePayrollAmountCell", () => {
   it("принимает целые и дробные с запятой", () => {
@@ -25,8 +46,8 @@ describe("parsePayrollWorksheetRows", () => {
     const h = ws.getRow(2);
     h.getCell(1).value = "Код";
     h.getCell(2).value = "Позиция";
-    h.getCell(3).value = "CAD (₽)";
-    h.getCell(4).value = "Мануал (₽)";
+    h.getCell(3).value = "CAD";
+    h.getCell(4).value = "Мануал";
     const data = ws.getRow(3);
     data.getCell(1).value = "1001";
     data.getCell(2).value = "Коронка";

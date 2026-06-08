@@ -207,6 +207,8 @@ export function OrderFilesPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [uploadWarn, setUploadWarn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [kaitenPushId, setKaitenPushId] = useState<string | null>(null);
+  const [kaitenPushError, setKaitenPushError] = useState<string | null>(null);
   const [imageViewer, setImageViewer] = useState<OrderImageViewerState | null>(
     null,
   );
@@ -449,6 +451,32 @@ export function OrderFilesPanel({
     [orderId, refreshList, refreshQueueList, onServerListChange],
   );
 
+  const retryKaitenPush = useCallback(
+    async (attachmentId: string) => {
+      if (!orderId) return;
+      setKaitenPushId(attachmentId);
+      setKaitenPushError(null);
+      try {
+        const res = await fetch(
+          `/api/orders/${orderId}/attachments/${attachmentId}/kaiten-push`,
+          { method: "POST" },
+        );
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setKaitenPushError(data.error ?? "Не удалось выгрузить в Kaiten");
+          return;
+        }
+        await refreshList();
+        onServerListChange?.();
+      } catch {
+        setKaitenPushError("Сеть недоступна");
+      } finally {
+        setKaitenPushId(null);
+      }
+    },
+    [orderId, refreshList, onServerListChange],
+  );
+
   const imageAttachments = useMemo(() => {
     if (!orderId) return [];
     return list.filter((a) =>
@@ -554,6 +582,10 @@ export function OrderFilesPanel({
         <p className="text-sm text-red-600">{loadError}</p>
       ) : null}
 
+      {kaitenPushError ? (
+        <p className="text-sm text-red-600">{kaitenPushError}</p>
+      ) : null}
+
       {uploadWarn ? (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/35 dark:text-amber-100">
           {uploadWarn}
@@ -653,10 +685,22 @@ export function OrderFilesPanel({
                         </span>
                       )}
                     </div>
+                    {!a.uploadedToKaitenAt ? (
+                      <button
+                        type="button"
+                        disabled={busy || kaitenPushId === a.id}
+                        onClick={() => void retryKaitenPush(a.id)}
+                        className="text-xs font-medium text-[var(--sidebar-blue)] hover:underline disabled:opacity-50"
+                      >
+                        {kaitenPushId === a.id
+                          ? "Выгрузка в Kaiten…"
+                          : "Повторить выгрузку в Kaiten"}
+                      </button>
+                    ) : null}
                   </div>
                   <button
                     type="button"
-                    disabled={busy}
+                    disabled={busy || kaitenPushId != null}
                     onClick={() => void deleteServer(a.id)}
                     className="shrink-0 pt-0.5 text-xs text-red-600 underline disabled:opacity-50"
                   >

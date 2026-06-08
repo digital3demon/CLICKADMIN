@@ -18,6 +18,7 @@ import {
 import {
   deleteOrderAttachmentById,
   fetchOrderKaitenCommentsForKanban,
+  patchOrderHeadFromKanban,
   patchOrderKaitenCard,
   postOrderKaitenComment,
   uploadOrderAttachmentFromFile,
@@ -1761,12 +1762,27 @@ export function KanbanCardModal({
                     value={card.dueDate || ""}
                     onChange={(e) => {
                       const v = e.target.value;
-                      onApply((b) => {
-                        const fc = findCard(b, cardId);
-                        if (!fc) return;
-                        fc.card.dueDate = v;
-                        pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
-                      });
+                      void (async () => {
+                        if (
+                          card.linkedOrderId &&
+                          card.kaitenCardId != null &&
+                          Number.isFinite(card.kaitenCardId)
+                        ) {
+                          const r = await patchOrderHeadFromKanban(card.linkedOrderId, {
+                            dueDate: v || null,
+                          });
+                          if (!r.ok) {
+                            toast(r.error, true);
+                            return;
+                          }
+                        }
+                        onApply((b) => {
+                          const fc = findCard(b, cardId);
+                          if (!fc) return;
+                          fc.card.dueDate = v;
+                          pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
+                        });
+                      })();
                       if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
                         const titleLine = (card.title || "").trim() || "Без названия";
                         const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
@@ -1805,21 +1821,36 @@ export function KanbanCardModal({
                         ? "Снять метку «Срочно» (срок не меняется)"
                         : "Пометить как срочное (срок не меняется)"
                     }
-                    onClick={() =>
-                      onApply((b) => {
-                        const fc = findCard(b, cardId);
-                        if (!fc) return;
-                        const next = !fc.card.urgent;
-                        fc.card.urgent = next;
-                        pushActivity(
-                          fc.card,
-                          next ? "Отмечена как срочная" : "Снята метка «Срочно»",
-                          b.users[0]?.id,
-                          b,
-                          act,
-                        );
-                      })
-                    }
+                    onClick={() => {
+                      void (async () => {
+                        const next = !card.urgent;
+                        if (
+                          card.linkedOrderId &&
+                          card.kaitenCardId != null &&
+                          Number.isFinite(card.kaitenCardId)
+                        ) {
+                          const r = await patchOrderHeadFromKanban(card.linkedOrderId, {
+                            urgent: next,
+                          });
+                          if (!r.ok) {
+                            toast(r.error, true);
+                            return;
+                          }
+                        }
+                        onApply((b) => {
+                          const fc = findCard(b, cardId);
+                          if (!fc) return;
+                          fc.card.urgent = next;
+                          pushActivity(
+                            fc.card,
+                            next ? "Отмечена как срочная" : "Снята метка «Срочно»",
+                            b.users[0]?.id,
+                            b,
+                            act,
+                          );
+                        });
+                      })();
+                    }}
                   >
                     Срочно
                   </button>

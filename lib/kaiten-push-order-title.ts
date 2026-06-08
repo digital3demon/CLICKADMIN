@@ -93,9 +93,11 @@ async function computeKaitenHeadForOrder(orderId: string): Promise<{
 }
 
 /** Демо / локальный канбан: пересчитать зеркала шапки из полей наряда без вызова Kaiten API. */
-export async function refreshOrderKaitenHeadMirrors(orderId: string): Promise<void> {
+export async function refreshOrderKaitenHeadMirrors(
+  orderId: string,
+): Promise<{ title: string; descriptionMirror: string | null } | null> {
   const head = await computeKaitenHeadForOrder(orderId);
-  if (!head) return;
+  if (!head) return null;
 
   const prisma = await getOrdersPrisma();
   await prisma.order.update({
@@ -105,26 +107,51 @@ export async function refreshOrderKaitenHeadMirrors(orderId: string): Promise<vo
       kaitenCardDescriptionMirror: head.descriptionMirror,
     },
   });
+  return { title: head.title, descriptionMirror: head.descriptionMirror };
 }
 
 /**
  * Обновляет в Kaiten заголовок, описание и флаг срочности карточки по актуальным полям наряда
  * (при привязанной карточке), затем синхронизирует зеркала в БД.
  */
+export type KaitenHeadPushResult =
+  | { ok: true; title: string; descriptionMirror: string | null }
+  | { ok: false; error: string };
+
 export async function pushKaitenCardTitleForOrderIfLinked(
   orderId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<KaitenHeadPushResult> {
+  const prisma = await getOrdersPrisma();
+  const manualRow = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      kaitenCardTitleManual: true,
+      kaitenCardDescriptionManual: true,
+      kaitenCardTitleMirror: true,
+      kaitenCardDescriptionMirror: true,
+    },
+  });
+
   const auth = getKaitenRestAuth();
-  if (!auth) return { ok: true };
-
   const head = await computeKaitenHeadForOrder(orderId);
-  if (!head?.kaitenCardId) return { ok: true };
+  if (!head) return { ok: true, title: "", descriptionMirror: null };
 
-  const patch: Record<string, unknown> = {
-    title: head.title,
-    description: head.description,
-    asap: head.asap,
-  };
+  const titleManual = manualRow?.kaitenCardTitleManual === true;
+  const descManual = manualRow?.kaitenCardDescriptionManual === true;
+  const mirrorTitle = titleManual
+    ? (manualRow?.kaitenCardTitleMirror ?? head.title)
+    : head.title;
+  const mirrorDesc = descManual
+    ? (manualRow?.kaitenCardDescriptionMirror ?? head.descriptionMirror)
+    : head.descriptionMirror;
+
+  if (!auth || !head.kaitenCardId) {
+    return { ok: true, title: mirrorTitle, descriptionMirror: mirrorDesc };
+  }
+
+  const patch: Record<string, unknown> = { asap: head.asap };
+  if (!titleManual) patch.title = head.title;
+  if (!descManual) patch.description = head.description;
 
   const res = await kaitenPatchCard(auth, head.kaitenCardId, patch, { burst: true });
   if (!res.ok) {
@@ -134,15 +161,22 @@ export async function pushKaitenCardTitleForOrderIfLinked(
     };
   }
 
-  const prisma = await getOrdersPrisma();
   await prisma.order.update({
     where: { id: orderId },
     data: {
-      kaitenCardTitleMirror: head.title,
-      kaitenCardDescriptionMirror: head.descriptionMirror,
+      ...(titleManual
+        ? {}
+        : { kaitenCardTitleMirror: head.title }),
+      ...(descManual
+        ? {}
+        : { kaitenCardDescriptionMirror: head.descriptionMirror }),
     },
   });
 
   invalidateKaitenSnapshotCache(orderId);
-  return { ok: true };
+  return {
+    ok: true,
+    title: mirrorTitle,
+    descriptionMirror: mirrorDesc,
+  };
 }

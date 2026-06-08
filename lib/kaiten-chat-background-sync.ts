@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { KaitenAuth } from "@/lib/kaiten-rest";
+import { syncAllUnpushedAttachmentsInBackground } from "@/lib/kaiten-sync";
 import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-column-titles";
 import { logger } from "@/lib/server/logger";
 
@@ -29,6 +30,9 @@ export type KaitenChatBackgroundSyncResult = {
   newCorrectionsImported: number;
   newProstheticsImported: number;
   kaitenLabMentionDbChanged: boolean;
+  attachmentsAttempted: number;
+  attachmentsPushed: number;
+  attachmentsFailed: number;
   elapsedMs: number;
 };
 
@@ -193,9 +197,10 @@ export async function syncKaitenChatsInBackground(
   let syncedCount = 0;
   let errorCount = 0;
   let kaitenLabMentionDbChanged = false;
+  let columnSyncRateLimited = false;
 
   for (const tenantId of tenants) {
-    if (checked >= limit) break;
+    if (checked >= limit || columnSyncRateLimited) break;
     const take = Math.min(perTenantLimit, limit - checked);
     const { rows: batch, persistentCursor } = await selectTenantOrderBatch(
       db,
@@ -213,7 +218,12 @@ export async function syncKaitenChatsInBackground(
         syncedCount += res.syncedCount;
         errorCount += res.errorCount;
         if (res.kaitenLabMentionDbChanged) kaitenLabMentionDbChanged = true;
+        if (res.rateLimited) {
+          columnSyncRateLimited = true;
+          break;
+        }
       }
+      if (columnSyncRateLimited) break;
       checked += orderIds.length;
     } catch (err) {
       checked += orderIds.length;
@@ -233,6 +243,22 @@ export async function syncKaitenChatsInBackground(
   const prosthAfter = await db.orderProstheticsRequest.count({
     where: { resolvedAt: null, rejectedAt: null },
   });
+
+  let attachmentsAttempted = 0;
+  let attachmentsPushed = 0;
+  let attachmentsFailed = 0;
+  if (!columnSyncRateLimited) {
+    try {
+      const att = await syncAllUnpushedAttachmentsInBackground(db);
+      attachmentsAttempted = att.attempted;
+      attachmentsPushed = att.pushed;
+      attachmentsFailed = att.failed;
+      if (att.rateLimited) columnSyncRateLimited = true;
+    } catch (err) {
+      logger.warn({ err }, "background Kaiten attachment sync failed");
+    }
+  }
+
   const result: KaitenChatBackgroundSyncResult = {
     ok: true,
     checked,
@@ -242,6 +268,9 @@ export async function syncKaitenChatsInBackground(
     newCorrectionsImported: Math.max(0, corrAfter - corrBefore),
     newProstheticsImported: Math.max(0, prosthAfter - prosthBefore),
     kaitenLabMentionDbChanged,
+    attachmentsAttempted,
+    attachmentsPushed,
+    attachmentsFailed,
     elapsedMs: Date.now() - startedAt,
   };
   logger.info(result, "background Kaiten chat sync completed");

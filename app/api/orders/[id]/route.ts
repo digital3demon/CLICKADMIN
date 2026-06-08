@@ -196,6 +196,8 @@ type PatchBody = {
   kaitenCardTypeId?: string | null;
   /** Человекочитаемое имя типа (fallback при несовпадении id между канбаном и БД CRM). */
   kaitenCardTypeName?: string | null;
+  /** Вид работы в шапке Kaiten (между врачом и сроком); пусто — тип карточки. */
+  kaitenCardTitleLabel?: string | null;
 };
 
 /** Поля шапки наряда, влияющие на заголовок/описание/срочность карточки Kaiten и зеркала канбана. */
@@ -210,6 +212,7 @@ const KAITEN_HEAD_PATCH_FIELDS: (keyof PatchBody)[] = [
   "doctorId",
   "clinicId",
   "kaitenCardTypeId",
+  "kaitenCardTitleLabel",
 ];
 
 const orderInclude = {
@@ -531,6 +534,19 @@ export async function PATCH(
         ? ""
         : String(body.clientOrderText).trim();
     scalarData.clientOrderText = t || null;
+  }
+
+  if (body.kaitenCardTitleLabel !== undefined) {
+    const t =
+      body.kaitenCardTitleLabel === null
+        ? ""
+        : String(body.kaitenCardTitleLabel).trim();
+    scalarData.kaitenCardTitleLabel = t.length ? t.slice(0, 120) : null;
+    scalarData.kaitenCardTitleManual = false;
+  }
+
+  if (body.notes !== undefined || body.clientOrderText !== undefined) {
+    scalarData.kaitenCardDescriptionManual = false;
   }
 
   if (body.legalEntity !== undefined) {
@@ -1117,6 +1133,32 @@ export async function PATCH(
     const touchedCrmKanbanFields =
       body.demoKanbanColumn !== undefined || body.kaitenCardTypeId !== undefined;
 
+    let kaitenTitleSyncError: string | null = null;
+    if (touchedKaitenHead) {
+      try {
+        if (session?.demo) {
+          const mirrors = await refreshOrderKaitenHeadMirrors(orderId);
+          if (mirrors) {
+            order.kaitenCardTitleMirror = mirrors.title;
+            order.kaitenCardDescriptionMirror = mirrors.descriptionMirror;
+          }
+        } else {
+          const push = await pushKaitenCardTitleForOrderIfLinked(orderId);
+          if (!push.ok) {
+            kaitenTitleSyncError = push.error;
+            console.error("[PATCH order] Kaiten head sync", push.error);
+          } else {
+            order.kaitenCardTitleMirror = push.title;
+            order.kaitenCardDescriptionMirror = push.descriptionMirror;
+          }
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        kaitenTitleSyncError = msg;
+        console.error("[PATCH order] Kaiten head / mirrors sync", e);
+      }
+    }
+
     after(async () => {
       try {
         const base = crmPublicBaseUrl();
@@ -1248,26 +1290,11 @@ export async function PATCH(
           console.error("[PATCH order] telegram kanban notify", e);
         }
       }
-
-      if (touchedKaitenHead) {
-        try {
-          if (session?.demo) {
-            await refreshOrderKaitenHeadMirrors(orderId);
-          } else {
-            const push = await pushKaitenCardTitleForOrderIfLinked(orderId);
-            if (!push.ok) {
-              console.error("[PATCH order] Kaiten head sync", push.error);
-            }
-          }
-        } catch (e) {
-          console.error("[PATCH order] Kaiten head / mirrors sync", e);
-        }
-      }
     });
 
     return NextResponse.json({
       ...(await hydrateOrderResponse(order, clientsPrisma, pricingPrisma)),
-      kaitenTitleSyncError: null,
+      kaitenTitleSyncError,
     });
   } catch (e) {
     if (prostheticsStockApplied && !orderSaved && warehouseId) {

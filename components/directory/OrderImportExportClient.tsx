@@ -163,8 +163,16 @@ export function OrderImportExportClient() {
   const [priceOptions, setPriceOptions] = useState<PriceRefOption[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [rowFilter, setRowFilter] = useState<"all" | "issues">("all");
 
   const issueCount = useMemo(() => rows.filter((r) => r.issues.length > 0).length, [rows]);
+  const visibleRows = useMemo(() => {
+    const indexed = rows.map((row, i) => ({ row, i }));
+    if (rowFilter === "issues") {
+      return indexed.filter(({ row }) => row.issues.length > 0);
+    }
+    return indexed;
+  }, [rows, rowFilter]);
   const priceComboboxOptions = useMemo<PrefixComboboxOption[]>(
     () =>
       priceOptions.map((p) => {
@@ -253,6 +261,7 @@ export function OrderImportExportClient() {
         return;
       }
       setSheetName(data.sheetName ?? "");
+      setRowFilter("all");
       setRows((Array.isArray(data.rows) ? data.rows : []).map((r) => ({ ...r, appointmentDateText: toDateValue(r.appointmentDateText), dueDateText: toDateValue(r.dueDateText), workReceivedAtText: toDateValue(r.workReceivedAtText) })));
       setDoctorOptions(Array.isArray(data.refs?.doctors) ? data.refs!.doctors! : []);
       setClinicOptions(Array.isArray(data.refs?.clinics) ? data.refs!.clinics! : []);
@@ -340,11 +349,47 @@ export function OrderImportExportClient() {
           <button type="button" disabled={!file || busyPreview} onClick={() => void runPreview()} className="h-9 rounded-md border border-[var(--input-border)] px-3">{busyPreview ? "Разбор..." : "Разобрать таблицу"}</button>
           <button type="button" disabled={rows.length === 0 || busyImport} onClick={() => void runImport()} className="h-9 rounded-md bg-[var(--sidebar-blue)] px-4 text-white">{busyImport ? "Сохранение..." : "Сохранить импорт"}</button>
         </div>
-        {rows.length > 0 ? <p className="mt-2 text-sm">Лист: {sheetName || "—"}. Строк: {rows.length}. Проблемных: <b>{issueCount}</b>.</p> : null}
+        {rows.length > 0 ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+            <span>
+              Лист: {sheetName || "—"}. Строк: {rows.length}. Проблемных: <b>{issueCount}</b>.
+              {rowFilter === "issues" ? (
+                <>
+                  {" "}
+                  Показано: <b>{visibleRows.length}</b>.
+                </>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              disabled={issueCount === 0}
+              onClick={() => setRowFilter("issues")}
+              className={`h-8 rounded-md border px-3 text-sm ${
+                rowFilter === "issues"
+                  ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)] text-white"
+                  : "border-[var(--input-border)] bg-[var(--card-bg)] text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+              } disabled:opacity-40`}
+            >
+              Показать только проблемные
+            </button>
+            <button
+              type="button"
+              disabled={rows.length === 0}
+              onClick={() => setRowFilter("all")}
+              className={`h-8 rounded-md border px-3 text-sm ${
+                rowFilter === "all"
+                  ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)] text-white"
+                  : "border-[var(--input-border)] bg-[var(--card-bg)] text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+              }`}
+            >
+              Показать все
+            </button>
+          </div>
+        ) : null}
         {loadError ? <p className="mt-2 text-sm text-red-600">{loadError}</p> : null}
       </section>
 
-      {rows.map((row, i) => {
+      {visibleRows.map(({ row, i }) => {
         const doctorId = row.doctorId ?? findRefId(row.doctorName, doctorOptions);
         const clinicId = row.clinicId ?? findRefId(row.clinicName, clinicOptions);
         const invoicedItems = splitInvoiced(row.invoicedText);

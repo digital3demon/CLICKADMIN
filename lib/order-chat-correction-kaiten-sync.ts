@@ -3,6 +3,7 @@ import {
   dedupeParsedKaitenComments,
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
+import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import { getKaitenRestAuth, kaitenListComments } from "@/lib/kaiten-rest";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
@@ -10,7 +11,6 @@ import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-pros
 
 /**
  * Тянет комментарии карточки из Kaiten и синхронизирует «!!!» в OrderChatCorrection.
- * @returns true если запрос к Kaiten успешен.
  * По умолчанию инвалидирует кэш GET /kaiten; для фонового пакета со списком нарядов
  * можно отключить, чтобы не сбрасывать снимок на каждом тике.
  */
@@ -19,12 +19,17 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
   orderId: string,
   kaitenCardId: number,
   opts?: { invalidateSnapshot?: boolean },
-): Promise<boolean> {
+): Promise<{ synced: boolean; rateLimited: boolean }> {
   const auth = getKaitenRestAuth();
-  if (!auth) return false;
+  if (!auth) return { synced: false, rateLimited: false };
 
   const comm = await kaitenListComments(auth, kaitenCardId);
-  if (!comm.ok) return false;
+  if (!comm.ok) {
+    return {
+      synced: false,
+      rateLimited: isKaitenRateLimitedStatus(comm.status),
+    };
+  }
 
   const comments = dedupeParsedKaitenComments(
     comm.comments
@@ -41,5 +46,5 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
   if (opts?.invalidateSnapshot !== false) {
     invalidateKaitenSnapshotCache(orderId.trim());
   }
-  return true;
+  return { synced: true, rateLimited: false };
 }

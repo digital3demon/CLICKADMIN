@@ -117,6 +117,7 @@ type KaitenSnapshot = {
 export function OrderKaitenTab({
   orderId,
   kaitenCardId,
+  initialKaitenCardTitleLabel = null,
   kaitenCardUrl,
   kanbanCardUrl = null,
   initialTrackLane,
@@ -127,6 +128,7 @@ export function OrderKaitenTab({
 }: {
   orderId: string;
   kaitenCardId: number | null;
+  initialKaitenCardTitleLabel?: string | null;
   kaitenCardUrl: string | null;
   kanbanCardUrl?: string | null;
   initialTrackLane: KaitenTrackLane | null;
@@ -142,6 +144,9 @@ export function OrderKaitenTab({
   const [loading, setLoading] = useState(true);
 
   const [title, setTitle] = useState("");
+  const titleDirtyRef = useRef(false);
+  const [workLabel, setWorkLabel] = useState(initialKaitenCardTitleLabel ?? "");
+  const persistedWorkLabelRef = useRef(initialKaitenCardTitleLabel ?? "");
   const [trackLane, setTrackLane] = useState<KaitenTrackLane | null>(
     initialTrackLane,
   );
@@ -174,6 +179,12 @@ export function OrderKaitenTab({
   const [noCardBlockReason, setNoCardBlockReason] = useState<string | null>(
     initialKaitenBlockReason?.trim() ? initialKaitenBlockReason.trim() : null,
   );
+
+  useEffect(() => {
+    const next = initialKaitenCardTitleLabel ?? "";
+    setWorkLabel(next);
+    persistedWorkLabelRef.current = next;
+  }, [initialKaitenCardTitleLabel]);
 
   const [boardOverride, setBoardOverride] = useState<{
     columns: Array<{ id: number; title?: string; name?: string }>;
@@ -256,6 +267,7 @@ export function OrderKaitenTab({
       if (c && typeof c === "object") {
         const t = c.title;
         setTitle(typeof t === "string" ? t : "");
+        titleDirtyRef.current = false;
         const col = c.column_id;
         setColumnId(typeof col === "number" ? col : "");
         const ln = c.lane_id;
@@ -419,9 +431,45 @@ export function OrderKaitenTab({
     setSaving(true);
     setSaveError(null);
     try {
-      const body: Record<string, unknown> = {
-        title: title.trim(),
-      };
+      const workLabelDirty =
+        workLabel.trim() !== persistedWorkLabelRef.current.trim();
+      if (workLabelDirty) {
+        const orderRes = await fetch(`/api/orders/${orderId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kaitenCardTitleLabel: workLabel.trim() || null,
+          }),
+        });
+        const orderData = (await orderRes.json().catch(() => ({}))) as {
+          error?: string;
+          kaitenTitleSyncError?: string | null;
+          kaitenCardTitleMirror?: string | null;
+        };
+        if (!orderRes.ok) {
+          setSaveError(orderData.error ?? "Не удалось сохранить вид работы");
+          return;
+        }
+        if (orderData.kaitenTitleSyncError) {
+          setSaveError(
+            `Вид работы сохранён, но Kaiten не обновился: ${orderData.kaitenTitleSyncError}`,
+          );
+          return;
+        }
+        persistedWorkLabelRef.current = workLabel.trim();
+        if (
+          typeof orderData.kaitenCardTitleMirror === "string" &&
+          orderData.kaitenCardTitleMirror.trim()
+        ) {
+          setTitle(orderData.kaitenCardTitleMirror);
+          titleDirtyRef.current = false;
+        }
+      }
+
+      const body: Record<string, unknown> = {};
+      if (titleDirtyRef.current) {
+        body.title = title.trim();
+      }
       if (spaceDirty && trackLane != null) {
         body.kaitenTrackLane = trackLane;
       }
@@ -430,6 +478,10 @@ export function OrderKaitenTab({
       }
       if (laneId !== "") {
         body.laneId = laneId;
+      }
+      if (Object.keys(body).length === 0) {
+        router.refresh();
+        return;
       }
       const res = await fetch(`/api/orders/${orderId}/kaiten`, {
         method: "PATCH",
@@ -448,7 +500,10 @@ export function OrderKaitenTab({
       if (data.card && typeof data.card === "object") {
         const c = data.card;
         const t = c.title;
-        if (typeof t === "string") setTitle(t);
+        if (typeof t === "string") {
+          setTitle(t);
+          titleDirtyRef.current = false;
+        }
         const col = c.column_id;
         if (typeof col === "number") setColumnId(col);
         const ln = c.lane_id;
@@ -469,6 +524,8 @@ export function OrderKaitenTab({
         setTrackLane(data.trackLane);
       }
       setSpaceDirty(false);
+      titleDirtyRef.current = false;
+      router.refresh();
     } catch {
       setSaveError("Сеть недоступна");
     } finally {
@@ -1165,7 +1222,10 @@ export function OrderKaitenTab({
       if (data.card && typeof data.card === "object") {
         const c = data.card;
         const t = c.title;
-        if (typeof t === "string") setTitle(t);
+        if (typeof t === "string") {
+          setTitle(t);
+          titleDirtyRef.current = false;
+        }
         const col = c.column_id;
         if (typeof col === "number") setColumnId(col);
         const ln = c.lane_id;
@@ -1285,11 +1345,30 @@ export function OrderKaitenTab({
         </h3>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
+            Вид работы
+            <span className="text-[10px] font-normal text-[var(--text-muted)]">
+              Между врачом и сроком в шапке. Пусто — подставится тип карточки.
+            </span>
+            <input
+              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
+              value={workLabel}
+              onChange={(e) => setWorkLabel(e.target.value)}
+              placeholder="Например: коронки 14–16"
+              maxLength={120}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
             Заголовок карточки
+            <span className="text-[10px] font-normal text-[var(--text-muted)]">
+              Полный текст в Kaiten. При смене вида работы пересчитывается автоматически.
+            </span>
             <input
               className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                titleDirtyRef.current = true;
+                setTitle(e.target.value);
+              }}
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)]">

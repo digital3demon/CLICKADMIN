@@ -28,8 +28,8 @@ import { getSiteOrigin } from "@/lib/site-origin-server";
 import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 export const dynamic = "force-dynamic";
 
-/** Колонка по ширине таблицы, к левому краю — как на странице «Заказы». */
-const SHIPMENTS_LIST_STACK = "w-fit max-w-full min-w-0 self-start space-y-4";
+/** На всю ширину рабочей области — как список «Заказы». */
+const SHIPMENTS_LIST_STACK = "w-full max-w-full min-w-0 self-start space-y-4";
 
 const MAX_RANGE_DAYS = 366;
 

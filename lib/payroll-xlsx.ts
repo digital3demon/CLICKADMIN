@@ -18,14 +18,15 @@ export const PAYROLL_XLSX_CATEGORIZED_KINDS = PAYROLL_WORK_KIND_VALUES.filter(
   (k) => k !== "UNCATEGORIZED",
 ) as Exclude<PayrollWorkKindValue, "UNCATEGORIZED">[];
 
+/** Заголовки столбцов = подписи категорий в UI (выпадающий список ФОТ). */
 export const PAYROLL_KIND_COLUMN_HEADERS: Record<
   (typeof PAYROLL_XLSX_CATEGORIZED_KINDS)[number],
   string
 > = {
-  CAD: "CAD (₽)",
-  CAD_SURGERY: "CAD Хирургия (₽)",
-  MANUAL: "Мануал (₽)",
-  PROCESSING: "Обработка (₽)",
+  CAD: PAYROLL_WORK_KIND_LABELS.CAD,
+  CAD_SURGERY: PAYROLL_WORK_KIND_LABELS.CAD_SURGERY,
+  MANUAL: PAYROLL_WORK_KIND_LABELS.MANUAL,
+  PROCESSING: PAYROLL_WORK_KIND_LABELS.PROCESSING,
 };
 
 const UNCAT_MARKER = "БЕЗ КАТЕГОРИИ";
@@ -308,7 +309,6 @@ export function buildPayrollImportPreview(opts: {
 export async function buildPayrollConfigXlsxBuffer(opts: {
   priceItems: PayrollPriceItemRef[];
   configs: PayrollConfigRef[];
-  includeCategoryColumns: boolean;
 }): Promise<Buffer> {
   const configMap = new Map<string, number>();
   for (const c of opts.configs) {
@@ -325,16 +325,15 @@ export async function buildPayrollConfigXlsxBuffer(opts: {
 
   ws.getCell(1, 1).value =
     "Шаблон ФОТ. Не меняйте заголовки во 2-й строке. Пустые ячейки цен не импортируются.";
-  ws.mergeCells(1, 1, 1, opts.includeCategoryColumns ? 2 + PAYROLL_XLSX_CATEGORIZED_KINDS.length : 2);
+  const mainColCount = 2 + PAYROLL_XLSX_CATEGORIZED_KINDS.length;
+  ws.mergeCells(1, 1, 1, mainColCount);
 
   const headerRow = ws.getRow(2);
   headerRow.getCell(1).value = MAIN_CODE_HEADER;
   headerRow.getCell(2).value = MAIN_NAME_HEADER;
-  if (opts.includeCategoryColumns) {
-    PAYROLL_XLSX_CATEGORIZED_KINDS.forEach((kind, i) => {
-      headerRow.getCell(3 + i).value = PAYROLL_KIND_COLUMN_HEADERS[kind];
-    });
-  }
+  PAYROLL_XLSX_CATEGORIZED_KINDS.forEach((kind, i) => {
+    headerRow.getCell(3 + i).value = PAYROLL_KIND_COLUMN_HEADERS[kind];
+  });
   headerRow.font = { bold: true };
 
   let r = 3;
@@ -342,12 +341,10 @@ export async function buildPayrollConfigXlsxBuffer(opts: {
     const row = ws.getRow(r);
     row.getCell(1).value = item.code;
     row.getCell(2).value = item.name;
-    if (opts.includeCategoryColumns) {
-      PAYROLL_XLSX_CATEGORIZED_KINDS.forEach((kind, i) => {
-        const amt = configMap.get(`${item.id}:${kind}`);
-        if (amt != null) row.getCell(3 + i).value = amt;
-      });
-    }
+    PAYROLL_XLSX_CATEGORIZED_KINDS.forEach((kind, i) => {
+      const amt = configMap.get(`${item.id}:${kind}`);
+      if (amt != null) row.getCell(3 + i).value = amt;
+    });
     r += 1;
   }
 
@@ -377,12 +374,8 @@ export async function buildPayrollConfigXlsxBuffer(opts: {
 
   ws.getColumn(1).width = 14;
   ws.getColumn(2).width = 42;
-  ws.getColumn(3).width = 28;
-  ws.getColumn(4).width = 14;
-  if (opts.includeCategoryColumns) {
-    for (let c = 5; c <= 2 + PAYROLL_XLSX_CATEGORIZED_KINDS.length; c++) {
-      ws.getColumn(c).width = 16;
-    }
+  for (let c = 3; c <= mainColCount; c++) {
+    ws.getColumn(c).width = 16;
   }
 
   const buf = await wb.xlsx.writeBuffer();

@@ -102,7 +102,9 @@ export async function POST(
     return NextResponse.json({ error: "Нет карточки Kaiten" }, { status: 400 });
   }
 
-  const res = await kaitenCreateComment(auth, order.kaitenCardId, kaitenText, parent);
+  const res = await kaitenCreateComment(auth, order.kaitenCardId, kaitenText, parent, {
+    burst: true,
+  });
 
   if (!res.ok) {
     return NextResponse.json(

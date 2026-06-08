@@ -1206,6 +1206,10 @@ model Order {
   kaitenCardTitleMirror          String?
   /// Описание карточки Kaiten (кэш для зеркала канбана)
   kaitenCardDescriptionMirror    String?
+  /// true — не отправлять вычисленный title в Kaiten при сохранении наряда (ручной заголовок в Kaiten/канбане)
+  kaitenCardTitleManual          Boolean                   @default(false)
+  /// true — не отправлять description из notes/clientOrderText при сохранении наряда
+  kaitenCardDescriptionManual    Boolean                   @default(false)
   /// Карточка Kaiten в состоянии «заблокирована» (синхронизация из Kaiten и после действий в CRM)
   kaitenBlocked                  Boolean                   @default(false)
   /// Текст причины блокировки из Kaiten (красная полоса в Kaiten / подсказка в списке CRM)

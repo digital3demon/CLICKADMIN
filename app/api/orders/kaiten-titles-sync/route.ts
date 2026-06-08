@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getKaitenRestAuth } from "@/lib/kaiten-rest";
+import { kaitenRetryAfterSeconds } from "@/lib/kaiten-rate-limit";
 import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-column-titles";
 
 type Body = { orderIds?: unknown; includeComments?: unknown };
@@ -74,6 +75,7 @@ export async function POST(req: Request) {
       errorCount,
       clicklabByOrderId,
       kaitenLabMentionDbChanged,
+      rateLimited,
     } = await syncKaitenColumnTitlesForOrderIds(prisma, auth, orderIds, {
       includeComments,
     });
@@ -86,8 +88,8 @@ export async function POST(req: Request) {
     const newCorrectionsImported = pendingCorrAfter > pendingCorrBefore;
     const newProstheticsImported = pendingProsthAfter > pendingProsthBefore;
 
-    return NextResponse.json({
-      ok: true,
+    const payload = {
+      ok: !rateLimited,
       titles,
       syncedCount,
       errorCount,
@@ -95,7 +97,20 @@ export async function POST(req: Request) {
       kaitenLabMentionDbChanged,
       newCorrectionsImported,
       newProstheticsImported,
-    });
+      rateLimited,
+      ...(rateLimited
+        ? { error: "Слишком много запросов к Kaiten, повторите позже" }
+        : {}),
+    };
+
+    if (rateLimited) {
+      return NextResponse.json(payload, {
+        status: 429,
+        headers: { "Retry-After": kaitenRetryAfterSeconds() },
+      });
+    }
+
+    return NextResponse.json(payload);
   } catch (e) {
     if (isConnAbortError(e) || req.signal?.aborted) {
       return NextResponse.json(

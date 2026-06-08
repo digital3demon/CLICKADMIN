@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
+import { kaitenRetryAfterSeconds } from "@/lib/kaiten-rate-limit";
 import { syncOrderChatCorrectionsFromKaitenLive } from "@/lib/order-chat-correction-kaiten-sync";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
@@ -39,13 +40,15 @@ export async function GET(
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
   }
 
+  let liveRateLimited = false;
   if (order.kaitenCardId != null) {
     try {
-      await syncOrderChatCorrectionsFromKaitenLive(
+      const live = await syncOrderChatCorrectionsFromKaitenLive(
         prisma,
         order.id,
         order.kaitenCardId,
       );
+      liveRateLimited = live.rateLimited;
     } catch (e) {
       console.error("[prosthetics-requests GET] live Kaiten sync", e);
     }
@@ -73,9 +76,22 @@ export async function GET(
     rejectedAt: r.rejectedAt?.toISOString() ?? null,
   }));
 
+  const headers: Record<string, string> = { "Cache-Control": "no-store" };
+  if (liveRateLimited) {
+    headers["Retry-After"] = kaitenRetryAfterSeconds();
+  }
+
   return NextResponse.json(
-    { requests },
-    { headers: { "Cache-Control": "no-store" } },
+    {
+      requests,
+      ...(liveRateLimited
+        ? {
+            rateLimited: true,
+            error: "Слишком много запросов к Kaiten, повторите позже",
+          }
+        : {}),
+    },
+    { status: liveRateLimited ? 429 : 200, headers },
   );
 }
 

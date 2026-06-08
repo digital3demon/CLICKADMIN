@@ -39,3 +39,13 @@ export function kaitenFastLivePollIntervalMs(): number {
   if (!Number.isFinite(n)) return 12_000;
   return Math.min(Math.max(n, 8000), 120_000);
 }
+
+/** HTTP 429 от Kaiten после исчерпания повторов в kaitenFetch. */
+export function isKaitenRateLimitedStatus(status: number): boolean {
+  return status === 429;
+}
+
+/** Заголовок Retry-After для ответов CRM клиенту (секунды). */
+export function kaitenRetryAfterSeconds(): string {
+  return "90";
+}

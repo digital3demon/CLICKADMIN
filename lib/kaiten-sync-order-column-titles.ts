@@ -19,6 +19,8 @@ import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-cor
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
+import { kaitenUrgentPatchFromCard } from "@/lib/kaiten-inbound-order-fields";
+import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 
 const MAX_IDS = 10;
 /** Параллельные карточки — очередь в kaitenFetch + малый параллелизм снижает 429. */
@@ -27,6 +29,17 @@ const CARD_FETCH_CONCURRENCY = 2;
 const CARD_FETCH_CONCURRENCY_WITH_COMMENTS = 1;
 
 type BoardColumn = { id: number; title: string; name?: string };
+
+function kaitenHeadMirrorsFromCard(cardObj: Record<string, unknown>): {
+  title: string | null;
+  description: string | null;
+} {
+  const t = cardObj.title;
+  const title = typeof t === "string" && t.trim() ? t.trim() : null;
+  const d = cardObj.description;
+  const description = typeof d === "string" && d.trim() ? d.trim() : null;
+  return { title, description };
+}
 
 /**
  * Обновляет в БД `kaitenColumnTitle` по актуальной карточке Kaiten (для списков заказов / отгрузок).
@@ -47,6 +60,8 @@ export async function syncKaitenColumnTitlesForOrderIds(
   clicklabByOrderId: Record<string, boolean>;
   /** Было ли изменение флага упоминания в БД (для router.refresh счётчика «Упоминания»). */
   kaitenLabMentionDbChanged: boolean;
+  /** Kaiten вернул 429 — дальнейшие карточки в пакете не опрашиваем. */
+  rateLimited: boolean;
 }> {
   const uniq = [...new Set(orderIds.map((x) => x.trim()).filter(Boolean))].slice(
     0,
@@ -57,6 +72,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
   let syncedCount = 0;
   let errorCount = 0;
   let kaitenLabMentionDbChanged = false;
+  let rateLimited = false;
   const includeComments = opts?.includeComments === true;
   /** Фон: с паузой в очереди kaitenFetch (~5 req/s). burst не использовать — блокирует сохранение нарядов. */
   const successfullyCheckedOrderIds = new Set<string>();
@@ -67,6 +83,11 @@ export async function syncKaitenColumnTitlesForOrderIds(
       id: true,
       kaitenCardId: true,
       kaitenColumnTitle: true,
+      kaitenCardTitleMirror: true,
+      kaitenCardDescriptionMirror: true,
+      kaitenCardTitleManual: true,
+      kaitenCardDescriptionManual: true,
+      isUrgent: true,
       kaitenCardSortOrder: true,
       kaitenBlocked: true,
       kaitenBlockReason: true,
@@ -83,23 +104,29 @@ export async function syncKaitenColumnTitlesForOrderIds(
 
   const columnsCache = new Map<number, BoardColumn[]>();
 
-  async function getCachedColumns(boardId: number): Promise<BoardColumn[] | null> {
+  async function getCachedColumns(
+    boardId: number,
+  ): Promise<{ columns: BoardColumn[] | null; rateLimited: boolean }> {
     if (columnsCache.has(boardId)) {
-      return columnsCache.get(boardId)!;
+      return { columns: columnsCache.get(boardId)!, rateLimited: false };
     }
     const cols = await kaitenListBoardColumns(auth, boardId);
     if (!cols.ok) {
-      return null;
+      return {
+        columns: null,
+        rateLimited: isKaitenRateLimitedStatus(cols.status),
+      };
     }
     columnsCache.set(boardId, cols.columns);
-    return cols.columns;
+    return { columns: cols.columns, rateLimited: false };
   }
 
   const chunkSize = includeComments
     ? CARD_FETCH_CONCURRENCY_WITH_COMMENTS
     : CARD_FETCH_CONCURRENCY;
 
-  for (let i = 0; i < withCards.length; i += chunkSize) {
+  cardLoop: for (let i = 0; i < withCards.length; i += chunkSize) {
+    if (rateLimited) break;
     const chunk = withCards.slice(i, i + chunkSize);
     const cardResponses = await Promise.all(
       chunk.map((row) =>
@@ -117,6 +144,22 @@ export async function syncKaitenColumnTitlesForOrderIds(
     );
 
     for (const { row, cardRes, commRes } of cardResponses) {
+      if (rateLimited) break cardLoop;
+      if (!cardRes.ok && isKaitenRateLimitedStatus(cardRes.status)) {
+        errorCount += 1;
+        rateLimited = true;
+        break cardLoop;
+      }
+      if (
+        includeComments &&
+        commRes &&
+        !commRes.ok &&
+        isKaitenRateLimitedStatus(commRes.status)
+      ) {
+        errorCount += 1;
+        rateLimited = true;
+        break cardLoop;
+      }
       let computedLabMention: boolean | undefined;
       if (includeComments && commRes?.ok) {
         try {
@@ -170,7 +213,13 @@ export async function syncKaitenColumnTitlesForOrderIds(
         errorCount += 1;
         continue;
       }
-      const colList = await getCachedColumns(boardId);
+      const colFetch = await getCachedColumns(boardId);
+      if (colFetch.rateLimited) {
+        errorCount += 1;
+        rateLimited = true;
+        break cardLoop;
+      }
+      const colList = colFetch.columns;
       if (colList == null) {
         errorCount += 1;
         continue;
@@ -184,6 +233,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
         meta.blockedAtIso != null ? new Date(meta.blockedAtIso) : null;
       const sortDb =
         "sort_order" in cardObj ? kaitenSortOrderFromCard(cardObj) : undefined;
+      const headMirror = kaitenHeadMirrorsFromCard(cardObj);
       const sameTitle = columnTitle === row.kaitenColumnTitle;
       const sameBlockedAt =
         (blockedAtNext === null && row.kaitenBlockedAt == null) ||
@@ -196,7 +246,27 @@ export async function syncKaitenColumnTitlesForOrderIds(
         sameBlockedAt;
       const sameSort =
         sortDb === undefined || sortDb === row.kaitenCardSortOrder;
-      if (sameTitle && sameBlock && sameSort) {
+      const sameHeadMirror =
+        (headMirror.title ?? "") === (row.kaitenCardTitleMirror ?? "") &&
+        (headMirror.description ?? "") === (row.kaitenCardDescriptionMirror ?? "");
+      const urgentPatch = kaitenUrgentPatchFromCard(cardObj, row.isUrgent);
+      const sameUrgent = urgentPatch.isUrgent === undefined;
+      const titleDriftedInKaiten =
+        !row.kaitenCardTitleManual &&
+        (headMirror.title ?? "") !== (row.kaitenCardTitleMirror ?? "") &&
+        Boolean(headMirror.title);
+      const descDriftedInKaiten =
+        !row.kaitenCardDescriptionManual &&
+        (headMirror.description ?? "") !== (row.kaitenCardDescriptionMirror ?? "");
+      if (
+        sameTitle &&
+        sameBlock &&
+        sameSort &&
+        sameHeadMirror &&
+        sameUrgent &&
+        !titleDriftedInKaiten &&
+        !descDriftedInKaiten
+      ) {
         titles[row.id] = columnTitle;
         if (includeComments && clicklabByOrderId[row.id] === undefined) {
           clicklabByOrderId[row.id] = false;
@@ -216,10 +286,15 @@ export async function syncKaitenColumnTitlesForOrderIds(
             kaitenSyncedAt: new Date(),
             kaitenSyncError: null,
             kaitenColumnTitle: columnTitle,
+            kaitenCardTitleMirror: headMirror.title,
+            kaitenCardDescriptionMirror: headMirror.description,
             kaitenBlocked: blocked,
             kaitenBlockReason: reasonDb,
             ...blockedAtData,
             ...(sortDb !== undefined ? { kaitenCardSortOrder: sortDb } : {}),
+            ...urgentPatch,
+            ...(titleDriftedInKaiten ? { kaitenCardTitleManual: true } : {}),
+            ...(descDriftedInKaiten ? { kaitenCardDescriptionManual: true } : {}),
           },
         });
       } catch {
@@ -255,5 +330,6 @@ export async function syncKaitenColumnTitlesForOrderIds(
     errorCount,
     clicklabByOrderId,
     kaitenLabMentionDbChanged,
+    rateLimited,
   };
 }

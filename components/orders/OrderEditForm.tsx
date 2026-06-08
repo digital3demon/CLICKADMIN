@@ -573,6 +573,8 @@ export type OrderEditInitial = {
   financeCalculated: boolean;
   prosthetics: OrderProstheticsV1;
   kaitenCardId: number | null;
+  /** Вид работы в шапке Kaiten (между врачом и сроком) */
+  kaitenCardTitleLabel?: string | null;
   /** «Настроить Kaiten позже» при создании */
   kaitenDecideLater?: boolean;
   /** Текст ошибки последней выгрузки / создания в Kaiten */
@@ -3119,6 +3121,7 @@ export function OrderEditForm({
             <OrderKaitenTab
               orderId={initial.id}
               kaitenCardId={initial.kaitenCardId}
+              initialKaitenCardTitleLabel={initial.kaitenCardTitleLabel ?? null}
               kaitenCardUrl={initial.kaitenCardUrl}
               kanbanCardUrl={kanbanCardUrl}
               initialTrackLane={initial.kaitenTrackLane}

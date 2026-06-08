@@ -483,6 +483,7 @@ export async function kaitenCreateComment(
   cardId: number,
   text: string,
   parentCommentId?: number | null,
+  opts?: KaitenHttpOpts,
 ): Promise<{ ok: boolean; status: number; comment: Record<string, unknown> | null; error: string | null }> {
   const trimmed = text.trim();
   const tryBodies: Record<string, unknown>[] = [];
@@ -494,11 +495,16 @@ export async function kaitenCreateComment(
 
   let lastErr = "Kaiten error";
   for (const body of tryBodies) {
-    const r = await kaitenFetch(auth, `/cards/${cardId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const r = await kaitenFetch(
+      auth,
+      `/cards/${cardId}/comments`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      opts,
+    );
     if (r.ok) {
       const j = r.json;
       if (j != null && typeof j === "object" && !Array.isArray(j)) {

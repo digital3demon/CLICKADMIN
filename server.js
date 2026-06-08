@@ -89,13 +89,35 @@ function startKaitenChatBackgroundSync() {
   );
   const port = process.env.PORT || "3000";
   const url = `http://127.0.0.1:${port}/api/cron/kaiten-chat-sync?limit=${limit}`;
+  let inFlight = false;
   const run = () => {
+    if (inFlight) {
+      console.warn("[cron] kaiten-chat-sync skipped: previous run still in flight");
+      return;
+    }
+    inFlight = true;
+    const timeoutMs = Math.max(15_000, Math.min(180_000, intervalMs - 5_000));
     fetch(url, {
       headers: {
         "x-internal-kaiten-chat-sync-secret":
           process.env.INTERNAL_KAITEN_CHAT_SYNC_SECRET,
       },
-    }).catch(() => undefined);
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error(
+            `[cron] kaiten-chat-sync failed: ${res.status} ${res.statusText}`,
+            await res.text().catch(() => ""),
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("[cron] kaiten-chat-sync network error:", err?.message);
+      })
+      .finally(() => {
+        inFlight = false;
+      });
   };
   setTimeout(run, 10_000);
   setInterval(run, intervalMs);

@@ -79,6 +79,7 @@ export async function POST(
         order.kaitenCardId,
         kaitenText,
         null,
+        { burst: true },
       );
       if (!res.ok) {
         await prisma.orderProstheticsRequest.update({

@@ -101,6 +101,7 @@ export async function POST(req: Request) {
         kaitenCardId,
         buildKaitenCommentTextWithCrmAuthor(cm.authorLabel || "CRM", cm.text || ""),
         parentExternalId,
+        { burst: true },
       );
       if (!posted.ok) {
         cm.syncStatus = "failed";

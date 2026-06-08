@@ -4,10 +4,7 @@ import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
 import { canConfigurePayroll } from "@/lib/payroll";
 import { getActivePriceListId } from "@/lib/price-list-workspace";
-import {
-  buildPayrollConfigXlsxBuffer,
-  PAYROLL_XLSX_CATEGORIZED_KINDS,
-} from "@/lib/payroll-xlsx";
+import { buildPayrollConfigXlsxBuffer } from "@/lib/payroll-xlsx";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,14 +45,9 @@ export async function GET() {
     }),
   ]);
 
-  const includeCategoryColumns = configs.some((c) =>
-    (PAYROLL_XLSX_CATEGORIZED_KINDS as readonly string[]).includes(c.kind),
-  );
-
   const buffer = await buildPayrollConfigXlsxBuffer({
     priceItems,
     configs,
-    includeCategoryColumns,
   });
 
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");

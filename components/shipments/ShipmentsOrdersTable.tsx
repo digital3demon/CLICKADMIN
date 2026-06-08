@@ -18,6 +18,53 @@ import { orderPathById } from "@/lib/order-public-ref";
 
 const TAGS_PAGE_SIZE = clampOrdersPageSize(null);
 
+const SHIPMENTS_TABLE_TH =
+  "min-w-0 whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
+
+const SHIPMENTS_TABLE_CLASS =
+  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] md:min-w-[56rem] lg:min-w-0 lg:text-xs 2xl:text-[13px]";
+
+function ShipmentsTableColGroup({
+  showAccountantColumns,
+}: {
+  showAccountantColumns: boolean;
+}) {
+  if (showAccountantColumns) {
+    return (
+      <colgroup>
+        <col className="max-md:hidden lg:w-[6%]" />
+        <col className="lg:w-[5.5%]" />
+        <col className="lg:w-[10%]" />
+        <col className="lg:w-[10%]" />
+        <col className="lg:w-[7.5%]" />
+        <col className="lg:w-[7%]" />
+        <col className="lg:w-[6.5%]" />
+        <col className="lg:w-[6.5%]" />
+        <col className="lg:w-[6.5%]" />
+        <col className="lg:w-[10%]" />
+        <col className="lg:w-[8%]" />
+        <col className="lg:w-[4.5%]" />
+        <col className="lg:w-[12%]" />
+      </colgroup>
+    );
+  }
+  return (
+    <colgroup>
+      <col className="max-md:hidden lg:w-[7.2%]" />
+      <col className="lg:w-[6.4%]" />
+      <col className="lg:w-[12.1%]" />
+      <col className="lg:w-[11.9%]" />
+      <col className="lg:w-[8.6%]" />
+      <col className="lg:w-[8.2%]" />
+      <col className="lg:w-[7.6%]" />
+      <col className="lg:w-[7.8%]" />
+      <col className="lg:w-[7.8%]" />
+      <col className="lg:w-[5.2%]" />
+      <col className="lg:w-[18%]" />
+    </colgroup>
+  );
+}
+
 function formatAdmission(o: {
   workReceivedAt: Date | null;
   createdAt: Date;
@@ -119,61 +166,44 @@ export function ShipmentsOrdersTable({
           </>
         }
       >
-        <div className="scrollbar-none min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] print:overflow-visible">
-        <table className="w-full max-w-full min-w-0 border-collapse text-left text-sm shell-desktop:w-max print:table-auto">
+        <div className="orders-harmony-table-shell scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] print:max-w-none print:w-full print:overflow-visible">
+        <table className={SHIPMENTS_TABLE_CLASS}>
+          <ShipmentsTableColGroup showAccountantColumns={showAccountantColumns} />
           <thead className="hidden shell-desktop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30 print:table-header-group print:static">
-            <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase leading-tight tracking-wide text-[var(--text-secondary)] print:bg-[var(--card-bg)]">
+            <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs print:bg-[var(--card-bg)]">
               <th
-                className="max-md:hidden min-w-0 whitespace-nowrap px-1 py-2 text-center normal-case print:hidden"
+                className={`${SHIPMENTS_TABLE_TH} max-md:hidden normal-case print:hidden`}
                 aria-label="Печать наряда, этикетки и QR"
                 title="Печать наряда, этикетки и QR на карточку Kaiten"
               >
                 Печать
               </th>
-              <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
-                title="№ наряда"
-              >
+              <th className={SHIPMENTS_TABLE_TH} title="№ наряда">
                 № наряда
               </th>
-              <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
-                title="Клиника"
-              >
+              <th className={SHIPMENTS_TABLE_TH} title="Клиника">
                 Клиника
               </th>
-              <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
-                title="Адрес клиники"
-              >
+              <th className={SHIPMENTS_TABLE_TH} title="Адрес клиники">
                 Адрес
               </th>
-              <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
-                title="Врач"
-              >
+              <th className={SHIPMENTS_TABLE_TH} title="Врач">
                 Врач
               </th>
-              <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
-                title="Пациент"
-              >
+              <th className={SHIPMENTS_TABLE_TH} title="Пациент">
                 Пациент
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
+                className={SHIPMENTS_TABLE_TH}
                 title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
               >
                 Поступление
               </th>
-              <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
-                title="Срок лабораторный"
-              >
+              <th className={SHIPMENTS_TABLE_TH} title="Срок лабораторный">
                 ЛАБ
               </th>
               <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center print:px-1.5"
+                className={SHIPMENTS_TABLE_TH}
                 title="Запись: дата и время приёма пациента"
               >
                 Запись
@@ -181,13 +211,13 @@ export function ShipmentsOrdersTable({
               {showAccountantColumns ? (
                 <>
                   <th
-                    className="min-w-[14rem] max-w-[22rem] px-2 py-2 text-center align-top normal-case print:max-w-none print:px-1.5"
+                    className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
                     title="ИНН, КПП, банк, р/с и др. по карточке клиники или ИП врача"
                   >
                     Реквизиты
                   </th>
                   <th
-                    className="min-w-[10rem] max-w-[14rem] px-2 py-2 text-center align-top normal-case print:max-w-none print:px-1.5"
+                    className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
                     title="С какого юрлица лаборатории ведётся наряд (поле в наряде)"
                   >
                     Наше юрлицо
@@ -195,13 +225,13 @@ export function ShipmentsOrdersTable({
                 </>
               ) : null}
               <th
-                className="min-w-0 whitespace-nowrap px-2 py-2 text-center normal-case print:hidden"
+                className={`${SHIPMENTS_TABLE_TH} normal-case print:hidden`}
                 title="Отправка работы"
               >
                 Отправка
               </th>
               <th
-                className="min-w-[11rem] whitespace-nowrap px-2 py-2 text-center align-top normal-case print:px-1.5"
+                className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
                 title="Отметки: как на странице «Заказы»"
               >
                 Отметки
@@ -293,12 +323,12 @@ export function ShipmentsOrdersTable({
                 <tr
                   className={`hidden shell-desktop:table-row print:table-row ${rowClass}`}
                 >
-                  <td className="max-md:hidden min-w-0 px-0.5 py-2 align-middle print:hidden">
+                  <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:py-1.5 print:hidden">
                     <div className="flex min-w-0 flex-nowrap items-center justify-center gap-0">
                       {renderPrintActions()}
                     </div>
                   </td>
-                  <td className="min-w-0 whitespace-nowrap px-2 py-2 align-middle font-mono font-medium text-[var(--app-text)] print:px-1.5">
+                  <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle font-mono font-medium text-[var(--app-text)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     <Link
                       href={orderPathById(o.id)}
                       className="text-[var(--sidebar-blue)] hover:underline"
@@ -307,25 +337,25 @@ export function ShipmentsOrdersTable({
                       {o.orderNumber}
                     </Link>
                   </td>
-                  <td className="min-w-0 max-w-[12rem] px-2 py-2 align-middle text-[var(--text-strong)] print:max-w-none print:px-1.5">
+                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     {o.clinic ? (
                       <Link
                         href={`/clients/${o.clinic.id}`}
                         title={o.clinic.name}
-                        className="block hyphens-auto break-words text-[var(--sidebar-blue)] hover:underline"
+                        className="block hyphens-auto break-words text-center text-[var(--sidebar-blue)] hover:underline"
                       >
                         {o.clinic.name}
                       </Link>
                     ) : (
-                      <span className="block break-words text-[var(--text-secondary)]">
+                      <span className="block break-words text-center text-[var(--text-secondary)]">
                         Частное лицо
                       </span>
                     )}
                   </td>
-                  <td className="min-w-0 max-w-[12rem] px-2 py-2 align-middle text-[var(--text-body)] print:max-w-none print:px-1.5">
+                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     {o.clinic?.address?.trim() ? (
                       <span
-                        className="block hyphens-auto break-words text-[var(--text-secondary)]"
+                        className="block hyphens-auto break-words text-center text-[var(--text-secondary)]"
                         title={o.clinic.address.trim()}
                       >
                         {o.clinic.address.trim()}
@@ -334,17 +364,17 @@ export function ShipmentsOrdersTable({
                       <span className="block text-[var(--text-muted)]">—</span>
                     )}
                   </td>
-                  <td className="min-w-0 max-w-[10rem] px-2 py-2 align-middle text-[var(--text-strong)] print:max-w-none print:px-1.5">
+                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     <Link
                       href={`/clients/doctors/${o.doctor.id}`}
                       title={o.doctor.fullName}
-                      className="block break-words text-[var(--sidebar-blue)] hover:underline sm:leading-snug"
+                      className="block break-words text-center text-[var(--sidebar-blue)] hover:underline sm:leading-snug"
                     >
                       {personNameSurnameInitials(o.doctor.fullName)}
                     </Link>
                   </td>
                   <td
-                    className="min-w-0 max-w-[10rem] px-2 py-2 align-middle text-[var(--text-body)] print:max-w-none print:px-1.5"
+                    className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5 print:px-1.5"
                     title={o.patientName ?? undefined}
                   >
                     <span className="block hyphens-auto break-words">
@@ -353,10 +383,10 @@ export function ShipmentsOrdersTable({
                         : "—"}
                     </span>
                   </td>
-                  <td className="min-w-0 whitespace-nowrap px-2 py-2 align-middle text-xs text-[var(--text-secondary)] print:px-1.5">
+                  <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     {formatAdmission(o)}
                   </td>
-                  <td className="min-w-0 px-2 py-2 align-middle text-[var(--text-secondary)] print:px-1.5">
+                  <td className="min-w-0 px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     <OrderListDueCell
                       orderId={o.id}
                       dueIso={o.dueDate?.toISOString() ?? null}
@@ -364,7 +394,7 @@ export function ShipmentsOrdersTable({
                       labHmSlots={labDueHmSlots}
                     />
                   </td>
-                  <td className="min-w-0 px-2 py-2 align-middle text-[var(--text-secondary)] print:px-1.5">
+                  <td className="min-w-0 px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     <OrderListDueCell
                       variant="appointment"
                       orderId={o.id}
@@ -378,7 +408,7 @@ export function ShipmentsOrdersTable({
                   </td>
                   {showAccountantColumns ? (
                     <>
-                      <td className="min-w-[14rem] max-w-[22rem] whitespace-pre-wrap px-2 py-2 align-top text-left text-[11px] leading-snug text-[var(--text-body)] print:max-w-none print:px-1.5 print:text-[10px]">
+                      <td className="min-w-0 whitespace-pre-wrap px-1 py-1 align-top text-left text-[11px] leading-snug text-[var(--text-body)] sm:px-1.5 sm:py-1.5 print:px-1.5 print:text-[10px]">
                         {o.counterpartyRequisitesText?.trim() ? (
                           <span className="block hyphens-auto break-words">
                             {o.counterpartyRequisitesText.trim()}
@@ -387,7 +417,7 @@ export function ShipmentsOrdersTable({
                           <span className="text-[var(--text-muted)]">—</span>
                         )}
                       </td>
-                      <td className="min-w-[10rem] max-w-[14rem] whitespace-pre-wrap px-2 py-2 align-top text-left text-[11px] leading-snug text-[var(--text-body)] print:max-w-none print:px-1.5 print:text-[10px]">
+                      <td className="min-w-0 whitespace-pre-wrap px-1 py-1 align-top text-left text-[11px] leading-snug text-[var(--text-body)] sm:px-1.5 sm:py-1.5 print:px-1.5 print:text-[10px]">
                         {o.legalEntity?.trim() ? (
                           <span className="block hyphens-auto break-words">
                             {o.legalEntity.trim()}
@@ -400,12 +430,12 @@ export function ShipmentsOrdersTable({
                   ) : null}
                   <td
                     data-shipped-cell
-                    className="min-w-0 px-2 py-2 text-center align-middle print:hidden"
+                    className="min-w-0 px-1 py-1 text-center align-middle sm:px-1.5 sm:py-1.5 print:hidden"
                   >
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
-                  <td className="min-w-[11rem] px-2 py-2 align-top print:px-1.5">
-                    {renderTagsCell()}
+                  <td className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5 print:px-1.5">
+                    <div className="min-w-0">{renderTagsCell()}</div>
                   </td>
                 </tr>
                 <tr
