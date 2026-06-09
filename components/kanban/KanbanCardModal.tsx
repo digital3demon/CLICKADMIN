@@ -69,6 +69,7 @@ import { createPortal } from "react-dom";
 import { DeadlineTomorrowHint } from "./DeadlineTomorrowHint";
 import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
 import { PayrollDonePanel } from "@/components/payroll/PayrollDonePanel";
+import { OrderSourceEmailsModal } from "@/components/orders/OrderSourceEmailsModal";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 import {
   KanbanPersonAvatar,
@@ -81,6 +82,7 @@ import {
   IconArrowRight,
   IconBrick,
   IconLink,
+  IconMail,
   IconPlus,
   IconSend,
   IconUnlock,
@@ -267,9 +269,12 @@ export function KanbanCardModal({
   const [manualRouteOpen, setManualRouteOpen] = useState(false);
   const [manualRoutePendingFiles, setManualRoutePendingFiles] = useState<File[]>([]);
   const [manualRouteRows, setManualRouteRows] = useState<ManualRouteDraftRow[]>([]);
+  const [orderMailOpen, setOrderMailOpen] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const found = cardId ? findCard(board, cardId) : null;
   const card = found?.card;
+  const showOrderMailButton =
+    Boolean(card?.linkedOrderId) && (card?.sourceEmailCount ?? 0) > 0;
   const act = (activityActorLabel ?? "").trim() || undefined;
 
   const closeFileViewer = useCallback(() => setFileViewer(null), []);
@@ -1601,18 +1606,31 @@ export function KanbanCardModal({
                 <IconPlus />
               </button>
             </div>
-            <button
-              type="button"
-              title="Скопировать ссылку на карточку"
-              aria-label="Поделиться — копировать ссылку"
-              className="ml-auto inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2.5 text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)]"
-              onClick={() => onCopyCardLink(cardId)}
-            >
-              <IconLink className="h-4 w-4 shrink-0" />
-              <span className="hidden text-[0.65rem] font-semibold uppercase tracking-wide sm:inline">
-                Поделиться
-              </span>
-            </button>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {showOrderMailButton && card?.linkedOrderId ? (
+                <button
+                  type="button"
+                  title={`Письма наряда (${card.sourceEmailCount})`}
+                  aria-label="Письма наряда"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)]"
+                  onClick={() => setOrderMailOpen(true)}
+                >
+                  <IconMail className="h-4 w-4 shrink-0" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                title="Скопировать ссылку на карточку"
+                aria-label="Поделиться — копировать ссылку"
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2.5 text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)]"
+                onClick={() => onCopyCardLink(cardId)}
+              >
+                <IconLink className="h-4 w-4 shrink-0" />
+                <span className="hidden text-[0.65rem] font-semibold uppercase tracking-wide sm:inline">
+                  Поделиться
+                </span>
+              </button>
+            </div>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
@@ -2306,6 +2324,13 @@ export function KanbanCardModal({
           onPrev={viewerGoPrev}
           onNext={viewerGoNext}
           onDownload={downloadCardFile}
+        />
+      ) : null}
+      {orderMailOpen && card?.linkedOrderId ? (
+        <OrderSourceEmailsModal
+          orderId={card.linkedOrderId}
+          orderNumber={extractOrderNumberLabelFromKanbanCardTitle(card.title)}
+          onClose={() => setOrderMailOpen(false)}
         />
       ) : null}
     </div>

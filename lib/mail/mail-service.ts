@@ -1317,6 +1317,9 @@ export async function sendEmail(
     subject: string;
     html: string;
     attachments: MailSendAttachment[];
+    inReplyTo?: string | null;
+    references?: string | null;
+    threadId?: string | null;
   },
 ) {
   const account = await requireUserEmailAccount(db, tenantId, userId, input.accountId, role);
@@ -1329,6 +1332,8 @@ export async function sendEmail(
     html: input.html,
     text,
     attachments: input.attachments,
+    inReplyTo: input.inReplyTo,
+    references: input.references,
   });
   const sentFolder = await folderByType(db, tenantId, userId, role, account.id, EmailFolderType.SENT);
   const email = await db.email.create({
@@ -1337,6 +1342,7 @@ export async function sendEmail(
       accountId: account.id,
       folderId: sentFolder.id,
       messageId: sent.messageId,
+      threadId: input.threadId?.trim() || null,
       direction: "OUTBOUND",
       isRead: true,
       readAt: new Date(),
@@ -1378,4 +1384,75 @@ export async function sendEmail(
   }
   await refreshFolderCounters(db, tenantId, sentFolder.id);
   return { email, ...sent };
+}
+
+export type EmailReplyTemplateDto = {
+  accountId: string;
+  subjectTemplate: string;
+  htmlTemplate: string;
+  isEnabled: boolean;
+};
+
+export async function getEmailReplyTemplate(
+  db: PrismaClient,
+  tenantId: string,
+  role: string,
+  accountId: string,
+): Promise<EmailReplyTemplateDto | null> {
+  if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
+  const account = await db.emailAccount.findFirst({
+    where: { id: accountId, tenantId },
+    select: { id: true },
+  });
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  const row = await db.emailReplyTemplate.findUnique({
+    where: { accountId },
+  });
+  if (!row) return null;
+  return {
+    accountId: row.accountId,
+    subjectTemplate: row.subjectTemplate,
+    htmlTemplate: row.htmlTemplate,
+    isEnabled: row.isEnabled,
+  };
+}
+
+export async function upsertEmailReplyTemplate(
+  db: PrismaClient,
+  tenantId: string,
+  role: string,
+  accountId: string,
+  input: {
+    subjectTemplate: string;
+    htmlTemplate: string;
+    isEnabled: boolean;
+  },
+): Promise<EmailReplyTemplateDto> {
+  if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
+  const account = await db.emailAccount.findFirst({
+    where: { id: accountId, tenantId },
+    select: { id: true },
+  });
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  const row = await db.emailReplyTemplate.upsert({
+    where: { accountId },
+    create: {
+      tenantId,
+      accountId,
+      subjectTemplate: input.subjectTemplate,
+      htmlTemplate: input.htmlTemplate,
+      isEnabled: input.isEnabled,
+    },
+    update: {
+      subjectTemplate: input.subjectTemplate,
+      htmlTemplate: input.htmlTemplate,
+      isEnabled: input.isEnabled,
+    },
+  });
+  return {
+    accountId: row.accountId,
+    subjectTemplate: row.subjectTemplate,
+    htmlTemplate: row.htmlTemplate,
+    isEnabled: row.isEnabled,
+  };
 }

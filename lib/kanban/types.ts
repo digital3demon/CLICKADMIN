@@ -94,6 +94,8 @@ export type KanbanCard = {
   description: string;
   /** Наряд CRM — карточка подтянута после создания в Kaiten */
   linkedOrderId?: string;
+  /** Сколько писем привязано к наряду (для кнопки почты в модалке). */
+  sourceEmailCount?: number;
   /** Родительский наряд для «продолжения работы» (ссылка в UI канбана). */
   continuesFromOrderId?: string | null;
   continuesFromOrderNumber?: string | null;

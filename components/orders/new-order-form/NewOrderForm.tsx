@@ -72,6 +72,7 @@ import {
 } from "@/lib/quick-order-template-storage";
 import { printOrderNarjadPdf } from "@/lib/print-order-narjad";
 import { cleanMailTextBody, mailHtmlToText } from "@/lib/mail/mail-text-cleanup";
+import { toast } from "@/components/ui/toast-store";
 import { OrderProstheticsBlock } from "@/components/orders/OrderProstheticsBlock";
 import { PodrobnoSection } from "./PodrobnoSection";
 import { type DetailLine, newDetailLineId } from "./detail-lines";
@@ -273,6 +274,9 @@ export function NewOrderForm({
   );
   const [continuationChoice, setContinuationChoice] =
     useState<ContinuationParent | null>(null);
+  const [replyToSourceEmailId, setReplyToSourceEmailId] = useState(
+    () => sourceEmails[0]?.id ?? "",
+  );
   const [nextOrderPreview, setNextOrderPreview] = useState<string | null>(null);
   const [correctionTrack, setCorrectionTrack] =
     useState<OrderCorrectionTrackValue | null>(null);
@@ -281,6 +285,18 @@ export function NewOrderForm({
   const hydratedRef = useRef(false);
   const prevClinicIdForLegalRef = useRef<string | null>(null);
   const canUseTestOrder = sessionRole === "OWNER";
+
+  useEffect(() => {
+    if (sourceEmails.length === 0) {
+      setReplyToSourceEmailId("");
+      return;
+    }
+    setReplyToSourceEmailId((prev) =>
+      sourceEmails.some((email) => email.id === prev)
+        ? prev
+        : sourceEmails[0]!.id,
+    );
+  }, [sourceEmails]);
 
   useEffect(() => {
     if (canUseTestOrder) return;
@@ -1040,6 +1056,9 @@ export function NewOrderForm({
             ],
             prosthetics,
             sourceEmailIds: sourceEmails.map((email) => email.id),
+            ...(sourceEmails.length > 0 && replyToSourceEmailId
+              ? { replyToSourceEmailId }
+              : {}),
             correctionTrack: correctionTrack ?? null,
             correctionReason:
               correctionTrack != null ? correctionReason.trim() || null : null,
@@ -1078,6 +1097,10 @@ export function NewOrderForm({
           id?: string;
           orderNumber?: string;
           kaitenPrintSyncError?: string | null;
+          autoReply?:
+            | { ok: true; to: string }
+            | { ok: false; error: string }
+            | { skipped: true; reason: string };
           error?: string;
         };
         if (!res.ok) {
@@ -1137,6 +1160,15 @@ export function NewOrderForm({
         if (quickOrder.tiles.length > 0) {
           saveQuickOrderTemplate(quickOrder);
         }
+        if (data.autoReply) {
+          if ("ok" in data.autoReply && data.autoReply.ok) {
+            toast.success(`Ответ по шаблону отправлен на ${data.autoReply.to}`);
+          } else if ("skipped" in data.autoReply && data.autoReply.skipped) {
+            toast.warning(`Автоответ не отправлен: ${data.autoReply.reason}`);
+          } else if ("error" in data.autoReply) {
+            toast.error(`Не удалось отправить автоответ: ${data.autoReply.error}`);
+          }
+        }
         setKaitenModalOpen(false);
         setContinuationChoice(null);
         router.push("/orders");
@@ -1179,6 +1211,8 @@ export function NewOrderForm({
       correctionReason,
       correctionPaid,
       continuationChoice,
+      replyToSourceEmailId,
+      sourceEmails,
       pendingFiles,
       router,
       onAfterSuccessfulSave,
@@ -1980,6 +2014,8 @@ export function NewOrderForm({
             {sourceEmails.length ? (
               <OrderSourceEmailsPanel
                 emails={sourceEmails}
+                replyToSourceEmailId={replyToSourceEmailId}
+                onReplyToSourceEmailIdChange={setReplyToSourceEmailId}
                 loadingAttachmentKeys={pendingSourceAttachmentLoadKeys}
                 onAddAttachment={(email, attachment) => void addSourceEmailAttachmentToOrder(email, attachment)}
                 onAppend={(email, selectedText) =>
@@ -2236,11 +2272,15 @@ function SourceEmailAttachmentRow({
 
 function OrderSourceEmailsPanel({
   emails,
+  replyToSourceEmailId,
+  onReplyToSourceEmailIdChange,
   loadingAttachmentKeys,
   onAddAttachment,
   onAppend,
 }: {
   emails: OrderSourceEmail[];
+  replyToSourceEmailId: string;
+  onReplyToSourceEmailIdChange: (emailId: string) => void;
   loadingAttachmentKeys: ReadonlySet<string>;
   onAddAttachment: (email: OrderSourceEmail, attachment: OrderSourceEmail["attachments"][number]) => void;
   onAppend: (email: OrderSourceEmail, selectedText?: string) => void;
@@ -2295,8 +2335,21 @@ function OrderSourceEmailsPanel({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                    Письмо {index + 1}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                      Письмо {index + 1}
+                    </div>
+                    {emails.length > 1 ? (
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-[0.68rem] font-medium text-[var(--text-secondary)]">
+                        <input
+                          type="radio"
+                          name="reply-to-source-email"
+                          checked={replyToSourceEmailId === email.id}
+                          onChange={() => onReplyToSourceEmailIdChange(email.id)}
+                        />
+                        Ответ по шаблону
+                      </label>
+                    ) : null}
                   </div>
                   <h4 className="mt-1 line-clamp-2 text-sm font-semibold text-[var(--app-text)]">
                     {email.subject || "(без темы)"}

@@ -196,6 +196,11 @@ export function MailSettingsClient() {
   const [ruleFolderChoice, setRuleFolderChoice] = useState("");
   const [ruleLabelChoice, setRuleLabelChoice] = useState("");
   const [showAllCustomFolders, setShowAllCustomFolders] = useState(false);
+  const [replySubjectTemplate, setReplySubjectTemplate] = useState("");
+  const [replyHtmlTemplate, setReplyHtmlTemplate] = useState("");
+  const [replyTemplateEnabled, setReplyTemplateEnabled] = useState(true);
+  const [replyTemplateLoading, setReplyTemplateLoading] = useState(false);
+  const [replyTemplateSaving, setReplyTemplateSaving] = useState(false);
   const accessDraftAccountIdRef = useRef("");
 
   const activeAccount = useMemo(
@@ -325,6 +330,69 @@ export function MailSettingsClient() {
       window.clearTimeout(timer);
     };
   }, [accountId, loadRules]);
+
+  useEffect(() => {
+    if (!accountId || !canManageAccountAccess) {
+      setReplySubjectTemplate("");
+      setReplyHtmlTemplate("");
+      setReplyTemplateEnabled(true);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    setReplyTemplateLoading(true);
+    void jsonFetch<{ template: {
+      subjectTemplate: string;
+      htmlTemplate: string;
+      isEnabled: boolean;
+    } | null }>(
+      `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template`,
+      { signal: controller.signal },
+    )
+      .then((data) => {
+        if (cancelled) return;
+        setReplySubjectTemplate(data.template?.subjectTemplate ?? "");
+        setReplyHtmlTemplate(
+          data.template?.htmlTemplate ??
+            "<p>Здравствуйте!</p><p>Ваш наряд {{orderNumber}} принят в работу.</p>",
+        );
+        setReplyTemplateEnabled(data.template?.isEnabled ?? true);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : "Ошибка загрузки шаблона автоответа");
+      })
+      .finally(() => {
+        if (!cancelled) setReplyTemplateLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [accountId, canManageAccountAccess]);
+
+  async function saveReplyTemplate() {
+    if (!activeAccount) return;
+    setReplyTemplateSaving(true);
+    setError("");
+    setStatus("Сохраняю шаблон автоответа...");
+    try {
+      await jsonFetch(`/api/mail/accounts/${activeAccount.id}/reply-template`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectTemplate: replySubjectTemplate,
+          htmlTemplate: replyHtmlTemplate,
+          isEnabled: replyTemplateEnabled,
+        }),
+      });
+      setStatus("Шаблон автоответа сохранён");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сохранить шаблон");
+    } finally {
+      setReplyTemplateSaving(false);
+    }
+  }
 
   async function saveAccount(formData: FormData) {
     setError("");
@@ -1060,6 +1128,66 @@ export function MailSettingsClient() {
           </form>
         </div>
       </section>
+
+      {canManageAccountAccess && activeAccount ? (
+        <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[var(--app-text)]">
+            Шаблон автоответа при создании наряда
+          </h2>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            Отправляется автоматически на выбранное письмо после сохранения наряда из почты.
+            Плейсхолдеры:{" "}
+            <code className="text-xs">{"{{orderNumber}}"}</code>,{" "}
+            <code className="text-xs">{"{{patientName}}"}</code>,{" "}
+            <code className="text-xs">{"{{doctorName}}"}</code>,{" "}
+            <code className="text-xs">{"{{clinicName}}"}</code>,{" "}
+            <code className="text-xs">{"{{dueDate}}"}</code>,{" "}
+            <code className="text-xs">{"{{appointmentDate}}"}</code>,{" "}
+            <code className="text-xs">{"{{originalSubject}}"}</code>,{" "}
+            <code className="text-xs">{"{{originalFrom}}"}</code>.
+          </p>
+          {replyTemplateLoading ? (
+            <p className="mt-4 text-sm text-[var(--text-secondary)]">Загрузка шаблона…</p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              <label className="flex items-center gap-2 text-sm text-[var(--app-text)]">
+                <input
+                  type="checkbox"
+                  checked={replyTemplateEnabled}
+                  onChange={(e) => setReplyTemplateEnabled(e.target.checked)}
+                />
+                Автоответ включён для ящика {activeAccount.email}
+              </label>
+              <label className="block text-sm font-medium text-[var(--app-text)]">
+                Тема письма
+                <input
+                  value={replySubjectTemplate}
+                  onChange={(e) => setReplySubjectTemplate(e.target.value)}
+                  placeholder="Пусто — Re: исходная тема"
+                  className="mt-1 h-11 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
+                />
+              </label>
+              <label className="block text-sm font-medium text-[var(--app-text)]">
+                Текст (HTML)
+                <textarea
+                  value={replyHtmlTemplate}
+                  onChange={(e) => setReplyHtmlTemplate(e.target.value)}
+                  rows={8}
+                  className="mt-1 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--app-text)] outline-none"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={replyTemplateSaving}
+                onClick={() => void saveReplyTemplate()}
+                className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
+              >
+                {replyTemplateSaving ? "Сохранение…" : "Сохранить шаблон"}
+              </button>
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

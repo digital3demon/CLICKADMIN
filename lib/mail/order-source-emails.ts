@@ -1,0 +1,91 @@
+import "server-only";
+import type { PrismaClient } from "@prisma/client";
+import { cleanMailTextBody, mailHtmlToText } from "@/lib/mail/mail-text-cleanup";
+
+export type OrderSourceEmailRow = {
+  id: string;
+  subject: string | null;
+  fromName: string | null;
+  fromAddress: string | null;
+  receivedAt: string | null;
+  sentAt: string | null;
+  preview: string | null;
+  textBody: string | null;
+  isReplyTarget: boolean;
+  autoReplySentAt: string | null;
+  attachments: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }>;
+};
+
+export function orderSourceEmailBodyText(input: {
+  textBody: string | null;
+  htmlBody: string | null;
+  preview: string | null;
+}): string {
+  return (
+    cleanMailTextBody(input.textBody) ||
+    mailHtmlToText(input.htmlBody) ||
+    cleanMailTextBody(input.preview) ||
+    "В письме нет текстового содержимого."
+  );
+}
+
+export async function fetchOrderSourceEmails(
+  db: PrismaClient,
+  tenantId: string,
+  orderId: string,
+): Promise<OrderSourceEmailRow[]> {
+  const links = await db.emailSourceOrder.findMany({
+    where: { tenantId, orderId },
+    orderBy: { createdAt: "asc" },
+    select: {
+      isReplyTarget: true,
+      autoReplySentAt: true,
+      email: {
+        select: {
+          id: true,
+          subject: true,
+          fromName: true,
+          fromAddress: true,
+          receivedAt: true,
+          sentAt: true,
+          preview: true,
+          textBody: true,
+          htmlBody: true,
+          attachments: {
+            select: {
+              id: true,
+              fileName: true,
+              mimeType: true,
+              size: true,
+            },
+            orderBy: { fileName: "asc" },
+          },
+        },
+      },
+    },
+  });
+
+  return links.map((link) => ({
+    id: link.email.id,
+    subject: link.email.subject,
+    fromName: link.email.fromName,
+    fromAddress: link.email.fromAddress,
+    receivedAt: link.email.receivedAt?.toISOString() ?? null,
+    sentAt: link.email.sentAt?.toISOString() ?? null,
+    preview: link.email.preview,
+    textBody: orderSourceEmailBodyText(link.email),
+    isReplyTarget: link.isReplyTarget,
+    autoReplySentAt: link.autoReplySentAt?.toISOString() ?? null,
+    attachments: link.email.attachments.map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      mimeType: a.mimeType,
+      size: a.size,
+    })),
+  }));
+}

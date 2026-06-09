@@ -54,4 +54,6 @@ export type KaitenLinkedOrderForKanban = {
     size: number;
     createdAt: string;
   }[];
+  /** Писем, привязанных к наряду через EmailSourceOrder. */
+  sourceEmailCount?: number;
 };

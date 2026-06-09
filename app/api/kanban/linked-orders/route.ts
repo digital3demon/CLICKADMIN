@@ -67,6 +67,9 @@ export async function GET() {
         demoKanbanColumn: true,
         clientOrderText: true,
         notes: true,
+        _count: {
+          select: { sourceEmailLinks: true },
+        },
         continuesFromOrder: {
           select: {
             id: true,
@@ -203,6 +206,7 @@ export async function GET() {
           kaitenCardId: child.kaitenCardId ?? null,
         })),
         attachments,
+        sourceEmailCount: o._count.sourceEmailLinks,
       };
     });
 

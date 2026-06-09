@@ -17,6 +17,8 @@ export type MailSendPayload = {
   html: string;
   text?: string;
   attachments?: MailSendAttachment[];
+  inReplyTo?: string | null;
+  references?: string | null;
 };
 
 type SmtpAccount = Pick<
@@ -55,6 +57,8 @@ export async function sendSmtpMessage(
     subject: payload.subject,
     html: payload.html,
     text: payload.text,
+    inReplyTo: payload.inReplyTo?.trim() || undefined,
+    references: payload.references?.trim() || undefined,
     attachments: payload.attachments?.map((a) => ({
       filename: a.filename,
       contentType: a.contentType,

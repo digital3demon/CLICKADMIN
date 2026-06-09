@@ -110,7 +110,7 @@ export async function POST(req: Request) {
       const result = await createOrderFromBody(
         { ordersPrisma, clientsPrisma, pricingPrisma },
         body,
-        { tenantId, actorUserId: s.sub },
+        { tenantId, actorUserId: s.sub, actorRole: s.role },
       );
       if (!result.ok) {
         return NextResponse.json(
@@ -215,7 +215,10 @@ export async function POST(req: Request) {
           after(syncKaiten);
         }
       }
-      return NextResponse.json(result.order);
+      return NextResponse.json({
+        ...result.order,
+        ...(result.autoReply ? { autoReply: result.autoReply } : {}),
+      });
     } catch (e) {
       logger.error({ err: e, msg: "order_create_failed" }, "POST /api/orders");
       return NextResponse.json(

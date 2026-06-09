@@ -807,11 +807,12 @@ model EmailAccount {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  folders EmailFolder[]
-  labels  EmailLabel[]
-  emails  Email[]
-  rules   EmailRule[]
-  syncJobs EmailSyncJob[]
+  folders       EmailFolder[]
+  labels        EmailLabel[]
+  emails        Email[]
+  rules         EmailRule[]
+  syncJobs      EmailSyncJob[]
+  replyTemplate EmailReplyTemplate?
 
   @@unique([tenantId, createdByUserId, email])
   @@index([tenantId, isActive])
@@ -879,9 +880,10 @@ model Email {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  attachments      EmailAttachment[]
-  labelAssignments EmailLabelAssignment[]
-  sourceOrderLinks EmailSourceOrder[]
+  attachments           EmailAttachment[]
+  labelAssignments      EmailLabelAssignment[]
+  sourceOrderLinks      EmailSourceOrder[]
+  autoReplySourceLinks  EmailSourceOrder[] @relation("EmailSourceOrderAutoReply")
 
   @@unique([accountId, folderId, uid])
   @@unique([accountId, messageId])
@@ -930,17 +932,36 @@ model EmailLabelAssignment {
 
 /// Связь письма с нарядом, созданным из этого письма.
 model EmailSourceOrder {
-  id        String   @id @default(cuid())
-  tenantId  String
-  emailId   String
-  email     Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id               String    @id @default(cuid())
+  tenantId         String
+  emailId          String
+  email            Email     @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  orderId          String
+  order            Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  isReplyTarget    Boolean   @default(false)
+  autoReplySentAt  DateTime?
+  autoReplyEmailId String?
+  autoReplyEmail   Email?    @relation("EmailSourceOrderAutoReply", fields: [autoReplyEmailId], references: [id], onDelete: SetNull)
+  createdAt        DateTime  @default(now())
 
   @@unique([orderId, emailId])
   @@index([tenantId, emailId])
   @@index([tenantId, orderId])
+}
+
+/// Шаблон автоответа при создании наряда из письма (один на ящик).
+model EmailReplyTemplate {
+  id              String       @id @default(cuid())
+  tenantId        String
+  accountId       String       @unique
+  account         EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  subjectTemplate String       @default("")
+  htmlTemplate    String       @db.Text
+  isEnabled       Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([tenantId, accountId])
 }
 
 /// Правило обработки входящей почты. Условия/действия — JSON-контракт UI; применяется при синхронизации.

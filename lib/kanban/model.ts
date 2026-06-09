@@ -1963,6 +1963,7 @@ function applyContinuesFromOrderToKanbanCard(
     orderId: child.id,
     orderNumber: child.orderNumber,
   }));
+  card.sourceEmailCount = row.sourceEmailCount ?? 0;
 }
 
 /** Текст описания карточки CRM-канбана (без строки «продолжение» — она в UI отдельной ссылкой). */

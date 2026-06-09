@@ -39,6 +39,7 @@ import {
   isReconciliationPaymentStatus,
 } from "@/lib/order-clinic-client-fields";
 import { parseOptionalDateTime } from "@/lib/parse-optional-date-time";
+import { resolveReplyToSourceEmailId } from "@/lib/mail/email-reply-template";
 
 const KAITEN_TRACK = new Set<string>([
   "ORTHOPEDICS",
@@ -125,10 +126,16 @@ export type CreateOrderBody = {
   correctionPaid?: boolean;
   continuesFromOrderId?: string | null;
   sourceEmailIds?: string[];
+  /** Письмо-получатель автоответа по шаблону; должно входить в sourceEmailIds. */
+  replyToSourceEmailId?: string | null;
 };
 
 export type CreateOrderResult =
-  | { ok: true; order: CreatedOrder }
+  | {
+      ok: true;
+      order: CreatedOrder;
+      autoReply?: import("@/lib/mail/order-auto-reply").OrderAutoReplyResult;
+    }
   | { ok: false; status: number; error: string };
 
 /** После успешного create в CRM: отложенный sync с Kaiten (см. POST /api/orders + after). */
@@ -158,6 +165,7 @@ function buildTestOrderNumber(): string {
 export type CreateOrderOptions = {
   tenantId: string;
   actorUserId?: string | null;
+  actorRole?: string | null;
   /** Импорт из Excel: разрешаем исторические даты записи/срока. */
   allowPastDates?: boolean;
 };
@@ -530,7 +538,18 @@ export async function createOrderFromBody(
         ),
       ).slice(0, 20)
     : [];
+  let autoReply:
+    | import("@/lib/mail/order-auto-reply").OrderAutoReplyResult
+    | undefined;
   if (sourceEmailIds.length > 0) {
+    const { sendOrderAutoReply } = await import("@/lib/mail/order-auto-reply");
+    const replyToSourceEmailId = resolveReplyToSourceEmailId(
+      sourceEmailIds,
+      body.replyToSourceEmailId,
+    );
+    if (sourceEmailIds.length > 1 && !replyToSourceEmailId) {
+      return fail(400, "Выберите письмо для автоответа по шаблону");
+    }
     try {
       const emails = await ordersPrisma.email.findMany({
         where: { tenantId, id: { in: sourceEmailIds } },
@@ -542,8 +561,19 @@ export async function createOrderFromBody(
             tenantId,
             orderId: order.id,
             emailId: email.id,
+            isReplyTarget: replyToSourceEmailId === email.id,
           })),
           skipDuplicates: true,
+        });
+      }
+      if (replyToSourceEmailId && opts.actorUserId) {
+        autoReply = await sendOrderAutoReply({
+          db: ordersPrisma,
+          tenantId,
+          userId: opts.actorUserId,
+          role: opts.actorRole?.trim() || "OWNER",
+          orderId: order.id,
+          replyToSourceEmailId,
         });
       }
     } catch (e) {
@@ -558,5 +588,5 @@ export async function createOrderFromBody(
     ...(continuesFromOrderId ? { continuesFromOrderId } : {}),
   });
 
-  return { ok: true, order };
+  return { ok: true, order, ...(autoReply ? { autoReply } : {}) };
 }
