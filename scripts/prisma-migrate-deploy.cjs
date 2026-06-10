@@ -180,16 +180,19 @@ function spawnNodeScript(scriptPath, extraEnv = {}, scriptArgs = []) {
 
 ensurePrismaGenerateBeforeStuckScript();
 
-const fixPath = pathToEnsure("prisma-resolve-stuck-kaiten-blocked-at-migration.cjs");
-if (fs.existsSync(fixPath)) {
+for (const stuckScript of [
+  "prisma-resolve-stuck-kaiten-blocked-at-migration.cjs",
+  "prisma-resolve-stuck-email-reply-template-migration.cjs",
+]) {
+  const fixPath = pathToEnsure(stuckScript);
+  if (!fs.existsSync(fixPath)) {
+    console.warn(`[migrate] нет ${stuckScript} — пропуск авто-исправления P3009.`);
+    continue;
+  }
   const fixStuck = spawnNodeScript(fixPath);
   if (fixStuck.status !== 0) {
     process.exit(fixStuck.status === null ? 1 : fixStuck.status);
   }
-} else {
-  console.warn(
-    "[migrate] нет prisma-resolve-stuck-kaiten-blocked-at-migration.cjs — пропуск авто-исправления P3009.",
-  );
 }
 
 function outputSpawnResult(result) {
