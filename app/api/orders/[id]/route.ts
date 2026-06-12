@@ -220,6 +220,19 @@ const KAITEN_HEAD_PATCH_FIELDS: (keyof PatchBody)[] = [
   "continuesFromOrderId",
 ];
 
+/** Поля из CRM, при изменении которых шапка Kaiten снова считается автоматической. */
+const KAITEN_TITLE_AUTO_FROM_CRM: (keyof PatchBody)[] = [
+  "orderNumber",
+  "patientName",
+  "doctorId",
+  "clinicId",
+  "dueDate",
+  "kaitenAdminDueHasTime",
+  "urgentSelection",
+  "kaitenCardTypeId",
+  "kaitenCardTitleLabel",
+];
+
 const orderInclude = {
   constructions: {
     orderBy: { sortOrder: "asc" as const },
@@ -549,6 +562,9 @@ export async function PATCH(
         ? ""
         : String(body.kaitenCardTitleLabel).trim();
     scalarData.kaitenCardTitleLabel = t.length ? t.slice(0, 120) : null;
+  }
+
+  if (KAITEN_TITLE_AUTO_FROM_CRM.some((k) => body[k] !== undefined)) {
     scalarData.kaitenCardTitleManual = false;
   }
 

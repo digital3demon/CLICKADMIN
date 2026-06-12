@@ -13,28 +13,11 @@ import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import type { KaitenUnblockFromListTagResult } from "@/lib/custom-list-tag-kaiten-unblock-label";
 
-function mirrorFieldsFromKaitenCard(card: Record<string, unknown>): {
-  kaitenCardTitleMirror?: string | null;
-  kaitenCardDescriptionMirror?: string | null;
+function kaitenSortOrderPatchFromCard(card: Record<string, unknown>): {
   kaitenCardSortOrder?: number | null;
 } {
-  const out: {
-    kaitenCardTitleMirror?: string | null;
-    kaitenCardDescriptionMirror?: string | null;
-    kaitenCardSortOrder?: number | null;
-  } = {};
-  if ("title" in card) {
-    const t = typeof card.title === "string" ? card.title.trim() : "";
-    out.kaitenCardTitleMirror = t.length ? t : null;
-  }
-  if ("description" in card) {
-    out.kaitenCardDescriptionMirror =
-      typeof card.description === "string" ? card.description : null;
-  }
-  if ("sort_order" in card) {
-    out.kaitenCardSortOrder = kaitenSortOrderFromCard(card);
-  }
-  return out;
+  if (!("sort_order" in card)) return {};
+  return { kaitenCardSortOrder: kaitenSortOrderFromCard(card) };
 }
 
 /**
@@ -155,7 +138,7 @@ export async function applyKaitenUnblockForOrderIfBlocked(
         kaitenSyncedAt: new Date(),
         kaitenSyncError: null,
         ...(laneToStore != null ? { kaitenTrackLane: laneToStore } : {}),
-        ...mirrorFieldsFromKaitenCard(updated.card as Record<string, unknown>),
+        ...kaitenSortOrderPatchFromCard(updated.card as Record<string, unknown>),
         kaitenBlocked: false,
         kaitenBlockReason: null,
         kaitenBlockedAt: null,

@@ -30,17 +30,6 @@ const CARD_FETCH_CONCURRENCY_WITH_COMMENTS = 1;
 
 type BoardColumn = { id: number; title: string; name?: string };
 
-function kaitenHeadMirrorsFromCard(cardObj: Record<string, unknown>): {
-  title: string | null;
-  description: string | null;
-} {
-  const t = cardObj.title;
-  const title = typeof t === "string" && t.trim() ? t.trim() : null;
-  const d = cardObj.description;
-  const description = typeof d === "string" && d.trim() ? d.trim() : null;
-  return { title, description };
-}
-
 /**
  * Обновляет в БД `kaitenColumnTitle` по актуальной карточке Kaiten (для списков заказов / отгрузок).
  * Карточки запрашиваются пачками; колонки доски кэшируются по `board_id`.
@@ -83,10 +72,6 @@ export async function syncKaitenColumnTitlesForOrderIds(
       id: true,
       kaitenCardId: true,
       kaitenColumnTitle: true,
-      kaitenCardTitleMirror: true,
-      kaitenCardDescriptionMirror: true,
-      kaitenCardTitleManual: true,
-      kaitenCardDescriptionManual: true,
       isUrgent: true,
       kaitenCardSortOrder: true,
       kaitenBlocked: true,
@@ -233,7 +218,6 @@ export async function syncKaitenColumnTitlesForOrderIds(
         meta.blockedAtIso != null ? new Date(meta.blockedAtIso) : null;
       const sortDb =
         "sort_order" in cardObj ? kaitenSortOrderFromCard(cardObj) : undefined;
-      const headMirror = kaitenHeadMirrorsFromCard(cardObj);
       const sameTitle = columnTitle === row.kaitenColumnTitle;
       const sameBlockedAt =
         (blockedAtNext === null && row.kaitenBlockedAt == null) ||
@@ -246,27 +230,9 @@ export async function syncKaitenColumnTitlesForOrderIds(
         sameBlockedAt;
       const sameSort =
         sortDb === undefined || sortDb === row.kaitenCardSortOrder;
-      const sameHeadMirror =
-        (headMirror.title ?? "") === (row.kaitenCardTitleMirror ?? "") &&
-        (headMirror.description ?? "") === (row.kaitenCardDescriptionMirror ?? "");
       const urgentPatch = kaitenUrgentPatchFromCard(cardObj, row.isUrgent);
       const sameUrgent = urgentPatch.isUrgent === undefined;
-      const titleDriftedInKaiten =
-        !row.kaitenCardTitleManual &&
-        (headMirror.title ?? "") !== (row.kaitenCardTitleMirror ?? "") &&
-        Boolean(headMirror.title);
-      const descDriftedInKaiten =
-        !row.kaitenCardDescriptionManual &&
-        (headMirror.description ?? "") !== (row.kaitenCardDescriptionMirror ?? "");
-      if (
-        sameTitle &&
-        sameBlock &&
-        sameSort &&
-        sameHeadMirror &&
-        sameUrgent &&
-        !titleDriftedInKaiten &&
-        !descDriftedInKaiten
-      ) {
+      if (sameTitle && sameBlock && sameSort && sameUrgent) {
         titles[row.id] = columnTitle;
         if (includeComments && clicklabByOrderId[row.id] === undefined) {
           clicklabByOrderId[row.id] = false;
@@ -286,15 +252,11 @@ export async function syncKaitenColumnTitlesForOrderIds(
             kaitenSyncedAt: new Date(),
             kaitenSyncError: null,
             kaitenColumnTitle: columnTitle,
-            kaitenCardTitleMirror: headMirror.title,
-            kaitenCardDescriptionMirror: headMirror.description,
             kaitenBlocked: blocked,
             kaitenBlockReason: reasonDb,
             ...blockedAtData,
             ...(sortDb !== undefined ? { kaitenCardSortOrder: sortDb } : {}),
             ...urgentPatch,
-            ...(titleDriftedInKaiten ? { kaitenCardTitleManual: true } : {}),
-            ...(descDriftedInKaiten ? { kaitenCardDescriptionManual: true } : {}),
           },
         });
       } catch {

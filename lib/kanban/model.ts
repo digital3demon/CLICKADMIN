@@ -14,7 +14,10 @@ import type {
 import type { UserRole } from "@prisma/client";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
-import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
+import {
+  resolveLinkedOrderKanbanTitle,
+  type KaitenLinkedOrderForKanban,
+} from "@/lib/kanban/kaiten-linked-order";
 
 export const STORAGE_KEY = "kanban-app-state-v3";
 export const STORAGE_KEY_LEGACY = "kanban-app-state-v2";
@@ -2313,11 +2316,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       isUrgent: row.isUrgent,
       urgentCoefficient: row.urgentCoefficient,
     });
-    const title =
-      row.kaitenCardTitleMirror != null &&
-      String(row.kaitenCardTitleMirror).trim() !== ""
-        ? String(row.kaitenCardTitleMirror).trim()
-        : titleFromOrder;
+    const title = resolveLinkedOrderKanbanTitle(row, titleFromOrder);
     const dueStr = row.dueDate ? String(row.dueDate).slice(0, 10) : "";
     const desc = linkedOrderKanbanDescription(row, false);
     const effType = resolveLinkedOrderCardTypeId(targetBoard, row, false);

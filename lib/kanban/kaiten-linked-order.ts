@@ -20,7 +20,7 @@ export type KaitenLinkedOrderForKanban = {
   kaitenColumnTitle: string | null;
   /** Порядок карточки в колонке Kaiten (`sort_order` в API). */
   kaitenCardSortOrder: number | null;
-  /** Кэш заголовка/описания карточки Kaiten для зеркала канбана. */
+  /** Кэш заголовка карточки Kaiten (последний push из наряда). */
   kaitenCardTitleMirror: string | null;
   kaitenCardDescriptionMirror: string | null;
   kaitenBlocked: boolean;
@@ -57,3 +57,11 @@ export type KaitenLinkedOrderForKanban = {
   /** Писем, привязанных к наряду через EmailSourceOrder. */
   sourceEmailCount?: number;
 };
+
+/** Заголовок карточки канбана — всегда из полей наряда (наряд главный). */
+export function resolveLinkedOrderKanbanTitle(
+  _row: Pick<KaitenLinkedOrderForKanban, "kaitenCardTitleMirror">,
+  titleFromOrder: string,
+): string {
+  return titleFromOrder;
+}

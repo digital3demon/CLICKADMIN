@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MailHtmlTemplateEditor } from "@/components/mail/MailHtmlTemplateEditor";
 import type { MailAccount, MailFolder } from "@/components/mail/types";
 import { mailFolderDisplayName } from "@/components/mail/types";
 import { ALL_USER_ROLES, USER_ROLE_LABELS } from "@/lib/user-role-labels";
@@ -814,6 +815,68 @@ export function MailSettingsClient() {
         ) : null}
       </section>
 
+      {canManageAccountAccess && activeAccount ? (
+        <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[var(--app-text)]">
+            Шаблон автоответа при создании наряда
+          </h2>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            Отправляется автоматически на выбранное письмо после сохранения наряда из почты.
+            Плейсхолдеры:{" "}
+            <code className="text-xs">{"{{orderNumber}}"}</code>,{" "}
+            <code className="text-xs">{"{{patientName}}"}</code>,{" "}
+            <code className="text-xs">{"{{doctorName}}"}</code>,{" "}
+            <code className="text-xs">{"{{clinicName}}"}</code>,{" "}
+            <code className="text-xs">{"{{dueDate}}"}</code>,{" "}
+            <code className="text-xs">{"{{appointmentDate}}"}</code>,{" "}
+            <code className="text-xs">{"{{originalSubject}}"}</code>,{" "}
+            <code className="text-xs">{"{{originalFrom}}"}</code>.
+          </p>
+          {replyTemplateLoading ? (
+            <p className="mt-4 text-sm text-[var(--text-secondary)]">Загрузка шаблона…</p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              <label className="flex items-center gap-2 text-sm text-[var(--app-text)]">
+                <input
+                  type="checkbox"
+                  checked={replyTemplateEnabled}
+                  onChange={(e) => setReplyTemplateEnabled(e.target.checked)}
+                />
+                Автоответ включён для ящика {activeAccount.email}
+              </label>
+              <label className="block text-sm font-medium text-[var(--app-text)]">
+                Тема письма
+                <input
+                  value={replySubjectTemplate}
+                  onChange={(e) => setReplySubjectTemplate(e.target.value)}
+                  placeholder="Пусто — Re: исходная тема"
+                  className="mt-1 h-11 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
+                />
+              </label>
+              <div className="block text-sm font-medium text-[var(--app-text)]">
+                Текст письма
+                <div className="mt-1">
+                  <MailHtmlTemplateEditor
+                    value={replyHtmlTemplate}
+                    onChange={setReplyHtmlTemplate}
+                    disabled={replyTemplateSaving}
+                    placeholder="Здравствуйте! Ваш наряд {{orderNumber}} принят в работу."
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={replyTemplateSaving}
+                onClick={() => void saveReplyTemplate()}
+                className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
+              >
+                {replyTemplateSaving ? "Сохранение…" : "Сохранить шаблон"}
+              </button>
+            </div>
+          )}
+        </section>
+      ) : null}
+
       <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -1128,66 +1191,6 @@ export function MailSettingsClient() {
           </form>
         </div>
       </section>
-
-      {canManageAccountAccess && activeAccount ? (
-        <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[var(--app-text)]">
-            Шаблон автоответа при создании наряда
-          </h2>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Отправляется автоматически на выбранное письмо после сохранения наряда из почты.
-            Плейсхолдеры:{" "}
-            <code className="text-xs">{"{{orderNumber}}"}</code>,{" "}
-            <code className="text-xs">{"{{patientName}}"}</code>,{" "}
-            <code className="text-xs">{"{{doctorName}}"}</code>,{" "}
-            <code className="text-xs">{"{{clinicName}}"}</code>,{" "}
-            <code className="text-xs">{"{{dueDate}}"}</code>,{" "}
-            <code className="text-xs">{"{{appointmentDate}}"}</code>,{" "}
-            <code className="text-xs">{"{{originalSubject}}"}</code>,{" "}
-            <code className="text-xs">{"{{originalFrom}}"}</code>.
-          </p>
-          {replyTemplateLoading ? (
-            <p className="mt-4 text-sm text-[var(--text-secondary)]">Загрузка шаблона…</p>
-          ) : (
-            <div className="mt-4 space-y-3">
-              <label className="flex items-center gap-2 text-sm text-[var(--app-text)]">
-                <input
-                  type="checkbox"
-                  checked={replyTemplateEnabled}
-                  onChange={(e) => setReplyTemplateEnabled(e.target.checked)}
-                />
-                Автоответ включён для ящика {activeAccount.email}
-              </label>
-              <label className="block text-sm font-medium text-[var(--app-text)]">
-                Тема письма
-                <input
-                  value={replySubjectTemplate}
-                  onChange={(e) => setReplySubjectTemplate(e.target.value)}
-                  placeholder="Пусто — Re: исходная тема"
-                  className="mt-1 h-11 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
-                />
-              </label>
-              <label className="block text-sm font-medium text-[var(--app-text)]">
-                Текст (HTML)
-                <textarea
-                  value={replyHtmlTemplate}
-                  onChange={(e) => setReplyHtmlTemplate(e.target.value)}
-                  rows={8}
-                  className="mt-1 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--app-text)] outline-none"
-                />
-              </label>
-              <button
-                type="button"
-                disabled={replyTemplateSaving}
-                onClick={() => void saveReplyTemplate()}
-                className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
-              >
-                {replyTemplateSaving ? "Сохранение…" : "Сохранить шаблон"}
-              </button>
-            </div>
-          )}
-        </section>
-      ) : null}
     </div>
   );
 }

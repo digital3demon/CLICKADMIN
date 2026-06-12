@@ -127,27 +127,34 @@ async function computeKaitenHeadForOrder(orderId: string): Promise<{
   };
 }
 
-/** Демо / локальный канбан: пересчитать зеркала шапки из полей наряда без вызова Kaiten API. */
-export async function refreshOrderKaitenHeadMirrors(
+async function persistOrderKaitenHeadMirrors(
   orderId: string,
-): Promise<{ title: string; descriptionMirror: string | null } | null> {
-  const head = await computeKaitenHeadForOrder(orderId);
-  if (!head) return null;
-
+  head: { title: string; descriptionMirror: string | null },
+): Promise<void> {
   const prisma = await getOrdersPrisma();
   await prisma.order.update({
     where: { id: orderId },
     data: {
       kaitenCardTitleMirror: head.title,
       kaitenCardDescriptionMirror: head.descriptionMirror,
+      kaitenCardTitleManual: false,
+      kaitenCardDescriptionManual: false,
     },
   });
+}
+
+/** Демо / локальный канбан: пересчитать зеркала шапки из полей наряда без вызова Kaiten API. */
+export async function refreshOrderKaitenHeadMirrors(
+  orderId: string,
+): Promise<{ title: string; descriptionMirror: string | null } | null> {
+  const head = await computeKaitenHeadForOrder(orderId);
+  if (!head) return null;
+  await persistOrderKaitenHeadMirrors(orderId, head);
   return { title: head.title, descriptionMirror: head.descriptionMirror };
 }
 
 /**
- * Обновляет в Kaiten заголовок, описание и флаг срочности карточки по актуальным полям наряда
- * (при привязанной карточке), затем синхронизирует зеркала в БД.
+ * Шапка Kaiten и зеркало в CRM — всегда из полей наряда (наряд главный).
  */
 export type KaitenHeadPushResult =
   | { ok: true; title: string; descriptionMirror: string | null }
@@ -173,39 +180,29 @@ export async function pushKaitenHeadForContinuationParents(
 export async function pushKaitenCardTitleForOrderIfLinked(
   orderId: string,
 ): Promise<KaitenHeadPushResult> {
-  const prisma = await getOrdersPrisma();
-  const manualRow = await prisma.order.findUnique({
-    where: { id: orderId },
-    select: {
-      kaitenCardTitleManual: true,
-      kaitenCardDescriptionManual: true,
-      kaitenCardTitleMirror: true,
-      kaitenCardDescriptionMirror: true,
-    },
-  });
-
   const auth = getKaitenRestAuth();
   const head = await computeKaitenHeadForOrder(orderId);
   if (!head) return { ok: true, title: "", descriptionMirror: null };
 
-  const titleManual = manualRow?.kaitenCardTitleManual === true;
-  const descManual = manualRow?.kaitenCardDescriptionManual === true;
-  const mirrorTitle = titleManual
-    ? (manualRow?.kaitenCardTitleMirror ?? head.title)
-    : head.title;
-  const mirrorDesc = descManual
-    ? (manualRow?.kaitenCardDescriptionMirror ?? head.descriptionMirror)
-    : head.descriptionMirror;
-
   if (!auth || !head.kaitenCardId) {
-    return { ok: true, title: mirrorTitle, descriptionMirror: mirrorDesc };
+    await persistOrderKaitenHeadMirrors(orderId, head);
+    return {
+      ok: true,
+      title: head.title,
+      descriptionMirror: head.descriptionMirror,
+    };
   }
 
-  const patch: Record<string, unknown> = { asap: head.asap };
-  if (!titleManual) patch.title = head.title;
-  if (!descManual) patch.description = head.description;
-
-  const res = await kaitenPatchCard(auth, head.kaitenCardId, patch, { burst: true });
+  const res = await kaitenPatchCard(
+    auth,
+    head.kaitenCardId,
+    {
+      asap: head.asap,
+      title: head.title,
+      description: head.description,
+    },
+    { burst: true },
+  );
   if (!res.ok) {
     return {
       ok: false,
@@ -213,22 +210,11 @@ export async function pushKaitenCardTitleForOrderIfLinked(
     };
   }
 
-  await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      ...(titleManual
-        ? {}
-        : { kaitenCardTitleMirror: head.title }),
-      ...(descManual
-        ? {}
-        : { kaitenCardDescriptionMirror: head.descriptionMirror }),
-    },
-  });
-
+  await persistOrderKaitenHeadMirrors(orderId, head);
   invalidateKaitenSnapshotCache(orderId);
   return {
     ok: true,
-    title: mirrorTitle,
-    descriptionMirror: mirrorDesc,
+    title: head.title,
+    descriptionMirror: head.descriptionMirror,
   };
 }

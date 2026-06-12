@@ -45,35 +45,15 @@ export type KaitenInboundHeadDetectInput = {
 };
 
 /**
- * Если title/description в Kaiten расходятся с CRM-вычислением — считаем шапку ручной.
- * Не сбрасывает manual, если уже true (липкий до явного сброса через PATCH label/notes).
+ * Раньше помечали шапку «ручной», если Kaiten расходился с нарядом.
+ * Сейчас наряд главный — флаги manual не выставляем из входящего Kaiten.
  */
 export function kaitenManualFlagsFromInboundCard(
-  card: Record<string, unknown>,
-  ctx: KaitenInboundHeadDetectInput,
+  _card: Record<string, unknown>,
+  _ctx: KaitenInboundHeadDetectInput,
 ): Pick<
   Prisma.OrderUpdateInput,
   "kaitenCardTitleManual" | "kaitenCardDescriptionManual"
 > {
-  const out: Pick<
-    Prisma.OrderUpdateInput,
-    "kaitenCardTitleManual" | "kaitenCardDescriptionManual"
-  > = {};
-  const rawTitle = typeof card.title === "string" ? card.title.trim() : "";
-  const rawDesc =
-    typeof card.description === "string" ? card.description.trim() : "";
-  if (
-    !ctx.kaitenCardTitleManual &&
-    rawTitle &&
-    rawTitle !== ctx.computedTitle.trim()
-  ) {
-    out.kaitenCardTitleManual = true;
-  }
-  if (
-    !ctx.kaitenCardDescriptionManual &&
-    rawDesc !== ctx.computedDescription.trim()
-  ) {
-    out.kaitenCardDescriptionManual = true;
-  }
-  return out;
+  return {};
 }

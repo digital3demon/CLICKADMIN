@@ -45,10 +45,7 @@ import { recordOrderRevision } from "@/lib/record-order-revision";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { pushKaitenCardTitleForOrderIfLinked } from "@/lib/kaiten-push-order-title";
 import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
-import {
-  kaitenMirrorFieldsFromCard,
-  kaitenUrgentPatchFromCard,
-} from "@/lib/kaiten-inbound-order-fields";
+import { kaitenUrgentPatchFromCard } from "@/lib/kaiten-inbound-order-fields";
 import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
@@ -71,8 +68,6 @@ function legacyKaitenTypeName(id: string): string | null {
   const hit = LEGACY_KAITEN_TYPE_NAME_BY_ID[id];
   return typeof hit === "string" && hit.trim() ? hit.trim() : null;
 }
-
-const mirrorFieldsFromKaitenCard = kaitenMirrorFieldsFromCard;
 
 type PatchBody = {
   title?: string;
@@ -601,16 +596,10 @@ export async function GET(
           : blockMeta.blockedAtIso
             ? { kaitenBlockedAt: new Date(blockMeta.blockedAtIso) }
             : {};
-      const mirror = mirrorFieldsFromKaitenCard(cardObj);
-      const titleDrifted =
-        !order.kaitenCardTitleManual &&
-        (mirror.kaitenCardTitleMirror ?? "") !==
-          (order.kaitenCardTitleMirror ?? "") &&
-        Boolean(mirror.kaitenCardTitleMirror);
-      const descDrifted =
-        !order.kaitenCardDescriptionManual &&
-        (mirror.kaitenCardDescriptionMirror ?? "") !==
-          (order.kaitenCardDescriptionMirror ?? "");
+      const sortPatch =
+        "sort_order" in cardObj
+          ? { kaitenCardSortOrder: kaitenSortOrderFromCard(cardObj) }
+          : {};
       await ordersPrisma.order.update({
         where: { id: orderIdTrim },
         data: {
@@ -618,10 +607,8 @@ export async function GET(
           kaitenBlocked: kBlocked,
           kaitenBlockReason: kBlockReason,
           ...blockedAtPatch,
-          ...mirror,
+          ...sortPatch,
           ...kaitenUrgentPatchFromCard(cardObj, order.isUrgent),
-          ...(titleDrifted ? { kaitenCardTitleManual: true } : {}),
-          ...(descDrifted ? { kaitenCardDescriptionManual: true } : {}),
         },
       });
       await syncKaitenLabMentionFromParsedComments(
@@ -969,7 +956,6 @@ export async function POST(
           kaitenBlockReason: kBlockReason,
           ...linkBlockedAtPatch,
           kaitenCardSortOrder: sort,
-          ...mirrorFieldsFromKaitenCard(cardObj),
         },
       });
     } catch (e) {
@@ -978,6 +964,11 @@ export async function POST(
         { error: "Не удалось сохранить привязку" },
         { status: 502 },
       );
+    }
+    try {
+      await pushKaitenCardTitleForOrderIfLinked(idTrim);
+    } catch (e) {
+      console.error("[kaiten POST link] push head after link", e);
     }
     invalidateKaitenSnapshotCache(idTrim);
     try {
@@ -1386,15 +1377,10 @@ export async function PATCH(
 
   try {
     const cardObj = updated.card as Record<string, unknown>;
-    const titleChangedInKaiten =
-      body.title !== undefined ||
-      (typeof cardObj.title === "string" &&
-        cardObj.title.trim() !== (order.kaitenCardTitleMirror ?? "").trim());
-    const descChangedInKaiten =
-      body.description !== undefined ||
-      (typeof cardObj.description === "string" &&
-        cardObj.description.trim() !==
-          (order.kaitenCardDescriptionMirror ?? "").trim());
+    const sortPatch =
+      "sort_order" in cardObj
+        ? { kaitenCardSortOrder: kaitenSortOrderFromCard(cardObj) }
+        : {};
 
     await ordersPrisma.order.update({
       where: { id: order.id },
@@ -1403,10 +1389,8 @@ export async function PATCH(
         kaitenSyncError: null,
         ...(laneToStore != null ? { kaitenTrackLane: laneToStore } : {}),
         ...(titleUpdate ?? {}),
-        ...mirrorFieldsFromKaitenCard(cardObj),
+        ...sortPatch,
         ...kaitenUrgentPatchFromCard(cardObj, order.isUrgent),
-        ...(titleChangedInKaiten ? { kaitenCardTitleManual: true } : {}),
-        ...(descChangedInKaiten ? { kaitenCardDescriptionManual: true } : {}),
         ...(blockRow != null
           ? {
               kaitenBlocked: blockRow.kaitenBlocked,
@@ -1432,10 +1416,7 @@ export async function PATCH(
 
   invalidateKaitenSnapshotCache(orderId.trim());
 
-  if (
-    body.kaitenCardTypeId !== undefined &&
-    order.kaitenCardTitleManual !== true
-  ) {
+  if (body.kaitenCardTypeId !== undefined) {
     try {
       await pushKaitenCardTitleForOrderIfLinked(orderId.trim());
     } catch (e) {
