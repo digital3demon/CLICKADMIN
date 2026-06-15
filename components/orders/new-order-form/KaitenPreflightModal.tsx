@@ -2,6 +2,7 @@
 
 import type { KaitenTrackLane } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 import { readClientState } from "@/lib/client-state-client";
 import {
@@ -443,10 +444,11 @@ export function KaitenPreflightModal({
   );
 
   if (!open) return null;
+  if (typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[140] flex items-center justify-center bg-zinc-900/50 p-3 sm:p-5"
+      className="fixed inset-0 z-[600] flex items-center justify-center bg-zinc-900/50 p-3 sm:p-5"
       role="dialog"
       aria-modal="true"
       aria-labelledby="kaiten-preflight-title"
@@ -724,6 +726,7 @@ export function KaitenPreflightModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
