@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { StickerEmbedAutoPrint } from "@/components/shipments/StickerEmbedAutoPrint";
 import { ShipmentsStickersSheet } from "@/components/shipments/ShipmentsStickersSheet";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
@@ -60,6 +61,7 @@ export default async function ShipmentsStickersPrintEmbedPage({
 
   return (
     <div className="sticker-print-frame">
+      <StickerEmbedAutoPrint />
       <ShipmentsStickersSheet rows={rows} preset={preset} />
     </div>
   );
