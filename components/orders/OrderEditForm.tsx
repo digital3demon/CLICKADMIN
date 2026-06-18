@@ -1362,9 +1362,18 @@ export function OrderEditForm({
         setDoctorId(row.sourceDoctorId);
         return;
       }
-      setDoctorId("");
+      setDoctorId((prev) => {
+        if (!prev) return "";
+        const allowed = orderDoctorsForClinicCombobox(
+          cid,
+          privatePracticeDoctors,
+          clinics,
+          allDoctors,
+        );
+        return allowed.some((d) => d.id === prev) ? prev : "";
+      });
     },
-    [clinics],
+    [clinics, privatePracticeDoctors, allDoctors],
   );
 
   const prevClinicIdForLegalRef = useRef<string | null>(null);

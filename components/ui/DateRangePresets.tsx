@@ -63,8 +63,8 @@ export function DateRangePresets({
     <div
       className={
         isHarmony
-          ? 'inline-flex flex-shrink-0 items-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--app-bg)] p-1'
-          : 'inline-flex items-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-0.5'
+          ? 'inline-flex w-full max-w-full flex-shrink-0 items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--app-bg)] p-1'
+          : 'inline-flex w-full max-w-full items-center justify-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-0.5'
       }
     >
       {PRESETS.map(({ key, label }) => {

@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  isPublicStickerHubPath,
   stickerPublicClientPath,
   stickerPublicHubAbsoluteUrl,
   stickerPublicHubPath,
   stickerPublicStaffPath,
 } from "@/lib/sticker-public-path";
+
+describe("isPublicStickerHubPath", () => {
+  it("распознаёт витрину по QR", () => {
+    expect(isPublicStickerHubPath("/p/t/lab/s/tok")).toBe(true);
+    expect(isPublicStickerHubPath("/p/t/lab/s/tok/staff")).toBe(true);
+    expect(isPublicStickerHubPath("/orders")).toBe(false);
+  });
+});
 
 describe("stickerPublicHubPath", () => {
   it("кодирует slug и token", () => {

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { getPrisma } from "@/lib/get-prisma";
+import {
+  normalizeRevisionsHistorySearchQuery,
+} from "@/lib/revisions-history";
+import { loadRevisionsHistoryMerged } from "@/lib/revisions-history.server";
+
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
@@ -9,95 +12,34 @@ export async function GET(req: Request) {
     const raw = searchParams.get("limit");
     const n = raw ? parseInt(raw, 10) : 80;
     const limit = Number.isFinite(n) ? Math.min(150, Math.max(1, n)) : 80;
-    const half = Math.min(100, Math.ceil(limit * 0.6));
+    const q = normalizeRevisionsHistorySearchQuery(searchParams.get("q"));
 
-    const ordersPrisma = await getOrdersPrisma();
-    const clientsPrisma = await getPrisma();
-    const [orderRows, contractorRows] = await Promise.all([
-      ordersPrisma.orderRevision.findMany({
-        orderBy: { createdAt: "desc" },
-        take: half,
-        select: {
-          id: true,
-          createdAt: true,
-          actorLabel: true,
-          summary: true,
-          kind: true,
-          order: {
-            select: {
-              id: true,
-              orderNumber: true,
-            },
+    const merged = await loadRevisionsHistoryMerged({ q: q || undefined, limit });
+
+    const items = merged.map((item) =>
+      item.t === "order"
+        ? {
+            source: "order" as const,
+            id: item.row.id,
+            createdAt: item.row.createdAt.toISOString(),
+            actorLabel: item.row.actorLabel,
+            summary: item.row.summary,
+            kind: item.row.kind,
+            order: item.row.order,
+          }
+        : {
+            source: "contractor" as const,
+            id: item.row.id,
+            createdAt: item.row.createdAt.toISOString(),
+            actorLabel: item.row.actorLabel,
+            summary: item.row.summary,
+            kind: item.row.kind,
+            clinic: item.row.clinic,
+            doctor: item.row.doctor,
           },
-        },
-      }),
-      clientsPrisma.contractorRevision.findMany({
-        orderBy: { createdAt: "desc" },
-        take: half,
-        select: {
-          id: true,
-          createdAt: true,
-          actorLabel: true,
-          summary: true,
-          kind: true,
-          clinic: { select: { id: true, name: true } },
-          doctor: { select: { id: true, fullName: true } },
-        },
-      }),
-    ]);
-
-    type Entry =
-      | {
-          source: "order";
-          id: string;
-          createdAt: string;
-          actorLabel: string;
-          summary: string;
-          kind: string;
-          order: { id: string; orderNumber: string };
-        }
-      | {
-          source: "contractor";
-          id: string;
-          createdAt: string;
-          actorLabel: string;
-          summary: string;
-          kind: string;
-          clinic: { id: string; name: string } | null;
-          doctor: { id: string; fullName: string } | null;
-        };
-
-    const items: Entry[] = [
-      ...orderRows.map((r) => ({
-        source: "order" as const,
-        id: r.id,
-        createdAt: r.createdAt.toISOString(),
-        actorLabel: r.actorLabel,
-        summary: r.summary,
-        kind: r.kind,
-        order: r.order,
-      })),
-      ...contractorRows.map((r) => ({
-        source: "contractor" as const,
-        id: r.id,
-        createdAt: r.createdAt.toISOString(),
-        actorLabel: r.actorLabel,
-        summary: r.summary,
-        kind: r.kind,
-        clinic: r.clinic,
-        doctor: r.doctor,
-      })),
-    ];
-
-    items.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
 
-    return NextResponse.json({
-      items: items.slice(0, limit),
-      revisions: orderRows,
-    });
+    return NextResponse.json({ items });
   } catch (e) {
     console.error(e);
     return NextResponse.json(

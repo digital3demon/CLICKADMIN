@@ -15,6 +15,8 @@ type Props = {
   tag?: string | null
   hideShipped?: boolean
   onlyShipped?: boolean
+  /** false — поиск вынесен в липкую полосу над списком (мобильная версия). */
+  showSearch?: boolean
 }
 
 export function OrdersListFiltersBar({
@@ -25,47 +27,55 @@ export function OrdersListFiltersBar({
   tag,
   hideShipped,
   onlyShipped,
+  showSearch = true,
 }: Props) {
   const { activeCount, resetFilters, setFilters } = useUrlFilters()
   const isHarmony = useUiDesign() === 'harmony'
   const filtersPanelId = useId()
   const [filtersOpen, setFiltersOpen] = useState(true)
 
+  const cardClass = isHarmony
+    ? 'no-print w-full min-w-0 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 card-shadow'
+    : 'no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]'
+
   return (
-    <div
-      className={
-        isHarmony
-          ? 'no-print w-full min-w-0 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 card-shadow'
-          : 'no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]'
-      }
-    >
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 xl:flex-nowrap">
+    <div className={cardClass}>
+      {showSearch ? (
         <OrdersListSearch
           initialValue={initialSearchQ}
           pageSize={pageSize}
           tag={tag}
           hideShipped={hideShipped}
           onlyShipped={onlyShipped}
-          className="min-w-0 w-full flex-1 basis-full xl:max-w-2xl xl:basis-auto"
+          className="min-w-0 w-full"
         />
-        <div
-          id={filtersPanelId}
-          hidden={!filtersOpen}
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-2 basis-full xl:basis-auto xl:justify-center"
-        >
+      ) : null}
+
+      <div
+        id={filtersPanelId}
+        hidden={!filtersOpen}
+        className={[
+          'flex min-w-0 flex-col gap-3',
+          showSearch ? 'mt-3' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <div className="flex w-full justify-center">
           <DateRangePresets
             currentFrom={appliedFrom ?? undefined}
             currentTo={appliedTo ?? undefined}
             onSelect={(from, to) => setFilters({ from, to })}
           />
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <OrdersListPeriodForm
             pageSize={pageSize}
             appliedFrom={appliedFrom}
             appliedTo={appliedTo}
-            className="min-w-0"
+            className="min-w-0 flex-1"
           />
-        </div>
-        <div className="ml-auto shrink-0">
           <FilterBadge
             count={activeCount}
             onReset={resetFilters}

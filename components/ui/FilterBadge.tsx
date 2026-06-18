@@ -20,9 +20,9 @@ export function FilterBadge({
   const active = count > 0
 
   const toggleClass = active
-    ? `inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium text-[var(--sidebar-blue)]
+    ? `inline-flex items-center gap-1.5 h-9 px-2.5 text-xs font-medium text-[var(--sidebar-blue)]
        bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors`
-    : `inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-medium
+    : `inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg text-xs font-medium
        text-[var(--text-secondary)] border border-[var(--card-border)] bg-[var(--card-bg)]
        hover:bg-[var(--surface-hover)] transition-colors`
 
@@ -98,7 +98,7 @@ export function FilterBadge({
           onReset()
         }}
         title="Сбросить все фильтры"
-        className="h-7 px-1.5 text-[var(--sidebar-blue)]
+        className="h-9 px-1.5 text-[var(--sidebar-blue)]
                    bg-blue-50 dark:bg-blue-900/20
                    hover:bg-blue-100 dark:hover:bg-blue-900/40
                    border-l border-[var(--sidebar-blue)]/30

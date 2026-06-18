@@ -616,7 +616,7 @@ export function ShipmentsOrdersTable({
                         </div>
                       </div>
 
-                      <div className="mt-2 text-xs text-[var(--text-secondary)]">
+                      <div className="mt-2 text-xs text-[var(--text-secondary)] [&_.order-list-tags-pack]:items-center">
                         {renderTagsCell()}
                       </div>
                     </div>

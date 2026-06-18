@@ -85,7 +85,7 @@ export function StickyListChrome({
       <div
         ref={toolbarRef}
         className={[
-          "sticky top-0 z-40 bg-[var(--app-bg)] pb-3",
+          "md:sticky md:top-0 md:z-40 md:bg-[var(--app-bg)] md:pb-3",
           toolbarClassName ?? "",
         ]
           .filter(Boolean)

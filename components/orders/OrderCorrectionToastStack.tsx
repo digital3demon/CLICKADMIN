@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import { orderPathById } from "@/lib/order-public-ref";
+import { isPublicStickerHubPath } from "@/lib/sticker-public-path";
 
 const STORAGE_KEY = "orderToastDismissedV1";
 
@@ -63,6 +64,7 @@ export function OrderCorrectionToastStack() {
   const router = useRouter();
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
   const isKanban = pathname === "/kanban" || pathname.startsWith("/kanban/");
+  const isPublicSticker = isPublicStickerHubPath(pathname);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const [corrections, setCorrections] = useState<OrderToastRow[]>([]);
   const [prostheticsRequests, setProstheticsRequests] = useState<OrderToastRow[]>(
@@ -100,7 +102,7 @@ export function OrderCorrectionToastStack() {
   }, []);
 
   useEffect(() => {
-    if (isLogin || isKanban) {
+    if (isLogin || isKanban || isPublicSticker) {
       setCorrections([]);
       setProstheticsRequests([]);
       return;
@@ -194,7 +196,7 @@ export function OrderCorrectionToastStack() {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [isLogin, isKanban, pathname, router]);
+  }, [isLogin, isKanban, isPublicSticker, pathname, router]);
 
   const { correctionVisible, prostheticsVisible } = useMemo(() => {
     const corr = corrections
@@ -233,7 +235,7 @@ export function OrderCorrectionToastStack() {
     [mergeDismissed],
   );
 
-  if (isLogin || isKanban || visibleCount === 0) return null;
+  if (isLogin || isKanban || isPublicSticker || visibleCount === 0) return null;
 
   return (
     <div

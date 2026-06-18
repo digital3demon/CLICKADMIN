@@ -1,16 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
-import {
-  getKaitenColumnPillClassFromOrder,
-  getOrderWarnings,
-  resolveKaitenColumnTitleForDisplay,
-} from "@/lib/order-status-display";
-import {
-  kaitenOrderToHarmonyTone,
-  resolveListPillClass,
-} from "@/lib/harmony-list-pill";
+import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { orderPathById } from "@/lib/order-public-ref";
 
@@ -36,67 +29,44 @@ export function OrdersListTableRow({
   className,
   children,
   clinicName,
+  clinicAddress,
   doctorName,
   patientName,
   labDate,
   appointmentDate,
-  shipDate,
   kaitenColumnTitle,
-  hasUnreadChat = false,
-  hasPrint = false,
-  hasCorrection = false,
-  hasProsthetics = false,
-  isLabOverdue = false,
   demoKanbanColumn,
+  demoCardTypeName,
+  kaitenCardId = null,
+  kaitenFilterHref = null,
   harmonyRowState = "default",
+  isLabOverdue = false,
+  mobileActionsNode,
   tagsNode,
-  indicatorsNode,
 }: {
   orderId: string;
   orderNumber: string;
   className?: string;
   children: ReactNode;
   clinicName?: string;
+  clinicAddress?: string;
   doctorName?: string;
   patientName?: string;
   labDate?: string;
   appointmentDate?: string;
-  shipDate?: string;
   kaitenColumnTitle?: string | null;
-  hasUnreadChat?: boolean;
-  hasPrint?: boolean;
-  hasCorrection?: boolean;
-  hasProsthetics?: boolean;
-  isLabOverdue?: boolean;
   demoKanbanColumn?: string | null;
+  demoCardTypeName?: string | null;
+  kaitenCardId?: number | null;
+  kaitenFilterHref?: string | null;
   harmonyRowState?: "blocked" | "shipped" | "default";
+  isLabOverdue?: boolean;
+  mobileActionsNode?: ReactNode;
   tagsNode?: ReactNode;
-  indicatorsNode?: ReactNode;
 }) {
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
   const href = orderPathById(orderId);
-  const kaitenPillClass = getKaitenColumnPillClassFromOrder({
-    kaitenColumnTitle,
-    demoKanbanColumn,
-  });
-  const kaitenBadgeLabel = resolveKaitenColumnTitleForDisplay({
-    kaitenColumnTitle,
-    demoKanbanColumn,
-  });
-  const kaitenHarmonyTone = kaitenOrderToHarmonyTone({
-    kaitenColumnTitle,
-    demoKanbanColumn,
-  });
-  const mobileKaitenPillClass = isHarmony
-    ? resolveListPillClass(true, "", kaitenHarmonyTone)
-    : `inline-flex max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${kaitenPillClass}`;
-  const orderWarnings = getOrderWarnings({
-    isOverdue: isLabOverdue,
-    hasCorrection,
-    hasProsthetics,
-    hasMention: hasUnreadChat,
-  });
 
   const go = (e: MouseEvent<HTMLElement>) => {
     if (e.button !== 0) return;
@@ -128,24 +98,35 @@ export function OrdersListTableRow({
       </tr>
       <tr className="border-b border-[var(--card-border)] md:hidden print:hidden">
         <td colSpan={99} className="p-0">
-          <div
-            className="cursor-pointer p-3 transition-colors duration-100 active:bg-[var(--surface-hover)]"
-            onClick={(e) => {
-              if (targetInsideInteractive(e.target)) return;
-              go(e);
-            }}
-            title={`${orderNumber} — открыть наряд (клик по строке)`}
-          >
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="font-mono text-sm font-semibold text-[var(--text-strong)]">
-                № {orderNumber}
-              </span>
-              {kaitenBadgeLabel ? (
-                <span
-                  className="max-w-[140px] shrink-0 truncate"
-                  title={kaitenBadgeLabel}
+          <div className="p-3">
+            <div className="mb-1.5 flex items-start justify-between gap-2">
+              <div className="flex min-w-0 flex-col items-start gap-1">
+                <Link
+                  href={href}
+                  className="font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
+                  title={`${orderNumber} — открыть наряд`}
                 >
-                  <span className={mobileKaitenPillClass}>{kaitenBadgeLabel}</span>
+                  № {orderNumber}
+                </Link>
+                <OrderListKaitenColumnTag
+                  kaitenCardId={kaitenCardId}
+                  demoKanbanColumn={demoKanbanColumn}
+                  demoCardTypeName={demoCardTypeName}
+                  kaitenColumnTitle={kaitenColumnTitle ?? null}
+                  filterHref={kaitenFilterHref}
+                  placement="underOrderNumber"
+                />
+              </div>
+              {labDate ? (
+                <span
+                  className={[
+                    "mt-0.5 shrink-0 text-xs",
+                    isLabOverdue
+                      ? "font-semibold text-red-600"
+                      : "text-[var(--text-muted)]",
+                  ].join(" ")}
+                >
+                  {labDate}
                 </span>
               ) : null}
             </div>
@@ -153,6 +134,15 @@ export function OrdersListTableRow({
             {clinicName ? (
               <div className="mb-0.5 truncate text-sm font-medium text-[var(--app-text)]">
                 {clinicName}
+              </div>
+            ) : null}
+
+            {clinicAddress ? (
+              <div
+                className="mb-0.5 truncate text-xs text-[var(--text-secondary)]"
+                title={clinicAddress}
+              >
+                {clinicAddress}
               </div>
             ) : null}
 
@@ -164,7 +154,7 @@ export function OrdersListTableRow({
               {patientName ? <span>{patientName}</span> : null}
             </div>
 
-            <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
+            <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
               {labDate ? (
                 <span>
                   <span className="font-medium text-[var(--text-secondary)]">
@@ -172,9 +162,7 @@ export function OrdersListTableRow({
                   </span>
                   <span
                     className={
-                      isLabOverdue
-                        ? "font-semibold text-red-600"
-                        : undefined
+                      isLabOverdue ? "font-semibold text-red-600" : undefined
                     }
                   >
                     {labDate}
@@ -189,42 +177,16 @@ export function OrdersListTableRow({
                   {appointmentDate}
                 </span>
               ) : null}
-              {shipDate ? (
-                <span>
-                  <span className="font-medium text-[var(--text-secondary)]">
-                    Отправка{" "}
-                  </span>
-                  {shipDate}
-                </span>
-              ) : null}
             </div>
 
-            {tagsNode || indicatorsNode || hasUnreadChat || hasPrint || orderWarnings.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2">
-                {hasUnreadChat ? (
-                  <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                    <span aria-hidden>💬</span>
-                    чат
-                  </span>
-                ) : null}
-                {hasPrint ? (
-                  <span className="inline-flex items-center rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 text-xs text-[var(--text-secondary)]">
-                    печать
-                  </span>
-                ) : null}
-                {orderWarnings
-                  .filter((w) => w.label !== "Упоминание" || !hasUnreadChat)
-                  .map((w) => (
-                    <span
-                      key={w.label}
-                      title={w.label}
-                      className="text-[10px] font-bold leading-none"
-                      aria-label={w.label}
-                    >
-                      {w.icon}
-                    </span>
-                  ))}
-                {indicatorsNode}
+            {mobileActionsNode ? (
+              <div className="flex flex-wrap items-center gap-2 [&_a]:inline-flex [&_a]:min-h-[44px] [&_a]:min-w-[44px] [&_a]:items-center [&_a]:justify-center [&_button]:min-h-[44px] [&_button]:min-w-[44px]">
+                {mobileActionsNode}
+              </div>
+            ) : null}
+
+            {tagsNode ? (
+              <div className="mt-2 text-xs text-[var(--text-secondary)]">
                 {tagsNode}
               </div>
             ) : null}

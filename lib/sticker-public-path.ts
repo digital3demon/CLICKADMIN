@@ -5,6 +5,11 @@ export function stickerPublicHubPath(tenantSlug: string, token: string): string 
   return `/p/t/${encodeURIComponent(s)}/s/${encodeURIComponent(t)}`;
 }
 
+/** Страницы витрины по QR — без меню CRM и внутренних уведомлений. */
+export function isPublicStickerHubPath(pathname: string): boolean {
+  return pathname.startsWith("/p/t/");
+}
+
 /** Выбор роли / вход сотрудников (редирект после логина). */
 export function stickerPublicStaffPath(tenantSlug: string, token: string): string {
   return `${stickerPublicHubPath(tenantSlug, token)}/staff`;

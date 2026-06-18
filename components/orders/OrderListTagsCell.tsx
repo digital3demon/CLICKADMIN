@@ -135,7 +135,7 @@ const padTable =
  * с мягкими лимитами через clamp; длинный текст переносится внутри пилюли.
  */
 const TAG_CLOUD_PACK_CLASS =
-  "order-list-tags-pack flex min-h-min w-full min-w-0 flex-wrap content-start items-start gap-x-1 gap-y-1";
+  "order-list-tags-pack flex min-h-min w-full min-w-0 flex-wrap content-center items-center gap-x-1 gap-y-1";
 
 const TAG_ADD_BUTTON_CLASS =
   "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40 sm:h-6 sm:w-6";
@@ -155,12 +155,12 @@ function customTagSlot(label: string): "huge" | "large" {
 
 function tagCloudCellClass(slot: TagSlotSize): string {
   if (slot === "huge") {
-    return "flex min-w-0 w-full max-w-full grow-0 shrink basis-auto items-start sm:max-w-[clamp(12rem,42vw,17rem)] [&>*]:min-w-0 [&>*]:max-w-full";
+    return "flex min-w-0 w-full max-w-full grow-0 shrink basis-auto items-center sm:max-w-[clamp(12rem,42vw,17rem)] [&>*]:min-w-0 [&>*]:max-w-full";
   }
   if (slot === "large") {
-    return "flex min-w-0 max-w-full grow-0 shrink basis-auto items-start [&>*]:min-w-0 [&>*]:max-w-full";
+    return "flex min-w-0 max-w-full grow-0 shrink basis-auto items-center [&>*]:min-w-0 [&>*]:max-w-full";
   }
-  return "flex min-w-0 max-w-full grow-0 shrink-0 basis-auto items-start [&>*]:max-w-full";
+  return "flex min-w-0 max-w-full grow-0 shrink-0 basis-auto items-center [&>*]:max-w-full";
 }
 const TAG_EDIT_BUTTON_CLASS =
   "order-list-tag-edit rounded leading-none hover:opacity-90";
@@ -1324,6 +1324,8 @@ export function OrderListTagsCell({
           container-type: inline-size;
         }
         .order-list-tag-pill {
+          display: inline-flex;
+          align-items: center;
           font-size: 0.88em;
           line-height: 1.05;
           padding: 0.22em 0.72em;

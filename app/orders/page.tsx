@@ -14,6 +14,7 @@ import { OrderPostingMonthBar } from "@/components/orders/OrderPostingMonthBar";
 import { OrdersListShippedToolbar } from "@/components/orders/OrdersListShippedToolbar";
 import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePref";
 import { OrdersListFiltersBar } from "@/components/orders/OrdersListFiltersBar";
+import { OrdersListStickySearch } from "@/components/orders/OrdersListStickySearch";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
 import { OrdersListChrome } from "@/components/orders/OrdersListChrome";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
@@ -29,6 +30,7 @@ import {
   parseListTagParam,
   relatedOrdersListTagQuickFilters,
   listTagParamsEqual,
+  listTagKaitenColumnTitle,
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
 import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
@@ -453,71 +455,81 @@ export default async function OrdersPage({
           }
         />
       </div>
-      <OrdersListChrome
-        className="w-full max-w-full min-w-0 self-start"
-        toolbar={<div className="space-y-4">
-      <div className="hidden lg:block">
-        <OrderPostingMonthBar
-          toolbarEnd={
-            <OrdersListShippedToolbar
-              pageSize={pageSize}
-              rawTag={rawTag}
-              listSearchQ={listSearchQ}
-              fromUrl={fromUrl}
-              toUrl={toUrl}
-              onlyShippedActive={onlyShippedActive}
-              hideShippedActive={hideShippedActive}
-            />
-          }
-        />
-      </div>
-      {periodError ? (
-        <div className="no-print w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-          {periodError} Фильтр по дате не применён.
+      <div className="no-print space-y-4">
+        <div className="hidden lg:block">
+          <OrderPostingMonthBar
+            toolbarEnd={
+              <OrdersListShippedToolbar
+                pageSize={pageSize}
+                rawTag={rawTag}
+                listSearchQ={listSearchQ}
+                fromUrl={fromUrl}
+                toUrl={toUrl}
+                onlyShippedActive={onlyShippedActive}
+                hideShippedActive={hideShippedActive}
+              />
+            }
+          />
         </div>
-      ) : null}
-      {periodLabelActive ? (
-        <div className="no-print flex w-full flex-wrap items-center gap-2 rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/25 sm:px-4 sm:py-2.5 sm:text-base">
-          <span className="text-[var(--text-body)]">
-            Период (дата создания наряда, МСК):{" "}
-            <strong className="font-mono text-[var(--text-strong)]">
-              {periodLabelActive}
-            </strong>
-          </span>
-          <Link
-            href={ordersListHref({
-              limit: pageSize,
-              tag: rawTag ?? undefined,
-              hideShipped: hideShippedActive,
-              onlyShipped: onlyShippedActive,
-              q: listSearchQ || undefined,
-            })}
-            className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
-          >
-            Сбросить период
-          </Link>
-        </div>
-      ) : null}
-      <Suspense
-        fallback={
-          <div className="no-print text-sm text-[var(--text-muted)]">
-            Поиск…
+        {periodError ? (
+          <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            {periodError} Фильтр по дате не применён.
           </div>
-        }
-      >
-        <OrdersListFiltersBar
-          pageSize={pageSize}
-          appliedFrom={fromUrl}
-          appliedTo={toUrl}
-          initialSearchQ={listSearchQ}
-          tag={rawTag ?? undefined}
-          hideShipped={hideShippedActive}
-          onlyShipped={onlyShippedActive}
-        />
-      </Suspense>
-      {showOrdersQuickFilterChipsRow ? (
-      <div className="no-print w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-        <div className="flex flex-wrap items-center gap-2">
+        ) : null}
+        {periodLabelActive ? (
+          <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/25 sm:px-4 sm:py-2.5 sm:text-base">
+            <span className="text-[var(--text-body)]">
+              Период (дата создания наряда, МСК):{" "}
+              <strong className="font-mono text-[var(--text-strong)]">
+                {periodLabelActive}
+              </strong>
+            </span>
+            <Link
+              href={ordersListHref({
+                limit: pageSize,
+                tag: rawTag ?? undefined,
+                hideShipped: hideShippedActive,
+                onlyShipped: onlyShippedActive,
+                q: listSearchQ || undefined,
+              })}
+              className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
+            >
+              Сбросить период
+            </Link>
+          </div>
+        ) : null}
+        <Suspense
+          fallback={
+            <div className="text-sm text-[var(--text-muted)]">Поиск…</div>
+          }
+        >
+          <div className="hidden md:block">
+            <OrdersListFiltersBar
+              pageSize={pageSize}
+              appliedFrom={fromUrl}
+              appliedTo={toUrl}
+              initialSearchQ={listSearchQ}
+              tag={rawTag ?? undefined}
+              hideShipped={hideShippedActive}
+              onlyShipped={onlyShippedActive}
+            />
+          </div>
+          <div className="md:hidden">
+            <OrdersListFiltersBar
+              pageSize={pageSize}
+              appliedFrom={fromUrl}
+              appliedTo={toUrl}
+              initialSearchQ={listSearchQ}
+              tag={rawTag ?? undefined}
+              hideShipped={hideShippedActive}
+              onlyShipped={onlyShippedActive}
+              showSearch={false}
+            />
+          </div>
+        </Suspense>
+        {showOrdersQuickFilterChipsRow ? (
+          <div className="w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+            <div className="flex flex-wrap items-center gap-2">
           {alwaysShowOrderAttentionChips || attentionCount > 0 ? (
             <Link
               href={ordersListHref({
@@ -649,31 +661,42 @@ export default async function OrdersPage({
             : null}
         </div>
       </div>
-      ) : null}
-      {rawTag && !activeFilter ? (
-        <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-          Параметр <code className="font-mono">tag</code> в ссылке не распознан — показан полный список.
-        </div>
-      ) : null}
-      {hideShippedActive && !activeFilter ? (
-        <div className="w-full rounded-lg border border-emerald-300/70 bg-emerald-100/60 px-4 py-2.5 text-sm text-emerald-950 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-100">
-          В списке скрыты наряды с отметкой «Работа отправлена» (отгруженные).
-        </div>
-      ) : null}
-      {onlyShippedActive && !activeFilter ? (
-        <div className="w-full rounded-lg border border-sky-300/70 bg-sky-100/60 px-4 py-2.5 text-sm text-sky-950 dark:border-sky-800/50 dark:bg-sky-950/40 dark:text-sky-100">
-          В списке только наряды с отметкой «Работа отправлена» (отгруженные).
-        </div>
-      ) : null}
-      <div className="orders-list-mirror-thead hidden w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] md:block print:hidden">
-        <table className={ORDERS_TABLE_CLASS} aria-hidden="true">
-          <OrdersTableColGroup />
-          <thead>
-            <OrdersTableHeaderRow isDemo={isDemo} />
-          </thead>
-        </table>
+        ) : null}
+        {rawTag && !activeFilter ? (
+          <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            Параметр <code className="font-mono">tag</code> в ссылке не распознан — показан полный список.
+          </div>
+        ) : null}
+        {hideShippedActive && !activeFilter ? (
+          <div className="w-full rounded-lg border border-emerald-300/70 bg-emerald-100/60 px-4 py-2.5 text-sm text-emerald-950 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-100">
+            В списке скрыты наряды с отметкой «Работа отправлена» (отгруженные).
+          </div>
+        ) : null}
+        {onlyShippedActive && !activeFilter ? (
+          <div className="w-full rounded-lg border border-sky-300/70 bg-sky-100/60 px-4 py-2.5 text-sm text-sky-950 dark:border-sky-800/50 dark:bg-sky-950/40 dark:text-sky-100">
+            В списке только наряды с отметкой «Работа отправлена» (отгруженные).
+          </div>
+        ) : null}
       </div>
-        </div>}
+      <OrdersListStickySearch
+        initialSearchQ={listSearchQ}
+        pageSize={pageSize}
+        tag={rawTag ?? undefined}
+        hideShipped={hideShippedActive}
+        onlyShipped={onlyShippedActive}
+      />
+      <OrdersListChrome
+        className="w-full max-w-full min-w-0 self-start"
+        toolbar={
+          <div className="orders-list-mirror-thead hidden w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] md:block print:hidden">
+            <table className={ORDERS_TABLE_CLASS} aria-hidden="true">
+              <OrdersTableColGroup />
+              <thead>
+                <OrdersTableHeaderRow isDemo={isDemo} />
+              </thead>
+            </table>
+          </div>
+        }
       >
       <div className="orders-harmony-table-shell w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] print:max-w-none print:w-full">
         <table className={ORDERS_TABLE_CLASS}>
@@ -721,9 +744,18 @@ export default async function OrdersPage({
                   o.dueDate != null &&
                   o.dueDate.getTime() < Date.now() &&
                   !workSent;
-                const hasCorrection = o.listPendingChatCorrections;
-                const hasProsthetics =
-                  o.listPendingProstheticsRequests && !o.prostheticsOrdered;
+                const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
+                const kaitenStatusFilterHref = kaitenColTrimmed
+                  ? ordersListHref({
+                      limit: pageSize,
+                      tag: listTagKaitenColumnTitle(kaitenColTrimmed),
+                      hideShipped: hideShippedActive,
+                      onlyShipped: onlyShippedActive,
+                      q: listSearchQ || undefined,
+                      from: fromUrl ?? undefined,
+                      to: toUrl ?? undefined,
+                    })
+                  : null;
                 const rowClass = blocked
                   ? "border-b-2 border-red-800/45 bg-gradient-to-r from-red-950/40 via-red-950/25 to-red-900/15 text-[var(--app-text)] dark:border-red-900/60 dark:from-red-950/50 dark:via-red-950/35 dark:to-red-950/20 [&>td:not(:first-child):not(:last-child)]:text-red-950/95 dark:[&>td:not(:first-child):not(:last-child)]:text-red-50/90"
                   : workSent
@@ -776,6 +808,7 @@ export default async function OrdersPage({
                   className={rowClass}
                   harmonyRowState={harmonyRowState}
                   clinicName={o.clinic?.name ?? "Частное лицо"}
+                  clinicAddress={o.clinic?.address?.trim() || undefined}
                   doctorName={personNameSurnameInitials(o.doctor.fullName)}
                   patientName={
                     o.patientName
@@ -786,20 +819,63 @@ export default async function OrdersPage({
                   appointmentDate={appointmentDateFormatted}
                   kaitenColumnTitle={o.kaitenColumnTitle}
                   demoKanbanColumn={o.demoKanbanColumn}
-                  hasCorrection={hasCorrection}
-                  hasProsthetics={hasProsthetics}
+                  demoCardTypeName={o.kaitenCardType?.name ?? null}
+                  kaitenCardId={o.kaitenCardId}
+                  kaitenFilterHref={kaitenStatusFilterHref}
                   isLabOverdue={isLabOverdue}
-                  hasUnreadChat={o.listKaitenLabMentionHighlight}
-                  hasPrint={!workSent || Boolean(kaitenUrl ?? o.kaitenCardId)}
-                  indicatorsNode={
-                    workSent ? (
-                      <span className="inline-flex items-center rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/45 dark:text-emerald-200">
-                        отправлен
-                      </span>
-                    ) : null
-                  }
-                  tagsNode={
-                    <div className="min-w-0 flex-1">{renderTagsNode()}</div>
+                  tagsNode={renderTagsNode()}
+                  mobileActionsNode={
+                    <>
+                      <Link
+                        href={orderPathById(o.id)}
+                        className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm font-medium text-[var(--text-strong)] active:bg-[var(--surface-hover)]"
+                        title={`${o.orderNumber} — открыть наряд`}
+                      >
+                        Открыть
+                      </Link>
+                      <div className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+                        <OrderListOrderChatCell
+                          orderId={o.id}
+                          orderNumber={o.orderNumber}
+                          labMentionHighlight={o.listKaitenLabMentionHighlight}
+                          embedded
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1">
+                        {!workSent ? (
+                          <OrderNarjadPrintTrigger
+                            orderId={o.id}
+                            variant="icon"
+                            title="Печать наряда (PDF) — диалог печати"
+                          />
+                        ) : null}
+                        <OrderStickerPrintLink orderId={o.id} />
+                        {kaitenUrl ? (
+                          <OrderKaitenQrModal
+                            url={kaitenUrl}
+                            kanbanUrl={
+                              kaitenWebUrl && kanbanWebUrl ? kanbanWebUrl : null
+                            }
+                            compact
+                            variant={
+                              o.kaitenCardId != null && !isDemo
+                                ? "kaiten"
+                                : "kanban"
+                            }
+                          />
+                        ) : o.kaitenCardId != null ? (
+                          <span
+                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
+                            title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
+                          >
+                            ⚠
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="min-h-[44px] flex-1 rounded-lg bg-[var(--surface-subtle)] px-2 py-1">
+                        <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                      </div>
+                    </>
                   }
                 >
                   <OrderListOrderChatCell

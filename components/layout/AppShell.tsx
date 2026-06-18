@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderCorrectionToastStack } from "@/components/orders/OrderCorrectionToastStack";
 import { OrderBackgroundUploadToast } from "@/components/orders/OrderBackgroundUploadToast";
+import { isPublicStickerHubPath } from "@/lib/sticker-public-path";
 import { Sidebar } from "./Sidebar";
 
 const SIDEBAR_W_CLASSIC = "calc(100% / 7)";
@@ -45,6 +46,7 @@ type AppShellProps = {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
+  const isPublicSticker = isPublicStickerHubPath(pathname ?? "");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
@@ -74,7 +76,7 @@ export function AppShell({ children }: AppShellProps) {
     };
   }, [mobileNavOpen]);
 
-  if (isLogin) {
+  if (isLogin || isPublicSticker) {
     return (
       <div className="min-h-screen w-full bg-[var(--app-bg)]">{children}</div>
     );

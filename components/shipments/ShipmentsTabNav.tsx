@@ -30,10 +30,11 @@ export function ShipmentsTabNav({
   });
 
   return (
-    <nav
-      className="no-print flex w-full flex-wrap gap-8 border-b border-[var(--card-border)]"
-      aria-label="Вид отгрузок"
-    >
+    <div className="no-print sticky top-0 z-50 -mx-2 bg-[var(--app-bg)] px-2 shadow-[0_4px_12px_-8px_rgba(0,0,0,0.45)] md:static md:z-auto md:mx-0 md:bg-transparent md:px-0 md:shadow-none">
+      <nav
+        className="flex w-full flex-wrap gap-8 border-b border-[var(--card-border)]"
+        aria-label="Вид отгрузок"
+      >
       <Link
         href={shipmentsListHref({
           tab: "today",
@@ -57,6 +58,7 @@ export function ShipmentsTabNav({
       <Link href={periodHref} className={tabClass(active === "period")}>
         За период
       </Link>
-    </nav>
+      </nav>
+    </div>
   );
 }
