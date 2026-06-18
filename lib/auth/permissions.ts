@@ -82,6 +82,16 @@ export function canCreateOrders(
   return false;
 }
 
+/** Редактирование полей существующего наряда (форма, PATCH, быстрые отметки в списке). */
+export function canEditOrders(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (role === "OWNER") return true;
+  if (moduleAccess?.ORDERS_EDIT === true) return true;
+  return false;
+}
+
 /** Редактирование шаблонов этикеток и сохранение настроек печати. */
 export function canEditStickerPrintSettings(
   role: UserRole,

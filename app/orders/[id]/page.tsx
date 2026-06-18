@@ -17,7 +17,7 @@ import {
   getPricingPrisma,
 } from "@/lib/get-domain-prisma";
 import { normalizeLegacyLabWorkStatus } from "@/lib/lab-work-status";
-import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
+import { canAcceptOrderChatCorrections, canEditOrders } from "@/lib/auth/permissions";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { invoiceParsedSnapshotForOrderEdit } from "@/lib/order-invoice-initial-for-edit";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
@@ -363,6 +363,8 @@ export default async function OrderEditPage({
     session != null && canAcceptOrderChatCorrections(session.role);
   const canEditClients =
     session?.role === "OWNER" || access?.CLIENTS_EDIT === true;
+  const canEditOrder =
+    session != null && canEditOrders(session.role, access ?? undefined);
 
   return (
     <OrderEditForm
@@ -373,6 +375,7 @@ export default async function OrderEditPage({
       demoKanbanCardTypes={demoKanbanCardTypes}
       canAcceptChatCorrections={canAcceptChatCorrections}
       canEditClients={canEditClients}
+      canEditOrder={canEditOrder}
       viewerRole={session?.role ?? null}
       orderPageFrame={{
         title: `Наряд ${order.orderNumber}`,

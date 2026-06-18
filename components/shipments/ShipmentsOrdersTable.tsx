@@ -355,7 +355,7 @@ export function ShipmentsOrdersTable({
                   )}
                 </>
               );
-              const renderTagsCell = () => (
+              const renderTagsCell = (opts?: { omitKaitenColumnTag?: boolean }) => (
                 <OrderListTagsCell
                   orderId={o.id}
                   pageSize={TAGS_PAGE_SIZE}
@@ -383,6 +383,7 @@ export function ShipmentsOrdersTable({
                   urgentCoefficient={o.urgentCoefficient}
                   customTags={o.listCustomTags}
                   shipmentsFilterContext={shipmentsTagFilterContext}
+                  omitKaitenColumnTag={opts?.omitKaitenColumnTag}
                 />
               );
               return (
@@ -552,7 +553,7 @@ export function ShipmentsOrdersTable({
                         ) : null}
                       </div>
 
-                      <div className="mb-0.5 truncate text-sm font-medium text-[var(--app-text)]">
+                      <div className="mb-0.5 truncate text-xs font-normal text-[var(--text-secondary)]">
                         {clinicName}
                       </div>
 
@@ -565,7 +566,7 @@ export function ShipmentsOrdersTable({
                         </div>
                       ) : null}
 
-                      <div className="mb-1.5 flex flex-wrap gap-1.5 text-xs text-[var(--text-secondary)]">
+                      <div className="mb-1.5 flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">
                         {doctorName ? <span>{doctorName}</span> : null}
                         {doctorName && patientName ? (
                           <span className="text-[var(--text-muted)]">·</span>
@@ -617,7 +618,7 @@ export function ShipmentsOrdersTable({
                       </div>
 
                       <div className="mt-2 text-xs text-[var(--text-secondary)] [&_.order-list-tags-pack]:items-center">
-                        {renderTagsCell()}
+                        {renderTagsCell({ omitKaitenColumnTag: true })}
                       </div>
                     </div>
                   </td>

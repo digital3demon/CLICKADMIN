@@ -31,6 +31,10 @@ export const dynamic = "force-dynamic";
 /** На всю ширину рабочей области — как список «Заказы». */
 const SHIPMENTS_LIST_STACK = "w-full max-w-full min-w-0 self-start space-y-4";
 
+/** Меньше внешних полей, чем у стандартного ModuleFrame — как на странице «Заказы». */
+const SHIPMENTS_FRAME_ROOT =
+  "!px-2 !pb-6 !pt-4 sm:!px-3 sm:!pb-7 sm:!pt-5 md:!px-4 md:!pb-8 md:!pt-6 lg:!px-4 lg:!pb-9 lg:!pt-7";
+
 const MAX_RANGE_DAYS = 366;
 
 function parseTab(raw: string | undefined): ShipmentsTab {
@@ -101,7 +105,7 @@ export default async function ShipmentsPage({
 
   if (!tenantId) {
     return (
-      <ModuleFrame title="Отгрузки" description="">
+      <ModuleFrame title="Отгрузки" description="" rootClassName={SHIPMENTS_FRAME_ROOT}>
         <p className="text-sm text-[var(--text-secondary)]">
           Войдите в CRM, чтобы просматривать отгрузки.
         </p>
@@ -142,6 +146,7 @@ export default async function ShipmentsPage({
         title="Отгрузки"
         description={description}
         descriptionClassName="no-print max-w-3xl"
+        rootClassName={SHIPMENTS_FRAME_ROOT}
       >
         <div className={SHIPMENTS_LIST_STACK}>
           <ShipmentsTabNav
@@ -200,6 +205,7 @@ export default async function ShipmentsPage({
         title="Отгрузки"
         description={description}
         descriptionClassName="no-print max-w-3xl"
+        rootClassName={SHIPMENTS_FRAME_ROOT}
       >
         <div className={SHIPMENTS_LIST_STACK}>
           <ShipmentsTabNav
@@ -280,6 +286,7 @@ export default async function ShipmentsPage({
       title="Отгрузки"
       description={description}
       descriptionClassName="no-print max-w-3xl"
+      rootClassName={SHIPMENTS_FRAME_ROOT}
     >
       <div className={SHIPMENTS_LIST_STACK}>
         <ShipmentsTabNav

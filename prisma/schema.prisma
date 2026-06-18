@@ -521,6 +521,8 @@ enum AppModule {
   ORDERS
   /// Создание нового заказа
   ORDERS_CREATE
+  /// Редактирование существующего заказа
+  ORDERS_EDIT
   KANBAN
   /// Канбан: можно менять заголовок карточки
   KANBAN_EDIT_TITLE

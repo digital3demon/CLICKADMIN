@@ -798,6 +798,7 @@ export default async function OrdersPage({
                     listSearchQ={listSearchQ || undefined}
                     periodFrom={fromUrl}
                     periodTo={toUrl}
+                    omitKaitenColumnTag
                   />
                 );
                 return (

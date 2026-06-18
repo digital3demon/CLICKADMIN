@@ -640,6 +640,7 @@ export function OrderEditForm({
   demoKanbanCardTypes = [],
   canAcceptChatCorrections = false,
   canEditClients = true,
+  canEditOrder = true,
   viewerRole = null,
   kanbanCardUrl = null,
   orderPageFrame,
@@ -652,6 +653,8 @@ export function OrderEditForm({
   canAcceptChatCorrections?: boolean;
   /** Правка счёта и клиентских полей на вкладке документооборота наряда. */
   canEditClients?: boolean;
+  /** Сохранение полей наряда (модуль «Редактирование заказа»). */
+  canEditOrder?: boolean;
   /** Роль текущего пользователя (для раскладки «строка в буфер» на вкладке счёта). */
   viewerRole?: UserRole | null;
   kanbanCardUrl?: string | null;
@@ -1778,6 +1781,10 @@ export function OrderEditForm({
 
   const save = useCallback(async () => {
     setError(null);
+    if (!canEditOrder) {
+      setError("Нет прав на редактирование наряда");
+      return;
+    }
     if (!isOrderPageFramed) {
       const nextOrderNumber = orderNumberDraft.trim();
       if (!nextOrderNumber) {
@@ -1968,6 +1975,7 @@ export function OrderEditForm({
     continuesFromOrderId,
     initial.continuesFromOrder?.id,
     router,
+    canEditOrder,
   ]);
 
   const confirmArchiveOrder = useCallback(async () => {
@@ -3332,7 +3340,9 @@ export function OrderEditForm({
     ],
   );
 
-  const renderSaveButton = (mobileBar = false) => (
+  const renderSaveButton = (mobileBar = false) => {
+    if (!canEditOrder) return null;
+    return (
     <button
       type="button"
       onClick={save}
@@ -3345,7 +3355,8 @@ export function OrderEditForm({
     >
       {saving ? "Сохранение…" : "Сохранить наряд"}
     </button>
-  );
+    );
+  };
 
   const formInner = (
     <>
@@ -3458,6 +3469,17 @@ export function OrderEditForm({
         </div>
       ) : null}
 
+      {!canEditOrder ? (
+        <p className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-[var(--text-secondary)]">
+          Режим просмотра: нет права «Редактирование заказа». Изменения недоступны.
+        </p>
+      ) : null}
+
+      <fieldset
+        disabled={!canEditOrder}
+        className="min-w-0 border-0 p-0 disabled:opacity-[0.88]"
+      >
+
       {initial.kaitenBlocked ? (
         <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-red-400/70 bg-red-950/40 px-3 py-2.5 text-sm text-red-50 shadow-sm dark:border-red-900/70 dark:bg-red-950/55">
           <div className="inline-flex min-w-0 items-center gap-1.5 font-medium leading-tight">
@@ -3561,6 +3583,7 @@ export function OrderEditForm({
           </div>
         </>
       )}
+      </fieldset>
     </div>
     <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shell-desktop:hidden">
       <div className="flex gap-2">{renderSaveButton(true)}</div>

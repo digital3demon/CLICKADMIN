@@ -16,6 +16,7 @@ export function isKanbanCardSubmodule(module: AppModule): boolean {
 export const ALL_APP_MODULES: AppModule[] = [
   "ORDERS",
   "ORDERS_CREATE",
+  "ORDERS_EDIT",
   "KANBAN",
   "KANBAN_EDIT_TITLE",
   "KANBAN_EDIT_DUE_DATE",
@@ -58,6 +59,7 @@ export const ALL_APP_MODULES: AppModule[] = [
 export const APP_MODULE_LABELS: Record<AppModule, string> = {
   ORDERS: "Заказы",
   ORDERS_CREATE: "Создание заказа",
+  ORDERS_EDIT: "Редактирование заказа",
   KANBAN: "Канбан",
   KANBAN_EDIT_TITLE: "Канбан: менять заголовок карточки",
   KANBAN_EDIT_DUE_DATE: "Канбан: менять срок",
@@ -165,6 +167,12 @@ export function defaultModuleAllowed(
   }
 
   switch (module) {
+    case "ORDERS_EDIT":
+      return (
+        role === "ADMINISTRATOR" ||
+        role === "SENIOR_ADMINISTRATOR" ||
+        role === "FINANCIAL_MANAGER"
+      );
     case "KANBAN":
       return true;
     case "KANBAN_EDIT_TITLE":

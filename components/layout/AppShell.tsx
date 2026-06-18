@@ -10,6 +10,10 @@ import { Sidebar } from "./Sidebar";
 
 const SIDEBAR_W_CLASSIC = "calc(100% / 7)";
 
+/** Слева от липких полос на mobile: кнопка меню (0.75rem + 2.75rem) + небольшой зазор. */
+const MOBILE_MENU_INSET =
+  "calc(max(0.75rem, env(safe-area-inset-left, 0px)) + 2.75rem + 0.375rem)";
+
 function MenuToggleIcon({ open }: { open: boolean }) {
   if (open) {
     return (
@@ -88,6 +92,7 @@ export function AppShell({ children }: AppShellProps) {
       style={
         {
           "--app-sidebar-w": SIDEBAR_W_CLASSIC,
+          "--app-mobile-menu-inset": MOBILE_MENU_INSET,
         } as CSSProperties
       }
     >

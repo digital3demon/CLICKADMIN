@@ -28,7 +28,7 @@ import {
   type DragStartEvent,
   type DraggableSyntheticListeners,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   pointerWithin,
   useSensor,
@@ -113,6 +113,22 @@ const CARD_MENU_EST_HEIGHT = 150;
 const BOARD_COLUMN_WIDTH_CLASS =
   "w-[140px] min-[420px]:w-[156px] sm:w-[176px] lg:w-[192px] xl:w-[208px]";
 
+/** На touch-экранах: удержание перед перетаскиванием карточки, чтобы работал горизонтальный скролл. */
+const KANBAN_TOUCH_DRAG_DELAY_MS = 420;
+const KANBAN_TOUCH_DRAG_TOLERANCE_PX = 12;
+
+function useKanbanCoarsePointer() {
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    const sync = () => setCoarse(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return coarse;
+}
+
 function rectsIntersect(a: DOMRect | { left: number; right: number; top: number; bottom: number }, b: DOMRect): boolean {
   return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
 }
@@ -141,6 +157,7 @@ function KanbanCardView({
   onStopCard,
   onDeleteCard,
   dragListeners,
+  dragVibrate = false,
   allowMoveToOtherBoard = true,
 }: {
   card: KanbanCard;
@@ -155,6 +172,8 @@ function KanbanCardView({
   onDeleteCard: () => void;
   /** Слушатели @dnd-kit (только для незаблокированной карточки). */
   dragListeners?: DraggableSyntheticListeners;
+  /** Touch: анимация «вибрации» на время перетаскивания (DragOverlay). */
+  dragVibrate?: boolean;
   allowMoveToOtherBoard?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -242,13 +261,17 @@ function KanbanCardView({
   const typeRing = kanbanTypeRingStyle(accent);
 
   return (
-    <div data-card-id={card.id} className="block w-full min-w-0 shrink-0 touch-pan-y">
+    <div data-card-id={card.id} className="block w-full min-w-0 shrink-0 touch-pan-x touch-pan-y">
       <div
         className="relative rounded-[9px] p-[2px] max-md:rounded-[7px] max-md:p-[1.5px]"
         style={typeRing}
       >
         <article
-          className={`relative overflow-visible border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,transform,border-color] dark:border-white/[0.1] rounded-[7px] max-md:rounded-[6px] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] hover:shadow-[var(--kanban-shadow-elevated)]`}
+          className={`relative overflow-visible border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.1] rounded-[7px] max-md:rounded-[6px] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] hover:shadow-[var(--kanban-shadow-elevated)] ${
+            dragVibrate
+              ? "kanban-card-drag-vibrate transition-none"
+              : "transition-[box-shadow,transform,border-color]"
+          }`}
           {...(dragListeners ?? {})}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest(".card-more-menu")) return;
@@ -517,7 +540,7 @@ function SortableKanbanCard({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.08 : undefined,
-    ...(dndLocked ? {} : { touchAction: "none" as const }),
+    ...(dndLocked || !isDragging ? {} : { touchAction: "none" as const }),
   };
 
   return (
@@ -564,7 +587,9 @@ function SortableColumnSection({
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 30 : undefined,
-    ...(!layoutLocked ? { touchAction: "none" as const } : {}),
+    ...(layoutLocked || columnDragDisabled || !isDragging
+      ? {}
+      : { touchAction: "none" as const }),
   };
 
   const dragProps = layoutLocked || columnDragDisabled ? {} : { ...listeners, ...attributes };
@@ -577,44 +602,42 @@ function SortableColumnSection({
       className={`kanban-column flex max-h-[calc(100dvh-184px)] ${BOARD_COLUMN_WIDTH_CLASS} shrink-0 flex-col rounded-[9px] border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.06] dark:bg-gradient-to-b dark:from-[#2d2d32] dark:to-[#27272a] max-md:max-h-[calc(100dvh-132px)]`}
     >
       <header
-        className={`column-header-handle flex flex-col gap-0.5 border-b border-[var(--kanban-border)] px-2 pb-1.5 pt-2 max-md:gap-0.5 max-md:px-1.5 max-md:pb-1 max-md:pt-1.5 sm:px-2 sm:pb-1.5 sm:pt-2 ${
-          layoutLocked ? "" : "cursor-grab active:cursor-grabbing"
+        className={`column-header-handle relative border-b border-[var(--kanban-border)] px-2 pb-1.5 pt-2 max-md:px-1.5 max-md:pb-1 max-md:pt-1.5 sm:px-2 sm:pb-1.5 sm:pt-2 ${
+          layoutLocked || columnDragDisabled ? "" : "cursor-grab active:cursor-grabbing"
         }`}
         {...dragProps}
       >
-        <div className="flex items-center justify-between gap-1">
-          <div
-            className="min-w-0 flex-1 cursor-default break-words text-[11px] font-semibold leading-tight text-[var(--kanban-text)] sm:text-[0.72rem] sm:leading-tight"
-            onDoubleClick={() => {
-              if (!layoutLocked) onRenameColumn(col.id);
-            }}
-          >
-            {col.title}
+        {!layoutLocked ? (
+          <div className="absolute right-1 top-1 z-10 flex shrink-0 items-center gap-0.5 sm:right-1.5 sm:top-1.5">
+            <button
+              type="button"
+              className="rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]"
+              title="Переименовать"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => onRenameColumn(col.id)}
+            >
+              <IconPen className="max-md:scale-90" />
+            </button>
+            <button
+              type="button"
+              className="rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]"
+              title="Удалить колонку"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => onDeleteColumn(col.id)}
+            >
+              <IconTrash className="max-md:scale-90" />
+            </button>
           </div>
-          {!layoutLocked ? (
-            <div className="flex gap-1">
-              <button
-                type="button"
-                className="rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]"
-                title="Переименовать"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => onRenameColumn(col.id)}
-              >
-                <IconPen className="max-md:scale-90" />
-              </button>
-              <button
-                type="button"
-                className="rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]"
-                title="Удалить колонку"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => onDeleteColumn(col.id)}
-              >
-                <IconTrash className="max-md:scale-90" />
-              </button>
-            </div>
-          ) : null}
+        ) : null}
+        <div
+          className="min-w-0 cursor-default break-words pr-9 text-[11px] font-semibold leading-tight text-[var(--kanban-text)] sm:pr-10 sm:text-[0.72rem] sm:leading-tight"
+          onDoubleClick={() => {
+            if (!layoutLocked) onRenameColumn(col.id);
+          }}
+        >
+          {col.title}
         </div>
-        <div className="text-[0.58rem] text-[var(--kanban-text-muted)] max-md:leading-tight sm:text-[0.65rem]">
+        <div className="mt-0.5 text-[0.58rem] text-[var(--kanban-text-muted)] max-md:leading-tight sm:text-[0.65rem]">
           {visCount}
           {visCount !== totalCount ? ` из ${totalCount}` : ""} карточек
         </div>
@@ -797,13 +820,17 @@ export function BoardCanvas({
   const [activeDragCardId, setActiveDragCardId] = useState<string | null>(null);
   /** Горизонтальная полоса колонок: wheel без passive — только горизонтальный жест / Shift+колесо. */
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
+  const coarsePointer = useKanbanCoarsePointer();
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: { distance: 8 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
+      activationConstraint: {
+        delay: coarsePointer ? KANBAN_TOUCH_DRAG_DELAY_MS : 200,
+        tolerance: KANBAN_TOUCH_DRAG_TOLERANCE_PX,
+      },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -1311,7 +1338,7 @@ export function BoardCanvas({
     >
       <div
         ref={horizontalScrollRef}
-        className="relative z-0 flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain p-1.5 [-webkit-overflow-scrolling:touch] sm:p-2"
+        className="relative z-0 flex min-h-0 min-w-0 flex-1 touch-pan-x overflow-x-auto overflow-y-auto overscroll-x-contain p-1.5 [-webkit-overflow-scrolling:touch] sm:p-2"
       >
         <div className="flex w-max min-w-0 shrink-0 items-start gap-1.5 sm:gap-2">
           <SortableContext
@@ -1414,6 +1441,7 @@ export function BoardCanvas({
                       visCount={vis.length}
                       totalCount={col.cards.length}
                       layoutLocked={aggregateLayoutLocked}
+                      columnDragDisabled={coarsePointer}
                     >
                       <SortableContext
                         id={col.id}
@@ -1491,6 +1519,7 @@ export function BoardCanvas({
               card={activeDragCard}
               homeBoard={activeDragCardHomeBoard}
               foreignBoardLabel={activeDragForeignBoardLabel}
+              dragVibrate
               onOpen={() => {}}
               onCopyLink={() => {}}
               onMoveCard={() => {}}

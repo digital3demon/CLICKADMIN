@@ -86,7 +86,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
 import { BoardCanvas } from "./BoardCanvas";
 import { KanbanFiltersButton } from "./KanbanFiltersButton";
-import { IconBoard, IconListRows } from "./kanban-icons";
+import { KanbanViewModePicker } from "./KanbanViewModePicker";
 
 const KanbanCalendar = dynamic(
   () => import("./KanbanCalendar").then((m) => m.KanbanCalendar),
@@ -1721,45 +1721,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               Ответственный
             </button>
           </div>
-          <div
-            className="flex min-w-0 flex-1 flex-wrap items-stretch gap-2 sm:flex-initial sm:items-center"
-            role="group"
-            aria-label="Вид доски"
-          >
-          <button
-            type="button"
-            className={`inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 py-2 text-[0.8125rem] hover:brightness-[0.98] dark:hover:brightness-110 sm:flex-initial sm:px-3 sm:text-[0.875rem] ${
-              appState.viewMode === "board"
-                ? "border-[var(--kanban-text)] bg-black/[0.05] font-semibold dark:bg-white/[0.08]"
-                : ""
-            }`}
-            onClick={() => patchApp((s) => (s.viewMode = "board"))}
-          >
-            <IconBoard /> Доска
-          </button>
-          <button
-            type="button"
-            className={`min-h-[2.75rem] flex-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 py-2 text-[0.8125rem] hover:brightness-[0.98] dark:hover:brightness-110 sm:flex-initial sm:px-3 sm:text-[0.875rem] ${
-              appState.viewMode === "calendar"
-                ? "border-[var(--kanban-text)] bg-black/[0.05] font-semibold dark:bg-white/[0.08]"
-                : ""
-            }`}
-            onClick={() => patchApp((s) => (s.viewMode = "calendar"))}
-          >
-            Календарь
-          </button>
-          <button
-            type="button"
-            className={`inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 py-2 text-[0.8125rem] hover:brightness-[0.98] dark:hover:brightness-110 sm:flex-initial sm:px-3 sm:text-[0.875rem] ${
-              appState.viewMode === "list"
-                ? "border-[var(--kanban-text)] bg-black/[0.05] font-semibold dark:bg-white/[0.08]"
-                : ""
-            }`}
-            onClick={() => patchApp((s) => (s.viewMode = "list"))}
-          >
-            <IconListRows /> Список
-          </button>
-          </div>
+          <KanbanViewModePicker
+            viewMode={appState.viewMode}
+            onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
+          />
         </div>
       </header>
 

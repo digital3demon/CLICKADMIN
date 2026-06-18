@@ -45,6 +45,8 @@ import {
 import { normalizeInvoiceNumberFieldRu } from "@/lib/format-invoice-number-ru";
 import { normalizeManualOrderNumber } from "@/lib/normalize-manual-order-number";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { canEditOrders } from "@/lib/auth/permissions";
+import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import { normalizeInvoiceParsedLines } from "@/lib/invoice-parsed-types";
 import { fetchOrderPriceListKindForOrder } from "@/lib/order-price-list-from-contractors";
 import { resolveClinicIdForDoctorIpOrder } from "@/lib/resolve-order-doctor-ip-clinic";
@@ -465,6 +467,15 @@ export async function PATCH(
   const tenantId = await orderTenantIdForSession(session);
   if (!tenantId) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+  if (session) {
+    const moduleAccess = await getEffectiveModuleAccess(tenantId, session.role);
+    if (!canEditOrders(session.role, moduleAccess)) {
+      return NextResponse.json(
+        { error: "Нет прав на редактирование наряда" },
+        { status: 403 },
+      );
+    }
   }
   const demoFieldsRequested =
     body.demoKanbanColumn !== undefined || body.kaitenCardTypeId !== undefined;

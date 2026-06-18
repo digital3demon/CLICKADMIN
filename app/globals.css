@@ -166,6 +166,39 @@ html.dark .kanban-root {
   --kanban-cal-mini-bg: #4a4a52;
 }
 
+/* Touch: карточка «вибрирует» всё время перетаскивания — сигнал, что drag активен. */
+@media (pointer: coarse) {
+  @keyframes kanban-card-drag-vibrate {
+    0% {
+      transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+    20% {
+      transform: translate3d(-1px, 0.5px, 0) rotate(-0.4deg);
+    }
+    40% {
+      transform: translate3d(1px, -0.5px, 0) rotate(0.4deg);
+    }
+    60% {
+      transform: translate3d(-0.5px, -1px, 0) rotate(-0.3deg);
+    }
+    80% {
+      transform: translate3d(0.5px, 1px, 0) rotate(0.3deg);
+    }
+    100% {
+      transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+  }
+
+  .kanban-card-drag-vibrate {
+    animation: kanban-card-drag-vibrate 0.12s linear infinite;
+    border-color: color-mix(in srgb, var(--kanban-accent) 45%, var(--kanban-border)) !important;
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--kanban-accent) 40%, transparent),
+      var(--kanban-shadow-elevated) !important;
+    cursor: grabbing !important;
+  }
+}
+
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;

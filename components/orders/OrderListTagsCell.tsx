@@ -124,6 +124,8 @@ type Props = {
     q?: string | null;
   } | null;
   financeCalculated?: boolean | null;
+  /** На mobile пилюля колонки Kaiten уже под № наряда — не дублировать в облаке тегов. */
+  omitKaitenColumnTag?: boolean;
 };
 
 const padTable =
@@ -417,6 +419,7 @@ export function OrderListTagsCell({
   shipmentsFilterContext = null,
   financeOfficeFilterContext = null,
   financeCalculated = null,
+  omitKaitenColumnTag = false,
 }: Props) {
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
@@ -943,7 +946,7 @@ export function OrderListTagsCell({
       });
     }
 
-    if (!shipmentsFilterContext) {
+    if (!shipmentsFilterContext && !omitKaitenColumnTag) {
       items.push({
         key: "kaiten",
         slot: "large",
@@ -1197,6 +1200,7 @@ export function OrderListTagsCell({
     removeTag,
     submitAdd,
     urgentCoefficient,
+    omitKaitenColumnTag,
     filterListHref,
   ]);
 

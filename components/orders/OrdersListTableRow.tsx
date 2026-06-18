@@ -132,7 +132,7 @@ export function OrdersListTableRow({
             </div>
 
             {clinicName ? (
-              <div className="mb-0.5 truncate text-sm font-medium text-[var(--app-text)]">
+              <div className="mb-0.5 truncate text-xs font-normal text-[var(--text-secondary)]">
                 {clinicName}
               </div>
             ) : null}
@@ -146,7 +146,7 @@ export function OrdersListTableRow({
               </div>
             ) : null}
 
-            <div className="mb-1.5 flex flex-wrap gap-1.5 text-xs text-[var(--text-secondary)]">
+            <div className="mb-1.5 flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">
               {doctorName ? <span>{doctorName}</span> : null}
               {doctorName && patientName ? (
                 <span className="text-[var(--text-muted)]">·</span>

@@ -7,6 +7,17 @@ export function clientsBranchModuleForMethod(method: string): "CLIENTS_VIEW" | "
   return HTTP_READ_METHODS.has(method.toUpperCase()) ? "CLIENTS_VIEW" : "CLIENTS_EDIT";
 }
 
+/** Для путей с модулем `ORDERS`: чтение — ORDERS, создание POST /api/orders — ORDERS_CREATE, иначе — ORDERS_EDIT. */
+export function ordersBranchModuleForMethod(
+  pathname: string,
+  method: string,
+): AppModule {
+  const m = method.toUpperCase();
+  if (HTTP_READ_METHODS.has(m)) return "ORDERS";
+  if (pathname === "/api/orders" && m === "POST") return "ORDERS_CREATE";
+  return "ORDERS_EDIT";
+}
+
 /** API настроек печати: GET — просмотр, PATCH — редактирование шаблонов. */
 export function printSettingsModuleForMethod(
   method: string,
@@ -114,6 +125,7 @@ export function requiredModuleForPath(
   if (base == null) return null;
   const m = (method ?? "GET").toUpperCase();
   if (base === "CLIENTS") return clientsBranchModuleForMethod(m);
+  if (base === "ORDERS") return ordersBranchModuleForMethod(pathname, m);
   if (base === "CONFIG_PRINT" && isPrintSettingsApiPath(pathname)) {
     return printSettingsModuleForMethod(m);
   }
