@@ -766,7 +766,7 @@ export default async function OrdersPage({
                   : workSent
                     ? "shipped"
                     : "default";
-                const renderTagsNode = () => (
+                const renderTagsNode = (opts?: { omitKaitenColumnTag?: boolean }) => (
                   <OrderListTagsCell
                     orderId={o.id}
                     pageSize={pageSize}
@@ -798,7 +798,7 @@ export default async function OrdersPage({
                     listSearchQ={listSearchQ || undefined}
                     periodFrom={fromUrl}
                     periodTo={toUrl}
-                    omitKaitenColumnTag
+                    omitKaitenColumnTag={opts?.omitKaitenColumnTag}
                   />
                 );
                 return (
@@ -824,7 +824,7 @@ export default async function OrdersPage({
                   kaitenCardId={o.kaitenCardId}
                   kaitenFilterHref={kaitenStatusFilterHref}
                   isLabOverdue={isLabOverdue}
-                  tagsNode={renderTagsNode()}
+                  tagsNode={renderTagsNode({ omitKaitenColumnTag: true })}
                   mobileActionsNode={
                     <>
                       <Link
