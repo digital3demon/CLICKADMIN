@@ -7,6 +7,8 @@ export type MailSendAttachment = {
   filename: string;
   contentType: string;
   content: Buffer;
+  /** Inline image (nodemailer cid). */
+  cid?: string;
 };
 
 export type MailSendPayload = {
@@ -63,6 +65,7 @@ export async function sendSmtpMessage(
       filename: a.filename,
       contentType: a.contentType,
       content: a.content,
+      ...(a.cid ? { cid: a.cid } : {}),
     })),
   });
 

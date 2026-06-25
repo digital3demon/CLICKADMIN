@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { KaitenTrackLane } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -177,7 +178,10 @@ type KaitenPreflightModalProps = {
   onCancelCollapse: () => void;
   onConfirm: (
     payload: KaitenSavePayload,
-    options?: { printPdf?: boolean },
+    options?: {
+      printPdf?: boolean;
+      autoReply?: { send: boolean; subject: string; html: string };
+    },
   ) => void;
   /** Дублирование поля из шапки наряда — можно поправить перед сохранением. */
   labDueLocal: string;
@@ -187,6 +191,10 @@ type KaitenPreflightModalProps = {
   onLabDueLocalChange: (raw: string) => void;
   /** Ошибка сохранения наряда (видна поверх формы, пока открыта модалка). */
   saveError?: string | null;
+  /** Панель «Ответное письмо» справа (заказ из почты). */
+  replyAside?: ReactNode;
+  /** Показывать «…и ответить» на кнопках сохранения. */
+  replyActionsEnabled?: boolean;
 };
 
 function ModalCloseIcon(props: { className?: string }) {
@@ -240,6 +248,8 @@ export function KaitenPreflightModal({
   labHmSlots,
   onLabDueLocalChange,
   saveError,
+  replyAside,
+  replyActionsEnabled = false,
 }: KaitenPreflightModalProps) {
   const [decideLater, setDecideLater] = useState(false);
   /** При «Решу позже»: только карточка CRM-канбана; нужны тип и пространство для доски. */
@@ -443,17 +453,30 @@ export function KaitenPreflightModal({
     [canSubmit, decideLater, kanbanOnly, onConfirm, cardTypeId, space, workLabel],
   );
 
+  const saveLabel = replyActionsEnabled ? "Сохранить заказ и ответить" : "Сохранить заказ";
+  const printLabel = replyActionsEnabled
+    ? "Сохранить, напечатать и ответить"
+    : "Сохранить и напечатать";
+
   if (!open) return null;
   if (typeof document === "undefined") return null;
 
   return createPortal(
     <div
       className="fixed inset-0 z-[600] flex items-center justify-center bg-zinc-900/50 p-3 sm:p-5"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="kaiten-preflight-title"
+      role="presentation"
     >
-      <div className="flex max-h-[min(96vh,920px)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl">
+      <div
+        className={`flex max-h-[min(96vh,920px)] w-full items-stretch justify-center gap-3 ${
+          replyAside ? "max-w-[min(96vw,72rem)] flex-col lg:flex-row" : "max-w-5xl"
+        }`}
+      >
+      <div
+        className="flex max-h-[min(96vh,920px)] w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kaiten-preflight-title"
+      >
         <div className="shrink-0 border-b border-[var(--border-subtle)] px-5 py-4 sm:px-6 sm:py-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -713,7 +736,7 @@ export function KaitenPreflightModal({
               disabled={saving || !canSubmit}
               onClick={() => submit(true)}
             >
-              {saving ? "Сохранение…" : "Сохранить и напечатать"}
+              {saving ? "Сохранение…" : printLabel}
             </button>
             <button
               type="button"
@@ -721,10 +744,12 @@ export function KaitenPreflightModal({
               disabled={saving || !canSubmit}
               onClick={() => submit(false)}
             >
-              {saving ? "Сохранение…" : "Сохранить заказ"}
+              {saving ? "Сохранение…" : saveLabel}
             </button>
           </div>
         </div>
+      </div>
+      {replyAside ? <div className="min-h-0 min-w-0 shrink-0">{replyAside}</div> : null}
       </div>
     </div>,
     document.body,

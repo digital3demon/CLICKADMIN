@@ -2,6 +2,7 @@ import "server-only";
 import {
   EmailDirection,
   EmailFolderType,
+  EmailReplyTemplateAssetKind,
   EmailSyncJobStatus,
   UserRole,
   type EmailAccount,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/mail/mail-list-cursor";
 import { previewFromMailBody, previewFromText, textFromHtml } from "@/lib/mail/mail-preview";
 import { sendSmtpMessage, type MailSendAttachment } from "@/lib/mail/smtp-client";
+import { buildReplyTemplateContentId } from "@/lib/mail/reply-template-cid";
 import { syncEmailAccount, type MailSyncScope } from "@/lib/mail/mail-sync.service";
 
 export type MailApiContext = {
@@ -1425,7 +1427,7 @@ export async function upsertEmailReplyTemplate(
   input: {
     subjectTemplate: string;
     htmlTemplate: string;
-    isEnabled: boolean;
+    isEnabled?: boolean;
   },
 ): Promise<EmailReplyTemplateDto> {
   if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
@@ -1434,6 +1436,9 @@ export async function upsertEmailReplyTemplate(
     select: { id: true },
   });
   if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  const existing = await db.emailReplyTemplate.findUnique({ where: { accountId } });
+  const isEnabled =
+    input.isEnabled !== undefined ? input.isEnabled : (existing?.isEnabled ?? true);
   const row = await db.emailReplyTemplate.upsert({
     where: { accountId },
     create: {
@@ -1441,12 +1446,12 @@ export async function upsertEmailReplyTemplate(
       accountId,
       subjectTemplate: input.subjectTemplate,
       htmlTemplate: input.htmlTemplate,
-      isEnabled: input.isEnabled,
+      isEnabled,
     },
     update: {
       subjectTemplate: input.subjectTemplate,
       htmlTemplate: input.htmlTemplate,
-      isEnabled: input.isEnabled,
+      ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),
     },
   });
   return {
@@ -1455,4 +1460,203 @@ export async function upsertEmailReplyTemplate(
     htmlTemplate: row.htmlTemplate,
     isEnabled: row.isEnabled,
   };
+}
+
+export type EmailReplyTemplateAssetDto = {
+  id: string;
+  accountId: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  kind: EmailReplyTemplateAssetKind;
+  contentId: string;
+  createdAt: string;
+};
+
+const REPLY_TEMPLATE_MAX_ASSETS = 20;
+const REPLY_TEMPLATE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const REPLY_TEMPLATE_MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+const REPLY_TEMPLATE_IMAGE_MIMES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+
+const REPLY_TEMPLATE_ATTACHMENT_MIMES = new Set([
+  "application/pdf",
+  "text/plain",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+function isAllowedReplyTemplateMime(mime: string, kind: EmailReplyTemplateAssetKind): boolean {
+  const norm = mime.toLowerCase().split(";")[0]?.trim() ?? "";
+  if (kind === EmailReplyTemplateAssetKind.INLINE_IMAGE) {
+    return REPLY_TEMPLATE_IMAGE_MIMES.has(norm);
+  }
+  return (
+    REPLY_TEMPLATE_ATTACHMENT_MIMES.has(norm) ||
+    norm.startsWith("application/vnd.")
+  );
+}
+
+async function requireOwnerEmailAccount(
+  db: PrismaClient,
+  tenantId: string,
+  role: string,
+  accountId: string,
+) {
+  if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
+  const account = await db.emailAccount.findFirst({
+    where: { id: accountId, tenantId },
+    select: { id: true },
+  });
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  return account;
+}
+
+export async function listEmailReplyTemplateAssets(
+  db: PrismaClient,
+  tenantId: string,
+  role: string,
+  accountId: string,
+): Promise<EmailReplyTemplateAssetDto[]> {
+  await requireOwnerEmailAccount(db, tenantId, role, accountId);
+  const rows = await db.emailReplyTemplateAsset.findMany({
+    where: { tenantId, accountId },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      accountId: true,
+      fileName: true,
+      mimeType: true,
+      size: true,
+      kind: true,
+      contentId: true,
+      createdAt: true,
+    },
+  });
+  return rows.map((row) => ({
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+  }));
+}
+
+export async function getEmailReplyTemplateAssetBytes(
+  db: PrismaClient,
+  tenantId: string,
+  role: string,
+  accountId: string,
+  assetId: string,
+): Promise<{ mimeType: string; fileName: string; data: Buffer }> {
+  await requireOwnerEmailAccount(db, tenantId, role, accountId);
+  const row = await db.emailReplyTemplateAsset.findFirst({
+    where: { id: assetId, tenantId, accountId },
+    select: { mimeType: true, fileName: true, data: true },
+  });
+  if (!row) throw new Error("EMAIL_REPLY_TEMPLATE_ASSET_NOT_FOUND");
+  return {
+    mimeType: row.mimeType,
+    fileName: row.fileName,
+    data: Buffer.from(row.data),
+  };
+}
+
+export async function createEmailReplyTemplateAsset(
+  db: PrismaClient,
+  tenantId: string,
+  role: string,
+  accountId: string,
+  input: { fileName: string; mimeType: string; data: Buffer },
+): Promise<EmailReplyTemplateAssetDto> {
+  await requireOwnerEmailAccount(db, tenantId, role, accountId);
+  const count = await db.emailReplyTemplateAsset.count({
+    where: { tenantId, accountId },
+  });
+  if (count >= REPLY_TEMPLATE_MAX_ASSETS) {
+    throw new Error("EMAIL_REPLY_TEMPLATE_ASSET_LIMIT");
+  }
+
+  const mimeType = input.mimeType.toLowerCase().split(";")[0]?.trim() || "application/octet-stream";
+  const kind = REPLY_TEMPLATE_IMAGE_MIMES.has(mimeType)
+    ? EmailReplyTemplateAssetKind.INLINE_IMAGE
+    : EmailReplyTemplateAssetKind.ATTACHMENT;
+  if (!isAllowedReplyTemplateMime(mimeType, kind)) {
+    throw new Error("EMAIL_REPLY_TEMPLATE_ASSET_TYPE_FORBIDDEN");
+  }
+  const maxBytes =
+    kind === EmailReplyTemplateAssetKind.INLINE_IMAGE
+      ? REPLY_TEMPLATE_MAX_IMAGE_BYTES
+      : REPLY_TEMPLATE_MAX_ATTACHMENT_BYTES;
+  if (input.data.length > maxBytes) {
+    throw new Error("EMAIL_REPLY_TEMPLATE_ASSET_TOO_LARGE");
+  }
+
+  const fileName = input.fileName.trim().slice(0, 255) || "file";
+  const row = await db.emailReplyTemplateAsset.create({
+    data: {
+      tenantId,
+      accountId,
+      fileName,
+      mimeType,
+      size: input.data.length,
+      data: new Uint8Array(input.data),
+      kind,
+      contentId: "",
+    },
+  });
+  const contentId = buildReplyTemplateContentId(row.id);
+  const updated = await db.emailReplyTemplateAsset.update({
+    where: { id: row.id },
+    data: { contentId },
+    select: {
+      id: true,
+      accountId: true,
+      fileName: true,
+      mimeType: true,
+      size: true,
+      kind: true,
+      contentId: true,
+      createdAt: true,
+    },
+  });
+  return { ...updated, createdAt: updated.createdAt.toISOString() };
+}
+
+export async function deleteEmailReplyTemplateAsset(
+  db: PrismaClient,
+  tenantId: string,
+  role: string,
+  accountId: string,
+  assetId: string,
+): Promise<void> {
+  await requireOwnerEmailAccount(db, tenantId, role, accountId);
+  const row = await db.emailReplyTemplateAsset.findFirst({
+    where: { id: assetId, tenantId, accountId },
+    select: { id: true },
+  });
+  if (!row) throw new Error("EMAIL_REPLY_TEMPLATE_ASSET_NOT_FOUND");
+  await db.emailReplyTemplateAsset.delete({ where: { id: assetId } });
+}
+
+export async function listEmailReplyTemplateAssetsForSend(
+  db: PrismaClient,
+  tenantId: string,
+  accountId: string,
+) {
+  return db.emailReplyTemplateAsset.findMany({
+    where: { tenantId, accountId },
+    select: {
+      id: true,
+      fileName: true,
+      mimeType: true,
+      kind: true,
+      contentId: true,
+      data: true,
+    },
+  });
 }

@@ -10,18 +10,16 @@ import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
 import { normalizeOrdersSearchQuery } from "@/lib/orders-list-query";
 import { withApiTiming } from "@/lib/server/api-timing";
 import { logger } from "@/lib/server/logger";
-import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
-import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
-import {
-  pushKaitenCardTitleForOrderIfLinked,
-  pushKaitenHeadForContinuationParents,
-} from "@/lib/kaiten-push-order-title";
-import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
+import { pushKaitenHeadForContinuationParents } from "@/lib/kaiten-push-order-title";
 import {
   createOrderFromBody,
   type CreateOrderBody,
   shouldScheduleKaitenSyncAfterOrderCreate,
 } from "@/lib/order-create-service";
+import {
+  runPostCreateOrderPipeline,
+  syncKaitenAfterOrderCreate,
+} from "@/lib/order-post-create-pipeline";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
@@ -124,100 +122,60 @@ export async function POST(req: Request) {
           result.order.continuesFromOrderId,
         ]);
       }
-      if (shouldScheduleKaitenSyncAfterOrderCreate(body)) {
-        const syncKaiten = async (): Promise<string | null> => {
-          const maxKaitenAttempts = 3;
-          let lastError: string | null = null;
-          for (let attempt = 0; attempt < maxKaitenAttempts; attempt++) {
-            let syncResult: Awaited<ReturnType<typeof syncNewOrderToKaiten>>;
-            try {
-              syncResult = await syncNewOrderToKaiten(orderId);
-            } catch (e) {
-              logger.error(
-                { err: e, msg: "kaiten_sync_after_create_deferred", attempt },
-                "POST /api/orders",
-              );
-              lastError = e instanceof Error ? e.message : String(e);
-              if (attempt === maxKaitenAttempts - 1) break;
-              await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-              continue;
-            }
-            if (syncResult.ok) {
-              invalidateKaitenSnapshotCache(orderId);
-              try {
-                const push = await pushKaitenCardTitleForOrderIfLinked(orderId);
-                if (!push.ok) {
-                  logger.error(
-                    { err: push.error, msg: "kaiten_head_after_create" },
-                    "POST /api/orders",
-                  );
-                }
-              } catch (e) {
-                logger.error(
-                  { err: e, msg: "kaiten_head_after_create" },
-                  "POST /api/orders",
-                );
-              }
-              try {
-                const row = await ordersPrisma.order.findUnique({
-                  where: { id: orderId },
-                  select: { continuesFromOrderId: true },
-                });
-                if (row?.continuesFromOrderId) {
-                  await pushKaitenHeadForContinuationParents([
-                    row.continuesFromOrderId,
-                  ]);
-                }
-              } catch (e) {
-                logger.error(
-                  { err: e, msg: "kaiten_parent_after_child_create" },
-                  "POST /api/orders",
-                );
-              }
-              try {
-                await syncUnpushedOrderAttachmentsToKaiten(
-                  orderId,
-                  ordersPrisma,
-                );
-              } catch (e) {
-                logger.error(
-                  { err: e, msg: "order_attachments_kaiten_after_create" },
-                  "POST /api/orders",
-                );
-              }
-              return null;
-            }
-            lastError = syncResult.error ?? "Не удалось создать карточку Kaiten";
-            logger.info(
-              {
-                msg: "kaiten_sync_after_create_deferred",
-                attempt,
-                err: syncResult.error,
-              },
-              "POST /api/orders",
-            );
-            if (attempt < maxKaitenAttempts - 1) {
-              await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-            }
-          }
-          return lastError ?? "Не удалось создать карточку Kaiten";
-        };
 
-        if (body.waitForKaitenBeforePrint === true) {
-          const kaitenPrintSyncError = await syncKaiten();
-          if (kaitenPrintSyncError) {
+      const sendAutoReply = body.sendAutoReply === true;
+      const needsKaiten = shouldScheduleKaitenSyncAfterOrderCreate(body);
+      const awaitKaiten =
+        body.waitForKaitenBeforePrint === true || sendAutoReply;
+
+      let kaitenSyncError: string | null = null;
+      let autoReply = undefined as
+        | Awaited<ReturnType<typeof runPostCreateOrderPipeline>>["autoReply"]
+        | undefined;
+
+      if (sendAutoReply) {
+        const pipeline = await runPostCreateOrderPipeline({
+          orderId,
+          body,
+          prisma: ordersPrisma,
+          tenantId,
+          actorUserId: s.sub,
+          actorRole: s.role,
+        });
+        kaitenSyncError = pipeline.kaitenSyncError;
+        autoReply = pipeline.autoReply;
+        if (body.waitForKaitenBeforePrint === true && kaitenSyncError) {
+          return NextResponse.json({
+            ...result.order,
+            kaitenPrintSyncError: kaitenSyncError,
+            ...(autoReply ? { autoReply } : {}),
+          });
+        }
+      } else if (needsKaiten) {
+        if (awaitKaiten) {
+          const kaiten = await syncKaitenAfterOrderCreate(orderId, ordersPrisma);
+          kaitenSyncError = kaiten.kaitenSyncError;
+          if (body.waitForKaitenBeforePrint === true && kaitenSyncError) {
             return NextResponse.json({
               ...result.order,
-              kaitenPrintSyncError,
+              kaitenPrintSyncError: kaitenSyncError,
             });
           }
         } else {
-          after(syncKaiten);
+          after(() =>
+            syncKaitenAfterOrderCreate(orderId, ordersPrisma).catch((e) => {
+              logger.error({ err: e, orderId }, "POST /api/orders kaiten background");
+            }),
+          );
         }
       }
+
       return NextResponse.json({
         ...result.order,
-        ...(result.autoReply ? { autoReply: result.autoReply } : {}),
+        ...(kaitenSyncError && !body.waitForKaitenBeforePrint
+          ? { kaitenSyncError }
+          : {}),
+        ...(autoReply ? { autoReply } : {}),
       });
     } catch (e) {
       logger.error({ err: e, msg: "order_create_failed" }, "POST /api/orders");

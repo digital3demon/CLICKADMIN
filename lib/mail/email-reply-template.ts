@@ -3,11 +3,21 @@ export type EmailReplyTemplateContext = {
   patientName: string;
   doctorName: string;
   clinicName: string;
+  clinicAddress: string;
   dueDate: string;
   appointmentDate: string;
   originalSubject: string;
   originalFrom: string;
 };
+
+export const EMAIL_REPLY_TEMPLATE_QUICK_INSERT = [
+  { label: "Номер наряда", token: "{{orderNumber}}" },
+  { label: "Адрес", token: "{{clinicAddress}}" },
+  { label: "Доктор", token: "{{doctorName}}" },
+  { label: "Клиника", token: "{{clinicName}}" },
+  { label: "Пациент", token: "{{patientName}}" },
+  { label: "Лабораторный срок", token: "{{dueDate}}" },
+] as const;
 
 const PLACEHOLDER_RE = /\{\{(\w+)\}\}/g;
 
@@ -48,4 +58,14 @@ export function defaultReplySubject(originalSubject: string): string {
   const trimmed = originalSubject.trim();
   if (!trimmed) return "Re: Ваш заказ";
   return /^re:\s/i.test(trimmed) ? trimmed : `Re: ${trimmed}`;
+}
+
+/** Подстановка номера наряда в уже отредактированный текст ответа. */
+export function substituteOrderNumberPlaceholders(
+  text: string,
+  orderNumber: string,
+): string {
+  const num = orderNumber.trim();
+  if (!num) return text;
+  return text.replace(/\{\{orderNumber\}\}/g, num);
 }

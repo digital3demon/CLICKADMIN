@@ -83,6 +83,10 @@ import {
   type KaitenSavePayload,
 } from "./KaitenPreflightModal";
 import {
+  OrderAutoReplyPreflightPanel,
+  type AutoReplyPreflightState,
+} from "./OrderAutoReplyPreflightPanel";
+import {
   NewOrderDuplicatePreflightModal,
   type ContinuationParent,
   type DuplicateGateState,
@@ -277,6 +281,26 @@ export function NewOrderForm({
   const [replyToSourceEmailId, setReplyToSourceEmailId] = useState(
     () => sourceEmails[0]?.id ?? "",
   );
+  const [sendAutoReply, setSendAutoReply] = useState(true);
+  const [autoReplyPreflight, setAutoReplyPreflight] = useState<AutoReplyPreflightState>({
+    sendReply: true,
+    draft: null,
+    canSendReply: false,
+    loading: false,
+    hint: null,
+  });
+  const lastSaveAttemptRef = useRef<{
+    kaiten: KaitenSavePayload;
+    printAfterSave: boolean;
+    sendReply: boolean;
+    draft: { subject: string; html: string } | null;
+  } | null>(null);
+  const lastSavedOrderRef = useRef<{
+    id: string;
+    orderNumber: string;
+    replyToSourceEmailId: string;
+    draft: { subject: string; html: string };
+  } | null>(null);
   const [nextOrderPreview, setNextOrderPreview] = useState<string | null>(null);
   const [correctionTrack, setCorrectionTrack] =
     useState<OrderCorrectionTrackValue | null>(null);
@@ -338,6 +362,17 @@ export function NewOrderForm({
   ]);
 
   const effectiveClinicIdForPrice = effectiveFinanceClinic?.id ?? null;
+
+  const selectedReplyEmail = useMemo(
+    () => sourceEmails.find((email) => email.id === replyToSourceEmailId) ?? null,
+    [sourceEmails, replyToSourceEmailId],
+  );
+
+  const replyActionsEnabled =
+    sourceEmails.length > 0 &&
+    sendAutoReply &&
+    autoReplyPreflight.canSendReply &&
+    Boolean(autoReplyPreflight.draft);
 
   const maxLeadWorkingDaysFromPriceLines = useMemo(() => {
     let maxLead: number | null = null;
@@ -981,7 +1016,25 @@ export function NewOrderForm({
   ]);
 
   const performSave = useCallback(
-    async (kaiten: KaitenSavePayload, printAfterSave = false) => {
+    async (
+      kaiten: KaitenSavePayload,
+      opts?: {
+        printPdf?: boolean;
+        autoReply?: { send: boolean; subject: string; html: string };
+      },
+    ) => {
+      const printAfterSave = opts?.printPdf === true;
+      const replySend = opts?.autoReply?.send === true;
+      const replyDraft = replySend ? opts?.autoReply : null;
+      lastSaveAttemptRef.current = {
+        kaiten,
+        printAfterSave,
+        sendReply: replySend,
+        draft: replyDraft
+          ? { subject: replyDraft.subject, html: replyDraft.html }
+          : null,
+      };
+
       const appointmentIso = isTestOrder
         ? null
         : localDateTimeToIso(snapDatetimeLocalToDueGrid(patientAppointmentLocal));
@@ -1059,6 +1112,13 @@ export function NewOrderForm({
             ...(sourceEmails.length > 0 && replyToSourceEmailId
               ? { replyToSourceEmailId }
               : {}),
+            ...(replySend && replyDraft
+              ? {
+                  sendAutoReply: true,
+                  autoReplySubject: replyDraft.subject,
+                  autoReplyHtml: replyDraft.html,
+                }
+              : {}),
             correctionTrack: correctionTrack ?? null,
             correctionReason:
               correctionTrack != null ? correctionReason.trim() || null : null,
@@ -1097,6 +1157,7 @@ export function NewOrderForm({
           id?: string;
           orderNumber?: string;
           kaitenPrintSyncError?: string | null;
+          kaitenSyncError?: string | null;
           autoReply?:
             | { ok: true; to: string }
             | { ok: false; error: string }
@@ -1104,7 +1165,31 @@ export function NewOrderForm({
           error?: string;
         };
         if (!res.ok) {
+          const label = nextOrderPreview ?? "…";
           setSaveError(data.error ?? "Ошибка сохранения");
+          toast.error(`${label} ошибка сохранения/отправки`, {
+            description: data.error ?? "Ошибка сохранения",
+            duration: 0,
+            action: {
+              label: "Повторить",
+              onClick: () => {
+                const attempt = lastSaveAttemptRef.current;
+                if (!attempt) return;
+                void performSave(attempt.kaiten, {
+                  printPdf: attempt.printAfterSave,
+                  ...(attempt.sendReply && attempt.draft
+                    ? {
+                        autoReply: {
+                          send: true,
+                          subject: attempt.draft.subject,
+                          html: attempt.draft.html,
+                        },
+                      }
+                    : {}),
+                });
+              },
+            },
+          });
           return;
         }
         const newId = data.id;
@@ -1117,6 +1202,115 @@ export function NewOrderForm({
             `Наряд сохранён, но карточка Kaiten не создана для печати QR: ${data.kaitenPrintSyncError}`,
           );
           return;
+        }
+
+        const orderNumberLabel = data.orderNumber ?? nextOrderPreview ?? "…";
+        const kaitenFailed =
+          replySend &&
+          Boolean(data.kaitenSyncError || data.kaitenPrintSyncError);
+        const replyFailed =
+          replySend &&
+          data.autoReply &&
+          !("ok" in data.autoReply && data.autoReply.ok);
+        const replyOk =
+          replySend &&
+          data.autoReply &&
+          "ok" in data.autoReply &&
+          data.autoReply.ok;
+
+        if (kaitenFailed || replyFailed) {
+          const desc =
+            data.kaitenSyncError ??
+            data.kaitenPrintSyncError ??
+            (data.autoReply && "error" in data.autoReply
+              ? data.autoReply.error
+              : data.autoReply && "skipped" in data.autoReply
+                ? data.autoReply.reason
+                : "Не удалось отправить ответ");
+          if (replyDraft && replyToSourceEmailId) {
+            lastSavedOrderRef.current = {
+              id: newId,
+              orderNumber: orderNumberLabel,
+              replyToSourceEmailId,
+              draft: { subject: replyDraft.subject, html: replyDraft.html },
+            };
+          }
+          setSaveError(desc);
+          toast.error(`${orderNumberLabel} ошибка сохранения/отправки`, {
+            description: desc,
+            duration: 0,
+            action: {
+              label: "Повторить",
+              onClick: () => {
+                const saved = lastSavedOrderRef.current;
+                if (saved && replyFailed && !kaitenFailed) {
+                  void fetch(`/api/orders/${saved.id}/auto-reply`, {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      replyToSourceEmailId: saved.replyToSourceEmailId,
+                      autoReplySubject: saved.draft.subject,
+                      autoReplyHtml: saved.draft.html,
+                    }),
+                  })
+                    .then(async (r) => {
+                      const j = (await r.json()) as {
+                        autoReply?:
+                          | { ok: true }
+                          | { ok: false; error: string }
+                          | { skipped: true; reason: string };
+                        error?: string;
+                      };
+                      if (
+                        r.ok &&
+                        j.autoReply &&
+                        "ok" in j.autoReply &&
+                        j.autoReply.ok
+                      ) {
+                        toast.success(
+                          `${saved.orderNumber} сохранено и отвечено успешно`,
+                        );
+                        return;
+                      }
+                      const err =
+                        j.error ??
+                        (j.autoReply && "error" in j.autoReply
+                          ? j.autoReply.error
+                          : j.autoReply && "skipped" in j.autoReply
+                            ? j.autoReply.reason
+                            : "Ошибка отправки");
+                      toast.error(`${saved.orderNumber} ошибка сохранения/отправки`, {
+                        description: err,
+                        duration: 0,
+                      });
+                    })
+                    .catch(() => {
+                      toast.error(`${saved.orderNumber} ошибка сохранения/отправки`, {
+                        description: "Сеть недоступна",
+                        duration: 0,
+                      });
+                    });
+                  return;
+                }
+                const attempt = lastSaveAttemptRef.current;
+                if (!attempt) return;
+                void performSave(attempt.kaiten, {
+                  printPdf: attempt.printAfterSave,
+                  ...(attempt.sendReply && attempt.draft
+                    ? {
+                        autoReply: {
+                          send: true,
+                          subject: attempt.draft.subject,
+                          html: attempt.draft.html,
+                        },
+                      }
+                    : {}),
+                });
+              },
+            },
+          });
+          if (kaitenFailed) return;
         }
         if (pendingFiles.length > 0) {
           const filesToUpload = [...pendingFiles];
@@ -1160,14 +1354,12 @@ export function NewOrderForm({
         if (quickOrder.tiles.length > 0) {
           saveQuickOrderTemplate(quickOrder);
         }
-        if (data.autoReply) {
-          if ("ok" in data.autoReply && data.autoReply.ok) {
-            toast.success(`Ответ по шаблону отправлен на ${data.autoReply.to}`);
-          } else if ("skipped" in data.autoReply && data.autoReply.skipped) {
-            toast.warning(`Автоответ не отправлен: ${data.autoReply.reason}`);
-          } else if ("error" in data.autoReply) {
-            toast.error(`Не удалось отправить автоответ: ${data.autoReply.error}`);
-          }
+        if (replyOk) {
+          toast.success(`${orderNumberLabel} сохранено и отвечено успешно`);
+        } else if (!replySend) {
+          toast.success(`${orderNumberLabel} сохранено успешно`);
+        } else if (!replyFailed && !kaitenFailed) {
+          toast.success(`${orderNumberLabel} сохранено успешно`);
         }
         setKaitenModalOpen(false);
         setContinuationChoice(null);
@@ -1175,6 +1367,30 @@ export function NewOrderForm({
         onAfterSuccessfulSave();
       } catch {
         setSaveError("Сеть недоступна или сервер не отвечает");
+        const label = nextOrderPreview ?? "…";
+        toast.error(`${label} ошибка сохранения/отправки`, {
+          description: "Сеть недоступна или сервер не отвечает",
+          duration: 0,
+          action: {
+            label: "Повторить",
+            onClick: () => {
+              const attempt = lastSaveAttemptRef.current;
+              if (!attempt) return;
+              void performSave(attempt.kaiten, {
+                printPdf: attempt.printAfterSave,
+                ...(attempt.sendReply && attempt.draft
+                  ? {
+                      autoReply: {
+                        send: true,
+                        subject: attempt.draft.subject,
+                        html: attempt.draft.html,
+                      },
+                    }
+                  : {}),
+              });
+            },
+          },
+        });
       } finally {
         setSaving(false);
       }
@@ -1214,6 +1430,8 @@ export function NewOrderForm({
       replyToSourceEmailId,
       sourceEmails,
       pendingFiles,
+      nextOrderPreview,
+      sendAutoReply,
       router,
       onAfterSuccessfulSave,
     ],
@@ -1315,8 +1533,46 @@ export function NewOrderForm({
           onKaitenCancelCollapse();
         }}
         onConfirm={(payload, opts) => {
-          void performSave(payload, opts?.printPdf === true);
+          const draft = autoReplyPreflight.draft;
+          void performSave(payload, {
+            printPdf: opts?.printPdf === true,
+            ...(sendAutoReply && draft
+              ? {
+                  autoReply: {
+                    send: true,
+                    subject: draft.subject,
+                    html: draft.html,
+                  },
+                }
+              : {}),
+          });
         }}
+        replyActionsEnabled={replyActionsEnabled}
+        replyAside={
+          sourceEmails.length > 0 ? (
+            <OrderAutoReplyPreflightPanel
+              open={kaitenModalOpen}
+              sourceEmail={selectedReplyEmail}
+              orderNumberPreview={nextOrderPreview ?? "…"}
+              patientName={patientName}
+              doctorName={selectedDoctorForIp?.fullName ?? ""}
+              clinicName={
+                selectedClinic?.name ??
+                (clinicId === ORDER_CLINIC_PRIVATE ? "Частное лицо" : "")
+              }
+              clinicAddress={
+                selectedClinic?.address?.trim() ??
+                effectiveFinanceClinic?.address?.trim() ??
+                ""
+              }
+              dueDateLocal={workDueLocal}
+              appointmentLocal={patientAppointmentLocal}
+              sendReply={sendAutoReply}
+              onSendReplyChange={setSendAutoReply}
+              onStateChange={setAutoReplyPreflight}
+            />
+          ) : undefined
+        }
       />
       {addClientOpen ? (
         <MobileAwareDialog

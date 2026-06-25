@@ -128,13 +128,18 @@ export type CreateOrderBody = {
   sourceEmailIds?: string[];
   /** Письмо-получатель автоответа по шаблону; должно входить в sourceEmailIds. */
   replyToSourceEmailId?: string | null;
+  /** Отправить ответ после save (+ Kaiten при необходимости). */
+  sendAutoReply?: boolean;
+  autoReplySubject?: string | null;
+  autoReplyHtml?: string | null;
 };
 
 export type CreateOrderResult =
   | {
       ok: true;
       order: CreatedOrder;
-      autoReply?: import("@/lib/mail/order-auto-reply").OrderAutoReplyResult;
+      /** Id письма для ответа (если задано в body). */
+      replyToSourceEmailId?: string | null;
     }
   | { ok: false; status: number; error: string };
 
@@ -538,15 +543,11 @@ export async function createOrderFromBody(
         ),
       ).slice(0, 20)
     : [];
-  let autoReply:
-    | import("@/lib/mail/order-auto-reply").OrderAutoReplyResult
-    | undefined;
+  const replyToSourceEmailId = resolveReplyToSourceEmailId(
+    sourceEmailIds,
+    body.replyToSourceEmailId,
+  );
   if (sourceEmailIds.length > 0) {
-    const { sendOrderAutoReply } = await import("@/lib/mail/order-auto-reply");
-    const replyToSourceEmailId = resolveReplyToSourceEmailId(
-      sourceEmailIds,
-      body.replyToSourceEmailId,
-    );
     if (sourceEmailIds.length > 1 && !replyToSourceEmailId) {
       return fail(400, "Выберите письмо для автоответа по шаблону");
     }
@@ -566,16 +567,6 @@ export async function createOrderFromBody(
           skipDuplicates: true,
         });
       }
-      if (replyToSourceEmailId && opts.actorUserId) {
-        autoReply = await sendOrderAutoReply({
-          db: ordersPrisma,
-          tenantId,
-          userId: opts.actorUserId,
-          role: opts.actorRole?.trim() || "OWNER",
-          orderId: order.id,
-          replyToSourceEmailId,
-        });
-      }
     } catch (e) {
       logger.error({ err: e, orderId: order.id, sourceEmailIds }, "order_source_email_link_failed");
     }
@@ -588,5 +579,9 @@ export async function createOrderFromBody(
     ...(continuesFromOrderId ? { continuesFromOrderId } : {}),
   });
 
-  return { ok: true, order, ...(autoReply ? { autoReply } : {}) };
+  return {
+    ok: true,
+    order,
+    ...(replyToSourceEmailId ? { replyToSourceEmailId } : {}),
+  };
 }

@@ -26,6 +26,7 @@ export type PanelSnapshotGetter = () => OrderDraftSnapshot;
 
 export type OrderSourceEmail = {
   id: string;
+  accountId: string;
   subject: string | null;
   fromName: string | null;
   fromAddress: string | null;

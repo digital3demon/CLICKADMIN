@@ -815,6 +815,7 @@ model EmailAccount {
   rules         EmailRule[]
   syncJobs      EmailSyncJob[]
   replyTemplate EmailReplyTemplate?
+  replyTemplateAssets EmailReplyTemplateAsset[]
 
   @@unique([tenantId, createdByUserId, email])
   @@index([tenantId, isActive])
@@ -964,6 +965,29 @@ model EmailReplyTemplate {
   updatedAt       DateTime     @updatedAt
 
   @@index([tenantId, accountId])
+}
+
+enum EmailReplyTemplateAssetKind {
+  INLINE_IMAGE
+  ATTACHMENT
+}
+
+/// Файлы шаблона ответа: картинки (CID в HTML) и вложения к каждому автоответу.
+model EmailReplyTemplateAsset {
+  id        String                      @id @default(cuid())
+  tenantId  String
+  accountId String
+  account   EmailAccount                @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  fileName  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  kind      EmailReplyTemplateAssetKind
+  contentId String
+  createdAt DateTime                    @default(now())
+
+  @@index([tenantId, accountId])
+  @@index([accountId, kind])
 }
 
 /// Правило обработки входящей почты. Условия/действия — JSON-контракт UI; применяется при синхронизации.

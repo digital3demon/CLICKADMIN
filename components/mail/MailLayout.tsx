@@ -925,6 +925,7 @@ export function MailLayout() {
       const opened = openNewOrder({
         sourceEmails: details.map((email) => ({
           id: email.id,
+          accountId: email.accountId,
           subject: email.subject,
           fromName: email.fromName,
           fromAddress: email.fromAddress,

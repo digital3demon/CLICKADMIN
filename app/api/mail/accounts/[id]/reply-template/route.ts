@@ -46,7 +46,7 @@ export async function PUT(
       {
         subjectTemplate: stringField(body.subjectTemplate, 500),
         htmlTemplate: stringField(body.htmlTemplate, 300_000),
-        isEnabled: body.isEnabled !== false,
+        ...(typeof body.isEnabled === "boolean" ? { isEnabled: body.isEnabled } : {}),
       },
     );
     return NextResponse.json({ template });

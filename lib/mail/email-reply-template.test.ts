@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultReplySubject,
   renderEmailReplyTemplate,
+  substituteOrderNumberPlaceholders,
   type EmailReplyTemplateContext,
 } from "@/lib/mail/email-reply-template";
 import { resolveReplyToSourceEmailId } from "@/lib/mail/email-reply-template";
@@ -11,6 +12,7 @@ const baseContext: EmailReplyTemplateContext = {
   patientName: "Иванова М. А.",
   doctorName: "Петров П. П.",
   clinicName: "Клиника «Альфа»",
+  clinicAddress: "ул. Ленина, 1",
   dueDate: "27.05.2026",
   appointmentDate: "28.05.2026 10:00",
   originalSubject: "Новочеркасская Невский ДД",
@@ -32,6 +34,11 @@ describe("renderEmailReplyTemplate", () => {
       clinicName: "",
     });
     expect(out).toBe("Клиника: ");
+  });
+
+  it("подставляет адрес клиники", () => {
+    const out = renderEmailReplyTemplate("Адрес: {{clinicAddress}}", baseContext);
+    expect(out).toBe("Адрес: ул. Ленина, 1");
   });
 
   it("экранирует HTML при html=true", () => {
@@ -64,5 +71,13 @@ describe("defaultReplySubject", () => {
 
   it("не дублирует Re:", () => {
     expect(defaultReplySubject("Re: Уже ответ")).toBe("Re: Уже ответ");
+  });
+});
+
+describe("substituteOrderNumberPlaceholders", () => {
+  it("подставляет номер в плейсхолдер", () => {
+    expect(
+      substituteOrderNumberPlaceholders("№ {{orderNumber}}", "178"),
+    ).toBe("№ 178");
   });
 });
