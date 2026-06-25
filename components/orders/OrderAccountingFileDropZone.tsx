@@ -2,8 +2,8 @@
 
 import { useCallback, useRef, useState } from "react";
 import {
-  looksLikePaymentSlipFile,
-  looksLikePdfFile,
+  looksLikePdfFileDeep,
+  looksLikePaymentSlipFileDeep,
 } from "@/lib/order-accounting-upload-file-kind";
 import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
 import {
@@ -27,10 +27,13 @@ type Props = {
   onHint?: (msg: string | null) => void;
 };
 
-function fileMatchesKind(file: File, kind: OrderAccountingDropKind): boolean {
+async function fileMatchesKind(
+  file: File,
+  kind: OrderAccountingDropKind,
+): Promise<boolean> {
   return kind === "invoice"
-    ? looksLikePdfFile(file)
-    : looksLikePaymentSlipFile(file);
+    ? looksLikePdfFileDeep(file)
+    : looksLikePaymentSlipFileDeep(file);
 }
 
 function kindMismatchHint(kind: OrderAccountingDropKind): string {
@@ -87,7 +90,7 @@ export function OrderAccountingFileDropZone({
         for (let i = 0; i < arr.length; i++) {
           const file = arr[i]!;
           if (i > 0) await new Promise((r) => setTimeout(r, 70));
-          if (!fileMatchesKind(file, kind)) {
+          if (!(await fileMatchesKind(file, kind))) {
             setHint(kindMismatchHint(kind));
             continue;
           }
@@ -212,6 +215,7 @@ export function OrderAccountingFileDropZone({
       />
       <div
         ref={zoneRef}
+        data-order-accounting-upload="true"
         tabIndex={disabled ? -1 : 0}
         role="button"
         aria-busy={busy}
@@ -233,6 +237,7 @@ export function OrderAccountingFileDropZone({
           const fl = e.clipboardData?.files;
           if (fl?.length) {
             e.preventDefault();
+            e.stopPropagation();
             void uploadFiles(fl);
           }
         }}

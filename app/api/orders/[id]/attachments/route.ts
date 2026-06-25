@@ -10,7 +10,7 @@ import {
   isProbablyPdf,
 } from "@/lib/invoice-number-extract";
 import {
-  pushAttachmentToKaiten,
+  pushAttachmentToKaitenWithCardWait,
   removeAttachmentFromKaitenIfAny,
 } from "@/lib/kaiten-sync";
 import {
@@ -482,23 +482,13 @@ export async function POST(req: Request, ctx: Ctx) {
       if (!deferredSkipKaitenPush) {
         await sleepMs(35 + Math.floor(Math.random() * 140));
         try {
-          await pushAttachmentToKaiten(
+          await pushAttachmentToKaitenWithCardWait(
             deferredOrderId,
             deferredAttachmentId,
             db,
           );
         } catch (e) {
           console.error("[attachments deferred] Kaiten push attachment", e);
-          await sleepMs(2200 + Math.floor(Math.random() * 900));
-          try {
-            await pushAttachmentToKaiten(
-              deferredOrderId,
-              deferredAttachmentId,
-              db,
-            );
-          } catch (e2) {
-            console.error("[attachments deferred] Kaiten push attachment retry", e2);
-          }
         }
       }
       if (!deferredTryPdfInvoice) return;

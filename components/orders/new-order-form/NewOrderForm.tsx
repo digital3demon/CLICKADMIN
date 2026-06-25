@@ -1120,6 +1120,7 @@ export function NewOrderForm({
         }
         if (pendingFiles.length > 0) {
           const filesToUpload = [...pendingFiles];
+          setPendingFiles([]);
           const normalized = normalizeOrderAttachmentUploadQueue(
             filesToUpload,
             CRM_UPLOAD_MAX_BYTES,
@@ -1142,7 +1143,6 @@ export function NewOrderForm({
                 orderNumber: data.orderNumber ?? null,
                 files: uploadQueue,
               });
-              setPendingFiles([]);
             } catch (e) {
               const msg =
                 e instanceof Error && e.message.trim()

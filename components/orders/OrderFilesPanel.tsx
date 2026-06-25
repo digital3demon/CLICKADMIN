@@ -14,6 +14,10 @@ import {
   listQueuedOrderAttachmentFiles,
   type QueuedOrderAttachmentMeta,
 } from "@/lib/order-attachment-background-queue";
+import {
+  isInsideOrderAccountingUploadZone,
+  shouldHandleOrderFilesGlobalPaste,
+} from "@/lib/order-files-paste-target";
 
 const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 
@@ -213,6 +217,7 @@ export function OrderFilesPanel({
     null,
   );
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRootRef = useRef<HTMLDivElement>(null);
   const listInFlightRef = useRef(false);
   const nextListPollAllowedAtRef = useRef(0);
   const listErrorBackoffMsRef = useRef(0);
@@ -380,6 +385,9 @@ export function OrderFilesPanel({
     const onPaste = (e: ClipboardEvent) => {
       const files = e.clipboardData?.files;
       if (!files?.length) return;
+      if (isInsideOrderAccountingUploadZone(e.target)) return;
+      const root = panelRootRef.current;
+      if (!root || !shouldHandleOrderFilesGlobalPaste(root)) return;
       e.preventDefault();
       if (orderId) void uploadServer(files);
       else addPending(files);
@@ -537,7 +545,7 @@ export function OrderFilesPanel({
   }, [imageViewer]);
 
   return (
-    <div className="space-y-4">
+    <div ref={panelRootRef} className="space-y-4">
       <div
         tabIndex={0}
         role="group"

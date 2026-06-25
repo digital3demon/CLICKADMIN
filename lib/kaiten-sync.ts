@@ -18,6 +18,13 @@ export class KaitenRateLimitError extends Error {
   }
 }
 
+export class KaitenCardNotReadyError extends Error {
+  constructor() {
+    super("Kaiten card not linked yet");
+    this.name = "KaitenCardNotReadyError";
+  }
+}
+
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -104,7 +111,7 @@ export async function pushAttachmentToKaiten(
     select: { kaitenCardId: true },
   });
   if (!order?.kaitenCardId) {
-    return;
+    throw new KaitenCardNotReadyError();
   }
 
   const att = await prisma.orderAttachment.findUnique({
@@ -180,6 +187,31 @@ export async function pushAttachmentToKaiten(
       }
     }
     await sleepMs(Math.max(300, wait));
+  }
+}
+
+/**
+ * Ждёт появления kaitenCardId (файлы часто приходят раньше карточки) и пушит вложение.
+ */
+export async function pushAttachmentToKaitenWithCardWait(
+  orderId: string,
+  attachmentId: string,
+  db?: PrismaClient,
+  options?: { maxWaitMs?: number },
+): Promise<void> {
+  const maxWaitMs = options?.maxWaitMs ?? 90_000;
+  const started = Date.now();
+  let delayMs = 400;
+  while (true) {
+    try {
+      await pushAttachmentToKaiten(orderId, attachmentId, db);
+      return;
+    } catch (e) {
+      if (!(e instanceof KaitenCardNotReadyError)) throw e;
+      if (Date.now() - started >= maxWaitMs) return;
+      await sleepMs(delayMs);
+      delayMs = Math.min(Math.round(delayMs * 1.45), 5000);
+    }
   }
 }
 
