@@ -248,3 +248,37 @@ export function mapOrderToExportV2Row(order: OrderExportV2Input): string[] {
 export function orderExportV2ColumnCount(): number {
   return ORDER_EXPORT_V2_HEADERS.length;
 }
+
+/** ARGB заливки шапки (строка 1) — из эталонного xlsx «таблица шаблон выгрузки». */
+export const ORDER_EXPORT_V2_HEADER_FILLS = [
+  "FFC3D69B", // A Зашла
+  "FFC3D69B", // B Оформил
+  "FF8CB3E4", // C Занес
+  "FFB97135", // D Номер наряда
+  "FFFAC090", // E Пациент
+  "FFFAC090", // F Доктор
+  "FFFAC090", // G Клиника
+  "FFD99694", // H Заказ, расшифровка
+  "FF93CDDD", // I Протетика
+  "FF93CDDD", // J Что еще есть к работе
+  "FF93CDDD", // K Комментарий от админов
+  "FFB9CDE5", // L Дата лабораторная
+  "FFC3D69B", // M Прием
+  "FFC3D69B", // N Время
+  "FFE6B9B8", // O Отгружено
+  "FFFAC090", // P Реквизиты контрагента
+  "FFD8D8D8", // Q Номер Счета
+  "FFD99694", // R Оплата
+  "FFD99694", // S Сверка
+  "FFE6B9B8", // T Выставлено
+  "FFD99694", // U Сумма
+  "FFD99694", // V Карточка в кайтен/канбан
+] as const;
+
+/** Ширины колонок из эталонного xlsx. */
+export const ORDER_EXPORT_V2_COLUMN_WIDTHS = [
+  17.36, 27.18, 31.91, 9.0, 10.73, 15.73, 20.0, 36.63, 15.82, 14.27, 31.0, 15.18,
+  10.36, 11.54, 15.27, 26.45, 12.0, 12.0, 20.0, 20.91, 26.91, 35.27,
+] as const;
+
+export const ORDER_EXPORT_V2_HEADER_ROW_HEIGHT = 29;

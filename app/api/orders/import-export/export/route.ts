@@ -14,20 +14,15 @@ import {
 } from "@/lib/order-import-export";
 import {
   mapOrderToExportV2Row,
+  ORDER_EXPORT_V2_COLUMN_WIDTHS,
+  ORDER_EXPORT_V2_HEADER_FILLS,
+  ORDER_EXPORT_V2_HEADER_ROW_HEIGHT,
   type OrderExportV2Construction,
   type OrderExportV2Input,
 } from "@/lib/order-export-v2";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const HEADER_FILL_C = "FF8CB3E4";
-const HEADER_FILL_Q = "FFD8D8D8";
-
-const COLUMN_WIDTHS = [
-  14, 14, 10, 12, 18, 16, 22, 24, 18, 20, 18, 12, 10, 8, 14, 26, 14, 12, 8, 36,
-  12, 14,
-];
 
 function thinBorder(): Partial<ExcelJS.Borders> {
   const side = { style: "thin" as const };
@@ -361,23 +356,17 @@ export async function GET(req: Request) {
   sheet.addRow([...ORDER_EXPORT_V2_HEADERS]);
 
   const headerRow = sheet.getRow(1);
-  headerRow.font = { bold: true };
+  headerRow.height = ORDER_EXPORT_V2_HEADER_ROW_HEIGHT;
   headerRow.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
   for (let col = 1; col <= ORDER_EXPORT_V2_HEADERS.length; col++) {
     const cell = headerRow.getCell(col);
     cell.border = thinBorder();
-    if (col === 3) {
+    const fillArgb = ORDER_EXPORT_V2_HEADER_FILLS[col - 1];
+    if (fillArgb) {
       cell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: HEADER_FILL_C },
-      };
-    }
-    if (col === 17) {
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: HEADER_FILL_Q },
+        fgColor: { argb: fillArgb },
       };
     }
   }
@@ -393,7 +382,7 @@ export async function GET(req: Request) {
 
   sheet.views = [{ state: "frozen", ySplit: 1, activeCell: "A2" }];
   sheet.columns.forEach((col, idx) => {
-    col.width = COLUMN_WIDTHS[idx] ?? 16;
+    col.width = ORDER_EXPORT_V2_COLUMN_WIDTHS[idx] ?? 16;
   });
 
   const buf = await workbook.xlsx.writeBuffer();

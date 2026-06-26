@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { userCanManageMailAccountSettings } from "@/lib/auth/permissions";
 import { canOpenMailSettingsModule } from "./mail-settings-access";
 
 vi.mock("@/lib/mail/mail-service", () => ({
@@ -28,5 +29,23 @@ describe("canOpenMailSettingsModule", () => {
     await expect(
       canOpenMailSettingsModule(db, "t1", "u1", "ADMINISTRATOR", { CONFIG_MAIL: false }),
     ).resolves.toBe(true);
+  });
+});
+
+describe("userCanManageMailAccountSettings", () => {
+  it("allows CONFIG_MAIL without per-mailbox settingsRoles", () => {
+    expect(
+      userCanManageMailAccountSettings("SENIOR_ADMINISTRATOR", [], { CONFIG_MAIL: true }),
+    ).toBe(true);
+  });
+
+  it("allows per-mailbox settingsRoles without CONFIG_MAIL", () => {
+    expect(
+      userCanManageMailAccountSettings(
+        "SENIOR_ADMINISTRATOR",
+        ["SENIOR_ADMINISTRATOR"],
+        { CONFIG_MAIL: false },
+      ),
+    ).toBe(true);
   });
 });

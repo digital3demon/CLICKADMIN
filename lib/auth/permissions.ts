@@ -1,4 +1,5 @@
 import type { AppModule, UserRole } from "@prisma/client";
+import { parseUserRole } from "@/lib/user-role-labels";
 
 /**
  * «Только канбан» в смысле навигации: нет модуля заказов, но есть канбан.
@@ -99,6 +100,21 @@ export function canAccessMailSettingsConfig(
 ): boolean {
   if (role === "OWNER") return true;
   return moduleAccess?.CONFIG_MAIL === true;
+}
+
+/**
+ * Правка папок, правил и шаблона для ящика:
+ * владелец, галочка CONFIG_MAIL в матрице или роль в settingsRoles ящика.
+ */
+export function userCanManageMailAccountSettings(
+  role: UserRole | string,
+  accountSettingsRoles: readonly string[] | null | undefined,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  const userRole = typeof role === "string" ? parseUserRole(role) : role;
+  if (!userRole) return false;
+  if (canAccessMailSettingsConfig(userRole, moduleAccess)) return true;
+  return (accountSettingsRoles ?? []).includes(userRole);
 }
 
 /** Редактирование шаблонов этикеток и сохранение настроек печати. */

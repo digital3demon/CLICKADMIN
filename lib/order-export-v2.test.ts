@@ -8,6 +8,8 @@ import {
   formatRequisitesTemplateStyle,
   formatShippedCell,
   mapOrderToExportV2Row,
+  ORDER_EXPORT_V2_COLUMN_WIDTHS,
+  ORDER_EXPORT_V2_HEADER_FILLS,
   orderExportV2ColumnCount,
   type OrderExportV2Input,
 } from "./order-export-v2";
@@ -92,6 +94,13 @@ describe("ORDER_EXPORT_V2_HEADERS", () => {
     expect(ORDER_EXPORT_V2_HEADERS[3]).toBe("Номер наряда");
     expect(ORDER_EXPORT_V2_HEADERS[19]).toBe("Выставлено");
     expect(orderExportV2ColumnCount()).toBe(22);
+  });
+
+  it("имеет заливку шапки для каждой колонки из эталона", () => {
+    expect(ORDER_EXPORT_V2_HEADER_FILLS).toHaveLength(22);
+    expect(ORDER_EXPORT_V2_HEADER_FILLS[2]).toBe("FF8CB3E4");
+    expect(ORDER_EXPORT_V2_HEADER_FILLS[16]).toBe("FFD8D8D8");
+    expect(ORDER_EXPORT_V2_COLUMN_WIDTHS).toHaveLength(22);
   });
 });
 

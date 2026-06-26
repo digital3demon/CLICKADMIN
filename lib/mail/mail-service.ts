@@ -14,7 +14,10 @@ import {
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
+import { userCanManageMailAccountSettings } from "@/lib/auth/permissions";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
+import type { AppModule } from "@prisma/client";
 import { encryptAppPassword } from "@/lib/mail/encryption";
 import {
   deleteMessage,
@@ -46,6 +49,7 @@ export type MailApiContext = {
   userId: string;
   role: string;
   db: PrismaClient;
+  moduleAccess: Record<AppModule, boolean>;
 };
 
 export type MailApiContextResult =
@@ -133,11 +137,13 @@ export async function assertMailSettingsManage(
   userId: string,
   role: string,
   accountId: string,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
 ): Promise<void> {
   const account = await requireMailSettingsAccountVisible(db, tenantId, userId, accountId, role);
-  if (role === UserRole.OWNER) return;
-  const normalizedRole = normalizeUserRole(role);
-  if (normalizedRole && account.settingsRoles.includes(normalizedRole)) return;
+  const access =
+    moduleAccess ??
+    (await getEffectiveModuleAccess(tenantId, role as UserRole));
+  if (userCanManageMailAccountSettings(role, account.settingsRoles, access)) return;
   throw new Error("MAIL_SETTINGS_ACCESS_FORBIDDEN");
 }
 
@@ -186,6 +192,7 @@ export async function getMailApiContext(): Promise<MailApiContextResult> {
       userId: session.sub,
       role: session.role,
       db: (await getOrdersPrisma()) as PrismaClient,
+      moduleAccess: await getEffectiveModuleAccess(tenantId, session.role),
     },
   };
 }
@@ -370,7 +377,12 @@ export async function listEmailAccounts(
   tenantId: string,
   userId: string,
   role: string,
-  options: { lite?: boolean; tree?: boolean; forSettings?: boolean } = {},
+  options: {
+    lite?: boolean;
+    tree?: boolean;
+    forSettings?: boolean;
+    moduleAccess?: Partial<Record<AppModule, boolean>> | null;
+  } = {},
 ) {
   const accountWhere = options.forSettings
     ? mailSettingsAccountWhere(tenantId, userId, role)
@@ -440,6 +452,15 @@ export async function listEmailAccounts(
       folders,
       labels: safeAccount.labels ?? [],
       hasPassword: Boolean(encryptedAppPassword),
+      ...(options.forSettings
+        ? {
+            canManageSettings: userCanManageMailAccountSettings(
+              role,
+              safeAccount.settingsRoles as string[] | undefined,
+              options.moduleAccess,
+            ),
+          }
+        : {}),
     };
   });
 }

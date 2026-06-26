@@ -21,6 +21,7 @@ export async function GET(req: Request) {
       lite: lite && !tree,
       tree,
       forSettings,
+      moduleAccess: r.ctx.moduleAccess,
     });
     return mailJsonResponse({ accounts, currentUser: { role: r.ctx.role } });
   } catch (err) {

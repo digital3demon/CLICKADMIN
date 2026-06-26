@@ -61,6 +61,7 @@ export type MailAccount = {
   allowedRoles: string[];
   settingsRoles: string[];
   hoverPreviewEnabled: boolean;
+  canManageSettings?: boolean;
   folders: MailFolder[];
   labels: MailLabel[];
   _count?: { emails: number };

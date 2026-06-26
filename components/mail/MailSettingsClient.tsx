@@ -254,7 +254,12 @@ export function MailSettingsClient() {
       setAccounts((prev) =>
         prev.map((item) =>
           item.id === nextAccountId
-            ? { ...item, folders: account.folders, labels: account.labels }
+            ? {
+                ...item,
+                folders: account.folders,
+                labels: account.labels,
+                canManageSettings: account.canManageSettings ?? item.canManageSettings,
+              }
             : item,
         ),
       );
@@ -276,12 +281,7 @@ export function MailSettingsClient() {
   }, []);
 
   const canManageAccountAccess = currentUserRole === "OWNER";
-  const canManageMailSettings =
-    canManageAccountAccess ||
-    Boolean(
-      currentUserRole &&
-        activeAccount?.settingsRoles?.includes(currentUserRole),
-    );
+  const canManageMailSettings = activeAccount?.canManageSettings === true;
 
   const customFolderCount = activeAccount?.folders.filter((folder) => folder.type === "CUSTOM").length ?? 0;
   const visibleFolders = useMemo(() => {
@@ -918,7 +918,9 @@ export function MailSettingsClient() {
           </div>
         ) : activeAccount ? (
           <div className="mt-5 rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4 text-sm text-[var(--text-secondary)]">
-            Доступ к этому ящику настраивает владелец.
+            Настройки правил и шаблонов для этого ящика недоступны. Нужна галочка «Конфиг:
+            почта» в матрице доступа или отметка вашей роли в колонке «Настройки почты» (её
+            выставляет владелец).
           </div>
         ) : null}
       </section>
