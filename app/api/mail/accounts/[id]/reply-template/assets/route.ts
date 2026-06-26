@@ -46,6 +46,7 @@ export async function POST(
     const asset = await createEmailReplyTemplateAsset(
       r.ctx.db,
       r.ctx.tenantId,
+      r.ctx.userId,
       r.ctx.role,
       id,
       {

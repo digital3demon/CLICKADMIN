@@ -37,6 +37,10 @@ export function mailErrorResponse(err: unknown, fallback = "Ошибка поч�
       status: 403,
       error: "Нет доступа к этому почтовому ящику",
     },
+    MAIL_SETTINGS_ACCESS_FORBIDDEN: {
+      status: 403,
+      error: "Нет доступа к настройкам этого почтового ящика",
+    },
     EMAIL_REPLY_TEMPLATE_ASSET_NOT_FOUND: {
       status: 404,
       error: "Файл шаблона не найден",

@@ -5,6 +5,7 @@ import {
   type FinanceOfficeOrderTableRow,
 } from "@/components/finance-office/FinanceOfficeOrdersTable";
 import { FinanceOfficeBankImportPanel } from "@/components/finance-office/FinanceOfficeBankImportPanel";
+import { FinanceOfficeQuickFilterChips } from "@/components/finance-office/FinanceOfficeQuickFilterChips";
 import {
   FinanceOfficeTabNav,
   type FinanceOfficeTab,
@@ -13,7 +14,7 @@ import { FinanceOfficePeriodForm } from "@/components/finance-office/FinanceOffi
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { fetchFinanceOfficeOrders } from "@/lib/fetch-finance-office-orders";
+import { fetchFinanceOfficeOrders, countFinanceOfficeQuickFilterChips } from "@/lib/fetch-finance-office-orders";
 import {
   humanListTagLabel,
   parseListTagParam,
@@ -136,14 +137,23 @@ export default async function FinanceOfficePage({
   }
 
   const shouldFetch = tab !== "period" || Boolean(start && endExclusive && !error);
-  const orders = shouldFetch
-    ? await fetchFinanceOfficeOrders(await getOrdersPrisma(), tenantId, {
+  const ordersPrisma = shouldFetch ? await getOrdersPrisma() : null;
+  const orders = ordersPrisma
+    ? await fetchFinanceOfficeOrders(ordersPrisma, tenantId, {
         listTag: rawTagInvalid ? null : rawTag,
         search: q,
         start,
         endExclusive,
       })
     : [];
+  const chipCounts =
+    ordersPrisma && shouldFetch && !error
+      ? await countFinanceOfficeQuickFilterChips(ordersPrisma, tenantId, {
+          search: q,
+          start,
+          endExclusive,
+        })
+      : { attentionCount: 0, prostheticsPendingCount: 0 };
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;
   const exportParams = new URLSearchParams();
   exportParams.set("tab", tab);
@@ -283,6 +293,17 @@ export default async function FinanceOfficePage({
     >
       <div className="w-full max-w-full space-y-4">
         {financeOfficeHeader}
+        {shouldFetch && !error ? (
+          <FinanceOfficeQuickFilterChips
+            attentionCount={chipCounts.attentionCount}
+            prostheticsPendingCount={chipCounts.prostheticsPendingCount}
+            activeFilter={parsedTag}
+            tab={tab}
+            periodFrom={fromRaw}
+            periodTo={toRaw}
+            q={q}
+          />
+        ) : null}
         <FinanceOfficeOrdersTable
           orders={error || (tab === "period" && !shouldFetch) ? [] : orders.map(serializeOrder)}
           activeTag={tagLabel}

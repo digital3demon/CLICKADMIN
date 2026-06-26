@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
+import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
+import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { hasMailSettingsPageAccess } from "@/lib/mail/mail-service";
 import {
   canAccessCostingModule,
   canManageUsers,
@@ -28,7 +31,16 @@ export default async function DirectoryHubPage() {
   const showCouriers = a?.CONFIG_COURIERS === true;
   const showOrdersImportExport = a?.CONFIG_ORDERS_IMPORT_EXPORT === true;
   const showContractTemplate = a?.CONFIG_CONTRACT_TEMPLATE === true;
-  const showMail = session?.role === "OWNER";
+  const tenantId = session ? await getTenantIdForSession(session) : null;
+  const showMail =
+    session != null &&
+    tenantId != null &&
+    (await hasMailSettingsPageAccess(
+      await getOrdersPrisma(),
+      tenantId,
+      session.sub,
+      session.role,
+    ));
   const showPrint = a?.CONFIG_PRINT === true;
   const showAppearance = a?.CONFIG_APPEARANCE === true;
   const showAccessMatrix =
@@ -186,7 +198,9 @@ export default async function DirectoryHubPage() {
               Почта
             </h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Подключение ящиков, роли доступа и правила обработки входящих писем.
+              {session?.role === "OWNER"
+                ? "Подключение ящиков, роли доступа и правила обработки входящих писем."
+                : "Папки, правила, метки и шаблон ответа для выбранных ящиков."}
             </p>
           </Link>
         ) : null}

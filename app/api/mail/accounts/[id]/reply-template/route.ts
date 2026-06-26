@@ -42,6 +42,7 @@ export async function PUT(
     const template = await upsertEmailReplyTemplate(
       r.ctx.db,
       r.ctx.tenantId,
+      r.ctx.userId,
       r.ctx.role,
       id,
       {

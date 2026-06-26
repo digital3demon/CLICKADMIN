@@ -93,6 +93,59 @@ function searchWhere(q: string): Prisma.OrderWhereInput {
   };
 }
 
+export function financeOfficeScopeWhere(
+  tenantId: string,
+  opts: {
+    search?: string | null;
+    start?: Date | null;
+    endExclusive?: Date | null;
+  } = {},
+): Prisma.OrderWhereInput {
+  const parts: Prisma.OrderWhereInput[] = [
+    { tenantId, archivedAt: null },
+    searchWhere(opts.search ?? ""),
+  ];
+  if (opts.start || opts.endExclusive) {
+    parts.push({
+      dueDate: {
+        ...(opts.start ? { gte: opts.start } : {}),
+        ...(opts.endExclusive ? { lt: opts.endExclusive } : {}),
+      },
+    });
+  }
+  return parts.length === 1 ? parts[0] : { AND: parts };
+}
+
+const pendingCorrectionsWhere = {
+  chatCorrections: {
+    some: { resolvedAt: null, rejectedAt: null },
+  },
+} satisfies Prisma.OrderWhereInput;
+
+const pendingProstheticsWhere = {
+  prostheticsOrdered: false,
+  prostheticsRequests: {
+    some: { resolvedAt: null, rejectedAt: null },
+  },
+} satisfies Prisma.OrderWhereInput;
+
+export async function countFinanceOfficeQuickFilterChips(
+  db: PrismaClient,
+  tenantId: string,
+  opts: {
+    search?: string | null;
+    start?: Date | null;
+    endExclusive?: Date | null;
+  } = {},
+): Promise<{ attentionCount: number; prostheticsPendingCount: number }> {
+  const scope = financeOfficeScopeWhere(tenantId, opts);
+  const [attentionCount, prostheticsPendingCount] = await Promise.all([
+    db.order.count({ where: { AND: [scope, pendingCorrectionsWhere] } }),
+    db.order.count({ where: { AND: [scope, pendingProstheticsWhere] } }),
+  ]);
+  return { attentionCount, prostheticsPendingCount };
+}
+
 function financePriority(row: FinanceOfficeOrderRow): number {
   if (row.listPendingChatCorrections) return 0;
   if (row.listPendingProstheticsRequests) return 1;
@@ -112,17 +165,12 @@ export async function fetchFinanceOfficeOrders(
 ): Promise<FinanceOfficeOrderRow[]> {
   const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
   const parts: Prisma.OrderWhereInput[] = [
-    { tenantId, archivedAt: null },
-    searchWhere(opts.search ?? ""),
+    financeOfficeScopeWhere(tenantId, {
+      search: opts.search,
+      start: opts.start,
+      endExclusive: opts.endExclusive,
+    }),
   ];
-  if (opts.start || opts.endExclusive) {
-    parts.push({
-      dueDate: {
-        ...(opts.start ? { gte: opts.start } : {}),
-        ...(opts.endExclusive ? { lt: opts.endExclusive } : {}),
-      },
-    });
-  }
   if (parsedTag) {
     parts.push(
       parsedTag.kind === "orderAttention"

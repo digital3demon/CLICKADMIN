@@ -792,6 +792,8 @@ model EmailAccount {
   createdByUserId      String?
   /// Роли, которым владелец разрешил видеть и использовать ящик.
   allowedRoles         UserRole[] @default([OWNER])
+  /// Роли, которым можно редактировать папки, правила, метки и шаблон ответа.
+  settingsRoles        UserRole[] @default([])
   email                String
   displayName          String?
   encryptedAppPassword String?

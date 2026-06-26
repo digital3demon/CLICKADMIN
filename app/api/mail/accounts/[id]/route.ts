@@ -39,6 +39,7 @@ export async function PATCH(
       id,
       body.allowedRoles,
       body.hoverPreviewEnabled,
+      body.settingsRoles,
     );
     return NextResponse.json({ account });
   } catch (err) {

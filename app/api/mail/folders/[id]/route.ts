@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { jsonBody, mailErrorResponse, mailJsonResponse } from "@/app/api/mail/_utils";
 import {
+  assertMailSettingsManage,
   getMailApiContext,
-  mailAccountAccessWhere,
+  mailSettingsAccountAccessWhere,
   normalizeMailColor,
   stringField,
   toMailFolderDto,
@@ -28,13 +29,20 @@ export async function PATCH(
       where: {
         id,
         tenantId: r.ctx.tenantId,
-        account: mailAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
+        account: mailSettingsAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
       },
-      select: { id: true, type: true },
+      select: { id: true, type: true, accountId: true },
     });
     if (!current) {
       return NextResponse.json({ error: "Папка не найдена" }, { status: 404 });
     }
+    await assertMailSettingsManage(
+      r.ctx.db,
+      r.ctx.tenantId,
+      r.ctx.userId,
+      r.ctx.role,
+      current.accountId,
+    );
     const folder = await r.ctx.db.emailFolder.update({
       where: { id: current.id },
       data: {
@@ -56,12 +64,29 @@ export async function DELETE(
   if (!r.ok) return r.response;
   try {
     const { id } = await params;
-    await r.ctx.db.emailFolder.deleteMany({
+    const current = await r.ctx.db.emailFolder.findFirst({
       where: {
         id,
         tenantId: r.ctx.tenantId,
         type: "CUSTOM",
-        account: mailAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
+        account: mailSettingsAccountAccessWhere(r.ctx.tenantId, r.ctx.userId, r.ctx.role),
+      },
+      select: { id: true, accountId: true },
+    });
+    if (!current) {
+      return NextResponse.json({ error: "Папка не найдена" }, { status: 404 });
+    }
+    await assertMailSettingsManage(
+      r.ctx.db,
+      r.ctx.tenantId,
+      r.ctx.userId,
+      r.ctx.role,
+      current.accountId,
+    );
+    await r.ctx.db.emailFolder.deleteMany({
+      where: {
+        id: current.id,
+        tenantId: r.ctx.tenantId,
       },
     });
     return NextResponse.json({ ok: true });

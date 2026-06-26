@@ -53,6 +53,7 @@ export async function DELETE(
     await deleteEmailReplyTemplateAsset(
       r.ctx.db,
       r.ctx.tenantId,
+      r.ctx.userId,
       r.ctx.role,
       id,
       assetId,

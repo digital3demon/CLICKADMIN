@@ -90,8 +90,70 @@ function userAccountWhere(tenantId: string, userId: string, role?: string) {
   };
 }
 
+function mailSettingsAccountWhere(tenantId: string, userId: string, role?: string) {
+  const normalizedRole = normalizeUserRole(role || "");
+  const roleOr: Array<{ allowedRoles: { has: UserRole } } | { settingsRoles: { has: UserRole } }> =
+    [];
+  if (normalizedRole) {
+    roleOr.push({ allowedRoles: { has: normalizedRole } });
+    roleOr.push({ settingsRoles: { has: normalizedRole } });
+  }
+  return {
+    tenantId,
+    isActive: true,
+    OR: [{ createdByUserId: userId }, ...roleOr],
+  };
+}
+
 export function mailAccountAccessWhere(tenantId: string, userId: string, role: string) {
   return userAccountWhere(tenantId, userId, role);
+}
+
+export function mailSettingsAccountAccessWhere(tenantId: string, userId: string, role: string) {
+  return mailSettingsAccountWhere(tenantId, userId, role);
+}
+
+async function requireMailSettingsAccountVisible(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+  accountId: string,
+  role?: string,
+) {
+  const account = await db.emailAccount.findFirst({
+    where: { id: accountId, ...mailSettingsAccountWhere(tenantId, userId, role) },
+  });
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  return account;
+}
+
+export async function assertMailSettingsManage(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+  role: string,
+  accountId: string,
+): Promise<void> {
+  const account = await requireMailSettingsAccountVisible(db, tenantId, userId, accountId, role);
+  if (role === UserRole.OWNER) return;
+  const normalizedRole = normalizeUserRole(role);
+  if (normalizedRole && account.settingsRoles.includes(normalizedRole)) return;
+  throw new Error("MAIL_SETTINGS_ACCESS_FORBIDDEN");
+}
+
+export async function hasMailSettingsPageAccess(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+  role: string,
+): Promise<boolean> {
+  if (role === UserRole.OWNER) return true;
+  const normalizedRole = normalizeUserRole(role);
+  if (!normalizedRole) return false;
+  const count = await db.emailAccount.count({
+    where: { tenantId, isActive: true, settingsRoles: { has: normalizedRole } },
+  });
+  return count > 0;
 }
 
 async function requireUserEmailAccount(
@@ -289,6 +351,7 @@ const mailAccountTreeSelect = {
   lastSyncAt: true,
   lastSyncError: true,
   allowedRoles: true,
+  settingsRoles: true,
   hoverPreviewEnabled: true,
   createdByUserId: true,
   encryptedAppPassword: true,
@@ -307,9 +370,11 @@ export async function listEmailAccounts(
   tenantId: string,
   userId: string,
   role: string,
-  options: { lite?: boolean; tree?: boolean } = {},
+  options: { lite?: boolean; tree?: boolean; forSettings?: boolean } = {},
 ) {
-  const accountWhere = userAccountWhere(tenantId, userId, role);
+  const accountWhere = options.forSettings
+    ? mailSettingsAccountWhere(tenantId, userId, role)
+    : userAccountWhere(tenantId, userId, role);
   const accountOrderBy = [{ email: "asc" as const }, { createdAt: "desc" as const }];
   const accounts = options.tree
     ? await db.emailAccount.findMany({
@@ -329,6 +394,7 @@ export async function listEmailAccounts(
             lastSyncAt: true,
             lastSyncError: true,
             allowedRoles: true,
+            settingsRoles: true,
             hoverPreviewEnabled: true,
             createdByUserId: true,
             encryptedAppPassword: true,
@@ -528,6 +594,13 @@ function normalizeAllowedMailRoles(value: unknown): UserRole[] {
   return Array.from(new Set<UserRole>([UserRole.OWNER, ...allowed]));
 }
 
+function normalizeSettingsMailRoles(value: unknown): UserRole[] {
+  const roles = Array.isArray(value) ? value : [];
+  return Array.from(
+    new Set(roles.filter((role): role is UserRole => normalizeUserRole(String(role)) !== null)),
+  );
+}
+
 export async function updateEmailAccountAccessRoles(
   db: PrismaClient,
   tenantId: string,
@@ -535,9 +608,12 @@ export async function updateEmailAccountAccessRoles(
   accountId: string,
   allowedRolesInput: unknown,
   hoverPreviewEnabledInput?: unknown,
+  settingsRolesInput?: unknown,
 ) {
   if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
   const allowedRoles = normalizeAllowedMailRoles(allowedRolesInput);
+  const settingsRoles =
+    settingsRolesInput !== undefined ? normalizeSettingsMailRoles(settingsRolesInput) : undefined;
   const hoverPreviewEnabled =
     typeof hoverPreviewEnabledInput === "boolean" ? hoverPreviewEnabledInput : undefined;
   const updated = await db.emailAccount.updateMany({
@@ -545,10 +621,21 @@ export async function updateEmailAccountAccessRoles(
     data: {
       allowedRoles,
       ...(hoverPreviewEnabled === undefined ? {} : { hoverPreviewEnabled }),
+      ...(settingsRoles === undefined ? {} : { settingsRoles }),
     },
   });
   if (!updated.count) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
-  return { id: accountId, allowedRoles, hoverPreviewEnabled };
+  const account = await db.emailAccount.findFirst({
+    where: { id: accountId, tenantId },
+    select: { allowedRoles: true, settingsRoles: true, hoverPreviewEnabled: true },
+  });
+  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  return {
+    id: accountId,
+    allowedRoles: account.allowedRoles,
+    settingsRoles: account.settingsRoles,
+    hoverPreviewEnabled: account.hoverPreviewEnabled,
+  };
 }
 
 /** Удаляет ящик и всю CRM-копию почты (письма, папки, метки, правила, jobs). Яндекс.Почта не затрагивается. */
@@ -657,7 +744,7 @@ export async function createEmailFolder(
   displayName: string,
   color = "#6b7280",
 ) {
-  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
+  await assertMailSettingsManage(db, tenantId, userId, role, accountId);
   const name = displayName.trim().slice(0, 120);
   if (!name) throw new Error("EMPTY_FOLDER_NAME");
   return db.emailFolder.create({
@@ -695,7 +782,7 @@ export async function createEmailLabel(
   accountId: string,
   input: { name: string; color: string },
 ) {
-  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
+  await assertMailSettingsManage(db, tenantId, userId, role, accountId);
   const name = input.name.trim().slice(0, 80);
   if (!name) throw new Error("EMPTY_LABEL_NAME");
   return db.emailLabel.create({
@@ -716,11 +803,12 @@ export async function listEmailRules(
   role: string,
   accountId?: string | null,
 ) {
-  if (accountId) await requireUserEmailAccount(db, tenantId, userId, accountId, role);
+  const settingsWhere = mailSettingsAccountWhere(tenantId, userId, role);
+  if (accountId) await requireMailSettingsAccountVisible(db, tenantId, userId, accountId, role);
   return db.emailRule.findMany({
     where: {
       tenantId,
-      account: userAccountWhere(tenantId, userId, role),
+      account: settingsWhere,
       ...(accountId ? { accountId } : {}),
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -742,7 +830,14 @@ export async function createEmailRule(
     actions: unknown;
   },
 ) {
-  const account = await requireUserEmailAccount(db, tenantId, userId, input.accountId, role);
+  await assertMailSettingsManage(db, tenantId, userId, role, input.accountId);
+  const account = await requireMailSettingsAccountVisible(
+    db,
+    tenantId,
+    userId,
+    input.accountId,
+    role,
+  );
   const name = input.name.trim().slice(0, 160);
   if (!name) throw new Error("EMPTY_RULE_NAME");
   const last = await db.emailRule.findFirst({
@@ -782,6 +877,12 @@ export async function updateEmailRule(
     sortOrder?: number | null;
   },
 ) {
+  const existing = await db.emailRule.findFirst({
+    where: { id: ruleId, tenantId, account: mailSettingsAccountWhere(tenantId, userId, role) },
+    select: { accountId: true },
+  });
+  if (!existing) throw new Error("EMAIL_RULE_NOT_FOUND");
+  await assertMailSettingsManage(db, tenantId, userId, role, existing.accountId);
   const data: Parameters<typeof db.emailRule.updateMany>[0]["data"] = {};
   if (typeof input.name === "string" && input.name.trim()) {
     data.name = input.name.trim().slice(0, 160);
@@ -793,12 +894,12 @@ export async function updateEmailRule(
   if (input.conditions && typeof input.conditions === "object") data.conditions = input.conditions;
   if (input.actions && typeof input.actions === "object") data.actions = input.actions;
   const updated = await db.emailRule.updateMany({
-    where: { id: ruleId, tenantId, account: userAccountWhere(tenantId, userId, role) },
+    where: { id: ruleId, tenantId, accountId: existing.accountId },
     data,
   });
   if (!updated.count) throw new Error("EMAIL_RULE_NOT_FOUND");
   return db.emailRule.findFirst({
-    where: { id: ruleId, tenantId, account: userAccountWhere(tenantId, userId, role) },
+    where: { id: ruleId, tenantId, accountId: existing.accountId },
   });
 }
 
@@ -809,8 +910,14 @@ export async function deleteEmailRule(
   role: string,
   ruleId: string,
 ): Promise<void> {
+  const existing = await db.emailRule.findFirst({
+    where: { id: ruleId, tenantId, account: mailSettingsAccountWhere(tenantId, userId, role) },
+    select: { accountId: true },
+  });
+  if (!existing) throw new Error("EMAIL_RULE_NOT_FOUND");
+  await assertMailSettingsManage(db, tenantId, userId, role, existing.accountId);
   await db.emailRule.deleteMany({
-    where: { id: ruleId, tenantId, account: userAccountWhere(tenantId, userId, role) },
+    where: { id: ruleId, tenantId, accountId: existing.accountId },
   });
 }
 
@@ -1402,7 +1509,7 @@ export async function getEmailReplyTemplate(
   role: string,
   accountId: string,
 ): Promise<EmailReplyTemplateDto | null> {
-  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
+  await requireMailSettingsAccountVisible(db, tenantId, userId, accountId, role);
   const row = await db.emailReplyTemplate.findUnique({
     where: { accountId },
   });
@@ -1418,6 +1525,7 @@ export async function getEmailReplyTemplate(
 export async function upsertEmailReplyTemplate(
   db: PrismaClient,
   tenantId: string,
+  userId: string,
   role: string,
   accountId: string,
   input: {
@@ -1426,7 +1534,7 @@ export async function upsertEmailReplyTemplate(
     isEnabled?: boolean;
   },
 ): Promise<EmailReplyTemplateDto> {
-  if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
+  await assertMailSettingsManage(db, tenantId, userId, role, accountId);
   const account = await db.emailAccount.findFirst({
     where: { id: accountId, tenantId },
     select: { id: true },
@@ -1500,21 +1608,6 @@ function isAllowedReplyTemplateMime(mime: string, kind: EmailReplyTemplateAssetK
   );
 }
 
-async function requireOwnerEmailAccount(
-  db: PrismaClient,
-  tenantId: string,
-  role: string,
-  accountId: string,
-) {
-  if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
-  const account = await db.emailAccount.findFirst({
-    where: { id: accountId, tenantId },
-    select: { id: true },
-  });
-  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
-  return account;
-}
-
 export async function listEmailReplyTemplateAssets(
   db: PrismaClient,
   tenantId: string,
@@ -1522,7 +1615,7 @@ export async function listEmailReplyTemplateAssets(
   role: string,
   accountId: string,
 ): Promise<EmailReplyTemplateAssetDto[]> {
-  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
+  await requireMailSettingsAccountVisible(db, tenantId, userId, accountId, role);
   const rows = await db.emailReplyTemplateAsset.findMany({
     where: { tenantId, accountId },
     orderBy: { createdAt: "asc" },
@@ -1551,7 +1644,7 @@ export async function getEmailReplyTemplateAssetBytes(
   accountId: string,
   assetId: string,
 ): Promise<{ mimeType: string; fileName: string; data: Buffer }> {
-  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
+  await requireMailSettingsAccountVisible(db, tenantId, userId, accountId, role);
   const row = await db.emailReplyTemplateAsset.findFirst({
     where: { id: assetId, tenantId, accountId },
     select: { mimeType: true, fileName: true, data: true },
@@ -1567,11 +1660,12 @@ export async function getEmailReplyTemplateAssetBytes(
 export async function createEmailReplyTemplateAsset(
   db: PrismaClient,
   tenantId: string,
+  userId: string,
   role: string,
   accountId: string,
   input: { fileName: string; mimeType: string; data: Buffer },
 ): Promise<EmailReplyTemplateAssetDto> {
-  await requireOwnerEmailAccount(db, tenantId, role, accountId);
+  await assertMailSettingsManage(db, tenantId, userId, role, accountId);
   const count = await db.emailReplyTemplateAsset.count({
     where: { tenantId, accountId },
   });
@@ -1628,11 +1722,12 @@ export async function createEmailReplyTemplateAsset(
 export async function deleteEmailReplyTemplateAsset(
   db: PrismaClient,
   tenantId: string,
+  userId: string,
   role: string,
   accountId: string,
   assetId: string,
 ): Promise<void> {
-  await requireOwnerEmailAccount(db, tenantId, role, accountId);
+  await assertMailSettingsManage(db, tenantId, userId, role, accountId);
   const row = await db.emailReplyTemplateAsset.findFirst({
     where: { id: assetId, tenantId, accountId },
     select: { id: true },

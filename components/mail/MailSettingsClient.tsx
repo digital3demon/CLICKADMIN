@@ -201,6 +201,7 @@ export function MailSettingsClient() {
   const [accountDetailsLoading, setAccountDetailsLoading] = useState(false);
   const [rulesLoading, setRulesLoading] = useState(false);
   const [selectedAccessRoles, setSelectedAccessRoles] = useState<string[]>(["OWNER"]);
+  const [selectedSettingsRoles, setSelectedSettingsRoles] = useState<string[]>([]);
   const [hoverPreviewEnabled, setHoverPreviewEnabled] = useState(true);
   const [accessSaving, setAccessSaving] = useState(false);
   const [ruleFolderChoice, setRuleFolderChoice] = useState("");
@@ -227,7 +228,7 @@ export function MailSettingsClient() {
       const accountsData = await jsonFetch<{
         accounts: MailAccount[];
         currentUser?: { role?: string };
-      }>("/api/mail/accounts?lite=1");
+      }>("/api/mail/accounts?lite=1&forSettings=1");
       setAccounts(accountsData.accounts);
       setCurrentUserRole(accountsData.currentUser?.role || "");
       setAccountId((prev) =>
@@ -245,7 +246,7 @@ export function MailSettingsClient() {
     setAccountDetailsLoading(true);
     try {
       const data = await jsonFetch<{ accounts: MailAccount[] }>(
-        "/api/mail/accounts?tree=1",
+        "/api/mail/accounts?tree=1&forSettings=1",
         { signal },
       );
       const account = data.accounts.find((item) => item.id === nextAccountId);
@@ -275,6 +276,12 @@ export function MailSettingsClient() {
   }, []);
 
   const canManageAccountAccess = currentUserRole === "OWNER";
+  const canManageMailSettings =
+    canManageAccountAccess ||
+    Boolean(
+      currentUserRole &&
+        activeAccount?.settingsRoles?.includes(currentUserRole),
+    );
 
   const customFolderCount = activeAccount?.folders.filter((folder) => folder.type === "CUSTOM").length ?? 0;
   const visibleFolders = useMemo(() => {
@@ -292,6 +299,7 @@ export function MailSettingsClient() {
     if (accessDraftAccountIdRef.current === activeAccount.id) return;
     accessDraftAccountIdRef.current = activeAccount.id;
     setSelectedAccessRoles(Array.from(new Set(["OWNER", ...(activeAccount.allowedRoles || [])])));
+    setSelectedSettingsRoles(Array.from(new Set(activeAccount.settingsRoles || [])));
     setHoverPreviewEnabled(activeAccount.hoverPreviewEnabled ?? true);
     setShowAllCustomFolders(false);
   }, [activeAccount]);
@@ -344,7 +352,7 @@ export function MailSettingsClient() {
   }, [accountId, loadRules]);
 
   useEffect(() => {
-    if (!accountId || !canManageAccountAccess) {
+    if (!accountId || !canManageMailSettings) {
       setReplySubjectTemplate("");
       setReplyHtmlTemplate("");
       return;
@@ -378,7 +386,7 @@ export function MailSettingsClient() {
       cancelled = true;
       controller.abort();
     };
-  }, [accountId, canManageAccountAccess]);
+  }, [accountId, canManageMailSettings]);
 
   const uploadReplyTemplateAsset = useCallback(
     async (file: File): Promise<ReplyTemplateAssetItem | null> => {
@@ -493,6 +501,19 @@ export function MailSettingsClient() {
     });
   }
 
+  function toggleSettingsRole(role: string): void {
+    if (role === "OWNER") return;
+    setSelectedSettingsRoles((prev) => {
+      const roles = new Set(prev);
+      if (roles.has(role)) {
+        roles.delete(role);
+      } else {
+        roles.add(role);
+      }
+      return [...roles];
+    });
+  }
+
   async function saveAccountAccess() {
     if (!activeAccount) return;
     setError("");
@@ -500,15 +521,18 @@ export function MailSettingsClient() {
     setAccessSaving(true);
     try {
       const allowedRoles = Array.from(new Set(["OWNER", ...selectedAccessRoles]));
+      const settingsRoles = Array.from(new Set(selectedSettingsRoles));
       await jsonFetch(`/api/mail/accounts/${activeAccount.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ allowedRoles, hoverPreviewEnabled }),
+        body: JSON.stringify({ allowedRoles, settingsRoles, hoverPreviewEnabled }),
       });
       setStatus("Настройки ящика обновлены");
       setAccounts((prev) =>
         prev.map((account) =>
-          account.id === activeAccount.id ? { ...account, allowedRoles, hoverPreviewEnabled } : account,
+          account.id === activeAccount.id
+            ? { ...account, allowedRoles, settingsRoles, hoverPreviewEnabled }
+            : account,
         ),
       );
       accessDraftAccountIdRef.current = activeAccount.id;
@@ -781,7 +805,7 @@ export function MailSettingsClient() {
                   Доступ к ящику «{activeAccount.displayName || activeAccount.email}»
                 </h3>
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  Отметьте роли, которым можно видеть письма, синхронизировать ящик и отправлять письма от этого аккаунта.
+                  Отметьте роли для доступа к письмам и отдельно — для редактирования настроек почты.
                 </p>
               </div>
               <button
@@ -793,29 +817,70 @@ export function MailSettingsClient() {
                 {accessSaving ? "Сохраняю..." : "Сохранить настройки"}
               </button>
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {MAIL_ROLE_OPTIONS.map((role) => {
-                const isOwnerRole = role.value === "OWNER";
-                const checked = isOwnerRole || selectedAccessRoles.includes(role.value);
-                return (
-                  <label
-                    key={role.value}
-                    className="flex items-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)]"
-                  >
-                    <input
-                      type="checkbox"
-                      name="allowedRoles"
-                      value={role.value}
-                      checked={checked}
-                      disabled={isOwnerRole || accessSaving}
-                      onChange={() => toggleAccessRole(role.value)}
-                      onClick={(event) => event.stopPropagation()}
-                      className="h-4 w-4 shrink-0 rounded border-[var(--input-border)]"
-                    />
-                    <span>{role.label}</span>
-                  </label>
-                );
-              })}
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Доступ к письмам
+                </h4>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  Просмотр, синхронизация и отправка писем.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {MAIL_ROLE_OPTIONS.map((role) => {
+                    const isOwnerRole = role.value === "OWNER";
+                    const checked = isOwnerRole || selectedAccessRoles.includes(role.value);
+                    return (
+                      <label
+                        key={`access-${role.value}`}
+                        className="flex items-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)]"
+                      >
+                        <input
+                          type="checkbox"
+                          name="allowedRoles"
+                          value={role.value}
+                          checked={checked}
+                          disabled={isOwnerRole || accessSaving}
+                          onChange={() => toggleAccessRole(role.value)}
+                          onClick={(event) => event.stopPropagation()}
+                          className="h-4 w-4 shrink-0 rounded border-[var(--input-border)]"
+                        />
+                        <span>{role.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Настройки почты
+                </h4>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  Папки, метки, правила и шаблон ответа.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {MAIL_ROLE_OPTIONS.filter((role) => role.value !== "OWNER").map((role) => {
+                    const checked = selectedSettingsRoles.includes(role.value);
+                    return (
+                      <label
+                        key={`settings-${role.value}`}
+                        className="flex items-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)]"
+                      >
+                        <input
+                          type="checkbox"
+                          name="settingsRoles"
+                          value={role.value}
+                          checked={checked}
+                          disabled={accessSaving}
+                          onChange={() => toggleSettingsRole(role.value)}
+                          onClick={(event) => event.stopPropagation()}
+                          className="h-4 w-4 shrink-0 rounded border-[var(--input-border)]"
+                        />
+                        <span>{role.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
             <label className="mt-4 flex items-start gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-3 text-sm text-[var(--app-text)]">
               <input
@@ -857,7 +922,7 @@ export function MailSettingsClient() {
         ) : null}
       </section>
 
-      {canManageAccountAccess && activeAccount ? (
+      {canManageMailSettings && activeAccount ? (
         <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-[var(--app-text)]">
             Шаблон ответа
@@ -948,6 +1013,8 @@ export function MailSettingsClient() {
         </section>
       ) : null}
 
+      {canManageMailSettings ? (
+      <>
       <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -1262,6 +1329,8 @@ export function MailSettingsClient() {
           </form>
         </div>
       </section>
+      </>
+      ) : null}
     </div>
   );
 }

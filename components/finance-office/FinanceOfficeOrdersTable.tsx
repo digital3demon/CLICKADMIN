@@ -41,23 +41,6 @@ export type FinanceOfficeOrderTableRow = {
   listPendingProstheticsRequests: boolean;
 };
 
-function financeRemarksCount(o: FinanceOfficeOrderTableRow): number {
-  return [
-    o.financeCalculated,
-    o.listCompositionMismatch || o.listPendingChatCorrections,
-    o.kaitenColumnTitle || o.kaitenCardId || o.demoKanbanColumn,
-    o.prostheticsOrdered,
-    o.listPendingProstheticsRequests,
-    o.invoicePrinted,
-    o.invoiceAttachmentId,
-    o.payment,
-    o.adminShippedOtpr,
-    o.kaitenBlocked,
-    o.isUrgent,
-    ...o.listCustomTags,
-  ].filter(Boolean).length;
-}
-
 export function FinanceOfficeOrdersTable({
   orders,
   activeTag = null,
@@ -153,7 +136,6 @@ export function FinanceOfficeOrdersTable({
           <tbody>
             {orders.map((o) => {
               const workSent = o.adminShippedOtpr;
-              const remarksCount = financeRemarksCount(o);
               return (
                 <tr
                   key={o.id}
@@ -221,46 +203,32 @@ export function FinanceOfficeOrdersTable({
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
                   <td className="w-[12rem] max-w-[12rem] align-top px-1.5 py-2">
-                    <div className="xl:hidden">
-                      {remarksCount > 0 ? (
-                        <span
-                          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 text-xs font-semibold text-[var(--text-strong)]"
-                          title={`Отметок: ${remarksCount}`}
-                        >
-                          {remarksCount}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-[var(--text-muted)]">—</span>
-                      )}
-                    </div>
-                    <div className="max-xl:hidden">
-                      <OrderListTagsCell
-                        orderId={o.id}
-                        pageSize={500}
-                        orderAttentionWarning={
-                          o.listCompositionMismatch || o.listPendingChatCorrections
-                        }
-                        kaitenCardId={o.kaitenCardId}
-                        demoKanbanColumn={o.demoKanbanColumn}
-                        demoCardTypeName={o.kaitenCardType?.name ?? null}
-                        kaitenColumnTitle={o.kaitenColumnTitle}
-                        prostheticsOrdered={o.prostheticsOrdered}
-                        listPendingProstheticsRequests={o.listPendingProstheticsRequests}
-                        invoicePrinted={o.invoicePrinted}
-                        hasInvoiceAttachment={o.invoiceAttachmentId != null}
-                        invoiceAttachmentId={o.invoiceAttachmentId}
-                        payment={o.payment}
-                        paymentPartialRub={o.paymentPartialRub}
-                        adminShippedOtpr={o.adminShippedOtpr}
-                        kaitenBlocked={o.kaitenBlocked === true}
-                        kaitenBlockReason={o.kaitenBlockReason}
-                        isUrgent={o.isUrgent}
-                        urgentCoefficient={o.urgentCoefficient}
-                        customTags={o.listCustomTags}
-                        financeOfficeFilterContext={{ tab, periodFrom, periodTo, q }}
-                        financeCalculated={o.financeCalculated}
-                      />
-                    </div>
+                    <OrderListTagsCell
+                      orderId={o.id}
+                      pageSize={500}
+                      orderAttentionWarning={
+                        o.listCompositionMismatch || o.listPendingChatCorrections
+                      }
+                      kaitenCardId={o.kaitenCardId}
+                      demoKanbanColumn={o.demoKanbanColumn}
+                      demoCardTypeName={o.kaitenCardType?.name ?? null}
+                      kaitenColumnTitle={o.kaitenColumnTitle}
+                      prostheticsOrdered={o.prostheticsOrdered}
+                      listPendingProstheticsRequests={o.listPendingProstheticsRequests}
+                      invoicePrinted={o.invoicePrinted}
+                      hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                      invoiceAttachmentId={o.invoiceAttachmentId}
+                      payment={o.payment}
+                      paymentPartialRub={o.paymentPartialRub}
+                      adminShippedOtpr={o.adminShippedOtpr}
+                      kaitenBlocked={o.kaitenBlocked === true}
+                      kaitenBlockReason={o.kaitenBlockReason}
+                      isUrgent={o.isUrgent}
+                      urgentCoefficient={o.urgentCoefficient}
+                      customTags={o.listCustomTags}
+                      financeOfficeFilterContext={{ tab, periodFrom, periodTo, q }}
+                      financeCalculated={o.financeCalculated}
+                    />
                   </td>
                 </tr>
               );
