@@ -63,6 +63,20 @@ export function substituteReplyTemplateCidsForPreview(
     });
 }
 
+/** Перед сохранением шаблона: URL превью → cid: для SMTP. */
+export function restoreReplyTemplateCidsFromPreview(
+  html: string,
+  assets: Array<{ id: string; contentId: string }>,
+  accountId: string,
+): string {
+  let out = html;
+  for (const asset of assets) {
+    const url = `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template/assets/${encodeURIComponent(asset.id)}?inline=1`;
+    out = out.split(url).join(`cid:${asset.contentId}`);
+  }
+  return out;
+}
+
 export function collectReplyTemplateMailAttachments(
   html: string,
   assets: ReplyTemplateAssetRow[],

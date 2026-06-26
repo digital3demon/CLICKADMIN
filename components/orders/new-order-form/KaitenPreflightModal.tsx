@@ -749,7 +749,11 @@ export function KaitenPreflightModal({
           </div>
         </div>
       </div>
-      {replyAside ? <div className="min-h-0 min-w-0 shrink-0">{replyAside}</div> : null}
+      {replyAside ? (
+        <div className="min-h-0 w-full min-w-0 shrink-0 lg:w-auto lg:max-w-[34rem]">
+          {replyAside}
+        </div>
+      ) : null}
       </div>
     </div>,
     document.body,

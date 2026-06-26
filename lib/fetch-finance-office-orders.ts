@@ -129,16 +129,22 @@ const pendingProstheticsWhere = {
   },
 } satisfies Prisma.OrderWhereInput;
 
+/** Счётчики чипов — без окна dueDate (как createdAt у списка «Заказы»), только поиск. */
+export function financeOfficeChipCountScopeWhere(
+  tenantId: string,
+  opts: { search?: string | null } = {},
+): Prisma.OrderWhereInput {
+  return financeOfficeScopeWhere(tenantId, { search: opts.search });
+}
+
 export async function countFinanceOfficeQuickFilterChips(
   db: PrismaClient,
   tenantId: string,
   opts: {
     search?: string | null;
-    start?: Date | null;
-    endExclusive?: Date | null;
   } = {},
 ): Promise<{ attentionCount: number; prostheticsPendingCount: number }> {
-  const scope = financeOfficeScopeWhere(tenantId, opts);
+  const scope = financeOfficeChipCountScopeWhere(tenantId, opts);
   const [attentionCount, prostheticsPendingCount] = await Promise.all([
     db.order.count({ where: { AND: [scope, pendingCorrectionsWhere] } }),
     db.order.count({ where: { AND: [scope, pendingProstheticsWhere] } }),

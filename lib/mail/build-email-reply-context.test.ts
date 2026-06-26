@@ -17,6 +17,25 @@ describe("buildEmailReplyTemplateContext", () => {
     expect(ctx.clinicAddress).toBe("—");
     expect(ctx.orderNumber).toBe("100");
   });
+
+  it("форматирует срок из datetime-local", () => {
+    const ctx = buildEmailReplyTemplateContext({
+      orderNumber: "2605-001",
+      dueDate: "2026-05-29T14:00",
+    });
+    expect(ctx.dueDate).toMatch(/29\.05\.26/);
+    expect(ctx.dueDate).toMatch(/14:00/);
+    expect(ctx.date).toBe("29.05.26");
+  });
+
+  it("date берётся из явного поля, иначе из срока лаборатории", () => {
+    const ctx = buildEmailReplyTemplateContext({
+      orderNumber: "1",
+      date: "2026-06-10",
+      dueDate: "2026-05-29T14:00",
+    });
+    expect(ctx.date).toBe("10.06.26");
+  });
 });
 
 describe("substituteOrderNumberPlaceholders", () => {

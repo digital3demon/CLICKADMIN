@@ -11,6 +11,10 @@ import {
 } from "@/components/mail/MailHtmlTemplateEditor";
 import { EmailReplyTemplatePlaceholderBar } from "@/components/mail/EmailReplyTemplatePlaceholderBar";
 import { insertTokenIntoControlledInput } from "@/lib/mail/insert-template-token";
+import {
+  restoreReplyTemplateCidsFromPreview,
+  substituteReplyTemplateCidsForPreview,
+} from "@/lib/mail/reply-template-cid";
 import type { MailAccount, MailFolder } from "@/components/mail/types";
 import { mailFolderDisplayName } from "@/components/mail/types";
 import { ALL_USER_ROLES, USER_ROLE_LABELS } from "@/lib/user-role-labels";
@@ -214,6 +218,7 @@ export function MailSettingsClient() {
   const replySubjectInputRef = useRef<HTMLInputElement>(null);
   const replySubjectSelectionRef = useRef({ start: 0, end: 0 });
   const replyEditorRef = useRef<MailHtmlTemplateEditorHandle>(null);
+  const replyTemplateAssetsRef = useRef<ReplyTemplateAssetItem[]>([]);
   const accessDraftAccountIdRef = useRef("");
 
   const activeAccount = useMemo(
@@ -360,19 +365,26 @@ export function MailSettingsClient() {
     let cancelled = false;
     const controller = new AbortController();
     setReplyTemplateLoading(true);
-    void jsonFetch<{ template: {
-      subjectTemplate: string;
-      htmlTemplate: string;
-    } | null }>(
-      `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template`,
-      { signal: controller.signal },
-    )
-      .then((data) => {
+    void Promise.all([
+      jsonFetch<{ template: { subjectTemplate: string; htmlTemplate: string } | null }>(
+        `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template`,
+        { signal: controller.signal },
+      ),
+      jsonFetch<{ assets: ReplyTemplateAssetItem[] }>(
+        `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template/assets`,
+        { signal: controller.signal },
+      ).catch(() => ({ assets: [] as ReplyTemplateAssetItem[] })),
+    ])
+      .then(([data, assetsData]) => {
         if (cancelled) return;
+        const assets = assetsData.assets ?? [];
+        replyTemplateAssetsRef.current = assets;
         setReplySubjectTemplate(data.template?.subjectTemplate ?? "");
-        setReplyHtmlTemplate(
+        const rawHtml =
           data.template?.htmlTemplate ??
-            "<p>Здравствуйте!</p><p>Ваш наряд {{orderNumber}} принят в работу.</p>",
+          "<p>Здравствуйте!</p><p>Ваш наряд {{orderNumber}} принят в работу.</p>";
+        setReplyHtmlTemplate(
+          substituteReplyTemplateCidsForPreview(rawHtml, assets, accountId),
         );
       })
       .catch((err) => {
@@ -429,12 +441,17 @@ export function MailSettingsClient() {
     setError("");
     setStatus("Сохраняю шаблон ответа...");
     try {
+      const htmlForSave = restoreReplyTemplateCidsFromPreview(
+        replyHtmlTemplate,
+        replyTemplateAssetsRef.current,
+        activeAccount.id,
+      );
       await jsonFetch(`/api/mail/accounts/${activeAccount.id}/reply-template`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subjectTemplate: replySubjectTemplate,
-          htmlTemplate: replyHtmlTemplate,
+          htmlTemplate: htmlForSave,
         }),
       });
       setStatus("Шаблон ответа сохранён");
@@ -938,6 +955,7 @@ export function MailSettingsClient() {
             <code className="text-xs">{"{{patientName}}"}</code>,{" "}
             <code className="text-xs">{"{{doctorName}}"}</code>,{" "}
             <code className="text-xs">{"{{clinicName}}"}</code>,{" "}
+            <code className="text-xs">{"{{date}}"}</code>,{" "}
             <code className="text-xs">{"{{dueDate}}"}</code>,{" "}
             <code className="text-xs">{"{{appointmentDate}}"}</code>,{" "}
             <code className="text-xs">{"{{originalSubject}}"}</code>,{" "}

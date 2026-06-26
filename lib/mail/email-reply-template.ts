@@ -4,6 +4,8 @@ export type EmailReplyTemplateContext = {
   doctorName: string;
   clinicName: string;
   clinicAddress: string;
+  /** Дата без времени (для «готовность к …» и т.п.). */
+  date: string;
   dueDate: string;
   appointmentDate: string;
   originalSubject: string;
@@ -16,10 +18,11 @@ export const EMAIL_REPLY_TEMPLATE_QUICK_INSERT = [
   { label: "Доктор", token: "{{doctorName}}" },
   { label: "Клиника", token: "{{clinicName}}" },
   { label: "Пациент", token: "{{patientName}}" },
+  { label: "Дата", token: "{{date}}" },
   { label: "Лабораторный срок", token: "{{dueDate}}" },
 ] as const;
 
-const PLACEHOLDER_RE = /\{\{(\w+)\}\}/g;
+const PLACEHOLDER_RE = /\{\{\s*(\w+)\s*\}\}/g;
 
 function escapeHtml(value: string): string {
   return value

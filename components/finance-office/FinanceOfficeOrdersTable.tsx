@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { StickyListChrome } from "@/components/layout/StickyListChrome";
+import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
+import { financeOfficeListHref } from "@/lib/finance-office-list-query";
+import { listTagKaitenColumnTitle } from "@/lib/order-list-tag-filter";
 
 export type FinanceOfficeOrderTableRow = {
   id: string;
@@ -40,6 +43,17 @@ export type FinanceOfficeOrderTableRow = {
   listPendingChatCorrections: boolean;
   listPendingProstheticsRequests: boolean;
 };
+
+function formatFinanceCardDate(iso: string | null): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+}
 
 export function FinanceOfficeOrdersTable({
   orders,
@@ -106,9 +120,9 @@ export function FinanceOfficeOrdersTable({
       }
     >
       <div className="relative">
-      <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch]">
+      <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible shell-desktop:overflow-x-visible [-webkit-overflow-scrolling:touch]">
         <table className="w-max min-w-full border-collapse text-left text-sm">
-          <thead className="xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
+          <thead className="hidden shell-desktop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <th className="w-[7.5rem] px-2 py-2 text-center normal-case max-xl:sticky max-xl:left-0 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">
                 <div className="flex flex-col items-center gap-1.5">
@@ -136,15 +150,57 @@ export function FinanceOfficeOrdersTable({
           <tbody>
             {orders.map((o) => {
               const workSent = o.adminShippedOtpr;
-              return (
-                <tr
-                  key={o.id}
-                  className={
-                    workSent
-                      ? ORDER_SHIPPED_ROW_CLASS
-                      : "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]"
+              const clinicName = o.clinic?.name ?? "Частное лицо";
+              const doctorName = personNameSurnameInitials(o.doctor.fullName);
+              const patientName = o.patientName
+                ? personNameSurnameInitials(o.patientName)
+                : "";
+              const labDate = formatFinanceCardDate(o.dueDate);
+              const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
+              const kaitenStatusFilterHref = kaitenColTrimmed
+                ? financeOfficeListHref({
+                    tab,
+                    tag: listTagKaitenColumnTitle(kaitenColTrimmed),
+                    from: periodFrom ?? undefined,
+                    to: periodTo ?? undefined,
+                    q: (q ?? "").trim() || undefined,
+                  })
+                : null;
+              const rowClass = workSent
+                ? ORDER_SHIPPED_ROW_CLASS
+                : "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
+              const renderTagsCell = (opts?: { omitKaitenColumnTag?: boolean }) => (
+                <OrderListTagsCell
+                  orderId={o.id}
+                  pageSize={500}
+                  orderAttentionWarning={
+                    o.listCompositionMismatch || o.listPendingChatCorrections
                   }
-                >
+                  kaitenCardId={o.kaitenCardId}
+                  demoKanbanColumn={o.demoKanbanColumn}
+                  demoCardTypeName={o.kaitenCardType?.name ?? null}
+                  kaitenColumnTitle={o.kaitenColumnTitle}
+                  prostheticsOrdered={o.prostheticsOrdered}
+                  listPendingProstheticsRequests={o.listPendingProstheticsRequests}
+                  invoicePrinted={o.invoicePrinted}
+                  hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                  invoiceAttachmentId={o.invoiceAttachmentId}
+                  payment={o.payment}
+                  paymentPartialRub={o.paymentPartialRub}
+                  adminShippedOtpr={o.adminShippedOtpr}
+                  kaitenBlocked={o.kaitenBlocked === true}
+                  kaitenBlockReason={o.kaitenBlockReason}
+                  isUrgent={o.isUrgent}
+                  urgentCoefficient={o.urgentCoefficient}
+                  customTags={o.listCustomTags}
+                  financeOfficeFilterContext={{ tab, periodFrom, periodTo, q }}
+                  financeCalculated={o.financeCalculated}
+                  omitKaitenColumnTag={opts?.omitKaitenColumnTag}
+                />
+              );
+              return (
+                <Fragment key={o.id}>
+                <tr className={`hidden shell-desktop:table-row ${rowClass}`}>
                   <td className="w-[7.5rem] px-2 py-2 text-center max-xl:sticky max-xl:left-0 max-xl:z-20 max-xl:bg-[var(--card-bg)] max-xl:shadow-[1px_0_0_var(--card-border)]">
                     <input
                       type="checkbox"
@@ -203,41 +259,98 @@ export function FinanceOfficeOrdersTable({
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
                   <td className="w-[12rem] max-w-[12rem] align-top px-1.5 py-2">
-                    <OrderListTagsCell
-                      orderId={o.id}
-                      pageSize={500}
-                      orderAttentionWarning={
-                        o.listCompositionMismatch || o.listPendingChatCorrections
-                      }
-                      kaitenCardId={o.kaitenCardId}
-                      demoKanbanColumn={o.demoKanbanColumn}
-                      demoCardTypeName={o.kaitenCardType?.name ?? null}
-                      kaitenColumnTitle={o.kaitenColumnTitle}
-                      prostheticsOrdered={o.prostheticsOrdered}
-                      listPendingProstheticsRequests={o.listPendingProstheticsRequests}
-                      invoicePrinted={o.invoicePrinted}
-                      hasInvoiceAttachment={o.invoiceAttachmentId != null}
-                      invoiceAttachmentId={o.invoiceAttachmentId}
-                      payment={o.payment}
-                      paymentPartialRub={o.paymentPartialRub}
-                      adminShippedOtpr={o.adminShippedOtpr}
-                      kaitenBlocked={o.kaitenBlocked === true}
-                      kaitenBlockReason={o.kaitenBlockReason}
-                      isUrgent={o.isUrgent}
-                      urgentCoefficient={o.urgentCoefficient}
-                      customTags={o.listCustomTags}
-                      financeOfficeFilterContext={{ tab, periodFrom, periodTo, q }}
-                      financeCalculated={o.financeCalculated}
-                    />
+                    {renderTagsCell()}
                   </td>
                 </tr>
+                <tr className="border-b border-[var(--card-border)] shell-desktop:hidden print:hidden">
+                  <td colSpan={99} className="p-0">
+                    <div className="p-3">
+                      <div className="mb-1.5 flex items-start justify-between gap-2">
+                        <div className="flex min-w-0 flex-col items-start gap-1">
+                          <Link
+                            href={orderPathById(o.id)}
+                            className="font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
+                            title={`${o.orderNumber} — открыть наряд`}
+                          >
+                            № {o.orderNumber}
+                          </Link>
+                          <OrderListKaitenColumnTag
+                            kaitenCardId={o.kaitenCardId}
+                            demoKanbanColumn={o.demoKanbanColumn}
+                            demoCardTypeName={o.kaitenCardType?.name ?? null}
+                            kaitenColumnTitle={o.kaitenColumnTitle}
+                            filterHref={kaitenStatusFilterHref}
+                            placement="underOrderNumber"
+                          />
+                        </div>
+                        {labDate ? (
+                          <span className="mt-0.5 shrink-0 text-xs text-[var(--text-muted)]">
+                            {labDate}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mb-0.5 truncate text-xs font-normal text-[var(--text-secondary)]">
+                        {clinicName}
+                      </div>
+
+                      <div className="mb-1.5 flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">
+                        {doctorName ? <span>{doctorName}</span> : null}
+                        {doctorName && patientName ? (
+                          <span className="text-[var(--text-muted)]">·</span>
+                        ) : null}
+                        {patientName ? <span>{patientName}</span> : null}
+                      </div>
+
+                      {o.counterpartyRequisitesText?.trim() ? (
+                        <div className="mb-2 text-xs leading-snug text-[var(--text-secondary)]">
+                          {o.counterpartyRequisitesText.trim()}
+                        </div>
+                      ) : null}
+
+                      <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-[44px] [&_button]:min-w-[44px]">
+                        <label className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-[var(--input-border)]"
+                            checked={selected.has(o.id)}
+                            onChange={(e) =>
+                              setSelected((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(o.id);
+                                else next.delete(o.id);
+                                return next;
+                              })
+                            }
+                            aria-label={`Выбрать наряд ${o.orderNumber}`}
+                          />
+                        </label>
+                        <Link
+                          href={orderPathById(o.id)}
+                          className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm font-medium text-[var(--text-strong)] active:bg-[var(--surface-hover)]"
+                          title={`${o.orderNumber} — открыть наряд`}
+                        >
+                          Открыть
+                        </Link>
+                        <div className="min-h-[44px] flex-1 rounded-lg bg-[var(--surface-subtle)] px-2 py-1">
+                          <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                        </div>
+                      </div>
+
+                      <div className="mt-2 text-xs text-[var(--text-secondary)] [&_.order-list-tags-pack]:items-center">
+                        {renderTagsCell({ omitKaitenColumnTag: true })}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
       <div
-        className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-12 bg-gradient-to-l from-[var(--card-bg)] to-transparent xl:hidden"
+        className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-12 bg-gradient-to-l from-[var(--card-bg)] to-transparent shell-desktop:hidden"
         aria-hidden="true"
       />
       </div>

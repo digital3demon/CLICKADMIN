@@ -13,6 +13,7 @@ const baseContext: EmailReplyTemplateContext = {
   doctorName: "Петров П. П.",
   clinicName: "Клиника «Альфа»",
   clinicAddress: "ул. Ленина, 1",
+  date: "27.05.26",
   dueDate: "27.05.2026",
   appointmentDate: "28.05.2026 10:00",
   originalSubject: "Новочеркасская Невский ДД",
@@ -48,6 +49,22 @@ describe("renderEmailReplyTemplate", () => {
       { html: true },
     );
     expect(out).toBe("<p>Тест &lt;script&gt;</p>");
+  });
+
+  it("поддерживает пробелы внутри {{ dueDate }}", () => {
+    const out = renderEmailReplyTemplate(
+      "Срок: {{ dueDate }}",
+      { ...baseContext, dueDate: "29.05.26, 14:00" },
+    );
+    expect(out).toBe("Срок: 29.05.26, 14:00");
+  });
+
+  it("подставляет {{date}} без времени", () => {
+    const out = renderEmailReplyTemplate(
+      "Готовность к {{ date }}",
+      { ...baseContext, date: "15.06.26" },
+    );
+    expect(out).toBe("Готовность к 15.06.26");
   });
 });
 
