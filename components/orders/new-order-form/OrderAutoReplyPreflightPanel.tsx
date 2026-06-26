@@ -179,6 +179,9 @@ export function OrderAutoReplyPreflightPanel({
     [buildContext, preflightOverrides],
   );
 
+  const renderPreviewHtmlRef = useRef(renderPreviewHtml);
+  renderPreviewHtmlRef.current = renderPreviewHtml;
+
   const applyTemplate = useCallback(
     (template: LoadedTemplate, accountId: string, opts?: { dateYmd?: string }) => {
       const { nextSubject, previewHtml } = renderPreviewHtml(
@@ -248,7 +251,8 @@ export function OrderAutoReplyPreflightPanel({
         const lt = template?.layoutType ?? "blocks";
         const hasContent =
           lt === "blocks"
-            ? Boolean(template?.editorDocument)
+            ? Boolean(template?.editorDocument) ||
+              Boolean(template?.htmlTemplate?.trim())
             : Boolean(template?.htmlTemplate?.trim());
         if (!template || !hasContent) {
           setCanSendReply(false);
@@ -273,9 +277,14 @@ export function OrderAutoReplyPreflightPanel({
         const initialYmd =
           localInputToDateYmd(dueDateLocal) || localInputToDateYmd(appointmentLocal);
         if (usesDate) setPickerDateYmd(initialYmd);
-        applyTemplate(loaded, sourceEmail.accountId, {
-          dateYmd: usesDate ? initialYmd : undefined,
-        });
+        const { nextSubject, previewHtml } = renderPreviewHtmlRef.current(
+          loaded,
+          sourceEmail.accountId,
+          usesDate ? initialYmd : undefined,
+        );
+        setSubject(nextSubject);
+        setLayoutType(loaded.layoutType);
+        setEditorHtml(previewHtml);
       } catch (e) {
         if (!cancelled) {
           setCanSendReply(false);
@@ -288,7 +297,7 @@ export function OrderAutoReplyPreflightPanel({
     return () => {
       cancelled = true;
     };
-  }, [open, sourceEmail?.id, sourceEmail?.accountId, sourceEmail, applyTemplate, dueDateLocal, appointmentLocal]);
+  }, [open, sourceEmail?.id, sourceEmail?.accountId, dueDateLocal, appointmentLocal]);
 
   useEffect(() => {
     if (!open || !sourceEmail || !templateRef.current || dirtyRef.current) return;
@@ -350,8 +359,10 @@ export function OrderAutoReplyPreflightPanel({
   if (!sourceEmail) return null;
 
   const editableBlocks =
-    layoutType === "blocks" && templateRef.current?.editorDocument
-      ? getEditablePreflightBlocks(templateRef.current.editorDocument)
+    layoutType === "blocks" && templateRef.current
+      ? getEditablePreflightBlocks(
+          templateRef.current.editorDocument ?? createClickLabPreset(),
+        )
       : [];
 
   const dateMissing =
