@@ -5,14 +5,15 @@ import { prisma } from "@/lib/prisma";
 import {
   firstHandedToAdminsAtFromLinkedOrderKanbanState,
   KANBAN_STATE_KEY,
+  milestonesFromLinkedOrderKanbanState,
 } from "@/lib/kanban-tenant-state-snippet-for-order";
 import { parseSnapshotV1 } from "@/lib/order-revision-snapshot";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
+import { isHandedToAdminsKaitenColumnTitle } from "@/lib/sticker-public-client-copy";
 import {
-  isHandedToAdminsKaitenColumnTitle,
-  stickerMovementSummaryForPublic,
-  stickerRevisionSummaryIsBoardMovement,
-} from "@/lib/sticker-public-client-copy";
+  earlierMilestoneIso,
+  milestonesFromRevisionColumns,
+} from "@/lib/sticker-public-milestones";
 
 export type PublicStickerClientView = {
   orderNumber: string;
@@ -25,7 +26,10 @@ export type PublicStickerClientView = {
    * Первый момент «сдана админам»: по журналу CRM-канбана и/или ревизиям колонки; если оба есть — более ранняя дата.
    */
   handedToAdminsAt: string | null;
-  revisions: { id: string; createdAt: string; actorLabel: string; summary: string }[];
+  /** Согласование → производство (канбан / ревизии). */
+  agreedAt: string | null;
+  /** Сборка → следующий этап (канбан / ревизии). */
+  producedAt: string | null;
 };
 
 export async function loadPublicStickerClientView(
@@ -56,6 +60,11 @@ export async function loadPublicStickerClientView(
     orderId,
   );
 
+  const milestonesFromKanban = milestonesFromLinkedOrderKanbanState(
+    stateRow?.value,
+    orderId,
+  );
+
   const revRows = await ordersDb.orderRevision.findMany({
     where: { orderId },
     orderBy: { createdAt: "asc" },
@@ -71,12 +80,14 @@ export async function loadPublicStickerClientView(
 
   let prevKaitenColumn: string | null = null;
   let handedFromRevisions: string | null = null;
+  const revisionColumnRows: Array<{ at: Date; column: string | null }> = [];
   for (const r of revRows) {
     const snap = parseSnapshotV1(r.snapshot);
     const col =
       snap?.order.kaitenColumnTitle != null
         ? String(snap.order.kaitenColumnTitle).trim() || null
         : null;
+    revisionColumnRows.push({ at: r.createdAt, column: col });
     if (
       isHandedToAdminsKaitenColumnTitle(col) &&
       !isHandedToAdminsKaitenColumnTitle(prevKaitenColumn)
@@ -85,6 +96,8 @@ export async function loadPublicStickerClientView(
     }
     prevKaitenColumn = col;
   }
+
+  const milestonesFromRevisions = milestonesFromRevisionColumns(revisionColumnRows);
 
   const handedToAdminsAt =
     handedFromKanban && handedFromRevisions
@@ -97,21 +110,6 @@ export async function loadPublicStickerClientView(
   const doctorShort =
     personNameSurnameInitials(doctorRaw || null) || doctorRaw || null;
 
-  const movementRevisions = revRows
-    .filter((r) =>
-      stickerRevisionSummaryIsBoardMovement((r.summary || "").trim()),
-    )
-    .map((r) => {
-      const summary = stickerMovementSummaryForPublic((r.summary || "").trim());
-      return {
-        id: r.id,
-        createdAt: r.createdAt.toISOString(),
-        actorLabel: (r.actorLabel || "").trim() || "—",
-        summary,
-      };
-    })
-    .filter((r) => r.summary.length > 0);
-
   return {
     orderNumber: order.orderNumber,
     clinicName: order.clinic?.name?.trim() || null,
@@ -120,6 +118,13 @@ export async function loadPublicStickerClientView(
     workReceivedAt: order.workReceivedAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
     handedToAdminsAt,
-    revisions: movementRevisions,
+    agreedAt: earlierMilestoneIso(
+      milestonesFromKanban.agreedAt,
+      milestonesFromRevisions.agreedAt,
+    ),
+    producedAt: earlierMilestoneIso(
+      milestonesFromKanban.producedAt,
+      milestonesFromRevisions.producedAt,
+    ),
   };
 }

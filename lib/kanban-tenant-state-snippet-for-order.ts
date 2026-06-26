@@ -2,6 +2,11 @@ import type { DemoKanbanColumn } from "@prisma/client";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
 import { isHandedToAdminsKaitenColumnTitle } from "@/lib/sticker-public-client-copy";
+import {
+  KANBAN_MOVE_TO_COLUMN_RE,
+  milestonesFromKanbanActivity,
+  type StickerPublicMilestones,
+} from "@/lib/sticker-public-milestones";
 
 export const KANBAN_STATE_KEY = "kanbanAppStateV3" as const;
 
@@ -81,8 +86,7 @@ export function kanbanSnippetForLinkedOrder(
 }
 
 /** «Перемещена в «…»» / с опциональным хвостом «(Kaiten)» — кириллические кавычки «». */
-const CRM_KANBAN_MOVE_TO_COLUMN_RE =
-  /Перемещена\s+в\s+«([^»]+)»(?:\s*\([^)]*\))?/u;
+export { KANBAN_MOVE_TO_COLUMN_RE };
 
 /**
  * Первый момент по журналу карточки CRM-канбана, когда колонка назначения — «сдана админам».
@@ -104,7 +108,7 @@ export function firstHandedToAdminsAtFromLinkedOrderKanbanState(
     const act = card.activity || [];
     for (let i = act.length - 1; i >= 0; i--) {
       const text = (act[i]?.text || "").trim();
-      const m = text.match(CRM_KANBAN_MOVE_TO_COLUMN_RE);
+      const m = text.match(KANBAN_MOVE_TO_COLUMN_RE);
       if (!m) continue;
       const colTitle = (m[1] || "").trim();
       if (!isHandedToAdminsKaitenColumnTitle(colTitle)) continue;
@@ -116,4 +120,27 @@ export function firstHandedToAdminsAtFromLinkedOrderKanbanState(
     return null;
   }
   return null;
+}
+
+/** Согласование→производство и уход из сборки по журналу CRM-канбана. */
+export function milestonesFromLinkedOrderKanbanState(
+  rawState: unknown,
+  orderId: string,
+): StickerPublicMilestones {
+  const oid = String(orderId || "").trim();
+  if (!oid) return { agreedAt: null, producedAt: null };
+  const st = rawState as { boards?: unknown } | null;
+  const boards = st?.boards;
+  if (!Array.isArray(boards)) return { agreedAt: null, producedAt: null };
+
+  let agreedAt: string | null = null;
+  let producedAt: string | null = null;
+  for (const b of boards as KanbanBoard[]) {
+    const card = findCardInBoard(b, oid);
+    if (!card) continue;
+    const m = milestonesFromKanbanActivity(card.activity);
+    if (m.agreedAt && (!agreedAt || m.agreedAt < agreedAt)) agreedAt = m.agreedAt;
+    if (m.producedAt && (!producedAt || m.producedAt < producedAt)) producedAt = m.producedAt;
+  }
+  return { agreedAt, producedAt };
 }
