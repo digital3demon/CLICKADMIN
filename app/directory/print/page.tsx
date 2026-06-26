@@ -17,7 +17,7 @@ export default async function DirectoryPrintPage() {
   return (
     <ModuleFrame
       title="Печать"
-      description="Шаблоны этикеток отгрузки: блоки, шрифты, пресеты для всей организации."
+      description="Шаблоны этикеток отгрузки и настройка публичной страницы по QR: блоки, шрифты, строки «Сроки»."
     >
       <PrintTenantSettings canEdit={canEdit} />
       <p className="mt-8 text-sm">

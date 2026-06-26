@@ -4,6 +4,10 @@ import {
   normalizeStickerPrintSettings,
   type StickerPrintSettings,
 } from "@/lib/sticker-print-settings";
+import {
+  normalizePublicHubTimeline,
+  type PublicHubTimelineConfig,
+} from "@/lib/sticker-public-hub-timeline";
 
 export const STICKER_PRINT_SETTINGS_KEY = "stickerPrintSettingsV1" as const;
 
@@ -60,6 +64,7 @@ export type StickerPrintSettingsV2 = {
   version: 2;
   activePresetId: string;
   presets: StickerTemplatePreset[];
+  publicHubTimeline?: PublicHubTimelineConfig;
 };
 
 export const STICKER_TEMPLATE_LIMITS = {
@@ -289,6 +294,7 @@ export function normalizeStickerPrintSettingsV2(raw: unknown): StickerPrintSetti
     version: 2 as const,
     activePresetId: DEFAULT_PRESET_ID,
     presets: [createDefaultPreset()],
+    publicHubTimeline: normalizePublicHubTimeline(null),
   };
 
   if (raw == null || typeof raw !== "object") return fallback;
@@ -300,6 +306,7 @@ export function normalizeStickerPrintSettingsV2(raw: unknown): StickerPrintSetti
       version: 2,
       activePresetId: DEFAULT_PRESET_ID,
       presets: [createDefaultPreset(v1.widthMm, v1.heightMm)],
+      publicHubTimeline: normalizePublicHubTimeline(null),
     };
   }
 
@@ -332,6 +339,7 @@ export function normalizeStickerPrintSettingsV2(raw: unknown): StickerPrintSetti
     version: 2,
     activePresetId,
     presets,
+    publicHubTimeline: normalizePublicHubTimeline(obj.publicHubTimeline),
   };
 }
 

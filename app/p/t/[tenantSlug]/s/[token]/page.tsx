@@ -63,32 +63,16 @@ export default async function StickerPublicHubPage({
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
             Сроки
           </h2>
-          <p>
-            <span className="text-zinc-500">Поступление в лабораторию: </span>
-            <span className="font-medium">
-              {data.workReceivedAt
-                ? fmtRu(data.workReceivedAt)
-                : `${fmtRu(data.createdAt)} — отдельная дата не указана, показана дата оформления`}
-            </span>
-          </p>
-          <p>
-            <span className="text-zinc-500">Оформлено: </span>
-            <span className="font-medium">{fmtRu(data.createdAt)}</span>
-          </p>
-          <p>
-            <span className="text-zinc-500">Согласовано: </span>
-            <span className="font-medium">{fmtRu(data.agreedAt)}</span>
-          </p>
-          <p>
-            <span className="text-zinc-500">Произведено: </span>
-            <span className="font-medium">{fmtRu(data.producedAt)}</span>
-          </p>
-          <p>
-            <span className="text-zinc-500">Готово: </span>
-            <span className="font-medium">
-              {data.handedToAdminsAt ? fmtRu(data.handedToAdminsAt) : "—"}
-            </span>
-          </p>
+          {data.timelineRows.map((row) => (
+            <p key={row.id}>
+              <span className="text-zinc-500">{row.label}: </span>
+              <span className="font-medium">
+                {row.at
+                  ? `${fmtRu(row.at)}${row.note ? ` — ${row.note}` : ""}`
+                  : "—"}
+              </span>
+            </p>
+          ))}
         </section>
 
         <div className="mt-6 border-t border-zinc-100 pt-5">

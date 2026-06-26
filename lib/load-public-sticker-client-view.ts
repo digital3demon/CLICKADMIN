@@ -3,33 +3,27 @@ import "server-only";
 import type { PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
-  firstHandedToAdminsAtFromLinkedOrderKanbanState,
   KANBAN_STATE_KEY,
-  milestonesFromLinkedOrderKanbanState,
+  kanbanActivityForLinkedOrder,
+  kanbanBoardsFromState,
 } from "@/lib/kanban-tenant-state-snippet-for-order";
 import { parseSnapshotV1 } from "@/lib/order-revision-snapshot";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
-import { isHandedToAdminsKaitenColumnTitle } from "@/lib/sticker-public-client-copy";
 import {
-  earlierMilestoneIso,
-  milestonesFromRevisionColumns,
-} from "@/lib/sticker-public-milestones";
+  resolvePublicHubTimeline,
+  type ResolvedTimelineRow,
+} from "@/lib/resolve-public-hub-timeline";
+import {
+  STICKER_PRINT_SETTINGS_KEY,
+  normalizeStickerPrintSettingsV2,
+} from "@/lib/sticker-template";
 
 export type PublicStickerClientView = {
   orderNumber: string;
   clinicName: string | null;
   doctorShort: string | null;
   patientShort: string | null;
-  workReceivedAt: string | null;
-  createdAt: string;
-  /**
-   * Первый момент «сдана админам»: по журналу CRM-канбана и/или ревизиям колонки; если оба есть — более ранняя дата.
-   */
-  handedToAdminsAt: string | null;
-  /** Согласование → производство (канбан / ревизии). */
-  agreedAt: string | null;
-  /** Сборка → следующий этап (канбан / ревизии). */
-  producedAt: string | null;
+  timelineRows: ResolvedTimelineRow[];
 };
 
 export async function loadPublicStickerClientView(
@@ -50,37 +44,37 @@ export async function loadPublicStickerClientView(
   });
   if (!order) return null;
 
-  const stateRow = await prisma.tenantClientState.findUnique({
-    where: { tenantId_key: { tenantId, key: KANBAN_STATE_KEY } },
-    select: { value: true },
-  });
+  const [stateRow, printRow] = await Promise.all([
+    prisma.tenantClientState.findUnique({
+      where: { tenantId_key: { tenantId, key: KANBAN_STATE_KEY } },
+      select: { value: true },
+    }),
+    prisma.tenantClientState.findUnique({
+      where: { tenantId_key: { tenantId, key: STICKER_PRINT_SETTINGS_KEY } },
+      select: { value: true },
+    }),
+  ]);
 
-  const handedFromKanban = firstHandedToAdminsAtFromLinkedOrderKanbanState(
-    stateRow?.value,
-    orderId,
-  );
-
-  const milestonesFromKanban = milestonesFromLinkedOrderKanbanState(
-    stateRow?.value,
-    orderId,
-  );
+  const kanbanState = stateRow?.value;
+  const printSettings = normalizeStickerPrintSettingsV2(printRow?.value ?? null);
 
   const revRows = await ordersDb.orderRevision.findMany({
     where: { orderId },
     orderBy: { createdAt: "asc" },
     take: 150,
     select: {
-      id: true,
       createdAt: true,
-      actorLabel: true,
-      summary: true,
       snapshot: true,
     },
   });
 
-  let prevKaitenColumn: string | null = null;
-  let handedFromRevisions: string | null = null;
   const revisionColumnRows: Array<{ at: Date; column: string | null }> = [];
+  const revisionFieldRows: Array<{
+    at: Date;
+    isUrgent?: boolean | null;
+    urgentCoefficient?: number | null;
+  }> = [];
+
   for (const r of revRows) {
     const snap = parseSnapshotV1(r.snapshot);
     const col =
@@ -88,23 +82,26 @@ export async function loadPublicStickerClientView(
         ? String(snap.order.kaitenColumnTitle).trim() || null
         : null;
     revisionColumnRows.push({ at: r.createdAt, column: col });
-    if (
-      isHandedToAdminsKaitenColumnTitle(col) &&
-      !isHandedToAdminsKaitenColumnTitle(prevKaitenColumn)
-    ) {
-      handedFromRevisions = r.createdAt.toISOString();
+    if (snap?.order) {
+      revisionFieldRows.push({
+        at: r.createdAt,
+        isUrgent: snap.order.isUrgent,
+        urgentCoefficient: snap.order.urgentCoefficient,
+      });
     }
-    prevKaitenColumn = col;
   }
 
-  const milestonesFromRevisions = milestonesFromRevisionColumns(revisionColumnRows);
-
-  const handedToAdminsAt =
-    handedFromKanban && handedFromRevisions
-      ? handedFromKanban < handedFromRevisions
-        ? handedFromKanban
-        : handedFromRevisions
-      : handedFromKanban ?? handedFromRevisions;
+  const timelineRows = resolvePublicHubTimeline({
+    config: printSettings.publicHubTimeline,
+    order: {
+      createdAt: order.createdAt.toISOString(),
+      workReceivedAt: order.workReceivedAt?.toISOString() ?? null,
+    },
+    kanbanActivity: kanbanActivityForLinkedOrder(kanbanState, orderId),
+    revisionColumnRows,
+    revisionFieldRows,
+    kanbanBoards: kanbanBoardsFromState(kanbanState),
+  });
 
   const doctorRaw = (order.doctor.fullName ?? "").trim();
   const doctorShort =
@@ -115,16 +112,6 @@ export async function loadPublicStickerClientView(
     clinicName: order.clinic?.name?.trim() || null,
     doctorShort,
     patientShort: personNameSurnameInitials(order.patientName) || null,
-    workReceivedAt: order.workReceivedAt?.toISOString() ?? null,
-    createdAt: order.createdAt.toISOString(),
-    handedToAdminsAt,
-    agreedAt: earlierMilestoneIso(
-      milestonesFromKanban.agreedAt,
-      milestonesFromRevisions.agreedAt,
-    ),
-    producedAt: earlierMilestoneIso(
-      milestonesFromKanban.producedAt,
-      milestonesFromRevisions.producedAt,
-    ),
+    timelineRows,
   };
 }

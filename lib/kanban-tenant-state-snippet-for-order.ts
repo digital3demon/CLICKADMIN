@@ -144,3 +144,30 @@ export function milestonesFromLinkedOrderKanbanState(
   }
   return { agreedAt, producedAt };
 }
+
+/** Журнал активности карточки, привязанной к наряду (все доски). */
+export function kanbanActivityForLinkedOrder(
+  rawState: unknown,
+  orderId: string,
+): Array<{ at?: string; text?: string }> {
+  const oid = String(orderId || "").trim();
+  if (!oid) return [];
+  const st = rawState as { boards?: unknown } | null;
+  const boards = st?.boards;
+  if (!Array.isArray(boards)) return [];
+  const merged: Array<{ at?: string; text?: string }> = [];
+  for (const b of boards as KanbanBoard[]) {
+    const card = findCardInBoard(b, oid);
+    if (!card?.activity?.length) continue;
+    merged.push(...card.activity);
+  }
+  return merged;
+}
+
+/** Доски CRM-канбана из tenant state (для сопоставления «следующая колонка»). */
+export function kanbanBoardsFromState(rawState: unknown): KanbanBoard[] {
+  const st = rawState as { boards?: unknown } | null;
+  const boards = st?.boards;
+  if (!Array.isArray(boards)) return [];
+  return boards as KanbanBoard[];
+}

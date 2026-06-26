@@ -250,6 +250,7 @@ export function StickerTemplateEditor({ canEdit }: { canEdit: boolean }) {
       version: 2,
       activePresetId: makeActive ? named.id : settings.activePresetId,
       presets: mergedPresets,
+      publicHubTimeline: settings.publicHubTimeline,
     };
     setDraft(named);
     await persistSettings(next, named);
@@ -265,6 +266,7 @@ export function StickerTemplateEditor({ canEdit }: { canEdit: boolean }) {
       version: 2,
       activePresetId: id,
       presets: [...settings.presets, created],
+      publicHubTimeline: settings.publicHubTimeline,
     };
     setDraft(created);
     setPresetName(name);
@@ -281,6 +283,7 @@ export function StickerTemplateEditor({ canEdit }: { canEdit: boolean }) {
           ? remaining[0]!.id
           : settings.activePresetId,
       presets: remaining,
+      publicHubTimeline: settings.publicHubTimeline,
     };
     const fallback =
       remaining.find((p) => p.id === next.activePresetId) ?? remaining[0]!;
