@@ -77,6 +77,9 @@ function renderButton(
   const href = escapeHtml(buttonHref(btn, context));
   const label = escapeHtml(substitute(btn.label, context));
   const radius = blockStyle?.buttonRadiusPx ?? 8;
+  const fontSize = blockStyle?.buttonFontSizePx ?? 15;
+  const padX = blockStyle?.buttonPaddingXPx ?? 20;
+  const padY = blockStyle?.buttonPaddingYPx ?? 12;
   let bg = blockStyle?.buttonBgColor ?? "#2563eb";
   let color = blockStyle?.buttonTextColor ?? "#ffffff";
   let border = "none";
@@ -91,7 +94,7 @@ function renderButton(
   }
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 4px;display:inline-table;">
 <tr><td align="center" style="border-radius:${radius}px;background-color:${bg};border:${border};">
-<a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;font-size:15px;font-weight:600;color:${color};text-decoration:none;border-radius:${radius}px;">${label}</a>
+<a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:${padY}px ${padX}px;font-size:${fontSize}px;font-weight:600;color:${color};text-decoration:none;border-radius:${radius}px;">${label}</a>
 </td></tr></table>`;
 }
 
@@ -105,37 +108,38 @@ function renderBlock(
   switch (block.type) {
     case "hero": {
       const logo = assetById(assets, block.logoAssetId);
+      const logoW = block.logoWidthPx ?? 200;
       const logoHtml = logo
-        ? `<img src="cid:${escapeHtml(logo.contentId)}" alt="" width="200" style="width:200px;height:auto;max-width:100%;display:block;margin:0 auto 16px;" />`
+        ? `<img src="cid:${escapeHtml(logo.contentId)}" alt="" width="${logoW}" style="width:${logoW}px;height:auto;max-width:100%;display:block;margin:0 auto 16px;" />`
         : "";
       const headline = escapeHtml(substitute(block.headline, context));
       const subtitle = block.subtitle?.trim()
         ? `<p style="margin:8px 0 0;font-size:15px;line-height:1.4;opacity:0.85;">${escapeHtml(substitute(block.subtitle, context))}</p>`
         : "";
-      return `<tr><td style="${tdStyle}">${logoHtml}<h1 style="margin:0;font-size:${block.style?.fontSizePx ?? 22}px;line-height:1.25;font-weight:700;">${headline}</h1>${subtitle}</td></tr>`;
+      return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="${tdStyle}">${logoHtml}<h1 style="margin:0;font-size:${block.style?.fontSizePx ?? 22}px;line-height:1.25;font-weight:700;">${headline}</h1>${subtitle}</td></tr>`;
     }
     case "text":
-      return `<tr><td style="${tdStyle}">${textToParagraphsHtml(block.content, context)}</td></tr>`;
+      return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="${tdStyle}">${textToParagraphsHtml(block.content, context)}</td></tr>`;
     case "buttons": {
       const buttonsHtml = block.buttons
         .map((btn) => renderButton(btn, context, block.style))
         .join("");
-      return `<tr><td style="${tdStyle}">${buttonsHtml}</td></tr>`;
+      return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="${tdStyle}">${buttonsHtml}</td></tr>`;
     }
     case "image": {
       const asset = assetById(assets, block.assetId);
       if (!asset) return "";
       const w = block.widthPx || 240;
       const align = block.align ?? "center";
-      return `<tr><td style="${tdStyle}"><img src="cid:${escapeHtml(asset.contentId)}" alt="" width="${w}" style="width:${w}px;height:auto;max-width:100%;display:block;margin:0 auto;" align="${align}" /></td></tr>`;
+      return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="${tdStyle}"><img src="cid:${escapeHtml(asset.contentId)}" alt="" width="${w}" style="width:${w}px;height:auto;max-width:100%;display:block;margin:0 auto;" align="${align}" /></td></tr>`;
     }
     case "divider": {
       const h = block.heightPx || 16;
       const color = block.color ?? "#e5e7eb";
-      return `<tr><td style="height:${h}px;line-height:${h}px;font-size:0;background-color:${color};">&nbsp;</td></tr>`;
+      return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="height:${h}px;line-height:${h}px;font-size:0;background-color:${color};">&nbsp;</td></tr>`;
     }
     case "attach_hint":
-      return `<tr><td style="${tdStyle}"><p style="margin:0;line-height:1.4;">${escapeHtml(substitute(block.text, context))}</p></td></tr>`;
+      return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="${tdStyle}"><p style="margin:0;line-height:1.4;">${escapeHtml(substitute(block.text, context))}</p></td></tr>`;
     case "footer": {
       const links = (block.links ?? [])
         .map(
@@ -143,7 +147,7 @@ function renderBlock(
             `<a href="${escapeHtml(substitute(l.href, context))}" style="color:inherit;margin:0 6px;">${escapeHtml(substitute(l.label, context))}</a>`,
         )
         .join("");
-      return `<tr><td style="${tdStyle}"><p style="margin:0 0 8px;line-height:1.4;">${escapeHtml(substitute(block.text, context))}</p>${links ? `<p style="margin:0;">${links}</p>` : ""}</td></tr>`;
+      return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="${tdStyle}"><p style="margin:0 0 8px;line-height:1.4;">${escapeHtml(substitute(block.text, context))}</p>${links ? `<p style="margin:0;">${links}</p>` : ""}</td></tr>`;
     }
     default:
       return "";
@@ -194,6 +198,18 @@ ${rows}
 </table>
 </body></html>`;
   return normalizeReplyHtmlForSend(html);
+}
+
+export function renderSingleReplyBlockHtml(
+  block: ReplyBlock,
+  context: EmailReplyTemplateContext,
+  assets: ReplyBlockAssetRef[],
+  opts?: { globalFont?: string; contentWidthPx?: number },
+): string {
+  const row = renderBlock(block, context, assets, opts?.globalFont);
+  if (!row) return "";
+  const width = opts?.contentWidthPx ?? 600;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="${width}" style="max-width:100%;width:100%;border-collapse:collapse;background-color:#ffffff;">${row}</table>`;
 }
 
 export function getEditablePreflightBlocks(document: ReplyEditorDocument): ReplyBlock[] {

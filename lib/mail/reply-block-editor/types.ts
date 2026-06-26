@@ -11,6 +11,9 @@ export type BlockStyle = {
   buttonBgColor?: string;
   buttonTextColor?: string;
   buttonRadiusPx?: number;
+  buttonFontSizePx?: number;
+  buttonPaddingXPx?: number;
+  buttonPaddingYPx?: number;
   align?: "left" | "center" | "right";
 };
 
@@ -36,6 +39,7 @@ export type ReplyBlockBase = {
 export type HeroBlock = ReplyBlockBase & {
   type: "hero";
   logoAssetId?: string | null;
+  logoWidthPx?: number;
   headline: string;
   subtitle?: string;
   editableHeadlineInPreflight?: boolean;

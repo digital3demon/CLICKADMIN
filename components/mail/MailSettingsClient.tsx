@@ -229,6 +229,7 @@ export function MailSettingsClient() {
   const [replyEditorDocument, setReplyEditorDocument] = useState<ReplyEditorDocument>(
     () => createClickLabPreset(),
   );
+  const [replySelectedBlockId, setReplySelectedBlockId] = useState<string | null>(null);
   const [replyTemplateLoading, setReplyTemplateLoading] = useState(false);
   const [replyTemplateSaving, setReplyTemplateSaving] = useState(false);
   const [replyTemplateSaveHint, setReplyTemplateSaveHint] = useState<string | null>(
@@ -1017,7 +1018,7 @@ export function MailSettingsClient() {
           {replyTemplateLoading ? (
             <p className="mt-4 text-sm text-[var(--text-secondary)]">Загрузка шаблона…</p>
           ) : (
-            <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] xl:items-start">
+            <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] xl:items-start">
               <div className="min-w-0 space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -1078,6 +1079,8 @@ export function MailSettingsClient() {
                     document={replyEditorDocument}
                     onChange={setReplyEditorDocument}
                     disabled={replyTemplateSaving}
+                    selectedBlockId={replySelectedBlockId}
+                    onSelectedBlockIdChange={setReplySelectedBlockId}
                     assets={replyTemplateAssets.map((a) => ({
                       id: a.id,
                       fileName: a.fileName,
@@ -1190,6 +1193,17 @@ export function MailSettingsClient() {
                     id: a.id,
                     contentId: a.contentId,
                   }))}
+                  interactive={
+                    replyLayoutType === "blocks"
+                      ? {
+                          document: replyEditorDocument,
+                          onDocumentChange: setReplyEditorDocument,
+                          selectedBlockId: replySelectedBlockId,
+                          onSelectBlockId: setReplySelectedBlockId,
+                          disabled: replyTemplateSaving,
+                        }
+                      : null
+                  }
                 />
               </div>
             </div>

@@ -1,5 +1,22 @@
 "use client";
 
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useMemo, useState } from "react";
 import {
   createClickLabPreset,
@@ -24,7 +41,65 @@ type Props = {
   onChange: (doc: ReplyEditorDocument) => void;
   assets: BlockEditorAsset[];
   disabled?: boolean;
+  selectedBlockId?: string | null;
+  onSelectedBlockIdChange?: (id: string | null) => void;
 };
+
+function SortableBlockListItem({
+  block,
+  index,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  block: ReplyBlock;
+  index: number;
+  selected: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: block.id,
+    disabled,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.7 : 1,
+  };
+  return (
+    <li ref={setNodeRef} style={style}>
+      <div
+        className={[
+          "flex w-full items-center gap-1 rounded-lg px-1 py-0.5",
+          selected ? "bg-[var(--sidebar-blue)] text-white" : "text-[var(--app-text)] hover:bg-[var(--surface-hover)]",
+        ].join(" ")}
+      >
+        <button
+          type="button"
+          disabled={disabled}
+          className={[
+            "shrink-0 cursor-grab px-1 text-xs active:cursor-grabbing",
+            selected ? "text-white/80" : "text-[var(--text-muted)]",
+          ].join(" ")}
+          title="Перетащить"
+          {...attributes}
+          {...listeners}
+        >
+          ⋮⋮
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onSelect}
+          className="min-w-0 flex-1 truncate py-1.5 text-left text-xs font-medium"
+        >
+          {index + 1}. {REPLY_BLOCK_TYPE_LABELS[block.type]}
+        </button>
+      </div>
+    </li>
+  );
+}
 
 const BLOCK_TYPES = Object.keys(REPLY_BLOCK_TYPE_LABELS) as ReplyBlockType[];
 
@@ -170,6 +245,42 @@ function BlockStyleFields({
               className="mt-1 h-8 w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-xs"
             />
           </label>
+          <label className="block text-xs text-[var(--text-secondary)]">
+            Размер текста кнопки, px
+            <input
+              type="number"
+              min={11}
+              max={24}
+              disabled={disabled}
+              value={style.buttonFontSizePx ?? 15}
+              onChange={(e) => onUpdate({ buttonFontSizePx: Number(e.target.value) })}
+              className="mt-1 h-8 w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-xs"
+            />
+          </label>
+          <label className="block text-xs text-[var(--text-secondary)]">
+            Отступ кнопки X, px
+            <input
+              type="number"
+              min={8}
+              max={40}
+              disabled={disabled}
+              value={style.buttonPaddingXPx ?? 20}
+              onChange={(e) => onUpdate({ buttonPaddingXPx: Number(e.target.value) })}
+              className="mt-1 h-8 w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-xs"
+            />
+          </label>
+          <label className="block text-xs text-[var(--text-secondary)]">
+            Отступ кнопки Y, px
+            <input
+              type="number"
+              min={6}
+              max={24}
+              disabled={disabled}
+              value={style.buttonPaddingYPx ?? 12}
+              onChange={(e) => onUpdate({ buttonPaddingYPx: Number(e.target.value) })}
+              className="mt-1 h-8 w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-xs"
+            />
+          </label>
         </>
       ) : null}
     </div>
@@ -271,8 +382,21 @@ export function ReplyTemplateBlockEditor({
   onChange,
   assets,
   disabled = false,
+  selectedBlockId: selectedBlockIdProp,
+  onSelectedBlockIdChange,
 }: Props) {
-  const [selectedId, setSelectedId] = useState<string | null>(document.blocks[0]?.id ?? null);
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(
+    document.blocks[0]?.id ?? null,
+  );
+  const selectedId = selectedBlockIdProp ?? internalSelectedId;
+  const setSelectedId = (id: string | null) => {
+    onSelectedBlockIdChange?.(id);
+    if (selectedBlockIdProp === undefined) setInternalSelectedId(id);
+  };
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const selected = useMemo(
     () => document.blocks.find((b) => b.id === selectedId) ?? null,
     [document.blocks, selectedId],
@@ -297,14 +421,13 @@ export function ReplyTemplateBlockEditor({
     updateBlock(id, { style: { ...block.style, ...patch } });
   }
 
-  function moveBlock(id: string, dir: -1 | 1) {
-    const idx = document.blocks.findIndex((b) => b.id === id);
-    const next = idx + dir;
-    if (idx < 0 || next < 0 || next >= document.blocks.length) return;
-    const blocks = [...document.blocks];
-    const [item] = blocks.splice(idx, 1);
-    blocks.splice(next, 0, item!);
-    onChange({ ...document, blocks });
+  function onBlockListDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = document.blocks.findIndex((b) => b.id === active.id);
+    const newIndex = document.blocks.findIndex((b) => b.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    onChange({ ...document, blocks: arrayMove(document.blocks, oldIndex, newIndex) });
   }
 
   function removeBlock(id: string) {
@@ -321,6 +444,30 @@ export function ReplyTemplateBlockEditor({
 
   return (
     <div className="space-y-4">
+      <label className="block text-xs text-[var(--text-secondary)]">
+        Ширина письма, px
+        <input
+          type="range"
+          min={320}
+          max={720}
+          step={10}
+          disabled={disabled}
+          value={document.global?.contentWidthPx ?? 600}
+          onChange={(e) =>
+            onChange({
+              ...document,
+              global: {
+                ...document.global,
+                contentWidthPx: Number(e.target.value),
+              },
+            })
+          }
+          className="mt-1 w-full"
+        />
+        <span className="text-[10px] text-[var(--text-muted)]">
+          {document.global?.contentWidthPx ?? 600} px
+        </span>
+      </label>
       <div className="flex flex-wrap gap-2">
         <select
           disabled={disabled}
@@ -353,52 +500,26 @@ export function ReplyTemplateBlockEditor({
         </button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,11rem)_1fr]">
-        <ul className="space-y-1">
-          {document.blocks.map((block, index) => (
-            <li key={block.id}>
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => setSelectedId(block.id)}
-                className={[
-                  "flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left text-xs font-medium",
-                  selectedId === block.id
-                    ? "bg-[var(--sidebar-blue)] text-white"
-                    : "text-[var(--app-text)] hover:bg-[var(--surface-hover)]",
-                ].join(" ")}
-              >
-                <span className="truncate">
-                  {index + 1}. {REPLY_BLOCK_TYPE_LABELS[block.type]}
-                </span>
-                <span className="flex shrink-0 gap-0.5">
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      moveBlock(block.id, -1);
-                    }}
-                    className="px-1 opacity-80"
-                  >
-                    ↑
-                  </span>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      moveBlock(block.id, 1);
-                    }}
-                    className="px-1 opacity-80"
-                  >
-                    ↓
-                  </span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,12rem)_1fr]">
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onBlockListDragEnd}>
+          <SortableContext
+            items={document.blocks.map((b) => b.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="space-y-1">
+              {document.blocks.map((block, index) => (
+                <SortableBlockListItem
+                  key={block.id}
+                  block={block}
+                  index={index}
+                  selected={selectedId === block.id}
+                  disabled={disabled}
+                  onSelect={() => setSelectedId(block.id)}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
 
         {selected ? (
           <div className="space-y-4 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
@@ -437,6 +558,20 @@ export function ReplyTemplateBlockEditor({
                       </option>
                     ))}
                   </select>
+                </label>
+                <label className="block text-xs text-[var(--text-secondary)]">
+                  Ширина логотипа, px
+                  <input
+                    type="number"
+                    min={48}
+                    max={480}
+                    disabled={disabled}
+                    value={selected.logoWidthPx ?? 200}
+                    onChange={(e) =>
+                      updateBlock(selected.id, { logoWidthPx: Number(e.target.value) })
+                    }
+                    className="mt-1 h-8 w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-xs"
+                  />
                 </label>
                 <label className="block text-xs text-[var(--text-secondary)]">
                   Заголовок
