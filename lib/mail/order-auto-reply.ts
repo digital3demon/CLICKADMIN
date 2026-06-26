@@ -8,7 +8,16 @@ import {
 export { resolveReplyToSourceEmailId } from "@/lib/mail/email-reply-template";
 import { buildEmailReplyTemplateContext } from "@/lib/mail/build-email-reply-context";
 import { listEmailReplyTemplateAssetsForSend, sendEmail } from "@/lib/mail/mail-service";
-import { collectReplyTemplateMailAttachments } from "@/lib/mail/reply-template-cid";
+import {
+  collectReplyTemplateMailAttachments,
+  normalizeReplyHtmlForSend,
+} from "@/lib/mail/reply-template-cid";
+import { resolveOrderStatusUrl } from "@/lib/mail/order-status-url";
+import {
+  buildHtmlFromReplyTemplate,
+  resolveLayoutType,
+} from "@/lib/mail/reply-template-render";
+import type { ReplyPreflightOverrides } from "@/lib/mail/reply-block-editor";
 import { logger } from "@/lib/server/logger";
 
 export type OrderAutoReplyResult =
@@ -30,6 +39,7 @@ export async function sendOrderAutoReply(params: {
   replyToSourceEmailId: string;
   overrideSubject?: string | null;
   overrideHtml?: string | null;
+  preflightOverrides?: ReplyPreflightOverrides | null;
 }): Promise<OrderAutoReplyResult> {
   const started = Date.now();
   const {
@@ -41,6 +51,7 @@ export async function sendOrderAutoReply(params: {
     replyToSourceEmailId,
     overrideSubject,
     overrideHtml,
+    preflightOverrides,
   } = params;
   const subjectOverride = overrideSubject?.trim() ?? "";
   const htmlOverride = overrideHtml?.trim() ?? "";
@@ -94,6 +105,17 @@ export async function sendOrderAutoReply(params: {
       }
     }
 
+    const tenantRow = await db.tenant.findUnique({
+      where: { id: tenantId },
+      select: { slug: true },
+    });
+    const orderStatusUrl = await resolveOrderStatusUrl(
+      db,
+      tenantId,
+      orderId,
+      tenantRow?.slug ?? "lab",
+    );
+
     const context = buildEmailReplyTemplateContext({
       orderNumber: link.order.orderNumber,
       patientName: link.order.patientName,
@@ -105,7 +127,18 @@ export async function sendOrderAutoReply(params: {
       originalSubject: link.email.subject,
       originalFromName: link.email.fromName,
       originalFromAddress: link.email.fromAddress,
+      orderStatusUrl,
     });
+
+    const assetRows = await listEmailReplyTemplateAssetsForSend(
+      db,
+      tenantId,
+      link.email.accountId,
+    );
+    const assetsForRender = assetRows.map((row) => ({
+      id: row.id,
+      contentId: row.contentId,
+    }));
 
     const subject = useOverride
       ? substituteOrderNumberPlaceholders(subjectOverride, link.order.orderNumber)
@@ -115,18 +148,36 @@ export async function sendOrderAutoReply(params: {
             ? renderEmailReplyTemplate(subjectRaw, context)
             : defaultReplySubject(context.originalSubject);
         })();
-    const html = useOverride
-      ? substituteOrderNumberPlaceholders(htmlOverride, link.order.orderNumber)
-      : renderEmailReplyTemplate(template!.htmlTemplate, context, { html: true });
+
+    let html: string;
+    if (useOverride) {
+      html = substituteOrderNumberPlaceholders(htmlOverride, link.order.orderNumber);
+    } else if (template) {
+      const layoutType = resolveLayoutType(
+        template.layoutType,
+        template.htmlTemplate,
+        template.editorDocument,
+      );
+      if (layoutType === "blocks") {
+        html = buildHtmlFromReplyTemplate(
+          "blocks",
+          template.htmlTemplate,
+          template.editorDocument,
+          context,
+          assetsForRender,
+          preflightOverrides,
+        );
+      } else {
+        html = renderEmailReplyTemplate(template.htmlTemplate, context, { html: true });
+      }
+    } else {
+      html = "";
+    }
+    html = normalizeReplyHtmlForSend(html);
     const inReplyTo = buildReferences(link.email.messageId);
     const references = inReplyTo;
     const threadId = link.email.threadId?.trim() || inReplyTo;
 
-    const assetRows = await listEmailReplyTemplateAssetsForSend(
-      db,
-      tenantId,
-      link.email.accountId,
-    );
     const attachments = collectReplyTemplateMailAttachments(
       html,
       assetRows.map((row) => ({

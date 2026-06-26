@@ -7,6 +7,7 @@ import {
 } from "@/lib/mail/mail-service";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(
   _req: Request,
@@ -37,7 +38,15 @@ export async function POST(
   if (!r.ok) return r.response;
   try {
     const { id } = await params;
-    const form = await req.formData();
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return NextResponse.json(
+        { error: "Не удалось принять файл. Повторите загрузку." },
+        { status: 400 },
+      );
+    }
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json({ error: "Выберите файл" }, { status: 400 });

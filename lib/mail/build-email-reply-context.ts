@@ -1,4 +1,5 @@
 import type { EmailReplyTemplateContext } from "@/lib/mail/email-reply-template";
+import { SAMPLE_ORDER_STATUS_URL } from "@/lib/mail/reply-block-editor";
 
 function parseContextDate(value: Date | string | null | undefined): Date | null {
   if (value == null) return null;
@@ -70,6 +71,7 @@ export type BuildEmailReplyContextInput = {
   originalSubject?: string | null;
   originalFromName?: string | null;
   originalFromAddress?: string | null;
+  orderStatusUrl?: string | null;
 };
 
 export function buildEmailReplyTemplateContext(
@@ -90,5 +92,6 @@ export function buildEmailReplyTemplateContext(
     appointmentDate: formatMailDateTime(input.appointmentDate),
     originalSubject: input.originalSubject?.trim() || "",
     originalFrom: senderLabel(input.originalFromName, input.originalFromAddress),
+    orderStatusUrl: input.orderStatusUrl?.trim() || SAMPLE_ORDER_STATUS_URL,
   };
 }

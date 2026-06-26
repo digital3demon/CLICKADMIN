@@ -22,9 +22,6 @@ export function htmlReplyBodyToPlainText(html: string): string {
     .replace(/<\/p>/gi, "\n\n")
     .replace(/<div[^>]*>/gi, "")
     .replace(/<\/div>/gi, "\n\n")
-    .replace(/<img[^>]*alt=["']([^"']*)["'][^>]*>/gi, (_, alt: string) =>
-      alt.trim() ? `[${alt.trim()}]\n` : "",
-    )
     .replace(/<img[^>]*>/gi, "");
 
   return stripRemainingTags(withBreaks)

@@ -964,6 +964,9 @@ model EmailReplyTemplate {
   account         EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   subjectTemplate String       @default("")
   htmlTemplate    String       @db.Text
+  layoutType      String       @default("blocks")
+  editorVersion   Int          @default(1)
+  editorDocument  Json?
   isEnabled       Boolean      @default(true)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt

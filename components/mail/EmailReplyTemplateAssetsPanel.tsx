@@ -33,6 +33,34 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
+/** multipart без Content-Type — boundary выставляет браузер. */
+export async function uploadReplyTemplateAssetFile(
+  accountId: string,
+  file: File,
+): Promise<ReplyTemplateAssetItem> {
+  const form = new FormData();
+  form.set("file", file, file.name);
+  const res = await fetch(
+    `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template/assets`,
+    {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    },
+  );
+  const data = (await res.json().catch(() => ({}))) as {
+    asset?: ReplyTemplateAssetItem;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+  if (!data.asset) {
+    throw new Error("Сервер не вернул загруженный файл");
+  }
+  return data.asset;
+}
+
 export function EmailReplyTemplateAssetsPanel({
   accountId,
   disabled = false,
@@ -76,18 +104,12 @@ export function EmailReplyTemplateAssetsPanel({
       if (onUploadImageFile && file.type.startsWith("image/")) {
         asset = await onUploadImageFile(file);
       } else {
-        const form = new FormData();
-        form.append("file", file);
-        const data = await jsonFetch<{ asset: ReplyTemplateAssetItem }>(
-          `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template/assets`,
-          { method: "POST", body: form },
-        );
-        asset = data.asset;
+        asset = await uploadReplyTemplateAssetFile(accountId, file);
       }
       if (asset) {
         setAssets((prev) => [...prev, asset!]);
         if (asset.kind === "INLINE_IMAGE") {
-          onInsertImage(asset.contentId, asset.fileName);
+          onInsertImage(asset.contentId, "");
         }
       }
     } catch (err) {
@@ -178,7 +200,7 @@ export function EmailReplyTemplateAssetsPanel({
                   <button
                     type="button"
                     disabled={disabled}
-                    onClick={() => onInsertImage(asset.contentId, asset.fileName)}
+                    onClick={() => onInsertImage(asset.contentId, "")}
                     className="rounded-lg bg-[var(--sidebar-blue)] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
                   >
                     Вставить в письмо

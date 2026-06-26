@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import Image from "@tiptap/extension-image";
 import FontFamily from "@tiptap/extension-font-family";
 import { TextStyle } from "@tiptap/extension-text-style";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -16,6 +15,11 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { compressImageForEmail } from "@/lib/mail/compress-image-for-email";
 import { FontSize } from "@/lib/mail/tiptap-font-size";
+import {
+  DEFAULT_REPLY_TEMPLATE_IMAGE_WIDTH_PX,
+  REPLY_TEMPLATE_IMAGE_WIDTH_PRESETS,
+  ResizableImage,
+} from "@/lib/mail/tiptap-resizable-image";
 
 const FONT_OPTIONS = [
   { label: "Arial", value: "Arial, sans-serif" },
@@ -27,18 +31,26 @@ const FONT_OPTIONS = [
 
 const SIZE_OPTIONS = ["12px", "14px", "16px", "18px", "20px", "24px", "28px"] as const;
 
+type UploadedImage = {
+  contentId: string;
+  previewUrl?: string | null;
+};
+
 type Props = {
   value: string;
   onChange: (html: string) => void;
   disabled?: boolean;
   placeholder?: string;
-  /** Upload image to server and return CID; if omitted — data URL (legacy). */
-  onUploadImageFile?: (file: File) => Promise<{ contentId: string } | null>;
+  onUploadImageFile?: (file: File) => Promise<UploadedImage | null>;
 };
 
 export type MailHtmlTemplateEditorHandle = {
   insertText: (text: string) => void;
-  insertCidImage: (contentId: string, alt: string) => void;
+  insertCidImage: (
+    contentId: string,
+    alt: string,
+    opts?: { previewUrl?: string | null; widthPx?: number },
+  ) => void;
 };
 
 function toolbarBtnClass(active: boolean) {
@@ -89,14 +101,14 @@ export const MailHtmlTemplateEditor = forwardRef<MailHtmlTemplateEditorHandle, P
         TextStyle,
         FontFamily,
         FontSize,
-        Image.configure({ inline: false, allowBase64: true }),
+        ResizableImage.configure({ inline: false, allowBase64: true }),
         Placeholder.configure({ placeholder }),
       ],
       content: value || "<p></p>",
       editorProps: {
         attributes: {
           class:
-            "min-h-[200px] px-3 py-3 text-sm leading-6 text-[var(--app-text)] outline-none [&_img]:my-2 [&_img]:max-w-full [&_img]:rounded-lg",
+            "min-h-[220px] px-3 py-3 text-sm leading-6 text-[var(--app-text)] outline-none [&_img]:my-2 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-lg",
         },
       },
       onUpdate: ({ editor: ed }) => {
@@ -107,13 +119,18 @@ export const MailHtmlTemplateEditor = forwardRef<MailHtmlTemplateEditorHandle, P
     });
 
     const insertCidImage = useCallback(
-      (contentId: string, alt: string) => {
+      (
+        contentId: string,
+        alt: string,
+        opts?: { previewUrl?: string | null; widthPx?: number },
+      ) => {
         if (!editor) return;
-        const safeAlt = alt.replace(/"/g, "'");
+        const src = opts?.previewUrl?.trim() || `cid:${contentId}`;
+        const width = opts?.widthPx ?? DEFAULT_REPLY_TEMPLATE_IMAGE_WIDTH_PX;
         editor
           .chain()
           .focus()
-          .setImage({ src: `cid:${contentId}`, alt: safeAlt })
+          .setImage({ src, alt: "", width })
           .run();
       },
       [editor],
@@ -167,12 +184,22 @@ export const MailHtmlTemplateEditor = forwardRef<MailHtmlTemplateEditorHandle, P
             const uploadFile = dataUrlToFile(compressed, file.name || "image.jpg");
             const uploaded = await onUploadImageFile(uploadFile);
             if (uploaded?.contentId) {
-              insertCidImage(uploaded.contentId, file.name);
+              insertCidImage(uploaded.contentId, file.name, {
+                previewUrl: uploaded.previewUrl,
+              });
             }
             return;
           }
           const src = await compressImageForEmail(file);
-          editor.chain().focus().setImage({ src, alt: file.name }).run();
+          editor
+            .chain()
+            .focus()
+            .setImage({
+              src,
+              alt: "",
+              width: DEFAULT_REPLY_TEMPLATE_IMAGE_WIDTH_PX,
+            })
+            .run();
         } catch (err) {
           setImageError(err instanceof Error ? err.message : "Не удалось вставить изображение");
         }
@@ -184,6 +211,19 @@ export const MailHtmlTemplateEditor = forwardRef<MailHtmlTemplateEditorHandle, P
       (editor?.getAttributes("textStyle").fontFamily as string | undefined) ?? "";
     const currentSize =
       (editor?.getAttributes("textStyle").fontSize as string | undefined) ?? "";
+    const imageActive = editor?.isActive("image") ?? false;
+    const currentImageWidth =
+      (editor?.getAttributes("image").width as string | undefined) ?? "";
+
+    const setImageWidth = (width: string) => {
+      editor?.chain().focus().updateAttributes("image", { width }).run();
+    };
+
+    const nudgeImageWidth = (delta: number) => {
+      const raw = currentImageWidth.replace(/px$/i, "");
+      const current = /^\d+$/.test(raw) ? Number(raw) : DEFAULT_REPLY_TEMPLATE_IMAGE_WIDTH_PX;
+      setImageWidth(String(Math.max(40, Math.min(800, current + delta))));
+    };
 
     return (
       <div className="overflow-hidden rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)]">
@@ -254,6 +294,45 @@ export const MailHtmlTemplateEditor = forwardRef<MailHtmlTemplateEditorHandle, P
           >
             Картинка
           </button>
+
+          {imageActive ? (
+            <div className="flex flex-wrap items-center gap-1 border-l border-[var(--border-subtle)] pl-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Ширина
+              </span>
+              <button
+                type="button"
+                disabled={disabled || !editor}
+                className="rounded-lg px-2 py-1 text-xs font-bold hover:bg-[var(--surface-hover)]"
+                onClick={() => nudgeImageWidth(-20)}
+                title="Уменьшить"
+              >
+                −
+              </button>
+              {REPLY_TEMPLATE_IMAGE_WIDTH_PRESETS.map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  disabled={disabled || !editor}
+                  className={toolbarBtnClass(currentImageWidth === String(w))}
+                  onClick={() => setImageWidth(String(w))}
+                  title={`${w}px`}
+                >
+                  {w}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={disabled || !editor}
+                className="rounded-lg px-2 py-1 text-xs font-bold hover:bg-[var(--surface-hover)]"
+                onClick={() => nudgeImageWidth(20)}
+                title="Увеличить"
+              >
+                +
+              </button>
+            </div>
+          ) : null}
+
           <input
             ref={fileInputRef}
             type="file"

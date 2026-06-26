@@ -1,18 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OrderSourceEmail } from "@/components/orders/new-order-panel-context";
-import { buildEmailReplyTemplateContext, formatMailDate, localInputToDateYmd } from "@/lib/mail/build-email-reply-context";
+import {
+  buildEmailReplyTemplateContext,
+  formatMailDate,
+  localInputToDateYmd,
+} from "@/lib/mail/build-email-reply-context";
 import {
   defaultReplySubject,
   renderEmailReplyTemplate,
 } from "@/lib/mail/email-reply-template";
 import {
-  extractInlineImagesFromReplyHtml,
-  htmlReplyBodyToPlainText,
-  mergeReplyHtmlWithImages,
-  plainTextToReplyHtml,
-} from "@/lib/mail/reply-body-plain-text";
+  createClickLabPreset,
+  getEditablePreflightBlocks,
+  renderReplyBlocksHtml,
+  SAMPLE_ORDER_STATUS_URL,
+  type ReplyEditorDocument,
+  type ReplyLayoutType,
+  type ReplyPreflightOverrides,
+} from "@/lib/mail/reply-block-editor";
 import {
   restoreReplyTemplateCidsFromPreview,
   substituteReplyTemplateCidsForPreview,
@@ -49,12 +56,23 @@ type Props = {
 type LoadedTemplate = {
   subjectTemplate: string;
   htmlTemplate: string;
+  layoutType: ReplyLayoutType;
+  editorDocument: ReplyEditorDocument | null;
 };
 
 const DATE_PLACEHOLDER_RE = /\{\{\s*date\s*\}\}/i;
 
+const EDITOR_CLASS =
+  "min-h-[12rem] w-full rounded-md border border-[var(--input-border)] bg-[var(--surface-muted)] px-3 py-2 text-sm leading-relaxed text-[var(--app-text)] shadow-sm outline-none [&_img]:my-2 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_p]:my-1";
+
+const PREVIEW_CLASS =
+  "min-h-[12rem] w-full overflow-y-auto rounded-md border border-[var(--input-border)] bg-white px-3 py-2 text-sm leading-relaxed text-gray-900 [&_a]:text-blue-600";
+
 function templateUsesDatePlaceholder(template: LoadedTemplate): boolean {
-  const hay = `${template.subjectTemplate}\n${template.htmlTemplate}`;
+  const hay =
+    template.layoutType === "blocks"
+      ? JSON.stringify(template.editorDocument ?? {})
+      : `${template.subjectTemplate}\n${template.htmlTemplate}`;
   return DATE_PLACEHOLDER_RE.test(hay);
 }
 
@@ -80,63 +98,44 @@ export function OrderAutoReplyPreflightPanel({
   onStateChange,
 }: Props) {
   const [subject, setSubject] = useState("");
-  const [bodyText, setBodyText] = useState("");
-  const [displayHtml, setDisplayHtml] = useState("");
+  const [editorHtml, setEditorHtml] = useState("");
+  const [layoutType, setLayoutType] = useState<ReplyLayoutType>("blocks");
+  const [textOverrides, setTextOverrides] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [canSendReply, setCanSendReply] = useState(false);
   const dirtyRef = useRef(false);
   const templateRef = useRef<LoadedTemplate | null>(null);
   const templateAssetsRef = useRef<Array<{ id: string; contentId: string }>>([]);
-  const inlineImagesRef = useRef<string[]>([]);
-  const lastRenderedDateRef = useRef("");
+  const editorRef = useRef<HTMLDivElement>(null);
+  const editorFocusedRef = useRef(false);
   const [pickerDateYmd, setPickerDateYmd] = useState("");
   const [needsDatePicker, setNeedsDatePicker] = useState(false);
 
-  const buildHtmlFromBodyText = useCallback((text: string) => {
-    return mergeReplyHtmlWithImages(
-      inlineImagesRef.current,
-      plainTextToReplyHtml(text),
-    );
-  }, []);
+  const preflightOverrides: ReplyPreflightOverrides = useMemo(
+    () => ({
+      dateYmd: pickerDateYmd || undefined,
+      textOverrides,
+    }),
+    [pickerDateYmd, textOverrides],
+  );
 
-  const applyTemplate = useCallback(
-    (template: LoadedTemplate, accountId: string, opts?: { dateYmd?: string }) => {
-      const ctx = buildEmailReplyTemplateContext({
+  const buildContext = useCallback(
+    (dateYmd?: string) =>
+      buildEmailReplyTemplateContext({
         orderNumber: orderNumberPreview,
         patientName,
         doctorName,
         clinicName,
         clinicAddress,
-        date: (opts?.dateYmd ?? pickerDateYmd).trim() || null,
+        date: (dateYmd ?? pickerDateYmd).trim() || null,
         dueDate: dueDateLocal.trim() || null,
         appointmentDate: appointmentLocal.trim() || null,
         originalSubject: sourceEmail!.subject,
         originalFromName: sourceEmail!.fromName,
         originalFromAddress: sourceEmail!.fromAddress,
-      });
-
-      const subjectRaw = template.subjectTemplate.trim();
-      const nextSubject = subjectRaw
-        ? renderEmailReplyTemplate(subjectRaw, ctx)
-        : defaultReplySubject(ctx.originalSubject);
-      const renderedHtml = renderEmailReplyTemplate(template.htmlTemplate, ctx, {
-        html: true,
-      });
-      const previewHtml = substituteReplyTemplateCidsForPreview(
-        renderedHtml,
-        templateAssetsRef.current,
-        accountId,
-      );
-      inlineImagesRef.current = extractInlineImagesFromReplyHtml(previewHtml);
-      const nextBodyText = htmlReplyBodyToPlainText(previewHtml);
-      const nextDisplayHtml = buildHtmlFromBodyText(nextBodyText);
-
-      setSubject(nextSubject);
-      setBodyText(nextBodyText);
-      setDisplayHtml(nextDisplayHtml);
-      lastRenderedDateRef.current = ctx.date;
-    },
+        orderStatusUrl: SAMPLE_ORDER_STATUS_URL,
+      }),
     [
       pickerDateYmd,
       orderNumberPreview,
@@ -147,37 +146,69 @@ export function OrderAutoReplyPreflightPanel({
       dueDateLocal,
       appointmentLocal,
       sourceEmail,
-      buildHtmlFromBodyText,
     ],
   );
 
-  const handlePickerDateChange = useCallback(
-    (nextYmd: string) => {
-      const prevFormatted = formatMailDate(pickerDateYmd);
-      const nextFormatted = formatMailDate(nextYmd);
-      setPickerDateYmd(nextYmd);
-      if (
-        dirtyRef.current &&
-        prevFormatted &&
-        nextFormatted &&
-        prevFormatted !== nextFormatted
-      ) {
-        setBodyText((t) =>
-          t.includes(prevFormatted) ? t.replaceAll(prevFormatted, nextFormatted) : t,
+  const renderPreviewHtml = useCallback(
+    (template: LoadedTemplate, accountId: string, dateYmd?: string) => {
+      const ctx = buildContext(dateYmd);
+      const subjectRaw = template.subjectTemplate.trim();
+      const nextSubject = subjectRaw
+        ? renderEmailReplyTemplate(subjectRaw, ctx)
+        : defaultReplySubject(ctx.originalSubject);
+
+      let html: string;
+      if (template.layoutType === "blocks") {
+        const doc = template.editorDocument ?? createClickLabPreset();
+        html = renderReplyBlocksHtml(
+          doc,
+          ctx,
+          templateAssetsRef.current,
+          preflightOverrides,
         );
-        setSubject((s) =>
-          s.includes(prevFormatted) ? s.replaceAll(prevFormatted, nextFormatted) : s,
-        );
-        lastRenderedDateRef.current = nextFormatted;
+      } else {
+        html = renderEmailReplyTemplate(template.htmlTemplate, ctx, { html: true });
+      }
+      const previewHtml = substituteReplyTemplateCidsForPreview(
+        html,
+        templateAssetsRef.current,
+        accountId,
+      );
+      return { nextSubject, previewHtml };
+    },
+    [buildContext, preflightOverrides],
+  );
+
+  const applyTemplate = useCallback(
+    (template: LoadedTemplate, accountId: string, opts?: { dateYmd?: string }) => {
+      const { nextSubject, previewHtml } = renderPreviewHtml(
+        template,
+        accountId,
+        opts?.dateYmd,
+      );
+      setSubject(nextSubject);
+      setLayoutType(template.layoutType);
+      if (template.layoutType === "freeform") {
+        setEditorHtml(previewHtml);
+        const el = editorRef.current;
+        if (el && !editorFocusedRef.current) el.innerHTML = previewHtml;
+      } else {
+        setEditorHtml(previewHtml);
       }
     },
-    [pickerDateYmd],
+    [renderPreviewHtml],
   );
+
+  const handlePickerDateChange = useCallback((nextYmd: string) => {
+    setPickerDateYmd(nextYmd);
+    dirtyRef.current = true;
+  }, []);
 
   useEffect(() => {
     if (!open || !sourceEmail) return;
     dirtyRef.current = false;
     templateRef.current = null;
+    setTextOverrides({});
     setNeedsDatePicker(false);
     setPickerDateYmd("");
     let cancelled = false;
@@ -196,7 +227,12 @@ export function OrderAutoReplyPreflightPanel({
           ),
         ]);
         const data = (await templateRes.json()) as {
-          template?: { subjectTemplate?: string; htmlTemplate?: string } | null;
+          template?: {
+            subjectTemplate?: string;
+            htmlTemplate?: string;
+            layoutType?: ReplyLayoutType;
+            editorDocument?: ReplyEditorDocument | null;
+          } | null;
           error?: string;
         };
         const assetsData = assetsRes.ok
@@ -209,13 +245,16 @@ export function OrderAutoReplyPreflightPanel({
         }
         if (cancelled) return;
         const template = data.template;
-        if (!template?.htmlTemplate?.trim()) {
+        const lt = template?.layoutType ?? "blocks";
+        const hasContent =
+          lt === "blocks"
+            ? Boolean(template?.editorDocument)
+            : Boolean(template?.htmlTemplate?.trim());
+        if (!template || !hasContent) {
           setCanSendReply(false);
           setHint("Шаблон ответа не настроен или пустой");
           setSubject("");
-          setBodyText("");
-          setDisplayHtml("");
-          inlineImagesRef.current = [];
+          setEditorHtml("");
           templateRef.current = null;
           return;
         }
@@ -224,20 +263,19 @@ export function OrderAutoReplyPreflightPanel({
         templateAssetsRef.current = assetsData.assets ?? [];
         templateRef.current = {
           subjectTemplate: template.subjectTemplate ?? "",
-          htmlTemplate: template.htmlTemplate,
+          htmlTemplate: template.htmlTemplate ?? "",
+          layoutType: lt,
+          editorDocument: template.editorDocument ?? null,
         };
         const loaded = templateRef.current;
         const usesDate = templateUsesDatePlaceholder(loaded);
         setNeedsDatePicker(usesDate);
-        if (usesDate) {
-          const initialYmd =
-            localInputToDateYmd(dueDateLocal) ||
-            localInputToDateYmd(appointmentLocal);
-          setPickerDateYmd(initialYmd);
-          applyTemplate(loaded, sourceEmail.accountId, { dateYmd: initialYmd });
-        } else {
-          applyTemplate(loaded, sourceEmail.accountId);
-        }
+        const initialYmd =
+          localInputToDateYmd(dueDateLocal) || localInputToDateYmd(appointmentLocal);
+        if (usesDate) setPickerDateYmd(initialYmd);
+        applyTemplate(loaded, sourceEmail.accountId, {
+          dateYmd: usesDate ? initialYmd : undefined,
+        });
       } catch (e) {
         if (!cancelled) {
           setCanSendReply(false);
@@ -250,7 +288,7 @@ export function OrderAutoReplyPreflightPanel({
     return () => {
       cancelled = true;
     };
-  }, [open, sourceEmail?.id, sourceEmail?.accountId, sourceEmail]);
+  }, [open, sourceEmail?.id, sourceEmail?.accountId, sourceEmail, applyTemplate, dueDateLocal, appointmentLocal]);
 
   useEffect(() => {
     if (!open || !sourceEmail || !templateRef.current || dirtyRef.current) return;
@@ -266,20 +304,28 @@ export function OrderAutoReplyPreflightPanel({
     dueDateLocal,
     appointmentLocal,
     pickerDateYmd,
+    textOverrides,
     applyTemplate,
   ]);
 
   useEffect(() => {
-    const htmlPreview = buildHtmlFromBodyText(bodyText);
-    setDisplayHtml(htmlPreview);
-    const htmlForSend =
-      sourceEmail && htmlPreview.trim()
-        ? restoreReplyTemplateCidsFromPreview(
-            htmlPreview,
-            templateAssetsRef.current,
-            sourceEmail.accountId,
-          )
-        : htmlPreview;
+    if (!sourceEmail || !templateRef.current) return;
+    const { previewHtml } = renderPreviewHtml(
+      templateRef.current,
+      sourceEmail.accountId,
+    );
+    setEditorHtml(previewHtml);
+  }, [textOverrides, pickerDateYmd, renderPreviewHtml, sourceEmail]);
+
+  useEffect(() => {
+    let htmlForSend = editorHtml;
+    if (sourceEmail && editorHtml.trim()) {
+      htmlForSend = restoreReplyTemplateCidsFromPreview(
+        editorHtml,
+        templateAssetsRef.current,
+        sourceEmail.accountId,
+      );
+    }
     onStateChange({
       sendReply,
       draft:
@@ -293,32 +339,28 @@ export function OrderAutoReplyPreflightPanel({
   }, [
     sendReply,
     subject,
-    bodyText,
+    editorHtml,
     canSendReply,
     loading,
     hint,
     onStateChange,
     sourceEmail,
-    buildHtmlFromBodyText,
   ]);
 
   if (!sourceEmail) return null;
 
-  const dueDateMissing =
-    !dueDateLocal.trim() &&
-    (bodyText.includes("{{dueDate}}") || displayHtml.includes("{{dueDate}}"));
+  const editableBlocks =
+    layoutType === "blocks" && templateRef.current?.editorDocument
+      ? getEditablePreflightBlocks(templateRef.current.editorDocument)
+      : [];
 
   const dateMissing =
-    needsDatePicker &&
-    !pickerDateYmd.trim() &&
-    (bodyText.includes("{{date}}") || displayHtml.includes("{{date}}"));
+    needsDatePicker && !pickerDateYmd.trim() && editorHtml.includes("{{date}}");
 
   return (
     <div className="flex max-h-[min(96vh,920px)] w-full min-w-[min(100%,22rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl lg:w-[32rem] lg:max-w-[32rem]">
       <div className="shrink-0 border-b border-[var(--border-subtle)] px-5 py-4">
-        <h2 className="text-lg font-semibold text-[var(--app-text)]">
-          Ответное письмо
-        </h2>
+        <h2 className="text-lg font-semibold text-[var(--app-text)]">Ответное письмо</h2>
         <p className="mt-1 text-xs text-[var(--text-secondary)]">
           Кому: {senderLabel(sourceEmail)}
         </p>
@@ -331,19 +373,11 @@ export function OrderAutoReplyPreflightPanel({
             checked={sendReply}
             onChange={(e) => onSendReplyChange(e.target.checked)}
           />
-          <span className="text-sm font-medium text-[var(--text-strong)]">
-            Отправить ответ
-          </span>
+          <span className="text-sm font-medium text-[var(--text-strong)]">Отправить ответ</span>
         </label>
         {hint ? (
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/35 dark:text-amber-100">
             {hint}
-          </p>
-        ) : null}
-        {dueDateMissing ? (
-          <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950 dark:border-sky-800/60 dark:bg-sky-950/35 dark:text-sky-100">
-            Укажите срок лаборатории в форме наряда — он подставится в{" "}
-            <code className="font-mono">{"{{dueDate}}"}</code>.
           </p>
         ) : null}
         {dateMissing ? (
@@ -374,33 +408,55 @@ export function OrderAutoReplyPreflightPanel({
                 className="h-10 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
               />
             </div>
+            {editableBlocks.map((block) =>
+              block.type === "text" ? (
+                <div key={block.id}>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                    Текст письма
+                  </label>
+                  <textarea
+                    disabled={!sendReply}
+                    rows={6}
+                    value={textOverrides[block.id] ?? block.content}
+                    onChange={(e) => {
+                      dirtyRef.current = true;
+                      setTextOverrides((prev) => ({ ...prev, [block.id]: e.target.value }));
+                    }}
+                    className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] disabled:opacity-50"
+                  />
+                </div>
+              ) : null,
+            )}
             <div>
               <p className="mb-1 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
                 Предпросмотр
               </p>
-              {displayHtml.trim() ? (
+              {layoutType === "freeform" ? (
                 <div
-                  className="mb-2 min-h-[4rem] rounded-md border border-[var(--input-border)] bg-[var(--surface-muted)] px-3 py-2 text-sm leading-relaxed text-[var(--app-text)] [&_img]:my-2 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_p]:my-1"
-                  dangerouslySetInnerHTML={{ __html: displayHtml }}
+                  ref={editorRef}
+                  role="textbox"
+                  aria-multiline
+                  aria-label="Текст ответного письма"
+                  contentEditable={sendReply}
+                  suppressContentEditableWarning
+                  onFocus={() => {
+                    editorFocusedRef.current = true;
+                  }}
+                  onBlur={() => {
+                    editorFocusedRef.current = false;
+                  }}
+                  onInput={(e) => {
+                    dirtyRef.current = true;
+                    setEditorHtml(e.currentTarget.innerHTML);
+                  }}
+                  className={EDITOR_CLASS}
                 />
-              ) : null}
-              <label
-                htmlFor="auto-reply-body"
-                className="mb-1 block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]"
-              >
-                Текст
-              </label>
-              <textarea
-                id="auto-reply-body"
-                value={bodyText}
-                disabled={!sendReply}
-                rows={12}
-                onChange={(e) => {
-                  dirtyRef.current = true;
-                  setBodyText(e.target.value);
-                }}
-                className="min-h-[10rem] w-full resize-y rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm leading-relaxed text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
-              />
+              ) : (
+                <div
+                  className={PREVIEW_CLASS}
+                  dangerouslySetInnerHTML={{ __html: editorHtml }}
+                />
+              )}
             </div>
           </>
         )}

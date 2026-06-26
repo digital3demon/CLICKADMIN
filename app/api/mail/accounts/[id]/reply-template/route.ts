@@ -6,6 +6,7 @@ import {
   upsertEmailReplyTemplate,
   stringField,
 } from "@/lib/mail/mail-service";
+import { parseEditorDocument, type ReplyLayoutType } from "@/lib/mail/reply-block-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,11 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await jsonBody(req);
+    const layoutTypeRaw = typeof body.layoutType === "string" ? body.layoutType.trim() : "";
+    const layoutType: ReplyLayoutType | undefined =
+      layoutTypeRaw === "blocks" || layoutTypeRaw === "freeform" ? layoutTypeRaw : undefined;
+    const editorDocument =
+      body.editorDocument !== undefined ? parseEditorDocument(body.editorDocument) : undefined;
     const template = await upsertEmailReplyTemplate(
       r.ctx.db,
       r.ctx.tenantId,
@@ -47,7 +53,11 @@ export async function PUT(
       id,
       {
         subjectTemplate: stringField(body.subjectTemplate, 500),
-        htmlTemplate: stringField(body.htmlTemplate, 300_000),
+        ...(typeof body.htmlTemplate === "string"
+          ? { htmlTemplate: stringField(body.htmlTemplate, 300_000) }
+          : {}),
+        ...(layoutType ? { layoutType } : {}),
+        ...(editorDocument !== undefined ? { editorDocument } : {}),
         ...(typeof body.isEnabled === "boolean" ? { isEnabled: body.isEnabled } : {}),
       },
     );

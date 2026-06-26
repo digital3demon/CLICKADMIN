@@ -42,6 +42,18 @@ import {
 import { previewFromMailBody, previewFromText, textFromHtml } from "@/lib/mail/mail-preview";
 import { sendSmtpMessage, type MailSendAttachment } from "@/lib/mail/smtp-client";
 import { buildReplyTemplateContentId } from "@/lib/mail/reply-template-cid";
+import type { ReplyEditorDocument, ReplyLayoutType } from "@/lib/mail/reply-block-editor";
+import {
+  createClickLabPreset,
+  validateReplyEditorDocument,
+  SAMPLE_ORDER_STATUS_URL,
+} from "@/lib/mail/reply-block-editor";
+import {
+  buildHtmlFromReplyTemplate,
+  normalizeEditorDocumentInput,
+  resolveLayoutType,
+} from "@/lib/mail/reply-template-render";
+import { buildEmailReplyTemplateContext } from "@/lib/mail/build-email-reply-context";
 import { syncEmailAccount, type MailSyncScope } from "@/lib/mail/mail-sync.service";
 
 export type MailApiContext = {
@@ -1520,8 +1532,53 @@ export type EmailReplyTemplateDto = {
   accountId: string;
   subjectTemplate: string;
   htmlTemplate: string;
+  layoutType: "blocks" | "freeform";
+  editorVersion: number;
+  editorDocument: ReplyEditorDocument | null;
   isEnabled: boolean;
 };
+
+function mapTemplateRow(row: {
+  accountId: string;
+  subjectTemplate: string;
+  htmlTemplate: string;
+  layoutType: string;
+  editorVersion: number;
+  editorDocument: unknown;
+  isEnabled: boolean;
+}): EmailReplyTemplateDto {
+  const layoutType = resolveLayoutType(row.layoutType, row.htmlTemplate, row.editorDocument);
+  const editorDocument =
+    layoutType === "blocks"
+      ? normalizeEditorDocumentInput("blocks", row.editorDocument)
+      : null;
+  return {
+    accountId: row.accountId,
+    subjectTemplate: row.subjectTemplate,
+    htmlTemplate: row.htmlTemplate,
+    layoutType,
+    editorVersion: row.editorVersion,
+    editorDocument,
+    isEnabled: row.isEnabled,
+  };
+}
+
+function previewContextForTemplateCache(): ReturnType<typeof buildEmailReplyTemplateContext> {
+  return buildEmailReplyTemplateContext({
+    orderNumber: "2606-285",
+    patientName: "Иванова А. С.",
+    doctorName: "Петров П. П.",
+    clinicName: "Клиника «Альфа»",
+    clinicAddress: "ул. Ленина, 1",
+    date: "20.06.26",
+    dueDate: "22.06.26, 14:00",
+    appointmentDate: "25.06.26, 10:00",
+    originalSubject: "Заказ",
+    originalFromName: "Клиника",
+    originalFromAddress: "clinic@example.com",
+    orderStatusUrl: SAMPLE_ORDER_STATUS_URL,
+  });
+}
 
 export async function getEmailReplyTemplate(
   db: PrismaClient,
@@ -1535,12 +1592,7 @@ export async function getEmailReplyTemplate(
     where: { accountId },
   });
   if (!row) return null;
-  return {
-    accountId: row.accountId,
-    subjectTemplate: row.subjectTemplate,
-    htmlTemplate: row.htmlTemplate,
-    isEnabled: row.isEnabled,
-  };
+  return mapTemplateRow(row);
 }
 
 export async function upsertEmailReplyTemplate(
@@ -1551,7 +1603,10 @@ export async function upsertEmailReplyTemplate(
   accountId: string,
   input: {
     subjectTemplate: string;
-    htmlTemplate: string;
+    htmlTemplate?: string;
+    layoutType?: ReplyLayoutType;
+    editorDocument?: ReplyEditorDocument | null;
+    editorVersion?: number;
     isEnabled?: boolean;
   },
 ): Promise<EmailReplyTemplateDto> {
@@ -1564,27 +1619,61 @@ export async function upsertEmailReplyTemplate(
   const existing = await db.emailReplyTemplate.findUnique({ where: { accountId } });
   const isEnabled =
     input.isEnabled !== undefined ? input.isEnabled : (existing?.isEnabled ?? true);
+  const layoutType: ReplyLayoutType =
+    input.layoutType ??
+    (existing
+      ? resolveLayoutType(existing.layoutType, existing.htmlTemplate, existing.editorDocument)
+      : "blocks");
+  let editorDocument: ReplyEditorDocument | null = null;
+  let htmlTemplate = input.htmlTemplate ?? existing?.htmlTemplate ?? "";
+  if (layoutType === "blocks") {
+    editorDocument =
+      input.editorDocument !== undefined
+        ? input.editorDocument ?? createClickLabPreset()
+        : normalizeEditorDocumentInput("blocks", existing?.editorDocument) ?? createClickLabPreset();
+    const issues = validateReplyEditorDocument(editorDocument);
+    if (issues.length > 0) {
+      throw new Error(issues[0] ?? "INVALID_REPLY_EDITOR_DOCUMENT");
+    }
+    const assets = await db.emailReplyTemplateAsset.findMany({
+      where: { tenantId, accountId },
+      select: { id: true, contentId: true },
+    });
+    htmlTemplate = buildHtmlFromReplyTemplate(
+      "blocks",
+      "",
+      editorDocument,
+      previewContextForTemplateCache(),
+      assets,
+    );
+  } else {
+    htmlTemplate = stringField(input.htmlTemplate ?? existing?.htmlTemplate ?? "", 300_000);
+    if (!htmlTemplate.trim()) {
+      throw new Error("EMPTY_REPLY_HTML_TEMPLATE");
+    }
+  }
   const row = await db.emailReplyTemplate.upsert({
     where: { accountId },
     create: {
       tenantId,
       accountId,
       subjectTemplate: input.subjectTemplate,
-      htmlTemplate: input.htmlTemplate,
+      htmlTemplate,
+      layoutType,
+      editorVersion: input.editorVersion ?? 1,
+      editorDocument: editorDocument ?? undefined,
       isEnabled,
     },
     update: {
       subjectTemplate: input.subjectTemplate,
-      htmlTemplate: input.htmlTemplate,
+      htmlTemplate,
+      layoutType,
+      editorVersion: input.editorVersion ?? 1,
+      editorDocument: editorDocument ?? undefined,
       ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),
     },
   });
-  return {
-    accountId: row.accountId,
-    subjectTemplate: row.subjectTemplate,
-    htmlTemplate: row.htmlTemplate,
-    isEnabled: row.isEnabled,
-  };
+  return mapTemplateRow(row);
 }
 
 export type EmailReplyTemplateAssetDto = {

@@ -13,6 +13,14 @@ describe("htmlReplyBodyToPlainText", () => {
       ),
     ).toBe("Здравствуйте!\n\nВаш наряд 2606-395 принят в работу.");
   });
+
+  it("не оставляет имя файла картинки в тексте", () => {
+    expect(
+      htmlReplyBodyToPlainText(
+        '<p>Текст</p><img src="cid:a@crm" alt="Click Lab logo-01.png">',
+      ),
+    ).toBe("Текст");
+  });
 });
 
 describe("plainTextToReplyHtml", () => {

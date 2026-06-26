@@ -10,6 +10,8 @@ export type EmailReplyTemplateContext = {
   appointmentDate: string;
   originalSubject: string;
   originalFrom: string;
+  /** Публичная витрина статуса заказа (QR с этикетки). */
+  orderStatusUrl: string;
 };
 
 export const EMAIL_REPLY_TEMPLATE_QUICK_INSERT = [
@@ -19,6 +21,7 @@ export const EMAIL_REPLY_TEMPLATE_QUICK_INSERT = [
   { label: "Клиника", token: "{{clinicName}}" },
   { label: "Пациент", token: "{{patientName}}" },
   { label: "Дата", token: "{{date}}" },
+  { label: "Статус заказа (URL)", token: "{{orderStatusUrl}}" },
   { label: "Лабораторный срок", token: "{{dueDate}}" },
 ] as const;
 

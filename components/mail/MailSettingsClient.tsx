@@ -3,8 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   EmailReplyTemplateAssetsPanel,
+  uploadReplyTemplateAssetFile,
   type ReplyTemplateAssetItem,
 } from "@/components/mail/EmailReplyTemplateAssetsPanel";
+import { MailReplyTemplatePreview } from "@/components/mail/MailReplyTemplatePreview";
+import { ReplyTemplateBlockEditor } from "@/components/mail/ReplyTemplateBlockEditor";
+import {
+  createClickLabPreset,
+  type ReplyEditorDocument,
+  type ReplyLayoutType,
+} from "@/lib/mail/reply-block-editor";
 import {
   MailHtmlTemplateEditor,
   type MailHtmlTemplateEditorHandle,
@@ -21,6 +29,10 @@ import { ALL_USER_ROLES, USER_ROLE_LABELS } from "@/lib/user-role-labels";
 
 const NEW_FOLDER_VALUE = "__new_folder__";
 const NEW_LABEL_VALUE = "__new_label__";
+
+function replyTemplateAssetPreviewUrl(accountId: string, assetId: string): string {
+  return `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template/assets/${encodeURIComponent(assetId)}?inline=1`;
+}
 
 type EmailRule = {
   id: string;
@@ -213,12 +225,28 @@ export function MailSettingsClient() {
   const [showAllCustomFolders, setShowAllCustomFolders] = useState(false);
   const [replySubjectTemplate, setReplySubjectTemplate] = useState("");
   const [replyHtmlTemplate, setReplyHtmlTemplate] = useState("");
+  const [replyLayoutType, setReplyLayoutType] = useState<ReplyLayoutType>("blocks");
+  const [replyEditorDocument, setReplyEditorDocument] = useState<ReplyEditorDocument>(
+    () => createClickLabPreset(),
+  );
   const [replyTemplateLoading, setReplyTemplateLoading] = useState(false);
   const [replyTemplateSaving, setReplyTemplateSaving] = useState(false);
+  const [replyTemplateSaveHint, setReplyTemplateSaveHint] = useState<string | null>(
+    null,
+  );
+  const [replyTemplateSaveHintKind, setReplyTemplateSaveHintKind] = useState<
+    "info" | "success" | "error"
+  >("info");
+  const replyTemplateSaveHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const replySubjectInputRef = useRef<HTMLInputElement>(null);
   const replySubjectSelectionRef = useRef({ start: 0, end: 0 });
   const replyEditorRef = useRef<MailHtmlTemplateEditorHandle>(null);
   const replyTemplateAssetsRef = useRef<ReplyTemplateAssetItem[]>([]);
+  const [replyTemplateAssets, setReplyTemplateAssets] = useState<ReplyTemplateAssetItem[]>(
+    [],
+  );
   const accessDraftAccountIdRef = useRef("");
 
   const activeAccount = useMemo(
@@ -366,7 +394,14 @@ export function MailSettingsClient() {
     const controller = new AbortController();
     setReplyTemplateLoading(true);
     void Promise.all([
-      jsonFetch<{ template: { subjectTemplate: string; htmlTemplate: string } | null }>(
+      jsonFetch<{
+        template: {
+          subjectTemplate: string;
+          htmlTemplate: string;
+          layoutType?: ReplyLayoutType;
+          editorDocument?: ReplyEditorDocument | null;
+        } | null;
+      }>(
         `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template`,
         { signal: controller.signal },
       ),
@@ -379,7 +414,13 @@ export function MailSettingsClient() {
         if (cancelled) return;
         const assets = assetsData.assets ?? [];
         replyTemplateAssetsRef.current = assets;
+        setReplyTemplateAssets(assets);
         setReplySubjectTemplate(data.template?.subjectTemplate ?? "");
+        const layout = data.template?.layoutType ?? "blocks";
+        setReplyLayoutType(layout);
+        if (layout === "blocks") {
+          setReplyEditorDocument(data.template?.editorDocument ?? createClickLabPreset());
+        }
         const rawHtml =
           data.template?.htmlTemplate ??
           "<p>Здравствуйте!</p><p>Ваш наряд {{orderNumber}} принят в работу.</p>";
@@ -403,13 +444,7 @@ export function MailSettingsClient() {
   const uploadReplyTemplateAsset = useCallback(
     async (file: File): Promise<ReplyTemplateAssetItem | null> => {
       if (!activeAccount) return null;
-      const form = new FormData();
-      form.append("file", file);
-      const data = await jsonFetch<{ asset: ReplyTemplateAssetItem }>(
-        `/api/mail/accounts/${encodeURIComponent(activeAccount.id)}/reply-template/assets`,
-        { method: "POST", body: form },
-      );
-      return data.asset;
+      return uploadReplyTemplateAssetFile(activeAccount.id, file);
     },
     [activeAccount],
   );
@@ -437,26 +472,44 @@ export function MailSettingsClient() {
 
   async function saveReplyTemplate() {
     if (!activeAccount) return;
+    if (replyTemplateSaveHintTimerRef.current) {
+      clearTimeout(replyTemplateSaveHintTimerRef.current);
+      replyTemplateSaveHintTimerRef.current = null;
+    }
     setReplyTemplateSaving(true);
-    setError("");
-    setStatus("Сохраняю шаблон ответа...");
+    setReplyTemplateSaveHint("Сохраняю…");
+    setReplyTemplateSaveHintKind("info");
     try {
-      const htmlForSave = restoreReplyTemplateCidsFromPreview(
-        replyHtmlTemplate,
-        replyTemplateAssetsRef.current,
-        activeAccount.id,
-      );
+      const body: Record<string, unknown> = {
+        subjectTemplate: replySubjectTemplate,
+        layoutType: replyLayoutType,
+      };
+      if (replyLayoutType === "blocks") {
+        body.editorDocument = replyEditorDocument;
+      } else {
+        const htmlForSave = restoreReplyTemplateCidsFromPreview(
+          replyHtmlTemplate,
+          replyTemplateAssetsRef.current,
+          activeAccount.id,
+        );
+        body.htmlTemplate = htmlForSave;
+      }
       await jsonFetch(`/api/mail/accounts/${activeAccount.id}/reply-template`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subjectTemplate: replySubjectTemplate,
-          htmlTemplate: htmlForSave,
-        }),
+        body: JSON.stringify(body),
       });
-      setStatus("Шаблон ответа сохранён");
+      setReplyTemplateSaveHint("Шаблон сохранён");
+      setReplyTemplateSaveHintKind("success");
+      replyTemplateSaveHintTimerRef.current = setTimeout(() => {
+        setReplyTemplateSaveHint(null);
+        replyTemplateSaveHintTimerRef.current = null;
+      }, 4000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось сохранить шаблон");
+      setReplyTemplateSaveHint(
+        err instanceof Error ? err.message : "Не удалось сохранить шаблон",
+      );
+      setReplyTemplateSaveHintKind("error");
     } finally {
       setReplyTemplateSaving(false);
     }
@@ -959,76 +1012,186 @@ export function MailSettingsClient() {
             <code className="text-xs">{"{{dueDate}}"}</code>,{" "}
             <code className="text-xs">{"{{appointmentDate}}"}</code>,{" "}
             <code className="text-xs">{"{{originalSubject}}"}</code>,{" "}
-            <code className="text-xs">{"{{originalFrom}}"}</code>.
+            <code className="text-xs">{"{{orderStatusUrl}}"}</code>.
           </p>
           {replyTemplateLoading ? (
             <p className="mt-4 text-sm text-[var(--text-secondary)]">Загрузка шаблона…</p>
           ) : (
-            <div className="mt-4 space-y-3">
-              <label className="block text-sm font-medium text-[var(--app-text)]">
-                Тема письма
-                <input
-                  ref={replySubjectInputRef}
-                  value={replySubjectTemplate}
-                  onChange={(e) => setReplySubjectTemplate(e.target.value)}
-                  onSelect={(e) => {
-                    replySubjectSelectionRef.current = {
-                      start: e.currentTarget.selectionStart ?? 0,
-                      end: e.currentTarget.selectionEnd ?? 0,
-                    };
-                  }}
-                  onClick={(e) => {
-                    replySubjectSelectionRef.current = {
-                      start: e.currentTarget.selectionStart ?? 0,
-                      end: e.currentTarget.selectionEnd ?? 0,
-                    };
-                  }}
-                  placeholder="Пусто — Re: исходная тема"
-                  className="mt-1 h-11 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
-                />
-              </label>
-              <EmailReplyTemplatePlaceholderBar
-                disabled={replyTemplateSaving}
-                onInsert={insertReplySubjectToken}
-              />
-              <div className="block text-sm font-medium text-[var(--app-text)]">
-                Текст письма
-                <div className="mt-1 space-y-2">
-                  <EmailReplyTemplatePlaceholderBar
+            <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] xl:items-start">
+              <div className="min-w-0 space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
                     disabled={replyTemplateSaving}
-                    onInsert={(token) => replyEditorRef.current?.insertText(token)}
+                    onClick={() => setReplyLayoutType("blocks")}
+                    className={[
+                      "rounded-lg px-3 py-1.5 text-xs font-semibold",
+                      replyLayoutType === "blocks"
+                        ? "bg-[var(--sidebar-blue)] text-white"
+                        : "border border-[var(--card-border)] hover:bg-[var(--surface-hover)]",
+                    ].join(" ")}
+                  >
+                    Блочный редактор
+                  </button>
+                  <button
+                    type="button"
+                    disabled={replyTemplateSaving}
+                    onClick={() => setReplyLayoutType("freeform")}
+                    className={[
+                      "rounded-lg px-3 py-1.5 text-xs font-semibold",
+                      replyLayoutType === "freeform"
+                        ? "bg-[var(--sidebar-blue)] text-white"
+                        : "border border-[var(--card-border)] hover:bg-[var(--surface-hover)]",
+                    ].join(" ")}
+                  >
+                    Простой HTML
+                  </button>
+                </div>
+                <label className="block text-sm font-medium text-[var(--app-text)]">
+                  Тема письма
+                  <input
+                    ref={replySubjectInputRef}
+                    value={replySubjectTemplate}
+                    onChange={(e) => setReplySubjectTemplate(e.target.value)}
+                    onSelect={(e) => {
+                      replySubjectSelectionRef.current = {
+                        start: e.currentTarget.selectionStart ?? 0,
+                        end: e.currentTarget.selectionEnd ?? 0,
+                      };
+                    }}
+                    onClick={(e) => {
+                      replySubjectSelectionRef.current = {
+                        start: e.currentTarget.selectionStart ?? 0,
+                        end: e.currentTarget.selectionEnd ?? 0,
+                      };
+                    }}
+                    placeholder="Пусто — Re: исходная тема"
+                    className="mt-1 h-11 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--app-text)] outline-none"
                   />
-                  <MailHtmlTemplateEditor
-                    ref={replyEditorRef}
-                    value={replyHtmlTemplate}
-                    onChange={setReplyHtmlTemplate}
+                </label>
+                <EmailReplyTemplatePlaceholderBar
+                  disabled={replyTemplateSaving}
+                  onInsert={insertReplySubjectToken}
+                />
+                {replyLayoutType === "blocks" ? (
+                  <ReplyTemplateBlockEditor
+                    document={replyEditorDocument}
+                    onChange={setReplyEditorDocument}
                     disabled={replyTemplateSaving}
-                    placeholder="Здравствуйте! Ваш наряд {{orderNumber}} принят в работу."
+                    assets={replyTemplateAssets.map((a) => ({
+                      id: a.id,
+                      fileName: a.fileName,
+                      kind: a.kind,
+                    }))}
+                  />
+                ) : (
+                  <div className="block text-sm font-medium text-[var(--app-text)]">
+                    Текст письма
+                    <div className="mt-1 space-y-2">
+                      <EmailReplyTemplatePlaceholderBar
+                        disabled={replyTemplateSaving}
+                        onInsert={(token) => replyEditorRef.current?.insertText(token)}
+                      />
+                      <MailHtmlTemplateEditor
+                        ref={replyEditorRef}
+                        value={replyHtmlTemplate}
+                        onChange={setReplyHtmlTemplate}
+                        disabled={replyTemplateSaving}
+                        placeholder="Здравствуйте! Ваш наряд {{orderNumber}} принят в работу."
+                        onUploadImageFile={async (file) => {
+                          const asset = await uploadReplyTemplateAsset(file);
+                          if (!asset) return null;
+                          if (
+                            !replyTemplateAssetsRef.current.some((a) => a.id === asset.id)
+                          ) {
+                            replyTemplateAssetsRef.current = [
+                              ...replyTemplateAssetsRef.current,
+                              asset,
+                            ];
+                            setReplyTemplateAssets([...replyTemplateAssetsRef.current]);
+                          }
+                          return {
+                            contentId: asset.contentId,
+                            previewUrl: replyTemplateAssetPreviewUrl(
+                              activeAccount.id,
+                              asset.id,
+                            ),
+                          };
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {activeAccount ? (
+                  <EmailReplyTemplateAssetsPanel
+                    accountId={activeAccount.id}
+                    disabled={replyTemplateSaving}
+                    onInsertImage={(contentId, alt) => {
+                      const asset = replyTemplateAssetsRef.current.find(
+                        (a) => a.contentId === contentId,
+                      );
+                      replyEditorRef.current?.insertCidImage(contentId, alt, {
+                        previewUrl: asset
+                          ? replyTemplateAssetPreviewUrl(activeAccount.id, asset.id)
+                          : null,
+                      });
+                    }}
                     onUploadImageFile={async (file) => {
                       const asset = await uploadReplyTemplateAsset(file);
-                      return asset ? { contentId: asset.contentId } : null;
+                      if (
+                        asset &&
+                        !replyTemplateAssetsRef.current.some((a) => a.id === asset.id)
+                      ) {
+                        replyTemplateAssetsRef.current = [
+                          ...replyTemplateAssetsRef.current,
+                          asset,
+                        ];
+                        setReplyTemplateAssets([...replyTemplateAssetsRef.current]);
+                      }
+                      return asset;
                     }}
                   />
+                ) : null}
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={replyTemplateSaving}
+                    onClick={() => void saveReplyTemplate()}
+                    className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
+                  >
+                    {replyTemplateSaving ? "Сохранение…" : "Сохранить шаблон"}
+                  </button>
+                  {replyTemplateSaveHint ? (
+                    <span
+                      className={[
+                        "text-sm font-medium",
+                        replyTemplateSaveHintKind === "success"
+                          ? "text-emerald-700 dark:text-emerald-300"
+                          : replyTemplateSaveHintKind === "error"
+                            ? "text-red-600 dark:text-red-300"
+                            : "text-[var(--text-secondary)]",
+                      ].join(" ")}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {replyTemplateSaveHint}
+                    </span>
+                  ) : null}
                 </div>
               </div>
-              {activeAccount ? (
-                <EmailReplyTemplateAssetsPanel
+              <div className="min-w-0 xl:sticky xl:top-4">
+                <MailReplyTemplatePreview
+                  subjectTemplate={replySubjectTemplate}
+                  htmlTemplate={replyHtmlTemplate}
+                  layoutType={replyLayoutType}
+                  editorDocument={replyEditorDocument}
                   accountId={activeAccount.id}
-                  disabled={replyTemplateSaving}
-                  onInsertImage={(contentId, alt) =>
-                    replyEditorRef.current?.insertCidImage(contentId, alt)
-                  }
-                  onUploadImageFile={uploadReplyTemplateAsset}
+                  assets={replyTemplateAssetsRef.current.map((a) => ({
+                    id: a.id,
+                    contentId: a.contentId,
+                  }))}
                 />
-              ) : null}
-              <button
-                type="button"
-                disabled={replyTemplateSaving}
-                onClick={() => void saveReplyTemplate()}
-                className="rounded-xl bg-[var(--sidebar-blue)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
-              >
-                {replyTemplateSaving ? "Сохранение…" : "Сохранить шаблон"}
-              </button>
+              </div>
             </div>
           )}
         </section>

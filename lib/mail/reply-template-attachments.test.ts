@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectReplyTemplateMailAttachments,
   extractCidsFromReplyHtml,
+  normalizeReplyHtmlForSend,
   restoreReplyTemplateCidsFromPreview,
   substituteReplyTemplateCidsForPreview,
 } from "./reply-template-cid";
@@ -69,6 +70,28 @@ describe("restoreReplyTemplateCidsFromPreview", () => {
       [{ id: "asset-1", contentId: "reply-asset-a@crm" }],
       "acc-1",
     );
-    expect(out).toBe('<img src="cid:reply-asset-a@crm" alt="logo">');
+    expect(out).toContain('src="cid:reply-asset-a@crm"');
+    expect(out).toContain('width="240"');
+    expect(out).not.toContain("logo");
+  });
+});
+
+describe("normalizeReplyHtmlForSend", () => {
+  it("убирает [имя-файла.png] и задаёт ширину inline-картинке", () => {
+    const html =
+      '<img src="cid:reply-asset-a@crm" alt="Click Lab logo-01.png"><p>Текст</p><p>[Click Lab logo-01.png]</p>';
+    const out = normalizeReplyHtmlForSend(html, 180);
+    expect(out).not.toContain("[Click Lab logo-01.png]");
+    expect(out).toContain('width="180"');
+    expect(out).toContain('style="width:180px');
+    expect(out).toContain("<p>Текст</p>");
+  });
+
+  it("сохраняет заданную в шаблоне ширину", () => {
+    const html =
+      '<img src="cid:x@crm" width="320" style="width: 320px; height: auto;" alt="logo">';
+    const out = normalizeReplyHtmlForSend(html);
+    expect(out).toContain('width="320"');
+    expect(out).toContain('style="width:320px');
   });
 });

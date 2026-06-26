@@ -45,6 +45,20 @@ export function mailErrorResponse(err: unknown, fallback = "Ошибка поч�
       status: 404,
       error: "Файл шаблона не найден",
     },
+    EMAIL_REPLY_TEMPLATE_ASSET_LIMIT: {
+      status: 400,
+      error: "Достигнут лимит файлов шаблона (20)",
+    },
+    EMAIL_REPLY_TEMPLATE_ASSET_TYPE_FORBIDDEN: {
+      status: 400,
+      error: "Тип файла не поддерживается",
+    },
+    EMAIL_REPLY_TEMPLATE_ASSET_TOO_LARGE: {
+      status: 400,
+      error: "Файл слишком большой (картинки до 5 МБ, вложения до 10 МБ)",
+    },
+    INVALID_REPLY_EDITOR_DOCUMENT: { status: 400, error: "Проверьте блоки шаблона" },
+    EMPTY_REPLY_HTML_TEMPLATE: { status: 400, error: "Текст шаблона пустой" },
   };
   const mapped = known[message];
   if (mapped) return NextResponse.json({ error: mapped.error }, { status: mapped.status });

@@ -18,6 +18,7 @@ const baseContext: EmailReplyTemplateContext = {
   appointmentDate: "28.05.2026 10:00",
   originalSubject: "Новочеркасская Невский ДД",
   originalFrom: "Denis Nevskiy <denis@example.com>",
+  orderStatusUrl: "https://crm.example/p/t/lab/s/preview",
 };
 
 describe("renderEmailReplyTemplate", () => {

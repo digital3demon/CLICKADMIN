@@ -1,4 +1,12 @@
 import type { MailSendAttachment } from "@/lib/mail/smtp-client";
+import { DEFAULT_REPLY_TEMPLATE_IMAGE_WIDTH_PX } from "@/lib/mail/tiptap-resizable-image";
+
+/** Плейсхолдеры вида [logo.png] из старого plain-text редактора. */
+const IMAGE_FILENAME_BRACKET_RE =
+  /\[[^\]]*\.(?:png|jpe?g|gif|webp|svg)(?:\s[^]]*)?\]/gi;
+
+const IMAGE_FILENAME_BRACKET_PARAGRAPH_RE =
+  /<p(?:\s[^>]*)?>\s*\[[^\]]*\.(?:png|jpe?g|gif|webp|svg)(?:\s[^]]*)?\]\s*<\/p>/gi;
 
 export type ReplyTemplateAssetRow = {
   id: string;
@@ -74,6 +82,42 @@ export function restoreReplyTemplateCidsFromPreview(
     const url = `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template/assets/${encodeURIComponent(asset.id)}?inline=1`;
     out = out.split(url).join(`cid:${asset.contentId}`);
   }
+  return normalizeReplyHtmlForSend(out);
+}
+
+function parseWidthFromImgAttrString(attrs: string): number | null {
+  const widthAttr = attrs.match(/\bwidth\s*=\s*["']?(\d+)/i)?.[1];
+  if (widthAttr && /^\d+$/.test(widthAttr)) return Number(widthAttr);
+  const style = attrs.match(/\bstyle\s*=\s*["']([^"']*)["']/i)?.[1] ?? "";
+  const px = /width:\s*(\d+)px/i.exec(style);
+  if (px?.[1]) return Number(px[1]);
+  return null;
+}
+
+function isInlineReplyImageSrc(attrs: string): boolean {
+  return (
+    /\bsrc\s*=\s*["']cid:/i.test(attrs) ||
+    /reply-template\/assets\//i.test(attrs)
+  );
+}
+
+/** Перед SMTP: убрать [имя-файла], задать width и пустой alt у inline-картинок. */
+export function normalizeReplyHtmlForSend(
+  html: string,
+  defaultWidthPx = DEFAULT_REPLY_TEMPLATE_IMAGE_WIDTH_PX,
+): string {
+  let out = html.replace(IMAGE_FILENAME_BRACKET_PARAGRAPH_RE, "");
+  out = out.replace(IMAGE_FILENAME_BRACKET_RE, "");
+
+  out = out.replace(/<img\b([^>]*?)\/?>/gi, (full, attrs: string) => {
+    if (!isInlineReplyImageSrc(attrs)) return full;
+    const src = attrs.match(/\bsrc\s*=\s*(["'])([^"']+)\1/i)?.[2]?.trim();
+    if (!src) return full;
+    const width = parseWidthFromImgAttrString(attrs) ?? defaultWidthPx;
+    const safeSrc = src.replace(/"/g, "&quot;");
+    return `<img src="${safeSrc}" alt="" width="${width}" style="width:${width}px;height:auto;max-width:100%;display:block;" />`;
+  });
+
   return out;
 }
 
