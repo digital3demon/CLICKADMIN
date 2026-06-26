@@ -20,7 +20,8 @@ export function hasDirectorySidebarAccess(
     a.MAIL === true ||
     a.CONFIG_USERS === true ||
     a.CONFIG_PRINT === true ||
-    a.CONFIG_APPEARANCE === true
+    a.CONFIG_APPEARANCE === true ||
+    a.CONFIG_MAIL === true
   );
 }
 

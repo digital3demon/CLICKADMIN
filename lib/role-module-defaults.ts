@@ -54,6 +54,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CONFIG_PRINT",
   "CONFIG_PRINT_EDIT",
   "CONFIG_APPEARANCE",
+  "CONFIG_MAIL",
 ];
 
 export const APP_MODULE_LABELS: Record<AppModule, string> = {
@@ -98,6 +99,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CONFIG_PRINT: "Конфиг: печать (этикетки)",
   CONFIG_PRINT_EDIT: "Конфиг: редактирование этикеток",
   CONFIG_APPEARANCE: "Конфиг: оформление интерфейса",
+  CONFIG_MAIL: "Конфиг: почта",
 };
 
 /** Все роли, кроме владельца (у владельца по определению полный доступ). */
@@ -211,6 +213,7 @@ export function defaultModuleAllowed(
     case "CONFIG_CONTRACT_TEMPLATE":
     case "CONFIG_PRINT":
     case "CONFIG_APPEARANCE":
+    case "CONFIG_MAIL":
       return true;
     case "CONFIG_PRINT_EDIT":
       return (

@@ -3,7 +3,7 @@ import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { hasMailSettingsPageAccess } from "@/lib/mail/mail-service";
+import { canOpenMailSettingsModule } from "@/lib/mail/mail-settings-access";
 import {
   canAccessCostingModule,
   canManageUsers,
@@ -35,11 +35,12 @@ export default async function DirectoryHubPage() {
   const showMail =
     session != null &&
     tenantId != null &&
-    (await hasMailSettingsPageAccess(
+    (await canOpenMailSettingsModule(
       await getOrdersPrisma(),
       tenantId,
       session.sub,
       session.role,
+      a ?? undefined,
     ));
   const showPrint = a?.CONFIG_PRINT === true;
   const showAppearance = a?.CONFIG_APPEARANCE === true;

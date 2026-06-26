@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useMemo, useState } from "react";
+import { toast } from "@/components/ui/toast-store";
 import {
   PrefixSearchCombobox,
   type PrefixComboboxOption,
@@ -305,15 +306,45 @@ export function OrderImportExportClient() {
     }
   };
 
-  const runExport = () => {
+  const runExport = async () => {
     setBusyExport(true);
-    const params = new URLSearchParams();
-    if (exportFrom) params.set("from", exportFrom);
-    if (exportTo) params.set("to", exportTo);
-    const qs = params.toString();
-    const url = `/api/orders/import-export/export${qs ? `?${qs}` : ""}`;
-    window.location.href = url;
-    window.setTimeout(() => setBusyExport(false), 1200);
+    setLoadError(null);
+    try {
+      const params = new URLSearchParams();
+      if (exportFrom) params.set("from", exportFrom);
+      if (exportTo) params.set("to", exportTo);
+      const qs = params.toString();
+      const url = `/api/orders/import-export/export${qs ? `?${qs}` : ""}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        const msg = data.error ?? "Не удалось выгрузить файл";
+        setLoadError(msg);
+        toast.warning(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+      const plainMatch = /filename="([^"]+)"/i.exec(cd);
+      const fileName = utf8Match
+        ? decodeURIComponent(utf8Match[1]!)
+        : plainMatch
+          ? decodeURIComponent(plainMatch[1]!)
+          : "Выгрузка работ.xlsx";
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      const msg = "Ошибка сети при выгрузке";
+      setLoadError(msg);
+      toast.error(msg);
+    } finally {
+      setBusyExport(false);
+    }
   };
 
   return (
@@ -342,7 +373,7 @@ export function OrderImportExportClient() {
           <button
             type="button"
             disabled={busyExport}
-            onClick={runExport}
+            onClick={() => void runExport()}
             className="h-9 rounded-md border border-[var(--input-border)] px-3"
           >
             {busyExport ? "Скачивание..." : "Скачать экспорт"}

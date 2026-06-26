@@ -92,6 +92,15 @@ export function canEditOrders(
   return false;
 }
 
+/** Модуль «Конфиг: почта» (/directory/mail) — глобальная галочка в матрице. */
+export function canAccessMailSettingsConfig(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (role === "OWNER") return true;
+  return moduleAccess?.CONFIG_MAIL === true;
+}
+
 /** Редактирование шаблонов этикеток и сохранение настроек печати. */
 export function canEditStickerPrintSettings(
   role: UserRole,

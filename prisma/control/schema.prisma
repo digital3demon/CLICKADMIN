@@ -67,6 +67,7 @@ enum AppModule {
   CONFIG_PRINT
   CONFIG_PRINT_EDIT
   CONFIG_APPEARANCE
+  CONFIG_MAIL
 }
 
 model Tenant {

@@ -34,6 +34,46 @@ export function isPrintSettingsApiPath(pathname: string): boolean {
   );
 }
 
+/** API и страница настроек почты (не чтение писем в /mail). */
+export function isMailSettingsPath(pathname: string, search = ""): boolean {
+  if (pathname === "/directory/mail" || pathname.startsWith("/directory/mail/")) {
+    return true;
+  }
+  if (pathname === "/api/mail/accounts" && search.includes("forSettings=1")) {
+    return true;
+  }
+  if (pathname === "/api/mail/accounts" || pathname.startsWith("/api/mail/accounts/")) {
+    if (pathname.endsWith("/test") || pathname.endsWith("/diagnose")) return true;
+    if (pathname.includes("/reply-template")) return true;
+    return false;
+  }
+  return (
+    pathname === "/api/mail/rules" ||
+    pathname.startsWith("/api/mail/rules/") ||
+    pathname === "/api/mail/folders" ||
+    pathname.startsWith("/api/mail/folders/") ||
+    pathname === "/api/mail/labels" ||
+    pathname.startsWith("/api/mail/labels/")
+  );
+}
+
+/** Настройки ящика: подключение, правки, удаление (не GET списка для /mail). */
+export function mailSettingsModuleForPath(
+  pathname: string,
+  method: string,
+  search = "",
+): "CONFIG_MAIL" | "MAIL" {
+  const m = method.toUpperCase();
+  if (pathname === "/api/mail/accounts" && m === "GET" && !search.includes("forSettings=1")) {
+    return "MAIL";
+  }
+  if (/^\/api\/mail\/accounts\/[^/]+$/.test(pathname) && m !== "GET") {
+    return "CONFIG_MAIL";
+  }
+  if (isMailSettingsPath(pathname, search)) return "CONFIG_MAIL";
+  return "MAIL";
+}
+
 type Rule = { prefix: string; module: AppModule };
 
 /**
@@ -64,7 +104,7 @@ const RULES: Rule[] = [
   { prefix: "/directory/orders-import-export", module: "CONFIG_ORDERS_IMPORT_EXPORT" },
   { prefix: "/api/orders/import-export", module: "CONFIG_ORDERS_IMPORT_EXPORT" },
   { prefix: "/directory/contracts", module: "CONFIG_CONTRACT_TEMPLATE" },
-  { prefix: "/directory/mail", module: "MAIL" },
+  { prefix: "/directory/mail", module: "CONFIG_MAIL" },
   { prefix: "/directory/warehouse", module: "CONFIG_WAREHOUSE" },
   { prefix: "/directory/kanban-boards", module: "CONFIG_KANBAN_BOARDS" },
   { prefix: "/directory/kaiten", module: "CONFIG_KAITEN" },
@@ -121,6 +161,7 @@ export function requiredModuleForPath(
   pathname: string,
   base: AppModule | null,
   method?: string,
+  search = "",
 ): AppModule | null {
   if (base == null) return null;
   const m = (method ?? "GET").toUpperCase();
@@ -128,6 +169,9 @@ export function requiredModuleForPath(
   if (base === "ORDERS") return ordersBranchModuleForMethod(pathname, m);
   if (base === "CONFIG_PRINT" && isPrintSettingsApiPath(pathname)) {
     return printSettingsModuleForMethod(m);
+  }
+  if (base === "MAIL" || pathname.startsWith("/api/mail")) {
+    return mailSettingsModuleForPath(pathname, m, search);
   }
   return base;
 }

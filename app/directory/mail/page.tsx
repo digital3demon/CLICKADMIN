@@ -1,24 +1,30 @@
 import { redirect } from "next/navigation";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { MailSettingsClient } from "@/components/mail/MailSettingsClient";
-import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { canOpenMailSettingsModule } from "@/lib/mail/mail-settings-access";
+import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { hasMailSettingsPageAccess } from "@/lib/mail/mail-service";
 import type { PrismaClient } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 export default async function MailSettingsPage() {
-  const session = await getSessionFromCookies();
+  const { session, access } = await getSessionWithModuleAccess();
   if (!session) redirect("/login?next=/directory/mail");
 
   const tenantId = await getTenantIdForSession(session);
   if (!tenantId) redirect("/login?next=/directory/mail");
 
   const db = (await getOrdersPrisma()) as PrismaClient;
-  const canAccess = await hasMailSettingsPageAccess(db, tenantId, session.sub, session.role);
-  if (!canAccess) redirect("/mail");
+  const canAccess = await canOpenMailSettingsModule(
+    db,
+    tenantId,
+    session.sub,
+    session.role,
+    access ?? undefined,
+  );
+  if (!canAccess) redirect(session.role === "OWNER" ? "/directory" : "/mail");
 
   const isOwner = session.role === "OWNER";
 

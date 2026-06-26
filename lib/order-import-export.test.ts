@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
+import ExcelJS from "exceljs";
 import {
   correctionTrackFromText,
+  isValidImportOrderNumber,
+  looksLikeImportHintOrderNumber,
+  ORDER_EXPORT_V2_HEADERS,
+  parseWorkbookImportRows,
   resolveClinicId,
   resolveDoctorId,
   splitInvoicedQuantitiesForTokens,
@@ -88,5 +93,76 @@ describe("correctionTrackFromText", () => {
   it("возвращает null для пустого/нерелевантного ввода", () => {
     expect(correctionTrackFromText("")).toBeNull();
     expect(correctionTrackFromText("обычная работа")).toBeNull();
+  });
+});
+
+describe("import hint row", () => {
+  it("распознаёт строку-подсказку", () => {
+    expect(looksLikeImportHintOrderNumber("Пример: номер наряда 2605-001")).toBe(
+      true,
+    );
+    expect(isValidImportOrderNumber("Пример: номер наряда")).toBe(false);
+    expect(isValidImportOrderNumber("2605-042")).toBe(true);
+  });
+});
+
+describe("parseWorkbookImportRows v2", () => {
+  it("пропускает строку-подсказку и читает данные v2", async () => {
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet("Занесение");
+    sheet.addRow([...ORDER_EXPORT_V2_HEADERS]);
+    sheet.addRow([
+      "",
+      "",
+      "",
+      "Пример: укажите номер наряда",
+      "Пациент пример",
+      "Доктор пример",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+    sheet.addRow([
+      "10.05.2026, 13:00",
+      "10.05.2026, 14:00",
+      "Админ",
+      "2605-099",
+      "Петров Пётр",
+      "Иванов И.И.",
+      "Смайл Центр",
+      "",
+      "",
+      "",
+      "",
+      "15.05.2026",
+      "12.05.2026",
+      "14:30",
+      "Нет",
+      "",
+      "",
+      "",
+      "Нет",
+      "",
+      "",
+      "Нет",
+    ]);
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
+    const { rows } = await parseWorkbookImportRows(buf);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.orderNumber).toBe("2605-099");
+    expect(rows[0]?.patientName).toBe("Петров Пётр");
   });
 });

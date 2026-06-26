@@ -92,6 +92,33 @@ export function hasProstheticsKeywords(inputRaw: string): boolean {
   return /\b(протетик|аналог|титанов|абатмент|винт)\b/.test(t);
 }
 
+/** Лист «Занесение» v2 — 22 колонки (экспорт). */
+export const ORDER_EXPORT_V2_HEADERS = [
+  "Зашла",
+  "Оформил",
+  "Занес",
+  "Номер наряда",
+  "Пациент",
+  "Доктор",
+  "Клиника",
+  "Заказ, расшифровка",
+  "Протетика",
+  "Что еще есть к работе",
+  "Комментарий от админов",
+  "Дата лабораторная",
+  "Прием",
+  "Время",
+  "Отгружено",
+  "Реквизиты контрагента",
+  "Номер Счета",
+  "Оплата",
+  "Сверка",
+  "Выставлено",
+  "Сумма",
+  "Карточка в кайтен/канбан",
+] as const;
+
+/** Устаревший шаблон (23 колонки) — алиасы для импорта старых файлов. */
 export const ORDER_IMPORT_EXPORT_HEADERS = [
   "Номер",
   "Пациент",
@@ -121,7 +148,7 @@ export const ORDER_IMPORT_EXPORT_HEADERS = [
 type HeaderKey = (typeof ORDER_IMPORT_EXPORT_HEADERS)[number];
 
 const HEADER_ALIASES: Record<HeaderKey, string[]> = {
-  Номер: ["номер"],
+  Номер: ["номер", "номер наряда"],
   Пациент: ["пациент"],
   Доктор: ["доктор"],
   Клиника: ["клиника"],
@@ -133,7 +160,7 @@ const HEADER_ALIASES: Record<HeaderKey, string[]> = {
   ],
   Занес: ["занес"],
   Зашла: ["зашла"],
-  Оформ: ["оформ"],
+  Оформ: ["оформ", "оформил"],
   "Заказ, расшифровка": ["заказ, расшифровка", "заказ расшифровка"],
   "Комментарий от админов": [
     "комментарий",
@@ -147,7 +174,7 @@ const HEADER_ALIASES: Record<HeaderKey, string[]> = {
     "исходные данные",
     "дополнительно к работе",
   ],
-  Дата: ["дата"],
+  Дата: ["дата", "дата лабораторная"],
   Прием: ["прием", "приём"],
   Время: ["время"],
   "Кол-во ед.": ["кол-во ед.", "кол во ед", "кол-во", "количество"],
@@ -160,11 +187,34 @@ const HEADER_ALIASES: Record<HeaderKey, string[]> = {
   "Карточка в кайтен/канбан создана": [
     "карточка в кайтен/канбан создана",
     "карточка в кайтен канбан создана",
+    "карточка в кайтен/канбан",
     "создать карточку в кайтен/канбан",
     "создать карточку в кайтен",
     "создать карточку",
   ],
 };
+
+/** Строка-подсказка из эталонного xlsx (не импортируется). */
+export function looksLikeImportHintOrderNumber(value: string): boolean {
+  const t = value.trim();
+  if (!t) return true;
+  const lower = normText(t);
+  if (lower.includes("пример") && (lower.includes("номер") || lower.includes("наряд"))) {
+    return true;
+  }
+  if (lower.includes("для разработ") || lower.includes("не заполнять")) return true;
+  if (lower.includes("формат колонк") || lower.includes("описание колонк")) return true;
+  if (lower.startsWith("указать ") || lower.startsWith("заполняется ")) return true;
+  return false;
+}
+
+export function isValidImportOrderNumber(value: string): boolean {
+  const t = value.trim();
+  if (!t || looksLikeImportHintOrderNumber(t)) return false;
+  if (/^\d{4}-\d{2,}$/i.test(t)) return true;
+  if (/^[\dA-Za-zА-Яа-яЁё][\dA-Za-zА-Яа-яЁё._-]{0,40}$/u.test(t)) return true;
+  return false;
+}
 
 function normText(value: unknown): string {
   return String(value ?? "")
@@ -649,6 +699,8 @@ export async function parseWorkbookImportRows(buffer: Uint8Array): Promise<{
     ].some((x) => x.length > 0);
     if (!hasData) continue;
 
+    if (!isValidImportOrderNumber(orderNumber)) continue;
+
     workNumber += 1;
     rows.push({
       rowNumber: workNumber,
@@ -818,7 +870,7 @@ export function combineAppointmentDateTime(
 }
 
 export function templateHeaderWithLetters(): Array<{ letter: string; title: string }> {
-  return ORDER_IMPORT_EXPORT_HEADERS.map((title, idx) => ({
+  return ORDER_EXPORT_V2_HEADERS.map((title, idx) => ({
     letter: toExcelColumn(idx + 1),
     title,
   }));

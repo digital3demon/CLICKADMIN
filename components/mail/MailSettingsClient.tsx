@@ -855,7 +855,8 @@ export function MailSettingsClient() {
                   Настройки почты
                 </h4>
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  Папки, метки, правила и шаблон ответа.
+                  Отмеченные роли смогут настраивать этот ящик в разделе «Конфигурация →
+                  Почта». Владелец всегда имеет полный доступ.
                 </p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {MAIL_ROLE_OPTIONS.filter((role) => role.value !== "OWNER").map((role) => {
