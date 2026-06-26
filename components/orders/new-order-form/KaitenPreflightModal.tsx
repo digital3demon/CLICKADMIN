@@ -463,16 +463,16 @@ export function KaitenPreflightModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[600] flex items-center justify-center bg-zinc-900/50 p-3 sm:p-5"
+      className="fixed inset-0 z-[600] overflow-y-auto bg-zinc-900/50 p-3 sm:p-5"
       role="presentation"
     >
       <div
-        className={`flex max-h-[min(96vh,920px)] w-full items-stretch justify-center gap-3 ${
+        className={`mx-auto flex w-full items-start justify-center gap-3 py-2 ${
           replyAside ? "max-w-[min(96vw,72rem)] flex-col lg:flex-row" : "max-w-5xl"
         }`}
       >
       <div
-        className="flex max-h-[min(96vh,920px)] w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
+        className="flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="kaiten-preflight-title"
@@ -520,7 +520,7 @@ export function KaitenPreflightModal({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5">
+        <div className="px-5 py-4 sm:px-6 sm:py-5">
           <div className="mb-5 rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-3 sm:px-4">
             <DueDatetimeComboPicker
               id="kaiten-modal-lab-due"

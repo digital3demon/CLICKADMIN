@@ -369,14 +369,14 @@ export function OrderAutoReplyPreflightPanel({
     needsDatePicker && !pickerDateYmd.trim() && editorHtml.includes("{{date}}");
 
   return (
-    <div className="flex max-h-[min(96vh,920px)] w-full min-w-[min(100%,22rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl lg:w-[32rem] lg:max-w-[32rem]">
+    <div className="flex w-full min-w-[min(100%,22rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl lg:w-[32rem] lg:max-w-[32rem]">
       <div className="shrink-0 border-b border-[var(--border-subtle)] px-5 py-4">
         <h2 className="text-lg font-semibold text-[var(--app-text)]">Ответное письмо</h2>
         <p className="mt-1 text-xs text-[var(--text-secondary)]">
           Кому: {senderLabel(sourceEmail)}
         </p>
       </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+      <div className="space-y-3 px-5 py-4">
         <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-2.5">
           <input
             type="checkbox"
