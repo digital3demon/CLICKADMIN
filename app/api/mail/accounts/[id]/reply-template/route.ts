@@ -20,6 +20,7 @@ export async function GET(
     const template = await getEmailReplyTemplate(
       r.ctx.db,
       r.ctx.tenantId,
+      r.ctx.userId,
       r.ctx.role,
       id,
     );

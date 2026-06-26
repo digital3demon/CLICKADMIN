@@ -19,6 +19,7 @@ export async function GET(
     const assets = await listEmailReplyTemplateAssets(
       r.ctx.db,
       r.ctx.tenantId,
+      r.ctx.userId,
       r.ctx.role,
       id,
     );

@@ -33,6 +33,14 @@ export function mailErrorResponse(err: unknown, fallback = "Ошибка поч�
       status: 400,
       error: "Для аккаунта не задан пароль приложения Яндекса",
     },
+    MAIL_ACCOUNT_ACCESS_FORBIDDEN: {
+      status: 403,
+      error: "Нет доступа к этому почтовому ящику",
+    },
+    EMAIL_REPLY_TEMPLATE_ASSET_NOT_FOUND: {
+      status: 404,
+      error: "Файл шаблона не найден",
+    },
   };
   const mapped = known[message];
   if (mapped) return NextResponse.json({ error: mapped.error }, { status: mapped.status });

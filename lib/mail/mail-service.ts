@@ -1398,15 +1398,11 @@ export type EmailReplyTemplateDto = {
 export async function getEmailReplyTemplate(
   db: PrismaClient,
   tenantId: string,
+  userId: string,
   role: string,
   accountId: string,
 ): Promise<EmailReplyTemplateDto | null> {
-  if (role !== UserRole.OWNER) throw new Error("MAIL_ACCOUNT_ACCESS_FORBIDDEN");
-  const account = await db.emailAccount.findFirst({
-    where: { id: accountId, tenantId },
-    select: { id: true },
-  });
-  if (!account) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
+  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   const row = await db.emailReplyTemplate.findUnique({
     where: { accountId },
   });
@@ -1522,10 +1518,11 @@ async function requireOwnerEmailAccount(
 export async function listEmailReplyTemplateAssets(
   db: PrismaClient,
   tenantId: string,
+  userId: string,
   role: string,
   accountId: string,
 ): Promise<EmailReplyTemplateAssetDto[]> {
-  await requireOwnerEmailAccount(db, tenantId, role, accountId);
+  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   const rows = await db.emailReplyTemplateAsset.findMany({
     where: { tenantId, accountId },
     orderBy: { createdAt: "asc" },
@@ -1549,11 +1546,12 @@ export async function listEmailReplyTemplateAssets(
 export async function getEmailReplyTemplateAssetBytes(
   db: PrismaClient,
   tenantId: string,
+  userId: string,
   role: string,
   accountId: string,
   assetId: string,
 ): Promise<{ mimeType: string; fileName: string; data: Buffer }> {
-  await requireOwnerEmailAccount(db, tenantId, role, accountId);
+  await requireUserEmailAccount(db, tenantId, userId, accountId, role);
   const row = await db.emailReplyTemplateAsset.findFirst({
     where: { id: assetId, tenantId, accountId },
     select: { mimeType: true, fileName: true, data: true },
