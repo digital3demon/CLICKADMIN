@@ -75,3 +75,19 @@ export function substituteOrderNumberPlaceholders(
   if (!num) return text;
   return text.replace(/\{\{orderNumber\}\}/g, num);
 }
+
+/** Реальный URL витрины вместо {{orderStatusUrl}} и preview-ссылки из префлайта. */
+export function applyOrderStatusUrlToReplyContent(
+  text: string,
+  orderStatusUrl: string,
+  samplePreviewUrl?: string,
+): string {
+  const url = orderStatusUrl.trim();
+  if (!url) return text;
+  let out = text.replace(/\{\{\s*orderStatusUrl\s*\}\}/g, url);
+  const sample = samplePreviewUrl?.trim();
+  if (sample && sample !== url) {
+    out = out.split(sample).join(url);
+  }
+  return out;
+}

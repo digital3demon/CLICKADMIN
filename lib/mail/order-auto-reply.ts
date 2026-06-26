@@ -4,6 +4,7 @@ import {
   defaultReplySubject,
   renderEmailReplyTemplate,
   substituteOrderNumberPlaceholders,
+  applyOrderStatusUrlToReplyContent,
 } from "@/lib/mail/email-reply-template";
 export { resolveReplyToSourceEmailId } from "@/lib/mail/email-reply-template";
 import { buildEmailReplyTemplateContext } from "@/lib/mail/build-email-reply-context";
@@ -13,6 +14,7 @@ import {
   normalizeReplyHtmlForSend,
 } from "@/lib/mail/reply-template-cid";
 import { resolveOrderStatusUrl } from "@/lib/mail/order-status-url";
+import { SAMPLE_ORDER_STATUS_URL } from "@/lib/mail/reply-block-editor/presets/click-lab";
 import {
   buildHtmlFromReplyTemplate,
   resolveLayoutType,
@@ -173,6 +175,7 @@ export async function sendOrderAutoReply(params: {
     } else {
       html = "";
     }
+    html = applyOrderStatusUrlToReplyContent(html, orderStatusUrl, SAMPLE_ORDER_STATUS_URL);
     html = normalizeReplyHtmlForSend(html);
     const inReplyTo = buildReferences(link.email.messageId);
     const references = inReplyTo;
