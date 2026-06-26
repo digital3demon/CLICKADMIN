@@ -1,9 +1,10 @@
 "use client";
 
 import {
-  normalizeRevisionsHistorySearchQuery,
-  revisionsHistoryHref,
-} from "@/lib/revisions-history";
+  ordersHistoryHref,
+  parseOrdersHistoryTab,
+} from "@/lib/corrections-history";
+import { normalizeRevisionsHistorySearchQuery } from "@/lib/revisions-history";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -20,11 +21,13 @@ export function OrdersHistorySearch({ initialValue }: { initialValue: string }) 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const urlSearchSnapshot = sp.toString();
+  const activeTab = parseOrdersHistoryTab(
+    new URLSearchParams(urlSearchSnapshot).get("tab"),
+  );
   useEffect(() => {
     if (document.activeElement === inputRef.current) return;
-    const fromUrl = normalizeRevisionsHistorySearchQuery(
-      new URLSearchParams(urlSearchSnapshot).get("q"),
-    );
+    const params = new URLSearchParams(urlSearchSnapshot);
+    const fromUrl = normalizeRevisionsHistorySearchQuery(params.get("q"));
     setValue((prev) =>
       normalizeRevisionsHistorySearchQuery(prev) === fromUrl ? prev : fromUrl,
     );
@@ -33,9 +36,12 @@ export function OrdersHistorySearch({ initialValue }: { initialValue: string }) 
   const flushToUrl = useCallback(
     (nextLocal: string) => {
       const q = normalizeRevisionsHistorySearchQuery(nextLocal);
-      router.replace(revisionsHistoryHref(q || undefined), { scroll: false });
+      router.replace(
+        ordersHistoryHref({ tab: activeTab, q: q || undefined }),
+        { scroll: false },
+      );
     },
-    [router],
+    [router, activeTab],
   );
 
   useEffect(() => {
@@ -56,7 +62,7 @@ export function OrdersHistorySearch({ initialValue }: { initialValue: string }) 
       debounceRef.current = null;
     }
     setValue("");
-    router.replace(revisionsHistoryHref(), { scroll: false });
+    router.replace(ordersHistoryHref({ tab: activeTab }), { scroll: false });
   };
 
   return (
@@ -70,7 +76,11 @@ export function OrdersHistorySearch({ initialValue }: { initialValue: string }) 
           id="orders-history-search-q"
           type="search"
           className={inputClass}
-          placeholder="Наряд, врач, клиника, пользователь, описание…"
+          placeholder={
+            activeTab === "corrections"
+              ? "Наряд, текст, Kaiten, канбан, пользователь…"
+              : "Наряд, врач, клиника, пользователь, описание…"
+          }
           value={value}
           onChange={(e) => setValue(e.target.value)}
           autoComplete="off"

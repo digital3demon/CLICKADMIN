@@ -1,3 +1,4 @@
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 import type { ConstructionCategory, JawArch } from "@prisma/client";
 import {
   clampPercent0to100,
@@ -56,6 +57,8 @@ export type OrderExportV2Input = {
   demoKanbanColumn: string | null;
   constructions: OrderExportV2Construction[];
   requisites: { legalFullName?: string | null; inn?: string | null } | null;
+  /** Наше юрлицо в наряде: «ООО» / «ИП» — для строки «Работает с …» в колонке P. */
+  legalEntity: string | null;
   revisions: Array<{ createdAt: Date; snapshot: unknown }>;
 };
 
@@ -96,14 +99,19 @@ export function formatAdditionalSourceCell(order: {
 
 export function formatRequisitesTemplateStyle(
   fields: { legalFullName?: string | null; inn?: string | null } | null | undefined,
+  legalEntity?: string | null,
 ): string {
   if (!fields) return "";
-  const name = (fields.legalFullName ?? "").trim();
+  const name = cleanLegalFullName(fields.legalFullName) ?? "";
   const inn = (fields.inn ?? "").trim();
-  if (!name && !inn) return "";
+  const entity = (legalEntity ?? "").trim();
+  if (!name && !inn && entity !== "ООО" && entity !== "ИП") return "";
   const lines: string[] = [];
   if (name) lines.push(name);
   if (inn) lines.push(`ИНН ${inn}`);
+  if (entity === "ООО" || entity === "ИП") {
+    lines.push(`Работает с ${entity}`);
+  }
   return lines.join("\n");
 }
 
@@ -230,7 +238,7 @@ export function mapOrderToExportV2Row(order: OrderExportV2Input): string[] {
     order.appointmentDate ? formatMoscowDate(order.appointmentDate) : "",
     appointmentTime,
     formatShippedCell(order.adminShippedOtpr, sentAt),
-    formatRequisitesTemplateStyle(order.requisites),
+    formatRequisitesTemplateStyle(order.requisites, order.legalEntity),
     formatInvoiceCell(order.invoiceNumber, order.invoiceAttachmentCreatedAt),
     order.payment?.trim() ?? "",
     order.clinic?.worksWithReconciliation === true ? "Да" : "Нет",

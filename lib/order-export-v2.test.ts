@@ -62,9 +62,10 @@ function baseOrder(overrides: Partial<OrderExportV2Input> = {}): OrderExportV2In
       },
     ],
     requisites: {
-      legalFullName: 'ООО "Клиника" сверка ЭДО',
+      legalFullName: 'ООО "Клиника" ООО сверка ЭДО',
       inn: "1234567890",
     },
+    legalEntity: "ООО",
     revisions: [
       {
         createdAt: new Date("2026-05-16T08:00:00.000Z"),
@@ -166,12 +167,28 @@ describe("computeOrderSentAt", () => {
 });
 
 describe("formatRequisitesTemplateStyle", () => {
-  it("сохраняет маркеры в legalFullName и добавляет ИНН", () => {
-    const text = formatRequisitesTemplateStyle({
-      legalFullName: 'ООО "Клиника" сверка ЭДО',
-      inn: "1234567890",
-    });
-    expect(text).toBe('ООО "Клиника" сверка ЭДО\nИНН 1234567890');
+  it("убирает сверку/ЭДО из названия, добавляет ИНН и «Работает с …»", () => {
+    const text = formatRequisitesTemplateStyle(
+      {
+        legalFullName: 'ООО "ДЕНАЛИ" ООО сверка ЭДО',
+        inn: "7814771598",
+      },
+      "ООО",
+    );
+    expect(text).toBe(
+      'ООО "ДЕНАЛИ"\nИНН 7814771598\nРаботает с ООО',
+    );
+  });
+
+  it("не добавляет строку «Работает с», если юрлицо не ООО/ИП", () => {
+    const text = formatRequisitesTemplateStyle(
+      {
+        legalFullName: 'ООО "Клиника" ООО сверка ЭДО',
+        inn: "1234567890",
+      },
+      "Частное лицо",
+    );
+    expect(text).toBe('ООО "Клиника"\nИНН 1234567890');
   });
 });
 

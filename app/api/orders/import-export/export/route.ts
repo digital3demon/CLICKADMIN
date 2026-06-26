@@ -116,6 +116,7 @@ export async function GET(req: Request) {
       appointmentDate: true,
       dueToAdminsHasTime: true,
       adminShippedOtpr: true,
+      legalEntity: true,
       payment: true,
       invoiceNumber: true,
       invoiceAttachmentId: true,
@@ -345,6 +346,7 @@ export async function GET(req: Request) {
       demoKanbanColumn: o.demoKanbanColumn,
       constructions: hydratedConstructions,
       requisites,
+      legalEntity: o.legalEntity?.trim() || null,
       revisions: o.revisions,
     };
   });
