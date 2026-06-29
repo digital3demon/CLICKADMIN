@@ -7,7 +7,7 @@ import {
   type ReplyTemplateAssetItem,
 } from "@/components/mail/EmailReplyTemplateAssetsPanel";
 import { MailReplyTemplatePreview } from "@/components/mail/MailReplyTemplatePreview";
-import { ReplyTemplateBlockEditor } from "@/components/mail/ReplyTemplateBlockEditor";
+import { ReplyTemplateBlockEditor, type ReplyTemplateBlockEditorHandle } from "@/components/mail/ReplyTemplateBlockEditor";
 import {
   createClickLabPreset,
   type ReplyEditorDocument,
@@ -244,6 +244,7 @@ export function MailSettingsClient() {
   const replySubjectInputRef = useRef<HTMLInputElement>(null);
   const replySubjectSelectionRef = useRef({ start: 0, end: 0 });
   const replyEditorRef = useRef<MailHtmlTemplateEditorHandle>(null);
+  const replyBlockEditorRef = useRef<ReplyTemplateBlockEditorHandle>(null);
   const replyTemplateAssetsRef = useRef<ReplyTemplateAssetItem[]>([]);
   const [replyTemplateAssets, setReplyTemplateAssets] = useState<ReplyTemplateAssetItem[]>(
     [],
@@ -486,7 +487,8 @@ export function MailSettingsClient() {
         layoutType: replyLayoutType,
       };
       if (replyLayoutType === "blocks") {
-        body.editorDocument = replyEditorDocument;
+        body.editorDocument =
+          replyBlockEditorRef.current?.flushPendingChanges() ?? replyEditorDocument;
       } else {
         const htmlForSave = restoreReplyTemplateCidsFromPreview(
           replyHtmlTemplate,
@@ -1076,6 +1078,7 @@ export function MailSettingsClient() {
                 />
                 {replyLayoutType === "blocks" ? (
                   <ReplyTemplateBlockEditor
+                    ref={replyBlockEditorRef}
                     document={replyEditorDocument}
                     onChange={setReplyEditorDocument}
                     disabled={replyTemplateSaving}
@@ -1086,6 +1089,7 @@ export function MailSettingsClient() {
                       fileName: a.fileName,
                       kind: a.kind,
                     }))}
+                    onUploadImage={uploadReplyTemplateAsset}
                   />
                 ) : (
                   <div className="block text-sm font-medium text-[var(--app-text)]">
@@ -1189,21 +1193,13 @@ export function MailSettingsClient() {
                   layoutType={replyLayoutType}
                   editorDocument={replyEditorDocument}
                   accountId={activeAccount.id}
-                  assets={replyTemplateAssetsRef.current.map((a) => ({
+                  assets={replyTemplateAssets.map((a) => ({
                     id: a.id,
                     contentId: a.contentId,
                   }))}
-                  interactive={
-                    replyLayoutType === "blocks"
-                      ? {
-                          document: replyEditorDocument,
-                          onDocumentChange: setReplyEditorDocument,
-                          selectedBlockId: replySelectedBlockId,
-                          onSelectBlockId: setReplySelectedBlockId,
-                          disabled: replyTemplateSaving,
-                        }
-                      : null
-                  }
+                  selectedBlockId={replySelectedBlockId}
+                  onSelectBlockId={setReplySelectedBlockId}
+                  disabled={replyTemplateSaving}
                 />
               </div>
             </div>
