@@ -14,7 +14,7 @@ import { FinanceOfficePeriodForm } from "@/components/finance-office/FinanceOffi
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { fetchFinanceOfficeOrders, countFinanceOfficeQuickFilterChips } from "@/lib/fetch-finance-office-orders";
+import { fetchFinanceOfficeOrders, countFinanceOfficeQuickFilterChips, financeOfficeListTagSkipsDueDateWindow } from "@/lib/fetch-finance-office-orders";
 import {
   humanListTagLabel,
   parseListTagParam,
@@ -158,6 +158,11 @@ export default async function FinanceOfficePage({
         })
       : { attentionCount: 0, prostheticsPendingCount: 0 };
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;
+  const tagSkipsDueDate = financeOfficeListTagSkipsDueDateWindow(parsedTag);
+  const listRangeSummary =
+    tagSkipsDueDate && tagLabel
+      ? `${tagLabel} — без ограничения по сроку лаборатории`
+      : rangeSummary;
   const exportParams = new URLSearchParams();
   exportParams.set("tab", tab);
   if (fromRaw) exportParams.set("from", fromRaw);
@@ -238,14 +243,14 @@ export default async function FinanceOfficePage({
                 preserveListTag={rawTagInvalid ? null : rawTag}
                 q={q}
                 receptionSummary={
-                  shouldFetch && rangeSummary
-                    ? `${rangeSummary} · нарядов: ${orders.length}`
+                  shouldFetch && listRangeSummary
+                    ? `${listRangeSummary} · нарядов: ${orders.length}`
                     : null
                 }
               />
-            ) : rangeSummary ? (
+            ) : listRangeSummary ? (
               <p className="text-sm font-medium text-[var(--text-body)]">
-                {rangeSummary} · нарядов: {orders.length}
+                {listRangeSummary} · нарядов: {orders.length}
               </p>
             ) : null}
             <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">

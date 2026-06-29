@@ -1,6 +1,10 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { getClientsPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
 import {
+  financeOfficeListTagSkipsDueDateWindow,
+  financeOfficeScopeWhere,
+} from "@/lib/finance-office-list-scope";
+import {
   formatCounterpartyRequisitesShortSummary,
 } from "@/lib/format-counterparty-requisites-summary";
 import {
@@ -82,39 +86,10 @@ export type FinanceOfficeOrderRow = Omit<
   listPendingProstheticsRequests: boolean;
 };
 
-function searchWhere(q: string): Prisma.OrderWhereInput {
-  const contains = q.trim();
-  if (!contains) return {};
-  return {
-    OR: [
-      { orderNumber: { contains, mode: "insensitive" } },
-      { patientName: { contains, mode: "insensitive" } },
-    ],
-  };
-}
-
-export function financeOfficeScopeWhere(
-  tenantId: string,
-  opts: {
-    search?: string | null;
-    start?: Date | null;
-    endExclusive?: Date | null;
-  } = {},
-): Prisma.OrderWhereInput {
-  const parts: Prisma.OrderWhereInput[] = [
-    { tenantId, archivedAt: null },
-    searchWhere(opts.search ?? ""),
-  ];
-  if (opts.start || opts.endExclusive) {
-    parts.push({
-      dueDate: {
-        ...(opts.start ? { gte: opts.start } : {}),
-        ...(opts.endExclusive ? { lt: opts.endExclusive } : {}),
-      },
-    });
-  }
-  return parts.length === 1 ? parts[0] : { AND: parts };
-}
+export {
+  financeOfficeListTagSkipsDueDateWindow,
+  financeOfficeScopeWhere,
+} from "@/lib/finance-office-list-scope";
 
 const pendingCorrectionsWhere = {
   chatCorrections: {
@@ -170,11 +145,12 @@ export async function fetchFinanceOfficeOrders(
   } = {},
 ): Promise<FinanceOfficeOrderRow[]> {
   const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
+  const skipDueDateWindow = financeOfficeListTagSkipsDueDateWindow(parsedTag);
   const parts: Prisma.OrderWhereInput[] = [
     financeOfficeScopeWhere(tenantId, {
       search: opts.search,
-      start: opts.start,
-      endExclusive: opts.endExclusive,
+      start: skipDueDateWindow ? null : opts.start,
+      endExclusive: skipDueDateWindow ? null : opts.endExclusive,
     }),
   ];
   if (parsedTag) {
