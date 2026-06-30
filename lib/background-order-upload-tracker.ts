@@ -12,7 +12,7 @@ export type BackgroundOrderUploadItem = {
 
 type Listener = () => void;
 
-const items = new Map<string, BackgroundOrderUploadItem>();
+const BACKGROUND_UPLOAD_SUCCESS_HIDE_MS = 8000;
 const listeners = new Set<Listener>();
 const clearTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const retryHandlers = new Map<string, () => Promise<void>>();
@@ -103,7 +103,7 @@ export function completeBackgroundOrderUpload(
     items.delete(id);
     retryHandlers.delete(id);
     emit();
-  }, 2600);
+  }, BACKGROUND_UPLOAD_SUCCESS_HIDE_MS);
   clearTimers.set(id, timer);
 }
 

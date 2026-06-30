@@ -84,6 +84,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
+import { TOAST_AUTO_HIDE_MS } from "@/components/ui/toast-store";
 import { BoardCanvas } from "./BoardCanvas";
 import { KanbanFiltersButton } from "./KanbanFiltersButton";
 import { KanbanViewModePicker } from "./KanbanViewModePicker";
@@ -770,7 +771,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     setToasts((t) => [...t, { id, text, err }]);
     setTimeout(() => {
       setToasts((t) => t.filter((x) => x.id !== id));
-    }, 4200);
+    }, err ? TOAST_AUTO_HIDE_MS.error : TOAST_AUTO_HIDE_MS.default);
   }, []);
 
   useEffect(() => {

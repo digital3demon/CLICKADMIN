@@ -45,7 +45,7 @@ import { recordOrderRevision } from "@/lib/record-order-revision";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { pushKaitenCardTitleForOrderIfLinked } from "@/lib/kaiten-push-order-title";
 import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
-import { kaitenUrgentPatchFromCard } from "@/lib/kaiten-inbound-order-fields";
+import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
 import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
@@ -600,10 +600,14 @@ export async function GET(
         "sort_order" in cardObj
           ? { kaitenCardSortOrder: kaitenSortOrderFromCard(cardObj) }
           : {};
+      const mirrorFields = kaitenMirrorFieldsFromCard(cardObj);
       await ordersPrisma.order.update({
         where: { id: orderIdTrim },
         data: {
           kaitenColumnTitle: columnTitle,
+          ...(mirrorFields.kaitenCardDescriptionMirror !== undefined
+            ? { kaitenCardDescriptionMirror: mirrorFields.kaitenCardDescriptionMirror }
+            : {}),
           kaitenBlocked: kBlocked,
           kaitenBlockReason: kBlockReason,
           ...blockedAtPatch,
@@ -1374,6 +1378,27 @@ export async function PATCH(
     body,
     updated.card as Record<string, unknown>,
   );
+  const mirrorFields = kaitenMirrorFieldsFromCard(
+    updated.card as Record<string, unknown>,
+  );
+  const descriptionMirrorPatch =
+    typeof body.description === "string"
+      ? {
+          kaitenCardDescriptionMirror:
+            kaitenDescriptionWithContinuationPrefix(
+              body.description.trim(),
+              order.continuesFromOrder
+                ? {
+                    orderNumber: order.continuesFromOrder.orderNumber,
+                    kaitenCardId: order.continuesFromOrder.kaitenCardId,
+                  }
+                : null,
+              mapContinuationChildrenRefs(order.continuationOrders),
+            ).trim() || null,
+        }
+      : mirrorFields.kaitenCardDescriptionMirror !== undefined
+        ? { kaitenCardDescriptionMirror: mirrorFields.kaitenCardDescriptionMirror }
+        : {};
 
   try {
     const cardObj = updated.card as Record<string, unknown>;
@@ -1389,6 +1414,7 @@ export async function PATCH(
         kaitenSyncError: null,
         ...(laneToStore != null ? { kaitenTrackLane: laneToStore } : {}),
         ...(titleUpdate ?? {}),
+        ...descriptionMirrorPatch,
         ...sortPatch,
         ...kaitenUrgentPatchFromCard(cardObj, order.isUrgent),
         ...(blockRow != null

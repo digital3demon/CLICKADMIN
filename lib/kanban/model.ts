@@ -15,6 +15,7 @@ import type { UserRole } from "@prisma/client";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
 import {
+  resolveLinkedOrderKanbanDescription,
   resolveLinkedOrderKanbanTitle,
   type KaitenLinkedOrderForKanban,
 } from "@/lib/kanban/kaiten-linked-order";
@@ -1969,25 +1970,11 @@ function applyContinuesFromOrderToKanbanCard(
   card.sourceEmailCount = row.sourceEmailCount ?? 0;
 }
 
-/** Текст описания карточки CRM-канбана (без строки «продолжение» — она в UI отдельной ссылкой). */
 function linkedOrderKanbanDescription(
   row: KaitenLinkedOrderForKanban,
   demo: boolean,
 ): string {
-  const blocks: string[] = [];
-  const client = row.clientOrderText?.trim();
-  const notes = row.notes?.trim();
-  if (client) blocks.push(`Заказ от клиента:\n${client}`);
-  if (notes) blocks.push(`Комментарий от админов:\n${notes}`);
-  const tail = demo
-    ? row.kaitenCardId != null
-      ? `Также в Kaiten: #${row.kaitenCardId}`
-      : "Карточка канбана в CRM"
-    : row.kaitenCardId != null
-      ? `Наряд в CRM. Карточка Kaiten: #${row.kaitenCardId}`
-      : "Наряд в CRM. Карточка Kaiten ещё не создана.";
-  blocks.push(tail);
-  return blocks.join("\n\n");
+  return resolveLinkedOrderKanbanDescription(row, demo);
 }
 
 function linkedOrderKanbanActivityCreateText(

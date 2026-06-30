@@ -1,5 +1,11 @@
 type ToastType = 'success' | 'error' | 'warning' | 'info'
 
+/** Автоскрытие тостов (мс). `duration: 0` — только вручную. */
+export const TOAST_AUTO_HIDE_MS = {
+  default: 7000,
+  error: 10_000,
+} as const
+
 export interface Toast {
   id: string
   type: ToastType
@@ -26,7 +32,9 @@ function addToast(toast: Omit<Toast, 'id'>): string {
   toasts = [...toasts, { ...toast, id }]
   notify()
 
-  const duration = toast.duration ?? (toast.type === 'error' ? 6000 : 3500)
+  const duration =
+    toast.duration ??
+    (toast.type === 'error' ? TOAST_AUTO_HIDE_MS.error : TOAST_AUTO_HIDE_MS.default)
   if (duration > 0) {
     setTimeout(() => removeToast(id), duration)
   }

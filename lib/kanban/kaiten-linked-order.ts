@@ -58,6 +58,67 @@ export type KaitenLinkedOrderForKanban = {
   sourceEmailCount?: number;
 };
 
+const CONTINUATION_HEAD_RE =
+  /^(Продолжение работы|У этой работы есть продолжение)/u;
+
+/** Убирает блоки «продолжение» и служебный хвост CRM — они в канбане отдельно. */
+export function stripKaitenDescriptionForKanbanBody(text: string): string {
+  let body = text.trim();
+  while (body) {
+    const lines = body.split("\n");
+    const first = lines[0]?.trim() ?? "";
+    if (CONTINUATION_HEAD_RE.test(first)) {
+      let i = 1;
+      while (i < lines.length && lines[i]?.trim() === "") i += 1;
+      body = lines.slice(i).join("\n").trim();
+      continue;
+    }
+    break;
+  }
+  return body
+    .replace(/\n\nНаряд в CRM\. Карточка Kaiten: #\d+\s*$/u, "")
+    .replace(/\n\nТакже в Kaiten: #\d+\s*$/u, "")
+    .replace(/\n\nКарточка канбана в CRM\s*$/u, "")
+    .trim();
+}
+
+function kanbanDescriptionTail(
+  row: Pick<KaitenLinkedOrderForKanban, "kaitenCardId">,
+  demo: boolean,
+): string {
+  if (demo) {
+    return row.kaitenCardId != null
+      ? `Также в Kaiten: #${row.kaitenCardId}`
+      : "Карточка канбана в CRM";
+  }
+  return row.kaitenCardId != null
+    ? `Наряд в CRM. Карточка Kaiten: #${row.kaitenCardId}`
+    : "Наряд в CRM. Карточка Kaiten ещё не создана.";
+}
+
+/** Описание карточки CRM-канбана: из Kaiten (зеркало), иначе из полей наряда. */
+export function resolveLinkedOrderKanbanDescription(
+  row: Pick<
+    KaitenLinkedOrderForKanban,
+    "clientOrderText" | "notes" | "kaitenCardId" | "kaitenCardDescriptionMirror"
+  >,
+  demo: boolean,
+): string {
+  const tail = kanbanDescriptionTail(row, demo);
+  const mirror = row.kaitenCardDescriptionMirror?.trim();
+  if (mirror && row.kaitenCardId != null) {
+    const body = stripKaitenDescriptionForKanbanBody(mirror);
+    return body ? `${body}\n\n${tail}` : tail;
+  }
+  const blocks: string[] = [];
+  const client = row.clientOrderText?.trim();
+  const notes = row.notes?.trim();
+  if (client) blocks.push(`Заказ от клиента:\n${client}`);
+  if (notes) blocks.push(`Комментарий от админов:\n${notes}`);
+  blocks.push(tail);
+  return blocks.join("\n\n");
+}
+
 /** Заголовок карточки канбана — всегда из полей наряда (наряд главный). */
 export function resolveLinkedOrderKanbanTitle(
   _row: Pick<KaitenLinkedOrderForKanban, "kaitenCardTitleMirror">,

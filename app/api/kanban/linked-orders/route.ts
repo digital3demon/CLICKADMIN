@@ -5,9 +5,12 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getClientsPrisma, getOrdersPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
+import { bestKaitenDescriptionMirrorForKanban } from "@/lib/kanban/kaiten-description-mirror";
 import { getKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { kaitenCommentsForSyncFromSnapshotPayload } from "@/lib/order-chat-correction-db";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
+import { getKaitenRestAuth } from "@/lib/kaiten-rest";
+import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-column-titles";
 
 export const dynamic = "force-dynamic";
 
@@ -180,7 +183,11 @@ export async function GET() {
             ? o.kaitenCardSortOrder
             : null,
         kaitenCardTitleMirror: o.kaitenCardTitleMirror ?? null,
-        kaitenCardDescriptionMirror: o.kaitenCardDescriptionMirror ?? null,
+        kaitenCardDescriptionMirror: bestKaitenDescriptionMirrorForKanban(
+          o.id,
+          o.kaitenCardId ?? null,
+          o.kaitenCardDescriptionMirror,
+        ),
         kaitenBlocked: o.kaitenBlocked,
         kaitenBlockReason: o.kaitenBlockReason,
         kaitenBlockedAt: o.kaitenBlockedAt
@@ -209,6 +216,26 @@ export async function GET() {
         sourceEmailCount: o._count.sourceEmailLinks,
       };
     });
+
+    void (async () => {
+      try {
+        const auth = getKaitenRestAuth();
+        if (!auth) return;
+        const missingMirror = rows
+          .filter(
+            (o) => o.kaitenCardId != null && !o.kaitenCardDescriptionMirror?.trim(),
+          )
+          .map((o) => o.id)
+          .slice(0, 5);
+        if (missingMirror.length > 0) {
+          await syncKaitenColumnTitlesForOrderIds(ordersPrisma, auth, missingMirror, {
+            includeComments: false,
+          });
+        }
+      } catch (e) {
+        console.error("[kanban/linked-orders] description mirror sync", e);
+      }
+    })();
 
     void (async () => {
       try {

@@ -19,7 +19,7 @@ import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-cor
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
-import { kaitenUrgentPatchFromCard } from "@/lib/kaiten-inbound-order-fields";
+import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 
 const MAX_IDS = 10;
@@ -74,6 +74,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
       kaitenColumnTitle: true,
       isUrgent: true,
       kaitenCardSortOrder: true,
+      kaitenCardDescriptionMirror: true,
       kaitenBlocked: true,
       kaitenBlockReason: true,
       kaitenBlockedAt: true,
@@ -218,7 +219,11 @@ export async function syncKaitenColumnTitlesForOrderIds(
         meta.blockedAtIso != null ? new Date(meta.blockedAtIso) : null;
       const sortDb =
         "sort_order" in cardObj ? kaitenSortOrderFromCard(cardObj) : undefined;
+      const mirrorFields = kaitenMirrorFieldsFromCard(cardObj);
+      const descMirror =
+        mirrorFields.kaitenCardDescriptionMirror?.trim() ?? null;
       const sameTitle = columnTitle === row.kaitenColumnTitle;
+      const sameDescription = (descMirror ?? "") === (row.kaitenCardDescriptionMirror ?? "");
       const sameBlockedAt =
         (blockedAtNext === null && row.kaitenBlockedAt == null) ||
         (blockedAtNext != null &&
@@ -232,7 +237,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
         sortDb === undefined || sortDb === row.kaitenCardSortOrder;
       const urgentPatch = kaitenUrgentPatchFromCard(cardObj, row.isUrgent);
       const sameUrgent = urgentPatch.isUrgent === undefined;
-      if (sameTitle && sameBlock && sameSort && sameUrgent) {
+      if (sameTitle && sameDescription && sameBlock && sameSort && sameUrgent) {
         titles[row.id] = columnTitle;
         if (includeComments && clicklabByOrderId[row.id] === undefined) {
           clicklabByOrderId[row.id] = false;
@@ -252,6 +257,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
             kaitenSyncedAt: new Date(),
             kaitenSyncError: null,
             kaitenColumnTitle: columnTitle,
+            ...(descMirror != null ? { kaitenCardDescriptionMirror: descMirror } : {}),
             kaitenBlocked: blocked,
             kaitenBlockReason: reasonDb,
             ...blockedAtData,
