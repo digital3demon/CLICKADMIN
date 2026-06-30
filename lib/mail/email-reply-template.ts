@@ -21,6 +21,7 @@ export const EMAIL_REPLY_TEMPLATE_QUICK_INSERT = [
   { label: "Клиника", token: "{{clinicName}}" },
   { label: "Пациент", token: "{{patientName}}" },
   { label: "Дата", token: "{{date}}" },
+  { label: "Дата записи", token: "{{appointmentDate}}" },
   { label: "Статус заказа (URL)", token: "{{orderStatusUrl}}" },
   { label: "Лабораторный срок", token: "{{dueDate}}" },
 ] as const;

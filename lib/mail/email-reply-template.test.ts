@@ -67,6 +67,14 @@ describe("renderEmailReplyTemplate", () => {
     );
     expect(out).toBe("Готовность к 15.06.26");
   });
+
+  it("подставляет дату записи пациента", () => {
+    const out = renderEmailReplyTemplate(
+      "Запись на {{appointmentDate}}",
+      baseContext,
+    );
+    expect(out).toBe("Запись на 28.05.2026 10:00");
+  });
 });
 
 describe("resolveReplyToSourceEmailId", () => {
