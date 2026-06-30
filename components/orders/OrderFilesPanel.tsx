@@ -10,6 +10,10 @@ import {
   normalizeOrderAttachmentUploadQueue,
 } from "@/lib/order-attachment-upload-client";
 import {
+  normalizeOrderAttachmentImages,
+} from "@/lib/order-attachment-image-normalize.client";
+import { isOrderAttachmentImageFile } from "@/lib/order-attachment-image-kind";
+import {
   enqueueOrderAttachmentFiles,
   listQueuedOrderAttachmentFiles,
   type QueuedOrderAttachmentMeta,
@@ -44,10 +48,7 @@ function formatSize(n: number): string {
 
 /** Превью в списке: по MIME или расширению (HEIC в браузере может не отрисоваться). */
 function isOrderAttachmentImage(mimeType: string, fileName: string): boolean {
-  const t = (mimeType || "").trim().toLowerCase();
-  if (t.startsWith("image/")) return true;
-  const n = (fileName || "").trim();
-  return /\.(jpe?g|png|gif|webp|bmp|tif|tiff|heic|heif)$/i.test(n);
+  return isOrderAttachmentImageFile({ type: mimeType, name: fileName });
 }
 
 type OrderImageViewerItem = { id: string; fileName: string; url: string };
@@ -305,7 +306,7 @@ export function OrderFilesPanel({
   }, [orderId, queued.length, busy, refreshList, refreshQueueList]);
 
   const addPending = useCallback(
-    (files: FileList | File[]) => {
+    async (files: FileList | File[]) => {
       const raw = Array.from(files);
       const arr = raw.filter((f) => f.size > 0 && f.size <= MAX_BYTES);
       const tooLargeFound = raw.some((f) => f.size > MAX_BYTES);
@@ -314,17 +315,28 @@ export function OrderFilesPanel({
       }
       if (arr.length === 0) return;
       if (!onPendingChange) return;
-      const cur = pendingFiles ?? [];
-      const names = new Set(cur.map((f) => `${f.name}-${f.size}`));
-      const next = [...cur];
-      for (const f of arr) {
-        const key = `${f.name}-${f.size}`;
-        if (!names.has(key)) {
-          names.add(key);
-          next.push(f);
+      setBusy(true);
+      setLoadError(null);
+      try {
+        const prepared = await normalizeOrderAttachmentImages(arr);
+        const cur = pendingFiles ?? [];
+        const names = new Set(cur.map((f) => `${f.name}-${f.size}`));
+        const next = [...cur];
+        for (const f of prepared) {
+          const key = `${f.name}-${f.size}`;
+          if (!names.has(key)) {
+            names.add(key);
+            next.push(f);
+          }
         }
+        onPendingChange(next);
+      } catch (e) {
+        setLoadError(
+          e instanceof Error ? e.message : "Не удалось подготовить изображение",
+        );
+      } finally {
+        setBusy(false);
       }
-      onPendingChange(next);
     },
     [onPendingChange, pendingFiles],
   );
@@ -345,10 +357,11 @@ export function OrderFilesPanel({
         return;
       }
       try {
+        const prepared = await normalizeOrderAttachmentImages(arr);
         const enqueued = await enqueueOrderAttachmentFiles({
           orderId,
           orderNumber: orderNumber ?? orderId,
-          files: arr,
+          files: prepared,
         });
         await refreshQueueList();
         if (enqueued > 0) {
@@ -390,7 +403,7 @@ export function OrderFilesPanel({
       if (!root || !shouldHandleOrderFilesGlobalPaste(root)) return;
       e.preventDefault();
       if (orderId) void uploadServer(files);
-      else addPending(files);
+      else void addPending(files);
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
@@ -424,7 +437,7 @@ export function OrderFilesPanel({
       if (!files?.length) return;
       e.preventDefault();
       if (orderId) void uploadServer(files);
-      else addPending(files);
+      else void addPending(files);
     },
     [orderId, uploadServer, addPending],
   );

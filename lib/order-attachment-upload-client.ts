@@ -2,7 +2,12 @@
  * Повторы загрузки вложения к наряду (новый заказ / редактирование): сеть, таймаут, занятость БД, всплески.
  */
 
+import { normalizeOrderAttachmentImage } from "@/lib/order-attachment-image-normalize.client";
+
 const MAX_ATTEMPTS = 3;
+
+export const ORDER_ATTACHMENT_PAYLOAD_TOO_LARGE_MESSAGE =
+  "Файл слишком большой для сервера. Для фото мы сжимаем автоматически — если ошибка остаётся, уменьшите файл или проверьте лимит загрузки на сервере (nginx client_max_body_size).";
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -92,6 +97,16 @@ export async function postOrderAttachmentWithRetries(
   const limit = Number.isFinite(options?.maxAttempts)
     ? Math.max(1, Math.min(MAX_ATTEMPTS, Math.round(Number(options?.maxAttempts))))
     : MAX_ATTEMPTS;
+  let prepared: File;
+  try {
+    prepared = await normalizeOrderAttachmentImage(file);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Не удалось подготовить изображение",
+    };
+  }
+
   for (let attempt = 0; attempt < limit; attempt++) {
     if (options?.signal?.aborted) {
       return { ok: false, error: "Отменено" };
@@ -99,8 +114,8 @@ export async function postOrderAttachmentWithRetries(
     try {
       const headers: Record<string, string> = {
         "content-type": "application/octet-stream",
-        "x-upload-filename": encodeURIComponent(file.name || "file"),
-        "x-upload-mime": file.type || "application/octet-stream",
+        "x-upload-filename": encodeURIComponent(prepared.name || "file"),
+        "x-upload-mime": prepared.type || "application/octet-stream",
       };
       if (options?.asInvoice) {
         headers["x-as-invoice"] = "1";
@@ -112,7 +127,7 @@ export async function postOrderAttachmentWithRetries(
         method: "POST",
         credentials: "include",
         headers,
-        body: file,
+        body: prepared,
         signal: options?.signal,
       });
       let data: Record<string, unknown> = {};
@@ -141,6 +156,9 @@ export async function postOrderAttachmentWithRetries(
           return { ok: true, data, warning: w };
         }
         return { ok: true, data };
+      }
+      if (res.status === 413) {
+        return { ok: false, error: ORDER_ATTACHMENT_PAYLOAD_TOO_LARGE_MESSAGE };
       }
       if (errStr && detailsStr && /^не удалось сохранить файл$/i.test(errStr)) {
         lastError = `${errStr}: ${detailsStr}`;

@@ -129,6 +129,7 @@ import {
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
 } from "@/lib/crm-upload-limits";
 import { enqueueOrderAttachmentFiles } from "@/lib/order-attachment-background-queue";
+import { normalizeOrderAttachmentImages } from "@/lib/order-attachment-image-normalize.client";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 import { orderIdFromOrderPath, orderPathById } from "@/lib/order-public-ref";
 
@@ -1332,10 +1333,11 @@ export function NewOrderForm({
             if (uploadQueue.length === 0) return;
 
             try {
+              const prepared = await normalizeOrderAttachmentImages(uploadQueue);
               await enqueueOrderAttachmentFiles({
                 orderId: newId,
                 orderNumber: data.orderNumber ?? null,
-                files: uploadQueue,
+                files: prepared,
               });
             } catch (e) {
               const msg =
