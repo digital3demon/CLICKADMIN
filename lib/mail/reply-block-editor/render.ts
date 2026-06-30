@@ -45,8 +45,12 @@ function styleAttr(style: BlockStyle | undefined, globalFont?: string): string {
   return parts.join(";");
 }
 
-function textToParagraphsHtml(text: string, context: EmailReplyTemplateContext): string {
-  const substituted = substitute(text, context);
+function textToParagraphsHtml(
+  text: string,
+  context: EmailReplyTemplateContext,
+  opts?: { literal?: boolean },
+): string {
+  const substituted = opts?.literal ? text : substitute(text, context);
   const paragraphs = substituted.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   if (paragraphs.length === 0) return "";
   return paragraphs
@@ -103,6 +107,7 @@ function renderBlock(
   context: EmailReplyTemplateContext,
   assets: ReplyBlockAssetRef[],
   globalFont?: string,
+  textContentLiteral?: boolean,
 ): string {
   const tdStyle = styleAttr(block.style, globalFont);
   switch (block.type) {
@@ -119,7 +124,7 @@ function renderBlock(
       return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="${tdStyle}">${logoHtml}<h1 style="margin:0;font-size:${block.style?.fontSizePx ?? 22}px;line-height:1.25;font-weight:700;">${headline}</h1>${subtitle}</td></tr>`;
     }
     case "text":
-      return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="${tdStyle}">${textToParagraphsHtml(block.content, context)}</td></tr>`;
+      return `<tr data-reply-block-id="${escapeHtml(block.id)}"><td style="${tdStyle}">${textToParagraphsHtml(block.content, context, { literal: textContentLiteral })}</td></tr>`;
     case "buttons": {
       const buttonsHtml = block.buttons
         .map((btn) => renderButton(btn, context, block.style))
@@ -182,10 +187,19 @@ export function renderReplyBlocksHtml(
   overrides?: ReplyPreflightOverrides | null,
 ): string {
   const doc = applyPreflightOverrides(document, overrides);
+  const literalTextBlockIds = new Set(Object.keys(overrides?.textOverrides ?? {}));
   const width = doc.global?.contentWidthPx ?? 600;
   const globalFont = doc.global?.fontFamily;
   const rows = doc.blocks
-    .map((block) => renderBlock(block, context, assets, globalFont))
+    .map((block) =>
+      renderBlock(
+        block,
+        context,
+        assets,
+        globalFont,
+        block.type === "text" && literalTextBlockIds.has(block.id),
+      ),
+    )
     .filter(Boolean)
     .join("");
   const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background-color:#f3f4f6;">

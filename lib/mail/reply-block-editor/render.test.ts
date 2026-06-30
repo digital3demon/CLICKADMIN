@@ -51,6 +51,17 @@ describe("applyPreflightOverrides", () => {
     expect(block?.type).toBe("text");
     if (block?.type === "text") expect(block.content).toBe("Новый текст");
   });
+
+  it("не подставляет плейсхолдеры в literal text override", () => {
+    const doc = createClickLabPreset();
+    const intro = doc.blocks.find((b) => b.type === "text" && b.editableInPreflight);
+    expect(intro?.type).toBe("text");
+    const html = renderReplyBlocksHtml(doc, SAMPLE_CONTEXT, [], {
+      textOverrides: { [intro!.id]: "Текст с {{date}} без подстановки" },
+    });
+    expect(html).toContain("Текст с {{date}} без подстановки");
+    expect(html).not.toContain("05.07.26");
+  });
 });
 
 describe("validateButtonAction", () => {

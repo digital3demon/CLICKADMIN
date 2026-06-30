@@ -108,7 +108,11 @@ export type ReplyEditorDocument = {
 };
 
 export type ReplyPreflightOverrides = {
+  /** @deprecated Используйте datePickerValues в префлайте UI. */
   dateYmd?: string;
+  datePickerValues?: Partial<
+    Record<"date" | "appointmentDate" | "dueDate", string>
+  >;
   textOverrides?: Record<string, string>;
   headlineOverrides?: Record<string, string>;
 };

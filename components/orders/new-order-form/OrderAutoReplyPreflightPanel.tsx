@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OrderSourceEmail } from "@/components/orders/new-order-panel-context";
-import {
-  buildEmailReplyTemplateContext,
-  formatMailDate,
-  localInputToDateYmd,
-} from "@/lib/mail/build-email-reply-context";
+import { buildEmailReplyTemplateContext } from "@/lib/mail/build-email-reply-context";
 import {
   defaultReplySubject,
   renderEmailReplyTemplate,
@@ -21,9 +17,16 @@ import {
   type ReplyPreflightOverrides,
 } from "@/lib/mail/reply-block-editor";
 import {
+  collectReplyDatePlaceholdersInHaystack,
+  initialReplyDatePickerValues,
+  type ReplyDatePlaceholderDef,
+  type ReplyDatePlaceholderKey,
+} from "@/lib/mail/reply-preflight-date-placeholders";
+import {
   restoreReplyTemplateCidsFromPreview,
   substituteReplyTemplateCidsForPreview,
 } from "@/lib/mail/reply-template-cid";
+import { OrderAutoReplyBlocksPreview } from "./OrderAutoReplyBlocksPreview";
 
 export type AutoReplyPreflightDraft = {
   subject: string;
@@ -60,20 +63,13 @@ type LoadedTemplate = {
   editorDocument: ReplyEditorDocument | null;
 };
 
-const DATE_PLACEHOLDER_RE = /\{\{\s*date\s*\}\}/i;
-
 const EDITOR_CLASS =
   "min-h-[12rem] w-full rounded-md border border-[var(--input-border)] bg-[var(--surface-muted)] px-3 py-2 text-sm leading-relaxed text-[var(--app-text)] shadow-sm outline-none [&_img]:my-2 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_p]:my-1";
 
-const PREVIEW_CLASS =
-  "min-h-[12rem] w-full overflow-y-auto rounded-md border border-[var(--input-border)] bg-white px-3 py-2 text-sm leading-relaxed text-gray-900 [&_a]:text-blue-600";
-
-function templateUsesDatePlaceholder(template: LoadedTemplate): boolean {
-  const hay =
-    template.layoutType === "blocks"
-      ? JSON.stringify(template.editorDocument ?? {})
-      : `${template.subjectTemplate}\n${template.htmlTemplate}`;
-  return DATE_PLACEHOLDER_RE.test(hay);
+function templateHaystack(template: LoadedTemplate): string {
+  return template.layoutType === "blocks"
+    ? JSON.stringify(template.editorDocument ?? {})
+    : `${template.subjectTemplate}\n${template.htmlTemplate}`;
 }
 
 function senderLabel(email: OrderSourceEmail): string {
@@ -101,6 +97,12 @@ export function OrderAutoReplyPreflightPanel({
   const [editorHtml, setEditorHtml] = useState("");
   const [layoutType, setLayoutType] = useState<ReplyLayoutType>("blocks");
   const [textOverrides, setTextOverrides] = useState<Record<string, string>>({});
+  const [datePlaceholderDefs, setDatePlaceholderDefs] = useState<
+    ReplyDatePlaceholderDef[]
+  >([]);
+  const [datePickerValues, setDatePickerValues] = useState<
+    Partial<Record<ReplyDatePlaceholderKey, string>>
+  >({});
   const [loading, setLoading] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [canSendReply, setCanSendReply] = useState(false);
@@ -109,49 +111,53 @@ export function OrderAutoReplyPreflightPanel({
   const templateAssetsRef = useRef<Array<{ id: string; contentId: string }>>([]);
   const editorRef = useRef<HTMLDivElement>(null);
   const editorFocusedRef = useRef(false);
-  const [pickerDateYmd, setPickerDateYmd] = useState("");
-  const [needsDatePicker, setNeedsDatePicker] = useState(false);
 
   const preflightOverrides: ReplyPreflightOverrides = useMemo(
     () => ({
-      dateYmd: pickerDateYmd || undefined,
+      datePickerValues,
       textOverrides,
     }),
-    [pickerDateYmd, textOverrides],
+    [datePickerValues, textOverrides],
   );
 
-  const buildContext = useCallback(
-    (dateYmd?: string) =>
-      buildEmailReplyTemplateContext({
-        orderNumber: orderNumberPreview,
-        patientName,
-        doctorName,
-        clinicName,
-        clinicAddress,
-        date: (dateYmd ?? pickerDateYmd).trim() || null,
-        dueDate: dueDateLocal.trim() || null,
-        appointmentDate: appointmentLocal.trim() || null,
-        originalSubject: sourceEmail!.subject,
-        originalFromName: sourceEmail!.fromName,
-        originalFromAddress: sourceEmail!.fromAddress,
-        orderStatusUrl: SAMPLE_ORDER_STATUS_URL,
-      }),
-    [
-      pickerDateYmd,
-      orderNumberPreview,
+  const buildContext = useCallback(() => {
+    const dateVal =
+      datePickerValues.date?.trim() ||
+      /(\d{4}-\d{2}-\d{2})/.exec(dueDateLocal.trim())?.[1] ||
+      /(\d{4}-\d{2}-\d{2})/.exec(appointmentLocal.trim())?.[1] ||
+      null;
+    const appointmentVal =
+      datePickerValues.appointmentDate?.trim() || appointmentLocal.trim() || null;
+    const dueVal = datePickerValues.dueDate?.trim() || dueDateLocal.trim() || null;
+    return buildEmailReplyTemplateContext({
+      orderNumber: orderNumberPreview,
       patientName,
       doctorName,
       clinicName,
       clinicAddress,
-      dueDateLocal,
-      appointmentLocal,
-      sourceEmail,
-    ],
-  );
+      date: dateVal,
+      dueDate: dueVal,
+      appointmentDate: appointmentVal,
+      originalSubject: sourceEmail!.subject,
+      originalFromName: sourceEmail!.fromName,
+      originalFromAddress: sourceEmail!.fromAddress,
+      orderStatusUrl: SAMPLE_ORDER_STATUS_URL,
+    });
+  }, [
+    datePickerValues,
+    orderNumberPreview,
+    patientName,
+    doctorName,
+    clinicName,
+    clinicAddress,
+    dueDateLocal,
+    appointmentLocal,
+    sourceEmail,
+  ]);
 
   const renderPreviewHtml = useCallback(
-    (template: LoadedTemplate, accountId: string, dateYmd?: string) => {
-      const ctx = buildContext(dateYmd);
+    (template: LoadedTemplate, accountId: string) => {
+      const ctx = buildContext();
       const subjectRaw = template.subjectTemplate.trim();
       const nextSubject = subjectRaw
         ? renderEmailReplyTemplate(subjectRaw, ctx)
@@ -179,32 +185,31 @@ export function OrderAutoReplyPreflightPanel({
     [buildContext, preflightOverrides],
   );
 
-  const renderPreviewHtmlRef = useRef(renderPreviewHtml);
-  renderPreviewHtmlRef.current = renderPreviewHtml;
-
   const applyTemplate = useCallback(
-    (template: LoadedTemplate, accountId: string, opts?: { dateYmd?: string }) => {
-      const { nextSubject, previewHtml } = renderPreviewHtml(
-        template,
-        accountId,
-        opts?.dateYmd,
-      );
+    (template: LoadedTemplate, accountId: string) => {
+      const { nextSubject, previewHtml } = renderPreviewHtml(template, accountId);
       setSubject(nextSubject);
       setLayoutType(template.layoutType);
+      setEditorHtml(previewHtml);
       if (template.layoutType === "freeform") {
-        setEditorHtml(previewHtml);
         const el = editorRef.current;
         if (el && !editorFocusedRef.current) el.innerHTML = previewHtml;
-      } else {
-        setEditorHtml(previewHtml);
       }
     },
     [renderPreviewHtml],
   );
 
-  const handlePickerDateChange = useCallback((nextYmd: string) => {
-    setPickerDateYmd(nextYmd);
+  const handleDatePickerChange = useCallback(
+    (key: ReplyDatePlaceholderKey, value: string) => {
+      dirtyRef.current = true;
+      setDatePickerValues((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
+
+  const handleTextOverride = useCallback((blockId: string, text: string) => {
     dirtyRef.current = true;
+    setTextOverrides((prev) => ({ ...prev, [blockId]: text }));
   }, []);
 
   useEffect(() => {
@@ -212,8 +217,8 @@ export function OrderAutoReplyPreflightPanel({
     dirtyRef.current = false;
     templateRef.current = null;
     setTextOverrides({});
-    setNeedsDatePicker(false);
-    setPickerDateYmd("");
+    setDatePlaceholderDefs([]);
+    setDatePickerValues({});
     let cancelled = false;
     setLoading(true);
     setHint(null);
@@ -272,15 +277,51 @@ export function OrderAutoReplyPreflightPanel({
           editorDocument: template.editorDocument ?? null,
         };
         const loaded = templateRef.current;
-        const usesDate = templateUsesDatePlaceholder(loaded);
-        setNeedsDatePicker(usesDate);
-        const initialYmd =
-          localInputToDateYmd(dueDateLocal) || localInputToDateYmd(appointmentLocal);
-        if (usesDate) setPickerDateYmd(initialYmd);
-        const { nextSubject, previewHtml } = renderPreviewHtmlRef.current(
-          loaded,
+        const defs = collectReplyDatePlaceholdersInHaystack(templateHaystack(loaded));
+        setDatePlaceholderDefs(defs);
+        const initialDates = initialReplyDatePickerValues(
+          defs,
+          dueDateLocal,
+          appointmentLocal,
+        );
+        setDatePickerValues(initialDates);
+        const ctx = buildEmailReplyTemplateContext({
+          orderNumber: orderNumberPreview,
+          patientName,
+          doctorName,
+          clinicName,
+          clinicAddress,
+          date:
+            initialDates.date?.trim() ||
+            /(\d{4}-\d{2}-\d{2})/.exec(dueDateLocal.trim())?.[1] ||
+            /(\d{4}-\d{2}-\d{2})/.exec(appointmentLocal.trim())?.[1] ||
+            null,
+          dueDate: initialDates.dueDate?.trim() || dueDateLocal.trim() || null,
+          appointmentDate:
+            initialDates.appointmentDate?.trim() || appointmentLocal.trim() || null,
+          originalSubject: sourceEmail.subject,
+          originalFromName: sourceEmail.fromName,
+          originalFromAddress: sourceEmail.fromAddress,
+          orderStatusUrl: SAMPLE_ORDER_STATUS_URL,
+        });
+        const subjectRaw = loaded.subjectTemplate.trim();
+        const nextSubject = subjectRaw
+          ? renderEmailReplyTemplate(subjectRaw, ctx)
+          : defaultReplySubject(ctx.originalSubject);
+        let html: string;
+        if (loaded.layoutType === "blocks") {
+          html = renderReplyBlocksHtml(
+            loaded.editorDocument ?? createClickLabPreset(),
+            ctx,
+            templateAssetsRef.current,
+          );
+        } else {
+          html = renderEmailReplyTemplate(loaded.htmlTemplate, ctx, { html: true });
+        }
+        const previewHtml = substituteReplyTemplateCidsForPreview(
+          html,
+          templateAssetsRef.current,
           sourceEmail.accountId,
-          usesDate ? initialYmd : undefined,
         );
         setSubject(nextSubject);
         setLayoutType(loaded.layoutType);
@@ -300,6 +341,14 @@ export function OrderAutoReplyPreflightPanel({
   }, [open, sourceEmail?.id, sourceEmail?.accountId, dueDateLocal, appointmentLocal]);
 
   useEffect(() => {
+    if (layoutType !== "freeform" || editorFocusedRef.current) return;
+    const el = editorRef.current;
+    if (el && el.innerHTML !== editorHtml) {
+      el.innerHTML = editorHtml;
+    }
+  }, [editorHtml, layoutType]);
+
+  useEffect(() => {
     if (!open || !sourceEmail || !templateRef.current || dirtyRef.current) return;
     applyTemplate(templateRef.current, sourceEmail.accountId);
   }, [
@@ -312,7 +361,7 @@ export function OrderAutoReplyPreflightPanel({
     clinicAddress,
     dueDateLocal,
     appointmentLocal,
-    pickerDateYmd,
+    datePickerValues,
     textOverrides,
     applyTemplate,
   ]);
@@ -324,7 +373,7 @@ export function OrderAutoReplyPreflightPanel({
       sourceEmail.accountId,
     );
     setEditorHtml(previewHtml);
-  }, [textOverrides, pickerDateYmd, renderPreviewHtml, sourceEmail]);
+  }, [textOverrides, datePickerValues, renderPreviewHtml, sourceEmail]);
 
   useEffect(() => {
     let htmlForSend = editorHtml;
@@ -358,15 +407,20 @@ export function OrderAutoReplyPreflightPanel({
 
   if (!sourceEmail) return null;
 
-  const editableBlocks =
+  const editableTextBlockIds =
     layoutType === "blocks" && templateRef.current
       ? getEditablePreflightBlocks(
           templateRef.current.editorDocument ?? createClickLabPreset(),
         )
+          .filter((b) => b.type === "text")
+          .map((b) => b.id)
       : [];
 
-  const dateMissing =
-    needsDatePicker && !pickerDateYmd.trim() && editorHtml.includes("{{date}}");
+  const unresolvedDateTokens = datePlaceholderDefs.filter((def) => {
+    const value = datePickerValues[def.key]?.trim();
+    if (value) return false;
+    return editorHtml.includes(def.token);
+  });
 
   return (
     <div className="flex w-full min-w-[min(100%,22rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl lg:w-[32rem] lg:max-w-[32rem]">
@@ -391,9 +445,11 @@ export function OrderAutoReplyPreflightPanel({
             {hint}
           </p>
         ) : null}
-        {dateMissing ? (
+        {unresolvedDateTokens.length > 0 ? (
           <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950 dark:border-sky-800/60 dark:bg-sky-950/35 dark:text-sky-100">
-            Выберите дату ниже — она подставится в <code className="font-mono">{"{{date}}"}</code>.
+            Укажите{" "}
+            {unresolvedDateTokens.map((d) => d.label.toLowerCase()).join(", ")} — плейсхолдер
+            останется в письме, пока дата не выбрана.
           </p>
         ) : null}
         {loading ? (
@@ -419,25 +475,28 @@ export function OrderAutoReplyPreflightPanel({
                 className="h-10 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
               />
             </div>
-            {editableBlocks.map((block) =>
-              block.type === "text" ? (
-                <div key={block.id}>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                    Текст письма
-                  </label>
-                  <textarea
-                    disabled={!sendReply}
-                    rows={6}
-                    value={textOverrides[block.id] ?? block.content}
-                    onChange={(e) => {
-                      dirtyRef.current = true;
-                      setTextOverrides((prev) => ({ ...prev, [block.id]: e.target.value }));
-                    }}
-                    className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] disabled:opacity-50"
-                  />
-                </div>
-              ) : null,
-            )}
+            {datePlaceholderDefs.map((def) => (
+              <div key={def.key}>
+                <label
+                  htmlFor={`auto-reply-date-${def.key}`}
+                  className="mb-1 block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]"
+                >
+                  {def.label}
+                </label>
+                <input
+                  id={`auto-reply-date-${def.key}`}
+                  type={def.inputType}
+                  value={datePickerValues[def.key] ?? ""}
+                  disabled={!sendReply}
+                  onChange={(e) => handleDatePickerChange(def.key, e.target.value)}
+                  className="h-10 w-full max-w-xs rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
+                />
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  Подставляется вместо{" "}
+                  <code className="font-mono">{def.token}</code>
+                </p>
+              </div>
+            ))}
             <div>
               <p className="mb-1 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
                 Предпросмотр
@@ -463,36 +522,17 @@ export function OrderAutoReplyPreflightPanel({
                   className={EDITOR_CLASS}
                 />
               ) : (
-                <div
-                  className={PREVIEW_CLASS}
-                  dangerouslySetInnerHTML={{ __html: editorHtml }}
+                <OrderAutoReplyBlocksPreview
+                  html={editorHtml}
+                  editableBlockIds={editableTextBlockIds}
+                  disabled={!sendReply}
+                  onTextOverride={handleTextOverride}
                 />
               )}
             </div>
           </>
         )}
       </div>
-      {needsDatePicker ? (
-        <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--surface-muted)] px-5 py-3">
-          <label
-            htmlFor="auto-reply-date"
-            className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]"
-          >
-            Дата в письме
-          </label>
-          <input
-            id="auto-reply-date"
-            type="date"
-            value={pickerDateYmd}
-            disabled={!sendReply}
-            onChange={(e) => handlePickerDateChange(e.target.value)}
-            className="h-10 w-full max-w-xs rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
-          />
-          <p className="mt-1.5 text-xs text-[var(--text-muted)]">
-            Подставляется вместо <code className="font-mono">{"{{date}}"}</code> в шаблоне.
-          </p>
-        </div>
-      ) : null}
     </div>
   );
 }
