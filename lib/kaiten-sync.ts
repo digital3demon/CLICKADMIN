@@ -2,6 +2,10 @@ import { OrderAttachmentScope, type PrismaClient } from "@prisma/client";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { readOrderAttachmentBytes } from "@/lib/order-attachment-storage";
 import { isOrderAttachmentEligibleForKaitenPush } from "@/lib/kaiten-attachment-eligibility";
+import {
+  KAITEN_PUSH_IN_FLIGHT_AT,
+  isOrderAttachmentUploadedToKaiten,
+} from "@/lib/kaiten-attachment-upload-state";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import {
   enqueueKaitenRequest,
@@ -27,6 +31,28 @@ export class KaitenCardNotReadyError extends Error {
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+async function tryClaimKaitenPush(
+  prisma: PrismaClient,
+  orderId: string,
+  attachmentId: string,
+): Promise<boolean> {
+  const claimed = await prisma.orderAttachment.updateMany({
+    where: { id: attachmentId, orderId, uploadedToKaitenAt: null },
+    data: { uploadedToKaitenAt: KAITEN_PUSH_IN_FLIGHT_AT },
+  });
+  return claimed.count > 0;
+}
+
+async function releaseKaitenPushClaim(
+  prisma: PrismaClient,
+  attachmentId: string,
+): Promise<void> {
+  await prisma.orderAttachment.updateMany({
+    where: { id: attachmentId, uploadedToKaitenAt: KAITEN_PUSH_IN_FLIGHT_AT },
+    data: { uploadedToKaitenAt: null },
+  });
 }
 
 function findKaitenFileIdOnCard(
@@ -114,6 +140,27 @@ export async function pushAttachmentToKaiten(
     throw new KaitenCardNotReadyError();
   }
 
+  const existing = await prisma.orderAttachment.findUnique({
+    where: { id: attachmentId },
+    select: { uploadedToKaitenAt: true },
+  });
+  if (isOrderAttachmentUploadedToKaiten(existing?.uploadedToKaitenAt)) {
+    return;
+  }
+
+  const claimed = await tryClaimKaitenPush(prisma, orderId, attachmentId);
+  if (!claimed) {
+    const again = await prisma.orderAttachment.findUnique({
+      where: { id: attachmentId },
+      select: { uploadedToKaitenAt: true },
+    });
+    if (isOrderAttachmentUploadedToKaiten(again?.uploadedToKaitenAt)) {
+      return;
+    }
+    return;
+  }
+
+  try {
   const att = await prisma.orderAttachment.findUnique({
     where: { id: attachmentId },
     select: {
@@ -187,6 +234,10 @@ export async function pushAttachmentToKaiten(
       }
     }
     await sleepMs(Math.max(300, wait));
+  }
+  } catch (e) {
+    await releaseKaitenPushClaim(prisma, attachmentId);
+    throw e;
   }
 }
 

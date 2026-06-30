@@ -950,8 +950,45 @@ export function KanbanCardModal({
           }
           orderAttId = up.id;
         }
+        if (orderAttId && card.linkedOrderId) {
+          const nowIso = new Date().toISOString();
+          const oaFile: CardFile = {
+            id: `oa-${orderAttId}`,
+            name: file.name,
+            mime: file.type || "application/octet-stream",
+            size: file.size,
+            dataUrl: `/api/orders/${card.linkedOrderId}/attachments/${orderAttId}`,
+            addedAt: nowIso,
+            addedByUserId: actor,
+            orderAttachmentId: orderAttId,
+          };
+          onApply((b) => {
+            const fc = findCard(b, cardId);
+            if (!fc) return;
+            const dup = (fc.card.files || []).some(
+              (f) => f.orderAttachmentId === orderAttId || f.id === oaFile.id,
+            );
+            if (dup) return;
+            fc.card.files = [...(fc.card.files || []), oaFile];
+            fc.card.updatedAt = nowIso;
+            pushActivity(fc.card, `Прикреплён файл: ${oaFile.name}`, actor, b, act);
+            if (isCardFileImage(oaFile)) {
+              fc.card.comments = fc.card.comments || [];
+              if (!fc.card.comments.some((c) => c.imageFileId === oaFile.id)) {
+                fc.card.comments.push({
+                  id: generateId("cm"),
+                  userId: actor,
+                  text: "",
+                  createdAt: nowIso,
+                  imageFileId: oaFile.id,
+                });
+              }
+            }
+          });
+          attachedOkCount += 1;
+          continue;
+        }
         const cf = await readFileAsCardFile(file, actor);
-        if (orderAttId) cf.orderAttachmentId = orderAttId;
         if (manualByIndex) {
           const manual = manualByIndex.get(i);
           if (manual) {

@@ -2119,9 +2119,27 @@ function mergeOrderAttachmentsIntoLinkedCard(
   }
   const fromOrder = cardFilesFromOrderAttachments(orderId, list);
   const orderIds = new Set(list.map((a) => a.id));
-  const kanbanOnly = (card.files || []).filter(
-    (f) => !f.orderAttachmentId || !orderIds.has(f.orderAttachmentId),
+  const orderImageNames = new Set(
+    list
+      .filter((a) =>
+        cardFileLooksLikeImageForChat({
+          mime: a.mimeType || "application/octet-stream",
+          name: a.fileName,
+        }),
+      )
+      .map((a) => a.fileName.trim().toLowerCase()),
   );
+  const kanbanOnly = (card.files || []).filter((f) => {
+    if (f.orderAttachmentId && orderIds.has(f.orderAttachmentId)) return false;
+    if (
+      !f.orderAttachmentId &&
+      cardFileLooksLikeImageForChat(f) &&
+      orderImageNames.has((f.name || "").trim().toLowerCase())
+    ) {
+      return false;
+    }
+    return true;
+  });
   card.files = [...fromOrder, ...kanbanOnly];
   syncChatImageCommentsWithImageFiles(card);
 }

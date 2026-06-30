@@ -3,7 +3,11 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
-import { KaitenRateLimitError, pushAttachmentToKaiten } from "@/lib/kaiten-sync";
+import { isOrderAttachmentUploadedToKaiten } from "@/lib/kaiten-attachment-upload-state";
+import {
+  KaitenRateLimitError,
+  pushAttachmentToKaiten,
+} from "@/lib/kaiten-sync";
 import { kaitenRetryAfterSeconds } from "@/lib/kaiten-rate-limit";
 
 type Ctx = { params: Promise<{ id: string; attachmentId: string }> };
@@ -57,7 +61,7 @@ export async function POST(_req: Request, ctx: Ctx) {
       { status: 400 },
     );
   }
-  if (row.uploadedToKaitenAt != null) {
+  if (isOrderAttachmentUploadedToKaiten(row.uploadedToKaitenAt)) {
     return NextResponse.json({ ok: true, alreadyUploaded: true });
   }
 
