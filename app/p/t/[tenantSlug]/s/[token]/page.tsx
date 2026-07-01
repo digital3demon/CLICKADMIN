@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PublicStickerOrderStatusPillsView } from "@/components/sticker/PublicStickerOrderStatusPills";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { loadPublicStickerClientView } from "@/lib/load-public-sticker-client-view";
 import { resolveStickerEmployeesHref } from "@/lib/sticker-public-employee-href";
@@ -48,16 +49,21 @@ export default async function StickerPublicHubPage({
   return (
     <div className="min-h-screen bg-zinc-50 px-3 py-8 text-zinc-900">
       <div className="mx-auto max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <h1 className="text-xl font-semibold">Наряд {data.orderNumber}</h1>
-        {data.clinicName ? (
-          <p className="mt-1 text-sm text-zinc-600">{data.clinicName}</p>
-        ) : null}
-        {data.doctorShort ? (
-          <p className="text-sm text-zinc-600">Врач: {data.doctorShort}</p>
-        ) : null}
-        {data.patientShort ? (
-          <p className="text-sm text-zinc-600">Пациент: {data.patientShort}</p>
-        ) : null}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-semibold">Наряд {data.orderNumber}</h1>
+            {data.clinicName ? (
+              <p className="mt-1 text-sm text-zinc-600">{data.clinicName}</p>
+            ) : null}
+            {data.doctorShort ? (
+              <p className="text-sm text-zinc-600">Врач: {data.doctorShort}</p>
+            ) : null}
+            {data.patientShort ? (
+              <p className="text-sm text-zinc-600">Пациент: {data.patientShort}</p>
+            ) : null}
+          </div>
+          <PublicStickerOrderStatusPillsView status={data.orderStatus} />
+        </div>
 
         <section className="mt-6 space-y-2 border-t border-zinc-100 pt-4 text-sm">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">

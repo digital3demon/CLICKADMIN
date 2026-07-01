@@ -14,6 +14,10 @@ import {
   type ResolvedTimelineRow,
 } from "@/lib/resolve-public-hub-timeline";
 import {
+  resolvePublicStickerOrderStatusPills,
+  type PublicStickerOrderStatusPills,
+} from "@/lib/public-sticker-order-status";
+import {
   STICKER_PRINT_SETTINGS_KEY,
   normalizeStickerPrintSettingsV2,
 } from "@/lib/sticker-template";
@@ -24,6 +28,7 @@ export type PublicStickerClientView = {
   doctorShort: string | null;
   patientShort: string | null;
   timelineRows: ResolvedTimelineRow[];
+  orderStatus: PublicStickerOrderStatusPills;
 };
 
 export async function loadPublicStickerClientView(
@@ -38,6 +43,10 @@ export async function loadPublicStickerClientView(
       patientName: true,
       workReceivedAt: true,
       createdAt: true,
+      labWorkStatus: true,
+      kaitenColumnTitle: true,
+      kaitenCardId: true,
+      adminShippedOtpr: true,
       clinic: { select: { name: true } },
       doctor: { select: { fullName: true } },
     },
@@ -107,11 +116,19 @@ export async function loadPublicStickerClientView(
   const doctorShort =
     personNameSurnameInitials(doctorRaw || null) || doctorRaw || null;
 
+  const orderStatus = resolvePublicStickerOrderStatusPills({
+    labWorkStatus: order.labWorkStatus,
+    kaitenColumnTitle: order.kaitenColumnTitle,
+    kaitenCardId: order.kaitenCardId,
+    adminShippedOtpr: order.adminShippedOtpr,
+  });
+
   return {
     orderNumber: order.orderNumber,
     clinicName: order.clinic?.name?.trim() || null,
     doctorShort,
     patientShort: personNameSurnameInitials(order.patientName) || null,
     timelineRows,
+    orderStatus,
   };
 }
