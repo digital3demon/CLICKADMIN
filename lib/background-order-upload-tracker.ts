@@ -14,6 +14,7 @@ type Listener = () => void;
 
 const BACKGROUND_UPLOAD_SUCCESS_HIDE_MS = 8000;
 const listeners = new Set<Listener>();
+const items = new Map<string, BackgroundOrderUploadItem>();
 const clearTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const retryHandlers = new Map<string, () => Promise<void>>();
 let snapshotCache: BackgroundOrderUploadItem[] = [];
