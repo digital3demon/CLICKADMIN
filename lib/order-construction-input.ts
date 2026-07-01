@@ -116,7 +116,7 @@ export async function buildConstructionCreatesFromInput(
     priceListIds.size > 0
       ? await prisma.priceListItem.findMany({
           where: { id: { in: [...priceListIds] } },
-          select: { id: true, priceRub: true },
+          select: { id: true, priceRub: true, variablePrice: true },
         })
       : [];
   if (foundPriceItems.length !== priceListIds.size) {
@@ -127,6 +127,9 @@ export async function buildConstructionCreatesFromInput(
   }
   const defaultPriceByPlId = new Map(
     foundPriceItems.map((p) => [p.id, p.priceRub]),
+  );
+  const variablePriceByPlId = new Map(
+    foundPriceItems.map((p) => [p.id, p.variablePrice === true]),
   );
   const clinicId = opts?.clinicId?.trim() ? opts.clinicId.trim() : null;
   const doctorId = opts?.doctorId?.trim() ? opts.doctorId.trim() : null;
@@ -192,8 +195,13 @@ export async function buildConstructionCreatesFromInput(
 
     const plid = trimOrNull(c.priceListItemId);
     if (plid) {
-      // Цена прайс-позиции всегда берётся из прайса/оверрайда, не из ручного ввода клиента.
-      const unitPrice = overridePriceByPlId.get(plid) ?? defaultPriceByPlId.get(plid) ?? null;
+      const catalogUnitPrice =
+        overridePriceByPlId.get(plid) ?? defaultPriceByPlId.get(plid) ?? null;
+      // variablePrice: цену за ед. вводит пользователь; остальные позиции — только прайс/оверрайд.
+      const unitPrice =
+        variablePriceByPlId.get(plid) === true && price != null
+          ? price
+          : catalogUnitPrice;
       let teethJson: string[] | undefined;
       if ("teethFdi" in c && Array.isArray(c.teethFdi)) {
         const teeth = c.teethFdi.map((x) => String(x));
