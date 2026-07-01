@@ -2,11 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatOrderChatSourceCaption } from "@/lib/order-chat-trigger-author";
 
 export type OrderProstheticsRequestInitial = {
   id: string;
   text: string;
   source: "KAITEN" | "DEMO_KANBAN";
+  authorLabel: string | null;
   createdAt: string;
   resolvedAt: string | null;
   rejectedAt: string | null;
@@ -221,8 +223,8 @@ export function OrderProstheticsRequestsPanel({
     [orderId, router, pullListFromApi],
   );
 
-  const srcLabel = (s: OrderProstheticsRequestInitial["source"]) =>
-    s === "KAITEN" ? "Kaiten" : "Канбан";
+  const srcLabel = (c: OrderProstheticsRequestInitial) =>
+    formatOrderChatSourceCaption(c.source, c.authorLabel);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-2">
@@ -245,7 +247,7 @@ export function OrderProstheticsRequestsPanel({
                 {c.text}
               </p>
               <p className="mt-0.5 text-[0.65rem] text-[var(--text-muted)]">
-                {srcLabel(c.source)}
+                {srcLabel(c)}
               </p>
             </div>
             {canAccept ? (

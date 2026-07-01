@@ -8,6 +8,7 @@ import { getKaitenRestAuth, kaitenListComments } from "@/lib/kaiten-rest";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
+import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 
 /**
  * Тянет комментарии карточки из Kaiten и синхронизирует «!!!» в OrderChatCorrection.
@@ -31,11 +32,13 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
     };
   }
 
-  const comments = dedupeParsedKaitenComments(
-    comm.comments
-      .map(parseKaitenListComment)
-      .filter((x): x is NonNullable<typeof x> => x != null),
-  ).map((c) => ({ id: c.id, text: c.text }));
+  const comments = mapParsedKaitenCommentsForTriggerSync(
+    dedupeParsedKaitenComments(
+      comm.comments
+        .map(parseKaitenListComment)
+        .filter((x): x is NonNullable<typeof x> => x != null),
+    ),
+  );
 
   await syncOrderChatCorrectionsFromKaitenComments(prisma, orderId.trim(), comments);
   await syncOrderProstheticsRequestsFromKaitenComments(

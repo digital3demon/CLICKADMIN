@@ -9,6 +9,7 @@ import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { getKaitenRestAuth, kaitenListComments } from "@/lib/kaiten-rest";
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
+import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ export async function GET(
       .map(parseKaitenListComment)
       .filter((x): x is NonNullable<typeof x> => x != null),
   );
-  const forSync = comments.map((c) => ({ id: c.id, text: c.text }));
+  const forSync = mapParsedKaitenCommentsForTriggerSync(comments);
 
   try {
     await syncOrderChatCorrectionsFromKaitenComments(prisma, order.id, forSync);

@@ -22,6 +22,7 @@ import {
 } from "@/lib/order-chat-correction-db";
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
+import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import {
   commentBodyDedupKey,
   compactCardComments,
@@ -268,7 +269,7 @@ export async function GET(
           await saveTenantKanbanStateWithRetry(tenantId, state, statePayload.updatedAt);
         }
         const ordersPrisma = await getOrdersPrisma();
-        const crmComments = parsed.map((c) => ({ id: c.id, text: c.text }));
+        const crmComments = mapParsedKaitenCommentsForTriggerSync(parsed);
         try {
           await syncOrderChatCorrectionsFromKaitenComments(
             ordersPrisma,
@@ -436,6 +437,7 @@ export async function POST(
           order.id,
           `!!! ${text}`,
           "DEMO_KANBAN",
+          { authorLabel },
         );
       } else if (action === "prosthetics") {
         await createOrderProstheticsRequestIfNeeded(
@@ -443,6 +445,7 @@ export async function POST(
           order.id,
           `??? ${text}`,
           "DEMO_KANBAN",
+          { authorLabel },
         );
       }
     }

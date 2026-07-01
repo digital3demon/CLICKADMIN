@@ -41,6 +41,7 @@ import {
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
+import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { pushKaitenCardTitleForOrderIfLinked } from "@/lib/kaiten-push-order-title";
@@ -579,12 +580,12 @@ export async function GET(
       await syncOrderChatCorrectionsFromKaitenComments(
         ordersPrisma,
         orderIdTrim,
-        comments,
+        mapParsedKaitenCommentsForTriggerSync(comments),
       );
       await syncOrderProstheticsRequestsFromKaitenComments(
         ordersPrisma,
         orderIdTrim,
-        comments,
+        mapParsedKaitenCommentsForTriggerSync(comments),
       );
     } catch (e) {
       console.error("[kaiten GET] correction sync (deferred)", e);

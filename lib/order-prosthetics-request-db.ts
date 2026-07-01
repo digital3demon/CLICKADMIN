@@ -3,32 +3,49 @@ import {
   isOrderProstheticsRequestTrigger,
   stripOrderProstheticsRequestPrefix,
 } from "@/lib/order-prosthetics-request";
+import {
+  type OrderChatTriggerKaitenComment,
+  trimOrderChatAuthorLabel,
+} from "@/lib/order-chat-trigger-author";
 
 export async function createOrderProstheticsRequestIfNeeded(
   db: PrismaClient,
   orderId: string,
   rawMessage: string,
   source: OrderChatCorrectionSource,
-  opts?: { kaitenCommentId?: number | null },
+  opts?: { kaitenCommentId?: number | null; authorLabel?: string | null },
 ): Promise<void> {
   if (!isOrderProstheticsRequestTrigger(rawMessage)) return;
   const text = stripOrderProstheticsRequestPrefix(rawMessage);
   if (!text) return;
 
   const kid = opts?.kaitenCommentId ?? null;
+  const authorLabel = trimOrderChatAuthorLabel(opts?.authorLabel);
   if (source === "KAITEN" && kid != null) {
     await db.orderProstheticsRequest.upsert({
       where: {
         orderId_kaitenCommentId: { orderId, kaitenCommentId: kid },
       },
-      create: { orderId, source, text, kaitenCommentId: kid },
-      update: {},
+      create: {
+        orderId,
+        source,
+        text,
+        kaitenCommentId: kid,
+        authorLabel,
+      },
+      update: authorLabel ? { authorLabel } : {},
     });
     return;
   }
 
   await db.orderProstheticsRequest.create({
-    data: { orderId, source, text, kaitenCommentId: kid },
+    data: {
+      orderId,
+      source,
+      text,
+      kaitenCommentId: kid,
+      authorLabel,
+    },
   });
 }
 
@@ -39,11 +56,12 @@ export async function createOrderProstheticsRequestIfNeeded(
 export async function syncOrderProstheticsRequestsFromKaitenComments(
   db: PrismaClient,
   orderId: string,
-  comments: ReadonlyArray<{ id: number; text: string }>,
+  comments: ReadonlyArray<OrderChatTriggerKaitenComment>,
 ): Promise<void> {
   for (const c of comments) {
     await createOrderProstheticsRequestIfNeeded(db, orderId, c.text, "KAITEN", {
       kaitenCommentId: c.id,
+      authorLabel: c.authorName,
     });
   }
 }

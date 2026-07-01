@@ -23,6 +23,7 @@ import {
   syncOrderProstheticsRequestsFromKaitenComments,
 } from "@/lib/order-prosthetics-request-db";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
+import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
@@ -120,10 +121,13 @@ export async function POST(
       if (kid != null) {
         await createOrderChatCorrectionIfNeeded(prisma, order.id, text, "KAITEN", {
           kaitenCommentId: kid,
+          authorLabel: label,
         });
       } else {
         needCommentBackfill = true;
-        await createOrderChatCorrectionIfNeeded(prisma, order.id, text, "KAITEN");
+        await createOrderChatCorrectionIfNeeded(prisma, order.id, text, "KAITEN", {
+          authorLabel: label,
+        });
       }
     }
     if (isOrderProstheticsRequestTrigger(text)) {
@@ -131,10 +135,13 @@ export async function POST(
       if (kid != null) {
         await createOrderProstheticsRequestIfNeeded(prisma, order.id, text, "KAITEN", {
           kaitenCommentId: kid,
+          authorLabel: label,
         });
       } else {
         needCommentBackfill = true;
-        await createOrderProstheticsRequestIfNeeded(prisma, order.id, text, "KAITEN");
+        await createOrderProstheticsRequestIfNeeded(prisma, order.id, text, "KAITEN", {
+          authorLabel: label,
+        });
       }
     }
   } catch (e) {
@@ -158,7 +165,7 @@ export async function POST(
           .map(parseKaitenListComment)
           .filter((x): x is NonNullable<typeof x> => x != null),
       );
-      const parsed = parsedFull.map((c) => ({ id: c.id, text: c.text }));
+      const parsed = mapParsedKaitenCommentsForTriggerSync(parsedFull);
       const tenantTagRow = await prisma.order.findUnique({
         where: { id: order.id },
         select: { tenant: { select: { kanbanAdminMentionTag: true } } },

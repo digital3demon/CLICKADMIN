@@ -608,6 +608,7 @@ export type OrderEditInitial = {
     id: string;
     text: string;
     source: "KAITEN" | "DEMO_KANBAN";
+    authorLabel: string | null;
     createdAt: string;
     resolvedAt: string | null;
     rejectedAt: string | null;
@@ -617,6 +618,7 @@ export type OrderEditInitial = {
     id: string;
     text: string;
     source: "KAITEN" | "DEMO_KANBAN";
+    authorLabel: string | null;
     createdAt: string;
     resolvedAt: string | null;
     rejectedAt: string | null;

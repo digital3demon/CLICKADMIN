@@ -1405,6 +1405,8 @@ model OrderChatCorrection {
   text             String
   /// id комментария в Kaiten — чтобы подтягивать «!!!» из UI Kaiten без дублей
   kaitenCommentId  Int?
+  /// Имя автора из Kaiten или CRM (для подписи «Kaiten · …»)
+  authorLabel      String?
   createdAt        DateTime                  @default(now())
   resolvedAt       DateTime?
   resolvedByUserId String?
@@ -1429,6 +1431,8 @@ model OrderProstheticsRequest {
   /// Текст без префикса «???»
   text             String
   kaitenCommentId  Int?
+  /// Имя автора из Kaiten или CRM
+  authorLabel      String?
   createdAt        DateTime                  @default(now())
   resolvedAt       DateTime?
   resolvedByUserId String?

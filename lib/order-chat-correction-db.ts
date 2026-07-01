@@ -7,6 +7,10 @@ import {
   isOrderChatCorrectionTrigger,
   stripOrderChatCorrectionPrefix,
 } from "@/lib/order-chat-correction";
+import {
+  type OrderChatTriggerKaitenComment,
+  trimOrderChatAuthorLabel,
+} from "@/lib/order-chat-trigger-author";
 
 /** id комментария из ответа Kaiten REST (POST/GET). */
 export function kaitenApiCommentNumericId(
@@ -21,26 +25,39 @@ export async function createOrderChatCorrectionIfNeeded(
   orderId: string,
   rawMessage: string,
   source: OrderChatCorrectionSource,
-  opts?: { kaitenCommentId?: number | null },
+  opts?: { kaitenCommentId?: number | null; authorLabel?: string | null },
 ): Promise<void> {
   if (!isOrderChatCorrectionTrigger(rawMessage)) return;
   const text = stripOrderChatCorrectionPrefix(rawMessage);
   if (!text) return;
 
   const kid = opts?.kaitenCommentId ?? null;
+  const authorLabel = trimOrderChatAuthorLabel(opts?.authorLabel);
   if (source === "KAITEN" && kid != null) {
     await db.orderChatCorrection.upsert({
       where: {
         orderId_kaitenCommentId: { orderId, kaitenCommentId: kid },
       },
-      create: { orderId, source, text, kaitenCommentId: kid },
-      update: {},
+      create: {
+        orderId,
+        source,
+        text,
+        kaitenCommentId: kid,
+        authorLabel,
+      },
+      update: authorLabel ? { authorLabel } : {},
     });
     return;
   }
 
   await db.orderChatCorrection.create({
-    data: { orderId, source, text, kaitenCommentId: kid },
+    data: {
+      orderId,
+      source,
+      text,
+      kaitenCommentId: kid,
+      authorLabel,
+    },
   });
 }
 
@@ -51,11 +68,12 @@ export async function createOrderChatCorrectionIfNeeded(
 export async function syncOrderChatCorrectionsFromKaitenComments(
   db: PrismaClient,
   orderId: string,
-  comments: ReadonlyArray<{ id: number; text: string }>,
+  comments: ReadonlyArray<OrderChatTriggerKaitenComment>,
 ): Promise<void> {
   for (const c of comments) {
     await createOrderChatCorrectionIfNeeded(db, orderId, c.text, "KAITEN", {
       kaitenCommentId: c.id,
+      authorLabel: c.authorName,
     });
   }
 }
@@ -63,16 +81,20 @@ export async function syncOrderChatCorrectionsFromKaitenComments(
 /** Комментарии из кэша снимка GET /kaiten (поле `comments`). */
 export function kaitenCommentsForSyncFromSnapshotPayload(
   payload: Record<string, unknown>,
-): Array<{ id: number; text: string }> {
+): OrderChatTriggerKaitenComment[] {
   const raw = payload.comments;
   if (!Array.isArray(raw)) return [];
   const seen = new Set<number>();
-  const out: Array<{ id: number; text: string }> = [];
+  const out: OrderChatTriggerKaitenComment[] = [];
   for (const x of raw) {
     const parsed = parseKaitenListComment(x);
     if (parsed == null || seen.has(parsed.id)) continue;
     seen.add(parsed.id);
-    out.push({ id: parsed.id, text: parsed.text });
+    out.push({
+      id: parsed.id,
+      text: parsed.text,
+      authorName: parsed.authorName,
+    });
   }
   return out;
 }

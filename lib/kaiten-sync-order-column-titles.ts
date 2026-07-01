@@ -17,6 +17,7 @@ import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
+import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
 import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
@@ -154,7 +155,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
               .map(parseKaitenListComment)
               .filter((x): x is NonNullable<typeof x> => x != null),
           );
-          const comments = parsedFull.map((c) => ({ id: c.id, text: c.text }));
+          const comments = mapParsedKaitenCommentsForTriggerSync(parsedFull);
           const labTag = normalizeKanbanAdminMentionTag(
             row.tenant?.kanbanAdminMentionTag,
           );

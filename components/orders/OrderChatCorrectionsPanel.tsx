@@ -2,11 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatOrderChatSourceCaption } from "@/lib/order-chat-trigger-author";
 
 export type OrderChatCorrectionInitial = {
   id: string;
   text: string;
   source: "KAITEN" | "DEMO_KANBAN";
+  authorLabel: string | null;
   createdAt: string;
   resolvedAt: string | null;
   rejectedAt: string | null;
@@ -225,8 +227,8 @@ export function OrderChatCorrectionsPanel({
     [orderId, router, pullListFromApi],
   );
 
-  const srcLabel = (s: OrderChatCorrectionInitial["source"]) =>
-    s === "KAITEN" ? "Kaiten" : "Канбан";
+  const srcLabel = (c: OrderChatCorrectionInitial) =>
+    formatOrderChatSourceCaption(c.source, c.authorLabel);
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
@@ -249,9 +251,14 @@ export function OrderChatCorrectionsPanel({
             key={c.id}
             className="flex items-start gap-2 rounded-md border border-amber-200/80 bg-amber-50/50 px-2 py-1.5 text-sm dark:border-amber-800/50 dark:bg-amber-950/25"
           >
-            <p className="min-w-0 flex-1 whitespace-pre-wrap text-[var(--text-body)]">
-              {c.text}
-            </p>
+            <div className="min-w-0 flex-1">
+              <p className="whitespace-pre-wrap text-[var(--text-body)]">
+                {c.text}
+              </p>
+              <p className="mt-0.5 text-[0.65rem] text-[var(--text-muted)]">
+                {srcLabel(c)}
+              </p>
+            </div>
             {canAccept ? (
               <span className="flex shrink-0 gap-1">
                 <button
@@ -312,11 +319,11 @@ export function OrderChatCorrectionsPanel({
               {archived.map((c) => (
                 <li
                   key={c.id}
-                  className="rounded border border-[var(--card-border)]/60 bg-[var(--surface-subtle)]/50 px-2 py-1 text-xs italic text-[var(--text-muted)] opacity-80"
+                  className="rounded border border-[var(--card-border)]/60 bg-[var(--surface-subtle)]/50 px-2 py-1 opacity-90"
                 >
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className="font-mono text-[10px] text-[var(--text-muted)]">
-                      {srcLabel(c.source)}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs italic text-[var(--text-muted)]">
+                    <span className="font-mono text-[10px] not-italic">
+                      {srcLabel(c)}
                     </span>
                     {c.rejectedAt ? (
                       <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold not-italic text-rose-900 dark:bg-rose-950/50 dark:text-rose-100">
@@ -328,7 +335,9 @@ export function OrderChatCorrectionsPanel({
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-0.5 whitespace-pre-wrap">{c.text}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm font-medium not-italic text-[var(--text-body)]">
+                    {c.text}
+                  </p>
                 </li>
               ))}
             </ul>

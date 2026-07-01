@@ -6,6 +6,7 @@ import { kaitenRetryAfterSeconds } from "@/lib/kaiten-rate-limit";
 import { syncOrderChatCorrectionsFromKaitenLive } from "@/lib/order-chat-correction-kaiten-sync";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
+import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,7 @@ export async function GET(
       id: true,
       text: true,
       source: true,
+      authorLabel: true,
       createdAt: true,
       resolvedAt: true,
       rejectedAt: true,
@@ -72,6 +74,7 @@ export async function GET(
     id: r.id,
     text: r.text,
     source: r.source,
+    authorLabel: r.authorLabel,
     createdAt: r.createdAt.toISOString(),
     resolvedAt: r.resolvedAt?.toISOString() ?? null,
     rejectedAt: r.rejectedAt?.toISOString() ?? null,
@@ -126,6 +129,11 @@ export async function POST(
   }
 
   const raw = typeof body.text === "string" ? body.text : "";
+  const authorLabel = userActivityDisplayLabel({
+    mentionHandle: null,
+    displayName: session.name?.trim() || null,
+    email: session.email || null,
+  });
 
   const prisma = await getOrdersPrisma();
   const order = await prisma.order.findFirst({
@@ -141,12 +149,14 @@ export async function POST(
     order.id,
     raw,
     "DEMO_KANBAN",
+    { authorLabel },
   );
   await createOrderProstheticsRequestIfNeeded(
     prisma,
     order.id,
     raw,
     "DEMO_KANBAN",
+    { authorLabel },
   );
 
   return NextResponse.json({ ok: true });
