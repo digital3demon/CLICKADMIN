@@ -30,6 +30,7 @@ export async function GET() {
     select: {
       id: true,
       text: true,
+      authorLabel: true,
       createdAt: true,
       order: { select: { id: true, orderNumber: true } },
     },
@@ -38,6 +39,7 @@ export async function GET() {
   const corrections = rows.map((r) => ({
     id: r.id,
     text: r.text,
+    authorLabel: r.authorLabel,
     orderId: r.order.id,
     orderNumber: r.order.orderNumber,
     createdAt: r.createdAt.toISOString(),

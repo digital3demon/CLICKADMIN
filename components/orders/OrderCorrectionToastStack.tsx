@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
+import { orderChatToastTitle } from "@/lib/order-chat-trigger-author";
 import { orderPathById } from "@/lib/order-public-ref";
 import { isPublicStickerHubPath } from "@/lib/sticker-public-path";
 
@@ -12,6 +13,7 @@ const STORAGE_KEY = "orderToastDismissedV1";
 type OrderToastRow = {
   id: string;
   text: string;
+  authorLabel?: string | null;
   orderId: string;
   orderNumber: string;
   createdAt: string;
@@ -250,8 +252,8 @@ export function OrderCorrectionToastStack() {
               onClick={() => dismissOne("correction", r.id)}
               className="min-w-0 flex-1 text-left leading-snug text-amber-950 hover:underline dark:text-amber-50"
             >
-              <span className="block text-[0.65rem] font-semibold uppercase tracking-wide text-amber-900/90 dark:text-amber-200/90">
-                Корректировка
+              <span className="block text-[0.65rem] font-semibold tracking-wide text-amber-900/90 dark:text-amber-200/90">
+                {orderChatToastTitle("correction", r.authorLabel)}
               </span>
               <span className="mt-0.5 block text-[var(--text-body)]">
                 по наряду{" "}
@@ -279,8 +281,8 @@ export function OrderCorrectionToastStack() {
               onClick={() => dismissOne("prosthetics", r.id)}
               className="min-w-0 flex-1 text-left leading-snug text-sky-950 hover:underline dark:text-sky-50"
             >
-              <span className="block text-[0.65rem] font-semibold uppercase tracking-wide text-sky-800/90 dark:text-sky-200/90">
-                Протетика
+              <span className="block text-[0.65rem] font-semibold tracking-wide text-sky-800/90 dark:text-sky-200/90">
+                {orderChatToastTitle("prosthetics", r.authorLabel)}
               </span>
               <span className="mt-0.5 block text-[var(--text-body)]">
                 по наряду{" "}

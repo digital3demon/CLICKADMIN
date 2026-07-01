@@ -24,6 +24,18 @@ export function formatOrderChatSourceCaption(
   return who ? `${base} · ${who}` : base;
 }
 
+/** Заголовок глобального уведомления (тост) по типу заявки. */
+export function orderChatToastTitle(
+  kind: "correction" | "prosthetics",
+  authorLabel?: string | null,
+): string {
+  const who = trimOrderChatAuthorLabel(authorLabel);
+  if (kind === "correction") {
+    return who ? `Корректировка от ${who}` : "Корректировка";
+  }
+  return who ? `Заказ протетики от ${who}` : "Протетика";
+}
+
 export function mapParsedKaitenCommentsForTriggerSync(
   parsed: ReadonlyArray<{
     id: number;
