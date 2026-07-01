@@ -1,4 +1,4 @@
-import { OrderAttachmentScope, type PrismaClient } from "@prisma/client";
+import { OrderAttachmentScope, type Prisma, type PrismaClient } from "@prisma/client";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { readOrderAttachmentBytes } from "@/lib/order-attachment-storage";
 import { isOrderAttachmentEligibleForKaitenPush } from "@/lib/kaiten-attachment-eligibility";
@@ -39,11 +39,44 @@ async function tryClaimKaitenPush(
   attachmentId: string,
 ): Promise<boolean> {
   const claimed = await prisma.orderAttachment.updateMany({
-    where: { id: attachmentId, orderId, uploadedToKaitenAt: null },
+    where: {
+      id: attachmentId,
+      orderId,
+      OR: [
+        { uploadedToKaitenAt: null },
+        { uploadedToKaitenAt: KAITEN_PUSH_IN_FLIGHT_AT },
+      ],
+    },
     data: { uploadedToKaitenAt: KAITEN_PUSH_IN_FLIGHT_AT },
   });
   return claimed.count > 0;
 }
+
+async function waitForPeerKaitenPushComplete(
+  prisma: PrismaClient,
+  attachmentId: string,
+  maxWaitMs: number,
+): Promise<boolean> {
+  const started = Date.now();
+  while (Date.now() - started < maxWaitMs) {
+    const row = await prisma.orderAttachment.findUnique({
+      where: { id: attachmentId },
+      select: { uploadedToKaitenAt: true },
+    });
+    if (isOrderAttachmentUploadedToKaiten(row?.uploadedToKaitenAt)) {
+      return true;
+    }
+    await sleepMs(400);
+  }
+  return false;
+}
+
+const unpushedToKaitenWhere: Prisma.OrderAttachmentWhereInput = {
+  OR: [
+    { uploadedToKaitenAt: null },
+    { uploadedToKaitenAt: KAITEN_PUSH_IN_FLIGHT_AT },
+  ],
+};
 
 async function releaseKaitenPushClaim(
   prisma: PrismaClient,
@@ -148,16 +181,23 @@ export async function pushAttachmentToKaiten(
     return;
   }
 
-  const claimed = await tryClaimKaitenPush(prisma, orderId, attachmentId);
+  let claimed = await tryClaimKaitenPush(prisma, orderId, attachmentId);
   if (!claimed) {
-    const again = await prisma.orderAttachment.findUnique({
-      where: { id: attachmentId },
-      select: { uploadedToKaitenAt: true },
-    });
-    if (isOrderAttachmentUploadedToKaiten(again?.uploadedToKaitenAt)) {
-      return;
+    const done = await waitForPeerKaitenPushComplete(prisma, attachmentId, 25_000);
+    if (done) return;
+    claimed = await tryClaimKaitenPush(prisma, orderId, attachmentId);
+    if (!claimed) {
+      const again = await prisma.orderAttachment.findUnique({
+        where: { id: attachmentId },
+        select: { uploadedToKaitenAt: true },
+      });
+      if (isOrderAttachmentUploadedToKaiten(again?.uploadedToKaitenAt)) {
+        return;
+      }
+      throw new Error(
+        "Не удалось начать выгрузку в Kaiten — повторите или дождитесь фоновой синхронизации",
+      );
     }
-    return;
   }
 
   try {
@@ -294,7 +334,7 @@ export async function syncAllUnpushedAttachmentsInBackground(
   const cap = Math.min(Math.max(1, Math.trunc(limit)), 20);
   const rows = await prisma.orderAttachment.findMany({
     where: {
-      uploadedToKaitenAt: null,
+      ...unpushedToKaitenWhere,
       scope: { not: OrderAttachmentScope.PAYMENT_SLIP },
       order: { kaitenCardId: { not: null } },
     },
@@ -353,7 +393,7 @@ export async function syncUnpushedOrderAttachmentsToKaiten(
   if (!order?.kaitenCardId) return;
 
   const rows = await prisma.orderAttachment.findMany({
-    where: { orderId, uploadedToKaitenAt: null },
+    where: { orderId, ...unpushedToKaitenWhere },
     select: {
       id: true,
       scope: true,

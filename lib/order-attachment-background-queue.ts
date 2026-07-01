@@ -7,6 +7,7 @@ import {
   startBackgroundOrderUpload,
 } from "@/lib/background-order-upload-tracker";
 import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
+import { requestOrderKaitenAttachmentSync } from "@/lib/order-kaiten-attachment-sync-client";
 
 type QueuedUploadRow = {
   id: string;
@@ -328,6 +329,7 @@ async function processOrderQueue(orderId: string): Promise<void> {
   if (fails.length === 0) {
     completeBackgroundOrderUpload(tracker.trackerId, { success: true });
     trackerByOrderId.delete(orderId);
+    void requestOrderKaitenAttachmentSync(orderId);
     return;
   }
 

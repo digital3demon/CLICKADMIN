@@ -5,6 +5,7 @@ import {
   CRM_UPLOAD_MAX_BYTES,
   formatCrmUploadMaxShortRu,
 } from "@/lib/crm-upload-limits";
+import { normalizeOrderAttachmentImage } from "@/lib/order-attachment-image-normalize.client";
 
 /** Совпадает с POST `/api/orders/[id]/attachments`. */
 export const ORDER_ATTACHMENT_MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
@@ -174,14 +175,24 @@ export async function uploadOrderAttachmentFromFile(
     };
   }
   try {
-    const buf = await file.arrayBuffer();
+    let prepared: File;
+    try {
+      prepared = await normalizeOrderAttachmentImage(file);
+    } catch (e) {
+      return {
+        ok: false,
+        error:
+          e instanceof Error ? e.message : "Не удалось подготовить изображение",
+      };
+    }
+    const buf = await prepared.arrayBuffer();
     const res = await fetch(`/api/orders/${orderId}/attachments`, {
       method: "POST",
       credentials: "include",
       headers: {
         "Content-Type": "application/octet-stream",
-        "X-Upload-Filename": encodeURIComponent(file.name),
-        "X-Upload-Mime": file.type || "application/octet-stream",
+        "X-Upload-Filename": encodeURIComponent(prepared.name),
+        "X-Upload-Mime": prepared.type || "application/octet-stream",
       },
       body: buf,
     });
