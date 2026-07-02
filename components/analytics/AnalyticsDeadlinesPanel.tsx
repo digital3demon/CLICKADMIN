@@ -15,6 +15,8 @@ import {
   DEFAULT_ADMIN_SLA_HOURS,
   defaultDeadlinesSchedule,
   formatDurationMinutesRu,
+  formatDurationDaysHoursRu,
+  workDayDurationMinutes,
   scheduleQueryString,
   type DeadlinesScheduleConfig,
 } from "@/lib/analytics/deadlines-schedule";
@@ -231,6 +233,17 @@ export function AnalyticsDeadlinesPanel({
     }));
   }, [work]);
 
+  const workDayMinutes = useMemo(
+    () => workDayDurationMinutes(schedule),
+    [schedule],
+  );
+
+  const formatWorkDuration = useCallback(
+    (minutes: number) =>
+      formatDurationDaysHoursRu(minutes, workDayMinutes),
+    [workDayMinutes],
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -349,12 +362,12 @@ export function AnalyticsDeadlinesPanel({
           <div className="grid gap-3 sm:grid-cols-2">
             <KpiCard
               label="Средний срок (всё время)"
-              value={formatDurationMinutesRu(work.allTimeAverageMinutes)}
+              value={formatWorkDuration(work.allTimeAverageMinutes)}
               hint="Оформление → сдана админам, по нарядам"
             />
             <KpiCard
               label="Средний срок (период)"
-              value={formatDurationMinutesRu(work.periodAverageMinutes)}
+              value={formatWorkDuration(work.periodAverageMinutes)}
               hint="Период — по дате оформления"
             />
           </div>
@@ -385,7 +398,7 @@ export function AnalyticsDeadlinesPanel({
                   />
                   <Tooltip
                     formatter={(v) => [
-                      formatDurationMinutesRu(
+                      formatWorkDuration(
                         typeof v === "number" ? v : Number(v),
                       ),
                       "Средний срок",
@@ -438,7 +451,7 @@ export function AnalyticsDeadlinesPanel({
                       {r.leadWorkingDays != null ? `${r.leadWorkingDays} дн.` : "—"}
                     </td>
                     <td className="px-3 py-2 tabular-nums">
-                      {formatDurationMinutesRu(r.averageDurationMinutes)}
+                      {formatWorkDuration(r.averageDurationMinutes)}
                     </td>
                     <td className="px-3 py-2 tabular-nums">{r.early}</td>
                     <td className="px-3 py-2 tabular-nums">{r.onTime}</td>

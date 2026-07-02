@@ -3,6 +3,8 @@ import ExcelJS from "exceljs";
 import { parseAnalyticsRange } from "@/lib/analytics/range";
 import {
   formatDurationMinutesRu,
+  formatDurationDaysHoursRu,
+  workDayDurationMinutes,
   parseAdminSlaHours,
   parseDeadlinesScheduleFromSearchParams,
 } from "@/lib/analytics/deadlines-schedule";
@@ -72,6 +74,9 @@ export async function GET(req: Request) {
     ws.addRow(["Всего", data.buckets.total, 100]);
   } else {
     const data = await loadWorkDeadlinesReport(from, to, schedule);
+    const workDayMinutes = workDayDurationMinutes(schedule);
+    const formatWorkDuration = (minutes: number) =>
+      formatDurationDaysHoursRu(minutes, workDayMinutes);
     const ws = wb.addWorksheet("Сроки работ");
     ws.addRow(["Период", fromLabel, "—", toLabel]);
     ws.addRow(["Рабочие часы", `${schedule.workStartHm}–${schedule.workEndHm}`]);
@@ -80,11 +85,11 @@ export async function GET(req: Request) {
     ws.addRow([]);
     ws.addRow([
       "Средний фактический срок (всё время)",
-      formatDurationMinutesRu(data.allTimeAverageMinutes),
+      formatWorkDuration(data.allTimeAverageMinutes),
     ]);
     ws.addRow([
       "Средний фактический срок (период)",
-      formatDurationMinutesRu(data.periodAverageMinutes),
+      formatWorkDuration(data.periodAverageMinutes),
     ]);
     ws.addRow([]);
     ws.addRow([
@@ -105,7 +110,7 @@ export async function GET(req: Request) {
         row.orderCount,
         row.lineCount,
         row.leadWorkingDays ?? "—",
-        formatDurationMinutesRu(row.averageDurationMinutes),
+        formatWorkDuration(row.averageDurationMinutes),
         row.early,
         row.onTime,
         row.late,

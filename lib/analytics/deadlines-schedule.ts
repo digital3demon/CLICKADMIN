@@ -123,3 +123,38 @@ export function formatDurationMinutesRu(totalMinutes: number): string {
   if (min === 0) return `${h} ч`;
   return `${h} ч ${min} мин`;
 }
+
+function hmToMinutes(hm: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hm.trim());
+  if (!m) return 0;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/** Длина рабочего дня по настройкам «с / до» (минуты). */
+export function workDayDurationMinutes(
+  schedule: Pick<DeadlinesScheduleConfig, "workStartHm" | "workEndHm">,
+): number {
+  const duration = hmToMinutes(schedule.workEndHm) - hmToMinutes(schedule.workStartHm);
+  return duration > 0 ? duration : 600;
+}
+
+/** Рабочие дни + часы (для сроков работ, сопоставимо с нормативом в днях). */
+export function formatDurationDaysHoursRu(
+  totalMinutes: number,
+  minutesPerWorkDay: number,
+): string {
+  const dayLen = Math.max(60, Math.round(minutesPerWorkDay));
+  const m = Math.max(0, Math.round(totalMinutes));
+  const days = Math.floor(m / dayLen);
+  const rem = m % dayLen;
+  const hours = Math.floor(rem / 60);
+  const min = rem % 60;
+
+  if (days > 0) {
+    if (hours <= 0) return `${days} дн.`;
+    return `${days} дн. ${hours} ч`;
+  }
+  if (hours <= 0) return `${min} мин`;
+  if (min === 0) return `${hours} ч`;
+  return `${hours} ч ${min} мин`;
+}
