@@ -27,6 +27,25 @@ type AdminReport = {
   bucketPercents: { early: number; onTime: number; late: number };
 };
 
+const CHART_COLORS = {
+  primary: "#0ea5e9",
+  muted: "#64748b",
+};
+
+type WorkPriceItemRow = {
+  priceListItemId: string;
+  code: string;
+  name: string;
+  leadWorkingDays: number | null;
+  orderCount: number;
+  lineCount: number;
+  averageDurationMinutes: number;
+  withNormativeLineCount: number;
+  early: number;
+  onTime: number;
+  late: number;
+};
+
 type WorkReport = {
   allTimeAverageMinutes: number;
   periodAverageMinutes: number;
@@ -45,6 +64,7 @@ type WorkReport = {
     periodAverageMinutes: number;
     allTimeAverageMinutes: number;
   };
+  rows: WorkPriceItemRow[];
 };
 
 const SUB_TABS = [
@@ -202,6 +222,15 @@ export function AnalyticsDeadlinesPanel({
   const exportHref = `/api/analytics/deadlines/export?type=${subTab}&${fullQ}`;
   const busy = loading || localLoading;
 
+  const workChartData = useMemo(() => {
+    if (!work?.rows?.length) return [];
+    return work.rows.slice(0, 15).map((r) => ({
+      name: `${r.code} ${r.name}`.slice(0, 42),
+      averageMinutes: r.averageDurationMinutes,
+      orders: r.orderCount,
+    }));
+  }, [work]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -303,7 +332,7 @@ export function AnalyticsDeadlinesPanel({
       ) : null}
 
       {subTab === "work" && work ? (
-        <>
+        <div className="space-y-6">
           {work.completedAllTime === 0 ? (
             <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
               Нет нарядов в колонке «Сдана админам» (ни в истории, ни сейчас на
@@ -317,72 +346,109 @@ export function AnalyticsDeadlinesPanel({
               страницы.
             </p>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <KpiCard
-              label="Средний факт (всё время)"
+              label="Средний срок (всё время)"
               value={formatDurationMinutesRu(work.allTimeAverageMinutes)}
-              hint="Оформление → сдана админам"
+              hint="Оформление → сдана админам, по нарядам"
             />
             <KpiCard
-              label="Средний факт (период)"
+              label="Средний срок (период)"
               value={formatDurationMinutesRu(work.periodAverageMinutes)}
-            />
-            <KpiCard
-              label="С нормативом — вовремя"
-              value={`${work.withNormative.onTime} (${work.withNormative.bucketPercents.onTime}%)`}
-            />
-            <KpiCard
-              label="Без норматива в прайсе"
-              value={String(work.withoutNormative.count)}
-              hint={`Средн. ${formatDurationMinutesRu(work.withoutNormative.periodAverageMinutes)} за период`}
+              hint="Период — по дате оформления"
             />
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
-              <h4 className="mb-3 text-sm font-semibold text-[var(--app-text)]">
-                С нормативом из прайса (период)
-              </h4>
-              <BucketChart buckets={work.withNormative} />
+          <p className="text-xs text-[var(--text-secondary)]">
+            По каждой позиции прайса в сданном наряде: одна строка или несколько
+            штук одной позиции — одна запись в статистике. Срок — рабочее время
+            от оформления до «Сдана админам»; сравнение с нормативом позиции
+            (leadWorkingDays), погрешность ±30 мин.
+          </p>
+          {workChartData.length > 0 ? (
+            <div className="h-[min(400px,60vh)] w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={workChartData}
+                  layout="vertical"
+                  margin={{ left: 8, right: 16 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 11, fill: CHART_COLORS.muted }}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={200}
+                    tick={{ fontSize: 10, fill: CHART_COLORS.muted }}
+                  />
+                  <Tooltip
+                    formatter={(v) => [
+                      formatDurationMinutesRu(
+                        typeof v === "number" ? v : Number(v),
+                      ),
+                      "Средний срок",
+                    ]}
+                    contentStyle={{
+                      background: "var(--card-bg)",
+                      border: "1px solid var(--card-border)",
+                      borderRadius: 8,
+                    }}
+                  />
+                  <Bar
+                    dataKey="averageMinutes"
+                    fill={CHART_COLORS.primary}
+                    radius={[0, 4, 4, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
-              <StatsBreakdown
-                rows={[
-                  {
-                    label: "Раньше норматива",
-                    count: work.withNormative.early,
-                    percent: work.withNormative.bucketPercents.early,
-                  },
-                  {
-                    label: "Вовремя",
-                    count: work.withNormative.onTime,
-                    percent: work.withNormative.bucketPercents.onTime,
-                  },
-                  {
-                    label: "Позже",
-                    count: work.withNormative.late,
-                    percent: work.withNormative.bucketPercents.late,
-                  },
-                ]}
-                totalLabel="Всего с нормативом"
-                total={work.withNormative.total}
-              />
-              <div className="mt-4 border-t border-[var(--card-border)] pt-3 text-sm">
-                <div className="flex justify-between text-[var(--text-secondary)]">
-                  <span>Без норматива (период)</span>
-                  <span className="tabular-nums font-medium text-[var(--app-text)]">
-                    {work.withoutNormative.count}
-                  </span>
-                </div>
-                <div className="mt-2 flex justify-between text-[var(--text-secondary)]">
-                  <span>Средний с нормативом</span>
-                  <span className="tabular-nums font-medium text-[var(--app-text)]">
-                    {formatDurationMinutesRu(work.withNormative.periodAverageMinutes)}
-                  </span>
-                </div>
-              </div>
-            </div>
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">
+              Нет позиций прайса в сданных нарядах за период.
+            </p>
+          )}
+          <div className="overflow-x-auto rounded-lg border border-[var(--card-border)]">
+            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                  <th className="px-3 py-2">Код</th>
+                  <th className="px-3 py-2">Название</th>
+                  <th className="px-3 py-2">Нарядов</th>
+                  <th className="px-3 py-2">Строк</th>
+                  <th className="px-3 py-2">Норматив</th>
+                  <th className="px-3 py-2">Средний срок</th>
+                  <th className="px-3 py-2">Раньше</th>
+                  <th className="px-3 py-2">Вовремя</th>
+                  <th className="px-3 py-2">Позже</th>
+                </tr>
+              </thead>
+              <tbody>
+                {work.rows.map((r) => (
+                  <tr
+                    key={r.priceListItemId}
+                    className="border-b border-[var(--border-subtle)] hover:bg-[var(--table-row-hover)]"
+                  >
+                    <td className="px-3 py-2 font-mono text-xs">{r.code}</td>
+                    <td className="px-3 py-2 text-[var(--text-strong)]">{r.name}</td>
+                    <td className="px-3 py-2 tabular-nums">{r.orderCount}</td>
+                    <td className="px-3 py-2 tabular-nums">{r.lineCount}</td>
+                    <td className="px-3 py-2 tabular-nums">
+                      {r.leadWorkingDays != null ? `${r.leadWorkingDays} дн.` : "—"}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums">
+                      {formatDurationMinutesRu(r.averageDurationMinutes)}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums">{r.early}</td>
+                    <td className="px-3 py-2 tabular-nums">{r.onTime}</td>
+                    <td className="px-3 py-2 tabular-nums">{r.late}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </>
+        </div>
       ) : null}
     </div>
   );

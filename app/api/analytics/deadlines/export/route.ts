@@ -87,16 +87,30 @@ export async function GET(req: Request) {
       formatDurationMinutesRu(data.periodAverageMinutes),
     ]);
     ws.addRow([]);
-    ws.addRow(["С нормативом из прайса"]);
-    ws.addRow(["Раньше", data.withNormative.early, data.withNormative.bucketPercents.early]);
-    ws.addRow(["Вовремя", data.withNormative.onTime, data.withNormative.bucketPercents.onTime]);
-    ws.addRow(["Позже", data.withNormative.late, data.withNormative.bucketPercents.late]);
-    ws.addRow([]);
-    ws.addRow(["Без норматива, шт", data.withoutNormative.count]);
     ws.addRow([
-      "Без норматива, средний (период)",
-      formatDurationMinutesRu(data.withoutNormative.periodAverageMinutes),
+      "Код",
+      "Название",
+      "Нарядов",
+      "Строк",
+      "Норматив (дн)",
+      "Средний срок",
+      "Раньше",
+      "Вовремя",
+      "Позже",
     ]);
+    for (const row of data.rows) {
+      ws.addRow([
+        row.code,
+        row.name,
+        row.orderCount,
+        row.lineCount,
+        row.leadWorkingDays ?? "—",
+        formatDurationMinutesRu(row.averageDurationMinutes),
+        row.early,
+        row.onTime,
+        row.late,
+      ]);
+    }
   }
 
   const buf = await wb.xlsx.writeBuffer();

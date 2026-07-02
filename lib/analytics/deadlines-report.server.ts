@@ -13,6 +13,12 @@ import {
   type DeadlinesScheduleConfig,
 } from "@/lib/analytics/deadlines-schedule";
 import { findFirstHandedToAdminsAt } from "@/lib/analytics/order-handed-at";
+import {
+  aggregateWorkDeadlinesByPriceItem,
+  type WorkDeadlinesPriceItemRow,
+} from "@/lib/analytics/work-deadlines-price-items";
+
+export type { WorkDeadlinesPriceItemRow };
 
 const PRICE_LIST = "PRICE_LIST" as const;
 
@@ -49,6 +55,7 @@ export type WorkDeadlinesReport = {
     periodAverageMinutes: number;
     allTimeAverageMinutes: number;
   };
+  rows: WorkDeadlinesPriceItemRow[];
 };
 
 function orderExclusionsWhere(): Prisma.OrderWhereInput {
@@ -148,8 +155,13 @@ type WorkOrderRow = {
   labWorkStatus: string;
   updatedAt: Date;
   constructions: Array<{
-    category: string;
-    priceListItem: { leadWorkingDays: number | null } | null;
+    priceListItemId: string | null;
+    priceListItem: {
+      id: string;
+      code: string;
+      name: string;
+      leadWorkingDays: number | null;
+    } | null;
   }>;
 };
 
@@ -167,10 +179,17 @@ async function loadWorkOrdersWithRevisions(): Promise<
       kaitenColumnTitle: true,
       kaitenSyncedAt: true,
       constructions: {
-        where: { category: PRICE_LIST },
+        where: { category: PRICE_LIST, priceListItemId: { not: null } },
         select: {
-          category: true,
-          priceListItem: { select: { leadWorkingDays: true } },
+          priceListItemId: true,
+          priceListItem: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              leadWorkingDays: true,
+            },
+          },
         },
       },
       revisions: {
@@ -196,6 +215,13 @@ async function loadWorkOrdersWithRevisions(): Promise<
   }));
 }
 
+function orderHasNormativeLead(order: WorkOrderRow): boolean {
+  return order.constructions.some((line) => {
+    const lead = line.priceListItem?.leadWorkingDays;
+    return lead != null && Number.isFinite(lead);
+  });
+}
+
 function maxLeadWorkingDays(order: WorkOrderRow): number | null {
   let max: number | null = null;
   for (const line of order.constructions) {
@@ -219,8 +245,8 @@ export async function loadWorkDeadlinesReport(
   to: Date,
   schedule: DeadlinesScheduleConfig,
 ): Promise<WorkDeadlinesReport> {
-  const rows = await loadWorkOrdersWithRevisions();
-  const completed = rows.filter(
+  const orders = await loadWorkOrdersWithRevisions();
+  const completed = orders.filter(
     (r): r is typeof r & { handedAt: Date } => r.handedAt != null,
   );
 
@@ -263,8 +289,15 @@ export async function loadWorkDeadlinesReport(
   }
 
   const periodWithNormativeDurations = periodCompleted
-    .filter((o) => maxLeadWorkingDays(o) != null)
+    .filter((o) => orderHasNormativeLead(o))
     .map((o) => workActualMinutes(o, schedule));
+
+  const priceItemRows = aggregateWorkDeadlinesByPriceItem(
+    completed,
+    from,
+    to,
+    schedule,
+  );
 
   return {
     period: { from: ymd(from), to: ymd(to) },
@@ -285,5 +318,6 @@ export async function loadWorkDeadlinesReport(
       periodAverageMinutes: averageMinutes(withoutNormativeDurations),
       allTimeAverageMinutes: averageMinutes(allWithoutNormativeDurations),
     },
+    rows: priceItemRows,
   };
 }
