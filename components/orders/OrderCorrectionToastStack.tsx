@@ -135,6 +135,7 @@ export function OrderCorrectionToastStack() {
   const isKanban = pathname === "/kanban" || pathname.startsWith("/kanban/");
   const isPublicSticker = isPublicStickerHubPath(pathname);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+  const [stackCollapsed, setStackCollapsed] = useState(false);
   const [chatMessages, setChatMessages] = useState<OrderToastRow[]>([]);
   const [corrections, setCorrections] = useState<OrderToastRow[]>([]);
   const [prostheticsRequests, setProstheticsRequests] = useState<OrderToastRow[]>(
@@ -235,10 +236,14 @@ export function OrderCorrectionToastStack() {
 
         const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}`;
         if (fp !== lastFpRef.current) {
+          const hadPrevious = lastFpRef.current.length > 0;
           lastFpRef.current = fp;
           setChatMessages(chatList);
           setCorrections(corrList);
           setProstheticsRequests(proList);
+          if (hadPrevious) {
+            setStackCollapsed(false);
+          }
           if (
             pathname === "/orders" ||
             pathname.startsWith("/orders/") ||
@@ -279,35 +284,37 @@ export function OrderCorrectionToastStack() {
     };
   }, [isLogin, isKanban, isPublicSticker, pathname, router]);
 
-  const { chatVisible, correctionVisible, prostheticsVisible } = useMemo(() => {
-    const chat = chatMessages
-      .filter((r) => !dismissed.has(dismissKey("chat", r.id)))
-      .slice(0, MAX_PER_COLUMN);
-    const corr = corrections
-      .filter((r) => !dismissed.has(dismissKey("correction", r.id)))
-      .slice(0, MAX_PER_COLUMN);
-    const pro = prostheticsRequests
-      .filter((r) => !dismissed.has(dismissKey("prosthetics", r.id)))
-      .slice(0, MAX_PER_COLUMN);
-    return {
-      chatVisible: chat,
-      correctionVisible: corr,
-      prostheticsVisible: pro,
-    };
+  const pending = useMemo(() => {
+    const chat = chatMessages.filter(
+      (r) => !dismissed.has(dismissKey("chat", r.id)),
+    );
+    const corr = corrections.filter(
+      (r) => !dismissed.has(dismissKey("correction", r.id)),
+    );
+    const pro = prostheticsRequests.filter(
+      (r) => !dismissed.has(dismissKey("prosthetics", r.id)),
+    );
+    return { chat, corr, pro };
   }, [chatMessages, corrections, prostheticsRequests, dismissed]);
 
-  const visibleCount =
-    chatVisible.length + correctionVisible.length + prostheticsVisible.length;
+  const pendingCount =
+    pending.chat.length + pending.corr.length + pending.pro.length;
+
+  const { chatVisible, correctionVisible, prostheticsVisible } = useMemo(() => {
+    return {
+      chatVisible: pending.chat.slice(0, MAX_PER_COLUMN),
+      correctionVisible: pending.corr.slice(0, MAX_PER_COLUMN),
+      prostheticsVisible: pending.pro.slice(0, MAX_PER_COLUMN),
+    };
+  }, [pending]);
 
   const hideAll = useCallback(() => {
-    mergeDismissed((prev) => {
-      const next = new Set(prev);
-      for (const r of chatMessages) next.add(dismissKey("chat", r.id));
-      for (const r of corrections) next.add(dismissKey("correction", r.id));
-      for (const r of prostheticsRequests) next.add(dismissKey("prosthetics", r.id));
-      return next;
-    });
-  }, [chatMessages, corrections, prostheticsRequests, mergeDismissed]);
+    setStackCollapsed(true);
+  }, []);
+
+  const showAll = useCallback(() => {
+    setStackCollapsed(false);
+  }, []);
 
   const dismissOne = useCallback(
     (kind: ToastKind, id: string) => {
@@ -316,8 +323,25 @@ export function OrderCorrectionToastStack() {
     [mergeDismissed],
   );
 
-  if (isLogin || isKanban || isPublicSticker || visibleCount === 0) {
+  if (isLogin || isKanban || isPublicSticker || pendingCount === 0) {
     return null;
+  }
+
+  if (stackCollapsed) {
+    return (
+      <div
+        className="pointer-events-none fixed z-[95] bottom-[max(1rem,env(safe-area-inset-bottom,0px))] right-[max(1rem,env(safe-area-inset-right,0px))] flex flex-col items-end"
+        aria-live="polite"
+      >
+        <button
+          type="button"
+          onClick={showAll}
+          className="pointer-events-auto rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]/95 px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shadow hover:bg-[var(--surface-muted)]"
+        >
+          Показать уведомления ({pendingCount})
+        </button>
+      </div>
+    );
   }
 
   const columns: Array<{
