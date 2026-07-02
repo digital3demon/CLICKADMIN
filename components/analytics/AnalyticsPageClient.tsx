@@ -17,6 +17,7 @@ import {
   defaultAnalyticsRange,
   toYmd,
 } from "@/lib/analytics/range";
+import { AnalyticsDeadlinesPanel } from "@/components/analytics/AnalyticsDeadlinesPanel";
 
 const TABS = [
   { id: "finance" as const, label: "Финансы" },
@@ -25,6 +26,7 @@ const TABS = [
   { id: "price" as const, label: "Позиции прайса" },
   { id: "contractors" as const, label: "Клиники и врачи" },
   { id: "warehouse" as const, label: "Склад" },
+  { id: "deadlines" as const, label: "Сроки" },
   { id: "reconciliation" as const, label: "Сверки" },
 ];
 
@@ -255,6 +257,7 @@ export function AnalyticsPageClient() {
   }, [q, reconQ]);
 
   useEffect(() => {
+    if (tab === "deadlines") return;
     if (loadedForQRef.current[tab] === activeQ) return;
     const ac = new AbortController();
     const tabNow = tab;
@@ -1445,6 +1448,10 @@ export function AnalyticsPageClient() {
             </table>
           </div>
         </div>
+      ) : null}
+
+      {tab === "deadlines" ? (
+        <AnalyticsDeadlinesPanel dateQuery={q} loading={loading} error={error} />
       ) : null}
     </div>
   );

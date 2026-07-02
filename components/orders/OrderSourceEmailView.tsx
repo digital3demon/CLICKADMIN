@@ -1,6 +1,7 @@
 "use client";
 
 import type { OrderSourceEmailRow } from "@/lib/mail/order-source-emails";
+import { LinkifiedPlainText } from "@/components/ui/LinkifiedPlainText";
 
 function formatSourceEmailDate(email: OrderSourceEmailRow): string {
   const raw = email.receivedAt || email.sentAt;
@@ -72,7 +73,7 @@ export function OrderSourceEmailView({
           compact ? "max-h-48" : "max-h-72"
         }`}
       >
-        {email.textBody}
+        <LinkifiedPlainText text={email.textBody ?? ""} />
       </p>
       {email.attachments.length > 0 ? (
         <div className="mt-3 space-y-1.5">

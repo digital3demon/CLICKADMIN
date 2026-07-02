@@ -26,6 +26,7 @@ import {
   prostheticsToJson,
 } from "@/lib/order-prosthetics";
 import { syncOrderProstheticsStockTx } from "@/lib/sync-order-prosthetics-stock";
+import { earliestEmailReceivedAt } from "@/lib/mail/order-source-work-received";
 import { auditLogger, logger } from "@/lib/server/logger";
 import { getActorForRevision } from "@/lib/actor-from-session";
 import { isOrderCorrectionTrack } from "@/lib/order-correction-track";
@@ -353,7 +354,26 @@ export async function createOrderFromBody(
 
   const dueDate = parseOptionalDateTime(body.dueDate);
   const serverNow = new Date();
-  const workReceivedAt = parseOptionalDateTime(body.workReceivedAt);
+  let workReceivedAt = parseOptionalDateTime(body.workReceivedAt);
+  const sourceEmailIdsForReceived = Array.isArray(body.sourceEmailIds)
+    ? Array.from(
+        new Set(
+          body.sourceEmailIds
+            .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+            .map((id) => id.trim()),
+        ),
+      ).slice(0, 20)
+    : [];
+  if (sourceEmailIdsForReceived.length > 0) {
+    const sourceEmails = await ordersPrisma.email.findMany({
+      where: { tenantId, id: { in: sourceEmailIdsForReceived } },
+      select: { receivedAt: true, sentAt: true, createdAt: true },
+    });
+    const fromMail = earliestEmailReceivedAt(sourceEmails);
+    if (fromMail) {
+      workReceivedAt = fromMail;
+    }
+  }
   if (workReceivedAt && workReceivedAt.getTime() > serverNow.getTime()) {
     return fail(400, "Дата поступления работы не может быть в будущем");
   }

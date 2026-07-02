@@ -72,6 +72,10 @@ import {
 } from "@/lib/quick-order-template-storage";
 import { printOrderNarjadPdf } from "@/lib/print-order-narjad";
 import { cleanMailTextBody, mailHtmlToText } from "@/lib/mail/mail-text-cleanup";
+import {
+  hasWorkReceivedFromSourceEmails,
+  workReceivedLocalFromSourceEmails,
+} from "@/lib/mail/order-source-work-received";
 import { toast } from "@/components/ui/toast-store";
 import { OrderProstheticsBlock } from "@/components/orders/OrderProstheticsBlock";
 import { PodrobnoSection } from "./PodrobnoSection";
@@ -234,7 +238,17 @@ export function NewOrderForm({
     useState<LabWorkStatus>(LAB_WORK_STATUS_DEFAULT);
   const [workDueLocal, setWorkDueLocal] = useState("");
   const [patientAppointmentLocal, setPatientAppointmentLocal] = useState("");
-  const [workReceivedLocal, setWorkReceivedLocal] = useState("");
+  const [workReceivedLocal, setWorkReceivedLocal] = useState(() => {
+    if (
+      initialSnapshot &&
+      "workReceivedLocal" in initialSnapshot &&
+      typeof initialSnapshot.workReceivedLocal === "string" &&
+      initialSnapshot.workReceivedLocal.trim()
+    ) {
+      return snapDatetimeLocalToDueGrid(initialSnapshot.workReceivedLocal);
+    }
+    return workReceivedLocalFromSourceEmails(sourceEmails);
+  });
   const [labWholeDay, setLabWholeDay] = useState(true);
   const [appointmentWholeDay, setAppointmentWholeDay] = useState(true);
   const [formOpenedAtIso] = useState(() => new Date().toISOString());
@@ -311,6 +325,15 @@ export function NewOrderForm({
   const prevClinicIdForLegalRef = useRef<string | null>(null);
   const canUseTestOrder = sessionRole === "OWNER";
 
+  const mailWorkReceivedLocal = useMemo(
+    () => workReceivedLocalFromSourceEmails(sourceEmails),
+    [sourceEmails],
+  );
+  const workReceivedLockedFromMail = useMemo(
+    () => hasWorkReceivedFromSourceEmails(sourceEmails),
+    [sourceEmails],
+  );
+
   useEffect(() => {
     if (sourceEmails.length === 0) {
       setReplyToSourceEmailId("");
@@ -322,6 +345,13 @@ export function NewOrderForm({
         : sourceEmails[0]!.id,
     );
   }, [sourceEmails]);
+
+  useEffect(() => {
+    if (!workReceivedLockedFromMail) return;
+    setWorkReceivedLocal((prev) =>
+      prev === mailWorkReceivedLocal ? prev : mailWorkReceivedLocal,
+    );
+  }, [workReceivedLockedFromMail, mailWorkReceivedLocal]);
 
   useEffect(() => {
     if (canUseTestOrder) return;
@@ -1095,11 +1125,15 @@ export function NewOrderForm({
             kaitenAdminDueHasTime: !labWholeDay,
             dueToAdminsHasTime: !appointmentWholeDay,
             waitForKaitenBeforePrint: printAfterSave,
-            workReceivedAt: workReceivedLocal.trim()
+            workReceivedAt: workReceivedLockedFromMail
               ? localDateTimeToIso(
-                  snapDatetimeLocalToDueGrid(workReceivedLocal),
+                  snapDatetimeLocalToDueGrid(mailWorkReceivedLocal),
                 )
-              : null,
+              : workReceivedLocal.trim()
+                ? localDateTimeToIso(
+                    snapDatetimeLocalToDueGrid(workReceivedLocal),
+                  )
+                : null,
             quickOrder,
             constructions: [
               ...detailLinesAndBridgesToConstructionsJson(
@@ -1797,12 +1831,19 @@ export function NewOrderForm({
                   label="Поступление"
                   labelPlacement="inside"
                   value={workReceivedLocal}
+                  disabled={workReceivedLockedFromMail}
+                  clearable={!workReceivedLockedFromMail}
                   onChange={(raw) => {
+                    if (workReceivedLockedFromMail) return;
                     setWorkReceivedLocal(
                       raw === "" ? "" : snapDatetimeLocalToDueGrid(raw),
                     );
                   }}
-                  title="Когда зашла работа; если не указать — считается момент занесения наряда"
+                  title={
+                    workReceivedLockedFromMail
+                      ? "Дата поступления из письма — изменить нельзя"
+                      : "Когда зашла работа; если не указать — считается момент занесения наряда"
+                  }
                   className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
                 />
                 <DueDatetimeComboPicker

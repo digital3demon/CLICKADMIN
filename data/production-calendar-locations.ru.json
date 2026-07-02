@@ -1,0 +1,82 @@
+[
+  {
+    "id": "ru-moscow",
+    "country": "RU",
+    "label": "Москва",
+    "searchAliases": ["москва", "moscow", "мск"],
+    "timezone": "Europe/Moscow",
+    "extraHolidaysMmDd": []
+  },
+  {
+    "id": "ru-moscow-oblast",
+    "country": "RU",
+    "label": "Московская область",
+    "searchAliases": ["московская", "подмосковье"],
+    "timezone": "Europe/Moscow",
+    "extraHolidaysMmDd": []
+  },
+  {
+    "id": "ru-spb",
+    "country": "RU",
+    "label": "Санкт-Петербург",
+    "searchAliases": ["спб", "питер", "санкт-петербург", "petersburg"],
+    "timezone": "Europe/Moscow",
+    "extraHolidaysMmDd": ["06-12"]
+  },
+  {
+    "id": "ru-leningrad-oblast",
+    "country": "RU",
+    "label": "Ленинградская область",
+    "searchAliases": ["ленинградская"],
+    "timezone": "Europe/Moscow",
+    "extraHolidaysMmDd": []
+  },
+  {
+    "id": "ru-kazan",
+    "country": "RU",
+    "label": "Казань (Татарстан)",
+    "searchAliases": ["казань", "татарстан"],
+    "timezone": "Europe/Moscow",
+    "extraHolidaysMmDd": []
+  },
+  {
+    "id": "ru-ekb",
+    "country": "RU",
+    "label": "Екатеринбург",
+    "searchAliases": ["екатеринбург", "свердловская"],
+    "timezone": "Asia/Yekaterinburg",
+    "extraHolidaysMmDd": []
+  },
+  {
+    "id": "ru-novosibirsk",
+    "country": "RU",
+    "label": "Новосибирск",
+    "searchAliases": ["новосибирск"],
+    "timezone": "Asia/Novosibirsk",
+    "extraHolidaysMmDd": []
+  },
+  {
+    "id": "ru-krasnodar",
+    "country": "RU",
+    "label": "Краснодар",
+    "searchAliases": ["краснодар", "краснодарский"],
+    "timezone": "Europe/Moscow",
+    "extraHolidaysMmDd": []
+  },
+  {
+    "id": "by-minsk",
+    "country": "BY",
+    "label": "Минск",
+    "searchAliases": ["минск", "беларусь"],
+    "timezone": "Europe/Minsk",
+    "extraHolidaysMmDd": []
+  },
+  {
+    "id": "kz-almaty",
+    "country": "KZ",
+    "label": "Алматы",
+    "searchAliases": ["алматы", "казахстан"],
+    "timezone": "Asia/Almaty",
+    "extraHolidaysMmDd": []
+  }
+]

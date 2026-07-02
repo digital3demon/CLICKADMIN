@@ -5,7 +5,7 @@ export type ProductionCalendarCountry =
 
 export const DEFAULT_PRODUCTION_CALENDAR_COUNTRY: ProductionCalendarCountry = "RU";
 
-const HOLIDAYS_MM_DD: Record<ProductionCalendarCountry, ReadonlySet<string>> = {
+export const HOLIDAYS_MM_DD: Record<ProductionCalendarCountry, ReadonlySet<string>> = {
   RU: new Set([
     "01-01",
     "01-02",
@@ -74,23 +74,55 @@ export function normalizeProductionCalendarCountry(
   return DEFAULT_PRODUCTION_CALENDAR_COUNTRY;
 }
 
-export function isWeekendYmd(ymd: string): boolean {
+export function weekdayYmdUtcNoon(ymd: string): number | null {
   const p = parseYmd(ymd);
-  if (!p) return false;
-  const wd = new Date(Date.UTC(p.y, p.m - 1, p.d, 12, 0, 0, 0)).getUTCDay();
+  if (!p) return null;
+  return new Date(Date.UTC(p.y, p.m - 1, p.d, 12, 0, 0, 0)).getUTCDay();
+}
+
+export function isWeekendYmd(ymd: string): boolean {
+  const wd = weekdayYmdUtcNoon(ymd);
   return wd === 0 || wd === 6;
 }
+
+export function isWeekendYmdWithDays(
+  ymd: string,
+  weekendDays: readonly number[],
+): boolean {
+  const wd = weekdayYmdUtcNoon(ymd);
+  if (wd == null) return false;
+  return weekendDays.includes(wd);
+}
+
+export type WorkingDayOptions = {
+  country?: string | null;
+  weekendDays?: readonly number[];
+  extraHolidaysMmDd?: readonly string[];
+};
 
 export function isWorkingDayYmd(
   ymd: string,
   countryInput?: string | null,
 ): boolean {
+  return isWorkingDayYmdWithOptions(ymd, { country: countryInput });
+}
+
+export function isWorkingDayYmdWithOptions(
+  ymd: string,
+  options?: WorkingDayOptions | null,
+): boolean {
   const p = parseYmd(ymd);
   if (!p) return false;
-  if (isWeekendYmd(ymd)) return false;
-  const country = normalizeProductionCalendarCountry(countryInput);
+  const weekendDays =
+    options?.weekendDays && options.weekendDays.length > 0
+      ? options.weekendDays
+      : [0, 6];
+  if (isWeekendYmdWithDays(ymd, weekendDays)) return false;
+  const country = normalizeProductionCalendarCountry(options?.country);
   const mmdd = `${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
-  return !HOLIDAYS_MM_DD[country].has(mmdd);
+  if (HOLIDAYS_MM_DD[country].has(mmdd)) return false;
+  if (options?.extraHolidaysMmDd?.includes(mmdd)) return false;
+  return true;
 }
 
 function addCalendarDaysYmd(ymd: string, days: number): string {
@@ -111,13 +143,23 @@ export function addWorkingDaysAfterYmd(
   days: number,
   countryInput?: string | null,
 ): string {
+  return addWorkingDaysAfterYmdWithOptions(startYmd, days, {
+    country: countryInput,
+  });
+}
+
+export function addWorkingDaysAfterYmdWithOptions(
+  startYmd: string,
+  days: number,
+  options?: WorkingDayOptions | null,
+): string {
   const n = Math.max(0, Math.trunc(Number(days) || 0));
   if (n === 0) return startYmd;
   let cur = startYmd;
   let left = n;
   for (let i = 0; i < 4000; i++) {
     cur = addCalendarDaysYmd(cur, 1);
-    if (isWorkingDayYmd(cur, countryInput)) {
+    if (isWorkingDayYmdWithOptions(cur, options)) {
       left -= 1;
       if (left <= 0) return cur;
     }
