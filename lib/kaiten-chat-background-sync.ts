@@ -1,19 +1,25 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { KaitenAuth } from "@/lib/kaiten-rest";
+import { syncKaitenChatCommentsForOrderIds } from "@/lib/order-chat-correction-kaiten-sync";
+import {
+  kaitenChatLowPriorityColumnTitles,
+  kaitenChatPriorityColumnTitles,
+  shouldIncludeLowPriorityChatSyncCycle,
+} from "@/lib/kaiten-chat-priority";
 import { syncAllUnpushedAttachmentsInBackground } from "@/lib/kaiten-sync";
-import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-column-titles";
-import { logger } from "@/lib/server/logger";
+import { cronLogger, kaitenLogger } from "@/lib/server/logger";
 
-const CURSOR_KEY = "kaitenChatBackgroundCursorV1";
-const DEFAULT_LIMIT = 40;
+const CURSOR_KEY = "kaitenChatBackgroundCursorV2";
+const DEFAULT_LIMIT = 60;
 const MAX_LIMIT = 120;
-const DEFAULT_PER_TENANT_LIMIT = 40;
-const SYNC_HELPER_CHUNK_SIZE = 10;
+const DEFAULT_PER_TENANT_LIMIT = 60;
+
 const memoryCursorByTenant = new Map<string, CursorState>();
 
 type CursorState = {
   lastOrderId?: string;
   checkedAt?: string;
+  cycle?: number;
 };
 
 type CursorReadResult = {
@@ -34,6 +40,7 @@ export type KaitenChatBackgroundSyncResult = {
   attachmentsPushed: number;
   attachmentsFailed: number;
   elapsedMs: number;
+  rateLimited: boolean;
 };
 
 function normalizeLimit(value: number | string | null | undefined): number {
@@ -44,12 +51,13 @@ function normalizeLimit(value: number | string | null | undefined): number {
 
 function parseCursor(value: Prisma.JsonValue | null | undefined): CursorState {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    return {};
+    return { cycle: 0 };
   }
   const obj = value as Record<string, unknown>;
   return {
     lastOrderId: typeof obj.lastOrderId === "string" ? obj.lastOrderId : undefined,
     checkedAt: typeof obj.checkedAt === "string" ? obj.checkedAt : undefined,
+    cycle: typeof obj.cycle === "number" && Number.isFinite(obj.cycle) ? obj.cycle : 0,
   };
 }
 
@@ -76,11 +84,11 @@ async function readTenantCursor(
     return { cursor: parseCursor(row?.value), persistent: true };
   } catch (err) {
     if (!isTenantClientStateMissing(err)) throw err;
-    logger.warn(
-      { tenantId },
-      "TenantClientState is unavailable; using in-memory Kaiten chat sync cursor",
+    cronLogger.warn(
+      { tenantId, channel: "cron" },
+      "TenantClientState unavailable; in-memory Kaiten chat cursor",
     );
-    return { cursor: memoryCursorByTenant.get(tenantId) ?? {}, persistent: false };
+    return { cursor: memoryCursorByTenant.get(tenantId) ?? { cycle: 0 }, persistent: false };
   }
 }
 
@@ -88,32 +96,24 @@ async function writeTenantCursor(
   db: PrismaClient,
   tenantId: string,
   lastOrderId: string,
+  cycle: number,
   persistent: boolean,
 ): Promise<void> {
-  const value = { lastOrderId, checkedAt: new Date().toISOString() };
+  const value = { lastOrderId, checkedAt: new Date().toISOString(), cycle };
   if (!persistent) {
     memoryCursorByTenant.set(tenantId, value);
     return;
   }
   await db.tenantClientState.upsert({
     where: { tenantId_key: { tenantId, key: CURSOR_KEY } },
-    create: {
-      tenantId,
-      key: CURSOR_KEY,
-      value,
-    },
-    update: {
-      value,
-    },
+    create: { tenantId, key: CURSOR_KEY, value },
+    update: { value },
   });
 }
 
 async function listTenantIdsWithKaitenOrders(db: PrismaClient): Promise<string[]> {
   const rows = await db.order.findMany({
-    where: {
-      archivedAt: null,
-      kaitenCardId: { not: null },
-    },
+    where: { archivedAt: null, kaitenCardId: { not: null } },
     distinct: ["tenantId"],
     orderBy: { tenantId: "asc" },
     select: { tenantId: true },
@@ -125,22 +125,74 @@ async function selectTenantOrderBatch(
   db: PrismaClient,
   tenantId: string,
   take: number,
-): Promise<{ rows: Array<{ id: string }>; persistentCursor: boolean }> {
+  cycle: number,
+): Promise<{ rows: Array<{ id: string }>; persistentCursor: boolean; nextCycle: number }> {
   const { cursor, persistent } = await readTenantCursor(db, tenantId);
+  const nextCycle = (cursor.cycle ?? 0) + 1;
   const baseWhere = {
     tenantId,
     archivedAt: null,
     kaitenCardId: { not: null },
   } satisfies Prisma.OrderWhereInput;
-  const staleFirst = await db.order.findMany({
-    where: baseWhere,
-    orderBy: [{ kaitenSyncedAt: "asc" }, { id: "asc" }],
-    take,
-    select: { id: true },
-  });
-  if (staleFirst.length > 0) {
-    return { rows: staleFirst, persistentCursor: persistent };
+
+  const includeLowPriority = shouldIncludeLowPriorityChatSyncCycle(cycle);
+  const lowPriority = kaitenChatLowPriorityColumnTitles();
+  const priority = kaitenChatPriorityColumnTitles();
+
+  const columnWhere: Prisma.OrderWhereInput = includeLowPriority
+    ? {}
+    : {
+        OR: [
+          { kaitenColumnTitle: { in: priority } },
+          { kaitenColumnTitle: null },
+          { kaitenColumnTitle: { notIn: lowPriority } },
+        ],
+      };
+
+  const picked: Array<{ id: string }> = [];
+  const pickedIds = new Set<string>();
+
+  const pushUnique = (rows: Array<{ id: string }>) => {
+    for (const r of rows) {
+      if (pickedIds.has(r.id)) continue;
+      picked.push(r);
+      pickedIds.add(r.id);
+      if (picked.length >= take) break;
+    }
+  };
+
+  if (priority.length > 0 && picked.length < take) {
+    const priorityRows = await db.order.findMany({
+      where: {
+        ...baseWhere,
+        ...columnWhere,
+        kaitenColumnTitle: { in: priority },
+      },
+      orderBy: [{ kaitenChatSyncedAt: "asc" }, { id: "asc" }],
+      take,
+      select: { id: true },
+    });
+    pushUnique(priorityRows);
   }
+
+  if (picked.length < take) {
+    const staleRows = await db.order.findMany({
+      where: {
+        ...baseWhere,
+        ...columnWhere,
+        ...(pickedIds.size > 0 ? { id: { notIn: [...pickedIds] } } : {}),
+      },
+      orderBy: [{ kaitenChatSyncedAt: "asc" }, { id: "asc" }],
+      take: take - picked.length,
+      select: { id: true },
+    });
+    pushUnique(staleRows);
+  }
+
+  if (picked.length > 0) {
+    return { rows: picked, persistentCursor: persistent, nextCycle };
+  }
+
   const afterCursor = cursor.lastOrderId
     ? await db.order.findMany({
         where: { ...baseWhere, id: { gt: cursor.lastOrderId } },
@@ -151,7 +203,7 @@ async function selectTenantOrderBatch(
     : [];
   if (afterCursor.length >= take || !cursor.lastOrderId) {
     if (afterCursor.length > 0) {
-      return { rows: afterCursor, persistentCursor: persistent };
+      return { rows: afterCursor, persistentCursor: persistent, nextCycle };
     }
     const rows = await db.order.findMany({
       where: baseWhere,
@@ -159,7 +211,7 @@ async function selectTenantOrderBatch(
       take,
       select: { id: true },
     });
-    return { rows, persistentCursor: persistent };
+    return { rows, persistentCursor: persistent, nextCycle };
   }
   const wrapped = await db.order.findMany({
     where: baseWhere,
@@ -174,6 +226,7 @@ async function selectTenantOrderBatch(
       ...wrapped.filter((r) => r.id !== cursor.lastOrderId && !seen.has(r.id)),
     ],
     persistentCursor: persistent,
+    nextCycle,
   };
 }
 
@@ -186,6 +239,12 @@ export async function syncKaitenChatsInBackground(
   const limit = normalizeLimit(opts?.limit);
   const perTenantLimit = normalizeLimit(opts?.perTenantLimit ?? DEFAULT_PER_TENANT_LIMIT);
   const tenants = await listTenantIdsWithKaitenOrders(db);
+
+  cronLogger.info(
+    { msg: "kaiten_chat_background_tick_start", limit, tenantCount: tenants.length },
+    "kaiten chat background tick start",
+  );
+
   const corrBefore = await db.orderChatCorrection.count({
     where: { resolvedAt: null, rejectedAt: null },
   });
@@ -196,43 +255,40 @@ export async function syncKaitenChatsInBackground(
   let checked = 0;
   let syncedCount = 0;
   let errorCount = 0;
-  let kaitenLabMentionDbChanged = false;
-  let columnSyncRateLimited = false;
+  let rateLimited = false;
 
   for (const tenantId of tenants) {
-    if (checked >= limit || columnSyncRateLimited) break;
+    if (checked >= limit || rateLimited) break;
     const take = Math.min(perTenantLimit, limit - checked);
-    const { rows: batch, persistentCursor } = await selectTenantOrderBatch(
+    const { cursor } = await readTenantCursor(db, tenantId);
+    const cycle = cursor.cycle ?? 0;
+    const { rows: batch, persistentCursor, nextCycle } = await selectTenantOrderBatch(
       db,
       tenantId,
       take,
+      cycle,
     );
     const orderIds = batch.map((r) => r.id);
     if (orderIds.length === 0) continue;
     try {
-      for (let i = 0; i < orderIds.length; i += SYNC_HELPER_CHUNK_SIZE) {
-        const chunk = orderIds.slice(i, i + SYNC_HELPER_CHUNK_SIZE);
-        const res = await syncKaitenColumnTitlesForOrderIds(db, auth, chunk, {
-          includeComments: true,
-        });
-        syncedCount += res.syncedCount;
-        errorCount += res.errorCount;
-        if (res.kaitenLabMentionDbChanged) kaitenLabMentionDbChanged = true;
-        if (res.rateLimited) {
-          columnSyncRateLimited = true;
-          break;
-        }
+      const res = await syncKaitenChatCommentsForOrderIds(db, auth, orderIds, {
+        source: "cron",
+      });
+      syncedCount += res.syncedCount;
+      errorCount += res.errorCount;
+      checked += res.checkedCount;
+      if (res.rateLimited) {
+        rateLimited = true;
+        break;
       }
-      if (columnSyncRateLimited) break;
-      checked += orderIds.length;
     } catch (err) {
       checked += orderIds.length;
       errorCount += orderIds.length;
-      logger.warn({ err, tenantId, orderIds }, "background Kaiten chat sync batch failed");
+      kaitenLogger.warn({ err, tenantId, orderIds }, "background Kaiten chat sync batch failed");
     } finally {
       const lastOrderId = orderIds.at(-1);
       if (lastOrderId) {
-        await writeTenantCursor(db, tenantId, lastOrderId, persistentCursor);
+        await writeTenantCursor(db, tenantId, lastOrderId, nextCycle, persistentCursor);
       }
     }
   }
@@ -247,15 +303,15 @@ export async function syncKaitenChatsInBackground(
   let attachmentsAttempted = 0;
   let attachmentsPushed = 0;
   let attachmentsFailed = 0;
-  if (!columnSyncRateLimited) {
+  if (!rateLimited) {
     try {
       const att = await syncAllUnpushedAttachmentsInBackground(db);
       attachmentsAttempted = att.attempted;
       attachmentsPushed = att.pushed;
       attachmentsFailed = att.failed;
-      if (att.rateLimited) columnSyncRateLimited = true;
+      if (att.rateLimited) rateLimited = true;
     } catch (err) {
-      logger.warn({ err }, "background Kaiten attachment sync failed");
+      kaitenLogger.warn({ err }, "background Kaiten attachment sync failed");
     }
   }
 
@@ -267,12 +323,17 @@ export async function syncKaitenChatsInBackground(
     errorCount,
     newCorrectionsImported: Math.max(0, corrAfter - corrBefore),
     newProstheticsImported: Math.max(0, prosthAfter - prosthBefore),
-    kaitenLabMentionDbChanged,
+    kaitenLabMentionDbChanged: false,
     attachmentsAttempted,
     attachmentsPushed,
     attachmentsFailed,
     elapsedMs: Date.now() - startedAt,
+    rateLimited,
   };
-  logger.info(result, "background Kaiten chat sync completed");
+
+  cronLogger.info(
+    { msg: "kaiten_chat_background_tick_done", ...result },
+    "kaiten chat background tick done",
+  );
   return result;
 }

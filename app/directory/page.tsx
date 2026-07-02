@@ -78,6 +78,18 @@ export default async function DirectoryHubPage() {
         ) : null}
         {session?.role === "OWNER" ? (
           <Link
+            href="/directory/logs"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">Логи</h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Выгрузка серверных логов за период в .txt — Kaiten, cron, почта и
+              ошибки API.
+            </p>
+          </Link>
+        ) : null}
+        {session?.role === "OWNER" ? (
+          <Link
             href="/directory/payroll"
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
           >

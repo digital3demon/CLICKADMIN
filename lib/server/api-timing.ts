@@ -1,5 +1,5 @@
 import type { NextResponse } from "next/server";
-import { logger } from "@/lib/server/logger";
+import { apiLogger } from "@/lib/server/logger";
 
 type Opts = {
   method: string;
@@ -17,7 +17,7 @@ export function withApiTiming<T extends NextResponse | Response>(
   const t0 = Date.now();
   return run().then(
     (res) => {
-      logger.info({
+      apiLogger.info({
         msg: "api_request",
         method: opts.method,
         path: opts.path,
@@ -27,7 +27,7 @@ export function withApiTiming<T extends NextResponse | Response>(
       return res;
     },
     (err: unknown) => {
-      logger.error(
+      apiLogger.error(
         {
           msg: "api_request_error",
           method: opts.method,

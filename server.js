@@ -21,6 +21,43 @@ if (!process.env.INTERNAL_KAITEN_CHAT_SYNC_SECRET) {
   process.env.INTERNAL_KAITEN_CHAT_SYNC_SECRET = crypto.randomBytes(32).toString("hex");
 }
 
+function pruneOldCrmLogFiles() {
+  if (
+    (process.env.LOG_FILE_ENABLED ?? "true").trim().toLowerCase() === "false" ||
+    (process.env.LOG_FILE_ENABLED ?? "true").trim().toLowerCase() === "0"
+  ) {
+    return;
+  }
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const rawDir = (process.env.LOG_DIR || "data/logs").trim();
+  const dir = path.isAbsolute(rawDir)
+    ? rawDir
+    : path.join(process.cwd(), rawDir);
+  if (!fs.existsSync(dir)) return;
+  const retentionRaw = Number(process.env.LOG_RETENTION_DAYS || 30);
+  const retentionDays =
+    Number.isFinite(retentionRaw) && retentionRaw >= 1
+      ? Math.min(retentionRaw, 365)
+      : 30;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - retentionDays);
+  const pad = (n) => String(n).padStart(2, "0");
+  const cutoffKey = `${cutoff.getFullYear()}-${pad(cutoff.getMonth() + 1)}-${pad(cutoff.getDate())}`;
+  const re = /^crm-(\d{4}-\d{2}-\d{2})\.log$/;
+  for (const name of fs.readdirSync(dir)) {
+    const m = re.exec(name);
+    if (!m?.[1] || m[1] >= cutoffKey) continue;
+    try {
+      fs.unlinkSync(path.join(dir, name));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+pruneOldCrmLogFiles();
+
 function startMailBackgroundSync() {
   if ((process.env.MAIL_BACKGROUND_SYNC ?? "true").trim().toLowerCase() === "false") {
     return;
@@ -85,7 +122,7 @@ function startKaitenChatBackgroundSync() {
   );
   const limit = Math.max(
     1,
-    Math.min(60, Number(process.env.KAITEN_CHAT_BACKGROUND_SYNC_LIMIT || 20)),
+    Math.min(120, Number(process.env.KAITEN_CHAT_BACKGROUND_SYNC_LIMIT || 60)),
   );
   const port = process.env.PORT || "3000";
   const url = `http://127.0.0.1:${port}/api/cron/kaiten-chat-sync?limit=${limit}`;

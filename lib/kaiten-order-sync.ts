@@ -17,6 +17,7 @@ import {
   type ContinuationOrderRef,
 } from "@/lib/order-continuation-display";
 import type { PrismaClient } from "@prisma/client";
+import { kaitenLogger } from "@/lib/server/logger";
 
 async function resolveContinuationParentForOrder(
   prisma: PrismaClient,
@@ -197,7 +198,7 @@ export async function syncNewOrderToKaiten(
       }),
     ]);
     if (!kaitenCardType) {
-      console.error("[kaiten] kaitenCardType missing for order", orderId);
+      kaitenLogger.error({ orderId, msg: "kaiten_card_type_missing" }, "kaiten card type missing");
       return {
         ok: false,
         error: "Тип карточки Kaiten не найден в справочнике",
@@ -208,13 +209,17 @@ export async function syncNewOrderToKaiten(
     const typeId = kaitenCardType.externalTypeId;
     const boardTarget = cfg.boardByLane[order.kaitenTrackLane];
     if (typeId == null || boardTarget == null || boardTarget.boardId == null) {
-      console.error("[kaiten] missing typeId or boardTarget for lane", {
-        typeId,
-        lane: order.kaitenTrackLane,
-        boardId: boardTarget?.boardId,
-        spaceId: boardTarget?.spaceId,
-        configuredLanes: Object.keys(cfg.boardByLane),
-      });
+      kaitenLogger.error(
+        {
+          msg: "kaiten_lane_config_missing",
+          typeId,
+          lane: order.kaitenTrackLane,
+          boardId: boardTarget?.boardId,
+          spaceId: boardTarget?.spaceId,
+          configuredLanes: Object.keys(cfg.boardByLane),
+        },
+        "kaiten missing typeId or boardTarget for lane",
+      );
       return {
         ok: false,
         error:
@@ -297,7 +302,7 @@ export async function syncNewOrderToKaiten(
           },
         });
       } catch (dbErr) {
-        console.error("[kaiten] could not save sync error to order", dbErr);
+        kaitenLogger.error({ err: dbErr, orderId }, "could not save kaiten sync error to order");
       }
       return {
         ok: false,
@@ -341,7 +346,7 @@ export async function syncNewOrderToKaiten(
         },
       });
     } catch (dbErr) {
-      console.error("[kaiten] could not save card id to order", dbErr);
+      kaitenLogger.error({ err: dbErr, orderId }, "could not save kaiten card id to order");
       return {
         ok: false,
         error: "Не удалось сохранить id карточки в базе",
@@ -359,7 +364,7 @@ export async function syncNewOrderToKaiten(
     }
     return { ok: true, kaitenCardId: cardId };
   } catch (e) {
-    console.error("[kaiten] syncNewOrderToKaiten", e);
+    kaitenLogger.error({ err: e, orderId }, "syncNewOrderToKaiten failed");
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Ошибка синхронизации с Kaiten",

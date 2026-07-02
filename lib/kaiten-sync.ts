@@ -14,6 +14,7 @@ import {
   kaitenGetCard,
   shouldRetryKaitenStatus,
 } from "@/lib/kaiten-rest";
+import { kaitenLogger } from "@/lib/server/logger";
 
 export class KaitenRateLimitError extends Error {
   constructor(message = "Kaiten rate limit (429)") {
@@ -363,18 +364,15 @@ export async function syncAllUnpushedAttachmentsInBackground(
       failed += 1;
       if (e instanceof KaitenRateLimitError) {
         rateLimited = true;
-        console.warn(
-          "[kaiten-sync] syncAllUnpushedAttachmentsInBackground rate limited",
-          r.orderId,
-          r.id,
+        kaitenLogger.warn(
+          { msg: "kaiten_attachment_bg_rate_limited", orderId: r.orderId, attachmentId: r.id },
+          "background attachment sync rate limited",
         );
         break;
       }
-      console.error(
-        "[kaiten-sync] syncAllUnpushedAttachmentsInBackground",
-        r.orderId,
-        r.id,
-        e,
+      kaitenLogger.error(
+        { err: e, orderId: r.orderId, attachmentId: r.id, msg: "kaiten_attachment_bg_failed" },
+        "background attachment sync failed",
       );
     }
   }
@@ -407,17 +405,15 @@ export async function syncUnpushedOrderAttachmentsToKaiten(
       await pushAttachmentToKaiten(orderId, r.id, prisma);
     } catch (e) {
       if (e instanceof KaitenRateLimitError) {
-        console.warn(
-          "[kaiten-sync] syncUnpushedOrderAttachmentsToKaiten rate limited",
-          orderId,
+        kaitenLogger.warn(
+          { msg: "kaiten_attachment_order_rate_limited", orderId },
+          "order attachment sync rate limited",
         );
         break;
       }
-      console.error(
-        "[kaiten-sync] syncUnpushedOrderAttachmentsToKaiten",
-        orderId,
-        r.id,
-        e,
+      kaitenLogger.error(
+        { err: e, orderId, attachmentId: r.id, msg: "kaiten_attachment_order_failed" },
+        "order attachment sync failed",
       );
     }
   }

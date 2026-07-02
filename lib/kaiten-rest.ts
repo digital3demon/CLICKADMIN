@@ -3,6 +3,7 @@ import {
   KAITEN_MIN_GAP_MS,
   kaitenSafeRequestSpacingMs,
 } from "@/lib/kaiten-rate-limit";
+import { isKaitenFetchDebugEnabled, kaitenLogger } from "@/lib/server/logger";
 import type { KaitenTrackLane } from "@prisma/client";
 
 export type KaitenAuth = { apiBase: string; token: string };
@@ -143,16 +144,19 @@ async function kaitenFetch(
   opts?: KaitenHttpOpts,
 ): Promise<{ ok: boolean; status: number; json: unknown; text: string }> {
   const urgent = opts?.burst === true;
+  const fetchStartedAt = Date.now();
   return scheduleKaiten(async () => {
     const max = 5;
     let last: { ok: boolean; status: number; json: unknown; text: string } | null =
       null;
+    let attempts = 0;
     for (let attempt = 0; attempt < max; attempt++) {
+      attempts = attempt + 1;
       if (attempt > 0) await awaitKaitenGap(urgent);
       const r = await kaitenFetchOnce(auth, path, init);
       last = { ok: r.ok, status: r.status, json: r.json, text: r.text };
-      if (!shouldRetryKaitenStatus(r.status)) return last;
-      if (attempt === max - 1) return last;
+      if (!shouldRetryKaitenStatus(r.status)) break;
+      if (attempt === max - 1) break;
       const wait =
         r.retryAfterMs ??
         Math.min(
@@ -160,6 +164,21 @@ async function kaitenFetch(
           Math.max(500, Math.round(700 * (attempt + 1) ** 2 + (r.status === 502 ? 400 : 0))),
         );
       await sleep(wait);
+    }
+    if (isKaitenFetchDebugEnabled() && last) {
+      kaitenLogger.debug(
+        {
+          msg: "kaiten_fetch_done",
+          path,
+          urgent,
+          status: last.status,
+          ok: last.ok,
+          attempts,
+          elapsedMs: Date.now() - fetchStartedAt,
+          queueDepth: kaitenQueue.length,
+        },
+        "kaiten fetch done",
+      );
     }
     return last!;
   }, urgent);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getKaitenRestAuth } from "@/lib/kaiten-rest";
 import { syncKaitenChatsInBackground } from "@/lib/kaiten-chat-background-sync";
-import { logger } from "@/lib/server/logger";
+import { cronLogger } from "@/lib/server/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +41,7 @@ export async function GET(req: Request) {
     });
     return NextResponse.json(result);
   } catch (err) {
-    logger.error({ err }, "background Kaiten chat sync failed");
+    cronLogger.error({ err }, "background Kaiten chat sync failed");
     return NextResponse.json(
       { ok: false, error: "Синхронизация чатов Kaiten не удалась" },
       { status: 500 },

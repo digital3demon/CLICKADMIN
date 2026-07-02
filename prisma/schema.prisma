@@ -1252,6 +1252,8 @@ model Order {
   demoKanbanColumn               DemoKanbanColumn?
   kaitenSyncError                String?
   kaitenSyncedAt                 DateTime?
+  /// Последний импорт комментариев Kaiten («!!!», «???», @lab) — отдельно от синка колонки
+  kaitenChatSyncedAt             DateTime?
   /// Подпись колонки доски Kaiten (обновляется при открытии вкладки «Кайтен» / после синхронизации)
   kaitenColumnTitle              String?
   /// Порядок карточки в колонке Kaiten (`sort_order` в API); для зеркала канбана по вертикали

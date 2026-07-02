@@ -48,6 +48,7 @@ export async function GET(
         prisma,
         order.id,
         order.kaitenCardId,
+        { source: "live" },
       );
       liveRateLimited = live.rateLimited;
     } catch (e) {

@@ -534,7 +534,11 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  if (pathname.startsWith("/directory/access")) {
+  if (
+    pathname.startsWith("/directory/access") ||
+    pathname.startsWith("/directory/logs") ||
+    pathname.startsWith("/api/directory/logs")
+  ) {
     if (role !== "OWNER") {
       if (pathname.startsWith("/api/")) {
         const out = NextResponse.json(

@@ -22,6 +22,7 @@ import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-m
 import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
 import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
+import { kaitenLogger } from "@/lib/server/logger";
 
 const MAX_IDS = 10;
 /** Параллельные карточки — очередь в kaitenFetch + малый параллелизм снижает 429. */
@@ -183,8 +184,15 @@ export async function syncKaitenColumnTitlesForOrderIds(
               parentId: c.parentId,
             })),
           });
+          await db.order.update({
+            where: { id: row.id },
+            data: { kaitenChatSyncedAt: new Date() },
+          });
         } catch (e) {
-          console.error("[kaiten-titles-sync] chat corrections", row.id, e);
+          kaitenLogger.error(
+            { err: e, orderId: row.id, msg: "kaiten_titles_sync_chat" },
+            "kaiten titles sync chat corrections failed",
+          );
         }
       } else if (includeComments && commRes && !commRes.ok) {
         clicklabByOrderId[row.id] = false;
