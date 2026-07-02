@@ -30,6 +30,8 @@ type AdminReport = {
 type WorkReport = {
   allTimeAverageMinutes: number;
   periodAverageMinutes: number;
+  completedAllTime: number;
+  completedInPeriod: number;
   withNormative: {
     early: number;
     onTime: number;
@@ -281,6 +283,19 @@ export function AnalyticsDeadlinesPanel({
 
       {subTab === "work" && work ? (
         <>
+          {work.completedAllTime === 0 ? (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+              Нет нарядов в колонке «Сдана админам» (ни в истории, ни сейчас на
+              доске). Учитываются только завершённые работы; тестовые, отменённые
+              и коррекции исключены.
+            </p>
+          ) : work.completedInPeriod === 0 ? (
+            <p className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-[var(--text-secondary)]">
+              За выбранный период оформления нет сданных админам нарядов (всего
+              сдано: {work.completedAllTime}). Расширьте даты «с / по» вверху
+              страницы.
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               label="Средний факт (всё время)"

@@ -38,6 +38,8 @@ export type WorkDeadlinesReport = {
   schedule: DeadlinesScheduleConfig;
   allTimeAverageMinutes: number;
   periodAverageMinutes: number;
+  completedAllTime: number;
+  completedInPeriod: number;
   withNormative: DeadlineBucketCounts & {
     bucketPercents: { early: number; onTime: number; late: number };
     periodAverageMinutes: number;
@@ -162,6 +164,8 @@ async function loadWorkOrdersWithRevisions(): Promise<
       createdAt: true,
       labWorkStatus: true,
       updatedAt: true,
+      kaitenColumnTitle: true,
+      kaitenSyncedAt: true,
       constructions: {
         where: { category: PRICE_LIST },
         select: {
@@ -185,7 +189,9 @@ async function loadWorkOrdersWithRevisions(): Promise<
     constructions: o.constructions,
     handedAt: findFirstHandedToAdminsAt(o.revisions, {
       labWorkStatus: o.labWorkStatus,
+      kaitenColumnTitle: o.kaitenColumnTitle,
       updatedAt: o.updatedAt,
+      kaitenSyncedAt: o.kaitenSyncedAt,
     }),
   }));
 }
@@ -263,6 +269,8 @@ export async function loadWorkDeadlinesReport(
   return {
     period: { from: ymd(from), to: ymd(to) },
     schedule,
+    completedAllTime: completed.length,
+    completedInPeriod: periodCompleted.length,
     allTimeAverageMinutes: averageMinutes(allDurations),
     periodAverageMinutes: averageMinutes(
       periodCompleted.map((o) => workActualMinutes(o, schedule)),
