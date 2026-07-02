@@ -6,7 +6,10 @@ import { telegramSendMessage } from "@/lib/telegram-send-message";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { DEFAULT_TENANT_SLUG } from "@/lib/tenant-constants";
 import {
+  resolveTelegramBotListCommand,
   telegramMenuLabelToCommand,
+} from "@/lib/telegram-bot-menu-commands";
+import {
   telegramReplyKeyboardMarkupForRole,
   tryTelegramBotListCommand,
 } from "@/lib/telegram-bot-lists";
@@ -89,7 +92,19 @@ async function reply(
     replyMarkup?: Record<string, unknown>;
   },
 ): Promise<void> {
-  const r = await telegramSendMessage(botToken, chatId, text, opts);
+  let r = await telegramSendMessage(botToken, chatId, text, opts);
+  if (!r.ok && opts?.parseMode === "HTML") {
+    const err = r.error.toLowerCase();
+    if (err.includes("parse") || err.includes("entity") || err.includes("html")) {
+      const plain = text
+        .replace(/<a href="[^"]*">([^<]*)<\/a>/gi, "$1")
+        .replace(/<\/?b>/gi, "")
+        .replace(/<[^>]+>/g, "");
+      r = await telegramSendMessage(botToken, chatId, plain, {
+        replyMarkup: opts.replyMarkup,
+      });
+    }
+  }
   if (!r.ok) {
     console.error("[telegram-bot] sendMessage failed", { chatId, error: r.error });
   }
@@ -181,13 +196,10 @@ export async function processTelegramBotUpdate(
   const menuAsCmd = telegramMenuLabelToCommand(textRaw);
   const text = menuAsCmd ?? normalizeBotCommandText(textRaw);
   const cmd = firstCommandToken(text);
+  const listCmd = resolveTelegramBotListCommand(textRaw);
 
-  /* В группах ответы отключены: там работает отдельный обработчик (chat id / @clicklab_admin). */
-  if (!isPrivateChat) {
-    return;
-  }
-
-  if (cmd === "/start") {
+  if (isPrivateChat) {
+    if (cmd === "/start") {
     const payload = startPayload(text);
     const shared = verifyAdminSharedMessengerBotStartToken(payload);
     if (payload.startsWith("sa_") && !shared.ok) {
@@ -299,12 +311,13 @@ export async function processTelegramBotUpdate(
     return;
   }
 
-  if (cmd === "/cancel") {
-    await prisma.telegramBotLinkPending.deleteMany({
-      where: { telegramUserId: tgUserId },
-    });
-    await replyRemoveKeyboard(botToken, chatId, "Ок, привязка отменена. Снова: /start");
-    return;
+    if (cmd === "/cancel") {
+      await prisma.telegramBotLinkPending.deleteMany({
+        where: { telegramUserId: tgUserId },
+      });
+      await replyRemoveKeyboard(botToken, chatId, "Ок, привязка отменена. Снова: /start");
+      return;
+    }
   }
 
   const linkedUser = await findCrmUserByTelegramIdForBot(tgUserId);
@@ -319,40 +332,65 @@ export async function processTelegramBotUpdate(
       ? UserRole.MANAGER
       : null;
 
-  if (effectiveTenantId && effectiveRole) {
-    const listReply = await tryTelegramBotListCommand({
-      command: cmd,
-      tenantId: effectiveTenantId,
-      role: effectiveRole,
-    });
-    if (listReply) {
-      if (isPrivateChat) {
-        await replyWithRoleKeyboard(botToken, chatId, listReply.text, effectiveRole, true, {
-          parseMode: listReply.parseMode,
-        });
-      } else {
-        await reply(botToken, chatId, listReply.text, {
-          parseMode: listReply.parseMode,
-        });
-      }
+  if (listCmd) {
+    if (!effectiveTenantId || !effectiveRole) {
+      await reply(
+        botToken,
+        chatId,
+        isPrivateChat
+          ? "Сначала привяжите Telegram к CRM: /start и email из профиля."
+          : "Команды отгрузок и сроков — в личном чате с ботом после привязки (/start).",
+      );
       return;
     }
-    if (text.trim().startsWith("/")) {
-      if (isPrivateChat) {
-        await replyWithRoleKeyboard(
-          botToken,
-          chatId,
-          "Неизвестная команда. Отгрузки: /shiptd /shiptm /shipw. Сроки канбана: /dlinetd /dlinetm /dlinew. Или кнопки ниже.",
-          effectiveRole,
-          true,
-        );
-      } else {
-        await reply(
-          botToken,
-          chatId,
-          "Неизвестная команда. В группе кнопки отключены; используйте личный чат с ботом.",
-        );
+    try {
+      const listReply = await tryTelegramBotListCommand({
+        command: listCmd,
+        tenantId: effectiveTenantId,
+        role: effectiveRole,
+      });
+      if (listReply) {
+        if (isPrivateChat) {
+          await replyWithRoleKeyboard(
+            botToken,
+            chatId,
+            listReply.text,
+            effectiveRole,
+            true,
+            { parseMode: listReply.parseMode },
+          );
+        } else {
+          await reply(botToken, chatId, listReply.text, {
+            parseMode: listReply.parseMode,
+          });
+        }
+        return;
       }
+    } catch (e) {
+      console.error("[telegram-bot] list command failed", e);
+      await reply(
+        botToken,
+        chatId,
+        "Не удалось загрузить список. Попробуйте позже или обратитесь к администратору.",
+      );
+      return;
+    }
+  }
+
+  /* Остальное — только личный чат (привязка, подсказки). */
+  if (!isPrivateChat) {
+    return;
+  }
+
+  if (effectiveTenantId && effectiveRole) {
+    if (text.trim().startsWith("/")) {
+      await replyWithRoleKeyboard(
+        botToken,
+        chatId,
+        "Неизвестная команда. Отгрузки: /shiptd /shiptm /shipw. Сроки канбана: /dlinetd /dlinetm /dlinew. Или кнопки ниже.",
+        effectiveRole,
+        true,
+      );
       return;
     }
   }
@@ -362,21 +400,13 @@ export async function processTelegramBotUpdate(
   });
   if (!pending) {
     if (effectiveTenantId && effectiveRole) {
-      if (isPrivateChat) {
-        await replyWithRoleKeyboard(
-          botToken,
-          chatId,
-          "Выберите действие кнопкой ниже или команды: /shiptd /shiptm /shipw /dlinetd /dlinetm /dlinew. Привязка почты: /start.",
-          effectiveRole,
-          true,
-        );
-      } else {
-        await reply(
-          botToken,
-          chatId,
-          "В группе кнопки отключены. Откройте личный чат с ботом и отправьте /start.",
-        );
-      }
+      await replyWithRoleKeyboard(
+        botToken,
+        chatId,
+        "Выберите действие кнопкой ниже или команды: /shiptd /shiptm /shipw /dlinetd /dlinetm /dlinew. Привязка почты: /start.",
+        effectiveRole,
+        true,
+      );
       return;
     }
     await reply(

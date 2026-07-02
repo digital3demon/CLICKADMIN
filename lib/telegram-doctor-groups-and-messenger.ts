@@ -16,6 +16,7 @@ import {
 import { telegramSendMessage } from "@/lib/telegram-send-message";
 import { telegramPeerIdToString } from "@/lib/telegram-json-ids";
 import { replyTelegramGroupChatIdForCrm } from "@/lib/telegram-group-chat-id-reply";
+import { resolveTelegramBotListCommand } from "@/lib/telegram-bot-menu-commands";
 
 async function reply(botToken: string, chatId: string, text: string): Promise<void> {
   const r = await telegramSendMessage(botToken, chatId, text);
@@ -223,6 +224,7 @@ export async function tryTelegramDoctorGroupsAndMessenger(
   });
 
   if (!resolvedGroup || resolvedGroup.doctor.deletedAt) {
+    if (resolveTelegramBotListCommand(textRaw)) return false;
     /* Тихо игнорируем в группе: без лишних сообщений, только CRM-поток для привязанных чатов. */
     return true;
   }

@@ -20,6 +20,12 @@ import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import type { ShipmentOrderRow } from "@/lib/fetch-shipments-orders";
 import { getClientsPrisma } from "@/lib/get-domain-prisma";
 
+export {
+  isTelegramBotListCommand,
+  resolveTelegramBotListCommand,
+  telegramMenuLabelToCommand,
+} from "@/lib/telegram-bot-menu-commands";
+
 const MAX_LINK_LINES = 120;
 
 const SHIP_COMMAND_ROLES = new Set<UserRole>([
@@ -124,21 +130,6 @@ export function telegramRoleMayShip(role: UserRole): boolean {
 
 export function telegramRoleMayDline(role: UserRole): boolean {
   return !DLINE_EXCLUDED_ROLES.has(role);
-}
-
-/** Текст на reply-кнопке → то же, что slash-команда (полное совпадение строки сообщения). */
-const MENU_LABEL_TO_COMMAND: Record<string, string> = {
-  "Отгрузки на сегодня": "/shiptd",
-  "Отгрузки на завтра": "/shiptm",
-  "Отгрузки до конца недели": "/shipw",
-  "Срок на сегодня": "/dlinetd",
-  "Срок на завтра": "/dlinetm",
-  "Срок до конца недели": "/dlinew",
-};
-
-export function telegramMenuLabelToCommand(raw: string): string | null {
-  const key = raw.trim();
-  return MENU_LABEL_TO_COMMAND[key] ?? null;
 }
 
 /** Нижняя клавиатура в чате: только кнопки, разрешённые роли (остальное — команды вручную). */
