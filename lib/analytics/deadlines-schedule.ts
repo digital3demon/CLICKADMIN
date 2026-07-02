@@ -145,16 +145,24 @@ export function formatDurationDaysHoursRu(
 ): string {
   const dayLen = Math.max(60, Math.round(minutesPerWorkDay));
   const m = Math.max(0, Math.round(totalMinutes));
-  const days = Math.floor(m / dayLen);
+  let days = Math.floor(m / dayLen);
   const rem = m % dayLen;
-  const hours = Math.floor(rem / 60);
+  let hours = Math.floor(rem / 60);
   const min = rem % 60;
+
+  if (min >= 31) hours += 1;
+
+  const hoursPerDay = dayLen / 60;
+  if (hours >= hoursPerDay) {
+    days += Math.floor(hours / hoursPerDay);
+    hours = hours % hoursPerDay;
+  }
 
   if (days > 0) {
     if (hours <= 0) return `${days} дн.`;
     return `${days} дн. ${hours} ч`;
   }
-  if (hours <= 0) return `${min} мин`;
-  if (min === 0) return `${hours} ч`;
-  return `${hours} ч ${min} мин`;
+  if (hours > 0) return `${hours} ч`;
+  if (min <= 0) return "0 мин";
+  return `${min} мин`;
 }

@@ -8,13 +8,20 @@ const TEN_HOUR_DAY = 600;
 
 describe("formatDurationDaysHoursRu", () => {
   it("показывает рабочие дни и часы", () => {
-    expect(formatDurationDaysHoursRu(5978, TEN_HOUR_DAY)).toBe("9 дн. 9 ч");
+    expect(formatDurationDaysHoursRu(5978, TEN_HOUR_DAY)).toBe("10 дн.");
     expect(formatDurationDaysHoursRu(3540, TEN_HOUR_DAY)).toBe("5 дн. 9 ч");
   });
 
-  it("меньше рабочего дня — часы и минуты", () => {
-    expect(formatDurationDaysHoursRu(59, TEN_HOUR_DAY)).toBe("59 мин");
-    expect(formatDurationDaysHoursRu(125, TEN_HOUR_DAY)).toBe("2 ч 5 мин");
+  it("округляет минуты: <30 — в ноль, от 31 — +1 ч", () => {
+    expect(formatDurationDaysHoursRu(125, TEN_HOUR_DAY)).toBe("2 ч");
+    expect(formatDurationDaysHoursRu(91, TEN_HOUR_DAY)).toBe("2 ч");
+    expect(formatDurationDaysHoursRu(59, TEN_HOUR_DAY)).toBe("1 ч");
+    expect(formatDurationDaysHoursRu(2439, TEN_HOUR_DAY)).toBe("4 дн. 1 ч");
+  });
+
+  it("меньше часа без округления вверх", () => {
+    expect(formatDurationDaysHoursRu(25, TEN_HOUR_DAY)).toBe("25 мин");
+    expect(formatDurationDaysHoursRu(30, TEN_HOUR_DAY)).toBe("30 мин");
   });
 
   it("только целые дни без остатка часов", () => {
