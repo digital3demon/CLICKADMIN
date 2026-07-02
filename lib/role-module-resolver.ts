@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import {
   ALL_APP_MODULES,
+  CLICKMIG_OWNER_ONLY_MODULES,
   defaultModuleAllowed,
 } from "@/lib/role-module-defaults";
 import { hasDirectoryHubAccess } from "@/lib/role-module-nav";
@@ -43,6 +44,9 @@ export async function getEffectiveModuleAccess(
       v = fromDb.get("CLIENTS")!;
     }
     out[m] = v;
+  }
+  for (const m of CLICKMIG_OWNER_ONLY_MODULES) {
+    out[m] = false;
   }
   return out;
 }

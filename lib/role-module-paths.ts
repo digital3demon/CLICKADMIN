@@ -114,6 +114,27 @@ export function mailSettingsModuleForPath(
   return "MAIL";
 }
 
+/** POST accept/reject — CLICKMIG_REVIEW; kanban actions — CLICKMIG_KANBAN. */
+export function clickmigBranchModuleForMethod(
+  pathname: string,
+  method: string,
+): AppModule {
+  const m = method.toUpperCase();
+  if (HTTP_READ_METHODS.has(m)) return "CLICKMIG";
+  if (pathname.includes("/accept") || pathname.includes("/reject")) {
+    return "CLICKMIG_REVIEW";
+  }
+  if (
+    pathname.includes("/kanban") ||
+    pathname.includes("/stage-action") ||
+    pathname.includes("/block") ||
+    pathname.includes("/move-column")
+  ) {
+    return "CLICKMIG_KANBAN";
+  }
+  return "CLICKMIG";
+}
+
 type Rule = { prefix: string; module: AppModule };
 
 /**
@@ -153,6 +174,9 @@ const RULES: Rule[] = [
   { prefix: "/directory/print", module: "CONFIG_PRINT" },
   { prefix: "/api/tenant/print-settings", module: "CONFIG_PRINT" },
   { prefix: "/directory/appearance", module: "CONFIG_APPEARANCE" },
+  { prefix: "/directory/clickmig", module: "CONFIG_CLICKMIG" },
+  { prefix: "/api/clickmig", module: "CLICKMIG" },
+  { prefix: "/clickmig", module: "CLICKMIG" },
   { prefix: "/api/directory", module: "DIRECTORY" },
   { prefix: "/orders/history", module: "ORDER_HISTORY" },
   { prefix: "/orders", module: "ORDERS" },
@@ -210,6 +234,7 @@ export function requiredModuleForPath(
   const m = (method ?? "GET").toUpperCase();
   if (base === "CLIENTS") return clientsBranchModuleForMethod(m);
   if (base === "ORDERS") return ordersBranchModuleForMethod(pathname, m);
+  if (base === "CLICKMIG") return clickmigBranchModuleForMethod(pathname, m);
   if (base === "CONFIG_PRINT" && isPrintSettingsApiPath(pathname)) {
     return printSettingsModuleForMethod(m);
   }

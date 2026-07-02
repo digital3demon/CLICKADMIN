@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AppModule, UserRole } from "@prisma/client";
 import { USER_ROLE_LABELS } from "@/lib/user-role-labels";
 import {
+  isClickMigOwnerOnlyModule,
   isKanbanCardSubmodule,
   ROLES_IN_ACCESS_MATRIX,
 } from "@/lib/role-module-defaults";
@@ -140,10 +141,13 @@ export function RoleModuleAccessMatrix() {
                   const kanbanBaseOn = data.effective[r]?.KANBAN === true;
                   const gatedByKanban =
                     isKanbanCardSubmodule(m.id) && !kanbanBaseOn;
-                  const cellDisabled = busy || gatedByKanban;
-                  const cellTitle = gatedByKanban
-                    ? "Сначала включите модуль «Канбан» для этой роли."
-                    : undefined;
+                  const clickMigOwnerOnly = isClickMigOwnerOnlyModule(m.id);
+                  const cellDisabled = busy || gatedByKanban || clickMigOwnerOnly;
+                  const cellTitle = clickMigOwnerOnly
+                    ? "КликМиг временно только у владельца (OWNER)."
+                    : gatedByKanban
+                      ? "Сначала включите модуль «Канбан» для этой роли."
+                      : undefined;
                   return (
                     <td key={r} className="p-1 text-center align-middle">
                       <input

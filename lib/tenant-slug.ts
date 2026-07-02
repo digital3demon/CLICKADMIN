@@ -8,6 +8,8 @@ const RESERVED = new Set([
   "static",
   "cdn",
   "admin",
+  /** Публичная форма КликМиг, не отдельный tenant. */
+  "test",
 ]);
 
 /**

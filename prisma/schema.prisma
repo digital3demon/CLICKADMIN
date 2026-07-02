@@ -115,6 +115,11 @@ model Tenant {
   payrollPriceItemConfigs   PayrollPriceItemConfig[]
   payrollWorkEntries        PayrollWorkEntry[]
   emailAccounts             EmailAccount[]
+  clickMigConfig            ClickMigConfig?
+  clickMigClients           ClickMigClient[]
+  clickMigApplications      ClickMigApplication[]
+  clickMigOrders            ClickMigOrder[]
+  clickMigFiles             ClickMigFile[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -598,6 +603,14 @@ enum AppModule {
   CONFIG_APPEARANCE
   /// Конфиг: подключение ящиков, папки, правила, метки, шаблон ответа
   CONFIG_MAIL
+  /// КликМиг: заявки и заказы
+  CLICKMIG
+  /// КликМиг: принять / отказать заявку
+  CLICKMIG_REVIEW
+  /// КликМиг: канбан-доска
+  CLICKMIG_KANBAN
+  /// Конфиг: КликМиг
+  CONFIG_CLICKMIG
 }
 
 /// Роль пользователя CRM (права будут расширяться)
@@ -1946,4 +1959,181 @@ model OrderConstruction {
   createdAt DateTime @default(now())
 
   @@index([orderId])
+}
+
+// --- КликМиг (отдельный контур заявок / заказов) ---
+
+enum ClickMigApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum ClickMigOrderStatus {
+  ACTIVE
+  BLOCKED
+  COMPLETED
+  CANCELLED
+}
+
+enum ClickMigMaterial {
+  ZIRCONIA
+  EMAX
+  PMMA
+  COMPOSITE
+}
+
+enum ClickMigFileKind {
+  PHOTO
+  SCAN
+  VIDEO
+  OTHER
+}
+
+model ClickMigClient {
+  id              String                @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email           String
+  passwordHash    String
+  fullName        String
+  phone           String?
+  emailVerifiedAt DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  clinics         ClickMigClientClinic[]
+  applications    ClickMigApplication[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model ClickMigClientClinic {
+  id        String         @id @default(cuid())
+  clientId  String
+  client    ClickMigClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name      String
+  address   String?
+  isDefault Boolean        @default(false)
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+
+  @@index([clientId])
+}
+
+model ClickMigApplication {
+  id                   String                    @id @default(cuid())
+  tenantId             String
+  tenant               Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publicNumber         String
+  status               ClickMigApplicationStatus @default(PENDING)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  clientId             String?
+  client               ClickMigClient?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  guestEmail           String?
+  guestDoctorName      String?
+  guestClinic          String?
+  guestAddress         String?
+  patientName          String
+  constructionTypeKey  String
+  material             ClickMigMaterial
+  teethFdi             Json
+  screwRetained        Boolean                   @default(false)
+  scanbodyManufacturer String?
+  shadeGroup           String?
+  shadeCode            String?
+  shadeDetail          String?
+  clientNotes          String?
+  photoLinks           Json?
+  scanLinks            Json?
+  rejectedReason       String?
+  rejectedAt           DateTime?
+  rejectedByUserId     String?
+  order                ClickMigOrder?
+  files                ClickMigFile[]
+
+  @@unique([tenantId, publicNumber])
+  @@index([tenantId, status, createdAt])
+}
+
+model ClickMigOrder {
+  id                     String              @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  applicationId          String              @unique
+  application            ClickMigApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  publicNumber           String
+  status                 ClickMigOrderStatus @default(ACTIVE)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  kanbanColumnId         String              @default("col_queue")
+  sortOrder              Int                 @default(0)
+  assigneeUserId         String?
+  participantUserId      String?
+  stageKey               String              @default("data_check")
+  timerStartedAt         DateTime?
+  timerDurationMs        Int?
+  timerFrozenAt          DateTime?
+  blockedAt              DateTime?
+  blockedReason          String?
+  blockedFields          Json?
+  blockVideoFileId       String?
+  resubmitToken          String?             @unique
+  resubmitTokenExpiresAt DateTime?
+  acceptedAt             DateTime?
+  acceptedByUserId       String?
+  completedAt            DateTime?
+  files                  ClickMigFile[]
+
+  @@unique([tenantId, publicNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, kanbanColumnId, sortOrder])
+  @@index([participantUserId])
+}
+
+model ClickMigFile {
+  id            String               @id @default(cuid())
+  tenantId      String
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  applicationId String?
+  application   ClickMigApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  orderId       String?
+  order         ClickMigOrder?       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind          ClickMigFileKind
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  diskRelPath   String?
+  data          Bytes?
+  createdAt     DateTime             @default(now())
+
+  @@index([applicationId])
+  @@index([orderId])
+}
+
+model ClickMigConfig {
+  id                     String   @id @default(cuid())
+  tenantId               String   @unique
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publicApiKeyHash       String?
+  allowedOrigins         Json     @default("[]")
+  constructionTypes      Json
+  scanbodyManufacturers  Json
+  shadeOptions           Json
+  defaultAssigneeUserId  String?
+  participantUserIds     Json     @default("[]")
+  maxCardsPerParticipant Int      @default(3)
+  columnTimers           Json
+  stageTimers            Json
+  timerBehaviors         Json
+  validationHints        Json
+  emailTemplates         Json
+  smtpHost               String?
+  smtpPort               Int?
+  smtpUser               String?
+  smtpPass               String?
+  smtpFromEmail          String?
+  smtpFromName           String?
+  updatedAt              DateTime @updatedAt
 }

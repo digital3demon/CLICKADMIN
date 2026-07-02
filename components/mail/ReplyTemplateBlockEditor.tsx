@@ -599,17 +599,29 @@ export const ReplyTemplateBlockEditor = forwardRef<ReplyTemplateBlockEditorHandl
       });
     }
 
+    const [imageUploadError, setImageUploadError] = useState("");
+
     async function handleImageUpload(
       file: File,
       onPicked: (assetId: string) => void,
     ) {
       if (!onUploadImage) return;
-      const asset = await onUploadImage(file);
-      if (asset?.id) onPicked(asset.id);
+      setImageUploadError("");
+      try {
+        const asset = await onUploadImage(file);
+        if (asset?.id) onPicked(asset.id);
+      } catch (err) {
+        setImageUploadError(
+          err instanceof Error ? err.message : "Не удалось загрузить изображение",
+        );
+      }
     }
 
     return (
       <div className="space-y-4">
+        {imageUploadError ? (
+          <p className="text-xs text-red-600 dark:text-red-300">{imageUploadError}</p>
+        ) : null}
         <div className="rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             Оформление письма

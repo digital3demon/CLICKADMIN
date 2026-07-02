@@ -56,6 +56,10 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CONFIG_PRINT_EDIT",
   "CONFIG_APPEARANCE",
   "CONFIG_MAIL",
+  "CLICKMIG",
+  "CLICKMIG_REVIEW",
+  "CLICKMIG_KANBAN",
+  "CONFIG_CLICKMIG",
 ];
 
 export const APP_MODULE_LABELS: Record<AppModule, string> = {
@@ -102,7 +106,23 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CONFIG_PRINT_EDIT: "Конфиг: редактирование этикеток",
   CONFIG_APPEARANCE: "Конфиг: оформление интерфейса",
   CONFIG_MAIL: "Конфиг: почта",
+  CLICKMIG: "КликМиг",
+  CLICKMIG_REVIEW: "КликМиг: принять / отказать заявку",
+  CLICKMIG_KANBAN: "КликМиг: канбан",
+  CONFIG_CLICKMIG: "Конфиг: КликМиг",
 };
+
+/** Пока КликМиг только у владельца (OWNER); см. getEffectiveModuleAccess. */
+export const CLICKMIG_OWNER_ONLY_MODULES: readonly AppModule[] = [
+  "CLICKMIG",
+  "CLICKMIG_REVIEW",
+  "CLICKMIG_KANBAN",
+  "CONFIG_CLICKMIG",
+] as const;
+
+export function isClickMigOwnerOnlyModule(module: AppModule): boolean {
+  return (CLICKMIG_OWNER_ONLY_MODULES as readonly AppModule[]).includes(module);
+}
 
 /** Все роли, кроме владельца (у владельца по определению полный доступ). */
 export const ROLES_IN_ACCESS_MATRIX: UserRole[] = [
@@ -149,6 +169,7 @@ export function defaultModuleAllowed(
     );
   }
   if (role === "MANAGER") {
+    if (isClickMigOwnerOnlyModule(module)) return false;
     return module !== "CONFIG_USER_INVITES";
   }
   if (role === "SENIOR_TECHNICIAN") {
@@ -235,6 +256,11 @@ export function defaultModuleAllowed(
     case "CONFIG_USERS":
       return false;
     case "CONFIG_USER_INVITES":
+      return false;
+    case "CLICKMIG":
+    case "CLICKMIG_REVIEW":
+    case "CLICKMIG_KANBAN":
+    case "CONFIG_CLICKMIG":
       return false;
     default:
       return true;

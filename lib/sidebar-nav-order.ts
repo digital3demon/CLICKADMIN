@@ -7,6 +7,7 @@ export const DEFAULT_SIDEBAR_HREF_ORDER = [
   "/analytics",
   "/payroll",
   "/finance-office",
+  "/clickmig",
   "/mail",
   "/shipments",
   "/warehouse",

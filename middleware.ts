@@ -33,6 +33,11 @@ import {
 } from "@/lib/plan-entitlements";
 import type { SubscriptionPlan } from "@prisma/client";
 import { VIEW_AS_ROLE_COOKIE_NAME, parseViewAsRole } from "@/lib/auth/view-as-role";
+import {
+  clickMigCrmPublicOrigin,
+  clickMigFormHostPathRedirect,
+  isClickMigFormHost,
+} from "@/lib/clickmig/form-host";
 
 function securityHeaders(res: NextResponse) {
   // Модалки предпросмотра внутри CRM используют iframe с тем же origin.
@@ -121,6 +126,9 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/favicon.ico") return true;
   /** QR с этикетки отгрузки: витрина без входа (клиент) + редиректы для сотрудников. */
   if (pathname.startsWith("/p/t/")) return true;
+  /** КликМиг: публичная форма, ЛК, дозагрузка, просмотр файлов. */
+  if (pathname.startsWith("/p/clickmig/")) return true;
+  if (pathname.startsWith("/api/clickmig/public/")) return true;
   return false;
 }
 
@@ -147,6 +155,20 @@ export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
   const host =
     req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+
+  if (isClickMigFormHost(host)) {
+    const formRedirect = clickMigFormHostPathRedirect(pathname);
+    if (formRedirect) {
+      return redirectPublic(req, formRedirect);
+    }
+    if (!isPublicPath(pathname)) {
+      const target = new URL(
+        pathname + req.nextUrl.search,
+        clickMigCrmPublicOrigin(),
+      );
+      return securityHeaders(NextResponse.redirect(target, 307));
+    }
+  }
 
   if (req.nextUrl.pathname.startsWith("/api")) {
     if (process.env.RATE_LIMIT_DISABLED === "1") {

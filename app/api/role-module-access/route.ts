@@ -6,6 +6,7 @@ import {
   ALL_APP_MODULES,
   APP_MODULE_LABELS,
   defaultModuleAllowed,
+  isClickMigOwnerOnlyModule,
   isKanbanCardSubmodule,
   ROLES_IN_ACCESS_MATRIX,
 } from "@/lib/role-module-defaults";
@@ -89,6 +90,15 @@ export async function PUT(req: Request) {
   }
   if (!ALL_APP_MODULES.includes(module)) {
     return NextResponse.json({ error: "Некорректный модуль" }, { status: 400 });
+  }
+  if (isClickMigOwnerOnlyModule(module)) {
+    return NextResponse.json(
+      {
+        error:
+          "КликМиг временно доступен только владельцу (OWNER); права других ролей не настраиваются.",
+      },
+      { status: 400 },
+    );
   }
   if (module === "CLIENTS") {
     return NextResponse.json(

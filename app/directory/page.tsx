@@ -44,6 +44,7 @@ export default async function DirectoryHubPage() {
     ));
   const showPrint = a?.CONFIG_PRINT === true;
   const showAppearance = a?.CONFIG_APPEARANCE === true;
+  const showClickMig = a?.CONFIG_CLICKMIG === true;
   const showAccessMatrix =
     session?.role === "OWNER" && !isSingleUserPortable();
 
@@ -228,6 +229,19 @@ export default async function DirectoryHubPage() {
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
               Приглашения, роли, список. Для владельца — и матрица доступа к
               модулям.
+            </p>
+          </Link>
+        ) : null}
+        {showClickMig ? (
+          <Link
+            href="/directory/clickmig"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">
+              КликМиг
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Справочники, SMTP, API key, участники и таймеры канбана.
             </p>
           </Link>
         ) : null}

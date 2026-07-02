@@ -35,6 +35,9 @@ function isNavActive(pathname: string, href: string): boolean {
   if (href === "/finance-office") {
     return pathname === "/finance-office" || pathname.startsWith("/finance-office/");
   }
+  if (href === "/clickmig") {
+    return pathname === "/clickmig" || pathname.startsWith("/clickmig/");
+  }
   if (href === "/mail") {
     return pathname === "/mail" || pathname.startsWith("/mail/");
   }
@@ -52,6 +55,7 @@ const baseNavItems: readonly {
   { href: "/analytics", label: "Аналитика", module: "ANALYTICS" },
   { href: "/payroll", label: "Зарплата", module: "PAYROLL" },
   { href: "/finance-office", label: "ФинОтдел", module: "FINANCE_OFFICE" },
+  { href: "/clickmig", label: "КликМиг", module: "CLICKMIG" },
   { href: "/mail", label: "Почта", module: "MAIL" },
   { href: "/shipments", label: "Отгрузки", module: "SHIPMENTS" },
   { href: "/warehouse", label: "Склад", module: "WAREHOUSE" },
@@ -159,6 +163,7 @@ export function SidebarNav() {
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean> | null>(null);
   const [orderHrefs, setOrderHrefs] = useState<string[]>(DEFAULT_HREF_ORDER);
   const [mailUnreadCount, setMailUnreadCount] = useState(0);
+  const [clickMigPendingCount, setClickMigPendingCount] = useState(0);
   const dragHrefRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -248,6 +253,44 @@ export function SidebarNav() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [mailNavVisible]);
+
+  const clickMigNavVisible = useMemo(
+    () => navItems.some((item) => item.href === "/clickmig"),
+    [navItems],
+  );
+
+  useEffect(() => {
+    if (!clickMigNavVisible) {
+      setClickMigPendingCount(0);
+      return;
+    }
+    let cancelled = false;
+    async function loadPending() {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/clickmig/pending-count", {
+          cache: "no-store",
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { count?: number };
+        if (!cancelled) setClickMigPendingCount(Math.max(0, Number(data.count) || 0));
+      } catch {
+        if (!cancelled) setClickMigPendingCount(0);
+      }
+    }
+    void loadPending();
+    const timer = window.setInterval(() => void loadPending(), 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadPending();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [clickMigNavVisible]);
 
   useEffect(() => {
     const allowed = new Set(navItems.map((i) => i.href));
@@ -411,6 +454,11 @@ export function SidebarNav() {
                         {mailUnreadCount > 99 ? "99+" : mailUnreadCount}
                       </span>
                     ) : null}
+                    {item.href === "/clickmig" && clickMigPendingCount > 0 ? (
+                      <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-bold text-[var(--sidebar-blue-hover)] tabular-nums">
+                        {clickMigPendingCount > 99 ? "99+" : clickMigPendingCount}
+                      </span>
+                    ) : null}
                   </Link>
                 </div>
                 <div
@@ -467,6 +515,13 @@ export function SidebarNav() {
                     aria-label={`Непрочитанных писем: ${mailUnreadCount}`}
                   >
                     {mailUnreadCount > 99 ? "99+" : mailUnreadCount}
+                  </span>
+                ) : item.href === "/clickmig" && clickMigPendingCount > 0 ? (
+                  <span
+                    className="pointer-events-none absolute right-0 top-1/2 inline-flex min-h-5 min-w-[1.75rem] -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-2 tabular-nums text-xs font-semibold text-white shadow-sm"
+                    aria-label={`Новых заявок КликМиг: ${clickMigPendingCount}`}
+                  >
+                    {clickMigPendingCount > 99 ? "99+" : clickMigPendingCount}
                   </span>
                 ) : (
                   <span

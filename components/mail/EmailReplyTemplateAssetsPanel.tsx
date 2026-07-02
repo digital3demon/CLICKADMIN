@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { compressImageForReplyTemplateUpload } from "@/lib/mail/compress-image-for-email";
 
 export type ReplyTemplateAssetItem = {
   id: string;
@@ -38,8 +39,11 @@ export async function uploadReplyTemplateAssetFile(
   accountId: string,
   file: File,
 ): Promise<ReplyTemplateAssetItem> {
+  const prepared = file.type.startsWith("image/")
+    ? await compressImageForReplyTemplateUpload(file)
+    : file;
   const form = new FormData();
-  form.set("file", file, file.name);
+  form.set("file", prepared, prepared.name);
   const res = await fetch(
     `/api/mail/accounts/${encodeURIComponent(accountId)}/reply-template/assets`,
     {
