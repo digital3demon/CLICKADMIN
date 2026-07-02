@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
+import {
+  mskLocalDateTimeToUtc,
+  workDeadlineEndAt,
+} from "@/lib/analytics/business-time";
 import { defaultDeadlinesSchedule } from "@/lib/analytics/deadlines-schedule";
-import { aggregateWorkDeadlinesByPriceItem } from "@/lib/analytics/work-deadlines-price-items";
+import {
+  aggregateWorkDeadlinesByPriceItem,
+  maxLeadWorkingDaysInOrder,
+} from "@/lib/analytics/work-deadlines-price-items";
 
 const schedule = defaultDeadlinesSchedule();
 const itemA = {
@@ -14,6 +21,18 @@ const itemB = {
   code: "B-02",
   name: "Вкладка",
   leadWorkingDays: 5,
+};
+const itemLong = {
+  id: "item-long",
+  code: "L-11",
+  name: "Длинный срок",
+  leadWorkingDays: 11,
+};
+const itemShort = {
+  id: "item-short",
+  code: "S-03",
+  name: "Короткий срок",
+  leadWorkingDays: 3,
 };
 
 describe("aggregateWorkDeadlinesByPriceItem", () => {
@@ -93,5 +112,44 @@ describe("aggregateWorkDeadlinesByPriceItem", () => {
       expect(row.orderCount).toBe(1);
       expect(row.lineCount).toBe(1);
     }
+  });
+
+  it("в наряде с двумя нормативами сравнивает с макс. сроком", () => {
+    const createdAt = mskLocalDateTimeToUtc("2026-06-01", "10:00")!;
+    const deadlineShort = workDeadlineEndAt(createdAt, 3, schedule)!;
+    const handedAt = new Date(deadlineShort.getTime() + 24 * 60 * 60_000);
+    const deadlineLong = workDeadlineEndAt(createdAt, 11, schedule)!;
+    expect(handedAt.getTime()).toBeLessThan(deadlineLong.getTime());
+
+    const rows = aggregateWorkDeadlinesByPriceItem(
+      [
+        {
+          id: "order-mixed",
+          createdAt,
+          handedAt,
+          constructions: [
+            {
+              priceListItemId: itemLong.id,
+              priceListItem: itemLong,
+            },
+            {
+              priceListItemId: itemShort.id,
+              priceListItem: itemShort,
+            },
+          ],
+        },
+      ],
+      new Date("2026-06-01T00:00:00.000Z"),
+      new Date("2026-06-30T23:59:59.999Z"),
+      schedule,
+    );
+
+    const shortRow = rows.find((r) => r.code === "S-03");
+    expect(shortRow).toBeDefined();
+    expect(shortRow?.late).toBe(0);
+    expect(maxLeadWorkingDaysInOrder([
+      { priceListItemId: itemLong.id, priceListItem: itemLong },
+      { priceListItemId: itemShort.id, priceListItem: itemShort },
+    ])).toBe(11);
   });
 });

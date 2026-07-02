@@ -57,6 +57,20 @@ function workActualMinutes(
   return countWorkingMinutesBetween(order.createdAt, order.handedAt, schedule);
 }
 
+/** Макс. leadWorkingDays по всем позициям прайса в наряде (qty не умножает). */
+export function maxLeadWorkingDaysInOrder(
+  constructions: WorkDeadlinesPriceItemOrder["constructions"],
+): number | null {
+  let max: number | null = null;
+  for (const line of constructions) {
+    const lead = line.priceListItem?.leadWorkingDays;
+    if (lead == null || !Number.isFinite(lead)) continue;
+    const n = Math.max(0, Math.trunc(lead));
+    if (max == null || n > max) max = n;
+  }
+  return max;
+}
+
 export function aggregateWorkDeadlinesByPriceItem(
   completed: WorkDeadlinesPriceItemOrder[],
   from: Date,
@@ -68,6 +82,7 @@ export function aggregateWorkDeadlinesByPriceItem(
   for (const order of completed) {
     if (order.createdAt < from || order.createdAt > to) continue;
     const minutes = workActualMinutes(order, schedule);
+    const orderMaxLead = maxLeadWorkingDaysInOrder(order.constructions);
 
     for (const line of order.constructions) {
       const pl = line.priceListItem;
@@ -93,11 +108,11 @@ export function aggregateWorkDeadlinesByPriceItem(
       cur.durationSum += minutes;
 
       const lead = pl.leadWorkingDays;
-      if (lead != null && Number.isFinite(lead)) {
+      if (lead != null && Number.isFinite(lead) && orderMaxLead != null) {
         cur.normativeLineCount += 1;
         const deadline = workDeadlineEndAt(
           order.createdAt,
-          Math.max(0, Math.trunc(lead)),
+          orderMaxLead,
           schedule,
         );
         if (deadline) {

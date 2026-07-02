@@ -374,8 +374,8 @@ export function AnalyticsDeadlinesPanel({
           <p className="text-xs text-[var(--text-secondary)]">
             По каждой позиции прайса в сданном наряде: одна строка или несколько
             штук одной позиции — одна запись в статистике. Срок — рабочее время
-            от оформления до «Сдана админам»; сравнение с нормативом позиции
-            (leadWorkingDays), погрешность ±30 мин.
+            от оформления до «Сдана админам»; сравнение с макс. нормативом
+            позиций в наряде (leadWorkingDays), погрешность ±30 мин.
           </p>
           {workChartData.length > 0 ? (
             <div className="h-[min(400px,60vh)] w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
