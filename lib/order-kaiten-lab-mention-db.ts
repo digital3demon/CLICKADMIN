@@ -47,7 +47,7 @@ export async function syncLabMentionFlagFromCommentTexts(
 export async function syncKaitenLabMentionFromParsedComments(
   db: PrismaClient,
   orderId: string,
-  comments: readonly { id: number; text: string }[],
+  comments: readonly { id: number; text: string; authorName?: string | null }[],
   kanbanAdminMentionTag: string | null | undefined,
 ): Promise<boolean> {
   const labTag = normalizeKanbanAdminMentionTag(kanbanAdminMentionTag);
@@ -84,12 +84,26 @@ export async function syncKaitenLabMentionFromParsedComments(
     return false;
   }
 
+  const latestMention =
+    bumpSignal && maxMentionId != null
+      ? withMention.find((c) => c.id === maxMentionId) ??
+        withMention[withMention.length - 1]
+      : null;
+  const toastAuthor = latestMention?.authorName?.trim().slice(0, 120) || null;
+  const toastText = latestMention?.text.replace(/\s+/g, " ").trim().slice(0, 500) || null;
+
   await db.order.update({
     where: { id: orderId },
     data: {
       kaitenChatHasLabMention: computed,
       kaitenLabMentionWaterlineCommentId: nextWaterline,
-      ...(bumpSignal ? { kaitenLabMentionSignalAt: new Date() } : {}),
+      ...(bumpSignal
+        ? {
+            kaitenLabMentionSignalAt: new Date(),
+            kaitenLabMentionToastAuthor: toastAuthor,
+            kaitenLabMentionToastText: toastText,
+          }
+        : {}),
     },
   });
   return true;

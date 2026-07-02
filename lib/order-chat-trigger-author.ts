@@ -26,14 +26,17 @@ export function formatOrderChatSourceCaption(
 
 /** Заголовок глобального уведомления (тост) по типу заявки. */
 export function orderChatToastTitle(
-  kind: "correction" | "prosthetics",
+  kind: "correction" | "prosthetics" | "chat",
   authorLabel?: string | null,
 ): string {
   const who = trimOrderChatAuthorLabel(authorLabel);
   if (kind === "correction") {
     return who ? `Корректировка от ${who}` : "Корректировка";
   }
-  return who ? `Заказ протетики от ${who}` : "Протетика";
+  if (kind === "prosthetics") {
+    return who ? `Заказ протетики от ${who}` : "Протетика";
+  }
+  return who ? `Новое сообщение от ${who}` : "Новое сообщение в чате";
 }
 
 export function mapParsedKaitenCommentsForTriggerSync(

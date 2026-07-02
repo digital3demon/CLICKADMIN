@@ -19,15 +19,36 @@ type OrderToastRow = {
   createdAt: string;
 };
 
-const correctionCardShell =
-  "flex gap-2 rounded-lg border border-amber-200/90 bg-amber-50/95 pl-3 pr-1 py-2 text-sm shadow-lg backdrop-blur-sm dark:border-amber-800/60 dark:bg-amber-950/90";
+type ToastKind = "chat" | "correction" | "prosthetics";
 
-const prostheticsCardShell =
-  "flex gap-2 rounded-lg border border-sky-200/90 bg-sky-50/95 pl-3 pr-1 py-2 text-sm shadow-lg backdrop-blur-sm dark:border-sky-800/60 dark:bg-sky-950/90";
+const shells: Record<ToastKind, string> = {
+  chat:
+    "flex gap-2 rounded-lg border border-violet-200/90 bg-violet-50/95 pl-3 pr-1 py-2 text-sm shadow-lg backdrop-blur-sm dark:border-violet-800/60 dark:bg-violet-950/90",
+  correction:
+    "flex gap-2 rounded-lg border border-amber-200/90 bg-amber-50/95 pl-3 pr-1 py-2 text-sm shadow-lg backdrop-blur-sm dark:border-amber-800/60 dark:bg-amber-950/90",
+  prosthetics:
+    "flex gap-2 rounded-lg border border-sky-200/90 bg-sky-50/95 pl-3 pr-1 py-2 text-sm shadow-lg backdrop-blur-sm dark:border-sky-800/60 dark:bg-sky-950/90",
+};
 
-function readDismissedPrefixed(): Set<string> {
-  return new Set();
-}
+const titleTone: Record<ToastKind, string> = {
+  chat: "text-violet-900/90 dark:text-violet-200/90",
+  correction: "text-amber-900/90 dark:text-amber-200/90",
+  prosthetics: "text-sky-800/90 dark:text-sky-200/90",
+};
+
+const dismissTone: Record<ToastKind, string> = {
+  chat: "text-violet-900/70 hover:bg-violet-200/80 dark:text-violet-100/80 dark:hover:bg-violet-900/50",
+  correction:
+    "text-amber-900/70 hover:bg-amber-200/80 dark:text-amber-100/80 dark:hover:bg-amber-900/50",
+  prosthetics:
+    "text-sky-900/70 hover:bg-sky-200/80 dark:text-sky-100/80 dark:hover:bg-sky-900/50",
+};
+
+const linkTone: Record<ToastKind, string> = {
+  chat: "text-violet-950 hover:underline dark:text-violet-50",
+  correction: "text-amber-950 hover:underline dark:text-amber-50",
+  prosthetics: "text-sky-950 hover:underline dark:text-sky-50",
+};
 
 function writeDismissedPrefixed(ids: Set<string>) {
   void writeClientState("user", STORAGE_KEY, [...ids]);
@@ -59,7 +80,53 @@ function parseRetryAfterMs(value: string | null): number {
   return 0;
 }
 
-const MAX_VISIBLE = 8;
+const MAX_PER_COLUMN = 5;
+
+function dismissKey(kind: ToastKind, id: string): string {
+  return `${kind}:${id}`;
+}
+
+function ToastCard({
+  kind,
+  row,
+  onDismiss,
+}: {
+  kind: ToastKind;
+  row: OrderToastRow;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className={shells[kind]}>
+      <Link
+        href={orderPathById(row.orderId)}
+        onClick={onDismiss}
+        className={`min-w-0 flex-1 text-left leading-snug ${linkTone[kind]}`}
+      >
+        <span
+          className={`block text-[0.65rem] font-semibold tracking-wide ${titleTone[kind]}`}
+        >
+          {orderChatToastTitle(kind, row.authorLabel)}
+        </span>
+        <span className="mt-0.5 block text-[var(--text-body)]">
+          по наряду{" "}
+          <span className="font-mono font-semibold tabular-nums">
+            {row.orderNumber}
+          </span>
+          : «{snippet(row.text)}»
+        </span>
+      </Link>
+      <button
+        type="button"
+        className={`shrink-0 self-start rounded px-1.5 py-0.5 text-lg leading-none ${dismissTone[kind]}`}
+        aria-label="Скрыть уведомление"
+        title="Скрыть"
+        onClick={onDismiss}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
 
 export function OrderCorrectionToastStack() {
   const pathname = usePathname() ?? "";
@@ -68,6 +135,7 @@ export function OrderCorrectionToastStack() {
   const isKanban = pathname === "/kanban" || pathname.startsWith("/kanban/");
   const isPublicSticker = isPublicStickerHubPath(pathname);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+  const [chatMessages, setChatMessages] = useState<OrderToastRow[]>([]);
   const [corrections, setCorrections] = useState<OrderToastRow[]>([]);
   const [prostheticsRequests, setProstheticsRequests] = useState<OrderToastRow[]>(
     [],
@@ -94,9 +162,7 @@ export function OrderCorrectionToastStack() {
         setDismissed(
           new Set(raw.filter((x): x is string => typeof x === "string")),
         );
-        return;
       }
-      setDismissed(readDismissedPrefixed());
     })();
     return () => {
       cancelled = true;
@@ -105,6 +171,7 @@ export function OrderCorrectionToastStack() {
 
   useEffect(() => {
     if (isLogin || isKanban || isPublicSticker) {
+      setChatMessages([]);
       setCorrections([]);
       setProstheticsRequests([]);
       return;
@@ -117,7 +184,11 @@ export function OrderCorrectionToastStack() {
       if (nextPollAllowedAtRef.current > now) return;
       pollInFlightRef.current = true;
       try {
-        const [resCorr, resPro] = await Promise.all([
+        const [resChat, resCorr, resPro] = await Promise.all([
+          fetch("/api/order-chat-messages/toasts", {
+            credentials: "include",
+            cache: "no-store",
+          }),
           fetch("/api/order-chat-corrections/toasts", {
             credentials: "include",
             cache: "no-store",
@@ -129,6 +200,7 @@ export function OrderCorrectionToastStack() {
         ]);
         if (cancelled) return;
         const retryMs = Math.max(
+          resChat.status === 429 ? parseRetryAfterMs(resChat.headers.get("Retry-After")) : 0,
           resCorr.status === 429 ? parseRetryAfterMs(resCorr.headers.get("Retry-After")) : 0,
           resPro.status === 429 ? parseRetryAfterMs(resPro.headers.get("Retry-After")) : 0,
         );
@@ -137,10 +209,16 @@ export function OrderCorrectionToastStack() {
           return;
         }
 
+        let chatList: OrderToastRow[] = [];
+        if (resChat.status !== 403 && resChat.status !== 401 && resChat.ok) {
+          const j = (await resChat.json().catch(() => ({}))) as {
+            messages?: OrderToastRow[];
+          };
+          chatList = Array.isArray(j.messages) ? j.messages : [];
+        }
+
         let corrList: OrderToastRow[] = [];
-        if (resCorr.status === 403 || resCorr.status === 401) {
-          corrList = [];
-        } else if (resCorr.ok) {
+        if (resCorr.status !== 403 && resCorr.status !== 401 && resCorr.ok) {
           const j = (await resCorr.json().catch(() => ({}))) as {
             corrections?: OrderToastRow[];
           };
@@ -148,25 +226,26 @@ export function OrderCorrectionToastStack() {
         }
 
         let proList: OrderToastRow[] = [];
-        if (resPro.status === 403 || resPro.status === 401) {
-          proList = [];
-        } else if (resPro.ok) {
+        if (resPro.status !== 403 && resPro.status !== 401 && resPro.ok) {
           const j = (await resPro.json().catch(() => ({}))) as {
             requests?: OrderToastRow[];
           };
           proList = Array.isArray(j.requests) ? j.requests : [];
         }
 
-        const fp = `c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}`;
+        const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}`;
         if (fp !== lastFpRef.current) {
           lastFpRef.current = fp;
+          setChatMessages(chatList);
           setCorrections(corrList);
           setProstheticsRequests(proList);
           if (
             pathname === "/orders" ||
             pathname.startsWith("/orders/") ||
             pathname === "/finance-office" ||
-            pathname.startsWith("/finance-office/")
+            pathname.startsWith("/finance-office/") ||
+            pathname === "/shipments" ||
+            pathname.startsWith("/shipments/")
           ) {
             router.refresh();
           }
@@ -200,117 +279,96 @@ export function OrderCorrectionToastStack() {
     };
   }, [isLogin, isKanban, isPublicSticker, pathname, router]);
 
-  const { correctionVisible, prostheticsVisible } = useMemo(() => {
+  const { chatVisible, correctionVisible, prostheticsVisible } = useMemo(() => {
+    const chat = chatMessages
+      .filter((r) => !dismissed.has(dismissKey("chat", r.id)))
+      .slice(0, MAX_PER_COLUMN);
     const corr = corrections
-      .filter((r) => !dismissed.has(`correction:${r.id}`))
-      .slice(0, 5);
-    const rest = Math.max(0, MAX_VISIBLE - corr.length);
+      .filter((r) => !dismissed.has(dismissKey("correction", r.id)))
+      .slice(0, MAX_PER_COLUMN);
     const pro = prostheticsRequests
-      .filter((r) => !dismissed.has(`prosthetics:${r.id}`))
-      .slice(0, rest);
+      .filter((r) => !dismissed.has(dismissKey("prosthetics", r.id)))
+      .slice(0, MAX_PER_COLUMN);
     return {
+      chatVisible: chat,
       correctionVisible: corr,
       prostheticsVisible: pro,
     };
-  }, [corrections, prostheticsRequests, dismissed]);
+  }, [chatMessages, corrections, prostheticsRequests, dismissed]);
 
-  const visibleCount = correctionVisible.length + prostheticsVisible.length;
+  const visibleCount =
+    chatVisible.length + correctionVisible.length + prostheticsVisible.length;
 
   const hideAll = useCallback(() => {
-    if (corrections.length === 0 && prostheticsRequests.length === 0) return;
     mergeDismissed((prev) => {
       const next = new Set(prev);
-      for (const r of corrections) {
-        next.add(`correction:${r.id}`);
-      }
-      for (const r of prostheticsRequests) {
-        next.add(`prosthetics:${r.id}`);
-      }
+      for (const r of chatMessages) next.add(dismissKey("chat", r.id));
+      for (const r of corrections) next.add(dismissKey("correction", r.id));
+      for (const r of prostheticsRequests) next.add(dismissKey("prosthetics", r.id));
       return next;
     });
-  }, [corrections, prostheticsRequests, mergeDismissed]);
+  }, [chatMessages, corrections, prostheticsRequests, mergeDismissed]);
 
   const dismissOne = useCallback(
-    (prefix: "correction" | "prosthetics", id: string) => {
-      mergeDismissed((prev) => new Set(prev).add(`${prefix}:${id}`));
+    (kind: ToastKind, id: string) => {
+      mergeDismissed((prev) => new Set(prev).add(dismissKey(kind, id)));
     },
     [mergeDismissed],
   );
 
-  if (isLogin || isKanban || isPublicSticker || visibleCount === 0) return null;
+  if (isLogin || isKanban || isPublicSticker || visibleCount === 0) {
+    return null;
+  }
+
+  const columns: Array<{
+    key: ToastKind;
+    label: string;
+    items: OrderToastRow[];
+  }> = [
+    { key: "chat" as const, label: "Чат", items: chatVisible },
+    { key: "correction" as const, label: "Корректировки", items: correctionVisible },
+    { key: "prosthetics" as const, label: "Заказ протетики", items: prostheticsVisible },
+  ].filter(
+    (c): c is { key: ToastKind; label: string; items: OrderToastRow[] } =>
+      c.items.length > 0,
+  );
 
   return (
     <div
-      className="pointer-events-none fixed z-[95] flex w-[min(22rem,calc(100vw-2rem))] flex-col items-stretch gap-2 bottom-[max(1rem,env(safe-area-inset-bottom,0px))] right-[max(1rem,env(safe-area-inset-right,0px))]"
+      className="pointer-events-none fixed z-[95] bottom-[max(1rem,env(safe-area-inset-bottom,0px))] right-[max(1rem,env(safe-area-inset-right,0px))] left-[max(1rem,env(safe-area-inset-left,0px))] flex flex-col items-end gap-2 sm:left-auto"
       aria-live="polite"
     >
-      <div className="pointer-events-auto flex flex-col gap-2">
-        {correctionVisible.map((r) => (
-          <div key={`c-${r.id}`} className={correctionCardShell}>
-            <Link
-              href={orderPathById(r.orderId)}
-              onClick={() => dismissOne("correction", r.id)}
-              className="min-w-0 flex-1 text-left leading-snug text-amber-950 hover:underline dark:text-amber-50"
+      <div className="pointer-events-auto flex max-w-full flex-col items-end gap-2">
+        <div className="flex max-w-full flex-row items-start justify-end gap-2 overflow-x-auto pb-0.5">
+          {columns.map((col) => (
+            <div
+              key={col.key}
+              className="flex w-[min(11.5rem,calc((100vw-3rem)/3))] shrink-0 flex-col gap-1.5"
             >
-              <span className="block text-[0.65rem] font-semibold tracking-wide text-amber-900/90 dark:text-amber-200/90">
-                {orderChatToastTitle("correction", r.authorLabel)}
-              </span>
-              <span className="mt-0.5 block text-[var(--text-body)]">
-                по наряду{" "}
-                <span className="font-mono font-semibold tabular-nums">
-                  {r.orderNumber}
-                </span>
-                : «{snippet(r.text)}»
-              </span>
-            </Link>
-            <button
-              type="button"
-              className="shrink-0 self-start rounded px-1.5 py-0.5 text-lg leading-none text-amber-900/70 hover:bg-amber-200/80 dark:text-amber-100/80 dark:hover:bg-amber-900/50"
-              aria-label="Скрыть уведомление"
-              title="Скрыть"
-              onClick={() => dismissOne("correction", r.id)}
-            >
-              ×
-            </button>
-          </div>
-        ))}
-        {prostheticsVisible.map((r) => (
-          <div key={`p-${r.id}`} className={prostheticsCardShell}>
-            <Link
-              href={orderPathById(r.orderId)}
-              onClick={() => dismissOne("prosthetics", r.id)}
-              className="min-w-0 flex-1 text-left leading-snug text-sky-950 hover:underline dark:text-sky-50"
-            >
-              <span className="block text-[0.65rem] font-semibold tracking-wide text-sky-800/90 dark:text-sky-200/90">
-                {orderChatToastTitle("prosthetics", r.authorLabel)}
-              </span>
-              <span className="mt-0.5 block text-[var(--text-body)]">
-                по наряду{" "}
-                <span className="font-mono font-semibold tabular-nums">
-                  {r.orderNumber}
-                </span>
-                : «{snippet(r.text)}»
-              </span>
-            </Link>
-            <button
-              type="button"
-              className="shrink-0 self-start rounded px-1.5 py-0.5 text-lg leading-none text-sky-900/70 hover:bg-sky-200/80 dark:text-sky-100/80 dark:hover:bg-sky-900/50"
-              aria-label="Скрыть уведомление"
-              title="Скрыть"
-              onClick={() => dismissOne("prosthetics", r.id)}
-            >
-              ×
-            </button>
-          </div>
-        ))}
+              <p className="px-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                {col.label}
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {col.items.map((r) => (
+                  <ToastCard
+                    key={`${col.key}-${r.id}`}
+                    kind={col.key}
+                    row={r}
+                    onDismiss={() => dismissOne(col.key, r.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={hideAll}
+          className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]/95 px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shadow hover:bg-[var(--surface-muted)]"
+        >
+          Скрыть все
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={hideAll}
-        className="pointer-events-auto self-end rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]/95 px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shadow hover:bg-[var(--surface-muted)]"
-      >
-        Скрыть все
-      </button>
     </div>
   );
 }

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
+import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
+import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
@@ -42,6 +44,7 @@ export type FinanceOfficeOrderTableRow = {
   listCompositionMismatch: boolean;
   listPendingChatCorrections: boolean;
   listPendingProstheticsRequests: boolean;
+  listKaitenLabMentionHighlight: boolean;
 };
 
 function formatFinanceCardDate(iso: string | null): string | undefined {
@@ -119,6 +122,11 @@ export function FinanceOfficeOrdersTable({
         </div>
       }
     >
+      <OrderListKaitenPoller
+        orderIds={orders
+          .filter((o) => o.kaitenCardId != null)
+          .map((o) => o.id)}
+      />
       <div className="relative">
       <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible shell-desktop:overflow-x-visible [-webkit-overflow-scrolling:touch]">
         <table className="w-max min-w-full border-collapse text-left text-sm">
@@ -136,6 +144,7 @@ export function FinanceOfficeOrdersTable({
                   <span>Выбрать</span>
                 </div>
               </th>
+              <th className="w-10 px-1 py-2 text-center normal-case max-xl:hidden">Чат</th>
               <th className="px-2 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
               <th className="px-2 py-2 text-center">Клиника</th>
               <th className="px-2 py-2 text-center">Врач</th>
@@ -217,6 +226,11 @@ export function FinanceOfficeOrdersTable({
                       aria-label={`Выбрать наряд ${o.orderNumber}`}
                     />
                   </td>
+                  <OrderListOrderChatCell
+                    orderId={o.id}
+                    orderNumber={o.orderNumber}
+                    labMentionHighlight={o.listKaitenLabMentionHighlight}
+                  />
                   <td className="whitespace-nowrap px-2 py-2 font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 max-xl:bg-[var(--card-bg)] max-xl:shadow-[1px_0_0_var(--card-border)]">
                     <Link href={orderPathById(o.id)} className="text-[var(--sidebar-blue)] hover:underline">
                       {o.orderNumber}
@@ -309,6 +323,12 @@ export function FinanceOfficeOrdersTable({
                       ) : null}
 
                       <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-[44px] [&_button]:min-w-[44px]">
+                        <OrderListOrderChatCell
+                          orderId={o.id}
+                          orderNumber={o.orderNumber}
+                          labMentionHighlight={o.listKaitenLabMentionHighlight}
+                          embedded
+                        />
                         <label className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2">
                           <input
                             type="checkbox"

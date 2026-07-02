@@ -39,18 +39,29 @@ async function tryClaimKaitenPush(
   orderId: string,
   attachmentId: string,
 ): Promise<boolean> {
+  /** Только null → in-flight: иначе два параллельных push (deferred + sync) грузят один файл дважды. */
   const claimed = await prisma.orderAttachment.updateMany({
     where: {
       id: attachmentId,
       orderId,
-      OR: [
-        { uploadedToKaitenAt: null },
-        { uploadedToKaitenAt: KAITEN_PUSH_IN_FLIGHT_AT },
-      ],
+      uploadedToKaitenAt: null,
     },
     data: { uploadedToKaitenAt: KAITEN_PUSH_IN_FLIGHT_AT },
   });
   return claimed.count > 0;
+}
+
+async function reclaimStaleKaitenPushClaimIfAny(
+  prisma: PrismaClient,
+  attachmentId: string,
+): Promise<void> {
+  await prisma.orderAttachment.updateMany({
+    where: {
+      id: attachmentId,
+      uploadedToKaitenAt: KAITEN_PUSH_IN_FLIGHT_AT,
+    },
+    data: { uploadedToKaitenAt: null },
+  });
 }
 
 async function waitForPeerKaitenPushComplete(
@@ -186,6 +197,7 @@ export async function pushAttachmentToKaiten(
   if (!claimed) {
     const done = await waitForPeerKaitenPushComplete(prisma, attachmentId, 25_000);
     if (done) return;
+    await reclaimStaleKaitenPushClaimIfAny(prisma, attachmentId);
     claimed = await tryClaimKaitenPush(prisma, orderId, attachmentId);
     if (!claimed) {
       const again = await prisma.orderAttachment.findUnique({
@@ -213,6 +225,21 @@ export async function pushAttachmentToKaiten(
   });
   if (!att) {
     throw new Error("Вложение не найдено");
+  }
+
+  const cardRes = await kaitenGetCard(auth, order.kaitenCardId);
+  if (cardRes.ok && cardRes.card) {
+    const existingOnCard = findKaitenFileIdOnCard(cardRes.card, att.fileName);
+    if (existingOnCard != null) {
+      await prisma.orderAttachment.update({
+        where: { id: attachmentId },
+        data: {
+          uploadedToKaitenAt: new Date(),
+          kaitenFileId: existingOnCard,
+        },
+      });
+      return;
+    }
   }
 
   const bytes = await readOrderAttachmentBytes(att);

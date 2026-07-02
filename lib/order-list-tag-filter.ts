@@ -276,7 +276,7 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
     case "orderAttention":
       return "Внимание: корректировки или расхождение сумм";
     case "kaitenLabMention":
-      return "Упоминание лаборатории в чате (@…)";
+      return "ЧАТ: упоминание лаборатории (@…)";
     case "paymentExpected":
       return "Не оплачено";
     case "paymentPartial":

@@ -578,7 +578,7 @@ export default async function OrdersPage({
               </span>
             </Link>
           ) : null}
-          {labMentionCount > 0 ? (
+          {alwaysShowOrderAttentionChips || labMentionCount > 0 ? (
             <Link
               href={ordersListHref({
                 limit: pageSize,
@@ -594,10 +594,10 @@ export default async function OrdersPage({
                   ? "border-violet-400/90 bg-violet-100 text-violet-950 ring-2 ring-violet-500/90 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100 dark:ring-violet-500/75"
                   : "border-violet-300/70 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/35 dark:text-violet-100 dark:hover:bg-violet-950/50"
               }`}
-              title="Наряды, в чате карточки Kaiten которых упомянули команду лаборатории (@…)"
+              title="Наряды с непрочитанным упоминанием лаборатории в чате Kaiten (@…)"
             >
               <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-                Упоминания
+                ЧАТ
               </span>
               <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
                 {labMentionCount}

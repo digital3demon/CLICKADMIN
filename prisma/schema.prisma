@@ -523,6 +523,8 @@ enum AppModule {
   ORDERS_CREATE
   /// Редактирование существующего заказа
   ORDERS_EDIT
+  /// Чат наряда (Kaiten / канбан): чтение и отправка без права редактировать наряд
+  ORDERS_CHAT
   KANBAN
   /// Канбан: можно менять заголовок карточки
   KANBAN_EDIT_TITLE
@@ -1278,6 +1280,9 @@ model Order {
   kaitenLabMentionSignalAt       DateTime?
   /// Макс. id комментария Kaiten с @лаборатории — чтобы не дублировать signal при повторном синке того же набора.
   kaitenLabMentionWaterlineCommentId Int?
+  /// Превью для тоста: автор и текст последнего @лаборатории в чате
+  kaitenLabMentionToastAuthor      String?
+  kaitenLabMentionToastText        String?
   /// Счёт по наряду выставлен клиенту
   invoiceIssued                  Boolean                   @default(false)
   /// Номер выставленного счёта (ручной ввод)

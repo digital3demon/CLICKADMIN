@@ -93,6 +93,16 @@ export function canEditOrders(
   return false;
 }
 
+/** Чат наряда в списках заказов, отгрузок и ФинОтдела (без права редактировать наряд). */
+export function canAccessOrderChat(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (role === "OWNER") return true;
+  if (moduleAccess?.ORDERS_CHAT === true) return true;
+  return false;
+}
+
 /** Модуль «Конфиг: почта» (/directory/mail) — глобальная галочка в матрице. */
 export function canAccessMailSettingsConfig(
   role: UserRole,

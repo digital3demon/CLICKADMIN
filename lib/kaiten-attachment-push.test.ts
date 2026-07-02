@@ -16,3 +16,9 @@ describe("isOrderAttachmentUploadedToKaiten", () => {
     );
   });
 });
+
+describe("kaiten push claim invariant", () => {
+  it("in-flight маркер не считается завершённой выгрузкой (второй push ждёт peer)", () => {
+    expect(isOrderAttachmentUploadedToKaiten(KAITEN_PUSH_IN_FLIGHT_AT)).toBe(false);
+  });
+});

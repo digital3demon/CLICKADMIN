@@ -4,6 +4,8 @@ import {
   financeOfficeListTagSkipsDueDateWindow,
   financeOfficeScopeWhere,
 } from "@/lib/finance-office-list-scope";
+import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
+import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import {
   formatCounterpartyRequisitesShortSummary,
 } from "@/lib/format-counterparty-requisites-summary";
@@ -61,6 +63,8 @@ const financeOfficeOrderSelect = {
     select: { id: true },
     take: 1,
   },
+  kaitenChatHasLabMention: true,
+  kaitenLabMentionSignalAt: true,
 } as const satisfies Prisma.OrderSelect;
 
 type FinanceOfficeRaw = Prisma.OrderGetPayload<{
@@ -84,6 +88,7 @@ export type FinanceOfficeOrderRow = Omit<
   listCompositionMismatch: boolean;
   listPendingChatCorrections: boolean;
   listPendingProstheticsRequests: boolean;
+  listKaitenLabMentionHighlight: boolean;
 };
 
 export {
@@ -117,14 +122,21 @@ export async function countFinanceOfficeQuickFilterChips(
   tenantId: string,
   opts: {
     search?: string | null;
+    userId?: string;
   } = {},
-): Promise<{ attentionCount: number; prostheticsPendingCount: number }> {
+): Promise<{
+  attentionCount: number;
+  prostheticsPendingCount: number;
+  labMentionCount: number;
+}> {
   const scope = financeOfficeChipCountScopeWhere(tenantId, opts);
-  const [attentionCount, prostheticsPendingCount] = await Promise.all([
-    db.order.count({ where: { AND: [scope, pendingCorrectionsWhere] } }),
-    db.order.count({ where: { AND: [scope, pendingProstheticsWhere] } }),
-  ]);
-  return { attentionCount, prostheticsPendingCount };
+  const [attentionCount, prostheticsPendingCount, labMentionCount] =
+    await Promise.all([
+      db.order.count({ where: { AND: [scope, pendingCorrectionsWhere] } }),
+      db.order.count({ where: { AND: [scope, pendingProstheticsWhere] } }),
+      countOrdersWithPendingKaitenLabMentionForUser(db, scope, opts.userId),
+    ]);
+  return { attentionCount, prostheticsPendingCount, labMentionCount };
 }
 
 function financePriority(row: FinanceOfficeOrderRow): number {
@@ -142,6 +154,7 @@ export async function fetchFinanceOfficeOrders(
     search?: string | null;
     start?: Date | null;
     endExclusive?: Date | null;
+    userId?: string | null;
   } = {},
 ): Promise<FinanceOfficeOrderRow[]> {
   const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
@@ -309,6 +322,7 @@ export async function fetchFinanceOfficeOrders(
       }),
       listPendingChatCorrections: (chatCorrections?.length ?? 0) > 0,
       listPendingProstheticsRequests: (prostheticsRequests?.length ?? 0) > 0,
+      listKaitenLabMentionHighlight: false,
     };
   });
 
@@ -316,7 +330,25 @@ export async function fetchFinanceOfficeOrders(
     parsedTag?.kind === "orderAttention"
       ? mapped.filter((r) => r.listCompositionMismatch || r.listPendingChatCorrections)
       : mapped;
-  return exact.sort((a, b) => {
+
+  const withMention = await hydrateOrderKaitenLabMentionHighlight(
+    db,
+    opts.userId,
+    exact.map((r) => ({
+      id: r.id,
+      kaitenChatHasLabMention: r.kaitenChatHasLabMention,
+      kaitenLabMentionSignalAt: r.kaitenLabMentionSignalAt,
+    })),
+  );
+  const mentionById = new Map(
+    withMention.map((r) => [r.id, r.listKaitenLabMentionHighlight]),
+  );
+  const withHighlight = exact.map((r) => ({
+    ...r,
+    listKaitenLabMentionHighlight: mentionById.get(r.id) ?? false,
+  }));
+
+  return withHighlight.sort((a, b) => {
     const pr = financePriority(a) - financePriority(b);
     if (pr !== 0) return pr;
     return (a.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER) -

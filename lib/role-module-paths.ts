@@ -18,6 +18,46 @@ export function ordersBranchModuleForMethod(
   return "ORDERS_EDIT";
 }
 
+const ORDER_ID_API_PATH_RE = /^\/api\/orders\/[^/]+\/(.+)$/;
+
+/**
+ * API чата наряда — отдельный модуль ORDERS_CHAT (не ORDERS_EDIT).
+ * GET /chat-corrections остаётся на ORDERS (фоновый импорт «!!!» для списка).
+ */
+export function orderChatApiModuleForPath(
+  pathname: string,
+  method: string,
+): AppModule | null {
+  const m = orderIdApiTail(pathname);
+  if (!m) return null;
+  const tail = m.tail;
+  const http = method.toUpperCase();
+  if (tail === "kanban-chat") return "ORDERS_CHAT";
+  if (tail === "kaiten-lab-mention-ack") return "ORDERS_CHAT";
+  if (tail === "kaiten/chat") return "ORDERS_CHAT";
+  if (tail === "kaiten/comments") return "ORDERS_CHAT";
+  if (tail === "chat-corrections" && !HTTP_READ_METHODS.has(http)) {
+    return "ORDERS_CHAT";
+  }
+  return null;
+}
+
+function orderIdApiTail(pathname: string): { tail: string } | null {
+  const m = pathname.match(ORDER_ID_API_PATH_RE);
+  if (!m?.[1]) return null;
+  return { tail: m[1].replace(/\/$/, "") };
+}
+
+/** POST вложения к наряду: достаточно ORDERS_EDIT или ORDERS_CHAT. */
+export function isOrderAttachmentUploadApiPath(
+  pathname: string,
+  method: string,
+): boolean {
+  if (method.toUpperCase() !== "POST") return false;
+  const t = orderIdApiTail(pathname);
+  return t?.tail === "attachments";
+}
+
 /** API настроек печати: GET — просмотр, PATCH — редактирование шаблонов. */
 export function printSettingsModuleForMethod(
   method: string,
@@ -123,6 +163,7 @@ const RULES: Rule[] = [
   { prefix: "/api/order-attachments", module: "ORDERS" },
   { prefix: "/api/kaiten", module: "ORDERS" },
   { prefix: "/api/order-chat-corrections", module: "ORDERS" },
+  { prefix: "/api/order-chat-messages", module: "ORDERS_CHAT" },
   { prefix: "/api/order-prosthetics-requests", module: "ORDERS" },
   { prefix: "/api/reorder-lines", module: "ORDERS" },
   { prefix: "/api/inventory", module: "WAREHOUSE" },
@@ -163,6 +204,8 @@ export function requiredModuleForPath(
   method?: string,
   search = "",
 ): AppModule | null {
+  const chatModule = orderChatApiModuleForPath(pathname, method ?? "GET");
+  if (chatModule) return chatModule;
   if (base == null) return null;
   const m = (method ?? "GET").toUpperCase();
   if (base === "CLIENTS") return clientsBranchModuleForMethod(m);

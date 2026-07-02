@@ -17,6 +17,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "ORDERS",
   "ORDERS_CREATE",
   "ORDERS_EDIT",
+  "ORDERS_CHAT",
   "KANBAN",
   "KANBAN_EDIT_TITLE",
   "KANBAN_EDIT_DUE_DATE",
@@ -61,6 +62,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   ORDERS: "Заказы",
   ORDERS_CREATE: "Создание заказа",
   ORDERS_EDIT: "Редактирование заказа",
+  ORDERS_CHAT: "Чат в наряде (Kaiten / канбан)",
   KANBAN: "Канбан",
   KANBAN_EDIT_TITLE: "Канбан: менять заголовок карточки",
   KANBAN_EDIT_DUE_DATE: "Канбан: менять срок",
@@ -154,7 +156,8 @@ export function defaultModuleAllowed(
       module === "KANBAN" ||
       module === "KANBAN_MANAGE_CHECKLIST" ||
       module === "KANBAN_MANAGE_TIMER" ||
-      module === "PAYROLL"
+      module === "PAYROLL" ||
+      module === "ORDERS_CHAT"
     );
   }
 
@@ -174,6 +177,13 @@ export function defaultModuleAllowed(
         role === "ADMINISTRATOR" ||
         role === "SENIOR_ADMINISTRATOR" ||
         role === "FINANCIAL_MANAGER"
+      );
+    case "ORDERS_CHAT":
+      return (
+        role === "ADMINISTRATOR" ||
+        role === "SENIOR_ADMINISTRATOR" ||
+        role === "FINANCIAL_MANAGER" ||
+        role === "ACCOUNTANT"
       );
     case "KANBAN":
       return true;

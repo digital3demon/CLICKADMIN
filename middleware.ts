@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth/jwt";
 import {
   getModuleForPathname,
+  isOrderAttachmentUploadApiPath,
   requiredModuleForPath,
 } from "@/lib/role-module-paths";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
@@ -133,6 +134,7 @@ function isRateLimitExemptPath(pathname: string, method: string): boolean {
     pathname.startsWith("/api/client-state") ||
     pathname.startsWith("/api/attention-reminders") ||
     pathname.startsWith("/api/order-chat-corrections/toasts") ||
+    pathname.startsWith("/api/order-chat-messages/toasts") ||
     pathname.startsWith("/api/order-prosthetics-requests/toasts") ||
     pathname.startsWith("/api/orders/search-suggest")
   );
@@ -583,20 +585,29 @@ export async function middleware(req: NextRequest) {
         );
       }
       if (!moduleAllowed) {
-      if (pathname.startsWith("/api/")) {
-        const out = NextResponse.json(
-          { error: "Нет доступа к этому разделу" },
-          { status: 403 },
-        );
-        return securityHeaders(out);
+        if (
+          requiredModule === "ORDERS_EDIT" &&
+          isOrderAttachmentUploadApiPath(pathname, req.method) &&
+          access.ORDERS_CHAT === true
+        ) {
+          moduleAllowed = true;
+        }
       }
-      const home =
-        access.ORDERS === true
-          ? "/orders"
-          : access.KANBAN === true
-            ? "/kanban"
-            : "/";
-      return redirectPublic(req, home);
+      if (!moduleAllowed) {
+        if (pathname.startsWith("/api/")) {
+          const out = NextResponse.json(
+            { error: "Нет доступа к этому разделу" },
+            { status: 403 },
+          );
+          return securityHeaders(out);
+        }
+        const home =
+          access.ORDERS === true
+            ? "/orders"
+            : access.KANBAN === true
+              ? "/kanban"
+              : "/";
+        return redirectPublic(req, home);
       }
     }
   }

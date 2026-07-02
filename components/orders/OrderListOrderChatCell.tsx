@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
 import { OrderListKaitenChatModal } from "@/components/orders/OrderListKaitenChatModal";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
+import { canAccessOrderChat } from "@/lib/auth/permissions";
 
 function ChatBubbleIcon({ className }: { className?: string }) {
   return (
@@ -35,8 +37,14 @@ export function OrderListOrderChatCell({
   /** Встроенный режим — без обёртки `<td>` (объединённая колонка таблицы). */
   embedded?: boolean;
 }) {
+  const { user } = useSessionUser();
+  const chatAllowed =
+    user != null &&
+    canAccessOrderChat(user.role, user.moduleAccess ?? undefined);
   const [open, setOpen] = useState(false);
   const adminMentionTag = useKanbanAdminMentionTag();
+
+  if (!chatAllowed) return null;
 
   const content = (
     <>

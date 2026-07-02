@@ -2,6 +2,7 @@ import Link from "next/link";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import {
   humanListTagLabel,
+  LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
   type ParsedListTag,
@@ -10,6 +11,7 @@ import {
 export function FinanceOfficeQuickFilterChips({
   attentionCount,
   prostheticsPendingCount,
+  labMentionCount,
   activeFilter = null,
   tab,
   periodFrom,
@@ -18,6 +20,7 @@ export function FinanceOfficeQuickFilterChips({
 }: {
   attentionCount: number;
   prostheticsPendingCount: number;
+  labMentionCount: number;
   activeFilter?: ParsedListTag | null;
   tab: string;
   periodFrom: string | null;
@@ -70,6 +73,25 @@ export function FinanceOfficeQuickFilterChips({
           </span>
           <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
             {prostheticsPendingCount}
+          </span>
+        </Link>
+        <Link
+          href={financeOfficeListHref({
+            ...listCtx,
+            tag: LIST_TAG_KAITEN_LAB_MENTION,
+          })}
+          className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+            activeFilter?.kind === "kaitenLabMention"
+              ? "border-violet-400/90 bg-violet-100 text-violet-950 ring-2 ring-violet-500/90 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100 dark:ring-violet-500/75"
+              : "border-violet-300/70 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/35 dark:text-violet-100 dark:hover:bg-violet-950/50"
+          }`}
+          title="Наряды с непрочитанным упоминанием лаборатории в чате Kaiten (@…)"
+        >
+          <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            ЧАТ
+          </span>
+          <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            {labMentionCount}
           </span>
         </Link>
         {activeFilter ? (

@@ -80,6 +80,7 @@ function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[
     listCompositionMismatch: o.listCompositionMismatch,
     listPendingChatCorrections: o.listPendingChatCorrections,
     listPendingProstheticsRequests: o.listPendingProstheticsRequests,
+    listKaitenLabMentionHighlight: o.listKaitenLabMentionHighlight,
   };
 }
 
@@ -149,14 +150,16 @@ export default async function FinanceOfficePage({
         search: q,
         start,
         endExclusive,
+        userId: session?.sub,
       })
     : [];
   const chipCounts =
     ordersPrisma && shouldFetch && !error
       ? await countFinanceOfficeQuickFilterChips(ordersPrisma, tenantId, {
           search: q,
+          userId: session?.sub,
         })
-      : { attentionCount: 0, prostheticsPendingCount: 0 };
+      : { attentionCount: 0, prostheticsPendingCount: 0, labMentionCount: 0 };
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;
   const tagSkipsDueDate = financeOfficeListTagSkipsDueDateWindow(parsedTag);
   const listRangeSummary =
@@ -307,6 +310,7 @@ export default async function FinanceOfficePage({
           <FinanceOfficeQuickFilterChips
             attentionCount={chipCounts.attentionCount}
             prostheticsPendingCount={chipCounts.prostheticsPendingCount}
+            labMentionCount={chipCounts.labMentionCount}
             activeFilter={parsedTag}
             tab={tab}
             periodFrom={fromRaw}

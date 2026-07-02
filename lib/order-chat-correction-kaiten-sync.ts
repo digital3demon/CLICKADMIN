@@ -10,6 +10,7 @@ import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import {
   syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
+import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import { kaitenLogger } from "@/lib/server/logger";
@@ -81,6 +82,7 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
   rateLimited: boolean;
   commentCount: number;
   importedCorrections: number;
+  labMentionDbChanged: boolean;
   elapsedMs: number;
 }> {
   const startedAt = Date.now();
@@ -103,13 +105,20 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
       rateLimited: false,
       commentCount: 0,
       importedCorrections: 0,
+      labMentionDbChanged: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
 
-  const corrBefore = await prisma.orderChatCorrection.count({
-    where: { orderId: oid, resolvedAt: null, rejectedAt: null },
-  });
+  const [corrBefore, orderMeta] = await Promise.all([
+    prisma.orderChatCorrection.count({
+      where: { orderId: oid, resolvedAt: null, rejectedAt: null },
+    }),
+    prisma.order.findUnique({
+      where: { id: oid },
+      select: { tenant: { select: { kanbanAdminMentionTag: true } } },
+    }),
+  ]);
 
   const comm = await kaitenListComments(auth, kaitenCardId);
   if (!comm.ok) {
@@ -133,6 +142,7 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
       rateLimited,
       commentCount: 0,
       importedCorrections: 0,
+      labMentionDbChanged: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -147,6 +157,20 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
 
   await syncOrderChatCorrectionsFromKaitenComments(prisma, oid, comments);
   await syncOrderProstheticsRequestsFromKaitenComments(prisma, oid, comments);
+  let labMentionDbChanged = false;
+  try {
+    labMentionDbChanged = await syncKaitenLabMentionFromParsedComments(
+      prisma,
+      oid,
+      comments,
+      orderMeta?.tenant?.kanbanAdminMentionTag,
+    );
+  } catch (err) {
+    kaitenLogger.error(
+      { err, orderId: oid, source, msg: "kaiten_lab_mention_sync" },
+      "kaiten lab mention sync failed",
+    );
+  }
   const importedCorrections = await logNewCorrectionsFromComments(
     prisma,
     oid,
@@ -168,6 +192,7 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
       source,
       commentCount: comments.length,
       importedCorrections,
+      labMentionDbChanged,
       rateLimited: false,
       elapsedMs,
     },
@@ -179,6 +204,7 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
     rateLimited: false,
     commentCount: comments.length,
     importedCorrections,
+    labMentionDbChanged,
     elapsedMs,
   };
 }
