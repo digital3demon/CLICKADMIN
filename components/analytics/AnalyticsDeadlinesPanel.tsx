@@ -62,11 +62,17 @@ function KpiCard({
   hint?: string;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
-      <div className="text-xs font-medium text-[var(--text-muted)]">{label}</div>
-      <div className="mt-1 text-xl font-semibold text-[var(--app-text)]">{value}</div>
+    <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-4 py-3.5">
+      <div className="text-[0.68rem] font-medium text-[var(--text-muted)]">
+        {label}
+      </div>
+      <div className="mt-1.5 text-xl font-semibold tabular-nums text-[var(--app-text)]">
+        {value}
+      </div>
       {hint ? (
-        <div className="mt-1 text-[0.68rem] text-[var(--text-secondary)]">{hint}</div>
+        <div className="mt-1 text-[0.65rem] text-[var(--text-secondary)]">
+          {hint}
+        </div>
       ) : null}
     </div>
   );
@@ -86,13 +92,57 @@ function BucketChart({
     <div className="h-56 w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
-          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-          <Tooltip />
-          <Bar dataKey="count" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+          <CartesianGrid strokeDasharray="3 3" opacity={0.2} vertical={false} />
+          <XAxis
+            dataKey="name"
+            tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            allowDecimals={false}
+            tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            contentStyle={{
+              background: "var(--card-bg)",
+              border: "1px solid var(--card-border)",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+          />
+          <Bar dataKey="count" fill="var(--sidebar-blue)" radius={[6, 6, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
+    </div>
+  );
+}
+
+function StatsBreakdown({
+  rows,
+  totalLabel,
+  total,
+}: {
+  rows: Array<{ label: string; count: number; percent: number }>;
+  totalLabel: string;
+  total: number;
+}) {
+  return (
+    <div className="flex h-full flex-col justify-center space-y-3 text-sm">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between gap-3">
+          <span className="text-[var(--text-secondary)]">{row.label}</span>
+          <span className="shrink-0 tabular-nums font-medium text-[var(--app-text)]">
+            {row.count} ({row.percent}%)
+          </span>
+        </div>
+      ))}
+      <div className="flex items-center justify-between gap-3 border-t border-[var(--card-border)] pt-3 font-semibold text-[var(--app-text)]">
+        <span>{totalLabel}</span>
+        <span className="tabular-nums">{total}</span>
+      </div>
     </div>
   );
 }
@@ -161,9 +211,9 @@ export function AnalyticsDeadlinesPanel({
             type="button"
             role="tab"
             aria-selected={subTab === t.id}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
               subTab === t.id
-                ? "bg-[var(--sidebar-blue)] text-white"
+                ? "bg-[var(--sidebar-blue)] text-white shadow-sm"
                 : "bg-[var(--surface-subtle)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
             }`}
             onClick={() => setSubTab(t.id)}
@@ -173,49 +223,21 @@ export function AnalyticsDeadlinesPanel({
         ))}
         <a
           href={exportHref}
-          className="ml-auto rounded-lg border border-[var(--card-border)] px-3 py-1.5 text-sm text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+          className="ml-auto rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--app-text)]"
         >
           Скачать Excel
         </a>
       </div>
 
-      <DeadlinesScheduleSettings schedule={schedule} onChange={setSchedule} />
-
-      {subTab === "admin" ? (
-        <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
-          <label className="flex flex-wrap items-end gap-3 text-sm">
-            <span className="text-[var(--text-secondary)]">
-              Порог занесения (рабочие часы)
-            </span>
-            <input
-              type="number"
-              min={0.5}
-              max={72}
-              step={0.5}
-              className="w-24 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-1"
-              value={slaHours}
-              onChange={(e) => setSlaHours(Number(e.target.value) || DEFAULT_ADMIN_SLA_HOURS)}
-            />
-            <button
-              type="button"
-              className="rounded-lg bg-[var(--sidebar-blue)] px-3 py-1.5 text-sm text-white"
-              onClick={() => void load()}
-            >
-              Применить
-            </button>
-          </label>
-          <p className="mt-2 text-xs text-[var(--text-secondary)]">
-            От поступления работы до оформления наряда; погрешность ±30 мин. Период
-            фильтруется по дате поступления.
-          </p>
-        </div>
-      ) : (
-        <p className="text-xs text-[var(--text-secondary)]">
-          От оформления до первого перехода в «Сдана админам»; норматив — макс.
-          leadWorkingDays из прайса (количество в позиции не умножает срок). Период
-          — по дате оформления. Погрешность ±30 мин.
-        </p>
-      )}
+      <DeadlinesScheduleSettings
+        schedule={schedule}
+        onChange={setSchedule}
+        mode={subTab}
+        slaHours={subTab === "admin" ? slaHours : undefined}
+        onSlaHoursChange={subTab === "admin" ? setSlaHours : undefined}
+        onApply={() => void load()}
+        applying={busy}
+      />
 
       {(error || localError) && (
         <p className="text-sm text-red-600 dark:text-red-400">{error || localError}</p>
@@ -227,7 +249,7 @@ export function AnalyticsDeadlinesPanel({
 
       {subTab === "admin" && admin ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard
               label="Средний срок за всё время"
               value={formatDurationMinutesRu(admin.allTimeAverageMinutes)}
@@ -247,35 +269,34 @@ export function AnalyticsDeadlinesPanel({
             />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
-              <h4 className="mb-2 text-sm font-semibold">Распределение за период</h4>
+            <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
+              <h4 className="mb-3 text-sm font-semibold text-[var(--app-text)]">
+                Распределение за период
+              </h4>
               <BucketChart buckets={admin.buckets} />
             </div>
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-sm">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Раньше порога</span>
-                  <span>
-                    {admin.buckets.early} ({admin.bucketPercents.early}%)
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Вовремя</span>
-                  <span>
-                    {admin.buckets.onTime} ({admin.bucketPercents.onTime}%)
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Позже</span>
-                  <span>
-                    {admin.buckets.late} ({admin.bucketPercents.late}%)
-                  </span>
-                </div>
-                <div className="flex justify-between border-t border-[var(--card-border)] pt-2 font-medium">
-                  <span>Всего в периоде</span>
-                  <span>{admin.buckets.total}</span>
-                </div>
-              </div>
+            <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
+              <StatsBreakdown
+                rows={[
+                  {
+                    label: "Раньше порога",
+                    count: admin.buckets.early,
+                    percent: admin.bucketPercents.early,
+                  },
+                  {
+                    label: "Вовремя",
+                    count: admin.buckets.onTime,
+                    percent: admin.bucketPercents.onTime,
+                  },
+                  {
+                    label: "Позже",
+                    count: admin.buckets.late,
+                    percent: admin.bucketPercents.late,
+                  },
+                ]}
+                totalLabel="Всего в периоде"
+                total={admin.buckets.total}
+              />
             </div>
           </div>
         </>
@@ -284,22 +305,23 @@ export function AnalyticsDeadlinesPanel({
       {subTab === "work" && work ? (
         <>
           {work.completedAllTime === 0 ? (
-            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+            <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
               Нет нарядов в колонке «Сдана админам» (ни в истории, ни сейчас на
               доске). Учитываются только завершённые работы; тестовые, отменённые
               и коррекции исключены.
             </p>
           ) : work.completedInPeriod === 0 ? (
-            <p className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-[var(--text-secondary)]">
+            <p className="rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-[var(--text-secondary)]">
               За выбранный период оформления нет сданных админам нарядов (всего
               сдано: {work.completedAllTime}). Расширьте даты «с / по» вверху
               страницы.
             </p>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard
               label="Средний факт (всё время)"
               value={formatDurationMinutesRu(work.allTimeAverageMinutes)}
+              hint="Оформление → сдана админам"
             />
             <KpiCard
               label="Средний факт (период)"
@@ -316,46 +338,45 @@ export function AnalyticsDeadlinesPanel({
             />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
-              <h4 className="mb-2 text-sm font-semibold">
+            <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
+              <h4 className="mb-3 text-sm font-semibold text-[var(--app-text)]">
                 С нормативом из прайса (период)
               </h4>
               <BucketChart buckets={work.withNormative} />
             </div>
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-sm">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Раньше норматива</span>
-                  <span>
-                    {work.withNormative.early} (
-                    {work.withNormative.bucketPercents.early}%)
+            <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
+              <StatsBreakdown
+                rows={[
+                  {
+                    label: "Раньше норматива",
+                    count: work.withNormative.early,
+                    percent: work.withNormative.bucketPercents.early,
+                  },
+                  {
+                    label: "Вовремя",
+                    count: work.withNormative.onTime,
+                    percent: work.withNormative.bucketPercents.onTime,
+                  },
+                  {
+                    label: "Позже",
+                    count: work.withNormative.late,
+                    percent: work.withNormative.bucketPercents.late,
+                  },
+                ]}
+                totalLabel="Всего с нормативом"
+                total={work.withNormative.total}
+              />
+              <div className="mt-4 border-t border-[var(--card-border)] pt-3 text-sm">
+                <div className="flex justify-between text-[var(--text-secondary)]">
+                  <span>Без норматива (период)</span>
+                  <span className="tabular-nums font-medium text-[var(--app-text)]">
+                    {work.withoutNormative.count}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Вовремя</span>
-                  <span>
-                    {work.withNormative.onTime} (
-                    {work.withNormative.bucketPercents.onTime}%)
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Позже</span>
-                  <span>
-                    {work.withNormative.late} ({work.withNormative.bucketPercents.late}%)
-                  </span>
-                </div>
-                <div className="flex justify-between border-t border-[var(--card-border)] pt-2">
+                <div className="mt-2 flex justify-between text-[var(--text-secondary)]">
                   <span>Средний с нормативом</span>
-                  <span>
+                  <span className="tabular-nums font-medium text-[var(--app-text)]">
                     {formatDurationMinutesRu(work.withNormative.periodAverageMinutes)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Без норматива (всё время)</span>
-                  <span>
-                    {formatDurationMinutesRu(
-                      work.withoutNormative.allTimeAverageMinutes,
-                    )}
                   </span>
                 </div>
               </div>
