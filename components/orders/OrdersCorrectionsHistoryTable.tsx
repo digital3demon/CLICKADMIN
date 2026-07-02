@@ -38,9 +38,9 @@ export function OrdersCorrectionsHistoryTable({
         <colgroup>
           <col style={{ width: "8.5rem" }} />
           <col style={{ width: "9rem" }} />
-          <col style={{ width: "11rem" }} />
-          <col style={{ width: "6.5rem" }} />
-          <col style={{ width: "9.5rem" }} />
+          <col style={{ width: "8rem" }} />
+          <col style={{ width: "10.25rem" }} />
+          <col style={{ width: "8rem" }} />
           <col style={{ width: "11rem" }} />
           <col />
         </colgroup>
@@ -92,11 +92,14 @@ export function OrdersCorrectionsHistoryTable({
                 >
                   {CORRECTION_SOURCE_LABEL[item.source]}
                 </td>
-                <td className="whitespace-nowrap px-2 py-2 text-[var(--text-strong)] sm:px-3 sm:py-2.5">
+                <td
+                  className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-2 font-mono text-xs tabular-nums text-[var(--text-strong)] sm:px-3 sm:py-2.5 sm:text-sm"
+                  title={formatRuDateTime(item.createdAt)}
+                >
                   {formatRuDateTime(item.createdAt)}
                 </td>
                 <td
-                  className={`px-2 py-2 font-medium sm:px-3 sm:py-2.5 ${decisionClass(decision.status)}`}
+                  className={`overflow-hidden text-ellipsis whitespace-nowrap px-2 py-2 font-medium sm:px-3 sm:py-2.5 ${decisionClass(decision.status)}`}
                 >
                   {decision.label}
                 </td>

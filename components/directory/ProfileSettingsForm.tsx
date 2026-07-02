@@ -48,6 +48,14 @@ async function parseJsonResponse<T>(r: Response): Promise<
   }
 }
 
+function telegramPrefSectionsForRole(role: UserRole | null) {
+  const sections = [...KANBAN_TELEGRAM_PREF_SECTIONS];
+  if (role === "PRODUCTION" || role === "SENIOR_PRODUCTION") {
+    sections.push(...KANBAN_TELEGRAM_PREF_SECTIONS_PRODUCTION);
+  }
+  return sections;
+}
+
 type ProfileUser = {
   id: string;
   role?: UserRole;
@@ -452,7 +460,7 @@ export function ProfileSettingsForm({
             </div>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               Вход в CRM только по почте и паролю. Здесь — привязка чата с ботом для
-              оповещений о событиях канбана в CRM (по переключателям ниже). События
+              оповещений о событиях канбана в CRM (переключатели ниже). События
               Kaiten приходят из Kaiten, через CRM не дублируются.
             </p>
           </div>
@@ -527,18 +535,16 @@ export function ProfileSettingsForm({
               Отвязать Telegram
             </button>
           )}
-          {telegramLinked &&
-          tgPrefs &&
-          (userRole === "ADMINISTRATOR" || userRole === "SENIOR_ADMINISTRATOR") ? (
+          {telegramLinked && tgPrefs ? (
             <div className="space-y-4 border-t border-[var(--card-border)] pt-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                 Личный Telegram: какие уведомления присылать
               </p>
               <p className="text-xs text-[var(--text-muted)]">
-                Для старшего администратора и администратора можно точечно включать типы
-                событий; список событий расширим позже.
+                Включайте только нужные типы событий канбана CRM. События Kaiten
+                приходят из Kaiten и здесь не настраиваются.
               </p>
-              {KANBAN_TELEGRAM_PREF_SECTIONS.map((sec) => (
+              {telegramPrefSectionsForRole(userRole).map((sec) => (
                 <div key={sec.id}>
                   <p className="text-xs font-medium text-[var(--text-body)]">{sec.title}</p>
                   <ul className="mt-2 divide-y divide-[var(--card-border)] rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]">
@@ -566,50 +572,6 @@ export function ProfileSettingsForm({
               <p className="text-[0.65rem] leading-snug text-[var(--text-muted)]">
                 С сервера сейчас уходит рассылка при сохранении канбана CRM в наряд
                 (колонка и тип карточки). Остальные пункты — по мере подключения.
-              </p>
-            </div>
-          ) : telegramLinked &&
-            tgPrefs &&
-            (userRole === "PRODUCTION" || userRole === "SENIOR_PRODUCTION") ? (
-            <div className="space-y-4 border-t border-[var(--card-border)] pt-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                Личный Telegram: производство
-              </p>
-              <p className="text-xs text-[var(--text-muted)]">
-                Новые карточки на доске «Производство» и упоминания группы через @тег из настроек
-                доски.
-              </p>
-              {KANBAN_TELEGRAM_PREF_SECTIONS_PRODUCTION.map((sec) => (
-                <div key={sec.id}>
-                  <p className="text-xs font-medium text-[var(--text-body)]">{sec.title}</p>
-                  <ul className="mt-2 divide-y divide-[var(--card-border)] rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]">
-                    {sec.keys.map((key) => (
-                      <li
-                        key={key}
-                        className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm"
-                      >
-                        <span className="text-[var(--app-text)]">
-                          {KANBAN_TELEGRAM_PREF_LABELS[key]}
-                        </span>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-[var(--input-border)] accent-[var(--sidebar-blue)] disabled:opacity-50"
-                          checked={tgPrefs[key]}
-                          disabled={tgBusy}
-                          onChange={() => void toggleTgPref(key)}
-                          aria-label={KANBAN_TELEGRAM_PREF_LABELS[key]}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          ) : telegramLinked && tgPrefs ? (
-            <div className="space-y-2 border-t border-[var(--card-border)] pt-4">
-              <p className="text-xs text-[var(--text-muted)]">
-                Детальные переключатели уведомлений в личный Telegram для вашей роли будут
-                добавлены позже.
               </p>
             </div>
           ) : null}
