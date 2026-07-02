@@ -91,7 +91,7 @@ async function reply(
     parseMode?: "HTML";
     replyMarkup?: Record<string, unknown>;
   },
-): Promise<void> {
+): Promise<boolean> {
   let r = await telegramSendMessage(botToken, chatId, text, opts);
   if (!r.ok && opts?.parseMode === "HTML") {
     const err = r.error.toLowerCase();
@@ -107,7 +107,9 @@ async function reply(
   }
   if (!r.ok) {
     console.error("[telegram-bot] sendMessage failed", { chatId, error: r.error });
+    return false;
   }
+  return true;
 }
 
 async function replyRemoveKeyboard(
@@ -350,19 +352,24 @@ export async function processTelegramBotUpdate(
         role: effectiveRole,
       });
       if (listReply) {
+        let sent = false;
         if (isPrivateChat) {
-          await replyWithRoleKeyboard(
-            botToken,
-            chatId,
-            listReply.text,
-            effectiveRole,
-            true,
-            { parseMode: listReply.parseMode },
-          );
+          const kb = telegramReplyKeyboardMarkupForRole(effectiveRole);
+          sent = await reply(botToken, chatId, listReply.text, {
+            parseMode: listReply.parseMode,
+            ...(kb ? { replyMarkup: kb } : {}),
+          });
         } else {
-          await reply(botToken, chatId, listReply.text, {
+          sent = await reply(botToken, chatId, listReply.text, {
             parseMode: listReply.parseMode,
           });
+        }
+        if (!sent) {
+          await reply(
+            botToken,
+            chatId,
+            "Не удалось отправить ответ (ошибка Telegram API). Проверьте логи сервера.",
+          );
         }
         return;
       }

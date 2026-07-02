@@ -132,6 +132,9 @@ export async function tryTelegramDoctorGroupsAndMessenger(
       : typeof msg.caption === "string"
         ? msg.caption
         : "";
+
+  if (resolveTelegramBotListCommand(textRaw)) return false;
+
   const textNorm = normalizeBotCommandText(textRaw);
   const cmd = firstCommandToken(textNorm);
 
@@ -224,7 +227,6 @@ export async function tryTelegramDoctorGroupsAndMessenger(
   });
 
   if (!resolvedGroup || resolvedGroup.doctor.deletedAt) {
-    if (resolveTelegramBotListCommand(textRaw)) return false;
     /* Тихо игнорируем в группе: без лишних сообщений, только CRM-поток для привязанных чатов. */
     return true;
   }

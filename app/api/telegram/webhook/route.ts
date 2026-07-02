@@ -4,6 +4,10 @@ import { processTelegramBotUpdate } from "@/lib/telegram-bot-process-update";
 import { getTelegramBotUserIdStr } from "@/lib/telegram-bot-identity";
 import { tryTelegramBotAddedChatIdAnnounce } from "@/lib/telegram-bot-my-chat-member";
 import { tryTelegramDoctorGroupsAndMessenger } from "@/lib/telegram-doctor-groups-and-messenger";
+import {
+  fetchTelegramBotMe,
+  fetchTelegramWebhookInfo,
+} from "@/lib/telegram-webhook-info";
 
 export const dynamic = "force-dynamic";
 
@@ -28,18 +32,49 @@ export async function GET() {
   }
   const hasToken = Boolean(botToken());
   const secretSet = Boolean(process.env.TELEGRAM_WEBHOOK_SECRET?.trim());
+  const token = botToken();
+  const [webhookInfo, botMe] = token
+    ? await Promise.all([
+        fetchTelegramWebhookInfo(token),
+        fetchTelegramBotMe(token),
+      ])
+    : [null, null];
+
+  const webhookUrlOk =
+    webhookInfo?.ok === true &&
+    webhookInfo.url.includes("/api/telegram/webhook");
+
   return NextResponse.json({
     ok: true,
     hasBotToken: hasToken,
     webhookSecretEnvSet: secretSet,
     postPath: "/api/telegram/webhook",
+    telegram: {
+      botMe: botMe?.ok === true ? { username: botMe.username, id: botMe.id } : null,
+      botMeError: botMe?.ok === false ? botMe.error : null,
+      webhookUrl: webhookInfo?.ok === true ? webhookInfo.url : null,
+      webhookUrlOk,
+      pendingUpdateCount:
+        webhookInfo?.ok === true ? webhookInfo.pendingUpdateCount : null,
+      lastErrorMessage:
+        webhookInfo?.ok === true ? webhookInfo.lastErrorMessage : null,
+      lastErrorDate:
+        webhookInfo?.ok === true ? webhookInfo.lastErrorDate : null,
+      webhookInfoError: webhookInfo?.ok === false ? webhookInfo.error : null,
+    },
     notes: [
       "URL в CRM не вводится: его указываете только в setWebhook у Telegram (https://ваш-домен/api/telegram/webhook).",
       secretSet
         ? "TELEGRAM_WEBHOOK_SECRET задан: в setWebhook обязателен тот же secret_token. Без него Telegram шлёт запрос без заголовка — CRM отвечает 403, бот «молчит»."
         : "TELEGRAM_WEBHOOK_SECRET не задан — заголовок X-Telegram-Bot-Api-Secret-Token не проверяется.",
+      webhookInfo?.ok === true && webhookInfo.lastErrorMessage
+        ? `Telegram не доставляет вебхук: ${webhookInfo.lastErrorMessage}`
+        : null,
+      webhookInfo?.ok === true && !webhookUrlOk
+        ? "В Telegram зарегистрирован другой URL вебхука — обновите setWebhook."
+        : null,
       "После правок .env перезапустите процесс Node (pm2/docker/systemd).",
-    ],
+    ].filter(Boolean),
   });
 }
 
@@ -76,15 +111,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 
+  let handledGroup = false;
   try {
     await getTelegramBotUserIdStr(token);
     await tryTelegramBotAddedChatIdAnnounce(body, token);
-    const handledGroup = await tryTelegramDoctorGroupsAndMessenger(body, token);
+    handledGroup = await tryTelegramDoctorGroupsAndMessenger(body, token);
     if (!handledGroup) {
       await processTelegramBotUpdate(body, token);
     }
   } catch (e) {
     console.error("[telegram webhook]", e);
   }
+
+  if (process.env.TELEGRAM_WEBHOOK_DEBUG === "1") {
+    const msg = body.message ?? body.edited_message ?? body.business_message;
+    const chat = msg && typeof msg === "object" ? (msg as { chat?: { type?: string } }).chat : null;
+    const text =
+      msg && typeof msg === "object" && typeof (msg as { text?: unknown }).text === "string"
+        ? String((msg as { text: string }).text).slice(0, 80)
+        : "";
+    console.info("[telegram webhook] ok", {
+      updateId: body.update_id,
+      chatType: chat?.type,
+      handledGroup,
+      text,
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }
