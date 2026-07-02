@@ -1,1 +1,2 @@
-ALTER TABLE "Order" ADD COLUMN "kaitenChatSyncedAt" DATETIME;
+-- AlterTable
+ALTER TABLE "Order" ADD COLUMN "kaitenChatSyncedAt" TIMESTAMP(3);
