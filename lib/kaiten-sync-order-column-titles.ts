@@ -15,11 +15,8 @@ import {
 } from "@/lib/kaiten-comment-parse";
 import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
-import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
-import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
-import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
-import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
+import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import { kaitenLogger } from "@/lib/server/logger";
@@ -164,26 +161,14 @@ export async function syncKaitenColumnTitlesForOrderIds(
             textIncludesAdminLabMention(c.text, labTag),
           );
           clicklabByOrderId[row.id] = computedLabMention;
-          await syncOrderChatCorrectionsFromKaitenComments(db, row.id, comments);
-          await syncOrderProstheticsRequestsFromKaitenComments(db, row.id, comments);
-          const labChanged = await syncKaitenLabMentionFromParsedComments(
-            db,
-            row.id,
-            comments,
-            row.tenant?.kanbanAdminMentionTag,
-          );
-          if (labChanged) kaitenLabMentionDbChanged = true;
-          await syncKaitenCommentsIntoKanbanState({
+          const ingested = await ingestKaitenCommentsForOrder({
+            prisma: db,
             tenantId: row.tenantId,
             orderId: row.id,
-            comments: parsedFull.map((c) => ({
-              id: c.id,
-              text: c.text,
-              created: c.created,
-              authorName: c.authorName,
-              parentId: c.parentId,
-            })),
+            parsed: parsedFull,
+            kanbanAdminMentionTag: row.tenant?.kanbanAdminMentionTag,
           });
+          if (ingested.labMentionDbChanged) kaitenLabMentionDbChanged = true;
           await db.order.update({
             where: { id: row.id },
             data: { kaitenChatSyncedAt: new Date() },

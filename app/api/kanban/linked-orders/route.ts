@@ -8,7 +8,7 @@ import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-orde
 import { bestKaitenDescriptionMirrorForKanban } from "@/lib/kanban/kaiten-description-mirror";
 import { getKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { kaitenCommentsForSyncFromSnapshotPayload } from "@/lib/order-chat-correction-db";
-import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
+import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import { getKaitenRestAuth } from "@/lib/kaiten-rest";
 import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-column-titles";
 
@@ -245,12 +245,16 @@ export async function GET() {
           const snap = getKaitenSnapshotCache(o.id);
           if (snap == null) continue;
           const comm = kaitenCommentsForSyncFromSnapshotPayload(snap);
-          await syncKaitenLabMentionFromParsedComments(
-            ordersPrisma,
-            o.id,
-            comm,
-            labTag,
-          );
+          await ingestKaitenCommentsForOrder({
+            prisma: ordersPrisma,
+            tenantId,
+            orderId: o.id,
+            parsed: comm,
+            kanbanAdminMentionTag: labTag,
+            skipCorrections: true,
+            skipProsthetics: true,
+            skipKanbanMirror: true,
+          });
         }
       } catch (e) {
         console.error("[kanban/linked-orders] lab mention from snapshot", e);

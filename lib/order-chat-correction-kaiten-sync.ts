@@ -7,11 +7,10 @@ import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import { getKaitenRestAuth, kaitenListComments, type KaitenAuth } from "@/lib/kaiten-rest";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
-import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
+import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import {
   syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
-import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import { kaitenLogger } from "@/lib/server/logger";
@@ -159,42 +158,27 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
   );
   const comments = mapParsedKaitenCommentsForTriggerSync(parsedFull);
 
-  await syncOrderChatCorrectionsFromKaitenComments(prisma, oid, comments);
-  await syncOrderProstheticsRequestsFromKaitenComments(prisma, oid, comments);
   let labMentionDbChanged = false;
-  try {
-    labMentionDbChanged = await syncKaitenLabMentionFromParsedComments(
-      prisma,
-      oid,
-      comments,
-      orderMeta?.tenant?.kanbanAdminMentionTag,
-    );
-  } catch (err) {
-    kaitenLogger.error(
-      { err, orderId: oid, source, msg: "kaiten_lab_mention_sync" },
-      "kaiten lab mention sync failed",
-    );
-  }
   const tenantId = orderMeta?.tenantId?.trim();
   if (tenantId && parsedFull.length > 0) {
     try {
-      await syncKaitenCommentsIntoKanbanState({
+      const ingested = await ingestKaitenCommentsForOrder({
+        prisma,
         tenantId,
         orderId: oid,
-        comments: parsedFull.map((c) => ({
-          id: c.id,
-          text: c.text,
-          created: c.created,
-          authorName: c.authorName,
-          parentId: c.parentId,
-        })),
+        parsed: parsedFull,
+        kanbanAdminMentionTag: orderMeta?.tenant?.kanbanAdminMentionTag,
       });
+      labMentionDbChanged = ingested.labMentionDbChanged;
     } catch (err) {
       kaitenLogger.error(
-        { err, orderId: oid, source, msg: "kaiten_kanban_mirror_sync" },
-        "kaiten comments mirror into kanban failed",
+        { err, orderId: oid, source, msg: "kaiten_comments_ingest" },
+        "kaiten comments ingest failed",
       );
     }
+  } else if (parsedFull.length > 0) {
+    await syncOrderChatCorrectionsFromKaitenComments(prisma, oid, comments);
+    await syncOrderProstheticsRequestsFromKaitenComments(prisma, oid, comments);
   }
   const importedCorrections = await logNewCorrectionsFromComments(
     prisma,

@@ -38,10 +38,7 @@ import {
   dedupeParsedKaitenComments,
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
-import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
-import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
-import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
-import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
+import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { pushKaitenCardTitleForOrderIfLinked } from "@/lib/kaiten-push-order-title";
@@ -577,18 +574,15 @@ export async function GET(
 
   void (async () => {
     try {
-      await syncOrderChatCorrectionsFromKaitenComments(
-        ordersPrisma,
-        orderIdTrim,
-        mapParsedKaitenCommentsForTriggerSync(comments),
-      );
-      await syncOrderProstheticsRequestsFromKaitenComments(
-        ordersPrisma,
-        orderIdTrim,
-        mapParsedKaitenCommentsForTriggerSync(comments),
-      );
+      await ingestKaitenCommentsForOrder({
+        prisma: ordersPrisma,
+        tenantId,
+        orderId: orderIdTrim,
+        parsed: comments,
+        kanbanAdminMentionTag: order.tenant?.kanbanAdminMentionTag,
+      });
     } catch (e) {
-      console.error("[kaiten GET] correction sync (deferred)", e);
+      console.error("[kaiten GET] ingest (deferred)", e);
     }
     try {
       const blockedAtPatch =
@@ -616,12 +610,6 @@ export async function GET(
           ...kaitenUrgentPatchFromCard(cardObj, order.isUrgent),
         },
       });
-      await syncKaitenLabMentionFromParsedComments(
-        ordersPrisma,
-        orderIdTrim,
-        comments.map((c) => ({ id: c.id, text: c.text })),
-        order.tenant?.kanbanAdminMentionTag,
-      );
     } catch (e) {
       console.error("[kaiten GET] kaitenColumnTitle / block (deferred)", e);
     }

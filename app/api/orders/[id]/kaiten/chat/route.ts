@@ -7,10 +7,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { getKaitenRestAuth, kaitenListComments } from "@/lib/kaiten-rest";
-import { syncOrderChatCorrectionsFromKaitenComments } from "@/lib/order-chat-correction-db";
-import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
-import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
-import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
+import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +37,11 @@ export async function GET(
   }
   const order = await prisma.order.findFirst({
     where: { id: orderId.trim(), tenantId },
-    select: { id: true, kaitenCardId: true },
+    select: {
+      id: true,
+      kaitenCardId: true,
+      tenant: { select: { kanbanAdminMentionTag: true } },
+    },
   });
   if (!order) {
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
@@ -65,23 +66,17 @@ export async function GET(
       .map(parseKaitenListComment)
       .filter((x): x is NonNullable<typeof x> => x != null),
   );
-  const forSync = mapParsedKaitenCommentsForTriggerSync(comments);
 
   try {
-    await syncOrderChatCorrectionsFromKaitenComments(prisma, order.id, forSync);
-    await syncOrderProstheticsRequestsFromKaitenComments(prisma, order.id, forSync);
-  } catch (e) {
-    console.error("[kaiten chat GET] correction sync", e);
-  }
-
-  try {
-    await syncKaitenCommentsIntoKanbanState({
+    await ingestKaitenCommentsForOrder({
+      prisma,
       tenantId,
       orderId: order.id,
-      comments,
+      parsed: comments,
+      kanbanAdminMentionTag: order.tenant?.kanbanAdminMentionTag,
     });
   } catch (e) {
-    console.error("[kaiten chat GET] kanban ingest", e);
+    console.error("[kaiten chat GET] ingest", e);
   }
 
   return NextResponse.json(

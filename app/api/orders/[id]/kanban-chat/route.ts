@@ -18,13 +18,9 @@ import {
 } from "@/lib/kaiten-rest";
 import {
   createOrderChatCorrectionIfNeeded,
-  syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
-import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
-import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
-import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
-import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
+import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import {
   commentBodyDedupKey,
   compactCardComments,
@@ -230,19 +226,12 @@ async function importKaitenCommentsSideEffects(
   kanbanAdminMentionTag: string | null | undefined,
 ): Promise<void> {
   const ordersPrisma = await getOrdersPrisma();
-  const crmComments = mapParsedKaitenCommentsForTriggerSync(parsed);
-  await syncOrderChatCorrectionsFromKaitenComments(ordersPrisma, orderId, crmComments);
-  await syncOrderProstheticsRequestsFromKaitenComments(ordersPrisma, orderId, crmComments);
-  await syncKaitenLabMentionFromParsedComments(
-    ordersPrisma,
+  await ingestKaitenCommentsForOrder({
+    prisma: ordersPrisma,
+    tenantId,
     orderId,
     parsed,
     kanbanAdminMentionTag,
-  );
-  await syncKaitenCommentsIntoKanbanState({
-    tenantId,
-    orderId,
-    comments: kaitenIncomingForSync(parsed),
   });
 }
 

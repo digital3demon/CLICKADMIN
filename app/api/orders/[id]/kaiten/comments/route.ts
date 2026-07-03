@@ -15,21 +15,17 @@ import {
 import {
   createOrderChatCorrectionIfNeeded,
   kaitenApiCommentNumericId,
-  syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import {
   createOrderProstheticsRequestIfNeeded,
-  syncOrderProstheticsRequestsFromKaitenComments,
 } from "@/lib/order-prosthetics-request-db";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
-import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
-import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
+import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import { notifyTelegramForMentionsInOrderKaitenComment } from "@/lib/order-kaiten-comment-mention-telegram";
 import { getSiteOrigin } from "@/lib/site-origin-server";
-import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
 
 type PostBody = {
   text?: string;
@@ -165,35 +161,22 @@ export async function POST(
           .map(parseKaitenListComment)
           .filter((x): x is NonNullable<typeof x> => x != null),
       );
-      const parsed = mapParsedKaitenCommentsForTriggerSync(parsedFull);
       const tenantTagRow = await prisma.order.findUnique({
         where: { id: order.id },
         select: { tenant: { select: { kanbanAdminMentionTag: true } } },
       });
-      if (needCommentBackfill) {
-        await syncOrderChatCorrectionsFromKaitenComments(prisma, order.id, parsed);
-        await syncOrderProstheticsRequestsFromKaitenComments(prisma, order.id, parsed);
-      }
-      await syncKaitenLabMentionFromParsedComments(
-        prisma,
-        order.id,
-        parsed,
-        tenantTagRow?.tenant?.kanbanAdminMentionTag,
-      );
       try {
-        await syncKaitenCommentsIntoKanbanState({
+        await ingestKaitenCommentsForOrder({
+          prisma,
           tenantId,
           orderId: order.id,
-          comments: parsedFull.map((c) => ({
-            id: c.id,
-            text: c.text,
-            created: c.created,
-            authorName: c.authorName,
-            parentId: c.parentId,
-          })),
+          parsed: parsedFull,
+          kanbanAdminMentionTag: tenantTagRow?.tenant?.kanbanAdminMentionTag,
+          skipCorrections: !needCommentBackfill,
+          skipProsthetics: !needCommentBackfill,
         });
       } catch (e) {
-        console.error("[kaiten comments] kanban ingest", e);
+        console.error("[kaiten comments] ingest", e);
       }
     }
   } catch (e) {
