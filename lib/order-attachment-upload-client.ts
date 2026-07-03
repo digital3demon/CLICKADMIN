@@ -3,6 +3,7 @@
  */
 
 import { normalizeOrderAttachmentImage } from "@/lib/order-attachment-image-normalize.client";
+import { requestOrderKaitenAttachmentSync } from "@/lib/order-kaiten-attachment-sync-client";
 
 const MAX_ATTEMPTS = 3;
 
@@ -89,6 +90,8 @@ export async function postOrderAttachmentWithRetries(
     asInvoice?: boolean;
     /** Только бух-блок: не в общем списке файлов и без Kaiten. */
     paymentSlip?: boolean;
+    /** После сохранения в CRM — отдельно догрузить в Kaiten (если карточка уже есть). */
+    syncKaitenAfter?: boolean;
     signal?: AbortSignal;
     maxAttempts?: number;
   },
@@ -152,6 +155,13 @@ export async function postOrderAttachmentWithRetries(
           typeof data.warning === "string" && data.warning.trim()
             ? data.warning.trim()
             : undefined;
+        const syncKaiten =
+          options?.syncKaitenAfter !== false &&
+          !options?.asInvoice &&
+          !options?.paymentSlip;
+        if (syncKaiten) {
+          void requestOrderKaitenAttachmentSync(orderId);
+        }
         if (w) {
           return { ok: true, data, warning: w };
         }

@@ -10,7 +10,6 @@ import {
   isProbablyPdf,
 } from "@/lib/invoice-number-extract";
 import {
-  pushAttachmentToKaitenWithCardWait,
   removeAttachmentFromKaitenIfAny,
 } from "@/lib/kaiten-sync";
 import {
@@ -300,9 +299,10 @@ export async function POST(req: Request, ctx: Ctx) {
       ? OrderAttachmentScope.PAYMENT_SLIP
       : OrderAttachmentScope.GENERAL;
 
-    const buf = Uint8Array.from(parsed.data);
+    const fileBuf = parsed.data;
     const mimeType = parsed.mimeType;
     const fileName = parsed.fileName;
+    const fileSize = fileBuf.byteLength;
 
     const fromName = extractInvoiceNumberFromFileName(fileName);
     const extractedInvoiceNumber =
@@ -345,7 +345,6 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     const attachmentId = newOrderAttachmentId();
-    const fileBuf = Buffer.from(buf);
     const shouldUseS3Storage = isOrderAttachmentS3Enabled();
     let diskRelPath: string | null = null;
     let dataForDb = fileBuf;
@@ -375,8 +374,8 @@ export async function POST(req: Request, ctx: Ctx) {
             scope: attachmentScope,
             fileName,
             mimeType,
-            size: buf.byteLength,
-            data: dataForDb,
+            size: fileSize,
+            data: new Uint8Array(dataForDb),
             diskRelPath,
           },
           select: {
@@ -433,16 +432,14 @@ export async function POST(req: Request, ctx: Ctx) {
         : base;
 
     const deferredKaitenHint = prevInvoiceForKaiten;
-    const deferredOrderId = orderId;
-    const deferredAttachmentId = row.id;
-    /** Счёт и платёжки хранятся в CRM без дубля в Kaiten / канбане. */
-    const deferredSkipKaitenPush = asInvoice || isPaymentSlipScope;
     const deferredTryPdfInvoice =
       asInvoice &&
       fromName == null &&
       isProbablyPdf(mimeType, fileName);
     const deferredMime = mimeType;
     const deferredFileName = fileName;
+    const deferredAttachmentId = row.id;
+    const deferredOrderId = orderId;
     const prismaForAfter = prisma;
     const deferredDeleteOldId =
       replacedInvoiceAttachmentId &&
@@ -477,18 +474,6 @@ export async function POST(req: Request, ctx: Ctx) {
             "[attachments deferred] delete replaced invoice row",
             e,
           );
-        }
-      }
-      if (!deferredSkipKaitenPush) {
-        await sleepMs(35 + Math.floor(Math.random() * 140));
-        try {
-          await pushAttachmentToKaitenWithCardWait(
-            deferredOrderId,
-            deferredAttachmentId,
-            db,
-          );
-        } catch (e) {
-          console.error("[attachments deferred] Kaiten push attachment", e);
         }
       }
       if (!deferredTryPdfInvoice) return;

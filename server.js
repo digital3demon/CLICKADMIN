@@ -117,8 +117,8 @@ function startKaitenChatBackgroundSync() {
     return;
   }
   const intervalMs = Math.max(
-    30_000,
-    Number(process.env.KAITEN_CHAT_BACKGROUND_SYNC_INTERVAL_MS || 30_000),
+    20_000,
+    Number(process.env.KAITEN_CHAT_BACKGROUND_SYNC_INTERVAL_MS || 20_000),
   );
   const limit = Math.max(
     1,

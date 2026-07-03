@@ -143,6 +143,7 @@ function isRateLimitExemptPath(pathname: string, method: string): boolean {
     pathname.startsWith("/api/attention-reminders") ||
     pathname.startsWith("/api/order-chat-corrections/toasts") ||
     pathname.startsWith("/api/order-chat-messages/toasts") ||
+    pathname.startsWith("/api/order-notifications/toasts") ||
     pathname.startsWith("/api/order-prosthetics-requests/toasts") ||
     pathname.startsWith("/api/orders/search-suggest")
   );
@@ -610,7 +611,7 @@ export async function middleware(req: NextRequest) {
         if (
           requiredModule === "ORDERS_EDIT" &&
           isOrderAttachmentUploadApiPath(pathname, req.method) &&
-          access.ORDERS_CHAT === true
+          (access.ORDERS_CHAT === true || access.ORDERS_CREATE === true)
         ) {
           moduleAllowed = true;
         }

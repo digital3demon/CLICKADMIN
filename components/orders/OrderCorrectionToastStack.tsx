@@ -65,9 +65,9 @@ function pollMs(): number {
   const n =
     raw != null && String(raw).trim()
       ? Number.parseInt(String(raw).trim(), 10)
-      : 4000;
-  if (!Number.isFinite(n)) return 4000;
-  return Math.min(Math.max(n, 2500), 30_000);
+      : 2000;
+  if (!Number.isFinite(n)) return 2000;
+  return Math.min(Math.max(n, 1500), 30_000);
 }
 
 function parseRetryAfterMs(value: string | null): number {
@@ -185,54 +185,32 @@ export function OrderCorrectionToastStack() {
       if (nextPollAllowedAtRef.current > now) return;
       pollInFlightRef.current = true;
       try {
-        const [resChat, resCorr, resPro] = await Promise.all([
-          fetch("/api/order-chat-messages/toasts", {
-            credentials: "include",
-            cache: "no-store",
-          }),
-          fetch("/api/order-chat-corrections/toasts", {
-            credentials: "include",
-            cache: "no-store",
-          }),
-          fetch("/api/order-prosthetics-requests/toasts", {
-            credentials: "include",
-            cache: "no-store",
-          }),
-        ]);
+        const res = await fetch("/api/order-notifications/toasts", {
+          credentials: "include",
+          cache: "no-store",
+        });
         if (cancelled) return;
-        const retryMs = Math.max(
-          resChat.status === 429 ? parseRetryAfterMs(resChat.headers.get("Retry-After")) : 0,
-          resCorr.status === 429 ? parseRetryAfterMs(resCorr.headers.get("Retry-After")) : 0,
-          resPro.status === 429 ? parseRetryAfterMs(resPro.headers.get("Retry-After")) : 0,
-        );
-        if (retryMs > 0) {
-          nextPollAllowedAtRef.current = Date.now() + Math.max(1000, retryMs);
+        const retryMs =
+          res.status === 429
+            ? parseRetryAfterMs(res.headers.get("Retry-After"))
+            : 0;
+
+        const j = (await res.json().catch(() => ({}))) as {
+          messages?: OrderToastRow[];
+          corrections?: OrderToastRow[];
+          requests?: OrderToastRow[];
+        };
+
+        if (res.status === 401 || res.status === 403) {
+          if (retryMs > 0) {
+            nextPollAllowedAtRef.current = Date.now() + Math.max(1000, retryMs);
+          }
           return;
         }
 
-        let chatList: OrderToastRow[] = [];
-        if (resChat.status !== 403 && resChat.status !== 401 && resChat.ok) {
-          const j = (await resChat.json().catch(() => ({}))) as {
-            messages?: OrderToastRow[];
-          };
-          chatList = Array.isArray(j.messages) ? j.messages : [];
-        }
-
-        let corrList: OrderToastRow[] = [];
-        if (resCorr.status !== 403 && resCorr.status !== 401 && resCorr.ok) {
-          const j = (await resCorr.json().catch(() => ({}))) as {
-            corrections?: OrderToastRow[];
-          };
-          corrList = Array.isArray(j.corrections) ? j.corrections : [];
-        }
-
-        let proList: OrderToastRow[] = [];
-        if (resPro.status !== 403 && resPro.status !== 401 && resPro.ok) {
-          const j = (await resPro.json().catch(() => ({}))) as {
-            requests?: OrderToastRow[];
-          };
-          proList = Array.isArray(j.requests) ? j.requests : [];
-        }
+        const chatList = Array.isArray(j.messages) ? j.messages : [];
+        const corrList = Array.isArray(j.corrections) ? j.corrections : [];
+        const proList = Array.isArray(j.requests) ? j.requests : [];
 
         const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}`;
         if (fp !== lastFpRef.current) {
@@ -256,7 +234,8 @@ export function OrderCorrectionToastStack() {
           }
         }
         pollBackoffMsRef.current = 0;
-        nextPollAllowedAtRef.current = 0;
+        nextPollAllowedAtRef.current =
+          retryMs > 0 ? Date.now() + Math.max(1000, retryMs) : 0;
       } catch {
         pollBackoffMsRef.current = Math.min(
           60_000,
@@ -268,17 +247,16 @@ export function OrderCorrectionToastStack() {
       }
     };
     const ms = pollMs();
-    const t0 = window.setTimeout(() => void tick(), 500);
+    void tick();
     const id = window.setInterval(() => void tick(), ms);
     const onVis = () => {
       if (document.visibilityState === "visible") {
-        window.setTimeout(() => void tick(), 400);
+        void tick();
       }
     };
     document.addEventListener("visibilitychange", onVis);
     return () => {
       cancelled = true;
-      window.clearTimeout(t0);
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };

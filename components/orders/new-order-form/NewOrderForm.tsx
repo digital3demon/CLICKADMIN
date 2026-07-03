@@ -1345,8 +1345,8 @@ export function NewOrderForm({
               },
             },
           });
-          if (kaitenFailed) return;
         }
+
         if (pendingFiles.length > 0) {
           const filesToUpload = [...pendingFiles];
           setPendingFiles([]);

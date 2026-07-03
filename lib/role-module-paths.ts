@@ -48,7 +48,7 @@ function orderIdApiTail(pathname: string): { tail: string } | null {
   return { tail: m[1].replace(/\/$/, "") };
 }
 
-/** POST вложения к наряду: достаточно ORDERS_EDIT или ORDERS_CHAT. */
+/** POST вложения к наряду: достаточно ORDERS_EDIT, ORDERS_CREATE или ORDERS_CHAT. */
 export function isOrderAttachmentUploadApiPath(
   pathname: string,
   method: string,
@@ -186,6 +186,7 @@ const RULES: Rule[] = [
   { prefix: "/api/materials", module: "ORDERS" },
   { prefix: "/api/order-attachments", module: "ORDERS" },
   { prefix: "/api/kaiten", module: "ORDERS" },
+  { prefix: "/api/order-notifications", module: "ORDERS" },
   { prefix: "/api/order-chat-corrections", module: "ORDERS" },
   { prefix: "/api/order-chat-messages", module: "ORDERS_CHAT" },
   { prefix: "/api/order-prosthetics-requests", module: "ORDERS" },

@@ -6,6 +6,7 @@ import {
   formatCrmUploadMaxShortRu,
 } from "@/lib/crm-upload-limits";
 import { normalizeOrderAttachmentImage } from "@/lib/order-attachment-image-normalize.client";
+import { requestOrderKaitenAttachmentSync } from "@/lib/order-kaiten-attachment-sync-client";
 
 /** Совпадает с POST `/api/orders/[id]/attachments`. */
 export const ORDER_ATTACHMENT_MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
@@ -202,6 +203,7 @@ export async function uploadOrderAttachmentFromFile(
     }
     const id = typeof data.id === "string" ? data.id : "";
     if (!id) return { ok: false, error: "Сервер не вернул id вложения" };
+    void requestOrderKaitenAttachmentSync(orderId);
     return { ok: true, id };
   } catch {
     return { ok: false, error: "Сеть недоступна" };
