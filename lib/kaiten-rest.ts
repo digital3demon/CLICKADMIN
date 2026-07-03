@@ -37,9 +37,55 @@ function sleep(ms: number): Promise<void> {
 }
 
 let lastKaitenRequestAt = 0;
-type KaitenQueueJob = { urgent: boolean; run: () => Promise<void> };
+type KaitenQueueJob = { urgent: boolean; enqueuedAt: number; run: () => Promise<void> };
 const kaitenQueue: KaitenQueueJob[] = [];
 let kaitenQueueDraining = false;
+
+export type KaitenQueueMetrics = {
+  queueDepth: number;
+  urgentDepth: number;
+  backgroundDepth: number;
+  oldestWaitMs: number;
+  draining: boolean;
+};
+
+/** Read-only метрики общей очереди Kaiten (для backpressure inbound sync). */
+export function getKaitenQueueMetrics(nowMs = Date.now()): KaitenQueueMetrics {
+  let urgentDepth = 0;
+  let backgroundDepth = 0;
+  let oldestEnqueuedAt = nowMs;
+  for (const job of kaitenQueue) {
+    if (job.urgent) urgentDepth += 1;
+    else backgroundDepth += 1;
+    if (job.enqueuedAt < oldestEnqueuedAt) oldestEnqueuedAt = job.enqueuedAt;
+  }
+  return {
+    queueDepth: kaitenQueue.length,
+    urgentDepth,
+    backgroundDepth,
+    oldestWaitMs: kaitenQueue.length > 0 ? Math.max(0, nowMs - oldestEnqueuedAt) : 0,
+    draining: kaitenQueueDraining,
+  };
+}
+
+/** Inbound sync откладываем, пока в очереди висят срочные user/outbound задачи. */
+export function isKaitenUrgentBacklogHighFromMetrics(
+  metrics: KaitenQueueMetrics,
+  opts?: { urgentThreshold?: number; waitMsThreshold?: number },
+): boolean {
+  const urgentThreshold = opts?.urgentThreshold ?? 2;
+  const waitMsThreshold = opts?.waitMsThreshold ?? 2000;
+  if (metrics.urgentDepth >= urgentThreshold) return true;
+  return metrics.urgentDepth > 0 && metrics.oldestWaitMs >= waitMsThreshold;
+}
+
+/** Inbound sync откладываем, пока в очереди висят срочные user/outbound задачи. */
+export function isKaitenUrgentBacklogHigh(
+  opts?: { urgentThreshold?: number; waitMsThreshold?: number },
+  nowMs = Date.now(),
+): boolean {
+  return isKaitenUrgentBacklogHighFromMetrics(getKaitenQueueMetrics(nowMs), opts);
+}
 
 async function awaitKaitenGap(urgent: boolean): Promise<void> {
   const gap = urgent ? KAITEN_MIN_GAP_MS : spacingMs();
@@ -69,6 +115,7 @@ function scheduleKaiten<T>(fn: () => Promise<T>, urgent: boolean): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     kaitenQueue.push({
       urgent,
+      enqueuedAt: Date.now(),
       run: async () => {
         try {
           resolve(await fn());

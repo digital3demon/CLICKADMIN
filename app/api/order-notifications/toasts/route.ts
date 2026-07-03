@@ -31,6 +31,7 @@ export async function GET() {
     if (sync.rateLimited) {
       const includeChat = canAccessOrderChat(session.role, access ?? undefined);
       const payload = await fetchOrderNotificationToasts(prisma, {
+        tenantId,
         userId: session.sub,
         includeChat,
       });
@@ -49,6 +50,7 @@ export async function GET() {
 
   const includeChat = canAccessOrderChat(session.role, access ?? undefined);
   const payload = await fetchOrderNotificationToasts(prisma, {
+    tenantId: tenantId ?? "",
     userId: session.sub,
     includeChat,
   });

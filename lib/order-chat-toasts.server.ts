@@ -19,10 +19,13 @@ const LAB_MENTION_ACK_ROLES = [
 export async function fetchOrderChatToastRows(
   db: PrismaClient,
   userId: string | null | undefined,
+  tenantId?: string | null,
 ): Promise<OrderChatToastRow[]> {
+  const tid = String(tenantId ?? "").trim();
   const candidates = await db.order.findMany({
     where: {
       archivedAt: null,
+      ...(tid ? { tenantId: tid } : {}),
       kaitenChatHasLabMention: true,
       kaitenLabMentionSignalAt: { not: null },
     },
