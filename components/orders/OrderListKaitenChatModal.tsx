@@ -586,7 +586,7 @@ export function OrderListKaitenChatModal({
                         </span>
                         {c.created ? (
                           <span suppressHydrationWarning>
-                            {new Date(c.created).toLocaleString("ru-RU")}
+                            {typeof window !== "undefined" ? new Date(c.created).toLocaleString("ru-RU") : ""}
                           </span>
                         ) : null}
                       </div>
@@ -632,7 +632,7 @@ export function OrderListKaitenChatModal({
                               <div className="text-[10px] text-[var(--text-muted)]" suppressHydrationWarning>
                                 {ch.authorName ?? "Участник"}
                                 {ch.created
-                                  ? ` · ${new Date(ch.created).toLocaleString("ru-RU")}`
+                                  ? ` · ${typeof window !== "undefined" ? new Date(ch.created).toLocaleString("ru-RU") : ""}`
                                   : null}
                               </div>
                               {childDisplay.label ? (
