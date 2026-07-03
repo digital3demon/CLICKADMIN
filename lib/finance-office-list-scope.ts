@@ -34,13 +34,12 @@ export function financeOfficeScopeWhere(
   return parts.length === 1 ? parts[0] : { AND: parts };
 }
 
-/** Корректировки, заказ протетики и чат — по всем нарядам, не только в окне dueDate. */
+/** Корректировки и заказ протетики — по всем нарядам, не только в окне dueDate. ЧАТ — в рамках вкладки. */
 export function financeOfficeListTagSkipsDueDateWindow(
   parsed: ParsedListTag | null | undefined,
 ): boolean {
   return (
     parsed?.kind === "orderAttention" ||
-    parsed?.kind === "prostheticsPending" ||
-    parsed?.kind === "kaitenLabMention"
+    parsed?.kind === "prostheticsPending"
   );
 }

@@ -158,6 +158,8 @@ export default async function FinanceOfficePage({
       ? await countFinanceOfficeQuickFilterChips(ordersPrisma, tenantId, {
           search: q,
           userId: session?.sub,
+          labMentionStart: start,
+          labMentionEndExclusive: endExclusive,
         })
       : { attentionCount: 0, prostheticsPendingCount: 0, labMentionCount: 0 };
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;

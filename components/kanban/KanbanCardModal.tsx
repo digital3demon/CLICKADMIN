@@ -98,7 +98,7 @@ import {
 } from "@/lib/kanban-mention-telegram-html";
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
-import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
+import { LinkifiedTextarea } from "@/components/ui/LinkifiedTextarea";
 
 type ChatAction = "comment" | "correction" | "prosthetics";
 
@@ -264,7 +264,6 @@ export function KanbanCardModal({
   const [pickerQuery, setPickerQuery] = useState("");
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
-  const descTextareaRef = useAutosizeTextarea(descDraft);
   const [fileViewer, setFileViewer] = useState<
     | null
     | { mode: "image"; images: CardFile[]; index: number }
@@ -1914,12 +1913,11 @@ export function KanbanCardModal({
                   </p>
                 ))}
                 <div className="grid min-h-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] sm:items-start">
-                  <textarea
-                    ref={descTextareaRef}
-                    className={`${baseInput} min-h-[100px] resize-none overflow-hidden sm:min-h-[120px]`}
+                  <LinkifiedTextarea
+                    className={baseInput}
                     rows={3}
                     value={descDraft}
-                    onChange={(e) => setDescDraft(e.target.value)}
+                    onChange={setDescDraft}
                     onBlur={() => {
                       void (async () => {
                         if (descDraft === (card.description || "")) return;

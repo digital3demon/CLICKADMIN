@@ -41,4 +41,30 @@ describe("splitPlainTextLinks", () => {
       { kind: "text", value: "." },
     ]);
   });
+
+  it("uses filename as link label for angle-bracket google drive urls", () => {
+    const segments = splitPlainTextLinks(
+      "Подсекин Александр Валентинович-03.07.2026-lowerjaw.ply <https://drive.google.com/file/d/1Fdfh-v4jZk3WNTmERwGZzLdsK294CrvK/view?usp=drive_web>",
+    );
+    expect(segments).toEqual([
+      {
+        kind: "link",
+        href: "https://drive.google.com/file/d/1Fdfh-v4jZk3WNTmERwGZzLdsK294CrvK/view?usp=drive_web",
+        display: "Подсекин Александр Валентинович-03.07.2026-lowerjaw.ply",
+      },
+    ]);
+  });
+
+  it("uses filename as link label when url is on the next line", () => {
+    const segments = splitPlainTextLinks(
+      "Подсекин Александр Валентинович-03.07.2026-upperjaw.ply\nhttps://drive.google.com/file/d/19Xn6G3bbG5qHPa3gFV7X2ZSsxNhkjRk/view?usp=drive_web",
+    );
+    expect(segments).toEqual([
+      {
+        kind: "link",
+        href: "https://drive.google.com/file/d/19Xn6G3bbG5qHPa3gFV7X2ZSsxNhkjRk/view?usp=drive_web",
+        display: "Подсекин Александр Валентинович-03.07.2026-upperjaw.ply",
+      },
+    ]);
+  });
 });

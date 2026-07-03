@@ -4,6 +4,7 @@ import {
   financeOfficeScopeWhere,
 } from "@/lib/finance-office-list-scope";
 import {
+  LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PAYMENT_PARTIAL,
   LIST_TAG_PROSTHETICS_PENDING,
@@ -24,8 +25,13 @@ describe("financeOfficeListTagSkipsDueDateWindow", () => {
     ).toBe(true);
   });
 
-  it("не пропускает окно для остальных тегов", () => {
+  it("не пропускает окно для чата и остальных тегов", () => {
     expect(financeOfficeListTagSkipsDueDateWindow(null)).toBe(false);
+    expect(
+      financeOfficeListTagSkipsDueDateWindow(
+        parseListTagParam(LIST_TAG_KAITEN_LAB_MENTION),
+      ),
+    ).toBe(false);
     expect(
       financeOfficeListTagSkipsDueDateWindow(
         parseListTagParam(LIST_TAG_PAYMENT_PARTIAL),

@@ -10,6 +10,22 @@ describe("cleanMailTextBody", () => {
     ).toBe("ЗДРАВСТВУЙТЕ, DIGITALDEMONSTUDIO!");
   });
 
+  it("removes duplicate bracket yandex disk links when bare url is on previous line", () => {
+    expect(
+      cleanMailTextBody(
+        "Цвет https://disk.yandex.ru/d/cbZa2KJK1Suvdg\n[https://disk.yandex.ru/d/cbZa2KJK1Suvdg]\nСканы https://disk.yandex.ru/d/CvRJKYB4LZjsWA\n[https://disk.yandex.ru/d/CvRJKYB4LZjsWA]",
+      ),
+    ).toBe(
+      "Цвет https://disk.yandex.ru/d/cbZa2KJK1Suvdg\nСканы https://disk.yandex.ru/d/CvRJKYB4LZjsWA",
+    );
+  });
+
+  it("keeps bracket-only url when it is the only occurrence", () => {
+    expect(cleanMailTextBody("[https://disk.yandex.ru/d/only-here]")).toBe(
+      "[https://disk.yandex.ru/d/only-here]",
+    );
+  });
+
   it("keeps regular non-image links in Russian text", () => {
     expect(
       cleanMailTextBody(

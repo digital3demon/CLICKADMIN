@@ -123,6 +123,9 @@ export async function countFinanceOfficeQuickFilterChips(
   opts: {
     search?: string | null;
     userId?: string;
+    /** Окно dueDate вкладки — только для счётчика «ЧАТ». */
+    labMentionStart?: Date | null;
+    labMentionEndExclusive?: Date | null;
   } = {},
 ): Promise<{
   attentionCount: number;
@@ -130,11 +133,20 @@ export async function countFinanceOfficeQuickFilterChips(
   labMentionCount: number;
 }> {
   const scope = financeOfficeChipCountScopeWhere(tenantId, opts);
+  const labMentionScope = financeOfficeScopeWhere(tenantId, {
+    search: opts.search,
+    start: opts.labMentionStart,
+    endExclusive: opts.labMentionEndExclusive,
+  });
   const [attentionCount, prostheticsPendingCount, labMentionCount] =
     await Promise.all([
       db.order.count({ where: { AND: [scope, pendingCorrectionsWhere] } }),
       db.order.count({ where: { AND: [scope, pendingProstheticsWhere] } }),
-      countOrdersWithPendingKaitenLabMentionForUser(db, scope, opts.userId),
+      countOrdersWithPendingKaitenLabMentionForUser(
+        db,
+        labMentionScope,
+        opts.userId,
+      ),
     ]);
   return { attentionCount, prostheticsPendingCount, labMentionCount };
 }
@@ -348,7 +360,12 @@ export async function fetchFinanceOfficeOrders(
     listKaitenLabMentionHighlight: mentionById.get(r.id) ?? false,
   }));
 
-  return withHighlight.sort((a, b) => {
+  const filtered =
+    parsedTag?.kind === "kaitenLabMention"
+      ? withHighlight.filter((r) => r.listKaitenLabMentionHighlight)
+      : withHighlight;
+
+  return filtered.sort((a, b) => {
     const pr = financePriority(a) - financePriority(b);
     if (pr !== 0) return pr;
     return (a.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER) -

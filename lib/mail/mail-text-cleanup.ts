@@ -1,11 +1,50 @@
+import { PLAIN_TEXT_URL_RE, trimTrailingUrlPunctuation } from "@/lib/linkify-plain-text";
+
 const MARKDOWN_IMAGE_RE =
   /!\[[^\]]*\]\((?:https?:\/\/[^\s)\]]+?\.(?:png|jpe?g|gif|webp|svg)(?:[^\s)\]]*)?|cid:[^\s)\]]+)\)/giu;
 const BRACKET_IMAGE_RE =
   /\[(?:https?:\/\/[^\s\]]+?\.(?:png|jpe?g|gif|webp|svg)(?:[^\s\]]*)?|cid:[^\s\]]+)\]/giu;
+const BRACKET_URL_RE = /\[(https?:\/\/[^\s\]]+)\]/giu;
+const BRACKET_URL_ONLY_LINE_RE = /^\[(https?:\/\/[^\s\]]+)\]$/iu;
+
+function normalizeMailUrl(url: string): string {
+  return trimTrailingUrlPunctuation(url.trim()).href.toLowerCase();
+}
+
+/** Убирает `[https://…]`, если тот же URL уже есть в тексте без скобок (типично для писем с Яндекса). */
+function stripDuplicateBracketUrls(text: string): string {
+  const bareUrls = new Set<string>();
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (BRACKET_URL_ONLY_LINE_RE.test(trimmed)) continue;
+    const withoutBracketUrls = line.replace(BRACKET_URL_RE, " ");
+    for (const match of withoutBracketUrls.matchAll(PLAIN_TEXT_URL_RE)) {
+      const href = match[0];
+      if (href) bareUrls.add(normalizeMailUrl(href));
+    }
+  }
+  if (bareUrls.size === 0) return text;
+
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      const onlyBracket = trimmed.match(BRACKET_URL_ONLY_LINE_RE);
+      if (onlyBracket?.[1] && bareUrls.has(normalizeMailUrl(onlyBracket[1]))) {
+        return "";
+      }
+      return line.replace(BRACKET_URL_RE, (full, url: string) =>
+        bareUrls.has(normalizeMailUrl(url)) ? "" : full,
+      );
+    })
+    .join("\n");
+}
 
 export function cleanMailTextBody(text: string | null | undefined): string {
-  return (text ?? "")
-    .replace(MARKDOWN_IMAGE_RE, " ")
+  const deduped = stripDuplicateBracketUrls(
+    (text ?? "").replace(MARKDOWN_IMAGE_RE, " "),
+  );
+  return deduped
     .split(/\r?\n/)
     .map((line) => {
       let next = line.replace(BRACKET_IMAGE_RE, " ");

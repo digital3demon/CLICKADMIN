@@ -9,6 +9,53 @@ import {
 } from "@/lib/order-list-tag-filter";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
+import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
+
+const pendingCorrectionsWhere = {
+  chatCorrections: {
+    some: { resolvedAt: null, rejectedAt: null },
+  },
+} satisfies Prisma.OrderWhereInput;
+
+const pendingProstheticsWhere = {
+  prostheticsOrdered: false,
+  prostheticsRequests: {
+    some: { resolvedAt: null, rejectedAt: null },
+  },
+} satisfies Prisma.OrderWhereInput;
+
+/** Наряды в окне отгрузки по сроку лаборатории [start, endExclusive). */
+export function shipmentDueRangeWhere(
+  tenantId: string,
+  start: Date,
+  endExclusive: Date,
+): Prisma.OrderWhereInput {
+  return {
+    tenantId,
+    archivedAt: null,
+    dueDate: { not: null, gte: start, lt: endExclusive },
+  };
+}
+
+export async function countShipmentQuickFilterChips(
+  db: PrismaClient,
+  tenantId: string,
+  start: Date,
+  endExclusive: Date,
+  userId?: string | null,
+): Promise<{
+  attentionCount: number;
+  prostheticsPendingCount: number;
+  labMentionCount: number;
+}> {
+  const scope = shipmentDueRangeWhere(tenantId, start, endExclusive);
+  const [attentionCount, prostheticsPendingCount, labMentionCount] = await Promise.all([
+    db.order.count({ where: { AND: [scope, pendingCorrectionsWhere] } }),
+    db.order.count({ where: { AND: [scope, pendingProstheticsWhere] } }),
+    countOrdersWithPendingKaitenLabMentionForUser(db, scope, userId ?? undefined),
+  ]);
+  return { attentionCount, prostheticsPendingCount, labMentionCount };
+}
 
 const shipmentOrderSelect = {
   id: true,
@@ -106,11 +153,11 @@ export async function fetchShipmentOrdersInDueRange(
       : null;
   const parsedTag = tagDecoded ? parseListTagParam(tagDecoded) : null;
 
-  const dueRange: Prisma.OrderWhereInput = {
+  const dueRange: Prisma.OrderWhereInput = shipmentDueRangeWhere(
     tenantId,
-    archivedAt: null,
-    dueDate: { not: null, gte: start, lt: endExclusive },
-  };
+    start,
+    endExclusive,
+  );
 
   const tagParts: Prisma.OrderWhereInput[] = [];
   if (parsedTag) {

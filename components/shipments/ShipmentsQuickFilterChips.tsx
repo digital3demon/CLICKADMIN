@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import {
   humanListTagLabel,
   LIST_TAG_KAITEN_LAB_MENTION,
@@ -7,8 +6,9 @@ import {
   LIST_TAG_PROSTHETICS_PENDING,
   type ParsedListTag,
 } from "@/lib/order-list-tag-filter";
+import { shipmentsListHref } from "@/lib/shipments-list-query";
 
-export function FinanceOfficeQuickFilterChips({
+export function ShipmentsQuickFilterChips({
   attentionCount,
   prostheticsPendingCount,
   labMentionCount,
@@ -16,7 +16,6 @@ export function FinanceOfficeQuickFilterChips({
   tab,
   periodFrom,
   periodTo,
-  q = "",
 }: {
   attentionCount: number;
   prostheticsPendingCount: number;
@@ -25,13 +24,11 @@ export function FinanceOfficeQuickFilterChips({
   tab: string;
   periodFrom: string | null;
   periodTo: string | null;
-  q?: string;
 }) {
   const listCtx = {
     tab,
     from: periodFrom,
     to: periodTo,
-    q: q.trim() || undefined,
   };
 
   const showRow =
@@ -50,11 +47,11 @@ export function FinanceOfficeQuickFilterChips({
     labMentionCount > 0 || activeFilter?.kind === "kaitenLabMention";
 
   return (
-    <div className="w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+    <div className="no-print w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
       <div className="flex flex-wrap items-center gap-2">
         {showCorrections ? (
           <Link
-            href={financeOfficeListHref({
+            href={shipmentsListHref({
               ...listCtx,
               tag: LIST_TAG_ORDER_ATTENTION,
             })}
@@ -75,7 +72,7 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showProsthetics ? (
           <Link
-            href={financeOfficeListHref({
+            href={shipmentsListHref({
               ...listCtx,
               tag: LIST_TAG_PROSTHETICS_PENDING,
             })}
@@ -96,7 +93,7 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showChat ? (
           <Link
-            href={financeOfficeListHref({
+            href={shipmentsListHref({
               ...listCtx,
               tag: LIST_TAG_KAITEN_LAB_MENTION,
             })}
@@ -124,7 +121,7 @@ export function FinanceOfficeQuickFilterChips({
               </strong>
             </span>
             <Link
-              href={financeOfficeListHref(listCtx)}
+              href={shipmentsListHref(listCtx)}
               className="shrink-0 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-0.5 text-xs font-medium text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
             >
               Сбросить

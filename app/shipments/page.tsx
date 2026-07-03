@@ -1,4 +1,5 @@
 import { ShipmentsOrdersTable } from "@/components/shipments/ShipmentsOrdersTable";
+import { ShipmentsQuickFilterChips } from "@/components/shipments/ShipmentsQuickFilterChips";
 import { ShipmentsPeriodForm } from "@/components/shipments/ShipmentsPeriodForm";
 import {
   ShipmentsTabNav,
@@ -6,7 +7,10 @@ import {
 } from "@/components/shipments/ShipmentsTabNav";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import Link from "next/link";
-import { fetchShipmentOrdersInDueRange } from "@/lib/fetch-shipments-orders";
+import {
+  countShipmentQuickFilterChips,
+  fetchShipmentOrdersInDueRange,
+} from "@/lib/fetch-shipments-orders";
 import {
   humanListTagLabel,
   parseListTagParam,
@@ -129,13 +133,19 @@ export default async function ShipmentsPage({
 
   if (tab === "today") {
     const { start, endExclusive } = moscowShipmentDayBoundsUtc(todayYmd);
-    const orders = await fetchShipmentOrdersInDueRange(
-      prisma,
-      tenantId,
-      start,
-      endExclusive,
-      { listTag: listTagForFetch, userId: session?.sub },
-    );
+    const [orders, chipCounts] = await Promise.all([
+      fetchShipmentOrdersInDueRange(prisma, tenantId, start, endExclusive, {
+        listTag: listTagForFetch,
+        userId: session?.sub,
+      }),
+      countShipmentQuickFilterChips(
+        prisma,
+        tenantId,
+        start,
+        endExclusive,
+        session?.sub,
+      ),
+    ]);
     const clearHref = shipmentsListHref({
       tab: "today",
       from: fromRaw ?? undefined,
@@ -160,6 +170,15 @@ export default async function ShipmentsPage({
             active: activeListTagFilter,
             clearHref,
           })}
+          <ShipmentsQuickFilterChips
+            attentionCount={chipCounts.attentionCount}
+            prostheticsPendingCount={chipCounts.prostheticsPendingCount}
+            labMentionCount={chipCounts.labMentionCount}
+            activeFilter={activeListTagFilter}
+            tab="today"
+            periodFrom={fromRaw}
+            periodTo={toRaw}
+          />
           <ShipmentsOrdersTable
             orders={orders}
             emptyHint="В окне отгрузки на сегодня нет нарядов с указанным сроком лаборатории в этом интервале."
@@ -188,13 +207,19 @@ export default async function ShipmentsPage({
   if (tab === "tomorrow") {
     const ymd = moscowTomorrowYmd();
     const { start, endExclusive } = moscowShipmentDayBoundsUtc(ymd);
-    const orders = await fetchShipmentOrdersInDueRange(
-      prisma,
-      tenantId,
-      start,
-      endExclusive,
-      { listTag: listTagForFetch, userId: session?.sub },
-    );
+    const [orders, chipCounts] = await Promise.all([
+      fetchShipmentOrdersInDueRange(prisma, tenantId, start, endExclusive, {
+        listTag: listTagForFetch,
+        userId: session?.sub,
+      }),
+      countShipmentQuickFilterChips(
+        prisma,
+        tenantId,
+        start,
+        endExclusive,
+        session?.sub,
+      ),
+    ]);
     const clearHref = shipmentsListHref({
       tab: "tomorrow",
       from: fromRaw ?? undefined,
@@ -219,6 +244,15 @@ export default async function ShipmentsPage({
             active: activeListTagFilter,
             clearHref,
           })}
+          <ShipmentsQuickFilterChips
+            attentionCount={chipCounts.attentionCount}
+            prostheticsPendingCount={chipCounts.prostheticsPendingCount}
+            labMentionCount={chipCounts.labMentionCount}
+            activeFilter={activeListTagFilter}
+            tab="tomorrow"
+            periodFrom={fromRaw}
+            periodTo={toRaw}
+          />
           <ShipmentsOrdersTable
             orders={orders}
             emptyHint="В окне отгрузки на завтра нет нарядов с указанным сроком лаборатории в этом интервале."
@@ -246,6 +280,9 @@ export default async function ShipmentsPage({
 
   let error: string | null = null;
   let orders: Awaited<ReturnType<typeof fetchShipmentOrdersInDueRange>> = [];
+  let chipCounts: Awaited<
+    ReturnType<typeof countShipmentQuickFilterChips>
+  > | null = null;
 
   if (fromRaw && toRaw) {
     if (fromRaw > toRaw) {
@@ -259,13 +296,24 @@ export default async function ShipmentsPage({
           fromRaw,
           toRaw,
         );
-        orders = await fetchShipmentOrdersInDueRange(
-          prisma,
-          tenantId,
-          start,
-          endExclusive,
-          { listTag: listTagForFetch, userId: session?.sub },
-        );
+        const [fetchedOrders, fetchedChips] = await Promise.all([
+          fetchShipmentOrdersInDueRange(
+            prisma,
+            tenantId,
+            start,
+            endExclusive,
+            { listTag: listTagForFetch, userId: session?.sub },
+          ),
+          countShipmentQuickFilterChips(
+            prisma,
+            tenantId,
+            start,
+            endExclusive,
+            session?.sub,
+          ),
+        ]);
+        orders = fetchedOrders;
+        chipCounts = fetchedChips;
       }
     }
   }
@@ -337,6 +385,18 @@ export default async function ShipmentsPage({
             {" · "}
             найдено: {orders.length}
           </p>
+        ) : null}
+
+        {showTable && chipCounts ? (
+          <ShipmentsQuickFilterChips
+            attentionCount={chipCounts.attentionCount}
+            prostheticsPendingCount={chipCounts.prostheticsPendingCount}
+            labMentionCount={chipCounts.labMentionCount}
+            activeFilter={activeListTagFilter}
+            tab="period"
+            periodFrom={fromRaw}
+            periodTo={toRaw}
+          />
         ) : null}
 
         {showTable ? (
