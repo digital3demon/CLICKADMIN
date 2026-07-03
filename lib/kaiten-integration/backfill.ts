@@ -3,7 +3,7 @@
  * CRM — источник истины; обрабатываются только наряды, созданные/изменённые за период disabled.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
-import type { KanbanAppState } from "@/lib/kanban/types";
+import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 import { getKaitenEnvConfig } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import {
@@ -134,7 +134,7 @@ async function pushPendingKanbanCommentsToKaiten(
   const state = parseKanbanState(stateRow?.value ?? null);
   if (!state) return 0;
 
-  let card: { comments?: Array<{ text?: string; authorLabel?: string; source?: string; syncStatus?: string; externalCommentId?: string }> } | null = null;
+  let card: KanbanCard | null = null;
   for (const board of state.boards || []) {
     for (const col of board.columns || []) {
       for (const c of col.cards || []) {
