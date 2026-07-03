@@ -426,8 +426,6 @@ export function OrderListKaitenChatModal({
     [loadError, loading, uploading, uploadFiles],
   );
 
-  if (!open) return null;
-
   const comments = snap?.comments ?? [];
   const cardImages = snap?.cardImages ?? [];
   const sidebarImages = useMemo(() => {
@@ -442,6 +440,13 @@ export function OrderListKaitenChatModal({
     }
     return [...byId.values()];
   }, [cardImages, comments]);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!open) return null;
   const isKanbanMode = chatMode === "kanban";
   const kanbanCardUrl = kanbanOrderDeepLinkPath(orderId);
   const roots = comments.filter((c) => c.parentId == null);
@@ -586,7 +591,7 @@ export function OrderListKaitenChatModal({
                         </span>
                         {c.created ? (
                           <span suppressHydrationWarning>
-                            {typeof window !== "undefined" ? new Date(c.created).toLocaleString("ru-RU") : ""}
+                            {mounted ? new Date(c.created).toLocaleString("ru-RU") : ""}
                           </span>
                         ) : null}
                       </div>
@@ -632,7 +637,7 @@ export function OrderListKaitenChatModal({
                               <div className="text-[10px] text-[var(--text-muted)]" suppressHydrationWarning>
                                 {ch.authorName ?? "Участник"}
                                 {ch.created
-                                  ? ` · ${typeof window !== "undefined" ? new Date(ch.created).toLocaleString("ru-RU") : ""}`
+                                  ? ` · ${mounted ? new Date(ch.created).toLocaleString("ru-RU") : ""}`
                                   : null}
                               </div>
                               {childDisplay.label ? (
