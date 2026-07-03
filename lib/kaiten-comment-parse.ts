@@ -228,6 +228,7 @@ export function parseKaitenListComment(o: unknown): {
   created?: string;
   authorName?: string;
   parentId: number | null;
+  isCrm: boolean;
 } | null {
   if (o == null || typeof o !== "object") return null;
   const r = o as Record<string, unknown>;
@@ -239,6 +240,7 @@ export function parseKaitenListComment(o: unknown): {
   let authorName = authorNameFromKaitenRecord(r);
 
   const m = text.match(CRM_COMMENT_AUTHOR_PREFIX_RE);
+  const isCrm = !!m;
   if (m) {
     const crm = m[1]?.trim();
     if (crm) authorName = crm;
@@ -251,7 +253,7 @@ export function parseKaitenListComment(o: unknown): {
       : typeof r.created_at === "string"
         ? r.created_at
         : undefined;
-  return { id, text, created, authorName, parentId };
+  return { id, text, created, authorName, parentId, isCrm };
 }
 
 /** Kaiten иногда отдаёт один и тот же id дважды — убираем дубли по числовому id. */

@@ -4,6 +4,7 @@ export type OrderChatTriggerKaitenComment = {
   id: number;
   text: string;
   authorName?: string | null;
+  isCrm?: boolean;
 };
 
 export function trimOrderChatAuthorLabel(
@@ -44,11 +45,13 @@ export function mapParsedKaitenCommentsForTriggerSync(
     id: number;
     text: string;
     authorName?: string | null;
+    isCrm?: boolean;
   }>,
 ): OrderChatTriggerKaitenComment[] {
   return parsed.map((c) => ({
     id: c.id,
     text: c.text,
     authorName: c.authorName,
+    isCrm: c.isCrm,
   }));
 }

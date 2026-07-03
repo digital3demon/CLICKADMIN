@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { canAccessOrderChat, isKanbanOnlyUser } from "@/lib/auth/permissions";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
@@ -27,9 +27,12 @@ export async function GET() {
   const prisma = await getOrdersPrisma();
 
   if (tenantId) {
-    // Запускаем синхронизацию в фоне, не блокируя ответ клиенту (fire-and-forget)
-    void maybeSyncKaitenForOrderNotificationToasts(prisma, tenantId).catch((e) => {
-      console.error("[toasts] Background Kaiten sync failed:", e);
+    // Запускаем синхронизацию в фоне ПОСЛЕ отправки ответа клиенту (after),
+    // чтобы не создавать задержку (TTFB) при поллинге уведомлений.
+    after(() => {
+      maybeSyncKaitenForOrderNotificationToasts(prisma, tenantId).catch((e) => {
+        console.error("[toasts] Background Kaiten sync failed:", e);
+      });
     });
   }
 

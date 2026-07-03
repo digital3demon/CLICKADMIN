@@ -58,13 +58,18 @@ export async function syncLabMentionFlagFromCommentTexts(
 export async function syncKaitenLabMentionFromParsedComments(
   db: PrismaClient,
   orderId: string,
-  comments: readonly { id: number; text: string; authorName?: string | null }[],
+  comments: readonly { id: number; text: string; authorName?: string | null; isCrm?: boolean }[],
   kanbanAdminMentionTag: string | null | undefined,
 ): Promise<boolean> {
   const labTag = normalizeKanbanAdminMentionTag(kanbanAdminMentionTag);
   const withMention = comments.filter((c) =>
     textIncludesAdminLabMention(c.text, labTag),
   );
+  
+  // Для сигнала (bump) учитываем только внешние комментарии (не CRM),
+  // так как CRM-комментарии уже подняли сигнал при отправке (POST /kanban-chat).
+  const externalMentions = withMention.filter((c) => !c.isCrm);
+  
   const computed = withMention.length > 0;
   const maxMentionId = computed
     ? Math.max(...withMention.map((c) => c.id))
@@ -80,10 +85,14 @@ export async function syncKaitenLabMentionFromParsedComments(
   if (!row) return false;
 
   const prevWl = row.kaitenLabMentionWaterlineCommentId ?? 0;
+  
+  const maxExternalMentionId = externalMentions.length > 0
+    ? Math.max(...externalMentions.map((c) => c.id))
+    : null;
+
   const bumpSignal =
-    computed &&
-    maxMentionId != null &&
-    maxMentionId > prevWl;
+    maxExternalMentionId != null &&
+    maxExternalMentionId > prevWl;
 
   const nextWaterline =
     computed && maxMentionId != null ? maxMentionId : null;
@@ -96,9 +105,9 @@ export async function syncKaitenLabMentionFromParsedComments(
   }
 
   const latestMention =
-    bumpSignal && maxMentionId != null
-      ? withMention.find((c) => c.id === maxMentionId) ??
-        withMention[withMention.length - 1]
+    bumpSignal && maxExternalMentionId != null
+      ? externalMentions.find((c) => c.id === maxExternalMentionId) ??
+        externalMentions[externalMentions.length - 1]
       : null;
   const toastAuthor = latestMention?.authorName?.trim().slice(0, 120) || null;
   const toastText = latestMention?.text.replace(/\s+/g, " ").trim().slice(0, 500) || null;

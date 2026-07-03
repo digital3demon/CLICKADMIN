@@ -28,7 +28,6 @@ import {
 } from "@/lib/kanban/chat-sync";
 import { textIncludesAdminLabMention } from "@/lib/kaiten-comment-parse";
 import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
-import { advanceKaitenLabMentionWaterlineOnly } from "@/lib/order-kaiten-lab-mention-db";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
@@ -557,16 +556,6 @@ export async function POST(
       card.updatedAt = nowIso();
       card.comments = compactCardComments(card.comments || []);
       const externalId = kaitenJsonIntId(row.externalCommentId);
-      if (
-        externalId != null &&
-        textIncludesAdminLabMention(messageText, normalizeKanbanAdminMentionTag(labTag))
-      ) {
-        try {
-          await advanceKaitenLabMentionWaterlineOnly(ordersPrisma, order.id, externalId);
-        } catch (e) {
-          console.error("[kanban-chat POST] CRM lab mention waterline", orderId, e);
-        }
-      }
       const loadedAfterSave = await loadTenantKanbanState(tenantId);
       const savedAfterSync = await saveTenantKanbanStateWithRetry(
         tenantId,

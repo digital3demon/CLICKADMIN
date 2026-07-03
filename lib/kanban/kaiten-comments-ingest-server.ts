@@ -10,7 +10,6 @@ import {
   syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
 import {
-  advanceKaitenLabMentionWaterlineOnly,
   syncCrmLabMentionFromCommentText,
   syncKaitenLabMentionFromParsedComments,
 } from "@/lib/order-kaiten-lab-mention-db";
@@ -23,6 +22,7 @@ export type KaitenParsedCommentForIngest = {
   created?: string;
   authorName?: string | null;
   parentId?: number | null;
+  isCrm?: boolean;
 };
 
 export type IngestKaitenCommentsForOrderInput = {
@@ -138,14 +138,9 @@ export async function ingestCrmKanbanCommentForOrder(
   );
 
   let waterlineAdvanced = false;
-  const kid = input.kaitenCommentIdForWaterline;
-  if (kid != null && Number.isFinite(kid)) {
-    waterlineAdvanced = await advanceKaitenLabMentionWaterlineOnly(
-      input.prisma,
-      orderId,
-      Math.trunc(kid),
-    );
-  }
+  // Waterline больше не двигаем при отправке из CRM, чтобы не пропустить
+  // более старые комментарии Kaiten, которые еще не были считаны поллером.
+  // Waterline будет обновлен при следующем чтении из Kaiten (readback).
 
   return { labMentionDbChanged, waterlineAdvanced };
 }

@@ -133,7 +133,7 @@ describe("ingestCrmKanbanCommentForOrder", () => {
     expect(result).toEqual({ labMentionDbChanged: true, waterlineAdvanced: false });
   });
 
-  it("после id Kaiten двигает только waterline", async () => {
+  it("больше не двигает waterline после id Kaiten", async () => {
     syncCrmLabMention.mockResolvedValue(false);
     const prisma = {} as never;
 
@@ -144,7 +144,7 @@ describe("ingestCrmKanbanCommentForOrder", () => {
       kaitenCommentIdForWaterline: 777,
     });
 
-    expect(advanceWaterline).toHaveBeenCalledWith(prisma, "o1", 777);
-    expect(result).toEqual({ labMentionDbChanged: false, waterlineAdvanced: true });
+    expect(advanceWaterline).not.toHaveBeenCalled();
+    expect(result).toEqual({ labMentionDbChanged: false, waterlineAdvanced: false });
   });
 });
