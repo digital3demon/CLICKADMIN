@@ -167,6 +167,7 @@ const RULES: Rule[] = [
   { prefix: "/directory/contracts", module: "CONFIG_CONTRACT_TEMPLATE" },
   { prefix: "/directory/mail", module: "CONFIG_MAIL" },
   { prefix: "/directory/warehouse", module: "CONFIG_WAREHOUSE" },
+  { prefix: "/api/tenant/kaiten-integration", module: "CONFIG_KANBAN_BOARDS" },
   { prefix: "/directory/kanban-boards", module: "CONFIG_KANBAN_BOARDS" },
   { prefix: "/directory/kaiten", module: "CONFIG_KAITEN" },
   { prefix: "/api/kaiten-card-types", module: "CONFIG_KAITEN" },

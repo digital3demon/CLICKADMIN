@@ -29,6 +29,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminMessengerTenantSettings } from "@/components/directory/AdminMessengerTenantSettings";
 import { LabDueSlotsTenantSettings } from "@/components/directory/LabDueSlotsTenantSettings";
+import { KaitenIntegrationTenantSettings } from "@/components/directory/KaitenIntegrationTenantSettings";
 import { OrderArchiveRetentionTenantSettings } from "@/components/directory/OrderArchiveRetentionTenantSettings";
 import { KanbanCrmUsersProvider } from "@/components/kanban/kanban-crm-users-context";
 import { IconBoard, IconPlus } from "@/components/kanban/kanban-icons";
@@ -97,6 +98,7 @@ export function DirectoryKanbanBoardsClient({
   const importRef = useRef<HTMLInputElement>(null);
   const canSetPrivateBoards =
     !isDemo && (sessionRole === "OWNER" || sessionRole === "MANAGER");
+  const canEditKaitenIntegration = !isDemo && sessionRole === "OWNER";
   const canEditKanbanAdminTag =
     !isDemo &&
     (sessionRole === "OWNER" ||
@@ -499,6 +501,9 @@ export function DirectoryKanbanBoardsClient({
     <KanbanCrmUsersProvider>
       <>
       <div className="space-y-8">
+        {!isDemo ? (
+          <KaitenIntegrationTenantSettings canEdit={canEditKaitenIntegration} />
+        ) : null}
         {!isDemo ? (
           <LabDueSlotsTenantSettings canEdit={canEditKanbanAdminTag} />
         ) : null}

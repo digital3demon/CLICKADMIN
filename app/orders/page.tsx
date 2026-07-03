@@ -43,6 +43,8 @@ import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
+import { getPrisma } from "@/lib/get-prisma";
+import { loadKaitenIntegrationTenantState } from "@/lib/kaiten-integration/settings";
 import { PrismaDataLoadErrorCallout } from "@/components/layout/PrismaDataLoadErrorCallout";
 import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
 import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
@@ -191,6 +193,20 @@ export default async function OrdersPage({
   const tenantId = session
     ? await getTenantIdForSession(session)
     : null;
+
+  let kaitenIntegrationActive = true;
+  if (tenantId) {
+    try {
+      const prisma = await getPrisma();
+      const integration = await loadKaitenIntegrationTenantState(
+        prisma,
+        tenantId,
+      );
+      kaitenIntegrationActive = integration.active;
+    } catch {
+      kaitenIntegrationActive = true;
+    }
+  }
 
   let userOrdersListPageSize: number | null = null;
   const [ordersPrisma, clientsPrisma] = await Promise.all([
@@ -436,7 +452,7 @@ export default async function OrdersPage({
         orderIds={orders
           .filter((o) => o.kaitenCardId != null)
           .map((o) => o.id)}
-        pollingEnabled={!isDemo}
+        pollingEnabled={!isDemo && kaitenIntegrationActive}
         searchActive={Boolean(listSearchQ)}
       >
       <div className={`${ORDERS_LIST_STACK} space-y-4`}>

@@ -18,6 +18,8 @@ import {
 } from "@/lib/order-continuation-display";
 import type { PrismaClient } from "@prisma/client";
 import { kaitenLogger } from "@/lib/server/logger";
+import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
+import { getPrisma } from "@/lib/get-prisma";
 
 async function resolveContinuationParentForOrder(
   prisma: PrismaClient,
@@ -133,6 +135,7 @@ export async function syncNewOrderToKaiten(
       where: { id: orderId },
       select: {
         id: true,
+        tenantId: true,
         orderNumber: true,
         doctorId: true,
         patientName: true,
@@ -168,6 +171,18 @@ export async function syncNewOrderToKaiten(
 
     if (!order) {
       return { ok: false, error: "Наряд не найден", httpStatus: 400 };
+    }
+    const corePrisma = await getPrisma();
+    const integrationGate = await gateKaitenSyncForTenant(
+      corePrisma,
+      order.tenantId ?? "",
+    );
+    if (integrationGate.skip) {
+      return {
+        ok: false,
+        error: "Интеграция с Kaiten выключена",
+        httpStatus: 503,
+      };
     }
     if (order.kaitenCardId != null) {
       return { ok: true, kaitenCardId: order.kaitenCardId };

@@ -209,19 +209,20 @@ export function upsertKaitenCommentsToCard(
       const nextCreatedAt = createdIso(row.created);
       const nextAuthor = row.authorName?.trim() || existing.authorLabel;
       const nextParentExt = row.parentId != null ? String(row.parentId) : null;
+      const nextSource = existing.source === "CRM" ? "CRM" : "KAITEN";
       if (
         existing.text !== nextText ||
         existing.createdAt !== nextCreatedAt ||
         (existing.authorLabel || "") !== (nextAuthor || "") ||
         (existing.externalParentId || null) !== nextParentExt ||
-        existing.source !== "KAITEN" ||
+        existing.source !== nextSource ||
         existing.syncStatus !== "synced"
       ) {
         existing.text = nextText;
         existing.createdAt = nextCreatedAt;
         existing.authorLabel = nextAuthor;
         existing.externalParentId = nextParentExt;
-        existing.source = "KAITEN";
+        existing.source = nextSource;
         existing.syncStatus = "synced";
         existing.syncedAt = new Date().toISOString();
         changed = true;

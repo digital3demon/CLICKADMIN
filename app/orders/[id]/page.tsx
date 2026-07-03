@@ -24,6 +24,8 @@ import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { resolveRegisteredByLabelForDisplay } from "@/lib/registered-by-label-display";
 import { fetchWorkspaceActivePriceListName } from "@/lib/order-price-list-from-contractors";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
+import { getPrisma } from "@/lib/get-prisma";
+import { loadKaitenIntegrationTenantState } from "@/lib/kaiten-integration/settings";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { decodeOrderPublicRef } from "@/lib/order-public-ref";
 import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
@@ -368,11 +370,24 @@ export default async function OrderEditPage({
   const canEditOrder =
     session != null && canEditOrders(session.role, access ?? undefined);
 
+  let kaitenIntegrationActive = true;
+  try {
+    const prisma = await getPrisma();
+    const integration = await loadKaitenIntegrationTenantState(
+      prisma,
+      tenantId,
+    );
+    kaitenIntegrationActive = integration.active;
+  } catch {
+    kaitenIntegrationActive = true;
+  }
+
   return (
     <OrderEditForm
       initial={initial}
       initialActiveTab={initialActiveTab}
       isDemoMode={isDemoMode}
+      kaitenIntegrationActive={kaitenIntegrationActive}
       kanbanCardUrl={kanbanAbs}
       demoKanbanCardTypes={demoKanbanCardTypes}
       canAcceptChatCorrections={canAcceptChatCorrections}

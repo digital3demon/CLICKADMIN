@@ -9,6 +9,7 @@ import { orderPathById } from "@/lib/order-public-ref";
 import { isPublicStickerHubPath } from "@/lib/sticker-public-path";
 
 const STORAGE_KEY = "orderToastDismissedV1";
+const STORAGE_KEY_COLLAPSED = "orderToastStackCollapsedV1";
 
 type OrderToastRow = {
   id: string;
@@ -50,8 +51,28 @@ const linkTone: Record<ToastKind, string> = {
   prosthetics: "text-sky-950 hover:underline dark:text-sky-50",
 };
 
+function writeStackCollapsed(collapsed: boolean) {
+  void writeClientState("user", STORAGE_KEY_COLLAPSED, collapsed);
+}
+
 function writeDismissedPrefixed(ids: Set<string>) {
   void writeClientState("user", STORAGE_KEY, [...ids]);
+}
+
+function dismissKey(kind: ToastKind, id: string): string {
+  return `${kind}:${id}`;
+}
+
+function toastRowKeys(
+  chatList: OrderToastRow[],
+  corrList: OrderToastRow[],
+  proList: OrderToastRow[],
+): Set<string> {
+  const keys = new Set<string>();
+  for (const r of chatList) keys.add(dismissKey("chat", r.id));
+  for (const r of corrList) keys.add(dismissKey("correction", r.id));
+  for (const r of proList) keys.add(dismissKey("prosthetics", r.id));
+  return keys;
 }
 
 function snippet(text: string, max = 56): string {
@@ -81,10 +102,6 @@ function parseRetryAfterMs(value: string | null): number {
 }
 
 const MAX_PER_COLUMN = 5;
-
-function dismissKey(kind: ToastKind, id: string): string {
-  return `${kind}:${id}`;
-}
 
 function ToastCard({
   kind,
@@ -142,6 +159,7 @@ export function OrderCorrectionToastStack() {
     [],
   );
   const lastFpRef = useRef<string>("");
+  const prevToastKeysRef = useRef<Set<string>>(new Set());
   const pollInFlightRef = useRef(false);
   const nextPollAllowedAtRef = useRef(0);
   const pollBackoffMsRef = useRef(0);
@@ -157,12 +175,18 @@ export function OrderCorrectionToastStack() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const raw = await readClientState<unknown>("user", STORAGE_KEY);
+      const [dismissedRaw, collapsedRaw] = await Promise.all([
+        readClientState<unknown>("user", STORAGE_KEY),
+        readClientState<unknown>("user", STORAGE_KEY_COLLAPSED),
+      ]);
       if (cancelled) return;
-      if (Array.isArray(raw)) {
+      if (Array.isArray(dismissedRaw)) {
         setDismissed(
-          new Set(raw.filter((x): x is string => typeof x === "string")),
+          new Set(dismissedRaw.filter((x): x is string => typeof x === "string")),
         );
+      }
+      if (collapsedRaw === true) {
+        setStackCollapsed(true);
       }
     })();
     return () => {
@@ -215,12 +239,24 @@ export function OrderCorrectionToastStack() {
         const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}`;
         if (fp !== lastFpRef.current) {
           const hadPrevious = lastFpRef.current.length > 0;
+          const nextKeys = toastRowKeys(chatList, corrList, proList);
+          let hasNewToast = false;
+          if (hadPrevious) {
+            for (const key of nextKeys) {
+              if (!prevToastKeysRef.current.has(key)) {
+                hasNewToast = true;
+                break;
+              }
+            }
+          }
           lastFpRef.current = fp;
+          prevToastKeysRef.current = nextKeys;
           setChatMessages(chatList);
           setCorrections(corrList);
           setProstheticsRequests(proList);
-          if (hadPrevious) {
+          if (hasNewToast) {
             setStackCollapsed(false);
+            writeStackCollapsed(false);
           }
           if (
             pathname === "/orders" ||
@@ -288,10 +324,12 @@ export function OrderCorrectionToastStack() {
 
   const hideAll = useCallback(() => {
     setStackCollapsed(true);
+    writeStackCollapsed(true);
   }, []);
 
   const showAll = useCallback(() => {
     setStackCollapsed(false);
+    writeStackCollapsed(false);
   }, []);
 
   const dismissOne = useCallback(
@@ -301,14 +339,21 @@ export function OrderCorrectionToastStack() {
     [mergeDismissed],
   );
 
-  if (isLogin || isKanban || isPublicSticker || pendingCount === 0) {
+  useEffect(() => {
+    if (pendingCount === 0 && stackCollapsed) {
+      setStackCollapsed(false);
+      writeStackCollapsed(false);
+    }
+  }, [pendingCount, stackCollapsed]);
+
+  if (isLogin || isKanban || isPublicSticker) {
     return null;
   }
 
-  if (stackCollapsed) {
+  if (stackCollapsed && pendingCount > 0) {
     return (
       <div
-        className="pointer-events-none fixed z-[95] bottom-[max(1rem,env(safe-area-inset-bottom,0px))] right-[max(1rem,env(safe-area-inset-right,0px))] flex flex-col items-end"
+        className="pointer-events-none fixed z-[120] bottom-[max(3.25rem,calc(1rem+env(safe-area-inset-bottom,0px)))] right-[max(1rem,env(safe-area-inset-right,0px))] flex flex-col items-end"
         aria-live="polite"
       >
         <button
@@ -320,6 +365,10 @@ export function OrderCorrectionToastStack() {
         </button>
       </div>
     );
+  }
+
+  if (pendingCount === 0) {
+    return null;
   }
 
   const columns: Array<{
@@ -337,7 +386,7 @@ export function OrderCorrectionToastStack() {
 
   return (
     <div
-      className="pointer-events-none fixed z-[95] bottom-[max(1rem,env(safe-area-inset-bottom,0px))] right-[max(1rem,env(safe-area-inset-right,0px))] left-[max(1rem,env(safe-area-inset-left,0px))] flex flex-col items-end gap-2 sm:left-auto"
+      className="pointer-events-none fixed z-[120] bottom-[max(3.25rem,calc(1rem+env(safe-area-inset-bottom,0px)))] right-[max(1rem,env(safe-area-inset-right,0px))] left-[max(1rem,env(safe-area-inset-left,0px))] flex flex-col items-end gap-2 sm:left-auto"
       aria-live="polite"
     >
       <div className="pointer-events-auto flex max-w-full flex-col items-end gap-2">

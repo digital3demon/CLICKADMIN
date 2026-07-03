@@ -8,6 +8,7 @@ import {
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
+import { loadKaitenIntegrationTenantState } from "@/lib/kaiten-integration/settings";
 
 /** Типы карточек + какие пространства (доски) реально настроены в .env. */
 export async function GET() {
@@ -18,6 +19,14 @@ export async function GET() {
     }
     const tenantId = await requireSessionTenantId(s);
     const prisma = await getPrisma();
+    const integration = await loadKaitenIntegrationTenantState(prisma, tenantId);
+    if (!integration.active) {
+      return NextResponse.json({
+        enabled: false,
+        cardTypes: [],
+        trackLanes: [],
+      });
+    }
     await ensureKaitenDirectory(prisma, tenantId);
     const types = await prisma.kaitenCardType.findMany({
       where: { tenantId, isActive: true },
@@ -33,7 +42,7 @@ export async function GET() {
           return t != null && (t.boardId != null || t.spaceId != null);
         })
       : [];
-    return NextResponse.json({ cardTypes: types, trackLanes });
+    return NextResponse.json({ enabled: true, cardTypes: types, trackLanes });
   } catch (e) {
     console.error(e);
     return NextResponse.json(

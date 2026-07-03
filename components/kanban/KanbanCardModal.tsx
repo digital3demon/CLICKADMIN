@@ -781,6 +781,48 @@ export function KanbanCardModal({
       }
     };
 
+    if (
+      card.linkedOrderId &&
+      (requestedAction === "correction" || requestedAction === "prosthetics")
+    ) {
+      try {
+        const postRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: trimmed, action: requestedAction }),
+        });
+        const postData = (await postRes.json().catch(() => ({}))) as { error?: string };
+        if (!postRes.ok) {
+          toast(postData.error ?? "Не удалось отправить сообщение в CRM-канбан", true);
+          return false;
+        }
+        const getRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const getData = (await getRes.json().catch(() => ({}))) as {
+          comments?: CardComment[];
+        };
+        if (getRes.ok && Array.isArray(getData.comments)) {
+          const nextComments = getData.comments as CardComment[];
+          onApply((b) => {
+            const fc = findCard(b, cardId);
+            if (!fc) return;
+            fc.card.comments = withImagePlaceholders(nextComments, fc.card);
+            pushActivity(fc.card, "Комментарий от админов", actor, b, act);
+          });
+          fireMentionTelegram();
+          return true;
+        }
+        fireMentionTelegram();
+        return true;
+      } catch {
+        toast("Сеть недоступна", true);
+        return false;
+      }
+    }
+
     const linkedKaiten =
       Boolean(card.linkedOrderId) &&
       card.kaitenCardId != null &&

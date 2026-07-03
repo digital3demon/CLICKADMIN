@@ -15,6 +15,63 @@ const LAB_MENTION_ACK_ROLES = [
   "SENIOR_ADMINISTRATOR",
 ] as const;
 
+type ChatToastCandidate = {
+  id: string;
+  orderNumber: string;
+  kaitenLabMentionSignalAt: Date | null;
+  kaitenLabMentionToastAuthor?: string | null;
+  kaitenLabMentionToastText?: string | null;
+};
+
+function isMissingToastPreviewColumn(err: unknown): boolean {
+  if (err == null || typeof err !== "object") return false;
+  const obj = err as { code?: string; meta?: { column?: string } };
+  const col = obj.meta?.column ?? "";
+  return (
+    obj.code === "P2022" &&
+    (col.includes("kaitenLabMentionToastAuthor") ||
+      col.includes("kaitenLabMentionToastText"))
+  );
+}
+
+async function fetchChatToastCandidates(
+  db: PrismaClient,
+  tenantId: string,
+): Promise<ChatToastCandidate[]> {
+  const where = {
+    archivedAt: null,
+    ...(tenantId ? { tenantId } : {}),
+    kaitenChatHasLabMention: true,
+    kaitenLabMentionSignalAt: { not: null },
+  };
+  try {
+    return await db.order.findMany({
+      where,
+      orderBy: { kaitenLabMentionSignalAt: "desc" },
+      take: 32,
+      select: {
+        id: true,
+        orderNumber: true,
+        kaitenLabMentionSignalAt: true,
+        kaitenLabMentionToastAuthor: true,
+        kaitenLabMentionToastText: true,
+      },
+    });
+  } catch (err) {
+    if (!isMissingToastPreviewColumn(err)) throw err;
+    return await db.order.findMany({
+      where,
+      orderBy: { kaitenLabMentionSignalAt: "desc" },
+      take: 32,
+      select: {
+        id: true,
+        orderNumber: true,
+        kaitenLabMentionSignalAt: true,
+      },
+    });
+  }
+}
+
 /** Непрочитанные упоминания лаборатории в чате — для колонки «Чат» в тостах. */
 export async function fetchOrderChatToastRows(
   db: PrismaClient,
@@ -22,23 +79,7 @@ export async function fetchOrderChatToastRows(
   tenantId?: string | null,
 ): Promise<OrderChatToastRow[]> {
   const tid = String(tenantId ?? "").trim();
-  const candidates = await db.order.findMany({
-    where: {
-      archivedAt: null,
-      ...(tid ? { tenantId: tid } : {}),
-      kaitenChatHasLabMention: true,
-      kaitenLabMentionSignalAt: { not: null },
-    },
-    orderBy: { kaitenLabMentionSignalAt: "desc" },
-    take: 32,
-    select: {
-      id: true,
-      orderNumber: true,
-      kaitenLabMentionSignalAt: true,
-      kaitenLabMentionToastAuthor: true,
-      kaitenLabMentionToastText: true,
-    },
-  });
+  const candidates = await fetchChatToastCandidates(db, tid);
   if (candidates.length === 0) return [];
 
   const ids = candidates.map((c) => c.id);

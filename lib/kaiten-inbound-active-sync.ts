@@ -14,6 +14,7 @@ import {
   type KaitenQueueMetrics,
 } from "@/lib/kaiten-rest";
 import { orderActiveInboundSyncWhere } from "@/lib/order-active-inbound-sync";
+import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
 
 export const INBOUND_CURSOR_KEY = "kaitenInboundActiveCursorV1";
 export const INBOUND_THROTTLE_KEY = "kaitenInboundNextAllowedAt";
@@ -345,6 +346,16 @@ export async function maybeRunActiveInboundKaitenSync(
   const tid = tenantId.trim();
   if (!tid) {
     return { ran: false, skippedReason: "no_tenant", syncedOrderCount: 0, rateLimited: false };
+  }
+
+  const integrationGate = await gateKaitenSyncForTenant(db, tid);
+  if (integrationGate.skip) {
+    return {
+      ran: false,
+      skippedReason: integrationGate.skippedReason,
+      syncedOrderCount: 0,
+      rateLimited: false,
+    };
   }
 
   const nowMs = Date.now();

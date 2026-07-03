@@ -8,6 +8,17 @@ import type { PrismaClient } from "@prisma/client";
 import { textIncludesAdminLabMention } from "@/lib/kaiten-comment-parse";
 import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
 
+function isMissingToastPreviewColumn(err: unknown): boolean {
+  if (err == null || typeof err !== "object") return false;
+  const obj = err as { code?: string; meta?: { column?: string } };
+  const col = obj.meta?.column ?? "";
+  return (
+    obj.code === "P2022" &&
+    (col.includes("kaitenLabMentionToastAuthor") ||
+      col.includes("kaitenLabMentionToastText"))
+  );
+}
+
 /** Есть ли в текстах комментариев (Kaiten сейчас, позже — любой внешний/внутренний чат) упоминание тега лаборатории. */
 export function computeKaitenLabMentionFromCommentTexts(
   commentTexts: readonly string[],
@@ -92,19 +103,31 @@ export async function syncKaitenLabMentionFromParsedComments(
   const toastAuthor = latestMention?.authorName?.trim().slice(0, 120) || null;
   const toastText = latestMention?.text.replace(/\s+/g, " ").trim().slice(0, 500) || null;
 
-  await db.order.update({
-    where: { id: orderId },
-    data: {
-      kaitenChatHasLabMention: computed,
-      kaitenLabMentionWaterlineCommentId: nextWaterline,
-      ...(bumpSignal
-        ? {
-            kaitenLabMentionSignalAt: new Date(),
-            kaitenLabMentionToastAuthor: toastAuthor,
-            kaitenLabMentionToastText: toastText,
-          }
-        : {}),
-    },
-  });
+  const signalPatch = bumpSignal ? { kaitenLabMentionSignalAt: new Date() } : {};
+  const basePatch = {
+    kaitenChatHasLabMention: computed,
+    kaitenLabMentionWaterlineCommentId: nextWaterline,
+    ...signalPatch,
+  };
+  try {
+    await db.order.update({
+      where: { id: orderId },
+      data: {
+        ...basePatch,
+        ...(bumpSignal
+          ? {
+              kaitenLabMentionToastAuthor: toastAuthor,
+              kaitenLabMentionToastText: toastText,
+            }
+          : {}),
+      },
+    });
+  } catch (err) {
+    if (!isMissingToastPreviewColumn(err)) throw err;
+    await db.order.update({
+      where: { id: orderId },
+      data: basePatch,
+    });
+  }
   return true;
 }

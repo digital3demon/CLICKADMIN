@@ -15,6 +15,7 @@ import {
 } from "@/lib/mail/order-auto-reply";
 import type { CreateOrderBody } from "@/lib/order-create-service";
 import { shouldScheduleKaitenSyncAfterOrderCreate } from "@/lib/order-create-service";
+import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
 import { logger } from "@/lib/server/logger";
 
 export type SyncKaitenAfterCreateResult = {
@@ -25,6 +26,14 @@ export async function syncKaitenAfterOrderCreate(
   orderId: string,
   prisma: PrismaClient,
 ): Promise<SyncKaitenAfterCreateResult> {
+  const tenantRow = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { tenantId: true },
+  });
+  if (!tenantRow) return { kaitenSyncError: null };
+  const integrationGate = await gateKaitenSyncForTenant(prisma, tenantRow.tenantId);
+  if (integrationGate.skip) return { kaitenSyncError: null };
+
   const maxKaitenAttempts = 3;
   let lastError: string | null = null;
   for (let attempt = 0; attempt < maxKaitenAttempts; attempt++) {

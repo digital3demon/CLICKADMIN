@@ -80,6 +80,13 @@ model Tenant {
   orderArchiveRetentionDays Int @default(30)
   /// Опция «Канбан» (доска в CRM), отдельно от тарифа
   addonKanban           Boolean          @default(false)
+  /// Интеграция с Kaiten API: при false — только CRM/канбан, без внешней синхронизации.
+  kaitenIntegrationEnabled Boolean       @default(true)
+  /// Когда интеграция была выключена (для догоняющей синхронизации при повторном включении).
+  kaitenIntegrationDisabledAt DateTime?
+  /// Кто выключил интеграцию (владелец tenant).
+  kaitenIntegrationDisabledByUserId String?
+  kaitenIntegrationDisabledByUser   User? @relation("TenantKaitenDisabledBy", fields: [kaitenIntegrationDisabledByUserId], references: [id], onDelete: SetNull)
   /// Общий Telegram-аккаунт администраторов (не привязан к пользователю CRM). Уникален по всем тенантам.
   adminSharedTelegramChatId       String? @unique
   adminSharedTelegramUsername     String?
@@ -726,6 +733,7 @@ model User {
   orderProstheticsRequestsRejected OrderProstheticsRequest[] @relation("OrderProstheticsRequestRejectedBy")
   orderKaitenLabMentionAcks      OrderKaitenLabMentionAck[]
   testOrdersOwned                Order[]                     @relation("TestOrderOwner")
+  tenantsWithKaitenDisabled      Tenant[]                    @relation("TenantKaitenDisabledBy")
   payrollWorkEntries             PayrollWorkEntry[]          @relation("PayrollWorkEntryUser")
   payrollWorkEntriesUpdated      PayrollWorkEntry[]          @relation("PayrollWorkEntryUpdatedBy")
   /// Клиентские состояния на уровне пользователя (UI prefs, флаги и т.п.)

@@ -1,4 +1,40 @@
 import { describe, expect, it } from "vitest";
+import { upsertKaitenCommentsToCard } from "@/lib/kanban/chat-sync";
+import type { CardComment } from "@/lib/kanban/types";
+
+describe("upsertKaitenCommentsToCard", () => {
+  it("сохраняет CRM-origin у комментария, отправленного из канбана и синкнутого в Kaiten", () => {
+    const existing: CardComment[] = [
+      {
+        id: "cm-1",
+        userId: "u1",
+        text: "!!! тест канбан",
+        createdAt: "2026-07-03T12:00:00.000Z",
+        authorLabel: "Всеволод Соколов",
+        externalCommentId: "123",
+        source: "CRM",
+        syncStatus: "synced",
+        syncedAt: "2026-07-03T12:00:01.000Z",
+      },
+    ];
+
+    const result = upsertKaitenCommentsToCard(existing, [
+      {
+        id: 123,
+        text: "!!! тест канбан",
+        created: "2026-07-03T12:00:02.000Z",
+        authorName: "Всеволод Соколов",
+        parentId: null,
+      },
+    ]);
+
+    expect(result.next).toHaveLength(1);
+    expect(result.next[0]?.source).toBe("CRM");
+    expect(result.next[0]?.syncStatus).toBe("synced");
+    expect(result.next[0]?.externalCommentId).toBe("123");
+  });
+});
+import { describe, expect, it } from "vitest";
 import {
   compactCardComments,
   mergeKaitenSnapshotIntoCardComments,

@@ -645,11 +645,14 @@ export function OrderEditForm({
   canEditOrder = true,
   viewerRole = null,
   kanbanCardUrl = null,
+  kaitenIntegrationActive = true,
   orderPageFrame,
 }: {
   initial: OrderEditInitial;
   initialActiveTab?: EditTab;
   isDemoMode?: boolean;
+  /** false — CRM/канбан без внешней синхронизации Kaiten. */
+  kaitenIntegrationActive?: boolean;
   demoKanbanCardTypes?: Array<{ id: string; name: string }>;
   /** Принять корректировки из чата (роль админ / ст. админ / фин. менеджер). */
   canAcceptChatCorrections?: boolean;
@@ -668,6 +671,8 @@ export function OrderEditForm({
   };
 }) {
   const isOrderPageFramed = orderPageFrame != null;
+  const showKaitenExternalUi = kaitenIntegrationActive && !isDemoMode;
+  const kanbanTabLabel = showKaitenExternalUi ? "Канбан/Кайтен" : "Канбан";
   const isAccountant = viewerRole === "ACCOUNTANT";
   const isHarmony = useUiDesign() === "harmony";
   const router = useRouter();
@@ -2904,7 +2909,7 @@ export function OrderEditForm({
         {(
           [
             { key: "Документооборот" as const, label: "Документооборот" },
-            { key: "Канбан/Кайтен" as const, label: "Канбан/Кайтен" },
+            { key: "Канбан/Кайтен" as const, label: kanbanTabLabel },
             { key: "История" as const, label: "История" },
           ] as const
         ).map(({ key, label }) => {
@@ -3217,7 +3222,7 @@ export function OrderEditForm({
         </div>
       ) : activeTab === "Канбан/Кайтен" ? (
         <div className={editColWrap}>
-          {isDemoMode ? (
+          {isDemoMode || !showKaitenExternalUi ? (
             <OrderDemoKanbanTab
               orderId={initial.id}
               initialColumn={initial.demoKanbanColumn}
@@ -3428,7 +3433,8 @@ export function OrderEditForm({
               >
                 Печать наряда (PDF)
               </OrderNarjadPrintTrigger>
-              {initial.kaitenCardUrl || kanbanCardUrl ? (
+              {showKaitenExternalUi &&
+              (initial.kaitenCardUrl || kanbanCardUrl) ? (
                 <OrderKaitenQrModal
                   url={initial.kaitenCardUrl || kanbanCardUrl}
                   kanbanUrl={
@@ -3671,6 +3677,7 @@ export function OrderEditForm({
 
   const orderPageHeaderAccessory = orderPageFrame ? (
     <div className="relative z-50 flex min-w-0 max-w-full flex-wrap items-center gap-2 lg:gap-2.5">
+      {showKaitenExternalUi ? (
       <KaitenHeaderPillMenu
         orderId={initial.id}
         kaitenCardId={initial.kaitenCardId}
@@ -3679,6 +3686,7 @@ export function OrderEditForm({
         demoKanbanColumn={initial.demoKanbanColumn}
         demoCardTypeName={initial.kaitenCardTypeName}
       />
+      ) : null}
       <UrgentPillMenu
         value={urgentSelection}
         onChange={setUrgentSelection}

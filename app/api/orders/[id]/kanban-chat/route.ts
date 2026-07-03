@@ -341,6 +341,12 @@ export async function POST(
   if (!retryCommentId && !text) {
     return NextResponse.json({ error: "Пустой текст" }, { status: 400 });
   }
+  const messageText =
+    action === "correction"
+      ? `!!! ${text}`
+      : action === "prosthetics"
+        ? `??? ${text}`
+        : text;
 
   const ordersPrisma = await getOrdersPrisma();
   const order = await ordersPrisma.order.findFirst({
@@ -352,7 +358,7 @@ export async function POST(
   }
 
   const draftCommentId = retryCommentId || newCommentId();
-  const textBodyKey = commentBodyDedupKey(text);
+  const textBodyKey = commentBodyDedupKey(messageText);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const loaded = await loadTenantKanbanState(tenantId);
@@ -417,7 +423,7 @@ export async function POST(
       row = normalizeCardComment({
         id: draftCommentId,
         userId: session.sub,
-        text,
+        text: messageText,
         createdAt,
         parentId,
         authorLabel,
@@ -435,7 +441,7 @@ export async function POST(
         await createOrderChatCorrectionIfNeeded(
           ordersPrisma,
           order.id,
-          `!!! ${text}`,
+          messageText,
           "DEMO_KANBAN",
           { authorLabel },
         );
@@ -443,7 +449,7 @@ export async function POST(
         await createOrderProstheticsRequestIfNeeded(
           ordersPrisma,
           order.id,
-          `??? ${text}`,
+          messageText,
           "DEMO_KANBAN",
           { authorLabel },
         );
