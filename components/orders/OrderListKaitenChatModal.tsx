@@ -66,12 +66,6 @@ type KanbanChatPayload = {
   comments?: KanbanChatCommentPayload[];
 };
 
-type ImagePreview = {
-  id: string;
-  name: string;
-  url: string;
-};
-
 function isNoKaitenCardError(errorText: string | null | undefined): boolean {
   const t = String(errorText || "").toLowerCase();
   return t.includes("не привяз") || t.includes("нет карточки kaiten");
@@ -159,17 +153,9 @@ export function OrderListKaitenChatModal({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadOk, setUploadOk] = useState<string | null>(null);
-  const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
   const [openImage, setOpenImage] = useState<{ name: string; url: string } | null>(
     null,
   );
-
-  const clearImagePreviews = useCallback(() => {
-    setImagePreviews((prev) => {
-      prev.forEach((p) => URL.revokeObjectURL(p.url));
-      return [];
-    });
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -273,11 +259,6 @@ export function OrderListKaitenChatModal({
   }, [open, orderId, router, chatMode]);
 
   useEffect(() => {
-    if (open) return;
-    clearImagePreviews();
-  }, [open, clearImagePreviews]);
-
-  useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -378,17 +359,6 @@ export function OrderListKaitenChatModal({
       if (arr.length === 0) return;
       setUploadError(null);
       setUploadOk(null);
-      const previews = arr
-        .filter((file) => file.type.startsWith("image/"))
-        .map((file, idx) => ({
-          id: `${file.name}-${file.size}-${file.lastModified}-${idx}`,
-          name: file.name,
-          url: URL.createObjectURL(file),
-        }));
-      setImagePreviews((prev) => {
-        prev.forEach((p) => URL.revokeObjectURL(p.url));
-        return previews;
-      });
       setUploading(true);
       try {
         const enqueued = await enqueueOrderAttachmentFiles({
@@ -427,19 +397,6 @@ export function OrderListKaitenChatModal({
   );
 
   const comments = snap?.comments ?? [];
-  const cardImages = snap?.cardImages ?? [];
-  const sidebarImages = useMemo(() => {
-    const byId = new Map<string, ChatImage>();
-    for (const img of cardImages) {
-      byId.set(String(img.id), img);
-    }
-    for (const c of comments) {
-      for (const img of c.images ?? []) {
-        byId.set(String(img.id), img);
-      }
-    }
-    return [...byId.values()];
-  }, [cardImages, comments]);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -689,52 +646,6 @@ export function OrderListKaitenChatModal({
 
           <aside className="flex min-h-0 w-full shrink-0 flex-col border-t border-[var(--card-border)] bg-[var(--surface-subtle)] sm:w-[min(15rem,34%)] sm:max-w-xs sm:border-l sm:border-t-0">
             <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 sm:px-3">
-              {sidebarImages.length > 0 || imagePreviews.length > 0 ? (
-                <div className="mb-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                      Изображения
-                    </p>
-                    {imagePreviews.length > 0 ? (
-                      <button
-                        type="button"
-                        className="text-[10px] font-medium text-[var(--sidebar-blue)] hover:underline"
-                        onClick={clearImagePreviews}
-                      >
-                        Скрыть предпросмотр
-                      </button>
-                    ) : null}
-                  </div>
-                  {sidebarImages.length > 0 ? renderSidebarImages(sidebarImages) : null}
-                  {imagePreviews.length > 0 ? (
-                    <div className={sidebarImages.length > 0 ? "mt-2 border-t border-[var(--card-border)] pt-2" : ""}>
-                      <p className="mb-1 text-[10px] text-[var(--text-muted)]">К загрузке</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {imagePreviews.map((preview) => (
-                          <button
-                            key={preview.id}
-                            type="button"
-                            className="min-w-0 text-left"
-                            title={preview.name}
-                            onClick={() =>
-                              setOpenImage({ name: preview.name, url: preview.url })
-                            }
-                          >
-                            <img
-                              src={preview.url}
-                              alt={preview.name}
-                              className="aspect-square w-full rounded border border-[var(--card-border)] object-cover"
-                            />
-                            <span className="mt-1 block truncate text-[10px] text-[var(--text-muted)]">
-                              {preview.name}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
               <OrderFilesPanel
                 orderId={orderId}
                 orderNumber={orderNumber}
