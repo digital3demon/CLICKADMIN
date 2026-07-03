@@ -27,25 +27,10 @@ export async function GET() {
   const prisma = await getOrdersPrisma();
 
   if (tenantId) {
-    const sync = await maybeSyncKaitenForOrderNotificationToasts(prisma, tenantId);
-    if (sync.rateLimited) {
-      const includeChat = canAccessOrderChat(session.role, access ?? undefined);
-      const payload = await fetchOrderNotificationToasts(prisma, {
-        tenantId,
-        userId: session.sub,
-        includeChat,
-      });
-      return NextResponse.json(
-        { ...payload, rateLimited: true },
-        {
-          status: 429,
-          headers: {
-            "Cache-Control": "no-store",
-            "Retry-After": "8",
-          },
-        },
-      );
-    }
+    // Запускаем синхронизацию в фоне, не блокируя ответ клиенту (fire-and-forget)
+    void maybeSyncKaitenForOrderNotificationToasts(prisma, tenantId).catch((e) => {
+      console.error("[toasts] Background Kaiten sync failed:", e);
+    });
   }
 
   const includeChat = canAccessOrderChat(session.role, access ?? undefined);
