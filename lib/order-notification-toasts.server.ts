@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { fetchOrderChatToastRows } from "@/lib/order-chat-toasts.server";
+import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 
 export type OrderNotificationToastRow = {
   id: string;
@@ -83,19 +84,22 @@ export async function fetchOrderNotificationToasts(
   opts: {
     tenantId: string;
     userId: string | null | undefined;
-    includeChat: boolean;
   },
 ): Promise<{
   messages: OrderNotificationToastRow[];
   corrections: OrderNotificationToastRow[];
   requests: OrderNotificationToastRow[];
+  labMentionCount: number;
 }> {
-  const [messages, corrections, requests] = await Promise.all([
-    opts.includeChat
-      ? fetchOrderChatToastRows(db, opts.userId, opts.tenantId)
-      : Promise.resolve([]),
+  const [messages, corrections, requests, labMentionCount] = await Promise.all([
+    fetchOrderChatToastRows(db, opts.userId, opts.tenantId),
     fetchCorrectionToastRows(db, opts.tenantId),
     fetchProstheticsToastRows(db, opts.tenantId),
+    countOrdersWithPendingKaitenLabMentionForUser(
+      db,
+      { archivedAt: null, tenantId: opts.tenantId },
+      opts.userId ?? undefined
+    ),
   ]);
-  return { messages, corrections, requests };
+  return { messages, corrections, requests, labMentionCount };
 }

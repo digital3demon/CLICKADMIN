@@ -223,6 +223,7 @@ export function OrderCorrectionToastStack() {
           messages?: OrderToastRow[];
           corrections?: OrderToastRow[];
           requests?: OrderToastRow[];
+          labMentionCount?: number;
         };
 
         if (res.status === 401 || res.status === 403) {
@@ -235,8 +236,9 @@ export function OrderCorrectionToastStack() {
         const chatList = Array.isArray(j.messages) ? j.messages : [];
         const corrList = Array.isArray(j.corrections) ? j.corrections : [];
         const proList = Array.isArray(j.requests) ? j.requests : [];
+        const labMentionCount = j.labMentionCount ?? 0;
 
-        const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}`;
+        const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}|lmc:${labMentionCount}`;
         if (fp !== lastFpRef.current) {
           const hadPrevious = lastFpRef.current.length > 0;
           const nextKeys = toastRowKeys(chatList, corrList, proList);
