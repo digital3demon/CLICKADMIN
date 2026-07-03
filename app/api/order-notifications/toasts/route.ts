@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isKanbanOnlyUser } from "@/lib/auth/permissions";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
@@ -9,8 +8,8 @@ export const dynamic = "force-dynamic";
 
 /** Единый опрос уведомлений: только чтение из локальной БД (Канбан). */
 export async function GET() {
-  const { session, access } = await getSessionWithModuleAccess();
-  if (!session || session.role === "USER" || isKanbanOnlyUser(session.role, access ?? undefined)) {
+  const { session } = await getSessionWithModuleAccess();
+  if (!session || session.role === "USER") {
     return NextResponse.json(
       { messages: [], corrections: [], requests: [], labMentionCount: 0 },
       { headers: { "Cache-Control": "no-store" } },
