@@ -24,6 +24,12 @@ import {
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { mergeKaitenSnapshotIntoCardComments } from "@/lib/kanban/chat-sync";
+import {
+  formatKanbanChatMessageDisplay,
+  kanbanChatMessageLabelClass,
+  kanbanChatMessageShellClass,
+  shouldShowKanbanChatSyncStatus,
+} from "@/lib/kanban/chat-message-display";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
 import {
@@ -2999,16 +3005,17 @@ function ChatPanel({
           const cm = block.comment;
           const author = chatAuthorName(cm.userId, cm.authorLabel);
           const imgFile = resolveChatImageFile(card, cm);
+          const display = formatKanbanChatMessageDisplay(cm.text);
 
           return (
-            <div
-              key={cm.id}
-              className="mb-2 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)]"
-            >
+            <div key={cm.id} className={kanbanChatMessageShellClass(display.kind)}>
               <div className="mb-0.5 text-[0.7rem] text-[var(--kaiten-modal-muted)]">
                 {author} · {relativeTimeRu(cm.createdAt)}
               </div>
-              {cm.syncStatus ? (
+              {display.label ? (
+                <p className={kanbanChatMessageLabelClass(display.kind)}>{display.label}</p>
+              ) : null}
+              {shouldShowKanbanChatSyncStatus(display.kind, cm.syncStatus) ? (
                 <div className="mb-0.5 text-[0.68rem] text-[var(--kaiten-modal-muted)]">
                   {chatSyncStatusLabel(cm)}
                 </div>
@@ -3016,14 +3023,14 @@ function ChatPanel({
               {cm.imageFileId && !imgFile ? (
                 <div className="mt-0.5 text-[0.75rem] text-[var(--kaiten-modal-muted)]">
                   Изображение удалено из карточки
-                  {cm.text.trim() ? (
+                  {display.body.trim() ? (
                     <span className="mt-0.5 block whitespace-pre-wrap break-words text-[var(--kaiten-modal-text)]">
-                      {cm.text}
+                      {display.body}
                     </span>
                   ) : null}
                 </div>
               ) : (
-                <div className="whitespace-pre-wrap break-words">{cm.text}</div>
+                <div className="whitespace-pre-wrap break-words">{display.body}</div>
               )}
             </div>
           );

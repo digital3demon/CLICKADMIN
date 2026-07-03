@@ -7,6 +7,7 @@ import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import { getKaitenRestAuth, kaitenListComments, type KaitenAuth } from "@/lib/kaiten-rest";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
+import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
 import {
   syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
@@ -67,7 +68,8 @@ async function logNewCorrectionsFromComments(
 }
 
 /**
- * Тянет комментарии карточки из Kaiten и синхронизирует «!!!» / «???» в БД.
+ * Тянет комментарии карточки из Kaiten, зеркалит в CRM-канбан и синхронизирует «!!!» / «???» в БД.
+ * UI читаeт ленту из kanban state; Kaiten — внешний источник (канбан ← Kaiten).
  */
 export async function syncOrderChatCorrectionsFromKaitenLive(
   prisma: PrismaClient,
@@ -116,7 +118,10 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
     }),
     prisma.order.findUnique({
       where: { id: oid },
-      select: { tenant: { select: { kanbanAdminMentionTag: true } } },
+      select: {
+        tenantId: true,
+        tenant: { select: { kanbanAdminMentionTag: true } },
+      },
     }),
   ]);
 
@@ -147,13 +152,12 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
     };
   }
 
-  const comments = mapParsedKaitenCommentsForTriggerSync(
-    dedupeParsedKaitenComments(
-      comm.comments
-        .map(parseKaitenListComment)
-        .filter((x): x is NonNullable<typeof x> => x != null),
-    ),
+  const parsedFull = dedupeParsedKaitenComments(
+    comm.comments
+      .map(parseKaitenListComment)
+      .filter((x): x is NonNullable<typeof x> => x != null),
   );
+  const comments = mapParsedKaitenCommentsForTriggerSync(parsedFull);
 
   await syncOrderChatCorrectionsFromKaitenComments(prisma, oid, comments);
   await syncOrderProstheticsRequestsFromKaitenComments(prisma, oid, comments);
@@ -170,6 +174,27 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
       { err, orderId: oid, source, msg: "kaiten_lab_mention_sync" },
       "kaiten lab mention sync failed",
     );
+  }
+  const tenantId = orderMeta?.tenantId?.trim();
+  if (tenantId && parsedFull.length > 0) {
+    try {
+      await syncKaitenCommentsIntoKanbanState({
+        tenantId,
+        orderId: oid,
+        comments: parsedFull.map((c) => ({
+          id: c.id,
+          text: c.text,
+          created: c.created,
+          authorName: c.authorName,
+          parentId: c.parentId,
+        })),
+      });
+    } catch (err) {
+      kaitenLogger.error(
+        { err, orderId: oid, source, msg: "kaiten_kanban_mirror_sync" },
+        "kaiten comments mirror into kanban failed",
+      );
+    }
   }
   const importedCorrections = await logNewCorrectionsFromComments(
     prisma,
