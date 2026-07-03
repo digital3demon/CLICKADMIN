@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { ReplyDatePlaceholderKey } from "@/lib/mail/reply-preflight-date-placeholders";
 
 function extractCellPlainText(cell: HTMLElement): string {
   const ps = cell.querySelectorAll("p");
@@ -18,6 +19,10 @@ type Props = {
   editableBlockIds: string[];
   disabled: boolean;
   onTextOverride: (blockId: string, text: string) => void;
+  onInlineDateClick?: (
+    key: ReplyDatePlaceholderKey,
+    anchorRect: DOMRect,
+  ) => void;
 };
 
 export function OrderAutoReplyBlocksPreview({
@@ -25,11 +30,14 @@ export function OrderAutoReplyBlocksPreview({
   editableBlockIds,
   disabled,
   onTextOverride,
+  onInlineDateClick,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const focusedBlockRef = useRef<string | null>(null);
   const onTextOverrideRef = useRef(onTextOverride);
+  const onInlineDateClickRef = useRef(onInlineDateClick);
   onTextOverrideRef.current = onTextOverride;
+  onInlineDateClickRef.current = onInlineDateClick;
 
   useEffect(() => {
     const root = rootRef.current;
@@ -70,6 +78,12 @@ export function OrderAutoReplyBlocksPreview({
         rowEl.style.userSelect = "none";
       }
     });
+
+    root.querySelectorAll(".reply-inline-date-pick").forEach((el) => {
+      const span = el as HTMLElement;
+      span.style.pointerEvents = disabled ? "none" : "auto";
+      span.style.userSelect = "none";
+    });
   }, [html, editableBlockIds, disabled]);
 
   useEffect(() => {
@@ -96,18 +110,48 @@ export function OrderAutoReplyBlocksPreview({
       onTextOverrideRef.current(blockId, extractCellPlainText(td as HTMLElement));
     };
 
+    const onClick = (e: MouseEvent) => {
+      if (disabled) return;
+      const span = (e.target as HTMLElement | null)?.closest?.(
+        "[data-reply-date-key]",
+      ) as HTMLElement | null;
+      if (!span) return;
+      const key = span.getAttribute("data-reply-date-key") as ReplyDatePlaceholderKey | null;
+      if (!key) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onInlineDateClickRef.current?.(key, span.getBoundingClientRect());
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (disabled) return;
+      const span = (e.target as HTMLElement | null)?.closest?.(
+        "[data-reply-date-key]",
+      ) as HTMLElement | null;
+      if (!span) return;
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const key = span.getAttribute("data-reply-date-key") as ReplyDatePlaceholderKey | null;
+      if (!key) return;
+      e.preventDefault();
+      onInlineDateClickRef.current?.(key, span.getBoundingClientRect());
+    };
+
     root.addEventListener("focusin", onFocusIn);
     root.addEventListener("focusout", onFocusOut);
+    root.addEventListener("click", onClick);
+    root.addEventListener("keydown", onKeyDown);
     return () => {
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
+      root.removeEventListener("click", onClick);
+      root.removeEventListener("keydown", onKeyDown);
     };
-  }, [editableBlockIds]);
+  }, [editableBlockIds, disabled]);
 
   return (
     <div
       ref={rootRef}
-      className="min-h-[12rem] w-full overflow-y-auto rounded-md border border-[var(--input-border)] bg-[#f3f4f6] px-1 py-2 text-sm leading-relaxed text-gray-900 [&_a]:pointer-events-none [&_a]:cursor-default"
+      className="min-h-[12rem] w-full overflow-y-auto rounded-md border border-[var(--input-border)] bg-[#f3f4f6] px-1 py-2 text-sm leading-relaxed text-gray-900 [&_.reply-inline-date-pick]:pointer-events-auto [&_a]:pointer-events-none [&_a]:cursor-default"
       aria-label="Предпросмотр ответного письма"
     />
   );

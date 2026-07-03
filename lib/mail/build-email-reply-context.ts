@@ -18,7 +18,7 @@ function parseContextDate(value: Date | string | null | undefined): Date | null 
   return null;
 }
 
-function formatMailDateTime(value: Date | string | null | undefined): string {
+export function formatMailDateTime(value: Date | string | null | undefined): string {
   const d = parseContextDate(value);
   if (!d) return "";
   return d.toLocaleString("ru-RU", {

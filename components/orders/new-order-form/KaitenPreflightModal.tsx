@@ -193,6 +193,9 @@ type KaitenPreflightModalProps = {
   saveError?: string | null;
   /** Панель «Ответное письмо» справа (заказ из почты). */
   replyAside?: ReactNode;
+  /** Галочка «Отправить ответ» — только при replyAside. */
+  sendReply?: boolean;
+  onSendReplyChange?: (value: boolean) => void;
   /** Показывать «…и ответить» на кнопках сохранения. */
   replyActionsEnabled?: boolean;
 };
@@ -249,6 +252,8 @@ export function KaitenPreflightModal({
   onLabDueLocalChange,
   saveError,
   replyAside,
+  sendReply = true,
+  onSendReplyChange,
   replyActionsEnabled = false,
 }: KaitenPreflightModalProps) {
   const [decideLater, setDecideLater] = useState(false);
@@ -716,6 +721,19 @@ export function KaitenPreflightModal({
                 <span className="mt-0.5 block text-xs font-normal text-[var(--text-muted)]">
                   Карточку Kaiten не создаём; для доски CRM укажите тип и пространство ниже.
                 </span>
+              </span>
+            </label>
+          ) : null}
+          {replyAside ? (
+            <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-[var(--input-border)] text-[var(--sidebar-blue)]"
+                checked={sendReply}
+                onChange={(e) => onSendReplyChange?.(e.target.checked)}
+              />
+              <span className="text-sm font-medium text-[var(--text-strong)]">
+                Отправить ответ
               </span>
             </label>
           ) : null}

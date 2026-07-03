@@ -1584,6 +1584,8 @@ export function NewOrderForm({
           });
         }}
         replyActionsEnabled={replyActionsEnabled}
+        sendReply={sendAutoReply}
+        onSendReplyChange={setSendAutoReply}
         replyAside={
           sourceEmails.length > 0 ? (
             <OrderAutoReplyPreflightPanel
@@ -1603,8 +1605,9 @@ export function NewOrderForm({
               }
               dueDateLocal={workDueLocal}
               appointmentLocal={patientAppointmentLocal}
+              labWholeDay={labWholeDay}
+              appointmentWholeDay={appointmentWholeDay}
               sendReply={sendAutoReply}
-              onSendReplyChange={setSendAutoReply}
               onStateChange={setAutoReplyPreflight}
             />
           ) : undefined

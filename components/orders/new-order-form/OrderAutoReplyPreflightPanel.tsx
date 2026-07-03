@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { OrderSourceEmail } from "@/components/orders/new-order-panel-context";
 import { buildEmailReplyTemplateContext } from "@/lib/mail/build-email-reply-context";
 import {
@@ -14,19 +14,24 @@ import {
   SAMPLE_ORDER_STATUS_URL,
   type ReplyEditorDocument,
   type ReplyLayoutType,
-  type ReplyPreflightOverrides,
 } from "@/lib/mail/reply-block-editor";
 import {
+  buildReplyDateDisplayByKey,
   collectReplyDatePlaceholdersInHaystack,
-  initialReplyDatePickerValues,
+  injectReplyInlineDatePickers,
+  initialReplyDatePickerState,
+  replyDateStateToLegacyValues,
+  stripReplyInlineDatePickers,
   type ReplyDatePlaceholderDef,
   type ReplyDatePlaceholderKey,
+  type ReplyDatePickerState,
 } from "@/lib/mail/reply-preflight-date-placeholders";
 import {
   restoreReplyTemplateCidsFromPreview,
   substituteReplyTemplateCidsForPreview,
 } from "@/lib/mail/reply-template-cid";
 import { OrderAutoReplyBlocksPreview } from "./OrderAutoReplyBlocksPreview";
+import { ReplyPreflightInlineDatePicker } from "./ReplyPreflightInlineDatePicker";
 
 export type AutoReplyPreflightDraft = {
   subject: string;
@@ -51,8 +56,9 @@ type Props = {
   clinicAddress: string;
   dueDateLocal: string;
   appointmentLocal: string;
+  labWholeDay?: boolean;
+  appointmentWholeDay?: boolean;
   sendReply: boolean;
-  onSendReplyChange: (value: boolean) => void;
   onStateChange: (state: AutoReplyPreflightState) => void;
 };
 
@@ -63,8 +69,13 @@ type LoadedTemplate = {
   editorDocument: ReplyEditorDocument | null;
 };
 
+type ActiveDatePicker = {
+  key: ReplyDatePlaceholderKey;
+  anchorRect: DOMRect;
+};
+
 const EDITOR_CLASS =
-  "min-h-[12rem] w-full rounded-md border border-[var(--input-border)] bg-[var(--surface-muted)] px-3 py-2 text-sm leading-relaxed text-[var(--app-text)] shadow-sm outline-none [&_img]:my-2 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_p]:my-1";
+  "min-h-[12rem] w-full rounded-md border border-[var(--input-border)] bg-[var(--surface-muted)] px-3 py-2 text-sm leading-relaxed text-[var(--app-text)] shadow-sm outline-none [&_.reply-inline-date-pick]:cursor-pointer [&_.reply-inline-date-pick]:underline [&_.reply-inline-date-pick]:decoration-dotted [&_.reply-inline-date-pick]:underline-offset-2 [&_.reply-inline-date-pick]:decoration-orange-400 [&_img]:my-2 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_p]:my-1";
 
 function templateHaystack(template: LoadedTemplate): string {
   return template.layoutType === "blocks"
@@ -89,8 +100,9 @@ export function OrderAutoReplyPreflightPanel({
   clinicAddress,
   dueDateLocal,
   appointmentLocal,
+  labWholeDay = true,
+  appointmentWholeDay = true,
   sendReply,
-  onSendReplyChange,
   onStateChange,
 }: Props) {
   const [subject, setSubject] = useState("");
@@ -100,9 +112,10 @@ export function OrderAutoReplyPreflightPanel({
   const [datePlaceholderDefs, setDatePlaceholderDefs] = useState<
     ReplyDatePlaceholderDef[]
   >([]);
-  const [datePickerValues, setDatePickerValues] = useState<
-    Partial<Record<ReplyDatePlaceholderKey, string>>
-  >({});
+  const [datePickerState, setDatePickerState] = useState<ReplyDatePickerState>({});
+  const [activeDatePicker, setActiveDatePicker] = useState<ActiveDatePicker | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [canSendReply, setCanSendReply] = useState(false);
@@ -112,52 +125,50 @@ export function OrderAutoReplyPreflightPanel({
   const editorRef = useRef<HTMLDivElement>(null);
   const editorFocusedRef = useRef(false);
 
-  const preflightOverrides: ReplyPreflightOverrides = useMemo(
-    () => ({
-      datePickerValues,
-      textOverrides,
-    }),
-    [datePickerValues, textOverrides],
-  );
-
-  const buildContext = useCallback(() => {
-    const dateVal =
-      datePickerValues.date?.trim() ||
-      /(\d{4}-\d{2}-\d{2})/.exec(dueDateLocal.trim())?.[1] ||
-      /(\d{4}-\d{2}-\d{2})/.exec(appointmentLocal.trim())?.[1] ||
-      null;
-    const appointmentVal =
-      datePickerValues.appointmentDate?.trim() || appointmentLocal.trim() || null;
-    const dueVal = datePickerValues.dueDate?.trim() || dueDateLocal.trim() || null;
-    return buildEmailReplyTemplateContext({
-      orderNumber: orderNumberPreview,
-      patientName,
-      doctorName,
-      clinicName,
-      clinicAddress,
-      date: dateVal,
-      dueDate: dueVal,
-      appointmentDate: appointmentVal,
-      originalSubject: sourceEmail!.subject,
-      originalFromName: sourceEmail!.fromName,
-      originalFromAddress: sourceEmail!.fromAddress,
-      orderStatusUrl: SAMPLE_ORDER_STATUS_URL,
-    });
-  }, [
-    datePickerValues,
-    orderNumberPreview,
-    patientName,
-    doctorName,
-    clinicName,
-    clinicAddress,
-    dueDateLocal,
-    appointmentLocal,
-    sourceEmail,
-  ]);
-
   const renderPreviewHtml = useCallback(
-    (template: LoadedTemplate, accountId: string) => {
-      const ctx = buildContext();
+    (
+      template: LoadedTemplate,
+      accountId: string,
+      opts?: {
+        dateState?: ReplyDatePickerState;
+        defs?: readonly ReplyDatePlaceholderDef[];
+      },
+    ) => {
+      const effectiveDateState = opts?.dateState ?? datePickerState;
+      const effectiveDefs = opts?.defs ?? datePlaceholderDefs;
+      const dateVal =
+        effectiveDateState.date?.value?.trim() ||
+        /(\d{4}-\d{2}-\d{2})/.exec(dueDateLocal.trim())?.[1] ||
+        /(\d{4}-\d{2}-\d{2})/.exec(appointmentLocal.trim())?.[1] ||
+        null;
+      const appointmentVal =
+        effectiveDateState.appointmentDate?.value?.trim() ||
+        appointmentLocal.trim() ||
+        null;
+      const dueVal =
+        effectiveDateState.dueDate?.value?.trim() || dueDateLocal.trim() || null;
+      const base = buildEmailReplyTemplateContext({
+        orderNumber: orderNumberPreview,
+        patientName,
+        doctorName,
+        clinicName,
+        clinicAddress,
+        date: dateVal,
+        dueDate: dueVal,
+        appointmentDate: appointmentVal,
+        originalSubject: sourceEmail!.subject,
+        originalFromName: sourceEmail!.fromName,
+        originalFromAddress: sourceEmail!.fromAddress,
+        orderStatusUrl: SAMPLE_ORDER_STATUS_URL,
+      });
+      const displayByKey = buildReplyDateDisplayByKey(effectiveDefs, effectiveDateState);
+      const ctx = {
+        ...base,
+        date: displayByKey.date ?? base.date,
+        dueDate: displayByKey.dueDate ?? base.dueDate,
+        appointmentDate: displayByKey.appointmentDate ?? base.appointmentDate,
+      };
+
       const subjectRaw = template.subjectTemplate.trim();
       const nextSubject = subjectRaw
         ? renderEmailReplyTemplate(subjectRaw, ctx)
@@ -166,12 +177,10 @@ export function OrderAutoReplyPreflightPanel({
       let html: string;
       if (template.layoutType === "blocks") {
         const doc = template.editorDocument ?? createClickLabPreset();
-        html = renderReplyBlocksHtml(
-          doc,
-          ctx,
-          templateAssetsRef.current,
-          preflightOverrides,
-        );
+        html = renderReplyBlocksHtml(doc, ctx, templateAssetsRef.current, {
+          datePickerValues: replyDateStateToLegacyValues(effectiveDateState),
+          textOverrides,
+        });
       } else {
         html = renderEmailReplyTemplate(template.htmlTemplate, ctx, { html: true });
       }
@@ -180,9 +189,26 @@ export function OrderAutoReplyPreflightPanel({
         templateAssetsRef.current,
         accountId,
       );
-      return { nextSubject, previewHtml };
+      const withInlinePickers = injectReplyInlineDatePickers(
+        previewHtml,
+        effectiveDefs,
+        displayByKey,
+      );
+      return { nextSubject, previewHtml: withInlinePickers };
     },
-    [buildContext, preflightOverrides],
+    [
+      datePickerState,
+      datePlaceholderDefs,
+      orderNumberPreview,
+      patientName,
+      doctorName,
+      clinicName,
+      clinicAddress,
+      dueDateLocal,
+      appointmentLocal,
+      sourceEmail,
+      textOverrides,
+    ],
   );
 
   const applyTemplate = useCallback(
@@ -199,10 +225,19 @@ export function OrderAutoReplyPreflightPanel({
     [renderPreviewHtml],
   );
 
-  const handleDatePickerChange = useCallback(
-    (key: ReplyDatePlaceholderKey, value: string) => {
+  const handleInlineDateClick = useCallback(
+    (key: ReplyDatePlaceholderKey, anchorRect: DOMRect) => {
+      if (!sendReply) return;
+      setActiveDatePicker({ key, anchorRect });
+    },
+    [sendReply],
+  );
+
+  const handleDateApply = useCallback(
+    (key: ReplyDatePlaceholderKey, value: string, hasTime: boolean) => {
       dirtyRef.current = true;
-      setDatePickerValues((prev) => ({ ...prev, [key]: value }));
+      setDatePickerState((prev) => ({ ...prev, [key]: { value, hasTime } }));
+      setActiveDatePicker(null);
     },
     [],
   );
@@ -218,7 +253,8 @@ export function OrderAutoReplyPreflightPanel({
     templateRef.current = null;
     setTextOverrides({});
     setDatePlaceholderDefs([]);
-    setDatePickerValues({});
+    setDatePickerState({});
+    setActiveDatePicker(null);
     let cancelled = false;
     setLoading(true);
     setHint(null);
@@ -279,49 +315,17 @@ export function OrderAutoReplyPreflightPanel({
         const loaded = templateRef.current;
         const defs = collectReplyDatePlaceholdersInHaystack(templateHaystack(loaded));
         setDatePlaceholderDefs(defs);
-        const initialDates = initialReplyDatePickerValues(
+        const initialDates = initialReplyDatePickerState(
           defs,
           dueDateLocal,
           appointmentLocal,
+          { labWholeDay, appointmentWholeDay },
         );
-        setDatePickerValues(initialDates);
-        const ctx = buildEmailReplyTemplateContext({
-          orderNumber: orderNumberPreview,
-          patientName,
-          doctorName,
-          clinicName,
-          clinicAddress,
-          date:
-            initialDates.date?.trim() ||
-            /(\d{4}-\d{2}-\d{2})/.exec(dueDateLocal.trim())?.[1] ||
-            /(\d{4}-\d{2}-\d{2})/.exec(appointmentLocal.trim())?.[1] ||
-            null,
-          dueDate: initialDates.dueDate?.trim() || dueDateLocal.trim() || null,
-          appointmentDate:
-            initialDates.appointmentDate?.trim() || appointmentLocal.trim() || null,
-          originalSubject: sourceEmail.subject,
-          originalFromName: sourceEmail.fromName,
-          originalFromAddress: sourceEmail.fromAddress,
-          orderStatusUrl: SAMPLE_ORDER_STATUS_URL,
-        });
-        const subjectRaw = loaded.subjectTemplate.trim();
-        const nextSubject = subjectRaw
-          ? renderEmailReplyTemplate(subjectRaw, ctx)
-          : defaultReplySubject(ctx.originalSubject);
-        let html: string;
-        if (loaded.layoutType === "blocks") {
-          html = renderReplyBlocksHtml(
-            loaded.editorDocument ?? createClickLabPreset(),
-            ctx,
-            templateAssetsRef.current,
-          );
-        } else {
-          html = renderEmailReplyTemplate(loaded.htmlTemplate, ctx, { html: true });
-        }
-        const previewHtml = substituteReplyTemplateCidsForPreview(
-          html,
-          templateAssetsRef.current,
+        setDatePickerState(initialDates);
+        const { nextSubject, previewHtml } = renderPreviewHtml(
+          loaded,
           sourceEmail.accountId,
+          { dateState: initialDates, defs },
         );
         setSubject(nextSubject);
         setLayoutType(loaded.layoutType);
@@ -338,7 +342,16 @@ export function OrderAutoReplyPreflightPanel({
     return () => {
       cancelled = true;
     };
-  }, [open, sourceEmail?.id, sourceEmail?.accountId, dueDateLocal, appointmentLocal]);
+  }, [
+    open,
+    sourceEmail?.id,
+    sourceEmail?.accountId,
+    dueDateLocal,
+    appointmentLocal,
+    labWholeDay,
+    appointmentWholeDay,
+    renderPreviewHtml,
+  ]);
 
   useEffect(() => {
     if (layoutType !== "freeform" || editorFocusedRef.current) return;
@@ -361,7 +374,9 @@ export function OrderAutoReplyPreflightPanel({
     clinicAddress,
     dueDateLocal,
     appointmentLocal,
-    datePickerValues,
+    labWholeDay,
+    appointmentWholeDay,
+    datePickerState,
     textOverrides,
     applyTemplate,
   ]);
@@ -373,13 +388,34 @@ export function OrderAutoReplyPreflightPanel({
       sourceEmail.accountId,
     );
     setEditorHtml(previewHtml);
-  }, [textOverrides, datePickerValues, renderPreviewHtml, sourceEmail]);
+  }, [textOverrides, datePickerState, renderPreviewHtml, sourceEmail]);
 
   useEffect(() => {
-    let htmlForSend = editorHtml;
-    if (sourceEmail && editorHtml.trim()) {
+    const root = editorRef.current;
+    if (!root || layoutType !== "freeform") return;
+
+    const onClick = (e: MouseEvent) => {
+      if (!sendReply) return;
+      const span = (e.target as HTMLElement | null)?.closest?.(
+        "[data-reply-date-key]",
+      ) as HTMLElement | null;
+      if (!span) return;
+      const key = span.getAttribute("data-reply-date-key") as ReplyDatePlaceholderKey | null;
+      if (!key) return;
+      e.preventDefault();
+      e.stopPropagation();
+      handleInlineDateClick(key, span.getBoundingClientRect());
+    };
+
+    root.addEventListener("click", onClick);
+    return () => root.removeEventListener("click", onClick);
+  }, [layoutType, sendReply, handleInlineDateClick]);
+
+  useEffect(() => {
+    let htmlForSend = stripReplyInlineDatePickers(editorHtml);
+    if (sourceEmail && htmlForSend.trim()) {
       htmlForSend = restoreReplyTemplateCidsFromPreview(
-        editorHtml,
+        htmlForSend,
         templateAssetsRef.current,
         sourceEmail.accountId,
       );
@@ -417,122 +453,118 @@ export function OrderAutoReplyPreflightPanel({
       : [];
 
   const unresolvedDateTokens = datePlaceholderDefs.filter((def) => {
-    const value = datePickerValues[def.key]?.trim();
+    const value = datePickerState[def.key]?.value?.trim();
     if (value) return false;
     return editorHtml.includes(def.token);
   });
 
+  const activeDef = activeDatePicker
+    ? datePlaceholderDefs.find((d) => d.key === activeDatePicker.key)
+    : undefined;
+  const activeEntry = activeDatePicker
+    ? datePickerState[activeDatePicker.key]
+    : undefined;
+
   return (
-    <div className="flex w-full min-w-[min(100%,22rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl lg:w-[32rem] lg:max-w-[32rem]">
-      <div className="shrink-0 border-b border-[var(--border-subtle)] px-5 py-4">
-        <h2 className="text-lg font-semibold text-[var(--app-text)]">Ответное письмо</h2>
-        <p className="mt-1 text-xs text-[var(--text-secondary)]">
-          Кому: {senderLabel(sourceEmail)}
-        </p>
-      </div>
-      <div className="space-y-3 px-5 py-4">
-        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-2.5">
-          <input
-            type="checkbox"
-            className="mt-0.5 h-4 w-4 rounded border-[var(--input-border)] text-[var(--sidebar-blue)]"
-            checked={sendReply}
-            onChange={(e) => onSendReplyChange(e.target.checked)}
-          />
-          <span className="text-sm font-medium text-[var(--text-strong)]">Отправить ответ</span>
-        </label>
-        {hint ? (
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/35 dark:text-amber-100">
-            {hint}
+    <>
+      <div className="flex w-full min-w-[min(100%,22rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl lg:w-[32rem] lg:max-w-[32rem]">
+        <div className="shrink-0 border-b border-[var(--border-subtle)] px-5 py-4">
+          <h2 className="text-lg font-semibold text-[var(--app-text)]">Ответное письмо</h2>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            Кому: {senderLabel(sourceEmail)}
           </p>
-        ) : null}
-        {unresolvedDateTokens.length > 0 ? (
-          <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950 dark:border-sky-800/60 dark:bg-sky-950/35 dark:text-sky-100">
-            Укажите{" "}
-            {unresolvedDateTokens.map((d) => d.label.toLowerCase()).join(", ")} — плейсхолдер
-            останется в письме, пока дата не выбрана.
-          </p>
-        ) : null}
-        {loading ? (
-          <p className="text-sm text-[var(--text-muted)]">Загрузка шаблона…</p>
-        ) : (
-          <>
-            <div>
-              <label
-                htmlFor="auto-reply-subject"
-                className="mb-1 block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]"
-              >
-                Тема
-              </label>
-              <input
-                id="auto-reply-subject"
-                type="text"
-                value={subject}
-                disabled={!sendReply}
-                onChange={(e) => {
-                  dirtyRef.current = true;
-                  setSubject(e.target.value);
-                }}
-                className="h-10 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
-              />
-            </div>
-            {datePlaceholderDefs.map((def) => (
-              <div key={def.key}>
+        </div>
+        <div className="space-y-3 px-5 py-4">
+          {hint ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/35 dark:text-amber-100">
+              {hint}
+            </p>
+          ) : null}
+          {unresolvedDateTokens.length > 0 ? (
+            <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950 dark:border-sky-800/60 dark:bg-sky-950/35 dark:text-sky-100">
+              Укажите{" "}
+              {unresolvedDateTokens.map((d) => d.label.toLowerCase()).join(", ")} — плейсхолдер
+              останется в письме, пока дата не выбрана.
+            </p>
+          ) : null}
+          {loading ? (
+            <p className="text-sm text-[var(--text-muted)]">Загрузка шаблона…</p>
+          ) : (
+            <>
+              <div>
                 <label
-                  htmlFor={`auto-reply-date-${def.key}`}
+                  htmlFor="auto-reply-subject"
                   className="mb-1 block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]"
                 >
-                  {def.label}
+                  Тема
                 </label>
                 <input
-                  id={`auto-reply-date-${def.key}`}
-                  type={def.inputType}
-                  value={datePickerValues[def.key] ?? ""}
+                  id="auto-reply-subject"
+                  type="text"
+                  value={subject}
                   disabled={!sendReply}
-                  onChange={(e) => handleDatePickerChange(def.key, e.target.value)}
-                  className="h-10 w-full max-w-xs rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
-                />
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  Подставляется вместо{" "}
-                  <code className="font-mono">{def.token}</code>
-                </p>
-              </div>
-            ))}
-            <div>
-              <p className="mb-1 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                Предпросмотр
-              </p>
-              {layoutType === "freeform" ? (
-                <div
-                  ref={editorRef}
-                  role="textbox"
-                  aria-multiline
-                  aria-label="Текст ответного письма"
-                  contentEditable={sendReply}
-                  suppressContentEditableWarning
-                  onFocus={() => {
-                    editorFocusedRef.current = true;
-                  }}
-                  onBlur={() => {
-                    editorFocusedRef.current = false;
-                  }}
-                  onInput={(e) => {
+                  onChange={(e) => {
                     dirtyRef.current = true;
-                    setEditorHtml(e.currentTarget.innerHTML);
+                    setSubject(e.target.value);
                   }}
-                  className={EDITOR_CLASS}
+                  className="h-10 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
                 />
-              ) : (
-                <OrderAutoReplyBlocksPreview
-                  html={editorHtml}
-                  editableBlockIds={editableTextBlockIds}
-                  disabled={!sendReply}
-                  onTextOverride={handleTextOverride}
-                />
-              )}
-            </div>
-          </>
-        )}
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                  Предпросмотр
+                </p>
+                <p className="mb-2 text-xs text-[var(--text-muted)]">
+                  Нажмите на подчёркнутую дату в тексте, чтобы изменить её. Без выбора времени
+                  в письме будет «в течение дня».
+                </p>
+                {layoutType === "freeform" ? (
+                  <div
+                    ref={editorRef}
+                    role="textbox"
+                    aria-multiline
+                    aria-label="Текст ответного письма"
+                    contentEditable={sendReply}
+                    suppressContentEditableWarning
+                    onFocus={() => {
+                      editorFocusedRef.current = true;
+                    }}
+                    onBlur={() => {
+                      editorFocusedRef.current = false;
+                    }}
+                    onInput={(e) => {
+                      dirtyRef.current = true;
+                      setEditorHtml(e.currentTarget.innerHTML);
+                    }}
+                    className={EDITOR_CLASS}
+                  />
+                ) : (
+                  <OrderAutoReplyBlocksPreview
+                    html={editorHtml}
+                    editableBlockIds={editableTextBlockIds}
+                    disabled={!sendReply}
+                    onTextOverride={handleTextOverride}
+                    onInlineDateClick={handleInlineDateClick}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+      {activeDef && activeDatePicker ? (
+        <ReplyPreflightInlineDatePicker
+          open
+          anchorRect={activeDatePicker.anchorRect}
+          def={activeDef}
+          value={activeEntry?.value ?? ""}
+          hasTime={activeEntry?.hasTime ?? false}
+          onApply={(value, hasTime) =>
+            handleDateApply(activeDatePicker.key, value, hasTime)
+          }
+          onClose={() => setActiveDatePicker(null)}
+        />
+      ) : null}
+    </>
   );
 }
