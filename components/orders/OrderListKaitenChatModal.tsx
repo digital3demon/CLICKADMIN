@@ -585,7 +585,7 @@ export function OrderListKaitenChatModal({
                           {c.authorName ?? "Участник"}
                         </span>
                         {c.created ? (
-                          <time dateTime={c.created}>
+                          <time dateTime={c.created} suppressHydrationWarning>
                             {new Date(c.created).toLocaleString("ru-RU")}
                           </time>
                         ) : null}
@@ -629,7 +629,7 @@ export function OrderListKaitenChatModal({
                               key={ch.id}
                               className={`text-sm ${orderListChatMessageShellClass(childDisplay.kind)}`}
                             >
-                              <div className="text-[10px] text-[var(--text-muted)]">
+                              <div className="text-[10px] text-[var(--text-muted)]" suppressHydrationWarning>
                                 {ch.authorName ?? "Участник"}{" "}
                                 {ch.created
                                   ? `· ${new Date(ch.created).toLocaleString("ru-RU")}`
