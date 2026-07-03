@@ -23,6 +23,8 @@ import {
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
+import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
+import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
 import {
   commentBodyDedupKey,
   compactCardComments,
@@ -204,6 +206,83 @@ async function saveTenantKanbanStateWithRetry(
   return updated.count > 0;
 }
 
+type ParsedKaitenComment = NonNullable<ReturnType<typeof parseKaitenListComment>>;
+
+function kaitenIncomingForSync(parsed: ParsedKaitenComment[]) {
+  return parsed.map((c) => ({
+    id: c.id,
+    text: c.text,
+    created: c.created,
+    authorName: c.authorName,
+    parentId: c.parentId,
+  }));
+}
+
+function kaitenParsedToDisplayComments(parsed: ParsedKaitenComment[]): CardComment[] {
+  const merged = upsertKaitenCommentsToCard([], kaitenIncomingForSync(parsed));
+  return normalizeCardCommentsForApi(compactCardComments(merged.next));
+}
+
+async function importKaitenCommentsSideEffects(
+  orderId: string,
+  tenantId: string,
+  parsed: ParsedKaitenComment[],
+  kanbanAdminMentionTag: string | null | undefined,
+): Promise<void> {
+  const ordersPrisma = await getOrdersPrisma();
+  const crmComments = mapParsedKaitenCommentsForTriggerSync(parsed);
+  await syncOrderChatCorrectionsFromKaitenComments(ordersPrisma, orderId, crmComments);
+  await syncOrderProstheticsRequestsFromKaitenComments(ordersPrisma, orderId, crmComments);
+  await syncKaitenLabMentionFromParsedComments(
+    ordersPrisma,
+    orderId,
+    parsed,
+    kanbanAdminMentionTag,
+  );
+  await syncKaitenCommentsIntoKanbanState({
+    tenantId,
+    orderId,
+    comments: kaitenIncomingForSync(parsed),
+  });
+}
+
+async function loadKaitenCommentsFallbackForOrder(
+  tenantId: string,
+  orderId: string,
+): Promise<CardComment[] | null> {
+  const ordersPrisma = await getOrdersPrisma();
+  const order = await ordersPrisma.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: {
+      kaitenCardId: true,
+      tenant: { select: { kanbanAdminMentionTag: true } },
+    },
+  });
+  if (order?.kaitenCardId == null || !Number.isFinite(order.kaitenCardId)) {
+    return null;
+  }
+  const auth = getKaitenRestAuth();
+  if (!auth) return null;
+  const list = await kaitenListComments(auth, order.kaitenCardId);
+  if (!list.ok) return null;
+  const parsed = dedupeParsedKaitenComments(
+    list.comments
+      .map(parseKaitenListComment)
+      .filter((x): x is ParsedKaitenComment => x != null),
+  );
+  try {
+    await importKaitenCommentsSideEffects(
+      orderId,
+      tenantId,
+      parsed,
+      order.tenant?.kanbanAdminMentionTag,
+    );
+  } catch (e) {
+    console.error("[kanban-chat GET] Kaiten fallback import", orderId, e);
+  }
+  return kaitenParsedToDisplayComments(parsed);
+}
+
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -224,21 +303,23 @@ export async function GET(
   const statePayload = await loadTenantKanbanState(tenantId);
   const state = statePayload.state;
   if (!state) {
+    const fallbackComments = await loadKaitenCommentsFallbackForOrder(tenantId, orderId);
     return NextResponse.json({
       ok: true,
-      mode: "kanban",
+      mode: fallbackComments ? "kaiten-fallback" : "kanban",
       hasCard: false,
-      comments: [],
+      comments: fallbackComments ?? [],
       cardImages: [],
     });
   }
   const loc = findCardByLinkedOrderId(state, orderId);
   if (!loc) {
+    const fallbackComments = await loadKaitenCommentsFallbackForOrder(tenantId, orderId);
     return NextResponse.json({
       ok: true,
-      mode: "kanban",
+      mode: fallbackComments ? "kaiten-fallback" : "kanban",
       hasCard: false,
-      comments: [],
+      comments: fallbackComments ?? [],
       cardImages: [],
     });
   }
@@ -269,17 +350,16 @@ export async function GET(
           await saveTenantKanbanStateWithRetry(tenantId, state, statePayload.updatedAt);
         }
         const ordersPrisma = await getOrdersPrisma();
-        const crmComments = mapParsedKaitenCommentsForTriggerSync(parsed);
+        const orderMeta = await ordersPrisma.order.findFirst({
+          where: { id: orderId, tenantId },
+          select: { tenant: { select: { kanbanAdminMentionTag: true } } },
+        });
         try {
-          await syncOrderChatCorrectionsFromKaitenComments(
-            ordersPrisma,
+          await importKaitenCommentsSideEffects(
             orderId,
-            crmComments,
-          );
-          await syncOrderProstheticsRequestsFromKaitenComments(
-            ordersPrisma,
-            orderId,
-            crmComments,
+            tenantId,
+            parsed,
+            orderMeta?.tenant?.kanbanAdminMentionTag,
           );
         } catch (e) {
           console.error("[kanban-chat GET] Kaiten trigger import", orderId, e);

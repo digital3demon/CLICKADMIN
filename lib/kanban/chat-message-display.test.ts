@@ -28,8 +28,10 @@ describe("formatKanbanChatMessageDisplay", () => {
 });
 
 describe("shouldShowKanbanChatSyncStatus", () => {
-  it("скрывает «Синхронизировано» у корректировок", () => {
+  it("скрывает «Синхронизировано»", () => {
     expect(shouldShowKanbanChatSyncStatus("correction", "synced")).toBe(false);
+    expect(shouldShowKanbanChatSyncStatus("plain", "synced")).toBe(false);
     expect(shouldShowKanbanChatSyncStatus("correction", "failed")).toBe(true);
+    expect(shouldShowKanbanChatSyncStatus("plain", "pending")).toBe(true);
   });
 });

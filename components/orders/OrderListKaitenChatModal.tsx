@@ -110,6 +110,29 @@ function normalizeKanbanChatComments(
   return (rows ?? []).map(normalizeKanbanChatComment);
 }
 
+/** Комментарии из GET /kaiten, если зеркало канбана ещё пустое. */
+function kaitenSnapshotToCommentRows(
+  rows: KaitenSnapshot["comments"] | undefined,
+): CommentRow[] {
+  return (rows ?? []).map((c) => ({
+    id: c.id,
+    text: String(c.text ?? ""),
+    created: c.created,
+    authorName: c.authorName,
+    parentId: c.parentId ?? null,
+    images: c.images,
+    source: "KAITEN" as const,
+    syncStatus: "synced" as const,
+  }));
+}
+
+function mergeChatCommentsForDisplay(
+  kanbanComments: CommentRow[],
+  kaitenComments: CommentRow[],
+): CommentRow[] {
+  return kanbanComments.length > 0 ? kanbanComments : kaitenComments;
+}
+
 export function OrderListKaitenChatModal({
   orderId,
   orderNumber,
@@ -159,20 +182,27 @@ export function OrderListKaitenChatModal({
       const kanbanComments =
         chatRes.ok && chatData.hasCard === true
           ? normalizeKanbanChatComments(chatData.comments)
-          : [];
-      const kanbanImages =
-        chatRes.ok && Array.isArray(chatData.cardImages) ? chatData.cardImages : [];
+          : chatRes.ok && Array.isArray(chatData.comments) && chatData.comments.length > 0
+            ? normalizeKanbanChatComments(chatData.comments)
+            : [];
 
       const kaitenRes = await fetch(`/api/orders/${orderId}/kaiten`);
       const kaitenData = (await kaitenRes.json().catch(() => ({}))) as {
         error?: string;
       } & Partial<KaitenSnapshot>;
+      const kaitenComments = kaitenRes.ok
+        ? kaitenSnapshotToCommentRows((kaitenData as KaitenSnapshot).comments)
+        : [];
+      const displayComments = mergeChatCommentsForDisplay(kanbanComments, kaitenComments);
+
+      const kanbanImages =
+        chatRes.ok && Array.isArray(chatData.cardImages) ? chatData.cardImages : [];
 
       if (kaitenRes.ok) {
         const s = kaitenData as KaitenSnapshot;
         setSnap({
           ...s,
-          comments: kanbanComments,
+          comments: displayComments,
           cardImages: kanbanImages.length > 0 ? kanbanImages : s.cardImages ?? [],
         });
         return;
@@ -186,14 +216,14 @@ export function OrderListKaitenChatModal({
           trackLane: null,
           columns: [],
           lanes: [],
-          comments: kanbanComments,
+          comments: displayComments,
           cardImages: kanbanImages,
           kaitenCardUrl: null,
         });
         return;
       }
 
-      if (chatData.hasCard === true) {
+      if (chatData.hasCard === true || displayComments.length > 0) {
         setChatMode("kanban");
         setSnap({
           configured: true,
@@ -201,7 +231,7 @@ export function OrderListKaitenChatModal({
           trackLane: null,
           columns: [],
           lanes: [],
-          comments: kanbanComments,
+          comments: displayComments,
           cardImages: kanbanImages,
           kaitenCardUrl: null,
         });

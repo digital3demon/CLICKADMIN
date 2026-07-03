@@ -24,13 +24,16 @@ export function formatKanbanChatMessageDisplay(text: string): KanbanChatMessageD
 }
 
 export function shouldShowKanbanChatSyncStatus(
-  kind: KanbanChatMessageKind,
+  _kind: KanbanChatMessageKind,
   syncStatus: string | undefined,
 ): boolean {
-  if (kind !== "plain") {
-    return syncStatus === "failed" || syncStatus === "pending" || syncStatus === "retried";
-  }
-  return Boolean(syncStatus);
+  if (!syncStatus || syncStatus === "synced") return false;
+  return (
+    syncStatus === "failed" ||
+    syncStatus === "pending" ||
+    syncStatus === "retried" ||
+    syncStatus === "local"
+  );
 }
 
 /** Оболочка пузыря в модалке карточки канбана (тёмная тема). */

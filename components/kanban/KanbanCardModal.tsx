@@ -17,13 +17,12 @@ import {
 } from "@/lib/kanban/card-files";
 import {
   deleteOrderAttachmentById,
-  fetchOrderKaitenCommentsForKanban,
+  fetchKanbanMirrorCommentsForOrder,
   patchOrderHeadFromKanban,
   patchOrderKaitenCard,
   postOrderKaitenComment,
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
-import { mergeKaitenSnapshotIntoCardComments } from "@/lib/kanban/chat-sync";
 import {
   formatKanbanChatMessageDisplay,
   kanbanChatMessageLabelClass,
@@ -395,32 +394,18 @@ export function KanbanCardModal({
     (commentAuthorUserId ?? "").trim() || board.users[0]?.id || "";
 
   useEffect(() => {
-    if (
-      !cardId ||
-      !linkedOrderId ||
-      kaitenCardIdForChat == null ||
-      !Number.isFinite(kaitenCardIdForChat)
-    ) {
-      return;
-    }
+    if (!cardId || !linkedOrderId) return;
     let cancelled = false;
     const load = (opts?: { refresh?: boolean }) => {
       if (cancelled) return;
       if (document.visibilityState !== "visible" && !opts?.refresh) return;
       void (async () => {
-        const snap = await fetchOrderKaitenCommentsForKanban(
-          linkedOrderId,
-          chatActorUserId,
-          { refresh: opts?.refresh },
-        );
+        const snap = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
         if (cancelled || !snap.ok) return;
         onApply((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
-          fc.card.comments = withImagePlaceholders(
-            mergeKaitenSnapshotIntoCardComments(fc.card.comments || [], snap.comments),
-            fc.card,
-          );
+          fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
         });
       })();
     };
@@ -431,37 +416,7 @@ export function KanbanCardModal({
       cancelled = true;
       window.clearInterval(iv);
     };
-  }, [cardId, linkedOrderId, kaitenCardIdForChat, chatActorUserId, onApply]);
-
-  useEffect(() => {
-    if (!cardId || !linkedOrderId) return;
-    if (kaitenCardIdForChat != null && Number.isFinite(kaitenCardIdForChat)) return;
-    let cancelled = false;
-    const load = () => {
-      if (cancelled) return;
-      if (document.visibilityState !== "visible") return;
-      void (async () => {
-        const res = await fetch(`/api/orders/${linkedOrderId}/kanban-chat`, {
-          credentials: "include",
-          cache: "no-store",
-        });
-        const data = (await res.json().catch(() => ({}))) as { comments?: CardComment[] };
-        if (cancelled || !res.ok) return;
-        const nextComments = Array.isArray(data.comments) ? data.comments : [];
-        onApply((b) => {
-          const fc = findCard(b, cardId);
-          if (!fc) return;
-          fc.card.comments = withImagePlaceholders(nextComments, fc.card);
-        });
-      })();
-    };
-    load();
-    const iv = window.setInterval(load, kaitenClientPollIntervalMs());
-    return () => {
-      cancelled = true;
-      window.clearInterval(iv);
-    };
-  }, [cardId, linkedOrderId, kaitenCardIdForChat, onApply]);
+  }, [cardId, linkedOrderId, onApply]);
 
   const pickerMerged = useMemo(
     () =>
@@ -847,22 +802,13 @@ export function KanbanCardModal({
         return false;
       }
       fireMentionTelegram();
-      const chatActor = chatActorUserId || board.users[0]?.id || "";
-      let snap = await fetchOrderKaitenCommentsForKanban(card.linkedOrderId, chatActor, {
-        refresh: true,
-      });
-      if (!snap.ok) {
-        snap = await fetchOrderKaitenCommentsForKanban(card.linkedOrderId, chatActor);
-      }
+      const snap = await fetchKanbanMirrorCommentsForOrder(card.linkedOrderId);
       if (snap.ok) {
         onApply((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
-          fc.card.comments = withImagePlaceholders(
-            mergeKaitenSnapshotIntoCardComments(fc.card.comments || [], snap.comments),
-            fc.card,
-          );
-          pushActivity(fc.card, "Комментарий от админов", chatActor, b, act);
+          fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
+          pushActivity(fc.card, "Комментарий от админов", chatActorUserId || board.users[0]?.id || "", b, act);
         });
         return true;
       }

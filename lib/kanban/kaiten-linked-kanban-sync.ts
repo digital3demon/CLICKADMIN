@@ -23,6 +23,33 @@ type KaitenSnapshotComment = {
  * Комментарии карточки из того же снимка Kaiten, что и вкладка наряда «Kaiten».
  * `displayUserId` — запасной userId для верстки; подпись берётся из `authorLabel`.
  */
+/**
+ * Лента чата из CRM-канбана (GET /kanban-chat): сервер подмешивает Kaiten и пишет в tenant state.
+ */
+export async function fetchKanbanMirrorCommentsForOrder(
+  orderId: string,
+): Promise<{ ok: true; comments: CardComment[] } | { ok: false }> {
+  try {
+    const res = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      hasCard?: boolean;
+      comments?: CardComment[];
+    };
+    if (!res.ok || !Array.isArray(data.comments)) {
+      return { ok: false };
+    }
+    if (data.comments.length === 0 && data.hasCard !== true) {
+      return { ok: false };
+    }
+    return { ok: true, comments: data.comments };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function fetchOrderKaitenCommentsForKanban(
   orderId: string,
   displayUserId: string,
