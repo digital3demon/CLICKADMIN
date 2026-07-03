@@ -1,19 +1,13 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { canAccessOrderChat, isKanbanOnlyUser } from "@/lib/auth/permissions";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
-import {
-  fetchOrderNotificationToasts,
-  maybeSyncKaitenForOrderNotificationToasts,
-} from "@/lib/order-notification-toasts.server";
+import { fetchOrderNotificationToasts } from "@/lib/order-notification-toasts.server";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Единый опрос уведомлений: лёгкий импорт чата Kaiten + чтение из БД.
- * Быстрее трёх отдельных /toasts и не ждёт только фонового cron.
- */
+/** Единый опрос уведомлений: только чтение из локальной БД (Канбан). */
 export async function GET() {
   const { session, access } = await getSessionWithModuleAccess();
   if (!session || isKanbanOnlyUser(session.role, access ?? undefined)) {
@@ -25,16 +19,6 @@ export async function GET() {
 
   const tenantId = await orderTenantIdForSession(session);
   const prisma = await getOrdersPrisma();
-
-  if (tenantId) {
-    // Запускаем синхронизацию в фоне ПОСЛЕ отправки ответа клиенту (after),
-    // чтобы не создавать задержку (TTFB) при поллинге уведомлений.
-    after(() => {
-      maybeSyncKaitenForOrderNotificationToasts(prisma, tenantId).catch((e) => {
-        console.error("[toasts] Background Kaiten sync failed:", e);
-      });
-    });
-  }
 
   const includeChat = canAccessOrderChat(session.role, access ?? undefined);
   const payload = await fetchOrderNotificationToasts(prisma, {

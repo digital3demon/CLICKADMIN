@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  INBOUND_CRON_BATCH_PER_TENANT,
+  INBOUND_CRON_GAP_MS,
   inboundSyncBatchSize,
   inboundSyncGapMs,
   parseInboundCursor,
@@ -46,14 +48,9 @@ describe("parseInboundNextAllowedAt", () => {
 });
 
 describe("inbound sync budgets", () => {
-  it("toast batch меньше cron batch", () => {
-    expect(inboundSyncBatchSize("toast")).toBeLessThan(
-      inboundSyncBatchSize("cron"),
-    );
-  });
-
-  it("cron gap больше toast gap", () => {
-    expect(inboundSyncGapMs("cron")).toBeGreaterThan(inboundSyncGapMs("toast"));
+  it("возвращает cron batch и gap", () => {
+    expect(inboundSyncBatchSize()).toBe(INBOUND_CRON_BATCH_PER_TENANT);
+    expect(inboundSyncGapMs()).toBe(INBOUND_CRON_GAP_MS);
   });
 });
 
@@ -63,7 +60,6 @@ describe("shouldAllowInboundKaitenSync", () => {
       nowMs: 1_000,
       nextAllowedAtMs: 5_000,
       queueMetrics: emptyQueue,
-      source: "toast",
     });
     expect(gate.allowed).toBe(false);
     expect(gate.reason).toBe("throttled");
@@ -79,7 +75,6 @@ describe("shouldAllowInboundKaitenSync", () => {
         urgentDepth: 2,
         oldestWaitMs: 100,
       },
-      source: "toast",
     });
     expect(gate.allowed).toBe(false);
     expect(gate.reason).toBe("urgent_backlog");
@@ -95,18 +90,16 @@ describe("shouldAllowInboundKaitenSync", () => {
         urgentDepth: 1,
         oldestWaitMs: 50,
       },
-      source: "cron",
     });
     expect(gate.allowed).toBe(false);
     expect(gate.reason).toBe("cron_defer_urgent");
   });
 
-  it("разрешает toast sync при свободной очереди", () => {
+  it("разрешает cron sync при свободной очереди", () => {
     const gate = shouldAllowInboundKaitenSync({
       nowMs: 10_000,
       nextAllowedAtMs: 9_000,
       queueMetrics: emptyQueue,
-      source: "toast",
     });
     expect(gate.allowed).toBe(true);
     expect(gate.reason).toBe("ok");

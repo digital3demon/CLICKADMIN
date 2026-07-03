@@ -88,7 +88,6 @@ export async function syncKaitenChatsInBackground(
       const result = await maybeRunActiveInboundKaitenSync(
         db,
         tenantId,
-        "cron",
         async (orderIds) => {
           const res = await syncKaitenChatCommentsForOrderIds(db, auth, orderIds, {
             source: "cron",

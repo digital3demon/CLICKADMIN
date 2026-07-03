@@ -19,13 +19,9 @@ import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
 export const INBOUND_CURSOR_KEY = "kaitenInboundActiveCursorV1";
 export const INBOUND_THROTTLE_KEY = "kaitenInboundNextAllowedAt";
 
-export const INBOUND_TOAST_BATCH = 4;
 export const INBOUND_CRON_BATCH_PER_TENANT = 20;
-export const INBOUND_TOAST_GAP_MS = 3_000;
 export const INBOUND_CRON_GAP_MS = 8_000;
 export const INBOUND_MENTION_BOOST = 4;
-
-export type InboundSyncSource = "toast" | "cron";
 
 export type InboundCursorState = {
   lastOrderId?: string;
@@ -81,19 +77,18 @@ export function parseInboundNextAllowedAt(
   return null;
 }
 
-export function inboundSyncGapMs(source: InboundSyncSource): number {
-  return source === "toast" ? INBOUND_TOAST_GAP_MS : INBOUND_CRON_GAP_MS;
+export function inboundSyncGapMs(): number {
+  return INBOUND_CRON_GAP_MS;
 }
 
-export function inboundSyncBatchSize(source: InboundSyncSource): number {
-  return source === "toast" ? INBOUND_TOAST_BATCH : INBOUND_CRON_BATCH_PER_TENANT;
+export function inboundSyncBatchSize(): number {
+  return INBOUND_CRON_BATCH_PER_TENANT;
 }
 
 export function shouldAllowInboundKaitenSync(input: {
   nowMs: number;
   nextAllowedAtMs: number | null;
   queueMetrics: KaitenQueueMetrics;
-  source: InboundSyncSource;
 }): { allowed: boolean; reason: string } {
   if (
     input.nextAllowedAtMs != null &&
@@ -104,7 +99,7 @@ export function shouldAllowInboundKaitenSync(input: {
   if (isKaitenUrgentBacklogHighFromMetrics(input.queueMetrics)) {
     return { allowed: false, reason: "urgent_backlog" };
   }
-  if (input.source === "cron" && input.queueMetrics.urgentDepth > 0) {
+  if (input.queueMetrics.urgentDepth > 0) {
     return { allowed: false, reason: "cron_defer_urgent" };
   }
   return { allowed: true, reason: "ok" };
@@ -334,7 +329,6 @@ export async function pickActiveInboundOrderIds(
 export async function maybeRunActiveInboundKaitenSync(
   db: PrismaClient,
   tenantId: string,
-  source: InboundSyncSource,
   runSync: (orderIds: string[]) => Promise<{ rateLimited: boolean }>,
   opts?: { maxTake?: number },
 ): Promise<{
@@ -365,7 +359,6 @@ export async function maybeRunActiveInboundKaitenSync(
     nowMs,
     nextAllowedAtMs: state.nextAllowedAtMs,
     queueMetrics,
-    source,
   });
   if (!gate.allowed) {
     return {
@@ -377,8 +370,8 @@ export async function maybeRunActiveInboundKaitenSync(
   }
 
   const take = Math.min(
-    inboundSyncBatchSize(source),
-    opts?.maxTake ?? inboundSyncBatchSize(source),
+    inboundSyncBatchSize(),
+    opts?.maxTake ?? inboundSyncBatchSize(),
   );
   if (take <= 0) {
     return {
@@ -395,7 +388,7 @@ export async function maybeRunActiveInboundKaitenSync(
     state.cursor,
     {
       mentionBoost: INBOUND_MENTION_BOOST,
-      usePriorityColumns: source === "cron",
+      usePriorityColumns: true,
       cycle: state.cursor.cycle ?? 0,
     },
   );
@@ -411,7 +404,7 @@ export async function maybeRunActiveInboundKaitenSync(
   const result = await runSync(orderIds);
   await writeInboundSyncState(db, tid, {
     cursor: nextCursor,
-    nextAllowedAtMs: nowMs + inboundSyncGapMs(source),
+    nextAllowedAtMs: nowMs + inboundSyncGapMs(),
     persistent: state.persistent,
   });
 
