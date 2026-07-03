@@ -9,7 +9,11 @@ import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server
 import {
   syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
-import { syncKaitenLabMentionFromParsedComments } from "@/lib/order-kaiten-lab-mention-db";
+import {
+  advanceKaitenLabMentionWaterlineOnly,
+  syncCrmLabMentionFromCommentText,
+  syncKaitenLabMentionFromParsedComments,
+} from "@/lib/order-kaiten-lab-mention-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 
@@ -37,6 +41,21 @@ export type IngestKaitenCommentsForOrderInput = {
 export type IngestKaitenCommentsForOrderResult = {
   labMentionDbChanged: boolean;
   kanbanMirrorChanged: boolean;
+};
+
+export type IngestCrmKanbanCommentForOrderInput = {
+  prisma: PrismaClient;
+  orderId: string;
+  commentText: string;
+  authorLabel?: string | null;
+  kanbanAdminMentionTag?: string | null;
+  /** Id из Kaiten после отправки CRM-комментария — только waterline, без второго bump. */
+  kaitenCommentIdForWaterline?: number | null;
+};
+
+export type IngestCrmKanbanCommentForOrderResult = {
+  labMentionDbChanged: boolean;
+  waterlineAdvanced: boolean;
 };
 
 export function kaitenParsedCommentsToKanbanSyncRows(
@@ -99,4 +118,34 @@ export async function ingestKaitenCommentsForOrder(
   }
 
   return { labMentionDbChanged, kanbanMirrorChanged };
+}
+
+/** CRM POST канбана: немедленный сигнал @lab в заказах; waterline — после id Kaiten. */
+export async function ingestCrmKanbanCommentForOrder(
+  input: IngestCrmKanbanCommentForOrderInput,
+): Promise<IngestCrmKanbanCommentForOrderResult> {
+  const orderId = input.orderId.trim();
+  if (!orderId) {
+    return { labMentionDbChanged: false, waterlineAdvanced: false };
+  }
+
+  const labMentionDbChanged = await syncCrmLabMentionFromCommentText(
+    input.prisma,
+    orderId,
+    input.commentText,
+    input.authorLabel,
+    input.kanbanAdminMentionTag,
+  );
+
+  let waterlineAdvanced = false;
+  const kid = input.kaitenCommentIdForWaterline;
+  if (kid != null && Number.isFinite(kid)) {
+    waterlineAdvanced = await advanceKaitenLabMentionWaterlineOnly(
+      input.prisma,
+      orderId,
+      Math.trunc(kid),
+    );
+  }
+
+  return { labMentionDbChanged, waterlineAdvanced };
 }

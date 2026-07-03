@@ -20,7 +20,6 @@ import {
   fetchKanbanMirrorCommentsForOrder,
   patchOrderHeadFromKanban,
   patchOrderKaitenCard,
-  postOrderKaitenComment,
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import {
@@ -782,38 +781,6 @@ export function KanbanCardModal({
         toast("Сеть недоступна", true);
         return false;
       }
-    }
-
-    const linkedKaiten =
-      Boolean(card.linkedOrderId) &&
-      card.kaitenCardId != null &&
-      Number.isFinite(card.kaitenCardId);
-
-    if (linkedKaiten && card.linkedOrderId) {
-      const kaitenText =
-        requestedAction === "correction"
-          ? `!!! ${trimmed}`
-          : requestedAction === "prosthetics"
-            ? `??? ${trimmed}`
-            : trimmed;
-      const r = await postOrderKaitenComment(card.linkedOrderId, kaitenText);
-      if (!r.ok) {
-        toast(r.error, true);
-        return false;
-      }
-      fireMentionTelegram();
-      const snap = await fetchKanbanMirrorCommentsForOrder(card.linkedOrderId);
-      if (snap.ok) {
-        onApply((b) => {
-          const fc = findCard(b, cardId);
-          if (!fc) return;
-          fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
-          pushActivity(fc.card, "Комментарий от админов", chatActorUserId || board.users[0]?.id || "", b, act);
-        });
-        return true;
-      }
-      toast("Сообщение ушло в Kaiten, список чата не обновился — откройте карточку снова", true);
-      return true;
     }
 
     if (card.linkedOrderId) {

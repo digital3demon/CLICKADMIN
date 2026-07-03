@@ -20,12 +20,15 @@ import {
   createOrderChatCorrectionIfNeeded,
 } from "@/lib/order-chat-correction-db";
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
-import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
+import { ingestKaitenCommentsForOrder, ingestCrmKanbanCommentForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import {
   commentBodyDedupKey,
   compactCardComments,
   upsertKaitenCommentsToCard,
 } from "@/lib/kanban/chat-sync";
+import { textIncludesAdminLabMention } from "@/lib/kaiten-comment-parse";
+import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
+import { advanceKaitenLabMentionWaterlineOnly } from "@/lib/order-kaiten-lab-mention-db";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
@@ -70,6 +73,9 @@ async function syncCrmCommentToKaiten(
   row: CardComment,
 ): Promise<CardComment> {
   const next = normalizeCardComment(row);
+  if (next.source === "KAITEN") {
+    return next;
+  }
   if (String(next.externalCommentId || "").trim()) {
     next.syncStatus = "synced";
     return next;
@@ -420,7 +426,11 @@ export async function POST(
   const ordersPrisma = await getOrdersPrisma();
   const order = await ordersPrisma.order.findFirst({
     where: { id: orderId, tenantId },
-    select: { id: true, kaitenCardId: true },
+    select: {
+      id: true,
+      kaitenCardId: true,
+      tenant: { select: { kanbanAdminMentionTag: true } },
+    },
   });
   if (!order) {
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
@@ -528,11 +538,35 @@ export async function POST(
     const saved = await saveTenantKanbanStateWithRetry(tenantId, next, loaded.updatedAt);
     if (!saved) continue;
 
-    if (!String(row.externalCommentId || "").trim()) {
+    const labTag = order.tenant?.kanbanAdminMentionTag;
+    try {
+      await ingestCrmKanbanCommentForOrder({
+        prisma: ordersPrisma,
+        orderId: order.id,
+        commentText: messageText,
+        authorLabel,
+        kanbanAdminMentionTag: labTag,
+      });
+    } catch (e) {
+      console.error("[kanban-chat POST] CRM lab mention ingest", orderId, e);
+    }
+
+    if (!String(row.externalCommentId || "").trim() && row.source === "CRM") {
       const synced = await syncCrmCommentToKaiten(card, row);
       Object.assign(row, synced);
       card.updatedAt = nowIso();
       card.comments = compactCardComments(card.comments || []);
+      const externalId = kaitenJsonIntId(row.externalCommentId);
+      if (
+        externalId != null &&
+        textIncludesAdminLabMention(messageText, normalizeKanbanAdminMentionTag(labTag))
+      ) {
+        try {
+          await advanceKaitenLabMentionWaterlineOnly(ordersPrisma, order.id, externalId);
+        } catch (e) {
+          console.error("[kanban-chat POST] CRM lab mention waterline", orderId, e);
+        }
+      }
       const loadedAfterSave = await loadTenantKanbanState(tenantId);
       const savedAfterSync = await saveTenantKanbanStateWithRetry(
         tenantId,

@@ -105,6 +105,28 @@ function commentsNearDuplicate(a: CardComment, b: CardComment): boolean {
   return Math.abs(ta - tb) <= 20 * 60 * 1000;
 }
 
+/** CRM pending без external id ↔ readback Kaiten с тем же телом, автором и окном времени. */
+function orphanCrmMatchesIncoming(
+  crm: CardComment,
+  incoming: KaitenCommentForSync,
+): boolean {
+  if (crm.source !== "CRM") return false;
+  if (String(crm.externalCommentId || "").trim()) return false;
+
+  const bodyKey = commentBodyDedupKey(crm.text);
+  const incomingKey = commentBodyDedupKey(incoming.text ?? "");
+  if (!bodyKey || bodyKey !== incomingKey) return false;
+
+  const crmAuthor = (crm.authorLabel || "").trim();
+  const incomingAuthor = (incoming.authorName || "").trim();
+  if (crmAuthor && incomingAuthor && crmAuthor !== incomingAuthor) return false;
+
+  const ta = new Date(crm.createdAt || "").getTime();
+  const tb = new Date(createdIso(incoming.created)).getTime();
+  if (!Number.isFinite(ta) || !Number.isFinite(tb)) return true;
+  return Math.abs(ta - tb) <= 20 * 60 * 1000;
+}
+
 /**
  * Убирает дубли: один externalCommentId, схлопывает повторы CRM без external id
  * с уже известным Kaiten-комментарием (тот же текст и автор, ±20 мин).
@@ -229,16 +251,7 @@ export function upsertKaitenCommentsToCard(
       }
       continue;
     }
-    const incomingBodyKey = commentBodyDedupKey(row.text ?? "");
-    const orphanCrm =
-      incomingBodyKey.length > 0
-        ? next.find(
-            (c) =>
-              c.source === "CRM" &&
-              !String(c.externalCommentId || "").trim() &&
-              commentBodyDedupKey(c.text) === incomingBodyKey,
-          )
-        : undefined;
+    const orphanCrm = next.find((c) => orphanCrmMatchesIncoming(c, row));
     if (orphanCrm) {
       orphanCrm.externalCommentId = extId;
       orphanCrm.externalParentId = row.parentId != null ? String(row.parentId) : null;

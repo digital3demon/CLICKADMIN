@@ -4,12 +4,14 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useState,
   type ClipboardEvent,
 } from "react";
 import { useRouter } from "next/navigation";
 import type { KaitenTrackLane } from "@prisma/client";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
+import { OrderFilesPanel } from "@/components/orders/OrderFilesPanel";
 import {
   CRM_UPLOAD_MAX_BYTES,
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
@@ -428,6 +430,18 @@ export function OrderListKaitenChatModal({
 
   const comments = snap?.comments ?? [];
   const cardImages = snap?.cardImages ?? [];
+  const sidebarImages = useMemo(() => {
+    const byId = new Map<string, ChatImage>();
+    for (const img of cardImages) {
+      byId.set(String(img.id), img);
+    }
+    for (const c of comments) {
+      for (const img of c.images ?? []) {
+        byId.set(String(img.id), img);
+      }
+    }
+    return [...byId.values()];
+  }, [cardImages, comments]);
   const isKanbanMode = chatMode === "kanban";
   const kanbanCardUrl = kanbanOrderDeepLinkPath(orderId);
   const roots = comments.filter((c) => c.parentId == null);
@@ -464,10 +478,10 @@ export function OrderListKaitenChatModal({
       setPosting(false);
     }
   };
-  const renderChatImages = (images: ChatImage[] | undefined) => {
-    if (!images?.length) return null;
+  const renderSidebarImages = (images: ChatImage[]) => {
+    if (images.length === 0) return null;
     return (
-      <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2">
         {images.map((image) => (
           <button
             key={image.id}
@@ -479,7 +493,7 @@ export function OrderListKaitenChatModal({
             <img
               src={image.url}
               alt={image.name}
-              className="h-20 w-full rounded border border-[var(--card-border)] object-cover hover:opacity-90"
+              className="aspect-square w-full rounded border border-[var(--card-border)] object-cover hover:opacity-90"
             />
             <span className="mt-1 block truncate text-[10px] text-[var(--text-muted)]">
               {image.name}
@@ -500,7 +514,7 @@ export function OrderListKaitenChatModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[min(92vh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl">
+      <div className="flex max-h-[min(92vh,40rem)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--card-border)] px-3 py-2.5 sm:px-4">
           <h2 id={titleId} className="min-w-0 truncate text-sm font-semibold text-[var(--app-text)]">
             Чат · наряд {orderNumber}
@@ -514,7 +528,8 @@ export function OrderListKaitenChatModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+        <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
           {loading ? (
             <p className="text-sm text-[var(--text-muted)]">Загрузка…</p>
           ) : loadError ? (
@@ -583,7 +598,6 @@ export function OrderListKaitenChatModal({
                       <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-text)]">
                         {display.body}
                       </p>
-                      {renderChatImages(c.images)}
                       {shouldShowKanbanChatSyncStatus(display.kind, c.syncStatus) ? (
                         <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
                           <span>{syncStatusLabel(c.syncStatus)}</span>
@@ -629,7 +643,6 @@ export function OrderListKaitenChatModal({
                               <p className="whitespace-pre-wrap text-[var(--app-text)]">
                                 {childDisplay.body}
                               </p>
-                              {renderChatImages(ch.images)}
                               {shouldShowKanbanChatSyncStatus(
                                 childDisplay.kind,
                                 ch.syncStatus,
@@ -665,16 +678,65 @@ export function OrderListKaitenChatModal({
                   })
                 )}
               </ul>
-              {!isKanbanMode && cardImages.length > 0 ? (
-                <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                    Изображения в карточке
-                  </p>
-                  {renderChatImages(cardImages)}
-                </div>
-              ) : null}
             </>
           )}
+          </div>
+
+          <aside className="flex min-h-0 w-full shrink-0 flex-col border-t border-[var(--card-border)] bg-[var(--surface-subtle)] sm:w-[min(15rem,34%)] sm:max-w-xs sm:border-l sm:border-t-0">
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 sm:px-3">
+              {sidebarImages.length > 0 || imagePreviews.length > 0 ? (
+                <div className="mb-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                      Изображения
+                    </p>
+                    {imagePreviews.length > 0 ? (
+                      <button
+                        type="button"
+                        className="text-[10px] font-medium text-[var(--sidebar-blue)] hover:underline"
+                        onClick={clearImagePreviews}
+                      >
+                        Скрыть предпросмотр
+                      </button>
+                    ) : null}
+                  </div>
+                  {sidebarImages.length > 0 ? renderSidebarImages(sidebarImages) : null}
+                  {imagePreviews.length > 0 ? (
+                    <div className={sidebarImages.length > 0 ? "mt-2 border-t border-[var(--card-border)] pt-2" : ""}>
+                      <p className="mb-1 text-[10px] text-[var(--text-muted)]">К загрузке</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {imagePreviews.map((preview) => (
+                          <button
+                            key={preview.id}
+                            type="button"
+                            className="min-w-0 text-left"
+                            title={preview.name}
+                            onClick={() =>
+                              setOpenImage({ name: preview.name, url: preview.url })
+                            }
+                          >
+                            <img
+                              src={preview.url}
+                              alt={preview.name}
+                              className="aspect-square w-full rounded border border-[var(--card-border)] object-cover"
+                            />
+                            <span className="mt-1 block truncate text-[10px] text-[var(--text-muted)]">
+                              {preview.name}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <OrderFilesPanel
+                orderId={orderId}
+                orderNumber={orderNumber}
+                listenPaste={false}
+              />
+            </div>
+          </aside>
         </div>
 
         <div className="shrink-0 border-t border-[var(--card-border)] px-3 py-3 sm:px-4">
@@ -706,42 +768,6 @@ export function OrderListKaitenChatModal({
           ) : null}
           {uploadOk ? (
             <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">{uploadOk}</p>
-          ) : null}
-          {imagePreviews.length > 0 ? (
-            <div className="mt-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] p-2">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                  Предпросмотр изображений
-                </p>
-                <button
-                  type="button"
-                  className="text-[10px] font-medium text-[var(--sidebar-blue)] hover:underline"
-                  onClick={clearImagePreviews}
-                >
-                  Скрыть
-                </button>
-              </div>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {imagePreviews.map((preview) => (
-                  <figure key={preview.id} className="min-w-0">
-                    <img
-                      src={preview.url}
-                      alt={preview.name}
-                      className="h-20 w-full rounded border border-[var(--card-border)] object-cover"
-                      onClick={() =>
-                        setOpenImage({ name: preview.name, url: preview.url })
-                      }
-                    />
-                    <figcaption
-                      className="mt-1 truncate text-[10px] text-[var(--text-muted)]"
-                      title={preview.name}
-                    >
-                      {preview.name}
-                    </figcaption>
-                  </figure>
-                ))}
-              </div>
-            </div>
           ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <label className="inline-flex cursor-pointer items-center rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]">

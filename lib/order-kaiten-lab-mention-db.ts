@@ -131,3 +131,74 @@ export async function syncKaitenLabMentionFromParsedComments(
   }
   return true;
 }
+
+/**
+ * CRM/канбан: сразу поднимает сигнал заказов при @lab в тексте, без id комментария Kaiten.
+ * Waterline обновляется отдельно после readback (`advanceKaitenLabMentionWaterlineOnly`).
+ */
+export async function syncCrmLabMentionFromCommentText(
+  db: PrismaClient,
+  orderId: string,
+  commentText: string,
+  authorLabel: string | null | undefined,
+  kanbanAdminMentionTag: string | null | undefined,
+): Promise<boolean> {
+  const labTag = normalizeKanbanAdminMentionTag(kanbanAdminMentionTag);
+  if (!textIncludesAdminLabMention(commentText, labTag)) return false;
+
+  const row = await db.order.findUnique({
+    where: { id: orderId },
+    select: { id: true },
+  });
+  if (!row) return false;
+
+  const toastAuthor = authorLabel?.trim().slice(0, 120) || null;
+  const toastText = commentText.replace(/\s+/g, " ").trim().slice(0, 500) || null;
+  const signalPatch = { kaitenLabMentionSignalAt: new Date() };
+  const basePatch = {
+    kaitenChatHasLabMention: true,
+    ...signalPatch,
+  };
+  try {
+    await db.order.update({
+      where: { id: orderId },
+      data: {
+        ...basePatch,
+        kaitenLabMentionToastAuthor: toastAuthor,
+        kaitenLabMentionToastText: toastText,
+      },
+    });
+  } catch (err) {
+    if (!isMissingToastPreviewColumn(err)) throw err;
+    await db.order.update({
+      where: { id: orderId },
+      data: basePatch,
+    });
+  }
+  return true;
+}
+
+/** После CRM→Kaiten sync: только waterline, без повторного bump сигнала. */
+export async function advanceKaitenLabMentionWaterlineOnly(
+  db: PrismaClient,
+  orderId: string,
+  kaitenCommentId: number,
+): Promise<boolean> {
+  const id = Math.trunc(kaitenCommentId);
+  if (!Number.isFinite(id) || id <= 0) return false;
+
+  const row = await db.order.findUnique({
+    where: { id: orderId },
+    select: { kaitenLabMentionWaterlineCommentId: true },
+  });
+  if (!row) return false;
+
+  const prev = row.kaitenLabMentionWaterlineCommentId ?? 0;
+  if (id <= prev) return false;
+
+  await db.order.update({
+    where: { id: orderId },
+    data: { kaitenLabMentionWaterlineCommentId: id },
+  });
+  return true;
+}

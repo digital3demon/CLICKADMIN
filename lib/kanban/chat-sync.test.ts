@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { upsertKaitenCommentsToCard } from "@/lib/kanban/chat-sync";
-import type { CardComment } from "@/lib/kanban/types";
+import {
+  compactCardComments,
+  mergeKaitenSnapshotIntoCardComments,
+  upsertKaitenCommentsToCard,
+} from "./chat-sync";
+import type { CardComment } from "./types";
 
-describe("upsertKaitenCommentsToCard", () => {
+describe("kanban chat sync", () => {
   it("сохраняет CRM-origin у комментария, отправленного из канбана и синкнутого в Kaiten", () => {
     const existing: CardComment[] = [
       {
@@ -33,16 +37,7 @@ describe("upsertKaitenCommentsToCard", () => {
     expect(result.next[0]?.syncStatus).toBe("synced");
     expect(result.next[0]?.externalCommentId).toBe("123");
   });
-});
-import { describe, expect, it } from "vitest";
-import {
-  compactCardComments,
-  mergeKaitenSnapshotIntoCardComments,
-  upsertKaitenCommentsToCard,
-} from "./chat-sync";
-import type { CardComment } from "./types";
 
-describe("kanban chat sync", () => {
   it("adds new kaiten comments with external id and synced status", () => {
     const current: CardComment[] = [];
     const merged = upsertKaitenCommentsToCard(current, [
@@ -144,6 +139,31 @@ describe("kanban chat sync", () => {
     expect(merged.next[0]?.id).toBe("cm-local");
     expect(merged.next[0]?.externalCommentId).toBe("5001");
     expect(merged.next[0]?.syncStatus).toBe("synced");
+  });
+
+  it("не схлопывает orphan CRM с другим автором при readback Kaiten", () => {
+    const current: CardComment[] = [
+      {
+        id: "cm-local",
+        userId: "u1",
+        text: "сфоткайте пожалуйста основание",
+        createdAt: "2026-05-07T10:00:00.000Z",
+        authorLabel: "Марк",
+        source: "CRM",
+        syncStatus: "pending",
+      },
+    ];
+    const merged = upsertKaitenCommentsToCard(current, [
+      {
+        id: 5002,
+        text: "сфоткайте пожалуйста основание",
+        created: "2026-05-07T10:00:01.000Z",
+        authorName: "Анна",
+        parentId: null,
+      },
+    ]);
+    expect(merged.next.length).toBe(2);
+    expect(merged.next.find((c) => c.source === "KAITEN")?.externalCommentId).toBe("5002");
   });
 
   it("compactCardComments removes duplicate CRM rows with same text", () => {
