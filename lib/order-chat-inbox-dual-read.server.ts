@@ -16,24 +16,13 @@ export function isOrderChatInboxDualReadEnabled(): boolean {
 }
 
 export function isOrderChatInboxReadNewEnabled(): boolean {
-  const raw = String(process.env.ORDER_CHAT_INBOX_READ_NEW ?? "").trim().toLowerCase();
-  const globalEnabled = raw === "1" || raw === "true" || raw === "yes";
-  if (globalEnabled) return true;
-  return false;
+  return true;
 }
 
 export function isOrderChatInboxReadNewEnabledForTenant(
   tenantId: string | null | undefined,
 ): boolean {
-  if (isOrderChatInboxReadNewEnabled()) return true;
-  const tid = String(tenantId || "").trim();
-  if (!tid) return false;
-  const list = String(process.env.ORDER_CHAT_INBOX_READ_NEW_TENANTS ?? "")
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
-  if (list.length === 0) return false;
-  return list.includes(tid);
+  return true;
 }
 
 type AckMap = Map<string, Date>;

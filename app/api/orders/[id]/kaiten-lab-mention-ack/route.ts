@@ -45,6 +45,22 @@ export async function POST(
     update: { ackAt: new Date() },
   });
 
+  // Also resolve in the new unified inbox model
+  try {
+    await (db as any).orderChatInboxItem.updateMany({
+      where: {
+        orderId: oid,
+        type: "LAB_MENTION",
+        resolvedAt: null,
+      },
+      data: {
+        resolvedAt: new Date(),
+      },
+    });
+  } catch (e) {
+    console.error("[kaiten-lab-mention-ack] failed to resolve unified inbox items", e);
+  }
+
   revalidatePath("/orders");
 
   return NextResponse.json({ ok: true });
