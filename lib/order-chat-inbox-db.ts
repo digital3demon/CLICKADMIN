@@ -1,0 +1,197 @@
+import type {
+  OrderChatCorrectionSource,
+  PrismaClient,
+} from "@prisma/client";
+import { textIncludesAdminLabMention } from "@/lib/kaiten-comment-parse";
+import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
+import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
+import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
+import { trimOrderChatAuthorLabel } from "@/lib/order-chat-trigger-author";
+
+type ChatInboxType = "CORRECTION" | "PROSTHETICS" | "LAB_MENTION";
+type ChatInboxSyncState = "PENDING_EXTERNAL" | "SYNCED_EXTERNAL" | "LOCAL_ONLY" | "FAILED_EXTERNAL";
+
+function detectChatInboxTypes(
+  text: string,
+  kanbanAdminMentionTag: string | null | undefined,
+): ChatInboxType[] {
+  const out: ChatInboxType[] = [];
+  if (isOrderChatCorrectionTrigger(text)) out.push("CORRECTION");
+  if (isOrderProstheticsRequestTrigger(text)) out.push("PROSTHETICS");
+  const labTag = normalizeKanbanAdminMentionTag(kanbanAdminMentionTag);
+  if (textIncludesAdminLabMention(text, labTag)) out.push("LAB_MENTION");
+  return out;
+}
+
+export async function createOrderChatInboxItemsFromCrmComment(
+  db: PrismaClient,
+  input: {
+    tenantId: string;
+    orderId: string;
+    text: string;
+    authorLabel?: string | null;
+    kanbanAdminMentionTag?: string | null;
+    crmDraftId: string;
+    syncState: ChatInboxSyncState;
+    source?: OrderChatCorrectionSource;
+  },
+): Promise<boolean> {
+  const orderId = input.orderId.trim();
+  const tenantId = input.tenantId.trim();
+  const crmDraftId = String(input.crmDraftId || "").trim();
+  if (!orderId || !tenantId || !crmDraftId) return false;
+  const types = detectChatInboxTypes(input.text, input.kanbanAdminMentionTag);
+  if (types.length === 0) return false;
+  const authorLabel = trimOrderChatAuthorLabel(input.authorLabel);
+  const source = input.source ?? "DEMO_KANBAN";
+  let changed = false;
+  for (const type of types) {
+    await (db as any).orderChatInboxItem.upsert({
+      where: {
+        orderId_type_crmDraftId: { orderId, type, crmDraftId },
+      },
+      create: {
+        tenantId,
+        orderId,
+        type,
+        source,
+        text: input.text,
+        authorLabel,
+        crmDraftId,
+        syncState: input.syncState,
+      },
+      update: {
+        text: input.text,
+        authorLabel,
+        syncState: input.syncState,
+      },
+    });
+    changed = true;
+  }
+  return changed;
+}
+
+export async function bindOrderChatInboxItemsByCrmDraft(
+  db: PrismaClient,
+  input: {
+    orderId: string;
+    crmDraftId: string;
+    kaitenCommentId: number;
+  },
+): Promise<boolean> {
+  const orderId = input.orderId.trim();
+  const draft = String(input.crmDraftId || "").trim();
+  const kaitenCommentId = Math.trunc(input.kaitenCommentId);
+  if (!orderId || !draft || !Number.isFinite(kaitenCommentId) || kaitenCommentId <= 0) {
+    return false;
+  }
+  const upd = await (db as any).orderChatInboxItem.updateMany({
+    where: {
+      orderId,
+      crmDraftId: draft,
+      kaitenCommentId: null,
+    },
+    data: {
+      kaitenCommentId,
+      syncState: "SYNCED_EXTERNAL",
+    },
+  });
+  return upd.count > 0;
+}
+
+export async function markOrderChatInboxDraftSyncFailed(
+  db: PrismaClient,
+  input: { orderId: string; crmDraftId: string },
+): Promise<boolean> {
+  const orderId = input.orderId.trim();
+  const draft = String(input.crmDraftId || "").trim();
+  if (!orderId || !draft) return false;
+  const upd = await (db as any).orderChatInboxItem.updateMany({
+    where: {
+      orderId,
+      crmDraftId: draft,
+      syncState: "PENDING_EXTERNAL",
+      kaitenCommentId: null,
+    },
+    data: { syncState: "FAILED_EXTERNAL" },
+  });
+  return upd.count > 0;
+}
+
+export async function syncOrderChatInboxFromKaitenComments(
+  db: PrismaClient,
+  input: {
+    tenantId: string;
+    orderId: string;
+    comments: ReadonlyArray<{
+      id: number;
+      text: string;
+      authorName?: string | null;
+      crmDraftId?: string | null;
+    }>;
+    kanbanAdminMentionTag?: string | null;
+  },
+): Promise<boolean> {
+  const tenantId = input.tenantId.trim();
+  const orderId = input.orderId.trim();
+  if (!tenantId || !orderId || input.comments.length === 0) return false;
+  let changed = false;
+
+  for (const c of input.comments) {
+    const kaitenCommentId = Math.trunc(c.id);
+    if (!Number.isFinite(kaitenCommentId) || kaitenCommentId <= 0) continue;
+    const types = detectChatInboxTypes(c.text, input.kanbanAdminMentionTag);
+    if (types.length === 0) continue;
+    const authorLabel = trimOrderChatAuthorLabel(c.authorName);
+    const crmDraftId = String(c.crmDraftId || "").trim() || null;
+
+    for (const type of types) {
+      if (crmDraftId) {
+        const bound = await (db as any).orderChatInboxItem.updateMany({
+          where: {
+            orderId,
+            type,
+            crmDraftId,
+            kaitenCommentId: null,
+          },
+          data: {
+            kaitenCommentId,
+            syncState: "SYNCED_EXTERNAL",
+            text: c.text,
+            authorLabel,
+          },
+        });
+        if (bound.count > 0) {
+          changed = true;
+          continue;
+        }
+      }
+
+      await (db as any).orderChatInboxItem.upsert({
+        where: {
+          orderId_type_kaitenCommentId: { orderId, type, kaitenCommentId },
+        },
+        create: {
+          tenantId,
+          orderId,
+          type,
+          source: "KAITEN",
+          text: c.text,
+          authorLabel,
+          kaitenCommentId,
+          crmDraftId,
+          syncState: "SYNCED_EXTERNAL",
+        },
+        update: {
+          text: c.text,
+          authorLabel,
+          crmDraftId,
+          syncState: "SYNCED_EXTERNAL",
+        },
+      });
+      changed = true;
+    }
+  }
+
+  return changed;
+}

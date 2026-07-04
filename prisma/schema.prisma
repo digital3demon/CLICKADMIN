@@ -116,6 +116,7 @@ model Tenant {
   /// Активные пользовательские сессии для ограничения устройств
   deviceSessions        UserDeviceSession[]
   orderKaitenLabMentionAcks OrderKaitenLabMentionAck[]
+  orderChatInboxItems       OrderChatInboxItem[]
   doctorTelegramGroups      DoctorTelegramGroup[]
   doctorMessengerItems      DoctorMessengerItem[]
   doctorTelegramMessages    DoctorTelegramMessage[]
@@ -525,6 +526,19 @@ enum OrderCorrectionTrack {
 enum OrderChatCorrectionSource {
   KAITEN
   DEMO_KANBAN
+}
+
+enum OrderChatInboxItemType {
+  CORRECTION
+  PROSTHETICS
+  LAB_MENTION
+}
+
+enum OrderChatInboxSyncState {
+  PENDING_EXTERNAL
+  SYNCED_EXTERNAL
+  LOCAL_ONLY
+  FAILED_EXTERNAL
 }
 
 /// Крупные модули CRM: вкл/выкл по роли (настраивает владелец в «Пользователи»)
@@ -1383,6 +1397,8 @@ model Order {
   chatCorrections                OrderChatCorrection[]
   /// Заявки по протетике из чата (префикс «???»)
   prostheticsRequests            OrderProstheticsRequest[]
+  /// Унифицированные события чата (dual-write этап миграции)
+  chatInboxItems                OrderChatInboxItem[]
   kaitenLabMentionAcks           OrderKaitenLabMentionAck[]
   payrollWorkEntries             PayrollWorkEntry[]
   sourceEmailLinks               EmailSourceOrder[]
@@ -1472,6 +1488,34 @@ model OrderProstheticsRequest {
   @@unique([orderId, kaitenCommentId])
   @@index([orderId, resolvedAt])
   @@index([orderId, rejectedAt])
+}
+
+/// Унифицированное событие из чата (корректировка / протетика / упоминание лаборатории).
+model OrderChatInboxItem {
+  id               String                 @id @default(cuid())
+  tenantId         String
+  tenant           Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId          String
+  order            Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type             OrderChatInboxItemType
+  source           OrderChatCorrectionSource
+  text             String
+  authorLabel      String?
+  createdAt        DateTime               @default(now())
+  kaitenCommentId  Int?
+  crmDraftId       String?
+  syncState        OrderChatInboxSyncState @default(PENDING_EXTERNAL)
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  rejectedAt       DateTime?
+  rejectedByUserId String?
+
+  @@unique([orderId, type, kaitenCommentId])
+  @@unique([orderId, type, crmDraftId])
+  @@index([tenantId, type, createdAt])
+  @@index([tenantId, type, resolvedAt, rejectedAt])
+  @@index([orderId, type, resolvedAt, rejectedAt])
+  @@index([orderId, syncState, createdAt])
 }
 
 /// Свободный тег наряда (фильтр «как у этого тега» в списке заказов)

@@ -6,10 +6,16 @@ import { syncOrderChatCorrectionsFromKaitenLive } from "@/lib/order-chat-correct
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
+import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
+import { createOrderChatInboxItemsFromCrmComment } from "@/lib/order-chat-inbox-db";
 
 export const dynamic = "force-dynamic";
 
 type PostBody = { text?: string };
+
+function apiDraftId(): string {
+  return `api_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 /**
  * Список заявок «???» по наряду; GET подтягивает комментарии Kaiten (как корректировки).
@@ -69,8 +75,33 @@ export async function GET(
       rejectedAt: true,
     },
   });
+  const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
+  const inboxRows = useInbox
+    ? await (prisma as any).orderChatInboxItem.findMany({
+        where: { orderId: order.id, type: "PROSTHETICS" },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          text: true,
+          source: true,
+          authorLabel: true,
+          createdAt: true,
+          resolvedAt: true,
+          rejectedAt: true,
+        },
+      })
+    : [];
 
-  const requests = rows.map((r) => ({
+  const sourceRows = useInbox ? inboxRows : rows;
+  const requests = (sourceRows as Array<{
+    id: string;
+    text: string;
+    source: "KAITEN" | "DEMO_KANBAN";
+    authorLabel: string | null;
+    createdAt: Date;
+    resolvedAt: Date | null;
+    rejectedAt: Date | null;
+  }>).map((r) => ({
     id: r.id,
     text: r.text,
     source: r.source,
@@ -135,7 +166,7 @@ export async function POST(
   const prisma = await getOrdersPrisma();
   const order = await prisma.order.findFirst({
     where: { id: orderId.trim(), tenantId },
-    select: { id: true },
+    select: { id: true, tenant: { select: { kanbanAdminMentionTag: true } } },
   });
   if (!order) {
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
@@ -148,6 +179,16 @@ export async function POST(
     "DEMO_KANBAN",
     { authorLabel },
   );
+  await createOrderChatInboxItemsFromCrmComment(prisma, {
+    tenantId,
+    orderId: order.id,
+    text: raw,
+    authorLabel,
+    kanbanAdminMentionTag: order.tenant?.kanbanAdminMentionTag,
+    crmDraftId: apiDraftId(),
+    syncState: "LOCAL_ONLY",
+    source: "DEMO_KANBAN",
+  });
 
   return NextResponse.json({ ok: true });
 }

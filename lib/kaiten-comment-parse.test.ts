@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildKaitenCommentTextWithCrmAuthor,
   firstOrderChatTriggerLine,
+  parseKaitenListComment,
   stripOrderChatTriggerPrefixKeepFullMessage,
   textIncludesAdminLabMention,
   textIncludesClicklabMention,
@@ -42,5 +44,33 @@ describe("order chat trigger prefixes", () => {
     );
 
     expect(textIncludesAdminLabMention("??? нужен мост", "clicklab")).toBe(false);
+  });
+});
+
+describe("CRM draft marker in Kaiten comments", () => {
+  it("встраивает и извлекает crmDraftId из служебной строки", () => {
+    const raw = buildKaitenCommentTextWithCrmAuthor(
+      "Иван Иванов",
+      "!!! проверка @ClickLab",
+      "cm_ABC12345",
+    );
+    const parsed = parseKaitenListComment({ id: 10, text: raw, created: "2026-07-04T00:00:00.000Z" });
+    expect(parsed).not.toBeNull();
+    expect(parsed?.isCrm).toBe(true);
+    expect(parsed?.authorName).toBe("Иван Иванов");
+    expect(parsed?.crmDraftId).toBe("cm_ABC12345");
+    expect(parsed?.text).toBe("!!! проверка @ClickLab");
+  });
+
+  it("игнорирует невалидный draft id и не ломает парсинг кириллицы", () => {
+    const parsed = parseKaitenListComment({
+      id: 11,
+      text: "[CRM · Петров][DRAFT:плохо]\n@ClickLab тест кириллица",
+      created: "2026-07-04T00:00:00.000Z",
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed?.isCrm).toBe(true);
+    expect(parsed?.crmDraftId ?? null).toBeNull();
+    expect(textIncludesAdminLabMention(parsed?.text || "", "clicklab")).toBe(true);
   });
 });

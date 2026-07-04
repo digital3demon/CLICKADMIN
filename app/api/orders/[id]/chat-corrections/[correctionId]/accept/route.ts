@@ -7,6 +7,7 @@ import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { getKaitenRestAuth, kaitenCreateComment } from "@/lib/kaiten-rest";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
+import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
 
 const REPLY_TEXT = "корректировка занесена";
 
@@ -32,13 +33,23 @@ export async function POST(
   }
 
   const prisma = await getOrdersPrisma();
-  const row = await prisma.orderChatCorrection.findFirst({
-    where: {
-      id: correctionId.trim(),
-      orderId: orderId.trim(),
-    },
-    select: { id: true, resolvedAt: true, rejectedAt: true },
-  });
+  const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
+  const row = useInbox
+    ? await (prisma as any).orderChatInboxItem.findFirst({
+        where: {
+          id: correctionId.trim(),
+          orderId: orderId.trim(),
+          type: "CORRECTION",
+        },
+        select: { id: true, resolvedAt: true, rejectedAt: true },
+      })
+    : await prisma.orderChatCorrection.findFirst({
+        where: {
+          id: correctionId.trim(),
+          orderId: orderId.trim(),
+        },
+        select: { id: true, resolvedAt: true, rejectedAt: true },
+      });
   if (!row) {
     return NextResponse.json({ error: "Запись не найдена" }, { status: 404 });
   }
@@ -57,13 +68,23 @@ export async function POST(
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
   }
 
-  await prisma.orderChatCorrection.update({
-    where: { id: row.id },
-    data: {
-      resolvedAt: new Date(),
-      resolvedByUserId: session.sub,
-    },
-  });
+  if (useInbox) {
+    await (prisma as any).orderChatInboxItem.update({
+      where: { id: row.id },
+      data: {
+        resolvedAt: new Date(),
+        resolvedByUserId: session.sub,
+      },
+    });
+  } else {
+    await prisma.orderChatCorrection.update({
+      where: { id: row.id },
+      data: {
+        resolvedAt: new Date(),
+        resolvedByUserId: session.sub,
+      },
+    });
+  }
 
   if (order.kaitenCardId != null) {
     const auth = getKaitenRestAuth();
@@ -82,10 +103,17 @@ export async function POST(
         { burst: true },
       );
       if (!res.ok) {
-        await prisma.orderChatCorrection.update({
-          where: { id: row.id },
-          data: { resolvedAt: null, resolvedByUserId: null },
-        });
+        if (useInbox) {
+          await (prisma as any).orderChatInboxItem.update({
+            where: { id: row.id },
+            data: { resolvedAt: null, resolvedByUserId: null },
+          });
+        } else {
+          await prisma.orderChatCorrection.update({
+            where: { id: row.id },
+            data: { resolvedAt: null, resolvedByUserId: null },
+          });
+        }
         return NextResponse.json(
           { error: res.error ?? "Не удалось отправить ответ в Kaiten" },
           { status: 502 },

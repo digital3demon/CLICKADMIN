@@ -3,7 +3,8 @@ import {
   normalizeKanbanAdminMentionTag,
 } from "@/lib/kanban-admin-mention";
 
-const CRM_COMMENT_AUTHOR_PREFIX_RE = /^\[CRM · (.+?)\]\s*\n/;
+const CRM_COMMENT_AUTHOR_PREFIX_RE =
+  /^\[CRM · (.+?)\](?:\[DRAFT:([A-Za-z0-9_-]{6,120})\])?\s*\n/;
 
 /** id комментария в ответах Kaiten REST часто приходит строкой (JSON). */
 export function kaitenJsonIntId(v: unknown): number | null {
@@ -148,13 +149,25 @@ export function sanitizeLabelForCrmKaitenComment(raw: string): string {
   return t.length ? t : "CRM";
 }
 
+function sanitizeCrmDraftId(raw: string | null | undefined): string | null {
+  const t = String(raw || "").trim();
+  if (!t) return null;
+  if (!/^[A-Za-z0-9_-]{6,120}$/.test(t)) return null;
+  return t;
+}
+
 /**
  * Текст комментария от админов, уходящий в Kaiten из CRM: первая строка фиксирует автора в CRM,
  * т.к. в Kaiten автором будет пользователь API-токена, а не сотрудник из сессии.
  */
-export function buildKaitenCommentTextWithCrmAuthor(label: string, body: string): string {
+export function buildKaitenCommentTextWithCrmAuthor(
+  label: string,
+  body: string,
+  crmDraftId?: string | null,
+): string {
   const safe = sanitizeLabelForCrmKaitenComment(label);
-  return `[CRM · ${safe}]\n${body}`;
+  const draft = sanitizeCrmDraftId(crmDraftId);
+  return draft ? `[CRM · ${safe}][DRAFT:${draft}]\n${body}` : `[CRM · ${safe}]\n${body}`;
 }
 
 function authorNameFromKaitenRecord(r: Record<string, unknown>): string | undefined {
@@ -229,6 +242,7 @@ export function parseKaitenListComment(o: unknown): {
   authorName?: string;
   parentId: number | null;
   isCrm: boolean;
+  crmDraftId?: string | null;
 } | null {
   if (o == null || typeof o !== "object") return null;
   const r = o as Record<string, unknown>;
@@ -241,9 +255,11 @@ export function parseKaitenListComment(o: unknown): {
 
   const m = text.match(CRM_COMMENT_AUTHOR_PREFIX_RE);
   const isCrm = !!m;
+  let crmDraftId: string | null = null;
   if (m) {
     const crm = m[1]?.trim();
     if (crm) authorName = crm;
+    crmDraftId = sanitizeCrmDraftId(m[2]);
     text = text.slice(m[0].length);
   }
 
@@ -253,7 +269,7 @@ export function parseKaitenListComment(o: unknown): {
       : typeof r.created_at === "string"
         ? r.created_at
         : undefined;
-  return { id, text, created, authorName, parentId, isCrm };
+  return { id, text, created, authorName, parentId, isCrm, crmDraftId };
 }
 
 /** Kaiten иногда отдаёт один и тот же id дважды — убираем дубли по числовому id. */

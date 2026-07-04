@@ -22,6 +22,10 @@ import {
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
 import { ingestKaitenCommentsForOrder, ingestCrmKanbanCommentForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import {
+  bindOrderChatInboxItemsByCrmDraft,
+  markOrderChatInboxDraftSyncFailed,
+} from "@/lib/order-chat-inbox-db";
+import {
   commentBodyDedupKey,
   compactCardComments,
   upsertKaitenCommentsToCard,
@@ -111,7 +115,11 @@ async function syncCrmCommentToKaiten(
   const posted = await kaitenCreateComment(
     auth,
     card.kaitenCardId,
-    buildKaitenCommentTextWithCrmAuthor(next.authorLabel || "CRM", next.text),
+    buildKaitenCommentTextWithCrmAuthor(
+      next.authorLabel || "CRM",
+      next.text,
+      String(next.id || "").trim() || null,
+    ),
     parentExternalId,
     { burst: true },
   );
@@ -541,10 +549,16 @@ export async function POST(
     try {
       await ingestCrmKanbanCommentForOrder({
         prisma: ordersPrisma,
+        tenantId,
         orderId: order.id,
         commentText: messageText,
         authorLabel,
         kanbanAdminMentionTag: labTag,
+        crmDraftId: draftCommentId,
+        syncState:
+          card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)
+            ? "PENDING_EXTERNAL"
+            : "LOCAL_ONLY",
       });
     } catch (e) {
       console.error("[kanban-chat POST] CRM lab mention ingest", orderId, e);
@@ -556,6 +570,26 @@ export async function POST(
       card.updatedAt = nowIso();
       card.comments = compactCardComments(card.comments || []);
       const externalId = kaitenJsonIntId(row.externalCommentId);
+      if (externalId != null) {
+        try {
+          await bindOrderChatInboxItemsByCrmDraft(ordersPrisma, {
+            orderId: order.id,
+            crmDraftId: draftCommentId,
+            kaitenCommentId: externalId,
+          });
+        } catch (e) {
+          console.error("[kanban-chat POST] inbox bind by draft failed", orderId, e);
+        }
+      } else if (row.syncStatus === "failed") {
+        try {
+          await markOrderChatInboxDraftSyncFailed(ordersPrisma, {
+            orderId: order.id,
+            crmDraftId: draftCommentId,
+          });
+        } catch (e) {
+          console.error("[kanban-chat POST] inbox mark failed failed", orderId, e);
+        }
+      }
       const loadedAfterSave = await loadTenantKanbanState(tenantId);
       const savedAfterSync = await saveTenantKanbanStateWithRetry(
         tenantId,

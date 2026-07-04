@@ -99,7 +99,11 @@ export async function POST(req: Request) {
       const posted = await kaitenCreateComment(
         auth,
         kaitenCardId,
-        buildKaitenCommentTextWithCrmAuthor(cm.authorLabel || "CRM", cm.text || ""),
+        buildKaitenCommentTextWithCrmAuthor(
+          cm.authorLabel || "CRM",
+          cm.text || "",
+          String(cm.id || "").trim() || null,
+        ),
         parentExternalId,
         { burst: true },
       );

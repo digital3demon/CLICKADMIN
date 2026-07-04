@@ -11,6 +11,8 @@ const syncLabMention = vi.fn();
 const syncCrmLabMention = vi.fn();
 const advanceWaterline = vi.fn();
 const syncKanbanMirror = vi.fn();
+const syncInboxFromKaiten = vi.fn();
+const createInboxFromCrm = vi.fn();
 
 vi.mock("@/lib/order-chat-correction-db", () => ({
   syncOrderChatCorrectionsFromKaitenComments: (...args: unknown[]) =>
@@ -33,6 +35,11 @@ vi.mock("@/lib/order-kaiten-lab-mention-db", () => ({
 
 vi.mock("@/lib/kanban/chat-sync-server", () => ({
   syncKaitenCommentsIntoKanbanState: (...args: unknown[]) => syncKanbanMirror(...args),
+}));
+
+vi.mock("@/lib/order-chat-inbox-db", () => ({
+  syncOrderChatInboxFromKaitenComments: (...args: unknown[]) => syncInboxFromKaiten(...args),
+  createOrderChatInboxItemsFromCrmComment: (...args: unknown[]) => createInboxFromCrm(...args),
 }));
 
 describe("kaitenParsedCommentsToKanbanSyncRows", () => {
@@ -63,6 +70,8 @@ describe("ingestKaitenCommentsForOrder", () => {
     syncCrmLabMention.mockResolvedValue(true);
     advanceWaterline.mockResolvedValue(true);
     syncKanbanMirror.mockResolvedValue({ changed: true, skipped: false });
+    syncInboxFromKaiten.mockResolvedValue(true);
+    createInboxFromCrm.mockResolvedValue(true);
   });
 
   it("обновляет lab mention и kanban mirror вместе с триггерами", async () => {
@@ -89,6 +98,12 @@ describe("ingestKaitenCommentsForOrder", () => {
       tenantId: "t1",
       orderId: "o1",
       comments: kaitenParsedCommentsToKanbanSyncRows(parsed),
+    });
+    expect(syncInboxFromKaiten).toHaveBeenCalledWith(prisma, {
+      tenantId: "t1",
+      orderId: "o1",
+      comments: parsed,
+      kanbanAdminMentionTag: "clicklab",
     });
     expect(result).toEqual({ labMentionDbChanged: true, kanbanMirrorChanged: true });
   });
@@ -129,6 +144,7 @@ describe("ingestCrmKanbanCommentForOrder", () => {
       "Админ",
       "clicklab",
     );
+    expect(createInboxFromCrm).not.toHaveBeenCalled();
     expect(advanceWaterline).not.toHaveBeenCalled();
     expect(result).toEqual({ labMentionDbChanged: true, waterlineAdvanced: false });
   });
@@ -146,5 +162,29 @@ describe("ingestCrmKanbanCommentForOrder", () => {
 
     expect(advanceWaterline).not.toHaveBeenCalled();
     expect(result).toEqual({ labMentionDbChanged: false, waterlineAdvanced: false });
+  });
+
+  it("пишет inbox dual-write при наличии tenantId и crmDraftId", async () => {
+    const prisma = {} as never;
+    await ingestCrmKanbanCommentForOrder({
+      prisma,
+      tenantId: "t1",
+      orderId: "o1",
+      commentText: "!!! тест @clicklab",
+      authorLabel: "Менеджер",
+      kanbanAdminMentionTag: "clicklab",
+      crmDraftId: "cm-123456",
+      syncState: "PENDING_EXTERNAL",
+    });
+    expect(createInboxFromCrm).toHaveBeenCalledWith(prisma, {
+      tenantId: "t1",
+      orderId: "o1",
+      text: "!!! тест @clicklab",
+      authorLabel: "Менеджер",
+      kanbanAdminMentionTag: "clicklab",
+      crmDraftId: "cm-123456",
+      syncState: "PENDING_EXTERNAL",
+      source: "DEMO_KANBAN",
+    });
   });
 });

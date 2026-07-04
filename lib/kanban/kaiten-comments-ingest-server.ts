@@ -14,6 +14,10 @@ import {
   syncKaitenLabMentionFromParsedComments,
 } from "@/lib/order-kaiten-lab-mention-db";
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
+import {
+  createOrderChatInboxItemsFromCrmComment,
+  syncOrderChatInboxFromKaitenComments,
+} from "@/lib/order-chat-inbox-db";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 
 export type KaitenParsedCommentForIngest = {
@@ -23,6 +27,7 @@ export type KaitenParsedCommentForIngest = {
   authorName?: string | null;
   parentId?: number | null;
   isCrm?: boolean;
+  crmDraftId?: string | null;
 };
 
 export type IngestKaitenCommentsForOrderInput = {
@@ -45,10 +50,13 @@ export type IngestKaitenCommentsForOrderResult = {
 
 export type IngestCrmKanbanCommentForOrderInput = {
   prisma: PrismaClient;
+  tenantId?: string;
   orderId: string;
   commentText: string;
   authorLabel?: string | null;
   kanbanAdminMentionTag?: string | null;
+  crmDraftId?: string | null;
+  syncState?: "PENDING_EXTERNAL" | "SYNCED_EXTERNAL" | "LOCAL_ONLY" | "FAILED_EXTERNAL";
   /** Id из Kaiten после отправки CRM-комментария — только waterline, без второго bump. */
   kaitenCommentIdForWaterline?: number | null;
 };
@@ -107,6 +115,13 @@ export async function ingestKaitenCommentsForOrder(
     );
   }
 
+  await syncOrderChatInboxFromKaitenComments(input.prisma, {
+    tenantId,
+    orderId,
+    comments: input.parsed,
+    kanbanAdminMentionTag: input.kanbanAdminMentionTag,
+  });
+
   let kanbanMirrorChanged = false;
   if (!input.skipKanbanMirror) {
     const mirror = await syncKaitenCommentsIntoKanbanState({
@@ -136,6 +151,21 @@ export async function ingestCrmKanbanCommentForOrder(
     input.authorLabel,
     input.kanbanAdminMentionTag,
   );
+
+  const tenantId = String(input.tenantId || "").trim();
+  const crmDraftId = String(input.crmDraftId || "").trim();
+  if (tenantId && crmDraftId) {
+    await createOrderChatInboxItemsFromCrmComment(input.prisma, {
+      tenantId,
+      orderId,
+      text: input.commentText,
+      authorLabel: input.authorLabel,
+      kanbanAdminMentionTag: input.kanbanAdminMentionTag,
+      crmDraftId,
+      syncState: input.syncState ?? "PENDING_EXTERNAL",
+      source: "DEMO_KANBAN",
+    });
+  }
 
   let waterlineAdvanced = false;
   // Waterline больше не двигаем при отправке из CRM, чтобы не пропустить

@@ -1,10 +1,33 @@
 import type { Prisma, PrismaClient, UserRole } from "@prisma/client";
 import { kaitenLabMentionPendingForUser } from "@/lib/order-kaiten-lab-mention-pending";
+import {
+  countOrdersWithPendingInboxLabMentionForUser,
+  isOrderChatInboxDualReadEnabled,
+  isOrderChatInboxReadNewEnabled,
+  isOrderChatInboxReadNewEnabledForTenant,
+} from "@/lib/order-chat-inbox-dual-read.server";
+import { logger } from "@/lib/server/logger";
 
 const LAB_MENTION_ACK_ROLES: UserRole[] = [
   "ADMINISTRATOR",
   "SENIOR_ADMINISTRATOR",
 ];
+
+function tenantIdFromWhere(where: Prisma.OrderWhereInput): string | null {
+  if (where && typeof where === "object" && "tenantId" in where) {
+    const v = (where as { tenantId?: unknown }).tenantId;
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  const andParts = (where as { AND?: unknown }).AND;
+  if (!Array.isArray(andParts)) return null;
+  for (const part of andParts) {
+    if (part && typeof part === "object" && "tenantId" in (part as object)) {
+      const v = (part as { tenantId?: unknown }).tenantId;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return null;
+}
 
 /** Сколько нарядов с непрочитанным упоминанием (прочтение общим флагом на всю лабораторию). */
 export async function countOrdersWithPendingKaitenLabMentionForUser(
@@ -12,6 +35,11 @@ export async function countOrdersWithPendingKaitenLabMentionForUser(
   baseWhere: Prisma.OrderWhereInput,
   userId?: string,
 ): Promise<number> {
+  const inboxCountPromise = countOrdersWithPendingInboxLabMentionForUser(
+    db,
+    baseWhere,
+    userId,
+  );
   const candidates = await db.order.findMany({
     where: { AND: [baseWhere, { kaitenChatHasLabMention: true }] },
     select: { id: true, kaitenLabMentionSignalAt: true },
@@ -58,6 +86,38 @@ export async function countOrdersWithPendingKaitenLabMentionForUser(
       })
     ) {
       n += 1;
+    }
+  }
+  const inboxN = await inboxCountPromise;
+  const tenantId = tenantIdFromWhere(baseWhere);
+  if (
+    isOrderChatInboxReadNewEnabled() ||
+    isOrderChatInboxReadNewEnabledForTenant(tenantId)
+  ) {
+    return inboxN;
+  }
+  if (isOrderChatInboxDualReadEnabled()) {
+    try {
+      if (inboxN !== n) {
+        logger.warn(
+          {
+            channel: "chat-inbox-dual-read",
+            legacyCount: n,
+            inboxCount: inboxN,
+            userId: userId ?? null,
+          },
+          "lab mention count dual-read delta",
+        );
+      }
+    } catch (err) {
+      logger.warn(
+        {
+          channel: "chat-inbox-dual-read",
+          userId: userId ?? null,
+          err,
+        },
+        "lab mention count dual-read failed",
+      );
     }
   }
   return n;
