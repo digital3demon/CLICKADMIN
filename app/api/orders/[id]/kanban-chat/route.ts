@@ -25,6 +25,7 @@ import {
   bindOrderChatInboxItemsByCrmDraft,
   markOrderChatInboxDraftSyncFailed,
 } from "@/lib/order-chat-inbox-db";
+import { advanceKaitenLabMentionWaterlineOnly } from "@/lib/order-kaiten-lab-mention-db";
 import {
   commentBodyDedupKey,
   compactCardComments,
@@ -577,8 +578,17 @@ export async function POST(
             crmDraftId: draftCommentId,
             kaitenCommentId: externalId,
           });
+          await advanceKaitenLabMentionWaterlineOnly(
+            ordersPrisma,
+            order.id,
+            externalId,
+          );
         } catch (e) {
-          console.error("[kanban-chat POST] inbox bind by draft failed", orderId, e);
+          console.error(
+            "[kanban-chat POST] inbox bind/waterline by draft failed",
+            orderId,
+            e,
+          );
         }
       } else if (row.syncStatus === "failed") {
         try {

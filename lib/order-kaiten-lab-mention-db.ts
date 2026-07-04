@@ -66,10 +66,6 @@ export async function syncKaitenLabMentionFromParsedComments(
     textIncludesAdminLabMention(c.text, labTag),
   );
   
-  // Для сигнала (bump) учитываем только внешние комментарии (не CRM),
-  // так как CRM-комментарии уже подняли сигнал при отправке (POST /kanban-chat).
-  const externalMentions = withMention.filter((c) => !c.isCrm);
-  
   const computed = withMention.length > 0;
   const maxMentionId = computed
     ? Math.max(...withMention.map((c) => c.id))
@@ -86,13 +82,9 @@ export async function syncKaitenLabMentionFromParsedComments(
 
   const prevWl = row.kaitenLabMentionWaterlineCommentId ?? 0;
   
-  const maxExternalMentionId = externalMentions.length > 0
-    ? Math.max(...externalMentions.map((c) => c.id))
-    : null;
-
-  const bumpSignal =
-    maxExternalMentionId != null &&
-    maxExternalMentionId > prevWl;
+  // Bump по факту нового комментария с @lab относительно waterline, без фильтра по isCrm.
+  // Иначе нативный комментарий Kaiten может не поднять сигнал при ошибочной классификации источника.
+  const bumpSignal = maxMentionId != null && maxMentionId > prevWl;
 
   const nextWaterline =
     computed && maxMentionId != null ? maxMentionId : null;
@@ -105,9 +97,9 @@ export async function syncKaitenLabMentionFromParsedComments(
   }
 
   const latestMention =
-    bumpSignal && maxExternalMentionId != null
-      ? externalMentions.find((c) => c.id === maxExternalMentionId) ??
-        externalMentions[externalMentions.length - 1]
+    bumpSignal && maxMentionId != null
+      ? withMention.find((c) => c.id === maxMentionId) ??
+        withMention[withMention.length - 1]
       : null;
   const toastAuthor = latestMention?.authorName?.trim().slice(0, 120) || null;
   const toastText = latestMention?.text.replace(/\s+/g, " ").trim().slice(0, 500) || null;

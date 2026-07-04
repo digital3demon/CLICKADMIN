@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   advanceKaitenLabMentionWaterlineOnly,
+  syncKaitenLabMentionFromParsedComments,
   syncCrmLabMentionFromCommentText,
 } from "@/lib/order-kaiten-lab-mention-db";
 
@@ -89,5 +90,52 @@ describe("advanceKaitenLabMentionWaterlineOnly", () => {
 
     expect(changed).toBe(false);
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("syncKaitenLabMentionFromParsedComments", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("поднимает signal для нового @lab даже если комментарий помечен isCrm", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const db = {
+      order: {
+        findUnique: vi.fn().mockResolvedValue({
+          kaitenChatHasLabMention: false,
+          kaitenLabMentionWaterlineCommentId: 100,
+        }),
+        update,
+      },
+    } as never;
+
+    const changed = await syncKaitenLabMentionFromParsedComments(
+      db,
+      "o1",
+      [
+        {
+          id: 101,
+          text: "@ClickLab кайтен тест",
+          authorName: "Kaiten User",
+          isCrm: true,
+        },
+      ],
+      "clicklab",
+    );
+
+    expect(changed).toBe(true);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "o1" },
+        data: expect.objectContaining({
+          kaitenChatHasLabMention: true,
+          kaitenLabMentionWaterlineCommentId: 101,
+          kaitenLabMentionSignalAt: expect.any(Date),
+          kaitenLabMentionToastAuthor: "Kaiten User",
+          kaitenLabMentionToastText: "@ClickLab кайтен тест",
+        }),
+      }),
+    );
   });
 });
