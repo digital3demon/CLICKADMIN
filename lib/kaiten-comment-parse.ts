@@ -67,6 +67,40 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const MIXED_ALPHABET_MAP: Record<string, string> = {
+  с: "c",
+  С: "c",
+  а: "a",
+  А: "a",
+  о: "o",
+  О: "o",
+  е: "e",
+  Е: "e",
+  р: "p",
+  Р: "p",
+  х: "x",
+  Х: "x",
+  в: "b",
+  В: "b",
+  м: "m",
+  М: "m",
+  н: "h",
+  Н: "h",
+  т: "t",
+  Т: "t",
+  к: "k",
+  К: "k",
+  у: "y",
+  У: "y",
+};
+
+export function normalizeMixedAlphabetForMentionMatch(s: string): string {
+  return s.replace(
+    /[сСаАоОеЕрРхХвВмМнНтТкКуУ]/g,
+    (m) => MIXED_ALPHABET_MAP[m] || m,
+  );
+}
+
 /**
  * Упоминание «команды лаборатории» в чате Kaiten (подсветка «Чат» в списке нарядов).
  * `tagToken` — без `@`, как в настройках организации (Tenant.kanbanAdminMentionTag).
@@ -74,8 +108,8 @@ function escapeRegExp(s: string): string {
  */
 export function textIncludesAdminLabMention(raw: string, tagToken?: string | null): boolean {
   const tag = normalizeKanbanAdminMentionTag(tagToken);
-  const esc = escapeRegExp(tag);
-  const n = normalizeOrderKaitenChatTriggerSource(raw);
+  const esc = escapeRegExp(normalizeMixedAlphabetForMentionMatch(tag));
+  const n = normalizeMixedAlphabetForMentionMatch(normalizeOrderKaitenChatTriggerSource(raw));
   if (new RegExp(`@${esc}(?![\\p{L}\\p{N}._-])`, "iu").test(n)) return true;
   const mdLoosen = n.replace(/\*+/g, " ").replace(/_+/g, " ");
   if (new RegExp(`@${esc}(?![\\p{L}\\p{N}._-])`, "iu").test(mdLoosen)) return true;

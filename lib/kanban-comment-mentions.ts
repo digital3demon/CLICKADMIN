@@ -61,8 +61,20 @@ function escapeRegExpChars(s: string): string {
 export function textIncludesMentionToken(text: string, token: string): boolean {
   const t = sanitizeMentionToken(token).toLowerCase();
   if (!t) return false;
-  const re = new RegExp(`@(${escapeRegExpChars(t)})(?=$|[^\\p{L}\\p{N}_])`, "giu");
-  return re.test(text);
+  
+  // Нормализуем кириллицу/латиницу для надежного матчинга
+  const map: Record<string, string> = {
+    с: "c", С: "c", а: "a", А: "a", о: "o", О: "o", е: "e", Е: "e",
+    р: "p", Р: "p", х: "x", Х: "x", в: "b", В: "b", м: "m", М: "m",
+    н: "h", Н: "h", т: "t", Т: "t", к: "k", К: "k", у: "y", У: "y",
+  };
+  const normalize = (s: string) => s.replace(/[сСаАоОеЕрРхХвВмМнНтТкКуУ]/g, (char) => map[char] || char);
+  
+  const normalizedToken = normalize(t);
+  const normalizedText = normalize(text);
+
+  const re = new RegExp(`@(${escapeRegExpChars(normalizedToken)})(?=$|[^\\p{L}\\p{N}_])`, "giu");
+  return re.test(normalizedText);
 }
 
 export function parseMentionUserIdsFromText(
@@ -89,16 +101,49 @@ export function parseMentionUserIdsFromText(
   while ((m = re.exec(text)) !== null) {
     const raw = m[1]?.trim();
     if (!raw) continue;
-    const key = sanitizeMentionToken(raw).toLowerCase();
-    if (adminTag && key === adminTag) {
+    
+    // Нормализуем кириллицу/латиницу для надежного матчинга тегов (СlickLab -> clicklab)
+    const normalizedRaw = raw.replace(/[сСаАоОеЕрРхХвВмМнНтТкКуУ]/g, (char) => {
+      const map: Record<string, string> = {
+        с: "c", С: "c", а: "a", А: "a", о: "o", О: "o", е: "e", Е: "e",
+        р: "p", Р: "p", х: "x", Х: "x", в: "b", В: "b", м: "m", М: "m",
+        н: "h", Н: "h", т: "t", Т: "t", к: "k", К: "k", у: "y", У: "y",
+      };
+      return map[char] || char;
+    });
+
+    const key = sanitizeMentionToken(normalizedRaw).toLowerCase();
+    
+    // Для админского и продакшн тегов тоже применяем ту же нормализацию
+    const normalizedAdminTag = adminTag.replace(/[сСаАоОеЕрРхХвВмМнНтТкКуУ]/g, (char) => {
+      const map: Record<string, string> = {
+        с: "c", С: "c", а: "a", А: "a", о: "o", О: "o", е: "e", Е: "e",
+        р: "p", Р: "p", х: "x", Х: "x", в: "b", В: "b", м: "m", М: "m",
+        н: "h", Н: "h", т: "t", Т: "t", к: "k", К: "k", у: "y", У: "y",
+      };
+      return map[char] || char;
+    });
+    const normalizedProdTag = prodTag.replace(/[сСаАоОеЕрРхХвВмМнНтТкКуУ]/g, (char) => {
+      const map: Record<string, string> = {
+        с: "c", С: "c", а: "a", А: "a", о: "o", О: "o", е: "e", Е: "e",
+        р: "p", Р: "p", х: "x", Х: "x", в: "b", В: "b", м: "m", М: "m",
+        н: "h", Н: "h", т: "t", Т: "t", к: "k", К: "k", у: "y", У: "y",
+      };
+      return map[char] || char;
+    });
+
+    if (normalizedAdminTag && key === normalizedAdminTag) {
       for (const id of adminIds) out.add(id);
       continue;
     }
-    if (prodTag && key === prodTag) {
+    if (normalizedProdTag && key === normalizedProdTag) {
       for (const id of prodIds) out.add(id);
       continue;
     }
-    const id = tokenToId.get(key);
+    
+    // Для обычных юзеров используем оригинальный ключ (без нормализации алфавита)
+    const originalKey = sanitizeMentionToken(raw).toLowerCase();
+    const id = tokenToId.get(originalKey);
     if (id) out.add(id);
   }
   return [...out];

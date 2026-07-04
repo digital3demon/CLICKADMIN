@@ -27,6 +27,15 @@ describe("textIncludesAdminLabMention", () => {
     expect(firstOrderChatTriggerLine(text, "!!!")).toBeNull();
     expect(firstOrderChatTriggerLine(text, "???")).toBeNull();
   });
+
+  it("находит тег при смешении кириллицы и латиницы (например С кириллическая, a латинская)", () => {
+    // В слове СlickLab первая буква С - кириллическая
+    expect(textIncludesAdminLabMention("проверка @СlickLab", "clicklab")).toBe(true);
+    // В слове лaбa первая a - латинская, вторая а - кириллическая
+    expect(textIncludesAdminLabMention("проверка @лaбa", "лаба")).toBe(true);
+    // В слове clicklаb буква а - кириллическая
+    expect(textIncludesAdminLabMention("проверка @clicklаb", "clicklab")).toBe(true);
+  });
 });
 
 describe("order chat trigger prefixes", () => {
