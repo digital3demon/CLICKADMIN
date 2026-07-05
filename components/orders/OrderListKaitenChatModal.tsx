@@ -241,10 +241,20 @@ export function OrderListKaitenChatModal({
     void load();
   }, [open, load]);
 
+  const [hasOpened, setHasOpened] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setHasOpened(true);
+    }
+  }, [open]);
+
   /** Подтверждение просмотра чата для текущего пользователя (БД), затем обновление RSC. */
   useEffect(() => {
-    if (!open) return;
-    if (chatMode !== "kaiten") return;
+    // Отправляем ack только при ЗАКРЫТИИ модалки (если она была открыта), 
+    // чтобы она не исчезала из отфильтрованного списка прямо во время чтения
+    if (open || !hasOpened) return;
+
     void (async () => {
       try {
         const res = await fetch(
@@ -256,7 +266,7 @@ export function OrderListKaitenChatModal({
         /* ignore */
       }
     })();
-  }, [open, orderId, router, chatMode]);
+  }, [open, hasOpened, orderId, router]);
 
   useEffect(() => {
     if (!open) return;
