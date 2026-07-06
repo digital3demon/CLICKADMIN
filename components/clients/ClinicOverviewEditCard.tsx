@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { CLINIC_DOCTOR_LINK_DELTA } from "@/lib/client-link-sync-events";
+import { ClientOrderSourceEmailsField } from "@/components/clients/ClientOrderSourceEmailsField";
 
 const btnBase =
   "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm";
@@ -18,6 +19,7 @@ type Props = {
   createdAt: Date;
   doctorCount: number;
   orderCount: number;
+  orderSourceEmails: string[];
 };
 
 export function ClinicOverviewEditCard({
@@ -30,6 +32,7 @@ export function ClinicOverviewEditCard({
   createdAt,
   doctorCount,
   orderCount,
+  orderSourceEmails,
 }: Props) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -280,6 +283,7 @@ export function ClinicOverviewEditCard({
               </dd>
             </div>
           ) : null}
+          <ClientOrderSourceEmailsField emails={orderSourceEmails} />
           <div>
             <dt className="text-[var(--text-muted)]">В базе с</dt>
             <dd className="mt-0.5 text-[var(--text-strong)]">

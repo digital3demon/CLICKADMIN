@@ -27,6 +27,7 @@ import {
   type LabWorkStatus,
 } from "@/lib/lab-work-status";
 import { cleanLegalFullName } from "@/lib/document-workflow-markers";
+import { listClinicOrderSourceEmails } from "@/lib/client-order-source-emails";
 
 const ORDERS_PREVIEW = 100;
 
@@ -186,6 +187,12 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
   if (!clinic) {
     notFound();
   }
+
+  const orderSourceEmails = await listClinicOrderSourceEmails(
+    prisma,
+    clinic.tenantId,
+    id,
+  );
 
   if (clinic.deletedAt) {
     return (
@@ -359,6 +366,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
                   .length
               }
               orderCount={clinic._count.orders}
+              orderSourceEmails={orderSourceEmails}
             />
 
             <ClinicLinkedDoctorsSection

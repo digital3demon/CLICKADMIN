@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { Maximize2, X } from "lucide-react";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/toast-store";
+import {
+  OrderEditForm,
+  type OrderEditInitial,
+} from "@/components/orders/OrderEditForm";
 
 async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
   const res = await fetch(url, {
@@ -21,6 +27,138 @@ async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> 
   return res.json();
 }
 
+type DiffModalData = {
+  realOrderInitial: OrderEditInitial;
+  aiOrderInitial: OrderEditInitial;
+  orderNumber: string;
+  predictionError: string | null;
+  kaitenIntegrationActive: boolean;
+  kanbanCardUrl: string | null;
+  demoKanbanCardTypes: Array<{ id: string; name: string }>;
+  isDemoMode: boolean;
+};
+
+function predictionField(
+  json: Record<string, unknown> | null | undefined,
+  key: "clinicHint" | "doctorHint" | "clinicId" | "doctorId",
+  legacyKey?: "clinicHint" | "doctorHint",
+): string {
+  if (!json) return "—";
+  const v = json[key];
+  if (typeof v === "string" && v.trim()) return v;
+  if (legacyKey) {
+    const legacy = json[legacyKey];
+    if (typeof legacy === "string" && legacy.trim()) return legacy;
+  }
+  return "—";
+}
+
+function AiDiffCompareModal({
+  open,
+  loading,
+  data,
+  onClose,
+}: {
+  open: boolean;
+  loading: boolean;
+  data: DiffModalData | null;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[600] flex flex-col bg-zinc-900/60"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Сравнение нарядов"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3">
+        <div>
+          <h2 className="text-lg font-semibold">
+            {data ? `Наряд ${data.orderNumber}` : "Загрузка…"}
+          </h2>
+          <p className="text-sm text-[var(--app-text-secondary)]">
+            Слева — как сохранил администратор, справа — как заполнил бы ИИ (только просмотр)
+          </p>
+        </div>
+        <button
+          type="button"
+          className="rounded-md p-2 text-[var(--app-text-secondary)] transition-colors hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
+          aria-label="Закрыть"
+          onClick={onClose}
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+        {loading ? (
+          <div className="flex h-full items-center justify-center text-[var(--app-text-secondary)]">
+            Загрузка форм…
+          </div>
+        ) : data?.predictionError ? (
+          <div className="mb-4 rounded-md border border-red-300 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+            Ошибка предсказания ИИ: {data.predictionError}
+          </div>
+        ) : null}
+        {data && !loading ? (
+          <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)]">
+              <div className="border-b border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)]">
+                Сохранил администратор
+              </div>
+              <OrderEditForm
+                key={`real-${data.realOrderInitial.id}`}
+                initial={data.realOrderInitial}
+                isDemoMode={data.isDemoMode}
+                kaitenIntegrationActive={data.kaitenIntegrationActive}
+                kanbanCardUrl={data.kanbanCardUrl}
+                demoKanbanCardTypes={data.demoKanbanCardTypes}
+                canAcceptChatCorrections={false}
+                canEditClients={false}
+                canEditOrder={false}
+                orderPageFrame={{
+                  title: `Наряд ${data.orderNumber}`,
+                }}
+              />
+            </div>
+            <div className="min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)]">
+              <div className="border-b border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)]">
+                Предложил ИИ
+              </div>
+              <OrderEditForm
+                key={`ai-${data.aiOrderInitial.id}`}
+                initial={data.aiOrderInitial}
+                isDemoMode={data.isDemoMode}
+                kaitenIntegrationActive={data.kaitenIntegrationActive}
+                kanbanCardUrl={data.kanbanCardUrl}
+                demoKanbanCardTypes={data.demoKanbanCardTypes}
+                canAcceptChatCorrections={false}
+                canEditClients={false}
+                canEditOrder={false}
+                orderPageFrame={{
+                  title: `Наряд ${data.orderNumber} (ИИ)`,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function AiAdminClient({
   initialAiEnabled,
   hasApiKey,
@@ -35,22 +173,47 @@ export function AiAdminClient({
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [diffs, setDiffs] = useState<any[]>([]);
   const [isLoadingDiffs, setIsLoadingDiffs] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalData, setModalData] = useState<DiffModalData | null>(null);
 
   async function loadDiffs() {
     setIsLoadingDiffs(true);
     try {
       const res = await jsonFetch<{ items: any[]; total: number }>("/api/ai-admin/diffs");
       setDiffs(res.items);
-    } catch (e: any) {
+    } catch {
       toast.error("Ошибка загрузки предсказаний");
     } finally {
       setIsLoadingDiffs(false);
     }
   }
 
-  // Загружаем diffs при переключении на вкладку
   if (activeTab === "diffs" && diffs.length === 0 && !isLoadingDiffs) {
     loadDiffs();
+  }
+
+  const closeModal = useCallback(() => {
+    setModalOpen(false);
+    setModalData(null);
+    setModalLoading(false);
+  }, []);
+
+  async function openDiffModal(predictionId: string) {
+    setModalOpen(true);
+    setModalLoading(true);
+    setModalData(null);
+    try {
+      const data = await jsonFetch<DiffModalData>(
+        `/api/ai-admin/diffs/${predictionId}/resolve-initial`,
+      );
+      setModalData(data);
+    } catch (e: any) {
+      toast.error(e.message || "Не удалось загрузить наряд");
+      closeModal();
+    } finally {
+      setModalLoading(false);
+    }
   }
 
   async function handleSaveSettings() {
@@ -61,7 +224,7 @@ export function AiAdminClient({
         body: { aiEnabled, apiKey: apiKey || undefined },
       });
       toast.success("Настройки ИИ сохранены");
-      if (apiKey) setApiKey(""); // Очищаем поле после сохранения
+      if (apiKey) setApiKey("");
     } catch (e: any) {
       toast.error(e.message || "Ошибка сохранения");
     } finally {
@@ -72,7 +235,6 @@ export function AiAdminClient({
   async function handleRunBacktest() {
     setIsBacktesting(true);
     try {
-      // Сначала сохраняем настройки, чтобы бэкенд увидел актуальные значения
       await jsonFetch("/api/ai-admin/settings", {
         method: "POST",
         body: { aiEnabled, apiKey: apiKey || undefined },
@@ -92,6 +254,12 @@ export function AiAdminClient({
 
   return (
     <ModuleFrame title="ИИ-Админ">
+      <AiDiffCompareModal
+        open={modalOpen}
+        loading={modalLoading}
+        data={modalData}
+        onClose={closeModal}
+      />
       <div className="flex flex-col h-full">
         <div className="flex gap-4 border-b border-[var(--app-border)] p-4">
           <button
@@ -112,7 +280,7 @@ export function AiAdminClient({
           {activeTab === "settings" && (
             <div className="max-w-xl space-y-6">
               <h2 className="text-xl font-semibold">Настройки OpenRouter</h2>
-              
+
               <div className="space-y-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -191,12 +359,23 @@ export function AiAdminClient({
                   {diffs.map((diff: any) => (
                     <div key={diff.id} className="border border-[var(--app-border)] rounded-lg overflow-hidden bg-[var(--app-bg-secondary)]">
                       <div className="bg-[var(--app-bg)] p-4 border-b border-[var(--app-border)] flex justify-between items-center">
-                        <div className="font-medium">Наряд {diff.order.orderNumber}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Наряд {diff.order.orderNumber}</span>
+                          <button
+                            type="button"
+                            className="rounded-md p-1.5 text-[var(--app-text-secondary)] transition-colors hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
+                            title="Раскрыть полные формы наряда"
+                            aria-label="Раскрыть сравнение нарядов"
+                            onClick={() => openDiffModal(diff.id)}
+                          >
+                            <Maximize2 className="h-4 w-4" />
+                          </button>
+                        </div>
                         <div className="text-sm text-[var(--app-text-secondary)]">
                           {new Date(diff.createdAt).toLocaleString("ru-RU")}
                         </div>
                       </div>
-                      
+
                       <div className="p-4 border-b border-[var(--app-border)]">
                         <div className="text-sm font-medium mb-2 text-[var(--app-text-secondary)]">Текст письма:</div>
                         <div className="text-sm whitespace-pre-wrap max-h-40 overflow-y-auto bg-[var(--app-bg)] p-3 rounded border border-[var(--app-border)]">
@@ -220,7 +399,7 @@ export function AiAdminClient({
                             </div>
                           </dl>
                         </div>
-                        
+
                         <div className="p-4">
                           <div className="text-sm font-medium mb-3 text-[var(--app-text-secondary)] flex justify-between items-center">
                             <span>Предложил ИИ:</span>
@@ -230,7 +409,7 @@ export function AiAdminClient({
                               <span className="text-[var(--app-text-secondary)] text-xs">{diff.durationMs}ms | {diff.model.split("/").pop()}</span>
                             )}
                           </div>
-                          
+
                           {diff.error ? (
                             <div className="text-sm text-red-500 bg-red-500/10 p-3 rounded">
                               {diff.error}
@@ -238,8 +417,8 @@ export function AiAdminClient({
                           ) : (
                             <dl className="space-y-2 text-sm">
                               <div><dt className="text-[var(--app-text-secondary)] inline">Пациент:</dt> <dd className="inline font-medium">{diff.predictionJson.patientName || "—"}</dd></div>
-                              <div><dt className="text-[var(--app-text-secondary)] inline">Клиника:</dt> <dd className="inline font-medium">{diff.predictionJson.clinicHint || "—"}</dd></div>
-                              <div><dt className="text-[var(--app-text-secondary)] inline">Врач:</dt> <dd className="inline font-medium">{diff.predictionJson.doctorHint || "—"}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Клиника:</dt> <dd className="inline font-medium">{predictionField(diff.predictionJson, "clinicId", "clinicHint")}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Врач:</dt> <dd className="inline font-medium">{predictionField(diff.predictionJson, "doctorId", "doctorHint")}</dd></div>
                               <div><dt className="text-[var(--app-text-secondary)] inline">Срочно:</dt> <dd className="inline font-medium">{diff.predictionJson.urgent ? "Да" : "Нет"}</dd></div>
                               <div>
                                 <dt className="text-[var(--app-text-secondary)] block mb-1">Описание работы:</dt>

@@ -25,6 +25,8 @@ import {
 import { getPrisma } from "@/lib/get-prisma";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { ClientOrderPreviewButton } from "@/components/clients/ClientOrderPreviewButton";
+import { ClientOrderSourceEmailsField } from "@/components/clients/ClientOrderSourceEmailsField";
+import { listDoctorOrderSourceEmails } from "@/lib/client-order-source-emails";
 const ORDERS_PREVIEW = 100;
 
 function firstSearchParam(
@@ -224,6 +226,12 @@ export default async function DoctorCardPage({
   }
 
   if (!doctor) notFound();
+
+  const orderSourceEmails = await listDoctorOrderSourceEmails(
+    await getPrisma(),
+    doctor.tenantId,
+    id,
+  );
 
   if (doctor.deletedAt) {
     return (
@@ -451,6 +459,7 @@ export default async function DoctorCardPage({
                     {displayOrDash(doctor.clinicWorkEmail)}
                   </dd>
                 </div>
+                <ClientOrderSourceEmailsField emails={orderSourceEmails} />
                 <div>
                   <dt className="text-[var(--text-muted)]">Телефон</dt>
                   <dd className="mt-0.5 text-[var(--app-text)]">

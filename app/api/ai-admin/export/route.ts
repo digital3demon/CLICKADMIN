@@ -23,8 +23,8 @@ export async function GET(req: Request) {
         order: {
           select: {
             patientName: true,
-            clinic: { select: { name: true } },
-            doctor: { select: { fullName: true } },
+            clinicId: true,
+            doctorId: true,
             clientOrderText: true,
             isUrgent: true,
           }
@@ -52,16 +52,16 @@ ${textBody}
 
 Извлеки следующие поля и верни их СТРОГО в формате JSON:
 - patientName: ФИО пациента (строка или null)
-- clinicHint: Название клиники (строка или null)
-- doctorHint: ФИО врача (строка или null)
+- clinicId: ID клиники из справочника (строка или null)
+- doctorId: ID врача из справочника (строка или null)
 - workDescription: Описание работы (строка или null). Собери сюда все конструкции, цвет, сроки сдачи и особые пожелания.
 - urgent: true, если есть пометка о срочности (срочно, cito, asap), иначе false (boolean или null)
 - warnings: массив строк с предупреждениями (например, если в письме два разных пациента, или текст слишком короткий/непонятный).`;
 
       const completion = {
         patientName: link.order?.patientName,
-        clinicHint: link.order?.clinic?.name || null,
-        doctorHint: link.order?.doctor?.fullName || null,
+        clinicId: link.order?.clinicId || null,
+        doctorId: link.order?.doctorId || null,
         workDescription: link.order?.clientOrderText,
         urgent: link.order?.isUrgent,
         warnings: [],

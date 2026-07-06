@@ -1,4 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
 import { extractOrderFieldsFromEmail } from "./order-email-extract";
 import * as openrouterConfig from "./openrouter-config";
 import * as openrouterClient from "./openrouter-client";
@@ -14,6 +17,21 @@ vi.mock("./openrouter-client", async (importOriginal) => {
     chatCompletion: vi.fn(),
   };
 });
+
+vi.mock("@/lib/get-domain-prisma", () => ({
+  getClientsPrisma: vi.fn().mockResolvedValue({
+    clinic: {
+      findMany: vi.fn().mockResolvedValue([
+        { id: "clinic-1", name: "Дента" },
+      ]),
+    },
+    doctor: {
+      findMany: vi.fn().mockResolvedValue([
+        { id: "doctor-1", fullName: "Петров Петр Петрович" },
+      ]),
+    },
+  }),
+}));
 
 describe("extractOrderFieldsFromEmail", () => {
   beforeEach(() => {
@@ -47,8 +65,8 @@ describe("extractOrderFieldsFromEmail", () => {
       ok: true,
       content: JSON.stringify({
         patientName: "Иванов Иван",
-        clinicHint: "Дента",
-        doctorHint: "Петров",
+        clinicId: "clinic-1",
+        doctorId: "doctor-1",
         workDescription: "Коронка Emax",
         urgent: true,
         warnings: [],
@@ -60,8 +78,8 @@ describe("extractOrderFieldsFromEmail", () => {
     const res = await extractOrderFieldsFromEmail("t1", "Заказ", "Срочно сделать коронку");
     expect(res.result).toEqual({
       patientName: "Иванов Иван",
-      clinicHint: "Дента",
-      doctorHint: "Петров",
+      clinicId: "clinic-1",
+      doctorId: "doctor-1",
       workDescription: "Коронка Emax",
       urgent: true,
       warnings: [],
