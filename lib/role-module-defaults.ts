@@ -263,6 +263,8 @@ export function defaultModuleAllowed(
     case "CLICKMIG_KANBAN":
     case "CONFIG_CLICKMIG":
       return false;
+    case "AI_ADMIN":
+      return false;
     default:
       return true;
   }
