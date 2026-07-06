@@ -155,9 +155,9 @@ export function AiAdminClient({
               <p className="text-sm text-[var(--app-text-secondary)] mb-4">
                 Скачать JSONL-файл с историческими парами «Письмо → Наряд» для дообучения (fine-tuning) моделей.
               </p>
-              <Button asChild variant="secondary">
-                <a href="/api/ai-admin/export" download="ai-dataset.jsonl">Скачать dataset.jsonl</a>
-              </Button>
+              <a href="/api/ai-admin/export" download="ai-dataset.jsonl" className="inline-flex items-center justify-center font-medium transition-colors duration-100 outline-none focus-visible:ring-offset-1 disabled:cursor-not-allowed touch-action-manipulation border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--app-text)] hover:bg-[var(--surface-hover)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--input-border)] h-8 px-3 text-sm gap-2 rounded-lg">
+                Скачать dataset.jsonl
+              </a>
             </div>
           )}
 
