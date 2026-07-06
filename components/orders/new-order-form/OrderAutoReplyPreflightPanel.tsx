@@ -346,11 +346,9 @@ export function OrderAutoReplyPreflightPanel({
     open,
     sourceEmail?.id,
     sourceEmail?.accountId,
-    dueDateLocal,
-    appointmentLocal,
-    labWholeDay,
-    appointmentWholeDay,
-    renderPreviewHtml,
+    // Исключаем renderPreviewHtml и локальные даты из зависимостей загрузки,
+    // чтобы не провоцировать бесконечный цикл (fetch -> set state -> renderPreviewHtml меняется -> fetch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   useEffect(() => {
