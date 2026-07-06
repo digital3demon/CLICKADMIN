@@ -33,23 +33,26 @@ export async function POST(
   }
 
   const prisma = await getOrdersPrisma();
-  const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
-  const row = useInbox
-    ? await (prisma as any).orderChatInboxItem.findFirst({
-        where: {
-          id: correctionId.trim(),
-          orderId: orderId.trim(),
-          type: "CORRECTION",
-        },
-        select: { id: true, resolvedAt: true, rejectedAt: true },
-      })
-    : await prisma.orderChatCorrection.findFirst({
-        where: {
-          id: correctionId.trim(),
-          orderId: orderId.trim(),
-        },
-        select: { id: true, resolvedAt: true, rejectedAt: true },
-      });
+  
+  const inboxRow = await (prisma as any).orderChatInboxItem.findFirst({
+    where: {
+      id: correctionId.trim(),
+      orderId: orderId.trim(),
+      type: "CORRECTION",
+    },
+    select: { id: true, resolvedAt: true, rejectedAt: true },
+  });
+  
+  const legacyRow = await prisma.orderChatCorrection.findFirst({
+    where: {
+      id: correctionId.trim(),
+      orderId: orderId.trim(),
+    },
+    select: { id: true, resolvedAt: true, rejectedAt: true },
+  });
+
+  const row = inboxRow || legacyRow;
+
   if (!row) {
     return NextResponse.json({ error: "Запись не найдена" }, { status: 404 });
   }
@@ -68,17 +71,18 @@ export async function POST(
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
   }
 
-  if (useInbox) {
+  if (inboxRow) {
     await (prisma as any).orderChatInboxItem.update({
-      where: { id: row.id },
+      where: { id: inboxRow.id },
       data: {
         rejectedAt: new Date(),
         rejectedByUserId: session.sub,
       },
     });
-  } else {
+  }
+  if (legacyRow) {
     await prisma.orderChatCorrection.update({
-      where: { id: row.id },
+      where: { id: legacyRow.id },
       data: {
         rejectedAt: new Date(),
         rejectedByUserId: session.sub,
