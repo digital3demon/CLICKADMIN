@@ -11,9 +11,9 @@ async function isAiConfigured(tenantId: string): Promise<boolean> {
   const db = await getOrdersPrisma();
   const tenant = await db.tenant.findUnique({
     where: { id: tenantId },
-    select: { aiEnabled: true, openRouterApiKey: true },
+    select: { aiEnabled: true, aiApiKey: true },
   });
-  return Boolean(tenant?.aiEnabled && tenant?.openRouterApiKey);
+  return Boolean(tenant?.aiEnabled && tenant?.aiApiKey);
 }
 
 async function savePredictionRun(

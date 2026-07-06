@@ -7,15 +7,15 @@ import {
   mergeAiPredictionJson,
   OrderEmailExtractSchema,
 } from "./order-email-extract";
-import * as openrouterConfig from "./openrouter-config";
-import * as openrouterClient from "./openrouter-client";
+import * as llmConfig from "./llm-config";
+import * as llmClient from "./llm-client";
 
-vi.mock("./openrouter-config", () => ({
+vi.mock("./llm-config", () => ({
   getAiSettings: vi.fn(),
 }));
 
-vi.mock("./openrouter-client", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./openrouter-client")>();
+vi.mock("./llm-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./llm-client")>();
   return {
     ...actual,
     chatCompletion: vi.fn(),
@@ -43,7 +43,7 @@ describe("extractOrderFieldsFromEmail", () => {
   });
 
   it("returns null if AI is disabled", async () => {
-    vi.mocked(openrouterConfig.getAiSettings).mockResolvedValueOnce({
+    vi.mocked(llmConfig.getAiSettings).mockResolvedValueOnce({
       enabled: false,
       apiKey: null,
       model: "test",
@@ -57,7 +57,7 @@ describe("extractOrderFieldsFromEmail", () => {
   });
 
   it("parses valid JSON response with attachments and composition", async () => {
-    vi.mocked(openrouterConfig.getAiSettings).mockResolvedValueOnce({
+    vi.mocked(llmConfig.getAiSettings).mockResolvedValueOnce({
       enabled: true,
       apiKey: "sk-test",
       model: "test",
@@ -65,7 +65,7 @@ describe("extractOrderFieldsFromEmail", () => {
       timeoutMs: 1000,
     });
 
-    vi.mocked(openrouterClient.chatCompletion).mockResolvedValueOnce({
+    vi.mocked(llmClient.chatCompletion).mockResolvedValueOnce({
       ok: true,
       content: JSON.stringify({
         patientName: "Иванов Иван",
@@ -111,7 +111,7 @@ describe("extractOrderFieldsFromEmail", () => {
   });
 
   it("handles invalid JSON gracefully", async () => {
-    vi.mocked(openrouterConfig.getAiSettings).mockResolvedValueOnce({
+    vi.mocked(llmConfig.getAiSettings).mockResolvedValueOnce({
       enabled: true,
       apiKey: "sk-test",
       model: "test",
@@ -119,7 +119,7 @@ describe("extractOrderFieldsFromEmail", () => {
       timeoutMs: 1000,
     });
 
-    vi.mocked(openrouterClient.chatCompletion).mockResolvedValueOnce({
+    vi.mocked(llmClient.chatCompletion).mockResolvedValueOnce({
       ok: true,
       content: "This is not JSON",
       model: "test",

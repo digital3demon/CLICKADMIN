@@ -1,8 +1,8 @@
 import "server-only";
 import { z } from "zod";
 import { getClientsPrisma } from "@/lib/get-domain-prisma";
-import { chatCompletion, stripMarkdownFences } from "./openrouter-client";
-import { getAiSettings } from "./openrouter-config";
+import { chatCompletion, stripMarkdownFences } from "./llm-client";
+import { getAiSettings } from "./llm-config";
 
 import type { ClientHistoryContext } from "./client-history-context";
 

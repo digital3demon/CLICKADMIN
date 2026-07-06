@@ -92,12 +92,12 @@ model Tenant {
   adminSharedTelegramUsername       String?
   /// Уведомления на общий аккаунт (JSON); пока — упоминания в чатах и др.
   adminSharedMessengerNotifyPrefs   Json?
-  /// Включен ли ИИ (OpenRouter) для этой организации
+  /// Включен ли ИИ для этой организации
   aiEnabled                         Boolean                    @default(false)
-  /// API-ключ OpenRouter (сохраняется в БД, чтобы не зависеть от .env)
-  openRouterApiKey                  String?
-  /// Модель OpenRouter по умолчанию для ИИ-Админа
-  openRouterModel                   String?
+  /// API-ключ SprutDock (в БД, не в .env)
+  aiApiKey                          String?
+  /// Модель SprutDock по умолчанию для ИИ-Админа (slug provider/model)
+  aiModel                           String?
   /// null — без срока / вечная лицензия
   subscriptionValidTo               DateTime?
   createdAt                         DateTime                   @default(now())

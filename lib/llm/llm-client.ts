@@ -1,14 +1,14 @@
 import "server-only";
-import { type AiSettings } from "./openrouter-config";
+import { type AiSettings } from "./llm-config";
 import {
-  extractOpenRouterMessageContent,
-  formatOpenRouterError,
+  extractMessageContent,
+  formatLlmApiError,
   parseRateLimitWaitMs,
-} from "./openrouter-response";
+} from "./llm-response";
 import { type ChatCompletionOptions, type ChatCompletionResult } from "./types";
 import { logger } from "@/lib/server/logger";
 
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const SPRUTDOCK_CHAT_COMPLETIONS_URL = "https://sprutdock.ru/v1/chat/completions";
 const MAX_RATE_LIMIT_RETRIES = 4;
 
 function sleep(ms: number): Promise<void> {
@@ -45,13 +45,11 @@ export async function chatCompletion(
           body.temperature = opts.temperature;
         }
 
-        const response = await fetch(OPENROUTER_API_URL, {
+        const response = await fetch(SPRUTDOCK_CHAT_COMPLETIONS_URL, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${settings.apiKey}`,
             "Content-Type": "application/json",
-            "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER || "https://crm.click-lab.online",
-            "X-Title": process.env.OPENROUTER_APP_TITLE || "ClickAdmin CRM",
           },
           body: JSON.stringify(body),
           signal: controller.signal,
@@ -61,12 +59,12 @@ export async function chatCompletion(
 
         if (!response.ok) {
           const errText = await response.text().catch(() => "");
-          lastError = formatOpenRouterError(response.status, errText);
-          logger.warn({ model, status: response.status, errText }, "OpenRouter API error");
+          lastError = formatLlmApiError(response.status, errText);
+          logger.warn({ model, status: response.status, errText }, "SprutDock API error");
 
           if (response.status === 429 && rateLimitAttempt < MAX_RATE_LIMIT_RETRIES) {
             const waitMs = parseRateLimitWaitMs(response, errText);
-            logger.warn({ model, waitMs, attempt: rateLimitAttempt + 1 }, "OpenRouter rate limit, retrying");
+            logger.warn({ model, waitMs, attempt: rateLimitAttempt + 1 }, "SprutDock rate limit, retrying");
             await sleep(waitMs);
             continue;
           }
@@ -78,10 +76,10 @@ export async function chatCompletion(
         }
 
         const data = await response.json();
-        const content = extractOpenRouterMessageContent(data.choices?.[0]?.message?.content);
+        const content = extractMessageContent(data.choices?.[0]?.message?.content);
 
         if (!content) {
-          lastError = "Invalid response format from OpenRouter";
+          lastError = "Invalid response format from SprutDock";
           break;
         }
 
@@ -93,7 +91,7 @@ export async function chatCompletion(
         };
       } catch (e: any) {
         lastError = e.name === "AbortError" ? "Timeout" : e.message;
-        logger.warn({ model, err: e }, "OpenRouter fetch failed");
+        logger.warn({ model, err: e }, "SprutDock fetch failed");
         break;
       }
     }

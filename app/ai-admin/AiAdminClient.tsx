@@ -13,12 +13,12 @@ import {
 import { OrderSourceEmailView } from "@/components/orders/OrderSourceEmailView";
 import type { OrderSourceEmailRow } from "@/lib/mail/order-source-emails";
 import {
-  initialOpenRouterModelState,
-  isValidOpenRouterModelSlug,
-  OPENROUTER_CUSTOM_MODEL_VALUE,
-  OPENROUTER_MODEL_OPTIONS,
-  resolveOpenRouterModel,
-} from "@/lib/llm/openrouter-models";
+  AI_CUSTOM_MODEL_VALUE,
+  AI_MODEL_OPTIONS,
+  initialAiModelState,
+  isValidAiModelSlug,
+  resolveModel,
+} from "@/lib/llm/ai-models";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 
 async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
@@ -270,19 +270,19 @@ function AiDiffCompareModal({
 export function AiAdminClient({
   initialAiEnabled,
   hasApiKey,
-  initialOpenRouterModel,
+  initialAiModel,
 }: {
   initialAiEnabled: boolean;
   hasApiKey: boolean;
-  initialOpenRouterModel?: string | null;
+  initialAiModel?: string | null;
 }) {
   const [activeTab, setActiveTab] = useState<"diffs" | "settings">("diffs");
   const [aiEnabled, setAiEnabled] = useState(initialAiEnabled);
-  const initialModel = initialOpenRouterModelState(initialOpenRouterModel);
+  const initialModel = initialAiModelState(initialAiModel);
   const [modelSource, setModelSource] = useState<"preset" | "custom">(initialModel.source);
   const [presetModel, setPresetModel] = useState(initialModel.presetModel);
   const [customModel, setCustomModel] = useState(initialModel.customModel);
-  const openRouterModel = resolveOpenRouterModel(modelSource, presetModel, customModel);
+  const aiModel = resolveModel(modelSource, presetModel, customModel);
   const [apiKey, setApiKey] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isBacktesting, setIsBacktesting] = useState(false);
@@ -333,7 +333,7 @@ export function AiAdminClient({
   }
 
   async function handleSaveSettings() {
-    if (modelSource === "custom" && !isValidOpenRouterModelSlug(customModel)) {
+    if (modelSource === "custom" && !isValidAiModelSlug(customModel)) {
       toast.error("Укажите slug модели в формате provider/model или provider/model:free");
       return;
     }
@@ -342,7 +342,7 @@ export function AiAdminClient({
     try {
       const res = await jsonFetch<{ ok: boolean; retryCount?: number }>("/api/ai-admin/settings", {
         method: "POST",
-        body: { aiEnabled, apiKey: apiKey || undefined, openRouterModel },
+        body: { aiEnabled, apiKey: apiKey || undefined, aiModel },
       });
       if (res.retryCount && res.retryCount > 0) {
         toast.success(`Настройки сохранены. Пересчёт ${res.retryCount} ошибок запущен в фоне`);
@@ -358,7 +358,7 @@ export function AiAdminClient({
   }
 
   async function handleRunBacktest() {
-    if (modelSource === "custom" && !isValidOpenRouterModelSlug(customModel)) {
+    if (modelSource === "custom" && !isValidAiModelSlug(customModel)) {
       toast.error("Укажите slug модели в формате provider/model или provider/model:free");
       return;
     }
@@ -367,7 +367,7 @@ export function AiAdminClient({
     try {
       await jsonFetch("/api/ai-admin/settings", {
         method: "POST",
-        body: { aiEnabled, apiKey: apiKey || undefined, openRouterModel },
+        body: { aiEnabled, apiKey: apiKey || undefined, aiModel },
       });
       if (apiKey) setApiKey("");
 
@@ -427,7 +427,7 @@ export function AiAdminClient({
         <div className="flex-1 overflow-auto p-6">
           {activeTab === "settings" && (
             <div className="max-w-xl space-y-6">
-              <h2 className="text-xl font-semibold">Настройки OpenRouter</h2>
+              <h2 className="text-xl font-semibold">Настройки ИИ</h2>
 
               <div className="space-y-2">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -447,10 +447,10 @@ export function AiAdminClient({
               <div className="space-y-2">
                 <label className="block font-medium">Модель по умолчанию</label>
                 <select
-                  value={modelSource === "custom" ? OPENROUTER_CUSTOM_MODEL_VALUE : presetModel}
+                  value={modelSource === "custom" ? AI_CUSTOM_MODEL_VALUE : presetModel}
                   onChange={(e) => {
                     const value = e.target.value;
-                    if (value === OPENROUTER_CUSTOM_MODEL_VALUE) {
+                    if (value === AI_CUSTOM_MODEL_VALUE) {
                       setModelSource("custom");
                       return;
                     }
@@ -459,12 +459,12 @@ export function AiAdminClient({
                   }}
                   className="w-full px-3 py-2 border border-[var(--app-border)] rounded-md bg-[var(--app-bg-secondary)]"
                 >
-                  {OPENROUTER_MODEL_OPTIONS.map((option) => (
+                  {AI_MODEL_OPTIONS.map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.label}
                     </option>
                   ))}
-                  <option value={OPENROUTER_CUSTOM_MODEL_VALUE}>Своя модель (slug)…</option>
+                  <option value={AI_CUSTOM_MODEL_VALUE}>Своя модель (slug)…</option>
                 </select>
                 {modelSource === "custom" ? (
                   <input
@@ -476,23 +476,23 @@ export function AiAdminClient({
                   />
                 ) : null}
                 <p className="text-sm text-[var(--app-text-secondary)]">
-                  Можно выбрать из списка или указать slug OpenRouter вручную, например{" "}
-                  <span className="font-mono">nvidia/nemotron-3-ultra-550b-a55b:free</span>.
+                  SprutDock — OpenAI-совместимый шлюз. Можно указать slug вручную, например{" "}
+                  <span className="font-mono">anthropic/claude-sonnet-4-6</span>.
                   Запасные модели отключены.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <label className="block font-medium">API Ключ OpenRouter</label>
+                <label className="block font-medium">API-ключ SprutDock</label>
                 <input
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={hasApiKey ? "•••••••••••••••• (ключ уже задан)" : "sk-or-v1-..."}
+                  placeholder={hasApiKey ? "•••••••••••••••• (ключ уже задан)" : "sk-mp-..."}
                   className="w-full px-3 py-2 border border-[var(--app-border)] rounded-md bg-[var(--app-bg-secondary)]"
                 />
                 <p className="text-sm text-[var(--app-text-secondary)]">
-                  Ключ хранится в базе данных. Оставьте пустым, если не хотите менять текущий.
+                  Ключ из личного кабинета sprutdock.ru. Хранится в базе данных. Оставьте пустым, если не хотите менять текущий.
                 </p>
               </div>
 

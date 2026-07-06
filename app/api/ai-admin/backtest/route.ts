@@ -20,10 +20,10 @@ export async function POST(req: Request) {
     
     const tenant = await db.tenant.findUnique({
       where: { id: tenantId },
-      select: { aiEnabled: true, openRouterApiKey: true },
+      select: { aiEnabled: true, aiApiKey: true },
     });
     
-    if (!tenant?.aiEnabled || !tenant?.openRouterApiKey) {
+    if (!tenant?.aiEnabled || !tenant?.aiApiKey) {
       return NextResponse.json({ error: "AI is not configured or disabled" }, { status: 400 });
     }
 
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
           }
         }
       },
-      take: 10, // Ограничиваем батч, чтобы не упереться в rate limits OpenRouter
+      take: 10, // Ограничиваем батч, чтобы не упереться в rate limits SprutDock
       select: { orderId: true, emailId: true },
     });
 

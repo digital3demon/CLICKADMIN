@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { getAiSettings } from "@/lib/llm/openrouter-config";
-import { chatCompletion, stripMarkdownFences } from "@/lib/llm/openrouter-client";
+import { getAiSettings } from "@/lib/llm/llm-config";
+import { chatCompletion, stripMarkdownFences } from "@/lib/llm/llm-client";
 import { fetchDoctorHistory } from "@/lib/llm/client-history-context";
 import { logger } from "@/lib/server/logger";
 
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     
     // Получаем всех активных тенантов, у которых включен ИИ
     const tenants = await db.tenant.findMany({
-      where: { aiEnabled: true, openRouterApiKey: { not: null } },
+      where: { aiEnabled: true, aiApiKey: { not: null } },
       select: { id: true },
     });
 

@@ -2,10 +2,8 @@ import "server-only";
 import type { PrismaClient } from "@prisma/client";
 import { resolveClientIdsFromPrediction } from "@/lib/ai-order-draft-from-prediction";
 import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
-import { chatCompletion } from "@/lib/llm/openrouter-client";
-import { getAiSettings } from "@/lib/llm/openrouter-config";
-
-const REFLECTION_MODEL = "google/gemini-2.5-flash:free";
+import { chatCompletion } from "@/lib/llm/llm-client";
+import { getAiSettings } from "@/lib/llm/llm-config";
 
 export async function analyzePredictionError(
   db: PrismaClient,
@@ -94,7 +92,7 @@ ${realSummary || "Ничего не найдено"}
 
   try {
     const response = await chatCompletion(
-      { ...settings, model: REFLECTION_MODEL },
+      settings,
       {
         messages: [{ role: "user", content: prompt }],
         temperature: 0.1,

@@ -14,14 +14,14 @@ export default async function AiAdminPage() {
   const db = await getOrdersPrisma();
   const tenant = await db.tenant.findUnique({
     where: { id: s.tid },
-    select: { aiEnabled: true, openRouterApiKey: true, openRouterModel: true },
+    select: { aiEnabled: true, aiApiKey: true, aiModel: true },
   });
 
   return (
     <AiAdminClient 
-      initialAiEnabled={tenant?.aiEnabled ?? false} 
-      hasApiKey={Boolean(tenant?.openRouterApiKey)} 
-      initialOpenRouterModel={tenant?.openRouterModel}
+      initialAiEnabled={tenant?.aiEnabled ?? false}
+      hasApiKey={Boolean(tenant?.aiApiKey)} 
+      initialAiModel={tenant?.aiModel}
     />
   );
 }

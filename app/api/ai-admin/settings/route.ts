@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
-import {
-  isAllowedOpenRouterModel,
-  normalizeOpenRouterModel,
-} from "@/lib/llm/openrouter-models";
+import { isAllowedModel, normalizeModel } from "@/lib/llm/ai-models";
 import { queueFailedAiPredictionsRetry } from "@/lib/llm/shadow-prediction";
 
 export async function POST(req: Request) {
@@ -25,7 +22,7 @@ export async function POST(req: Request) {
 
     const tenantBefore = await db.tenant.findUnique({
       where: { id: tenantId },
-      select: { openRouterModel: true },
+      select: { aiModel: true },
     });
     
     const updateData: Record<string, unknown> = {
@@ -33,20 +30,20 @@ export async function POST(req: Request) {
     };
     
     if (typeof body.apiKey === "string" && body.apiKey.trim().length > 0) {
-      updateData.openRouterApiKey = body.apiKey.trim();
+      updateData.aiApiKey = body.apiKey.trim();
     }
 
     let modelChanged = false;
-    if (typeof body.openRouterModel === "string") {
-      const model = body.openRouterModel.trim();
-      if (!isAllowedOpenRouterModel(model)) {
+    if (typeof body.aiModel === "string") {
+      const model = body.aiModel.trim();
+      if (!isAllowedModel(model)) {
         return NextResponse.json(
           { error: "Неверный slug модели. Формат: provider/model или provider/model:free" },
           { status: 400 },
         );
       }
-      updateData.openRouterModel = model;
-      const previousModel = normalizeOpenRouterModel(tenantBefore?.openRouterModel);
+      updateData.aiModel = model;
+      const previousModel = normalizeModel(tenantBefore?.aiModel);
       modelChanged = previousModel !== model;
     }
 

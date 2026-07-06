@@ -23,7 +23,7 @@ export function parseRateLimitWaitMs(response: Response, errText: string): numbe
   return 8000;
 }
 
-export function extractOpenRouterMessageContent(content: unknown): string | null {
+export function extractMessageContent(content: unknown): string | null {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return null;
 
@@ -38,9 +38,37 @@ export function extractOpenRouterMessageContent(content: unknown): string | null
   return parts.length > 0 ? parts.join("\n") : null;
 }
 
-export function formatOpenRouterError(status: number, errText: string): string {
-  if (status === 429) {
-    return "Лимит бесплатных моделей OpenRouter (≈16 запросов/мин). Подождите минуту или добавьте свой API-ключ с балансом.";
+function parseSprutDockErrorMessage(errText: string): string | null {
+  try {
+    const parsed = JSON.parse(errText) as {
+      message_ru?: unknown;
+      message?: unknown;
+      error_code?: unknown;
+    };
+    if (typeof parsed.message_ru === "string" && parsed.message_ru.trim()) {
+      return parsed.message_ru.trim();
+    }
+    if (typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+    if (typeof parsed.error_code === "string" && parsed.error_code.trim()) {
+      return parsed.error_code.trim();
+    }
+  } catch {
+    // ignore malformed error body
   }
-  return `OpenRouter API error (${status}): ${errText}`;
+  return null;
+}
+
+export function formatLlmApiError(status: number, errText: string): string {
+  if (status === 429) {
+    return "Лимит SprutDock (60 запросов/мин). Подождите минуту и повторите.";
+  }
+
+  const message = parseSprutDockErrorMessage(errText);
+  if (message) {
+    return `SprutDock API error (${status}): ${message}`;
+  }
+
+  return `SprutDock API error (${status}): ${errText}`;
 }
