@@ -13,6 +13,7 @@ import {
 import { enrichOrderEmailPrediction } from "./order-email-enrichment";
 import { resolveClientIdsFromPrediction } from "@/lib/ai-order-draft-from-prediction";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
+import { loadEmailAttachmentOrderContext } from "./email-attachment-order-context";
 
 import { fetchClientOrderHistoryContext } from "./client-history-context";
 import { loadActivePriceListItemNames } from "./resolve-ai-composition-lines";
@@ -41,6 +42,43 @@ function emailBodyText(input: {
   );
 }
 
+function mergePdfHintsIntoPrediction(
+  prediction: Record<string, unknown>,
+  pdf: Awaited<ReturnType<typeof loadEmailAttachmentOrderContext>>,
+): Record<string, unknown> {
+  if (pdf.clickOrderPdfs.length === 0) return prediction;
+
+  const out = { ...prediction };
+  const primary = pdf.clickOrderPdfs[0]!;
+
+  out.clickOrderPdfUsed = true;
+  if (pdf.promptBlock.trim()) out.clickOrderPdfContext = pdf.promptBlock.trim();
+
+  if (primary.patientName?.trim() && !String(out.patientName ?? "").trim()) {
+    out.patientName = primary.patientName.trim();
+  }
+  if (primary.clinicName?.trim() && !String(out.clinicHint ?? "").trim()) {
+    out.clinicHint = primary.clinicName.trim();
+  }
+  if (primary.doctorName?.trim() && !String(out.doctorHint ?? "").trim()) {
+    out.doctorHint = primary.doctorName.trim();
+  }
+  if (primary.clientOrderText.trim() && !String(out.clientOrderText ?? "").trim()) {
+    out.clientOrderText = primary.clientOrderText.trim();
+  }
+  if (primary.checkedSources.some((s) => /скан/i.test(s))) {
+    out.hasScans = true;
+  }
+
+  const existingIds = Array.isArray(out.suggestedAttachmentIds)
+    ? out.suggestedAttachmentIds.filter((x): x is string => typeof x === "string")
+    : [];
+  const mergedIds = [...new Set([...existingIds, ...pdf.suggestedAttachmentIds])];
+  if (mergedIds.length > 0) out.suggestedAttachmentIds = mergedIds;
+
+  return out;
+}
+
 export async function runOrderEmailPrediction(
   db: PrismaClient,
   tenantId: string,
@@ -63,12 +101,18 @@ export async function runOrderEmailPrediction(
   if (!primaryEmail) return null;
 
   const primaryBody = emailBodyText(primaryEmail);
-  if (!primaryBody.trim()) return null;
-
   const emailBlocks: EmailBlockForExtract[] = [];
   const attachmentMap = new Map<string, EmailAttachmentCatalogItem>();
+  const attachmentRefs: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+    emailId: string;
+  }> = [];
 
   const addAttachments = (
+    emailIdForAttachment: string,
     rows: Array<{ id: string; fileName: string; mimeType: string; size: number }>,
   ) => {
     for (const a of rows) {
@@ -78,33 +122,39 @@ export async function runOrderEmailPrediction(
         mimeType: a.mimeType,
         size: a.size,
       });
+      attachmentRefs.push({ ...a, emailId: emailIdForAttachment });
     }
   };
 
-  addAttachments(primaryEmail.attachments);
+  addAttachments(emailId, primaryEmail.attachments);
 
   if (orderId) {
     const sourceRows = await fetchOrderSourceEmails(db, tenantId, orderId);
     for (const row of sourceRows) {
       const body = row.textBody?.trim() || "";
-      if (!body) continue;
-      emailBlocks.push({
-        id: row.id,
-        subject: row.subject,
-        textBody: body,
-        isPrimary: row.id === emailId,
-      });
-      for (const a of row.attachments) {
-        attachmentMap.set(a.id, a);
+      if (body) {
+        emailBlocks.push({
+          id: row.id,
+          subject: row.subject,
+          textBody: body,
+          isPrimary: row.id === emailId,
+        });
       }
+      addAttachments(row.id, row.attachments);
     }
   }
+
+  const pdfContext = await loadEmailAttachmentOrderContext(db, tenantId, attachmentRefs);
+  const pdfFallbackBody = pdfContext.clickOrderPdfs[0]?.clientOrderText?.trim() ?? "";
+  const effectiveBody = primaryBody.trim() || pdfFallbackBody;
+
+  if (!effectiveBody.trim()) return null;
 
   if (emailBlocks.length === 0) {
     emailBlocks.push({
       id: emailId,
       subject: primaryEmail.subject,
-      textBody: primaryBody,
+      textBody: effectiveBody,
       isPrimary: true,
     });
   } else if (!emailBlocks.some((b) => b.isPrimary)) {
@@ -114,10 +164,13 @@ export async function runOrderEmailPrediction(
       emailBlocks.unshift({
         id: emailId,
         subject: primaryEmail.subject,
-        textBody: primaryBody,
+        textBody: effectiveBody,
         isPrimary: true,
       });
     }
+  } else if (!primaryBody.trim() && pdfFallbackBody) {
+    const primaryBlock = emailBlocks.find((b) => b.isPrimary) ?? emailBlocks[0];
+    if (primaryBlock) primaryBlock.textBody = pdfFallbackBody;
   }
 
   const emailAttachments = [...attachmentMap.values()];
@@ -134,12 +187,15 @@ export async function runOrderEmailPrediction(
       ? { clinicId: sourceMatch.clinicId, doctorId: sourceMatch.doctorId }
       : null;
 
-  // ШАГ 1: Имя пациента — сначала из темы (работа + пациент), иначе быстрый LLM
   const priceListNames = await loadActivePriceListItemNames();
   const primaryBlock = emailBlocks.find((b) => b.isPrimary) ?? emailBlocks[0];
   const subjectSplit = splitSubjectWorkAndPatient(primaryBlock?.subject, priceListNames);
 
-  let patientName = subjectSplit.patientName;
+  let patientName =
+    subjectSplit.patientName ??
+    pdfContext.primaryPatientName ??
+    pdfContext.clickOrderPdfs[0]?.patientName ??
+    null;
   if (!patientName) {
     const extracted = await extractPatientNameOnly(tenantId, emailBlocks);
     patientName =
@@ -147,7 +203,6 @@ export async function runOrderEmailPrediction(
       extracted.patientName;
   }
 
-  // СБОР КОНТЕКСТА: История врача и пациента
   const historyContext = await fetchClientOrderHistoryContext(
     db,
     tenantId,
@@ -155,13 +210,13 @@ export async function runOrderEmailPrediction(
     patientName,
   );
 
-  // ШАГ 2: Полный разбор с учетом истории
   const { result, model, durationMs, error, rawJson } = await extractOrderFieldsFromEmail(
     tenantId,
     emailBlocks,
     {
       fromAddress: primaryEmail.fromAddress,
       emailAttachments,
+      pdfOrderText: pdfContext.promptBlock,
       preResolved,
       historyContext,
     },
@@ -177,6 +232,8 @@ export async function runOrderEmailPrediction(
   } else if (result) {
     parsedAi = { ...result };
   }
+
+  parsedAi = mergePdfHintsIntoPrediction(parsedAi, pdfContext);
 
   let predictionJson = mergeAiPredictionJson(parsedAi, {
     preResolved,

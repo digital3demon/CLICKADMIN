@@ -131,6 +131,7 @@ export function buildOrderEmailExtractUserPrompt(opts: {
   catalogText: string;
   attachmentsText: string;
   emailsText: string;
+  pdfOrderText?: string | null;
   preResolved?: PreResolvedClientIds | null;
   historyContext?: ClientHistoryContext | null;
 }): string {
@@ -169,13 +170,14 @@ ${patientHistory.map((h) => `- Наряд ${h.orderNumber} от ${h.createdAt.sl
     }
   }
 
-  return `Ты — старший администратор и опытный зубной техник зуботехнической лаборатории. Извлеки данные для нового наряда из писем клиники.
+  return `Ты — старший администратор и опытный зубной техник зуботехнической лаборатории. Извлеки данные для нового наряда из писем клиники и PDF-нарядов.
 
 ${fromLine}
 
 ${clientBlock}
 ${historyBlock}
 ${opts.attachmentsText}
+${opts.pdfOrderText?.trim() ? `\nЗаполненный PDF наряд (электронная форма CLICK — приоритетнее пустого текста письма):\n${opts.pdfOrderText.trim()}\n` : ""}
 
 Письма (--- между блоками):
 ${opts.emailsText}
@@ -196,6 +198,7 @@ ${opts.emailsText}
 - ФОКУС НА ПРАЙС: nameHint — максимально близко к точному названию из каталога/истории врача, не выдумывай новых названий.
 - ЧЕЛЮСТИ: ВЧ/НЧ/верхняя/нижняя — обычно НЕ отдельные позиции прайса. Одна работа на обе челюсти → одна строка compositionHints с quantity: 2, а не две строки «… ВЧ» и «… НЧ».
 - СОКРАЩЕНИЯ: если врач пишет бытовое название («капа», «коронка emax»), подбери ближайшую позицию из каталога/истории — не придумывай синоним с нуля.
+- PDF НАРЯД: если есть блок «PDF наряд» — patientName, clinicHint/doctorHint, clientOrderText, compositionHints и даты бери оттуда; имя файла «Фамилия Имя Отчество.pdf» тоже может быть пациентом.
 - ТЕМА ПИСЬМА: часто формат «{работа из прайса} {фамилия пациента} {инициал}», напр. «Марко Росса Джалилов М.» → compositionHints: «Аппарат Марко Росса…», patientName: «Джалилов М.». «Марко Росса», «Андрезен», «апп» — это работы, НЕ ФИО.
 - КЛИЕНТ ПО ПОЧТЕ: если заказчик уже определён по отправителю (preResolved) — не ищи врача/клинику в теме письма и не пиши warning «не определен врач из темы». В теме после названия работы обычно только пациент.
 - ЛОГИКА: Если заказана коронка/модель, но нет ни сканов (.stl), ни слепков (упоминания в тексте) — добавь warning.
@@ -272,6 +275,7 @@ export async function extractOrderFieldsFromEmail(
   options?: {
     fromAddress?: string | null;
     emailAttachments?: EmailAttachmentCatalogItem[];
+    pdfOrderText?: string | null;
     preResolved?: PreResolvedClientIds | null;
     historyContext?: ClientHistoryContext | null;
   },
@@ -302,6 +306,7 @@ export async function extractOrderFieldsFromEmail(
     catalogText,
     attachmentsText,
     emailsText,
+    pdfOrderText: options?.pdfOrderText,
     preResolved: options?.preResolved,
     historyContext: options?.historyContext,
   });
