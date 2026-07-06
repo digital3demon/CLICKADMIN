@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
-import { resolveClientIdsFromPrediction } from "./ai-order-draft-from-prediction";
+import { resolveClientIdsFromPrediction } from "@/lib/ai-order-draft-from-prediction";
 import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
-import { getOpenRouterClient } from "./openrouter-client";
+import { getOpenRouterClient } from "@/lib/llm/openrouter-client";
 
 export async function analyzePredictionError(
   db: PrismaClient,
