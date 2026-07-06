@@ -3,6 +3,40 @@ import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
+import {
+  buildOrderEmailExtractUserPrompt,
+  formatAttachmentsForPrompt,
+  formatEmailBlocksForPrompt,
+  loadClinicDoctorCatalogText,
+  type EmailAttachmentCatalogItem,
+  type EmailBlockForExtract,
+} from "@/lib/llm/order-email-extract";
+import {
+  compositionHintsFromOrderConstructions,
+  emailAttachmentIdsMatchingOrderFiles,
+  scanLikeEmailAttachmentIds,
+} from "@/lib/llm/order-email-export-ground-truth";
+import { cleanMailTextBody } from "@/lib/mail/mail-text-cleanup";
+
+function emailBodyText(email: {
+  textBody: string | null;
+  preview: string | null;
+}): string {
+  return cleanMailTextBody(email.textBody) || cleanMailTextBody(email.preview) || "";
+}
+
+function groundTruthSuggestedAttachmentIds(
+  order: {
+    hasScans: boolean;
+    attachments: Array<{ fileName: string; mimeType: string }>;
+  },
+  emailAttachments: EmailAttachmentCatalogItem[],
+): string[] {
+  const matched = emailAttachmentIdsMatchingOrderFiles(order.attachments, emailAttachments);
+  if (matched.length > 0) return matched;
+  if (order.hasScans) return scanLikeEmailAttachmentIds(emailAttachments);
+  return [];
+}
 
 export async function GET(req: Request) {
   try {
@@ -17,103 +51,163 @@ export async function GET(req: Request) {
     }
 
     const db = await getOrdersPrisma();
+    const catalogText = await loadClinicDoctorCatalogText(tenantId);
 
     const links = await db.emailSourceOrder.findMany({
       where: { tenantId },
       include: {
         order: {
           select: {
+            id: true,
             patientName: true,
             clinicId: true,
             doctorId: true,
             clientOrderText: true,
             isUrgent: true,
+            workReceivedAt: true,
+            dueDate: true,
+            dueToAdminsAt: true,
+            hasScans: true,
+            hasCt: true,
+            hasMri: true,
+            hasPhoto: true,
+            legalEntity: true,
+            payment: true,
+            attachments: {
+              select: { fileName: true, mimeType: true },
+              where: { scope: "GENERAL" },
+            },
+            constructions: {
+              select: {
+                quantity: true,
+                teethFdi: true,
+                priceListItem: { select: { code: true, name: true } },
+              },
+            },
           },
         },
         email: {
           select: {
+            id: true,
             subject: true,
             textBody: true,
             preview: true,
             fromAddress: true,
+            receivedAt: true,
             attachments: {
               select: { id: true, fileName: true, mimeType: true, size: true },
             },
           },
         },
       },
+      orderBy: [{ orderId: "asc" }, { createdAt: "asc" }],
     });
 
-    let jsonl = "";
+    const byOrderId = new Map<string, typeof links>();
     for (const link of links) {
-      const textBody = link.email?.textBody || link.email?.preview || "";
-      if (!textBody.trim()) continue;
+      const list = byOrderId.get(link.orderId) ?? [];
+      list.push(link);
+      byOrderId.set(link.orderId, list);
+    }
 
-      const attachments = link.email?.attachments ?? [];
-      const attachmentLines =
-        attachments.length === 0
-          ? "Вложений в письме нет."
-          : attachments
-              .map(
-                (a) =>
-                  `  "${a.id}": ${a.fileName} (${a.mimeType}${a.size != null ? `, ${a.size} B` : ""})`,
-              )
-              .join(",\n");
+    let jsonl = "";
+    for (const [, orderLinks] of byOrderId) {
+      const order = orderLinks[0]?.order;
+      if (!order) continue;
 
-      const fromLine = link.email?.fromAddress?.trim()
-        ? `Отправитель письма: ${link.email.fromAddress.trim()}`
-        : "Отправитель письма: не указан";
+      const attachmentMap = new Map<string, EmailAttachmentCatalogItem>();
+      const emailBlocks: EmailBlockForExtract[] = [];
+      let primaryEmailId: string | null = null;
+      let primaryFromAddress: string | null = null;
+
+      for (const link of orderLinks) {
+        const body = emailBodyText(link.email);
+        if (!body.trim()) continue;
+        if (!primaryEmailId) {
+          primaryEmailId = link.email.id;
+          primaryFromAddress = link.email.fromAddress;
+        }
+        emailBlocks.push({
+          id: link.email.id,
+          subject: link.email.subject,
+          textBody: body,
+          isPrimary: link.email.id === primaryEmailId,
+        });
+        for (const a of link.email.attachments) {
+          attachmentMap.set(a.id, {
+            id: a.id,
+            fileName: a.fileName,
+            mimeType: a.mimeType,
+            size: a.size,
+          });
+        }
+      }
+
+      if (emailBlocks.length === 0) continue;
+
+      const emailAttachments = [...attachmentMap.values()];
+      const attachmentsText = formatAttachmentsForPrompt(emailAttachments);
+      const emailsText = formatEmailBlocksForPrompt(emailBlocks);
 
       const sourceMatch = await resolveClientIdsFromOrderSourceEmail(
         db,
         tenantId,
-        link.email?.fromAddress,
+        primaryFromAddress,
       );
-      const groundClinicId = link.order?.clinicId ?? null;
-      const groundDoctorId = link.order?.doctorId ?? null;
 
-      const prompt = `Ты — профессиональный ассистент зуботехнической лаборатории. Твоя задача — извлечь данные для нового наряда из текста письма от стоматологической клиники.
+      const prompt = buildOrderEmailExtractUserPrompt({
+        fromAddress: primaryFromAddress,
+        catalogText,
+        attachmentsText,
+        emailsText,
+        preResolved:
+          sourceMatch.matched && sourceMatch.doctorId
+            ? { clinicId: sourceMatch.clinicId, doctorId: sourceMatch.doctorId }
+            : null,
+      });
 
-${fromLine}
-
-Тема письма: ${link.email?.subject || "(без темы)"}
-Текст письма:
-${textBody}
-
-Вложения письма (ID -> файл):
-{
-${attachmentLines}
-}
-
-Извлеки следующие поля и верни их СТРОГО в формате JSON:
-- patientName: ФИО пациента (строка или null)
-- clinicId: ID клиники из справочника (строка или null)
-- doctorId: ID врача из справочника (строка или null)
-- workDescription: Описание работы (строка или null). Собери сюда все конструкции, цвет, сроки сдачи и особые пожелания.
-- urgent: true, если есть пометка о срочности (срочно, cito, asap), иначе false (boolean или null)
-- suggestedAttachmentIds: массив ID вложений из каталога выше, которые нужно прикрепить к наряду
-- warnings: массив строк с предупреждениями (например, если в письме два разных пациента, или текст слишком короткий/непонятный).`;
+      const compositionHints = compositionHintsFromOrderConstructions(order.constructions);
+      const suggestedAttachmentIds = groundTruthSuggestedAttachmentIds(order, emailAttachments);
 
       const completion = {
-        patientName: link.order?.patientName,
-        clinicId: groundClinicId,
-        doctorId: groundDoctorId,
-        workDescription: link.order?.clientOrderText,
-        urgent: link.order?.isUrgent,
-        suggestedAttachmentIds: attachments.map((a) => a.id),
+        patientName: order.patientName ?? null,
+        clinicId: order.clinicId ?? null,
+        doctorId: order.doctorId ?? null,
+        clientOrderText: order.clientOrderText ?? null,
+        patientAppointmentAt: order.dueToAdminsAt?.toISOString() ?? null,
+        urgent: order.isUrgent ?? null,
+        hasScans: order.hasScans ?? null,
+        hasCt: order.hasCt ?? null,
+        hasMri: order.hasMri ?? null,
+        hasPhoto: order.hasPhoto ?? null,
+        suggestedAttachmentIds,
+        compositionHints,
+        confidenceScore: 100,
         matchedBySourceEmail: sourceMatch.matched,
         sourceEmailAmbiguous: sourceMatch.ambiguous,
         warnings: [],
+        groundTruth: {
+          workReceivedAt: order.workReceivedAt?.toISOString() ?? null,
+          dueDate: order.dueDate?.toISOString() ?? null,
+          dueToAdminsAt: order.dueToAdminsAt?.toISOString() ?? null,
+          legalEntity: order.legalEntity ?? null,
+          payment: order.payment ?? null,
+          constructions: order.constructions.map((c) => ({
+            code: c.priceListItem?.code ?? null,
+            name: c.priceListItem?.name ?? null,
+            quantity: c.quantity,
+            teethFdi: c.teethFdi,
+          })),
+        },
       };
 
-      const row = {
-        messages: [
-          { role: "user", content: prompt },
-          { role: "assistant", content: JSON.stringify(completion) },
-        ],
-      };
-
-      jsonl += JSON.stringify(row) + "\n";
+      jsonl +=
+        JSON.stringify({
+          messages: [
+            { role: "user", content: prompt },
+            { role: "assistant", content: JSON.stringify(completion) },
+          ],
+        }) + "\n";
     }
 
     return new NextResponse(jsonl, {

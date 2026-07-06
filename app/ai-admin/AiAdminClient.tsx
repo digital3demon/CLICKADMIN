@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
@@ -11,22 +10,8 @@ import {
   OrderEditForm,
   type OrderEditInitial,
 } from "@/components/orders/OrderEditForm";
-import type { OrderDraftSnapshot } from "@/lib/order-draft-snapshot";
-
-const NewOrderForm = dynamic(
-  () =>
-    import("@/components/orders/new-order-form/NewOrderForm").then((m) => ({
-      default: m.NewOrderForm,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex min-h-[240px] items-center justify-center px-6 text-sm text-[var(--text-secondary)]">
-        Загрузка формы…
-      </div>
-    ),
-  },
-);
+import { OrderSourceEmailView } from "@/components/orders/OrderSourceEmailView";
+import type { OrderSourceEmailRow } from "@/lib/mail/order-source-emails";
 
 async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
   const res = await fetch(url, {
@@ -46,7 +31,7 @@ async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> 
 
 type DiffModalData = {
   realOrderInitial: OrderEditInitial;
-  aiDraftSnapshot: OrderDraftSnapshot;
+  aiOrderInitial: OrderEditInitial;
   aiSuggestedAttachments: Array<{
     id: string;
     fileName: string;
@@ -60,7 +45,16 @@ type DiffModalData = {
   kaitenIntegrationActive: boolean;
   kanbanCardUrl: string | null;
   demoKanbanCardTypes: Array<{ id: string; name: string }>;
+  orderSourceEmails: OrderSourceEmailRow[];
+  aiEmailId: string;
 };
+
+function formatIsoDateShort(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("ru-RU");
+}
 
 function aiSuggestedFilesLabel(
   json: Record<string, unknown> | null | undefined,
@@ -70,19 +64,40 @@ function aiSuggestedFilesLabel(
   return ids.length === 1 ? "1 файл" : `${ids.length} файла`;
 }
 
-function predictionField(
+function predictionClientLabel(
   json: Record<string, unknown> | null | undefined,
-  key: "clinicHint" | "doctorHint" | "clinicId" | "doctorId",
-  legacyKey?: "clinicHint" | "doctorHint",
+  diff?: { order?: { clinic?: { name?: string } | null; doctor?: { fullName?: string } | null } },
+  role: "clinic" | "doctor" = "clinic",
 ): string {
   if (!json) return "—";
-  const v = json[key];
-  if (typeof v === "string" && v.trim()) return v;
-  if (legacyKey) {
-    const legacy = json[legacyKey];
-    if (typeof legacy === "string" && legacy.trim()) return legacy;
+  if (json.matchedBySourceEmail && diff?.order) {
+    if (role === "clinic") return diff.order.clinic?.name || "—";
+    return diff.order.doctor?.fullName || "—";
   }
+  const hintKey = role === "clinic" ? "clinicHint" : "doctorHint";
+  const idKey = role === "clinic" ? "clinicId" : "doctorId";
+  const hint = json[hintKey];
+  if (typeof hint === "string" && hint.trim()) return hint;
+  const id = json[idKey];
+  if (typeof id === "string" && id.trim()) return id;
+  if (id === null && role === "clinic") return "Частная практика";
   return "—";
+}
+
+function predictionClientText(json: Record<string, unknown> | null | undefined): string {
+  if (!json) return "—";
+  const client = json.clientOrderText;
+  if (typeof client === "string" && client.trim()) return client;
+  const legacy = json.workDescription;
+  if (typeof legacy === "string" && legacy.trim()) return legacy;
+  return "—";
+}
+
+function compositionCount(json: Record<string, unknown> | null | undefined): number {
+  if (!json) return 0;
+  if (typeof json.compositionLineCount === "number") return json.compositionLineCount;
+  const resolved = json.resolvedConstructions;
+  return Array.isArray(resolved) ? resolved.length : 0;
 }
 
 function AiDiffCompareModal({
@@ -120,7 +135,7 @@ function AiDiffCompareModal({
             {data ? `Сравнение · наряд ${data.orderNumber}` : "Загрузка…"}
           </h2>
           <p className="text-sm text-[var(--app-text-secondary)]">
-            Слева — сохранённый наряд администратора, справа — виртуальный черновик ИИ из письма
+            Слева — наряд администратора, по центру — виртуальный наряд ИИ, справа — письма-источники (✓ — использовано ИИ)
           </p>
         </div>
         <button
@@ -144,7 +159,7 @@ function AiDiffCompareModal({
           </div>
         ) : null}
         {data && !loading ? (
-          <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-3">
             <div className="min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)]">
               <div className="border-b border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)]">
                 Сохранил администратор
@@ -178,22 +193,52 @@ function AiDiffCompareModal({
                   </span>
                 ) : null}
               </div>
-              <NewOrderForm
-                key="ai-virtual-draft"
-                panelId="ai-diff-preview"
-                titleId="ai-diff-preview-title"
-                initialSnapshot={data.aiDraftSnapshot}
-                sourceEmails={[]}
+              <OrderEditForm
+                key={`ai-${data.aiOrderInitial.id}`}
+                initial={data.aiOrderInitial}
+                isDemoMode={data.isDemoMode}
+                kaitenIntegrationActive={false}
+                kanbanCardUrl={null}
+                demoKanbanCardTypes={[]}
+                canAcceptChatCorrections={false}
+                canEditClients={false}
+                canEditOrder={false}
                 previewMode
                 virtualSuggestedAttachments={data.aiSuggestedAttachments.map((a) => ({
                   fileName: a.fileName,
                   mimeType: a.mimeType,
                 }))}
-                onCollapse={() => {}}
-                onClose={() => {}}
-                onAfterSuccessfulSave={() => {}}
-                onKaitenCancelCollapse={() => {}}
+                orderPageFrame={{
+                  title: "Виртуальный наряд ИИ",
+                }}
               />
+            </div>
+            <div className="min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)]">
+              <div className="border-b border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)]">
+                Письма-источники
+                <span className="ml-2 text-xs font-normal text-[var(--app-text-secondary)]">
+                  ({data.orderSourceEmails.length})
+                </span>
+              </div>
+              <div className="max-h-[calc(100dvh-8rem)] overflow-y-auto p-3">
+                {data.orderSourceEmails.length === 0 ? (
+                  <p className="px-1 py-4 text-sm text-[var(--app-text-secondary)]">
+                    К этому наряду не привязано писем.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {data.orderSourceEmails.map((email, index) => (
+                      <OrderSourceEmailView
+                        key={email.id}
+                        email={email}
+                        index={index}
+                        compact
+                        usedByAi={email.id === data.aiEmailId}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ) : null}
@@ -435,8 +480,13 @@ export function AiAdminClient({
                             <div><dt className="text-[var(--app-text-secondary)] inline">Клиника:</dt> <dd className="inline font-medium">{diff.order.clinic?.name || "—"}</dd></div>
                             <div><dt className="text-[var(--app-text-secondary)] inline">Врач:</dt> <dd className="inline font-medium">{diff.order.doctor?.fullName || "—"}</dd></div>
                             <div><dt className="text-[var(--app-text-secondary)] inline">Срочно:</dt> <dd className="inline font-medium">{diff.order.isUrgent ? "Да" : "Нет"}</dd></div>
+                            <div><dt className="text-[var(--app-text-secondary)] inline">Поступление:</dt> <dd className="inline font-medium">{formatIsoDateShort(diff.order.workReceivedAt)}</dd></div>
+                            <div><dt className="text-[var(--app-text-secondary)] inline">Запись/доставка:</dt> <dd className="inline font-medium">{formatIsoDateShort(diff.order.dueToAdminsAt)}</dd></div>
+                            <div><dt className="text-[var(--app-text-secondary)] inline">Срок лаборатории:</dt> <dd className="inline font-medium">{formatIsoDateShort(diff.order.dueDate)}</dd></div>
+                            <div><dt className="text-[var(--app-text-secondary)] inline">Сканы:</dt> <dd className="inline font-medium">{diff.order.hasScans ? "Да" : "Нет"}</dd></div>
+                            <div><dt className="text-[var(--app-text-secondary)] inline">Состав:</dt> <dd className="inline font-medium">{diff.order._count?.constructions ?? "—"} поз.</dd></div>
                             <div>
-                              <dt className="text-[var(--app-text-secondary)] block mb-1">Описание работы:</dt>
+                              <dt className="text-[var(--app-text-secondary)] block mb-1">Заказ от клиента:</dt>
                               <dd className="block bg-[var(--app-bg)] p-2 rounded border border-[var(--app-border)] whitespace-pre-wrap">
                                 {diff.order.clientOrderText || "—"}
                               </dd>
@@ -462,7 +512,12 @@ export function AiAdminClient({
                             {diff.error ? (
                               <span className="text-red-500 text-xs px-2 py-1 bg-red-500/10 rounded">Ошибка</span>
                             ) : (
-                              <span className="text-[var(--app-text-secondary)] text-xs">{diff.durationMs}ms | {diff.model.split("/").pop()}</span>
+                              <span className="text-[var(--app-text-secondary)] text-xs">
+                                {typeof diff.predictionJson?.confidenceScore === "number"
+                                  ? `${diff.predictionJson.confidenceScore}% · `
+                                  : ""}
+                                {diff.durationMs}ms | {diff.model.split("/").pop()}
+                              </span>
                             )}
                           </div>
 
@@ -473,9 +528,14 @@ export function AiAdminClient({
                           ) : (
                             <dl className="space-y-2 text-sm">
                               <div><dt className="text-[var(--app-text-secondary)] inline">Пациент:</dt> <dd className="inline font-medium">{diff.predictionJson.patientName || "—"}</dd></div>
-                              <div><dt className="text-[var(--app-text-secondary)] inline">Заказчик (клиника):</dt> <dd className="inline font-medium">{predictionField(diff.predictionJson, "clinicId", "clinicHint")}</dd></div>
-                              <div><dt className="text-[var(--app-text-secondary)] inline">Заказчик (врач):</dt> <dd className="inline font-medium">{predictionField(diff.predictionJson, "doctorId", "doctorHint")}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Заказчик (клиника):</dt> <dd className="inline font-medium">{predictionClientLabel(diff.predictionJson, diff, "clinic")}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Заказчик (врач):</dt> <dd className="inline font-medium">{predictionClientLabel(diff.predictionJson, diff, "doctor")}</dd></div>
                               <div><dt className="text-[var(--app-text-secondary)] inline">Срочно:</dt> <dd className="inline font-medium">{diff.predictionJson.urgent ? "Да" : "Нет"}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Поступление:</dt> <dd className="inline font-medium">{formatIsoDateShort(diff.predictionJson.workReceivedAt as string)}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Запись/доставка:</dt> <dd className="inline font-medium">{formatIsoDateShort((diff.predictionJson.dueToAdminsAt ?? diff.predictionJson.patientAppointmentAt) as string)}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Срок лаборатории:</dt> <dd className="inline font-medium">{formatIsoDateShort(diff.predictionJson.dueDate as string)}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Сканы:</dt> <dd className="inline font-medium">{diff.predictionJson.hasScans ? "Да" : "Нет"}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Состав:</dt> <dd className="inline font-medium">{compositionCount(diff.predictionJson)} поз.</dd></div>
                               {aiSuggestedFilesLabel(diff.predictionJson) ? (
                                 <div>
                                   <dt className="text-[var(--app-text-secondary)] inline">Файлы ИИ:</dt>{" "}
@@ -483,9 +543,9 @@ export function AiAdminClient({
                                 </div>
                               ) : null}
                               <div>
-                                <dt className="text-[var(--app-text-secondary)] block mb-1">Описание работы:</dt>
+                                <dt className="text-[var(--app-text-secondary)] block mb-1">Заказ от клиента:</dt>
                                 <dd className="block bg-[var(--app-bg)] p-2 rounded border border-[var(--app-border)] whitespace-pre-wrap">
-                                  {diff.predictionJson.workDescription || "—"}
+                                  {predictionClientText(diff.predictionJson)}
                                 </dd>
                               </div>
                               {diff.predictionJson.warnings?.length > 0 && (

@@ -21,7 +21,7 @@ export async function runShadowPredictionInBackground(
         return;
       }
 
-      const run = await runOrderEmailPrediction(db, tenantId, emailId);
+      const run = await runOrderEmailPrediction(db, tenantId, emailId, orderId);
       if (!run) return;
 
       await db.aiOrderPrediction.create({

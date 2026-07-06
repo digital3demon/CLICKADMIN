@@ -643,6 +643,8 @@ export function OrderEditForm({
   canAcceptChatCorrections = false,
   canEditClients = true,
   canEditOrder = true,
+  previewMode = false,
+  virtualSuggestedAttachments = [],
   viewerRole = null,
   kanbanCardUrl = null,
   kaitenIntegrationActive = true,
@@ -660,6 +662,9 @@ export function OrderEditForm({
   canEditClients?: boolean;
   /** Сохранение полей наряда (модуль «Редактирование заказа»). */
   canEditOrder?: boolean;
+  /** Виртуальный наряд ИИ в Diff Viewer — без сохранения и без API файлов. */
+  previewMode?: boolean;
+  virtualSuggestedAttachments?: Array<{ fileName: string; mimeType?: string }>;
   /** Роль текущего пользователя (для раскладки «строка в буфер» на вкладке счёта). */
   viewerRole?: UserRole | null;
   kanbanCardUrl?: string | null;
@@ -2616,12 +2621,29 @@ export function OrderEditForm({
           <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             Файлы
           </h4>
+          {previewMode && virtualSuggestedAttachments.length > 0 ? (
+            <div className="mb-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
+              <div className="font-medium text-emerald-700 dark:text-emerald-300">
+                ИИ бы добавил:
+              </div>
+              <ul className="mt-1 list-disc pl-4 text-[var(--app-text)]">
+                {virtualSuggestedAttachments.map((f) => (
+                  <li key={f.fileName}>
+                    {f.fileName}
+                    {f.mimeType ? (
+                      <span className="text-[var(--text-muted)]"> ({f.mimeType})</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <OrderFilesPanel
             key={`${initial.id}-${invoiceAttachmentId ?? "no-inv"}`}
-            orderId={initial.id}
+            orderId={previewMode ? null : initial.id}
             orderNumber={initial.orderNumber}
-            listenPaste
-            onServerListChange={() => router.refresh()}
+            listenPaste={!previewMode}
+            onServerListChange={previewMode ? undefined : () => router.refresh()}
           />
         </div>
       </section>
@@ -3348,7 +3370,7 @@ export function OrderEditForm({
   );
 
   const renderSaveButton = (mobileBar = false) => {
-    if (!canEditOrder) return null;
+    if (!canEditOrder || previewMode) return null;
     return (
     <button
       type="button"
@@ -3464,7 +3486,7 @@ export function OrderEditForm({
               {workSentNarjadActions}
             </div>
         </div>
-        {!isOrderPageFramed ? (
+        {!isOrderPageFramed && !previewMode ? (
           <div className="flex shrink-0 justify-end">
             {renderSaveButton()}
           </div>
@@ -3477,15 +3499,19 @@ export function OrderEditForm({
         </div>
       ) : null}
 
-      {!canEditOrder ? (
+      {previewMode ? (
+        <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
+          Виртуальный наряд ИИ — только просмотр. Файлы и Kaiten не создаются.
+        </p>
+      ) : !canEditOrder ? (
         <p className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-[var(--text-secondary)]">
           Режим просмотра: нет права «Редактирование заказа». Изменения недоступны.
         </p>
       ) : null}
 
       <fieldset
-        disabled={!canEditOrder}
-        className="min-w-0 border-0 p-0 disabled:opacity-[0.88]"
+        disabled={!canEditOrder || previewMode}
+        className={`min-w-0 border-0 p-0 disabled:opacity-[0.88]${previewMode ? " pointer-events-none select-none" : ""}`}
       >
 
       {initial.kaitenBlocked ? (
@@ -3726,6 +3752,7 @@ export function OrderEditForm({
           titleRowEnd={renderSaveButton()}
         >
           {formInner}
+          {!previewMode ? (
           <div className="mt-10 flex justify-start border-t border-[var(--card-border)] pt-6">
             <button
               type="button"
@@ -3738,6 +3765,7 @@ export function OrderEditForm({
               Удалить наряд…
             </button>
           </div>
+          ) : null}
         </ModuleFrame>
         {orderNumberModalOpen ? (
           <div

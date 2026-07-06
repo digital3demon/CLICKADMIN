@@ -32,16 +32,21 @@ export function OrderSourceEmailView({
   email,
   index,
   compact = false,
+  usedByAi = false,
 }: {
   email: OrderSourceEmailRow;
   index?: number;
   compact?: boolean;
+  /** Письмо использовано ИИ для предсказания (Diff Viewer). */
+  usedByAi?: boolean;
 }) {
   return (
     <article
-      className={`rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] ${
-        compact ? "p-3" : "p-4"
-      }`}
+      className={`rounded-xl border bg-[var(--card-bg)] ${
+        usedByAi
+          ? "border-[var(--sidebar-blue)]/50 ring-1 ring-[var(--sidebar-blue)]/25"
+          : "border-[var(--card-border)]"
+      } ${compact ? "p-3" : "p-4"}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -55,6 +60,26 @@ export function OrderSourceEmailView({
           </h4>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
+          {usedByAi ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--sidebar-blue)]/40 bg-[var(--sidebar-blue)]/10 px-2 py-0.5 text-[0.65rem] font-semibold text-[var(--sidebar-blue)]"
+              title="ИИ использовал это письмо"
+            >
+              <svg
+                className="h-3.5 w-3.5 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              ИИ
+            </span>
+          ) : null}
           <time className="text-[0.68rem] font-medium text-[var(--text-muted)]">
             {formatSourceEmailDate(email)}
           </time>

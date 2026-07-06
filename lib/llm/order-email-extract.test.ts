@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import {
-  extractOrderFieldsFromEmail,
+  extractOrderFieldsFromSingleEmail,
   mergeAiPredictionJson,
 } from "./order-email-extract";
 import * as openrouterConfig from "./openrouter-config";
@@ -50,12 +50,12 @@ describe("extractOrderFieldsFromEmail", () => {
       timeoutMs: 1000,
     });
 
-    const res = await extractOrderFieldsFromEmail("t1", "Subj", "Body");
+    const res = await extractOrderFieldsFromSingleEmail("t1", "Subj", "Body");
     expect(res.result).toBeNull();
     expect(res.error).toBe("AI is disabled");
   });
 
-  it("parses valid JSON response with attachments", async () => {
+  it("parses valid JSON response with attachments and composition", async () => {
     vi.mocked(openrouterConfig.getAiSettings).mockResolvedValueOnce({
       enabled: true,
       apiKey: "sk-test",
@@ -70,26 +70,41 @@ describe("extractOrderFieldsFromEmail", () => {
         patientName: "Иванов Иван",
         clinicId: "clinic-1",
         doctorId: "doctor-1",
-        workDescription: "Коронка Emax",
+        clientOrderText: "Коронка Emax на 46",
+        patientAppointmentAt: "2026-06-12T09:00:00.000Z",
         urgent: true,
+        hasScans: true,
+        hasCt: false,
+        hasMri: false,
+        hasPhoto: false,
         suggestedAttachmentIds: ["att-1"],
+        compositionHints: [{ nameHint: "Коронка Emax", teethFdi: ["46"] }],
+        confidenceScore: 88,
         warnings: [],
       }),
       model: "test",
       durationMs: 100,
     });
 
-    const res = await extractOrderFieldsFromEmail("t1", "Заказ", "Срочно сделать коронку", {
-      fromAddress: "doc@clinic.ru",
-      emailAttachments: [{ id: "att-1", fileName: "scan.stl", mimeType: "model/stl" }],
-    });
-    expect(res.result).toEqual({
+    const res = await extractOrderFieldsFromSingleEmail(
+      "t1",
+      "Заказ",
+      "Срочно сделать коронку",
+      {
+        fromAddress: "doc@clinic.ru",
+        emailAttachments: [{ id: "att-1", fileName: "scan.stl", mimeType: "model/stl" }],
+      },
+    );
+    expect(res.result).toMatchObject({
       patientName: "Иванов Иван",
       clinicId: "clinic-1",
       doctorId: "doctor-1",
-      workDescription: "Коронка Emax",
+      clientOrderText: "Коронка Emax на 46",
       urgent: true,
+      hasScans: true,
       suggestedAttachmentIds: ["att-1"],
+      compositionHints: [{ nameHint: "Коронка Emax", teethFdi: ["46"] }],
+      confidenceScore: 88,
       warnings: [],
     });
   });
@@ -110,7 +125,7 @@ describe("extractOrderFieldsFromEmail", () => {
       durationMs: 100,
     });
 
-    const res = await extractOrderFieldsFromEmail("t1", "Subj", "Body");
+    const res = await extractOrderFieldsFromSingleEmail("t1", "Subj", "Body");
     expect(res.result).toBeNull();
     expect(res.error).toContain("JSON parse/validation error");
   });
@@ -119,7 +134,15 @@ describe("extractOrderFieldsFromEmail", () => {
 describe("mergeAiPredictionJson", () => {
   it("overrides client ids when matched by source email", () => {
     const merged = mergeAiPredictionJson(
-      { clinicId: "wrong", doctorId: "wrong", patientName: "X" },
+      {
+        clinicId: "wrong",
+        doctorId: "wrong",
+        patientName: "X",
+        clientOrderText: "текст",
+        suggestedAttachmentIds: [],
+        confidenceScore: 50,
+        warnings: [],
+      },
       {
         preResolved: { clinicId: "c1", doctorId: "d1" },
         matchedBySourceEmail: true,

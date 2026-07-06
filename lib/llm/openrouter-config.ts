@@ -9,10 +9,10 @@ export type AiSettings = {
   timeoutMs: number;
 };
 
-const DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+const DEFAULT_MODEL = "qwen/qwen3-next-80b-a3b-instruct:free";
 const DEFAULT_FALLBACKS = [
-  "nousresearch/hermes-3-llama-3.1-405b:free",
-  "meta-llama/llama-3.2-3b-instruct:free",
+  "deepseek/deepseek-chat:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
 ];
 const DEFAULT_TIMEOUT_MS = 35000;
 
