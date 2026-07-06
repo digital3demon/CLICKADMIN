@@ -73,13 +73,13 @@ export function AiAdminClient({
       <div className="flex flex-col h-full">
         <div className="flex gap-4 border-b border-[var(--app-border)] p-4">
           <button
-            className={\`px-4 py-2 rounded-md transition-colors \${activeTab === "diffs" ? "bg-[var(--app-accent)] text-white" : "hover:bg-[var(--app-hover)]"}\`}
+            className={`px-4 py-2 rounded-md transition-colors ${activeTab === "diffs" ? "bg-[var(--app-accent)] text-white" : "hover:bg-[var(--app-hover)]"}`}
             onClick={() => setActiveTab("diffs")}
           >
             Diff Viewer
           </button>
           <button
-            className={\`px-4 py-2 rounded-md transition-colors \${activeTab === "settings" ? "bg-[var(--app-accent)] text-white" : "hover:bg-[var(--app-hover)]"}\`}
+            className={`px-4 py-2 rounded-md transition-colors ${activeTab === "settings" ? "bg-[var(--app-accent)] text-white" : "hover:bg-[var(--app-hover)]"}`}
             onClick={() => setActiveTab("settings")}
           >
             Настройки
