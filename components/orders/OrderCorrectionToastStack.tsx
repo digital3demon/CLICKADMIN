@@ -76,7 +76,9 @@ function toastRowKeys(
 }
 
 function snippet(text: string, max = 56): string {
-  const t = text.replace(/\s+/g, " ").trim();
+  let t = text.replace(/!!!|\?\?\?/g, "");
+  t = t.replace(/@[\wА-Яа-яЁёA-Za-z]+/g, "");
+  t = t.replace(/\s+/g, " ").trim();
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1)}…`;
 }
