@@ -16,6 +16,7 @@ import {
   emailAttachmentIdsMatchingOrderFiles,
   scanLikeEmailAttachmentIds,
 } from "@/lib/llm/order-email-export-ground-truth";
+import { fetchClientOrderHistoryContext } from "@/lib/llm/client-history-context";
 import { cleanMailTextBody } from "@/lib/mail/mail-text-cleanup";
 
 function emailBodyText(email: {
@@ -57,11 +58,12 @@ export async function GET(req: Request) {
       where: { tenantId },
       include: {
         order: {
-          select: {
-            id: true,
-            patientName: true,
-            clinicId: true,
-            doctorId: true,
+        select: {
+          id: true,
+          createdAt: true,
+          patientName: true,
+          clinicId: true,
+          doctorId: true,
             clientOrderText: true,
             isUrgent: true,
             workReceivedAt: true,
@@ -155,15 +157,26 @@ export async function GET(req: Request) {
         primaryFromAddress,
       );
 
+      const preResolved =
+        sourceMatch.matched && sourceMatch.doctorId
+          ? { clinicId: sourceMatch.clinicId, doctorId: sourceMatch.doctorId }
+          : null;
+
+      const historyContext = await fetchClientOrderHistoryContext(
+        db,
+        tenantId,
+        preResolved?.doctorId ?? null,
+        order.patientName,
+        order.createdAt,
+      );
+
       const prompt = buildOrderEmailExtractUserPrompt({
         fromAddress: primaryFromAddress,
         catalogText,
         attachmentsText,
         emailsText,
-        preResolved:
-          sourceMatch.matched && sourceMatch.doctorId
-            ? { clinicId: sourceMatch.clinicId, doctorId: sourceMatch.doctorId }
-            : null,
+        preResolved,
+        historyContext,
       });
 
       const compositionHints = compositionHintsFromOrderConstructions(order.constructions);

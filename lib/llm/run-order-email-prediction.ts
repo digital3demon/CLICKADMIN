@@ -5,6 +5,7 @@ import { fetchOrderSourceEmails } from "@/lib/mail/order-source-emails";
 import { mailHtmlToText, cleanMailTextBody } from "@/lib/mail/mail-text-cleanup";
 import {
   extractOrderFieldsFromEmail,
+  extractPatientNameOnly,
   mergeAiPredictionJson,
   type EmailAttachmentCatalogItem,
   type EmailBlockForExtract,
@@ -12,6 +13,8 @@ import {
 import { enrichOrderEmailPrediction } from "./order-email-enrichment";
 import { resolveClientIdsFromPrediction } from "@/lib/ai-order-draft-from-prediction";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
+
+import { fetchClientOrderHistoryContext } from "./client-history-context";
 
 export type RunOrderEmailPredictionResult = {
   model: string;
@@ -125,6 +128,18 @@ export async function runOrderEmailPrediction(
       ? { clinicId: sourceMatch.clinicId, doctorId: sourceMatch.doctorId }
       : null;
 
+  // ШАГ 1: Быстрое извлечение имени пациента
+  const { patientName } = await extractPatientNameOnly(tenantId, emailBlocks);
+
+  // СБОР КОНТЕКСТА: История врача и пациента
+  const historyContext = await fetchClientOrderHistoryContext(
+    db,
+    tenantId,
+    preResolved?.doctorId ?? null,
+    patientName,
+  );
+
+  // ШАГ 2: Полный разбор с учетом истории
   const { result, model, durationMs, error, rawJson } = await extractOrderFieldsFromEmail(
     tenantId,
     emailBlocks,
@@ -132,6 +147,7 @@ export async function runOrderEmailPrediction(
       fromAddress: primaryEmail.fromAddress,
       emailAttachments,
       preResolved,
+      historyContext,
     },
   );
 

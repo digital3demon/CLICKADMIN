@@ -4,6 +4,8 @@ import { getClientsPrisma } from "@/lib/get-domain-prisma";
 import { chatCompletion, stripMarkdownFences } from "./openrouter-client";
 import { getAiSettings } from "./openrouter-config";
 
+import type { ClientHistoryContext } from "./client-history-context";
+
 const CompositionHintSchema = z.object({
   nameHint: z.string().describe("Название работы как в письме или уточнённый синоним для прайса"),
   quantity: z.number().nullable().optional(),
@@ -130,6 +132,7 @@ export function buildOrderEmailExtractUserPrompt(opts: {
   attachmentsText: string;
   emailsText: string;
   preResolved?: PreResolvedClientIds | null;
+  historyContext?: ClientHistoryContext | null;
 }): string {
   const fromLine = opts.fromAddress?.trim()
     ? `Отправитель основного письма: ${opts.fromAddress.trim()}`
@@ -145,12 +148,33 @@ export function buildOrderEmailExtractUserPrompt(opts: {
 
 Определи clinicId и doctorId по тексту и отправителю.`;
 
-  return `Ты — ассистент зуботехнической лаборатории. Извлеки данные для нового наряда из писем клиники.
+  let historyBlock = "";
+  if (opts.historyContext) {
+    const { doctorParticulars, doctorHistory, patientHistory } = opts.historyContext;
+    
+    if (doctorParticulars?.trim()) {
+      historyBlock += `\n[ОСОБЕННОСТИ ВРАЧА]\n${doctorParticulars.trim()}\n`;
+    }
+
+    if (doctorHistory.length > 0) {
+      historyBlock += `\n[ПОСЛЕДНИЕ ЗАКАЗЫ ВРАЧА (СЛОВАРЬ СОКРАЩЕНИЙ)]
+Используй это как словарь: если врач пишет сокращение, посмотри, в какую позицию прайса (Состав) это превращалось раньше.
+${doctorHistory.map((h) => `- Текст: "${h.text}" -> Состав: ${h.constructions}`).join("\n")}\n`;
+    }
+
+    if (patientHistory.length > 0) {
+      historyBlock += `\n[ИСТОРИЯ ПАЦИЕНТА (ПРОДОЛЖЕНИЕ РАБОТЫ)]
+Найдены прошлые наряды этого пациента. Учитывай их, чтобы понять контекст (например, если просят "продолжить" или "переделать").
+${patientHistory.map((h) => `- Наряд ${h.orderNumber} от ${h.createdAt.slice(0, 10)} (${h.status}): ${h.constructions}`).join("\n")}\n`;
+    }
+  }
+
+  return `Ты — старший администратор и опытный зубной техник зуботехнической лаборатории. Извлеки данные для нового наряда из писем клиники.
 
 ${fromLine}
 
 ${clientBlock}
-
+${historyBlock}
 ${opts.attachmentsText}
 
 Письма (--- между блоками):
@@ -164,11 +188,13 @@ ${opts.emailsText}
 - urgent: true если «срочно/cito/asap/urgent/!!!» ИЛИ «на завтра/сегодня/к пятнице»
 - hasScans, hasCt, hasMri, hasPhoto: boolean|null — по тексту и вложениям
 - suggestedAttachmentIds: string[] — ID из каталога (только явный выбор; для .stl обязательно)
-- compositionHints: [{ nameHint, quantity?, teethFdi? }] — все позиции работ; размытые формулировки уточняй ТОЛЬКО здесь (не в clientOrderText)
+- compositionHints: [{ nameHint, quantity?, teethFdi? }] — все позиции работ.
 - confidenceScore: 0–100 — насколько уверен в разборе
 - warnings: string[] — неоднозначности + логика («коронка без сканов/цвета», «несколько пациентов» и т.п.)
 
-Правила:
+Правила экспертизы:
+- ФОКУС НА ПРАЙС: Для compositionHints используй "Историю заказов врача" как словарь. Если врач пишет нечетко, подбирай точное название из истории.
+- ЛОГИКА: Если заказана коронка/модель, но нет ни сканов (.stl), ни слепков (упоминания в тексте) — добавь warning.
 - Не выдумывай факты. Пустое → null или [].
 - Юрлицо и оплата — не возвращай.
 - Срок лаборатории не считай — только patientAppointmentAt.
@@ -182,6 +208,50 @@ export async function loadClinicDoctorCatalogText(tenantId: string): Promise<str
 
 export { formatAttachmentsForPrompt, formatEmailBlocksForPrompt };
 
+export async function extractPatientNameOnly(
+  tenantId: string,
+  emailBlocks: EmailBlockForExtract[],
+): Promise<{ patientName: string | null; durationMs: number; error?: string }> {
+  const settings = await getAiSettings(tenantId);
+  if (!settings.enabled || !settings.apiKey) {
+    return { patientName: null, durationMs: 0, error: "AI is disabled" };
+  }
+
+  if (emailBlocks.length === 0) {
+    return { patientName: null, durationMs: 0, error: "Empty email blocks" };
+  }
+
+  const emailsText = formatEmailBlocksForPrompt(emailBlocks);
+  const prompt = `Извлеки ФИО пациента из текста писем. Верни только JSON с полем patientName. Если пациентов несколько — верни первого. Если нет — верни null.
+
+Письма:
+${emailsText}
+
+Верни СТРОГО JSON:
+- patientName: ФИО пациента (string|null)
+`;
+
+  const response = await chatCompletion(settings, {
+    messages: [{ role: "user", content: prompt }],
+    responseFormat: "json_object",
+  });
+
+  if (!response.ok) {
+    return { patientName: null, durationMs: response.durationMs, error: response.error };
+  }
+
+  try {
+    const rawJson = stripMarkdownFences(response.content);
+    const parsed = JSON.parse(rawJson);
+    return {
+      patientName: typeof parsed.patientName === "string" ? parsed.patientName.trim() : null,
+      durationMs: response.durationMs,
+    };
+  } catch (e: any) {
+    return { patientName: null, durationMs: response.durationMs, error: e.message };
+  }
+}
+
 export async function extractOrderFieldsFromEmail(
   tenantId: string,
   emailBlocks: EmailBlockForExtract[],
@@ -189,6 +259,7 @@ export async function extractOrderFieldsFromEmail(
     fromAddress?: string | null;
     emailAttachments?: EmailAttachmentCatalogItem[];
     preResolved?: PreResolvedClientIds | null;
+    historyContext?: ClientHistoryContext | null;
   },
 ): Promise<{
   result: OrderEmailExtractResult | null;
@@ -218,6 +289,7 @@ export async function extractOrderFieldsFromEmail(
     attachmentsText,
     emailsText,
     preResolved: options?.preResolved,
+    historyContext: options?.historyContext,
   });
 
   const response = await chatCompletion(settings, {
