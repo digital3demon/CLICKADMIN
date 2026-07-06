@@ -73,13 +73,43 @@ export async function loadActivePriceListItemNames(): Promise<string[]> {
 
 const FUZZY_HINT_MIN_LEN = 4;
 
+/** Латиница в прайсе vs кириллица в письме (Marco Rosa, Emax) — визуально похожие буквы. */
+const LATIN_TO_CYRILLIC_FOLD: Record<string, string> = {
+  a: "а",
+  c: "с",
+  e: "е",
+  h: "н",
+  k: "к",
+  m: "м",
+  n: "н",
+  o: "о",
+  p: "р",
+  r: "р",
+  s: "с",
+  t: "т",
+  x: "х",
+  y: "у",
+};
+
+function foldScriptLookalikes(token: string): string {
+  return token
+    .toLowerCase()
+    .split("")
+    .map((ch) => LATIN_TO_CYRILLIC_FOLD[ch] ?? ch)
+    .join("");
+}
+
 /** JS `\b` не считает кириллицу «словом» — явные границы букв/цифр. */
 const WORD_LEFT = String.raw`(?<![\p{L}\p{N}])`;
 const WORD_RIGHT = String.raw`(?![\p{L}\p{N}])`;
 
+/** Верхняя/верхнюю/на верхнюю челюсть — не часть названия прайса. */
+const JAW_UPPER_MARKER = String.raw`(?:вч|(?:на\s+)?верх(?:нюю|няя|ней)(?:\s+челюсть)?|upper)`;
+const JAW_LOWER_MARKER = String.raw`(?:нч|(?:на\s+)?ниж(?:нюю|няя|ней)(?:\s+челюсть)?|lower)`;
+
 /** Челюсть в hint не часть названия прайса — убираем перед сопоставлением. */
 const JAW_MARKER_RE = new RegExp(
-  `${WORD_LEFT}(?:вч|нч|верх(?:няя)?(?:\\s+челюсть)?|ниж(?:няя)?(?:\\s+челюсть)?|upper|lower)${WORD_RIGHT}`,
+  `${WORD_LEFT}(?:${JAW_UPPER_MARKER}|${JAW_LOWER_MARKER})${WORD_RIGHT}`,
   "giu",
 );
 
@@ -99,10 +129,46 @@ export function normalizeCompositionHintForMatch(hint: string): string {
 
 function tokensLooselyEqual(a: string, b: string): boolean {
   if (a === b) return true;
+  const foldedA = foldScriptLookalikes(a);
+  const foldedB = foldScriptLookalikes(b);
+  if (foldedA === foldedB) return true;
+  if (levenshteinDistanceAtMostOne(foldedA, foldedB)) return true;
   const minLen = Math.min(a.length, b.length);
   if (minLen < 4) return false;
   const stemLen = Math.min(minLen, 5);
-  return a.slice(0, stemLen) === b.slice(0, stemLen);
+  if (a.slice(0, stemLen) === b.slice(0, stemLen)) return true;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length > b.length ? a : b;
+  if (Math.abs(a.length - b.length) <= 1 && longer.startsWith(shorter)) return true;
+  return levenshteinDistanceAtMostOne(a, b);
+}
+
+function levenshteinDistanceAtMostOne(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) {
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i] && ++diff > 1) return false;
+    }
+    return true;
+  }
+  const shorter = a.length < b.length ? a : b;
+  const longer = a.length < b.length ? b : a;
+  let i = 0;
+  let j = 0;
+  let skipped = false;
+  while (i < shorter.length && j < longer.length) {
+    if (shorter[i] === longer[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (skipped) return false;
+    skipped = true;
+    j++;
+  }
+  return true;
 }
 
 function tokenizeForMatch(text: string): string[] {
@@ -124,6 +190,16 @@ function hintTokensMatchName(hint: string, itemName: string): boolean {
   );
 }
 
+function tokenMatchStrength(itemToken: string, textToken: string): number {
+  if (itemToken === textToken) return 3;
+  if (levenshteinDistanceAtMostOne(itemToken, textToken)) return 2;
+  const foldedItem = foldScriptLookalikes(itemToken);
+  const foldedText = foldScriptLookalikes(textToken);
+  if (foldedItem === foldedText) return 1;
+  if (levenshteinDistanceAtMostOne(foldedItem, foldedText)) return 1;
+  return 0;
+}
+
 function scorePriceItemMentionInOrderText(itemName: string, orderText: string): number {
   const itemTokens = tokenizeForMatch(itemName);
   if (itemTokens.length === 0) return 0;
@@ -131,29 +207,40 @@ function scorePriceItemMentionInOrderText(itemName: string, orderText: string): 
   if (textTokens.length === 0) return 0;
 
   let matched = 0;
+  let matchStrength = 0;
   for (const itemToken of itemTokens) {
-    if (textTokens.some((textToken) => tokensLooselyEqual(itemToken, textToken))) {
+    let bestStrength = 0;
+    for (const textToken of textTokens) {
+      bestStrength = Math.max(bestStrength, tokenMatchStrength(itemToken, textToken));
+    }
+    if (bestStrength > 0) {
       matched++;
+      matchStrength += bestStrength;
     }
   }
   if (matched === 0) return 0;
-  if (matched === itemTokens.length) return matched * 10;
-  if (matched >= 2) return matched * 5;
-  if (itemTokens.length === 1 && matched === 1) return 5;
-  if (matched / itemTokens.length >= 0.66) return matched * 3;
-  return 0;
+
+  const textCoverage = matched / textTokens.length;
+  const itemCoverage = matched / itemTokens.length;
+  const unmatchedLong = itemTokens.filter(
+    (itemToken) =>
+      itemToken.length >= 4 &&
+      !textTokens.some((textToken) => tokenMatchStrength(itemToken, textToken) > 0),
+  ).length;
+
+  let score = matched * 100 + textCoverage * 20 + itemCoverage * 10 + matchStrength * 5;
+  score -= unmatchedLong * 8;
+  return score;
 }
 
 function orderTextImpliesJawPairQuantity(orderText: string): number | null {
   const lower = orderText.toLowerCase();
-  const hasUpper = new RegExp(
-    `${WORD_LEFT}(?:вч|верх(?:няя)?(?:\\s+челюсть)?)${WORD_RIGHT}`,
-    "iu",
-  ).test(lower);
-  const hasLower = new RegExp(
-    `${WORD_LEFT}(?:нч|ниж(?:няя)?(?:\\s+челюсть)?)${WORD_RIGHT}`,
-    "iu",
-  ).test(lower);
+  const hasUpper = new RegExp(`${WORD_LEFT}${JAW_UPPER_MARKER}${WORD_RIGHT}`, "iu").test(
+    lower,
+  );
+  const hasLower = new RegExp(`${WORD_LEFT}${JAW_LOWER_MARKER}${WORD_RIGHT}`, "iu").test(
+    lower,
+  );
   if (hasUpper && hasLower) return 2;
   return null;
 }
@@ -173,10 +260,57 @@ export function inferCompositionHintsFromOrderText(
 
   if (scored.length === 0) return [];
   const best = scored[0]!;
-  if (scored.length > 1 && scored[1]!.score >= best.score) return [];
+  if (scored.length > 1 && scored[1]!.score === best.score) {
+    return [];
+  }
 
   const jawQty = orderTextImpliesJawPairQuantity(text);
   return [{ nameHint: best.name, quantity: jawQty ?? 1 }];
+}
+
+/** Ищет позицию прайса в теме письма, тексте заказа и PDF — по фрагментам и целиком. */
+export function inferCompositionHintsFromEmailContext(
+  parts: {
+    clientOrderText?: string | null;
+    emailSubject?: string | null;
+    pdfOrderText?: string | null;
+  },
+  priceListItemNames: string[],
+): CompositionHint[] {
+  const segments = new Set<string>();
+  const addSegments = (text: string | null | undefined) => {
+    const trimmed = text?.trim() ?? "";
+    if (!trimmed) return;
+    segments.add(trimmed);
+    for (const piece of trimmed.split(/[,;]/)) {
+      const seg = piece.trim();
+      if (seg.length >= 4) segments.add(seg);
+    }
+  };
+
+  addSegments(parts.clientOrderText);
+  addSegments(parts.emailSubject);
+  addSegments(parts.pdfOrderText);
+
+  const mergedHints: CompositionHint[] = [];
+  const seenNames = new Set<string>();
+
+  for (const segment of segments) {
+    for (const hint of inferCompositionHintsFromOrderText(segment, priceListItemNames)) {
+      const key = hint.nameHint.trim().toLowerCase();
+      if (!key || seenNames.has(key)) continue;
+      seenNames.add(key);
+      mergedHints.push(hint);
+    }
+  }
+
+  if (mergedHints.length > 0) return mergedHints;
+
+  const combined = [parts.clientOrderText, parts.emailSubject, parts.pdfOrderText]
+    .map((part) => part?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n");
+  return inferCompositionHintsFromOrderText(combined, priceListItemNames);
 }
 
 function findAmbiguousMatches(hint: string, items: CatalogItem[]): CatalogItem[] {

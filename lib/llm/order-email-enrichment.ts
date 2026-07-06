@@ -14,6 +14,7 @@ import { isoToDatetimeLocal, localDateTimeToIso } from "@/lib/datetime-local";
 import {
   resolveAiCompositionLines,
   inferCompositionHintsFromOrderText,
+  inferCompositionHintsFromEmailContext,
   compositionLinesToOrderConstructions,
   loadActivePriceListItemNames,
   type CompositionHint,
@@ -45,7 +46,11 @@ function parseCompositionHints(v: unknown): CompositionHint[] {
       nameHint,
       quantity: typeof r.quantity === "number" ? r.quantity : null,
       teethFdi: Array.isArray(r.teethFdi)
-        ? r.teethFdi.filter((t): t is string => typeof t === "string")
+        ? r.teethFdi
+            .map((t) =>
+              typeof t === "string" || typeof t === "number" ? String(t).trim() : "",
+            )
+            .filter(Boolean)
         : null,
     });
   }
@@ -54,8 +59,14 @@ function parseCompositionHints(v: unknown): CompositionHint[] {
 
 function filterMisleadingAiWarnings(
   warnings: string[],
-  opts: { clientMatchedByEmail: boolean; patientFixedFromSubject: boolean },
+  opts: {
+    clientMatchedByEmail: boolean;
+    patientFixedFromSubject: boolean;
+    attachmentFileNames?: string[];
+  },
 ): string[] {
+  const catalogNames = (opts.attachmentFileNames ?? []).map((name) => name.toLowerCase());
+
   return warnings.filter((w) => {
     const lower = w.toLowerCase();
     if (opts.clientMatchedByEmail) {
@@ -63,6 +74,21 @@ function filterMisleadingAiWarnings(
       if (lower.includes("не определена клиника") && lower.includes("отправител")) return false;
     }
     if (opts.patientFixedFromSubject && lower.includes("неясное фио пациента")) return false;
+
+    const missingAttachment = w.match(
+      /вложение\s+(\S+)\s+упомянуто[^.]*отсутствует\s+в\s+каталоге/i,
+    );
+    if (missingAttachment && catalogNames.length > 0) {
+      const mentioned = missingAttachment[1]!.toLowerCase();
+      const found = catalogNames.some(
+        (fileName) =>
+          fileName === mentioned ||
+          fileName.includes(mentioned) ||
+          mentioned.includes(fileName),
+      );
+      if (found) return false;
+    }
+
     return true;
   });
 }
@@ -79,6 +105,22 @@ function mergeCompositionHints(
     if (!key || known.has(key)) continue;
     known.add(key);
     merged.push({ nameHint, quantity: 1 });
+  }
+  return merged;
+}
+
+function mergeCompositionHintObjects(
+  existing: CompositionHint[],
+  extra: CompositionHint[],
+): CompositionHint[] {
+  if (extra.length === 0) return existing;
+  const merged = [...existing];
+  const known = new Set(existing.map((h) => h.nameHint.trim().toLowerCase()));
+  for (const hint of extra) {
+    const key = hint.nameHint.trim().toLowerCase();
+    if (!key || known.has(key)) continue;
+    known.add(key);
+    merged.push(hint);
   }
   return merged;
 }
@@ -258,21 +300,62 @@ export async function enrichOrderEmailPrediction(
     }
   }
 
-  let compositionHints = mergeCompositionHints(
+  const aiCompositionHints = mergeCompositionHints(
     parseCompositionHints(out.compositionHints),
     subjectSplit.workNameHints,
   );
   const clientText = typeof out.clientOrderText === "string" ? out.clientOrderText : "";
-  if (compositionHints.length === 0 && clientText.trim()) {
-    compositionHints = inferCompositionHintsFromOrderText(clientText, priceListNames);
-  }
-  out.compositionHints = compositionHints;
+  const pdfOrderText =
+    typeof out.clickOrderPdfContext === "string" ? out.clickOrderPdfContext : null;
+  const inferredHints = inferCompositionHintsFromEmailContext(
+    {
+      clientOrderText: clientText,
+      emailSubject: primaryEmail?.subject ?? null,
+      pdfOrderText,
+    },
+    priceListNames,
+  );
+  let compositionHints =
+    aiCompositionHints.length === 0
+      ? inferredHints
+      : mergeCompositionHintObjects(aiCompositionHints, inferredHints);
 
-  const composition = await resolveAiCompositionLines(compositionHints, {
+  let composition = await resolveAiCompositionLines(compositionHints, {
     clinicId: clinicIdForDb,
     doctorId: doctorId || null,
   });
-  warnings.push(...composition.warnings);
+  let compositionWarnings = composition.warnings;
+
+  if (inferredHints.length > 0 && aiCompositionHints.length > 0) {
+    const [aiOnly, inferredOnly] = await Promise.all([
+      resolveAiCompositionLines(aiCompositionHints, {
+        clinicId: clinicIdForDb,
+        doctorId: doctorId || null,
+      }),
+      resolveAiCompositionLines(inferredHints, {
+        clinicId: clinicIdForDb,
+        doctorId: doctorId || null,
+      }),
+    ]);
+    if (aiOnly.lines.length === 0 && inferredOnly.lines.length > 0) {
+      composition = inferredOnly;
+      compositionHints = inferredHints;
+      compositionWarnings = inferredOnly.warnings;
+    }
+  } else if (composition.lines.length === 0 && inferredHints.length > 0) {
+    const retry = await resolveAiCompositionLines(inferredHints, {
+      clinicId: clinicIdForDb,
+      doctorId: doctorId || null,
+    });
+    if (retry.lines.length > 0) {
+      composition = retry;
+      compositionHints = inferredHints;
+      compositionWarnings = retry.warnings;
+    }
+  }
+
+  out.compositionHints = compositionHints;
+  warnings.push(...compositionWarnings);
   out.resolvedConstructions = compositionLinesToOrderConstructions(composition.lines);
   out.compositionLineCount = composition.lines.length;
 
@@ -307,6 +390,7 @@ export async function enrichOrderEmailPrediction(
       filterMisleadingAiWarnings(warnings, {
         clientMatchedByEmail: out.matchedBySourceEmail === true,
         patientFixedFromSubject,
+        attachmentFileNames: input.attachments.map((a) => a.fileName),
       }),
     ),
   ];

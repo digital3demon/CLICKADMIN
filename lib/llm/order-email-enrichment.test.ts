@@ -26,6 +26,11 @@ vi.mock("@/lib/order-due-datetime", () => ({
 }));
 
 vi.mock("./resolve-ai-composition-lines", () => ({
+  loadActivePriceListItemNames: vi.fn().mockResolvedValue([
+    "Аппарат Андрезена",
+    "Коронка Emax",
+  ]),
+  inferCompositionHintsFromEmailContext: vi.fn().mockReturnValue([]),
   resolveAiCompositionLines: vi.fn().mockResolvedValue({
     lines: [
       {

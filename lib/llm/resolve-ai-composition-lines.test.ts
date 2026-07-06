@@ -18,6 +18,7 @@ import { getPricingPrismaClient } from "@/lib/prisma-pricing";
 import {
   resolveAiCompositionLines,
   inferCompositionHintsFromOrderText,
+  inferCompositionHintsFromEmailContext,
 } from "./resolve-ai-composition-lines";
 
 const mockItems = [
@@ -58,6 +59,16 @@ const mockItems = [
     priceRub: 5000,
     leadWorkingDays: 5,
     sortOrder: 4,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-5",
+    code: "005",
+    name: "Аппарат Марко Росса/HAAS титан",
+    priceRub: 19000,
+    leadWorkingDays: 10,
+    sortOrder: 5,
     isActive: true,
     priceListId: "pl-1",
   },
@@ -118,6 +129,20 @@ describe("resolveAiCompositionLines", () => {
     expect(res.warnings).toHaveLength(0);
   });
 
+  it("merges accusative jaw phrases into one price line", async () => {
+    const res = await resolveAiCompositionLines(
+      [
+        { nameHint: "Ретенционная каппа на верхнюю челюсть", quantity: 1 },
+        { nameHint: "Ретенционная каппа на нижнюю челюсть", quantity: 1 },
+      ],
+      { clinicId: null, doctorId: null },
+    );
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines[0].code).toBe("7208");
+    expect(res.lines[0].quantity).toBe(2);
+    expect(res.warnings).toHaveLength(0);
+  });
+
   it("matches reversed word order like retainer kappa", async () => {
     const res = await resolveAiCompositionLines(
       [{ nameHint: "Ретенционная каппа", quantity: 1 }],
@@ -152,5 +177,63 @@ describe("inferCompositionHintsFromOrderText", () => {
 
   it("returns empty when no catalog item matches", () => {
     expect(inferCompositionHintsFromOrderText("просто осмотр", names)).toEqual([]);
+  });
+
+  it("prefers apparatus over crown when order text is only marco rosa", () => {
+    const extendedNames = [
+      ...names,
+      "Корона из циркония Marco Rosa (многослойный)",
+    ];
+    expect(inferCompositionHintsFromOrderText("марко роса", extendedNames)).toEqual([
+      { nameHint: "Аппарат Марко Росса/HAAS титан", quantity: 1 },
+    ]);
+  });
+});
+
+describe("inferCompositionHintsFromEmailContext", () => {
+  const names = mockItems.map((item) => item.name);
+
+  it("finds Marco Rosa in comma-separated email subject", () => {
+    expect(
+      inferCompositionHintsFromEmailContext(
+        {
+          clientOrderText: "марко росса",
+          emailSubject: "вр Федорова пац Беляев Иван, марко росса, Чкаловский 50",
+        },
+        names,
+      ),
+    ).toEqual([{ nameHint: "Аппарат Марко Росса/HAAS титан", quantity: 1 }]);
+  });
+
+  it("matches typo rosa vs rossa in price list name", async () => {
+    const res = await resolveAiCompositionLines(
+      [{ nameHint: "марко роса", quantity: 1 }],
+      { clinicId: null, doctorId: null },
+    );
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines[0].code).toBe("005");
+  });
+
+  it("ignores hallucinated AI hint when marco rosa maps to apparatus", async () => {
+    const inferred = inferCompositionHintsFromEmailContext(
+      {
+        clientOrderText: "марко роса",
+        emailSubject: "вр Федорова пац Беляев Иван, марко росса, Чкаловский 50",
+      },
+      mockItems.map((item) => item.name),
+    );
+    expect(inferred).toHaveLength(1);
+
+    const aiHints = [
+      { nameHint: "Корона из циркония Marco Rosa (многослойный)", quantity: 1 },
+    ];
+    const aiOnly = await resolveAiCompositionLines(aiHints, { clinicId: null, doctorId: null });
+    const inferredOnly = await resolveAiCompositionLines(inferred, {
+      clinicId: null,
+      doctorId: null,
+    });
+    expect(aiOnly.lines).toHaveLength(0);
+    expect(inferredOnly.lines).toHaveLength(1);
+    expect(inferredOnly.lines[0].code).toBe("005");
   });
 });

@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import {
   extractOrderFieldsFromSingleEmail,
   mergeAiPredictionJson,
+  OrderEmailExtractSchema,
 } from "./order-email-extract";
 import * as openrouterConfig from "./openrouter-config";
 import * as openrouterClient from "./openrouter-client";
@@ -128,6 +129,24 @@ describe("extractOrderFieldsFromEmail", () => {
     const res = await extractOrderFieldsFromSingleEmail("t1", "Subj", "Body");
     expect(res.result).toBeNull();
     expect(res.error).toContain("JSON parse/validation error");
+  });
+});
+
+describe("OrderEmailExtractSchema", () => {
+  it("coerces numeric teethFdi codes to strings", () => {
+    const parsed = OrderEmailExtractSchema.parse({
+      patientName: "Беляев Иван",
+      clinicId: null,
+      doctorId: null,
+      clientOrderText: "марко росса",
+      patientAppointmentAt: null,
+      urgent: false,
+      suggestedAttachmentIds: [],
+      compositionHints: [{ nameHint: "Аппарат Марко Росса", teethFdi: [53, 63, 55, 65] }],
+      confidenceScore: 80,
+      warnings: [],
+    });
+    expect(parsed.compositionHints[0]?.teethFdi).toEqual(["53", "63", "55", "65"]);
   });
 });
 
