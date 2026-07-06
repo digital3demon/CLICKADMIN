@@ -286,6 +286,7 @@ export function AiAdminClient({
   const [apiKey, setApiKey] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isBacktesting, setIsBacktesting] = useState(false);
+  const [isBatchAnalyzing, setIsBatchAnalyzing] = useState(false);
   const [diffs, setDiffs] = useState<any[]>([]);
   const [isLoadingDiffs, setIsLoadingDiffs] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -378,6 +379,24 @@ export function AiAdminClient({
       toast.error(e.message || "Ошибка запуска");
     } finally {
       setIsBacktesting(false);
+    }
+  }
+
+  async function handleRunBatchAnalyze() {
+    setIsBatchAnalyzing(true);
+    try {
+      const res = await jsonFetch<{ message: string; count: number }>("/api/ai-admin/batch-analyze", {
+        method: "POST",
+      });
+      if (res.count > 0) {
+        toast.success(`Запущен анализ ошибок для ${res.count} нарядов в фоне`);
+      } else {
+        toast.info("Нет подходящих нарядов для анализа");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Ошибка запуска анализа");
+    } finally {
+      setIsBatchAnalyzing(false);
     }
   }
 
@@ -489,6 +508,16 @@ export function AiAdminClient({
               </p>
               <Button onClick={handleRunBacktest} disabled={isBacktesting} variant="secondary">
                 Запустить батч (10 писем)
+              </Button>
+
+              <hr className="border-[var(--app-border)] my-8" />
+
+              <h2 className="text-xl font-semibold">Авто-анализ ошибок (Self-Correction)</h2>
+              <p className="text-sm text-[var(--app-text-secondary)] mb-4">
+                Проанализировать старые предсказания, сравнить их с реальными нарядами и сгенерировать выводы для ИИ.
+              </p>
+              <Button onClick={handleRunBatchAnalyze} disabled={isBatchAnalyzing} variant="secondary">
+                Запустить анализ (20 нарядов)
               </Button>
 
               <hr className="border-[var(--app-border)] my-8" />
