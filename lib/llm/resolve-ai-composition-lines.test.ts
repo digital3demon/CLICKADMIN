@@ -48,6 +48,16 @@ const mockItems = [
     isActive: true,
     priceListId: "pl-1",
   },
+  {
+    id: "pli-4",
+    code: "7208",
+    name: "Каппа ретенционная\\элайнер",
+    priceRub: 5000,
+    leadWorkingDays: 5,
+    sortOrder: 4,
+    isActive: true,
+    priceListId: "pl-1",
+  },
 ];
 
 describe("resolveAiCompositionLines", () => {
@@ -88,6 +98,30 @@ describe("resolveAiCompositionLines", () => {
     );
     expect(res.lines).toHaveLength(1);
     expect(res.lines[0].unitPrice).toBe(8000);
+    expect(res.warnings).toHaveLength(0);
+  });
+
+  it("matches retention capa VCH/NCH as one price item qty 2", async () => {
+    const res = await resolveAiCompositionLines(
+      [
+        { nameHint: "Ретенционная капа ВЧ", quantity: 1 },
+        { nameHint: "Ретенционная капа НЧ", quantity: 1 },
+      ],
+      { clinicId: null, doctorId: null },
+    );
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines[0].code).toBe("7208");
+    expect(res.lines[0].quantity).toBe(2);
+    expect(res.warnings).toHaveLength(0);
+  });
+
+  it("matches reversed word order like retainer kappa", async () => {
+    const res = await resolveAiCompositionLines(
+      [{ nameHint: "Ретенционная каппа", quantity: 1 }],
+      { clinicId: null, doctorId: null },
+    );
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines[0].code).toBe("7208");
     expect(res.warnings).toHaveLength(0);
   });
 

@@ -71,11 +71,126 @@ export type OrderSourceEmailClientMatch = {
   ambiguous: boolean;
 };
 
-/** Обратный lookup: fromAddress письма → clinicId/doctorId из истории EmailSourceOrder. */
+async function resolveClientIdsFromClientCatalog(
+  tenantId: string,
+  normalizedEmail: string,
+): Promise<OrderSourceEmailClientMatch> {
+  const { getClientsPrisma } = await import("@/lib/get-domain-prisma");
+  const clientsPrisma = await getClientsPrisma();
+  const doctors = await clientsPrisma.doctor.findMany({
+    where: { tenantId, deletedAt: null },
+    select: {
+      id: true,
+      email: true,
+      clinicWorkEmail: true,
+      clinicLinks: { select: { clinicId: true } },
+    },
+  });
+
+  const doctorMatches = doctors.filter(
+    (d) =>
+      normalizeOrderSourceEmailAddress(d.email) === normalizedEmail ||
+      normalizeOrderSourceEmailAddress(d.clinicWorkEmail) === normalizedEmail,
+  );
+
+  if (doctorMatches.length === 1) {
+    const doctor = doctorMatches[0]!;
+    const clinicId =
+      doctor.clinicLinks.length === 1 ? doctor.clinicLinks[0]!.clinicId : null;
+    return { clinicId, doctorId: doctor.id, matched: true, ambiguous: false };
+  }
+  if (doctorMatches.length > 1) {
+    return { clinicId: null, doctorId: null, matched: false, ambiguous: true };
+  }
+
+  const clinics = await clientsPrisma.clinic.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true, email: true },
+  });
+  const clinicMatches = clinics.filter(
+    (c) => normalizeOrderSourceEmailAddress(c.email) === normalizedEmail,
+  );
+
+  if (clinicMatches.length === 1) {
+    const clinicId = clinicMatches[0]!.id;
+    const linkedDoctors = doctors.filter((d) =>
+      d.clinicLinks.some((link) => link.clinicId === clinicId),
+    );
+    if (linkedDoctors.length === 1) {
+      return { clinicId, doctorId: linkedDoctors[0]!.id, matched: true, ambiguous: false };
+    }
+    if (linkedDoctors.length > 1) {
+      return { clinicId: null, doctorId: null, matched: false, ambiguous: true };
+    }
+  }
+  if (clinicMatches.length > 1) {
+    return { clinicId: null, doctorId: null, matched: false, ambiguous: true };
+  }
+
+  return { clinicId: null, doctorId: null, matched: false, ambiguous: false };
+}
+
+export type OrderSourceEmailClientPair = {
+  clinicId: string | null;
+  doctorId: string;
+};
+
+function orderClientPairKey(pair: OrderSourceEmailClientPair): string {
+  return `${pair.clinicId ?? ""}:${pair.doctorId}`;
+}
+
+/**
+ * Слияние истории нарядов, справочника CRM и (опционально) клиента текущего наряда.
+ * Приоритет: однозначная история → клиент текущего наряда среди пар → CRM → неоднозначно.
+ */
+export function resolveOrderSourceEmailClientMatch(
+  historyPairs: OrderSourceEmailClientPair[],
+  catalog: OrderSourceEmailClientMatch,
+  preferOrder?: OrderSourceEmailClientPair | null,
+): OrderSourceEmailClientMatch {
+  if (historyPairs.length === 1) {
+    const pair = historyPairs[0]!;
+    return {
+      clinicId: pair.clinicId,
+      doctorId: pair.doctorId,
+      matched: true,
+      ambiguous: false,
+    };
+  }
+
+  if (historyPairs.length > 1) {
+    if (preferOrder) {
+      const preferKey = orderClientPairKey(preferOrder);
+      const preferred = historyPairs.find((p) => orderClientPairKey(p) === preferKey);
+      if (preferred) {
+        return {
+          clinicId: preferred.clinicId,
+          doctorId: preferred.doctorId,
+          matched: true,
+          ambiguous: false,
+        };
+      }
+    }
+    if (catalog.matched && !catalog.ambiguous) {
+      return catalog;
+    }
+    return { clinicId: null, doctorId: null, matched: false, ambiguous: true };
+  }
+
+  return catalog;
+}
+
+export type ResolveClientIdsFromOrderSourceEmailOptions = {
+  /** Если почта в истории у нескольких клиентов — взять пару этого наряда. */
+  preferOrderId?: string | null;
+};
+
+/** Обратный lookup: fromAddress → клиент из истории нарядов или справочника CRM. */
 export async function resolveClientIdsFromOrderSourceEmail(
   db: PrismaClient,
   tenantId: string,
   fromAddress: string | null | undefined,
+  opts?: ResolveClientIdsFromOrderSourceEmailOptions,
 ): Promise<OrderSourceEmailClientMatch> {
   const normalized = normalizeOrderSourceEmailAddress(fromAddress);
   if (!normalized) {
@@ -90,29 +205,35 @@ export async function resolveClientIdsFromOrderSourceEmail(
     },
   });
 
-  const pairKeys = new Set<string>();
-  let clinicId: string | null = null;
-  let doctorId: string | null = null;
-
+  const pairByKey = new Map<string, OrderSourceEmailClientPair>();
   for (const link of links) {
     const addr = normalizeOrderSourceEmailAddress(link.email.fromAddress);
     if (addr !== normalized) continue;
-    const key = `${link.order.clinicId ?? ""}:${link.order.doctorId}`;
-    if (pairKeys.has(key)) continue;
-    pairKeys.add(key);
-    if (pairKeys.size === 1) {
-      clinicId = link.order.clinicId;
-      doctorId = link.order.doctorId;
+    const key = orderClientPairKey(link.order);
+    if (!pairByKey.has(key)) {
+      pairByKey.set(key, link.order);
+    }
+  }
+  const historyPairs = [...pairByKey.values()];
+
+  let preferOrder: OrderSourceEmailClientPair | null = null;
+  const preferOrderId = opts?.preferOrderId?.trim();
+  if (preferOrderId) {
+    const order = await db.order.findFirst({
+      where: { id: preferOrderId, tenantId },
+      select: { clinicId: true, doctorId: true },
+    });
+    if (order?.doctorId) {
+      preferOrder = order;
     }
   }
 
-  if (pairKeys.size === 0) {
-    return { clinicId: null, doctorId: null, matched: false, ambiguous: false };
-  }
-  if (pairKeys.size > 1) {
-    return { clinicId: null, doctorId: null, matched: false, ambiguous: true };
-  }
-  return { clinicId, doctorId, matched: true, ambiguous: false };
+  const catalog =
+    historyPairs.length === 1
+      ? { clinicId: null, doctorId: null, matched: false, ambiguous: false }
+      : await resolveClientIdsFromClientCatalog(tenantId, normalized);
+
+  return resolveOrderSourceEmailClientMatch(historyPairs, catalog, preferOrder);
 }
 
 /** Для тестов и offline-разбора: группировка адресов → пары клиентов. */

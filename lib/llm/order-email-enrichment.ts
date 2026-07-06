@@ -1,5 +1,6 @@
 import "server-only";
 import type { PrismaClient } from "@prisma/client";
+import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
 import { getClientsPrisma } from "@/lib/get-domain-prisma";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 import { emailEffectiveReceivedAt } from "@/lib/mail/order-source-work-received";
@@ -13,11 +14,16 @@ import { isoToDatetimeLocal, localDateTimeToIso } from "@/lib/datetime-local";
 import {
   resolveAiCompositionLines,
   compositionLinesToOrderConstructions,
+  loadActivePriceListItemNames,
   type CompositionHint,
 } from "./resolve-ai-composition-lines";
 import type { EmailAttachmentCatalogItem } from "./order-email-extract";
 import { ORDER_EMAIL_ENRICHMENT_VERSION } from "./order-email-enrichment-version";
 import { cleanMailTextBody, mailHtmlToText } from "@/lib/mail/mail-text-cleanup";
+import {
+  splitSubjectWorkAndPatient,
+  stripWorkNamesFromPatientName,
+} from "./order-email-subject-parse";
 
 export type EnrichedPrediction = Record<string, unknown>;
 
@@ -43,6 +49,64 @@ function parseCompositionHints(v: unknown): CompositionHint[] {
     });
   }
   return out;
+}
+
+function filterMisleadingAiWarnings(
+  warnings: string[],
+  opts: { clientMatchedByEmail: boolean; patientFixedFromSubject: boolean },
+): string[] {
+  return warnings.filter((w) => {
+    const lower = w.toLowerCase();
+    if (opts.clientMatchedByEmail) {
+      if (lower.includes("не определен врач") && lower.includes("из темы")) return false;
+      if (lower.includes("не определена клиника") && lower.includes("отправител")) return false;
+    }
+    if (opts.patientFixedFromSubject && lower.includes("неясное фио пациента")) return false;
+    return true;
+  });
+}
+
+function mergeCompositionHints(
+  existing: CompositionHint[],
+  extraNameHints: string[],
+): CompositionHint[] {
+  if (extraNameHints.length === 0) return existing;
+  const merged = [...existing];
+  const known = new Set(existing.map((h) => h.nameHint.trim().toLowerCase()));
+  for (const nameHint of extraNameHints) {
+    const key = nameHint.trim().toLowerCase();
+    if (!key || known.has(key)) continue;
+    known.add(key);
+    merged.push({ nameHint, quantity: 1 });
+  }
+  return merged;
+}
+
+/** «ретенционные капы на ВЧ и НЧ» → одна позиция прайса, qty 2. */
+const WORD_LEFT = String.raw`(?<![\p{L}\p{N}])`;
+const WORD_RIGHT = String.raw`(?![\p{L}\p{N}])`;
+
+function supplementCompositionHintsFromOrderText(
+  hints: CompositionHint[],
+  clientOrderText: string | null | undefined,
+): CompositionHint[] {
+  const text = clientOrderText?.trim() ?? "";
+  if (!text) return hints;
+
+  const lower = text.toLowerCase();
+  if (!/ретенцион/.test(lower) || !/кап/.test(lower)) return hints;
+
+  const hasUpper = new RegExp(
+    `${WORD_LEFT}(?:вч|верх(?:няя)?(?:\\s+челюсть)?)${WORD_RIGHT}`,
+    "iu",
+  ).test(lower);
+  const hasLower = new RegExp(
+    `${WORD_LEFT}(?:нч|ниж(?:няя)?(?:\\s+челюсть)?)${WORD_RIGHT}`,
+    "iu",
+  ).test(lower);
+  if (!hasUpper || !hasLower) return hints;
+
+  return [{ nameHint: "Каппа ретенционная", quantity: 2 }];
 }
 
 export async function enrichOrderEmailPrediction(
@@ -80,6 +144,8 @@ export async function enrichOrderEmailPrediction(
   const primaryEmail = await db.email.findUnique({
     where: { id: input.primaryEmailId },
     select: {
+      fromAddress: true,
+      subject: true,
       receivedAt: true,
       sentAt: true,
       createdAt: true,
@@ -88,6 +154,56 @@ export async function enrichOrderEmailPrediction(
       preview: true,
     },
   });
+
+  const sourceMatch = primaryEmail?.fromAddress
+    ? await resolveClientIdsFromOrderSourceEmail(db, tenantId, primaryEmail.fromAddress, {
+        preferOrderId: input.orderId ?? null,
+      })
+    : { clinicId: null, doctorId: null, matched: false, ambiguous: false };
+  out.matchedBySourceEmail = sourceMatch.matched;
+  if (sourceMatch.ambiguous) {
+    out.sourceEmailAmbiguous = true;
+  } else {
+    delete out.sourceEmailAmbiguous;
+  }
+  if (sourceMatch.matched && sourceMatch.doctorId) {
+    out.clinicId = sourceMatch.clinicId;
+    out.doctorId = sourceMatch.doctorId;
+  }
+
+  const rawClinicId =
+    typeof out.clinicId === "string" && out.clinicId.trim() ? out.clinicId.trim() : null;
+  const clinicIdForName =
+    rawClinicId && rawClinicId !== ORDER_CLINIC_PRIVATE ? rawClinicId : null;
+  const doctorIdForName =
+    typeof out.doctorId === "string" && out.doctorId.trim() ? out.doctorId.trim() : null;
+
+  if (doctorIdForName) {
+    const doctor = await clientsPrisma.doctor.findFirst({
+      where: { id: doctorIdForName, tenantId, deletedAt: null },
+      select: { fullName: true },
+    });
+    if (doctor?.fullName.trim()) {
+      out.resolvedDoctorName = doctor.fullName.trim();
+    }
+  }
+
+  if (clinicIdForName) {
+    const clinic = await clientsPrisma.clinic.findFirst({
+      where: { id: clinicIdForName, tenantId, deletedAt: null },
+      select: { name: true },
+    });
+    if (clinic?.name.trim()) {
+      out.resolvedClinicName = clinic.name.trim();
+    }
+  } else if (
+    out.clinicId === null ||
+    rawClinicId === ORDER_CLINIC_PRIVATE ||
+    out.clinicId === ORDER_CLINIC_PRIVATE
+  ) {
+    out.resolvedClinicName = "Частная практика";
+  }
+
   let workReceivedAt: Date | null = primaryEmail
     ? emailEffectiveReceivedAt(primaryEmail)
     : null;
@@ -153,10 +269,34 @@ export async function enrichOrderEmailPrediction(
     out.dueToAdminsAt = appointmentIso;
   }
 
-  const composition = await resolveAiCompositionLines(
-    parseCompositionHints(out.compositionHints),
-    { clinicId: clinicIdForDb, doctorId: doctorId || null },
+  const priceListNames = await loadActivePriceListItemNames();
+  const subjectSplit = splitSubjectWorkAndPatient(primaryEmail?.subject, priceListNames);
+  let patientFixedFromSubject = false;
+
+  if (subjectSplit.patientName) {
+    out.patientName = subjectSplit.patientName;
+    patientFixedFromSubject = true;
+  } else if (typeof out.patientName === "string") {
+    const cleaned = stripWorkNamesFromPatientName(out.patientName, priceListNames);
+    if (cleaned && cleaned !== out.patientName.trim()) {
+      out.patientName = cleaned;
+      patientFixedFromSubject = true;
+    }
+  }
+
+  const compositionHints = mergeCompositionHints(
+    supplementCompositionHintsFromOrderText(
+      parseCompositionHints(out.compositionHints),
+      typeof out.clientOrderText === "string" ? out.clientOrderText : null,
+    ),
+    subjectSplit.workNameHints,
   );
+  out.compositionHints = compositionHints;
+
+  const composition = await resolveAiCompositionLines(compositionHints, {
+    clinicId: clinicIdForDb,
+    doctorId: doctorId || null,
+  });
   warnings.push(...composition.warnings);
   out.resolvedConstructions = compositionLinesToOrderConstructions(composition.lines);
   out.compositionLineCount = composition.lines.length;
@@ -187,7 +327,14 @@ export async function enrichOrderEmailPrediction(
     }
   }
 
-  out.warnings = [...new Set(warnings)];
+  out.warnings = [
+    ...new Set(
+      filterMisleadingAiWarnings(warnings, {
+        clientMatchedByEmail: out.matchedBySourceEmail === true,
+        patientFixedFromSubject,
+      }),
+    ),
+  ];
   out.enrichmentVersion = ORDER_EMAIL_ENRICHMENT_VERSION;
   return out;
 }

@@ -155,6 +155,7 @@ export async function GET(req: Request) {
         db,
         tenantId,
         primaryFromAddress,
+        { preferOrderId: order.id },
       );
 
       const preResolved =

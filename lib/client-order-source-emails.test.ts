@@ -4,6 +4,7 @@ import {
   mergeDistinctOrderSourceEmails,
   normalizeOrderSourceEmailAddress,
   resolveClientIdsFromPairIndex,
+  resolveOrderSourceEmailClientMatch,
 } from "./client-order-source-emails";
 import {
   buildVirtualOrderDraftFromPrediction,
@@ -43,6 +44,83 @@ describe("mergeDistinctOrderSourceEmails", () => {
         "  ",
       ]),
     ).toEqual(["a@x.ru", "b@x.ru"]);
+  });
+});
+
+describe("resolveOrderSourceEmailClientMatch", () => {
+  const catalogDoctor = {
+    clinicId: "c-catalog",
+    doctorId: "d-catalog",
+    matched: true,
+    ambiguous: false,
+  };
+  const catalogEmpty = {
+    clinicId: null,
+    doctorId: null,
+    matched: false,
+    ambiguous: false,
+  };
+
+  it("uses unambiguous history pair", () => {
+    expect(
+      resolveOrderSourceEmailClientMatch(
+        [{ clinicId: "c1", doctorId: "d1" }],
+        catalogEmpty,
+      ),
+    ).toEqual({
+      clinicId: "c1",
+      doctorId: "d1",
+      matched: true,
+      ambiguous: false,
+    });
+  });
+
+  it("prefers current order client when history is ambiguous", () => {
+    expect(
+      resolveOrderSourceEmailClientMatch(
+        [
+          { clinicId: "c1", doctorId: "d1" },
+          { clinicId: "c2", doctorId: "d2" },
+        ],
+        catalogEmpty,
+        { clinicId: "c2", doctorId: "d2" },
+      ),
+    ).toEqual({
+      clinicId: "c2",
+      doctorId: "d2",
+      matched: true,
+      ambiguous: false,
+    });
+  });
+
+  it("uses CRM catalog when history is ambiguous and order has no pair", () => {
+    expect(
+      resolveOrderSourceEmailClientMatch(
+        [
+          { clinicId: "c1", doctorId: "d1" },
+          { clinicId: "c2", doctorId: "d2" },
+        ],
+        catalogDoctor,
+        { clinicId: "c-other", doctorId: "d-other" },
+      ),
+    ).toEqual(catalogDoctor);
+  });
+
+  it("stays ambiguous when history and catalog disagree", () => {
+    expect(
+      resolveOrderSourceEmailClientMatch(
+        [
+          { clinicId: "c1", doctorId: "d1" },
+          { clinicId: "c2", doctorId: "d2" },
+        ],
+        catalogEmpty,
+      ),
+    ).toEqual({
+      clinicId: null,
+      doctorId: null,
+      matched: false,
+      ambiguous: true,
+    });
   });
 });
 

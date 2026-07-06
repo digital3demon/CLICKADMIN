@@ -4,7 +4,8 @@ import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { runOrderEmailPrediction } from "./run-order-email-prediction";
 import { logger } from "@/lib/server/logger";
 
-const RETRY_DELAY_MS = 3000;
+/** Один наряд за раз на tenant — следующий стартует только после завершения предыдущего. */
+const tenantQueues = new Map<string, Promise<void>>();
 
 async function isAiConfigured(tenantId: string): Promise<boolean> {
   const db = await getOrdersPrisma();
@@ -49,23 +50,41 @@ async function savePredictionRun(
   );
 }
 
+function enqueueSerialPredictionJob(tenantId: string, job: () => Promise<void>): void {
+  const previous = tenantQueues.get(tenantId) ?? Promise.resolve();
+  const next = previous
+    .then(job)
+    .catch((err) => {
+      logger.error({ err, tenantId }, "AI prediction queue job failed");
+    });
+  tenantQueues.set(tenantId, next);
+}
+
+async function runPredictionJob(
+  tenantId: string,
+  orderId: string,
+  emailId: string,
+  mode: "create" | { updateId: string },
+) {
+  if (!(await isAiConfigured(tenantId))) return;
+
+  const db = await getOrdersPrisma();
+  const run = await runOrderEmailPrediction(db, tenantId, emailId, orderId);
+  await savePredictionRun(tenantId, orderId, emailId, run, mode);
+}
+
 export function runShadowPredictionInBackground(
   tenantId: string,
   orderId: string,
   emailId: string,
-  delayMs = 0,
 ) {
-  setTimeout(async () => {
+  enqueueSerialPredictionJob(tenantId, async () => {
     try {
-      if (!(await isAiConfigured(tenantId))) return;
-
-      const db = await getOrdersPrisma();
-      const run = await runOrderEmailPrediction(db, tenantId, emailId, orderId);
-      await savePredictionRun(tenantId, orderId, emailId, run, "create");
+      await runPredictionJob(tenantId, orderId, emailId, "create");
     } catch (e: any) {
       logger.error({ err: e, orderId, emailId }, "AI shadow prediction failed");
     }
-  }, delayMs);
+  });
 }
 
 export function rerunAiPredictionInBackground(
@@ -73,19 +92,14 @@ export function rerunAiPredictionInBackground(
   predictionId: string,
   orderId: string,
   emailId: string,
-  delayMs = 0,
 ) {
-  setTimeout(async () => {
+  enqueueSerialPredictionJob(tenantId, async () => {
     try {
-      if (!(await isAiConfigured(tenantId))) return;
-
-      const db = await getOrdersPrisma();
-      const run = await runOrderEmailPrediction(db, tenantId, emailId, orderId);
-      await savePredictionRun(tenantId, orderId, emailId, run, { updateId: predictionId });
+      await runPredictionJob(tenantId, orderId, emailId, { updateId: predictionId });
     } catch (e: any) {
       logger.error({ err: e, orderId, emailId, predictionId }, "AI prediction retry failed");
     }
-  }, delayMs);
+  });
 }
 
 /** Пересчитать все предсказания с ошибкой (например, после смены модели). */
@@ -100,15 +114,9 @@ export async function queueFailedAiPredictionsRetry(tenantId: string): Promise<n
     orderBy: { createdAt: "asc" },
   });
 
-  failed.forEach((row, index) => {
-    rerunAiPredictionInBackground(
-      tenantId,
-      row.id,
-      row.orderId,
-      row.emailId,
-      index * RETRY_DELAY_MS,
-    );
-  });
+  for (const row of failed) {
+    rerunAiPredictionInBackground(tenantId, row.id, row.orderId, row.emailId);
+  }
 
   return failed.length;
 }

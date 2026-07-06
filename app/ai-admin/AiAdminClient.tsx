@@ -19,6 +19,7 @@ import {
   OPENROUTER_MODEL_OPTIONS,
   resolveOpenRouterModel,
 } from "@/lib/llm/openrouter-models";
+import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 
 async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
   const res = await fetch(url, {
@@ -71,12 +72,23 @@ function aiSuggestedFilesLabel(
   return ids.length === 1 ? "1 файл" : `${ids.length} файла`;
 }
 
+function looksLikeInternalClientId(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === ORDER_CLINIC_PRIVATE) return true;
+  return /^c[a-z0-9]{20,}$/i.test(trimmed);
+}
+
 function predictionClientLabel(
   json: Record<string, unknown> | null | undefined,
   diff?: { order?: { clinic?: { name?: string } | null; doctor?: { fullName?: string } | null } },
   role: "clinic" | "doctor" = "clinic",
 ): string {
   if (!json) return "—";
+
+  const resolvedNameKey = role === "clinic" ? "resolvedClinicName" : "resolvedDoctorName";
+  const resolvedName = json[resolvedNameKey];
+  if (typeof resolvedName === "string" && resolvedName.trim()) return resolvedName;
+
   if (json.matchedBySourceEmail && diff?.order) {
     if (role === "clinic") return diff.order.clinic?.name || "—";
     return diff.order.doctor?.fullName || "—";
@@ -86,8 +98,8 @@ function predictionClientLabel(
   const hint = json[hintKey];
   if (typeof hint === "string" && hint.trim()) return hint;
   const id = json[idKey];
-  if (typeof id === "string" && id.trim()) return id;
   if (id === null && role === "clinic") return "Частная практика";
+  if (typeof id === "string" && id.trim() && !looksLikeInternalClientId(id)) return id.trim();
   return "—";
 }
 

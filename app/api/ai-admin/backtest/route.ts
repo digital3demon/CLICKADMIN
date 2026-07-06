@@ -45,11 +45,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "No pending backtests found", count: 0 });
     }
 
-    // Запускаем предсказания в фоне
+    // Ставим в очередь: обрабатывается строго по одному наряду
     for (const link of links) {
       runShadowPredictionInBackground(tenantId, link.orderId, link.emailId);
-      // Пауза 3 секунды между запусками, чтобы не упираться в лимиты бесплатных моделей OpenRouter
-      await new Promise(r => setTimeout(r, 3000));
     }
 
     return NextResponse.json({ message: "Backtest started", count: links.length });

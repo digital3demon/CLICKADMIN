@@ -162,27 +162,31 @@ export async function GET(
 
     const sourceMatch = email
 
-      ? await resolveClientIdsFromOrderSourceEmail(db, tenantId, email.fromAddress)
+      ? await resolveClientIdsFromOrderSourceEmail(db, tenantId, email.fromAddress, {
+
+          preferOrderId: prediction.orderId,
+
+        })
 
       : { clinicId: null, doctorId: null, matched: false, ambiguous: false };
 
 
 
-    const effectiveSourceMatch = predictionJson.matchedBySourceEmail
+    const effectiveSourceMatch = sourceMatch.matched
 
-      ? {
+      ? sourceMatch
 
-          clinicId: predictionJson.clinicId ?? null,
+      : predictionJson.matchedBySourceEmail
 
-          doctorId: predictionJson.doctorId ?? null,
+        ? {
 
-          matched: true,
+            clinicId: predictionJson.clinicId ?? null,
 
-        }
+            doctorId: predictionJson.doctorId ?? null,
 
-      : sourceMatch.matched
+            matched: true,
 
-        ? sourceMatch
+          }
 
         : undefined;
 
@@ -258,9 +262,9 @@ export async function GET(
 
       aiSuggestedAttachments,
 
-      matchedBySourceEmail: Boolean(predictionJson.matchedBySourceEmail),
+      matchedBySourceEmail: sourceMatch.matched,
 
-      sourceEmailAmbiguous: Boolean(predictionJson.sourceEmailAmbiguous),
+      sourceEmailAmbiguous: sourceMatch.ambiguous,
 
       orderNumber: fetched.orderNumber,
 

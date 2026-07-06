@@ -39,6 +39,8 @@ export type AiPredictionJson = {
   resolvedConstructions?: OrderEditInitial["constructions"];
   compositionLineCount?: number;
   compositionHints?: Array<{ nameHint: string; quantity?: number | null; teethFdi?: string[] | null }>;
+  resolvedClinicName?: string | null;
+  resolvedDoctorName?: string | null;
   enrichmentVersion?: number;
 };
 
@@ -275,17 +277,19 @@ export async function ensurePredictionEnriched(
 
   let predictionJson = input.predictionJson;
   const sourceMatch = email
-    ? await resolveClientIdsFromOrderSourceEmail(db, tenantId, email.fromAddress)
+    ? await resolveClientIdsFromOrderSourceEmail(db, tenantId, email.fromAddress, {
+        preferOrderId: input.orderId,
+      })
     : { clinicId: null, doctorId: null, matched: false, ambiguous: false };
 
-  const effectiveSourceMatch = predictionJson.matchedBySourceEmail
-    ? {
-        clinicId: predictionJson.clinicId ?? null,
-        doctorId: predictionJson.doctorId ?? null,
-        matched: true,
-      }
-    : sourceMatch.matched
-      ? sourceMatch
+  const effectiveSourceMatch = sourceMatch.matched
+    ? sourceMatch
+    : predictionJson.matchedBySourceEmail
+      ? {
+          clinicId: predictionJson.clinicId ?? null,
+          doctorId: predictionJson.doctorId ?? null,
+          matched: true,
+        }
       : undefined;
 
   const resolvedIds = resolveClientIdsFromPrediction(predictionJson, effectiveSourceMatch);

@@ -15,6 +15,11 @@ import { resolveClientIdsFromPrediction } from "@/lib/ai-order-draft-from-predic
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 
 import { fetchClientOrderHistoryContext } from "./client-history-context";
+import { loadActivePriceListItemNames } from "./resolve-ai-composition-lines";
+import {
+  splitSubjectWorkAndPatient,
+  stripWorkNamesFromPatientName,
+} from "./order-email-subject-parse";
 
 export type RunOrderEmailPredictionResult = {
   model: string;
@@ -121,6 +126,7 @@ export async function runOrderEmailPrediction(
     db,
     tenantId,
     primaryEmail.fromAddress,
+    { preferOrderId: orderId ?? null },
   );
 
   const preResolved =
@@ -128,8 +134,18 @@ export async function runOrderEmailPrediction(
       ? { clinicId: sourceMatch.clinicId, doctorId: sourceMatch.doctorId }
       : null;
 
-  // ШАГ 1: Быстрое извлечение имени пациента
-  const { patientName } = await extractPatientNameOnly(tenantId, emailBlocks);
+  // ШАГ 1: Имя пациента — сначала из темы (работа + пациент), иначе быстрый LLM
+  const priceListNames = await loadActivePriceListItemNames();
+  const primaryBlock = emailBlocks.find((b) => b.isPrimary) ?? emailBlocks[0];
+  const subjectSplit = splitSubjectWorkAndPatient(primaryBlock?.subject, priceListNames);
+
+  let patientName = subjectSplit.patientName;
+  if (!patientName) {
+    const extracted = await extractPatientNameOnly(tenantId, emailBlocks);
+    patientName =
+      stripWorkNamesFromPatientName(extracted.patientName, priceListNames) ??
+      extracted.patientName;
+  }
 
   // СБОР КОНТЕКСТА: История врача и пациента
   const historyContext = await fetchClientOrderHistoryContext(

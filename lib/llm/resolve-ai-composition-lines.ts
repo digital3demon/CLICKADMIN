@@ -61,12 +61,64 @@ async function loadPriceListItemsForClient(
   }));
 }
 
+export async function loadActivePriceListItemNames(): Promise<string[]> {
+  const prisma = getPricingPrismaClient();
+  const priceListId = await getActivePriceListId(prisma);
+  const items = await prisma.priceListItem.findMany({
+    where: { isActive: true, priceListId },
+    select: { name: true },
+  });
+  return items.map((it) => it.name);
+}
+
 const FUZZY_HINT_MIN_LEN = 4;
 
+/** JS `\b` не считает кириллицу «словом» — явные границы букв/цифр. */
+const WORD_LEFT = String.raw`(?<![\p{L}\p{N}])`;
+const WORD_RIGHT = String.raw`(?![\p{L}\p{N}])`;
+
+/** Челюсть в hint не часть названия прайса — убираем перед сопоставлением. */
+const JAW_MARKER_RE = new RegExp(
+  `${WORD_LEFT}(?:вч|нч|верх(?:няя)?(?:\\s+челюсть)?|ниж(?:няя)?(?:\\s+челюсть)?|upper|lower)${WORD_RIGHT}`,
+  "giu",
+);
+
+/** Капа/капы/кап → канон «каппа» для сопоставления с прайсом. */
+export function normalizeCompositionHintForMatch(hint: string): string {
+  return hint
+    .toLowerCase()
+    .replace(/\\/g, " ")
+    .replace(JAW_MARKER_RE, " ")
+    .replace(new RegExp(`${WORD_LEFT}капы${WORD_RIGHT}`, "gu"), "каппа")
+    .replace(new RegExp(`${WORD_LEFT}капу${WORD_RIGHT}`, "gu"), "каппа")
+    .replace(new RegExp(`${WORD_LEFT}капа${WORD_RIGHT}`, "gu"), "каппа")
+    .replace(new RegExp(`${WORD_LEFT}кап${WORD_RIGHT}`, "gu"), "каппа")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeForMatch(text: string): string[] {
+  const normalized = normalizeCompositionHintForMatch(text);
+  return normalized
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+}
+
+/** Все значимые слова hint есть в названии прайса (порядок не важен). */
+function hintTokensMatchName(hint: string, itemName: string): boolean {
+  const hintTokens = tokenizeForMatch(hint);
+  if (hintTokens.length === 0) return false;
+  const nameTokens = new Set(tokenizeForMatch(itemName));
+  return hintTokens.every((token) => nameTokens.has(token));
+}
+
 function findAmbiguousMatches(hint: string, items: CatalogItem[]): CatalogItem[] {
-  const q = hint.trim().toLowerCase();
+  const normalizedHint = normalizeCompositionHintForMatch(hint);
+  const q = normalizedHint.trim().toLowerCase();
   if (q.length < FUZZY_HINT_MIN_LEN) return [];
-  return items.filter((it) => {
+  const substringMatches = items.filter((it) => {
     const name = it.name.toLowerCase();
     const both = `${it.code} ${it.name}`.toLowerCase();
     if (name === q || both === q) return true;
@@ -74,6 +126,23 @@ function findAmbiguousMatches(hint: string, items: CatalogItem[]): CatalogItem[]
     if (both.includes(q)) return true;
     return false;
   });
+  if (substringMatches.length > 0) return substringMatches;
+
+  return items.filter((it) => hintTokensMatchName(normalizedHint, it.name));
+}
+
+function mergeResolvedLinesByPriceItem(lines: ResolvedCompositionLine[]): ResolvedCompositionLine[] {
+  const merged = new Map<string, ResolvedCompositionLine>();
+  for (const line of lines) {
+    const existing = merged.get(line.priceListItemId);
+    if (!existing) {
+      merged.set(line.priceListItemId, { ...line, teethFdi: [...line.teethFdi] });
+      continue;
+    }
+    existing.quantity += line.quantity;
+    existing.teethFdi.push(...line.teethFdi);
+  }
+  return [...merged.values()];
 }
 
 export async function resolveAiCompositionLines(
@@ -97,7 +166,10 @@ export async function resolveAiCompositionLines(
     const nameHint = hint.nameHint?.trim();
     if (!nameHint) continue;
 
-    let item = resolvePriceListItem(nameHint, catalogRefs);
+    let item = resolvePriceListItem(normalizeCompositionHintForMatch(nameHint), catalogRefs);
+    if (!item) {
+      item = resolvePriceListItem(nameHint, catalogRefs);
+    }
     if (!item) {
       const candidates = findAmbiguousMatches(nameHint, catalog);
       if (candidates.length === 1) {
@@ -139,12 +211,13 @@ export async function resolveAiCompositionLines(
     });
   }
 
-  const maxLeadWorkingDays = lines.reduce(
+  const mergedLines = mergeResolvedLinesByPriceItem(lines);
+  const maxLeadWorkingDays = mergedLines.reduce(
     (max, l) => Math.max(max, l.leadWorkingDays ?? 0),
     0,
   );
 
-  return { lines, warnings, maxLeadWorkingDays };
+  return { lines: mergedLines, warnings, maxLeadWorkingDays };
 }
 
 export function compositionLinesToOrderConstructions(
