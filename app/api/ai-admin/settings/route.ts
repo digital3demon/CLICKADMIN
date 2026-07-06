@@ -31,7 +31,10 @@ export async function POST(req: Request) {
     if (typeof body.openRouterModel === "string") {
       const model = body.openRouterModel.trim();
       if (!isAllowedOpenRouterModel(model)) {
-        return NextResponse.json({ error: "Unknown model" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Неверный slug модели. Формат: provider/model или provider/model:free" },
+          { status: 400 },
+        );
       }
       updateData.openRouterModel = model;
     }

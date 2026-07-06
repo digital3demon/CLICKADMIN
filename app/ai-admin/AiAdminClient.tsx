@@ -13,8 +13,11 @@ import {
 import { OrderSourceEmailView } from "@/components/orders/OrderSourceEmailView";
 import type { OrderSourceEmailRow } from "@/lib/mail/order-source-emails";
 import {
-  normalizeOpenRouterModel,
+  initialOpenRouterModelState,
+  isValidOpenRouterModelSlug,
+  OPENROUTER_CUSTOM_MODEL_VALUE,
   OPENROUTER_MODEL_OPTIONS,
+  resolveOpenRouterModel,
 } from "@/lib/llm/openrouter-models";
 
 async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
@@ -263,9 +266,11 @@ export function AiAdminClient({
 }) {
   const [activeTab, setActiveTab] = useState<"diffs" | "settings">("diffs");
   const [aiEnabled, setAiEnabled] = useState(initialAiEnabled);
-  const [openRouterModel, setOpenRouterModel] = useState(
-    normalizeOpenRouterModel(initialOpenRouterModel),
-  );
+  const initialModel = initialOpenRouterModelState(initialOpenRouterModel);
+  const [modelSource, setModelSource] = useState<"preset" | "custom">(initialModel.source);
+  const [presetModel, setPresetModel] = useState(initialModel.presetModel);
+  const [customModel, setCustomModel] = useState(initialModel.customModel);
+  const openRouterModel = resolveOpenRouterModel(modelSource, presetModel, customModel);
   const [apiKey, setApiKey] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isBacktesting, setIsBacktesting] = useState(false);
@@ -315,6 +320,11 @@ export function AiAdminClient({
   }
 
   async function handleSaveSettings() {
+    if (modelSource === "custom" && !isValidOpenRouterModelSlug(customModel)) {
+      toast.error("Укажите slug модели в формате provider/model или provider/model:free");
+      return;
+    }
+
     setIsSaving(true);
     try {
       await jsonFetch("/api/ai-admin/settings", {
@@ -331,6 +341,11 @@ export function AiAdminClient({
   }
 
   async function handleRunBacktest() {
+    if (modelSource === "custom" && !isValidOpenRouterModelSlug(customModel)) {
+      toast.error("Укажите slug модели в формате provider/model или provider/model:free");
+      return;
+    }
+
     setIsBacktesting(true);
     try {
       await jsonFetch("/api/ai-admin/settings", {
@@ -397,8 +412,16 @@ export function AiAdminClient({
               <div className="space-y-2">
                 <label className="block font-medium">Модель по умолчанию</label>
                 <select
-                  value={openRouterModel}
-                  onChange={(e) => setOpenRouterModel(e.target.value)}
+                  value={modelSource === "custom" ? OPENROUTER_CUSTOM_MODEL_VALUE : presetModel}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === OPENROUTER_CUSTOM_MODEL_VALUE) {
+                      setModelSource("custom");
+                      return;
+                    }
+                    setModelSource("preset");
+                    setPresetModel(value);
+                  }}
                   className="w-full px-3 py-2 border border-[var(--app-border)] rounded-md bg-[var(--app-bg-secondary)]"
                 >
                   {OPENROUTER_MODEL_OPTIONS.map((option) => (
@@ -406,10 +429,21 @@ export function AiAdminClient({
                       {option.label}
                     </option>
                   ))}
+                  <option value={OPENROUTER_CUSTOM_MODEL_VALUE}>Своя модель (slug)…</option>
                 </select>
+                {modelSource === "custom" ? (
+                  <input
+                    type="text"
+                    value={customModel}
+                    onChange={(e) => setCustomModel(e.target.value)}
+                    placeholder="nvidia/nemotron-3-ultra-550b-a55b:free"
+                    className="w-full px-3 py-2 border border-[var(--app-border)] rounded-md bg-[var(--app-bg-secondary)] font-mono text-sm"
+                  />
+                ) : null}
                 <p className="text-sm text-[var(--app-text-secondary)]">
-                  Используется для всех запросов ИИ-Админа. Запасные модели отключены — при ошибке
-                  система не переключается на другую модель автоматически.
+                  Можно выбрать из списка или указать slug OpenRouter вручную, например{" "}
+                  <span className="font-mono">nvidia/nemotron-3-ultra-550b-a55b:free</span>.
+                  Запасные модели отключены.
                 </p>
               </div>
 
