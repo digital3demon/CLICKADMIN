@@ -96,6 +96,8 @@ model Tenant {
   aiEnabled             Boolean          @default(false)
   /// API-ключ OpenRouter (сохраняется в БД, чтобы не зависеть от .env)
   openRouterApiKey      String?
+  /// Модель OpenRouter по умолчанию для ИИ-Админа
+  openRouterModel       String?
   /// null — без срока / вечная лицензия
   subscriptionValidTo   DateTime?
   createdAt             DateTime         @default(now())

@@ -3,6 +3,8 @@ import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
+import { isAllowedOpenRouterModel } from "@/lib/llm/openrouter-models";
+
 export async function POST(req: Request) {
   try {
     const s = await getSessionFromCookies();
@@ -24,6 +26,14 @@ export async function POST(req: Request) {
     
     if (typeof body.apiKey === "string" && body.apiKey.trim().length > 0) {
       updateData.openRouterApiKey = body.apiKey.trim();
+    }
+
+    if (typeof body.openRouterModel === "string") {
+      const model = body.openRouterModel.trim();
+      if (!isAllowedOpenRouterModel(model)) {
+        return NextResponse.json({ error: "Unknown model" }, { status: 400 });
+      }
+      updateData.openRouterModel = model;
     }
 
     await db.tenant.update({

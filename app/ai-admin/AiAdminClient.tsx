@@ -12,6 +12,10 @@ import {
 } from "@/components/orders/OrderEditForm";
 import { OrderSourceEmailView } from "@/components/orders/OrderSourceEmailView";
 import type { OrderSourceEmailRow } from "@/lib/mail/order-source-emails";
+import {
+  normalizeOpenRouterModel,
+  OPENROUTER_MODEL_OPTIONS,
+} from "@/lib/llm/openrouter-models";
 
 async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
   const res = await fetch(url, {
@@ -251,12 +255,17 @@ function AiDiffCompareModal({
 export function AiAdminClient({
   initialAiEnabled,
   hasApiKey,
+  initialOpenRouterModel,
 }: {
   initialAiEnabled: boolean;
   hasApiKey: boolean;
+  initialOpenRouterModel?: string | null;
 }) {
   const [activeTab, setActiveTab] = useState<"diffs" | "settings">("diffs");
   const [aiEnabled, setAiEnabled] = useState(initialAiEnabled);
+  const [openRouterModel, setOpenRouterModel] = useState(
+    normalizeOpenRouterModel(initialOpenRouterModel),
+  );
   const [apiKey, setApiKey] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isBacktesting, setIsBacktesting] = useState(false);
@@ -310,7 +319,7 @@ export function AiAdminClient({
     try {
       await jsonFetch("/api/ai-admin/settings", {
         method: "POST",
-        body: { aiEnabled, apiKey: apiKey || undefined },
+        body: { aiEnabled, apiKey: apiKey || undefined, openRouterModel },
       });
       toast.success("Настройки ИИ сохранены");
       if (apiKey) setApiKey("");
@@ -326,7 +335,7 @@ export function AiAdminClient({
     try {
       await jsonFetch("/api/ai-admin/settings", {
         method: "POST",
-        body: { aiEnabled, apiKey: apiKey || undefined },
+        body: { aiEnabled, apiKey: apiKey || undefined, openRouterModel },
       });
       if (apiKey) setApiKey("");
 
@@ -382,6 +391,25 @@ export function AiAdminClient({
                 </label>
                 <p className="text-sm text-[var(--app-text-secondary)]">
                   Если включено, при создании наряда из письма CRM будет в фоне запрашивать предсказание у ИИ.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block font-medium">Модель по умолчанию</label>
+                <select
+                  value={openRouterModel}
+                  onChange={(e) => setOpenRouterModel(e.target.value)}
+                  className="w-full px-3 py-2 border border-[var(--app-border)] rounded-md bg-[var(--app-bg-secondary)]"
+                >
+                  {OPENROUTER_MODEL_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-sm text-[var(--app-text-secondary)]">
+                  Используется для всех запросов ИИ-Админа. Запасные модели отключены — при ошибке
+                  система не переключается на другую модель автоматически.
                 </p>
               </div>
 
