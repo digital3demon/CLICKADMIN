@@ -4,7 +4,22 @@ import { useState } from "react";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/toast-store";
-import { jsonFetch } from "@/lib/json-fetch";
+
+async function jsonFetch<T = any>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...init?.headers,
+    },
+    body: init?.body ? JSON.stringify(init.body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Ошибка запроса");
+  }
+  return res.json();
+}
 
 export function AiAdminClient({
   initialAiEnabled,
