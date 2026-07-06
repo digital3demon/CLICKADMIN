@@ -32,6 +32,7 @@ import {
   type OrderProstheticsV1,
 } from "@/lib/order-prosthetics";
 import { recordOrderRevision } from "@/lib/record-order-revision";
+import { analyzePredictionError } from "@/lib/llm/analyze-prediction-error";
 import { syncOrderProstheticsStockTx } from "@/lib/sync-order-prosthetics-stock";
 import {
   isOrderCorrectionTrack,
@@ -1243,6 +1244,19 @@ export async function PATCH(
         const linkHtml = telegramHtmlLink(cardUrl, linkLabel);
         const cardWord = telegramHtmlLink(cardUrl, "карточке");
         const orderWord = telegramHtmlLink(orderPageUrl, "заказе");
+
+        // Запускаем анализ ошибок ИИ после успешного сохранения наряда
+        try {
+          const prediction = await ordersPrisma.aiOrderPrediction.findFirst({
+            where: { orderId, tenantId: order.tenantId },
+            orderBy: { createdAt: "desc" },
+          });
+          if (prediction) {
+            await analyzePredictionError(ordersPrisma, order.tenantId, prediction.id);
+          }
+        } catch (e) {
+          console.error("[PATCH order] analyze prediction error", e);
+        }
 
         const touchedCorrection =
           body.correctionTrack !== undefined ||

@@ -6,10 +6,12 @@ import { getAiSettings } from "./openrouter-config";
 
 import type { ClientHistoryContext } from "./client-history-context";
 
+const FdiToothCodeSchema = z.union([z.string(), z.number()]).transform((value) => String(value).trim());
+
 const CompositionHintSchema = z.object({
   nameHint: z.string().describe("Название работы как в письме или уточнённый синоним для прайса"),
   quantity: z.number().nullable().optional(),
-  teethFdi: z.array(z.string()).nullable().optional(),
+  teethFdi: z.array(FdiToothCodeSchema).nullable().optional(),
 });
 
 export const OrderEmailExtractSchema = z.object({
@@ -151,10 +153,13 @@ export function buildOrderEmailExtractUserPrompt(opts: {
 
   let historyBlock = "";
   if (opts.historyContext) {
-    const { doctorParticulars, doctorHistory, patientHistory } = opts.historyContext;
+    const { doctorParticulars, doctorAiParticulars, doctorAiLessons, doctorHistory, patientHistory } = opts.historyContext;
     
-    if (doctorParticulars?.trim()) {
-      historyBlock += `\n[ОСОБЕННОСТИ ВРАЧА]\n${doctorParticulars.trim()}\n`;
+    if (doctorParticulars?.trim() || doctorAiParticulars?.trim() || doctorAiLessons?.trim()) {
+      historyBlock += `\n[ОСОБЕННОСТИ ВРАЧА]\n`;
+      if (doctorParticulars?.trim()) historyBlock += `${doctorParticulars.trim()}\n`;
+      if (doctorAiParticulars?.trim()) historyBlock += `${doctorAiParticulars.trim()}\n`;
+      if (doctorAiLessons?.trim()) historyBlock += `\n[ВАЖНО! ПРОШЛЫЕ ОШИБКИ ИИ ПО ЭТОМУ ВРАЧУ]\n${doctorAiLessons.trim()}\n`;
     }
 
     if (doctorHistory.length > 0) {
@@ -190,7 +195,7 @@ ${opts.emailsText}
 - urgent: true если «срочно/cito/asap/urgent/!!!» ИЛИ «на завтра/сегодня/к пятнице»
 - hasScans, hasCt, hasMri, hasPhoto: boolean|null — по тексту и вложениям
 - suggestedAttachmentIds: string[] — ID из каталога (только явный выбор; для .stl обязательно)
-- compositionHints: [{ nameHint, quantity?, teethFdi? }] — все позиции работ.
+- compositionHints: [{ nameHint, quantity?, teethFdi? }] — все позиции работ. teethFdi — строки FDI («53», не число 53).
 - confidenceScore: 0–100 — насколько уверен в разборе
 - warnings: string[] — неоднозначности + логика («коронка без сканов/цвета», «несколько пациентов» и т.п.)
 

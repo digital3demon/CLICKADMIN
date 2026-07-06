@@ -16,6 +16,8 @@ export type PatientHistoryRow = {
 
 export type ClientHistoryContext = {
   doctorParticulars: string | null;
+  doctorAiParticulars: string | null;
+  doctorAiLessons: string | null;
   doctorHistory: DoctorHistoryRow[];
   patientHistory: PatientHistoryRow[];
 };
@@ -137,7 +139,7 @@ export async function fetchClientOrderHistoryContext(
 
   const doctor = await db.doctor.findUnique({
     where: { id: doctorId },
-    select: { particulars: true },
+    select: { particulars: true, aiParticulars: true, aiLessons: true },
   });
 
   const [doctorHistory, patientHistory] = await Promise.all([
@@ -147,6 +149,8 @@ export async function fetchClientOrderHistoryContext(
 
   return {
     doctorParticulars: doctor?.particulars ?? null,
+    doctorAiParticulars: doctor?.aiParticulars ?? null,
+    doctorAiLessons: doctor?.aiLessons ?? null,
     doctorHistory,
     patientHistory,
   };
