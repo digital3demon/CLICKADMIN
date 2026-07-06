@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
@@ -10,6 +11,22 @@ import {
   OrderEditForm,
   type OrderEditInitial,
 } from "@/components/orders/OrderEditForm";
+import type { OrderDraftSnapshot } from "@/lib/order-draft-snapshot";
+
+const NewOrderForm = dynamic(
+  () =>
+    import("@/components/orders/new-order-form/NewOrderForm").then((m) => ({
+      default: m.NewOrderForm,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-[240px] items-center justify-center px-6 text-sm text-[var(--text-secondary)]">
+        Загрузка формы…
+      </div>
+    ),
+  },
+);
 
 async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
   const res = await fetch(url, {
@@ -29,14 +46,29 @@ async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> 
 
 type DiffModalData = {
   realOrderInitial: OrderEditInitial;
-  aiOrderInitial: OrderEditInitial;
+  aiDraftSnapshot: OrderDraftSnapshot;
+  aiSuggestedAttachments: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+  }>;
+  matchedBySourceEmail: boolean;
+  sourceEmailAmbiguous: boolean;
   orderNumber: string;
   predictionError: string | null;
+  isDemoMode: boolean;
   kaitenIntegrationActive: boolean;
   kanbanCardUrl: string | null;
   demoKanbanCardTypes: Array<{ id: string; name: string }>;
-  isDemoMode: boolean;
 };
+
+function aiSuggestedFilesLabel(
+  json: Record<string, unknown> | null | undefined,
+): string | null {
+  const ids = json?.suggestedAttachmentIds;
+  if (!Array.isArray(ids) || ids.length === 0) return null;
+  return ids.length === 1 ? "1 файл" : `${ids.length} файла`;
+}
 
 function predictionField(
   json: Record<string, unknown> | null | undefined,
@@ -85,10 +117,10 @@ function AiDiffCompareModal({
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3">
         <div>
           <h2 className="text-lg font-semibold">
-            {data ? `Наряд ${data.orderNumber}` : "Загрузка…"}
+            {data ? `Сравнение · наряд ${data.orderNumber}` : "Загрузка…"}
           </h2>
           <p className="text-sm text-[var(--app-text-secondary)]">
-            Слева — как сохранил администратор, справа — как заполнил бы ИИ (только просмотр)
+            Слева — сохранённый наряд администратора, справа — виртуальный черновик ИИ из письма
           </p>
         </div>
         <button
@@ -133,22 +165,34 @@ function AiDiffCompareModal({
               />
             </div>
             <div className="min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)]">
-              <div className="border-b border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)]">
-                Предложил ИИ
+              <div className="flex flex-wrap items-center gap-2 border-b border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)]">
+                <span>Виртуальный наряд ИИ</span>
+                {data.matchedBySourceEmail ? (
+                  <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-normal text-emerald-700">
+                    заказчик по почте
+                  </span>
+                ) : null}
+                {data.sourceEmailAmbiguous ? (
+                  <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-normal text-amber-700">
+                    почта неоднозначна
+                  </span>
+                ) : null}
               </div>
-              <OrderEditForm
-                key={`ai-${data.aiOrderInitial.id}`}
-                initial={data.aiOrderInitial}
-                isDemoMode={data.isDemoMode}
-                kaitenIntegrationActive={data.kaitenIntegrationActive}
-                kanbanCardUrl={data.kanbanCardUrl}
-                demoKanbanCardTypes={data.demoKanbanCardTypes}
-                canAcceptChatCorrections={false}
-                canEditClients={false}
-                canEditOrder={false}
-                orderPageFrame={{
-                  title: `Наряд ${data.orderNumber} (ИИ)`,
-                }}
+              <NewOrderForm
+                key="ai-virtual-draft"
+                panelId="ai-diff-preview"
+                titleId="ai-diff-preview-title"
+                initialSnapshot={data.aiDraftSnapshot}
+                sourceEmails={[]}
+                previewMode
+                virtualSuggestedAttachments={data.aiSuggestedAttachments.map((a) => ({
+                  fileName: a.fileName,
+                  mimeType: a.mimeType,
+                }))}
+                onCollapse={() => {}}
+                onClose={() => {}}
+                onAfterSuccessfulSave={() => {}}
+                onKaitenCancelCollapse={() => {}}
               />
             </div>
           </div>
@@ -401,8 +445,20 @@ export function AiAdminClient({
                         </div>
 
                         <div className="p-4">
-                          <div className="text-sm font-medium mb-3 text-[var(--app-text-secondary)] flex justify-between items-center">
-                            <span>Предложил ИИ:</span>
+                          <div className="text-sm font-medium mb-3 text-[var(--app-text-secondary)] flex flex-wrap justify-between items-center gap-2">
+                            <span className="flex flex-wrap items-center gap-2">
+                              Предложил ИИ
+                              {!diff.error && diff.predictionJson?.matchedBySourceEmail ? (
+                                <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-normal text-emerald-700">
+                                  по почте
+                                </span>
+                              ) : null}
+                              {!diff.error && diff.predictionJson?.sourceEmailAmbiguous ? (
+                                <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-normal text-amber-700">
+                                  почта неоднозначна
+                                </span>
+                              ) : null}
+                            </span>
                             {diff.error ? (
                               <span className="text-red-500 text-xs px-2 py-1 bg-red-500/10 rounded">Ошибка</span>
                             ) : (
@@ -417,9 +473,15 @@ export function AiAdminClient({
                           ) : (
                             <dl className="space-y-2 text-sm">
                               <div><dt className="text-[var(--app-text-secondary)] inline">Пациент:</dt> <dd className="inline font-medium">{diff.predictionJson.patientName || "—"}</dd></div>
-                              <div><dt className="text-[var(--app-text-secondary)] inline">Клиника:</dt> <dd className="inline font-medium">{predictionField(diff.predictionJson, "clinicId", "clinicHint")}</dd></div>
-                              <div><dt className="text-[var(--app-text-secondary)] inline">Врач:</dt> <dd className="inline font-medium">{predictionField(diff.predictionJson, "doctorId", "doctorHint")}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Заказчик (клиника):</dt> <dd className="inline font-medium">{predictionField(diff.predictionJson, "clinicId", "clinicHint")}</dd></div>
+                              <div><dt className="text-[var(--app-text-secondary)] inline">Заказчик (врач):</dt> <dd className="inline font-medium">{predictionField(diff.predictionJson, "doctorId", "doctorHint")}</dd></div>
                               <div><dt className="text-[var(--app-text-secondary)] inline">Срочно:</dt> <dd className="inline font-medium">{diff.predictionJson.urgent ? "Да" : "Нет"}</dd></div>
+                              {aiSuggestedFilesLabel(diff.predictionJson) ? (
+                                <div>
+                                  <dt className="text-[var(--app-text-secondary)] inline">Файлы ИИ:</dt>{" "}
+                                  <dd className="inline font-medium">{aiSuggestedFilesLabel(diff.predictionJson)}</dd>
+                                </div>
+                              ) : null}
                               <div>
                                 <dt className="text-[var(--app-text-secondary)] block mb-1">Описание работы:</dt>
                                 <dd className="block bg-[var(--app-bg)] p-2 rounded border border-[var(--app-border)] whitespace-pre-wrap">

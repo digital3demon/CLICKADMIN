@@ -147,6 +147,8 @@ const RULES: Rule[] = [
   { prefix: "/finance-office", module: "FINANCE_OFFICE" },
   { prefix: "/api/mail", module: "MAIL" },
   { prefix: "/mail", module: "MAIL" },
+  { prefix: "/api/ai-admin", module: "AI_ADMIN" },
+  { prefix: "/ai-admin", module: "AI_ADMIN" },
   { prefix: "/api/payroll", module: "PAYROLL" },
   { prefix: "/payroll", module: "PAYROLL" },
   { prefix: "/orders/new", module: "ORDERS_CREATE" },

@@ -187,6 +187,8 @@ export function NewOrderForm({
   titleId,
   initialSnapshot,
   sourceEmails = [],
+  previewMode = false,
+  virtualSuggestedAttachments = [],
   onCollapse,
   onClose,
   onAfterSuccessfulSave,
@@ -196,6 +198,9 @@ export function NewOrderForm({
   titleId: string;
   initialSnapshot?: OrderDraftSnapshot | null;
   sourceEmails?: OrderSourceEmail[];
+  /** Только просмотр виртуального наряда ИИ (Diff Viewer). */
+  previewMode?: boolean;
+  virtualSuggestedAttachments?: Array<{ fileName: string; mimeType?: string }>;
   onCollapse: () => void;
   onClose: () => void;
   onAfterSuccessfulSave: () => void;
@@ -787,8 +792,9 @@ export function NewOrderForm({
   );
 
   useEffect(() => {
+    if (previewMode) return;
     return registerPanelSnapshot(panelId, () => orderDraftSnapshot);
-  }, [panelId, registerPanelSnapshot, orderDraftSnapshot]);
+  }, [panelId, registerPanelSnapshot, orderDraftSnapshot, previewMode]);
 
   /** Шаблон плашек для следующих окон «Новый наряд» (серверное user-state). */
   useEffect(() => {
@@ -1521,7 +1527,11 @@ export function NewOrderForm({
   }
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden">
+    <div
+      className={`flex min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden${
+        previewMode ? " pointer-events-none select-none" : ""
+      }`}
+    >
       <NewOrderDuplicatePreflightModal
         open={duplicateGate != null}
         gate={duplicateGate}
@@ -1776,6 +1786,7 @@ export function NewOrderForm({
                     aria-hidden
                   />
                 </button>
+                {!previewMode ? (
                 <button
                   type="button"
                   onClick={onCollapse}
@@ -1785,6 +1796,8 @@ export function NewOrderForm({
                 >
                   <ChevronDown className="h-4 w-4" aria-hidden />
                 </button>
+                ) : null}
+                {!previewMode ? (
                 <button
                   type="button"
                   onClick={onClose}
@@ -1794,6 +1807,8 @@ export function NewOrderForm({
                 >
                   <CloseIcon className="h-4 w-4" aria-hidden />
                 </button>
+                ) : null}
+                {!previewMode ? (
                 <button
                   type="button"
                   onClick={() => void requestSave()}
@@ -1802,6 +1817,7 @@ export function NewOrderForm({
                 >
                   {saving ? "…" : "Сохранить"}
                 </button>
+                ) : null}
               </div>
             </div>
             <div
@@ -1931,6 +1947,8 @@ export function NewOrderForm({
             </div>
           </div>
           <div className="hidden shrink-0 flex-wrap items-center justify-end gap-1 sm:flex sm:pl-2">
+            {!previewMode ? (
+            <>
             <button
               type="button"
               onClick={onCollapse}
@@ -1957,6 +1975,8 @@ export function NewOrderForm({
             >
               {saving ? "Сохранение…" : "Сохранить"}
             </button>
+            </>
+            ) : null}
           </div>
         </div>
 
@@ -2298,12 +2318,29 @@ export function NewOrderForm({
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)] sm:text-base">
                     Файлы
                   </h3>
+                  {previewMode && virtualSuggestedAttachments.length > 0 ? (
+                    <div className="mb-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
+                      <div className="font-medium text-emerald-700 dark:text-emerald-300">
+                        ИИ бы добавил:
+                      </div>
+                      <ul className="mt-1 list-disc pl-4 text-[var(--app-text)]">
+                        {virtualSuggestedAttachments.map((f) => (
+                          <li key={f.fileName}>
+                            {f.fileName}
+                            {f.mimeType ? (
+                              <span className="text-[var(--text-muted)]"> ({f.mimeType})</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   <OrderFilesPanel
                     orderId={null}
-                    listenPaste
+                    listenPaste={!previewMode}
                     pendingFiles={pendingFiles}
                     pendingLoadingFiles={pendingSourceAttachmentLoads}
-                    onPendingChange={setPendingFiles}
+                    onPendingChange={previewMode ? undefined : setPendingFiles}
                   />
                 </section>
                 <div
@@ -2349,6 +2386,7 @@ export function NewOrderForm({
             />
         </div>
       </div>
+      {!previewMode ? (
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shell-desktop:hidden">
         <button
           type="button"
@@ -2359,6 +2397,7 @@ export function NewOrderForm({
           {saving ? "Сохранение…" : "Создать заказ"}
         </button>
       </div>
+      ) : null}
     </div>
   );
 }

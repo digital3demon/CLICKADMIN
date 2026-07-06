@@ -61,3 +61,101 @@ export async function listDoctorOrderSourceEmails(
 ): Promise<string[]> {
   return listOrderSourceEmailsForOrders(db, tenantId, { doctorId });
 }
+
+export type OrderSourceEmailClientMatch = {
+  clinicId: string | null;
+  doctorId: string | null;
+  /** true — однозначное совпадение fromAddress со справочником почт клиентов */
+  matched: boolean;
+  /** true — несколько разных пар clinic/doctor на одну почту */
+  ambiguous: boolean;
+};
+
+/** Обратный lookup: fromAddress письма → clinicId/doctorId из истории EmailSourceOrder. */
+export async function resolveClientIdsFromOrderSourceEmail(
+  db: PrismaClient,
+  tenantId: string,
+  fromAddress: string | null | undefined,
+): Promise<OrderSourceEmailClientMatch> {
+  const normalized = normalizeOrderSourceEmailAddress(fromAddress);
+  if (!normalized) {
+    return { clinicId: null, doctorId: null, matched: false, ambiguous: false };
+  }
+
+  const links = await db.emailSourceOrder.findMany({
+    where: { tenantId },
+    select: {
+      email: { select: { fromAddress: true } },
+      order: { select: { clinicId: true, doctorId: true } },
+    },
+  });
+
+  const pairKeys = new Set<string>();
+  let clinicId: string | null = null;
+  let doctorId: string | null = null;
+
+  for (const link of links) {
+    const addr = normalizeOrderSourceEmailAddress(link.email.fromAddress);
+    if (addr !== normalized) continue;
+    const key = `${link.order.clinicId ?? ""}:${link.order.doctorId}`;
+    if (pairKeys.has(key)) continue;
+    pairKeys.add(key);
+    if (pairKeys.size === 1) {
+      clinicId = link.order.clinicId;
+      doctorId = link.order.doctorId;
+    }
+  }
+
+  if (pairKeys.size === 0) {
+    return { clinicId: null, doctorId: null, matched: false, ambiguous: false };
+  }
+  if (pairKeys.size > 1) {
+    return { clinicId: null, doctorId: null, matched: false, ambiguous: true };
+  }
+  return { clinicId, doctorId, matched: true, ambiguous: false };
+}
+
+/** Для тестов и offline-разбора: группировка адресов → пары клиентов. */
+export function buildOrderSourceEmailPairIndex(
+  rows: Array<{
+    fromAddress: string | null | undefined;
+    clinicId: string | null;
+    doctorId: string;
+  }>,
+): Map<string, Array<{ clinicId: string | null; doctorId: string }>> {
+  const index = new Map<string, Array<{ clinicId: string | null; doctorId: string }>>();
+  for (const row of rows) {
+    const addr = normalizeOrderSourceEmailAddress(row.fromAddress);
+    if (!addr) continue;
+    const list = index.get(addr) ?? [];
+    const key = `${row.clinicId ?? ""}:${row.doctorId}`;
+    if (!list.some((x) => `${x.clinicId ?? ""}:${x.doctorId}` === key)) {
+      list.push({ clinicId: row.clinicId, doctorId: row.doctorId });
+    }
+    index.set(addr, list);
+  }
+  return index;
+}
+
+export function resolveClientIdsFromPairIndex(
+  index: Map<string, Array<{ clinicId: string | null; doctorId: string }>>,
+  fromAddress: string | null | undefined,
+): OrderSourceEmailClientMatch {
+  const normalized = normalizeOrderSourceEmailAddress(fromAddress);
+  if (!normalized) {
+    return { clinicId: null, doctorId: null, matched: false, ambiguous: false };
+  }
+  const pairs = index.get(normalized) ?? [];
+  if (pairs.length === 0) {
+    return { clinicId: null, doctorId: null, matched: false, ambiguous: false };
+  }
+  if (pairs.length > 1) {
+    return { clinicId: null, doctorId: null, matched: false, ambiguous: true };
+  }
+  return {
+    clinicId: pairs[0]!.clinicId,
+    doctorId: pairs[0]!.doctorId,
+    matched: true,
+    ambiguous: false,
+  };
+}

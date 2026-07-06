@@ -60,6 +60,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CLICKMIG_REVIEW",
   "CLICKMIG_KANBAN",
   "CONFIG_CLICKMIG",
+  "AI_ADMIN",
 ];
 
 export const APP_MODULE_LABELS: Record<AppModule, string> = {
@@ -113,12 +114,13 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   AI_ADMIN: "ИИ-Админ",
 };
 
-/** Пока КликМиг только у владельца (OWNER); см. getEffectiveModuleAccess. */
+/** Только владелец (OWNER); см. getEffectiveModuleAccess. */
 export const CLICKMIG_OWNER_ONLY_MODULES: readonly AppModule[] = [
   "CLICKMIG",
   "CLICKMIG_REVIEW",
   "CLICKMIG_KANBAN",
   "CONFIG_CLICKMIG",
+  "AI_ADMIN",
 ] as const;
 
 export function isClickMigOwnerOnlyModule(module: AppModule): boolean {

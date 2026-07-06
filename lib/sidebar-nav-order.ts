@@ -9,6 +9,7 @@ export const DEFAULT_SIDEBAR_HREF_ORDER = [
   "/finance-office",
   "/clickmig",
   "/mail",
+  "/ai-admin",
   "/shipments",
   "/warehouse",
   "/clients",

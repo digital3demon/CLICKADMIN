@@ -2,7 +2,10 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { extractOrderFieldsFromEmail } from "./order-email-extract";
+import {
+  extractOrderFieldsFromEmail,
+  mergeAiPredictionJson,
+} from "./order-email-extract";
 import * as openrouterConfig from "./openrouter-config";
 import * as openrouterClient from "./openrouter-client";
 
@@ -52,7 +55,7 @@ describe("extractOrderFieldsFromEmail", () => {
     expect(res.error).toBe("AI is disabled");
   });
 
-  it("parses valid JSON response", async () => {
+  it("parses valid JSON response with attachments", async () => {
     vi.mocked(openrouterConfig.getAiSettings).mockResolvedValueOnce({
       enabled: true,
       apiKey: "sk-test",
@@ -69,19 +72,24 @@ describe("extractOrderFieldsFromEmail", () => {
         doctorId: "doctor-1",
         workDescription: "Коронка Emax",
         urgent: true,
+        suggestedAttachmentIds: ["att-1"],
         warnings: [],
       }),
       model: "test",
       durationMs: 100,
     });
 
-    const res = await extractOrderFieldsFromEmail("t1", "Заказ", "Срочно сделать коронку");
+    const res = await extractOrderFieldsFromEmail("t1", "Заказ", "Срочно сделать коронку", {
+      fromAddress: "doc@clinic.ru",
+      emailAttachments: [{ id: "att-1", fileName: "scan.stl", mimeType: "model/stl" }],
+    });
     expect(res.result).toEqual({
       patientName: "Иванов Иван",
       clinicId: "clinic-1",
       doctorId: "doctor-1",
       workDescription: "Коронка Emax",
       urgent: true,
+      suggestedAttachmentIds: ["att-1"],
       warnings: [],
     });
   });
@@ -105,5 +113,20 @@ describe("extractOrderFieldsFromEmail", () => {
     const res = await extractOrderFieldsFromEmail("t1", "Subj", "Body");
     expect(res.result).toBeNull();
     expect(res.error).toContain("JSON parse/validation error");
+  });
+});
+
+describe("mergeAiPredictionJson", () => {
+  it("overrides client ids when matched by source email", () => {
+    const merged = mergeAiPredictionJson(
+      { clinicId: "wrong", doctorId: "wrong", patientName: "X" },
+      {
+        preResolved: { clinicId: "c1", doctorId: "d1" },
+        matchedBySourceEmail: true,
+      },
+    );
+    expect(merged.clinicId).toBe("c1");
+    expect(merged.doctorId).toBe("d1");
+    expect(merged.matchedBySourceEmail).toBe(true);
   });
 });
