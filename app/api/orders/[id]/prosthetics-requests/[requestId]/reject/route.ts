@@ -7,7 +7,6 @@ import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { getKaitenRestAuth, kaitenCreateComment } from "@/lib/kaiten-rest";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
-import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
 
 const REPLY_TEXT = "отказ по протетике";
 
@@ -106,19 +105,20 @@ export async function POST(
         null,
         { burst: true },
       );
-      if (!res.ok) {
-        if (useInbox) {
-          await (prisma as any).orderChatInboxItem.update({
-            where: { id: row.id },
-            data: { rejectedAt: null, rejectedByUserId: null },
-          });
-        } else {
-          await prisma.orderProstheticsRequest.update({
-            where: { id: row.id },
-            data: { rejectedAt: null, rejectedByUserId: null },
-          });
-        }
-        return NextResponse.json(
+          if (!res.ok) {
+            if (inboxRow) {
+              await (prisma as any).orderChatInboxItem.update({
+                where: { id: inboxRow.id },
+                data: { rejectedAt: null, rejectedByUserId: null },
+              });
+            }
+            if (legacyRow) {
+              await prisma.orderProstheticsRequest.update({
+                where: { id: legacyRow.id },
+                data: { rejectedAt: null, rejectedByUserId: null },
+              });
+            }
+            return NextResponse.json(
           { error: res.error ?? "Не удалось отправить ответ в Kaiten" },
           { status: 502 },
         );
