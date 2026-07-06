@@ -327,11 +327,15 @@ export function AiAdminClient({
 
     setIsSaving(true);
     try {
-      await jsonFetch("/api/ai-admin/settings", {
+      const res = await jsonFetch<{ ok: boolean; retryCount?: number }>("/api/ai-admin/settings", {
         method: "POST",
         body: { aiEnabled, apiKey: apiKey || undefined, openRouterModel },
       });
-      toast.success("Настройки ИИ сохранены");
+      if (res.retryCount && res.retryCount > 0) {
+        toast.success(`Настройки сохранены. Пересчёт ${res.retryCount} ошибок запущен в фоне`);
+      } else {
+        toast.success("Настройки ИИ сохранены");
+      }
       if (apiKey) setApiKey("");
     } catch (e: any) {
       toast.error(e.message || "Ошибка сохранения");

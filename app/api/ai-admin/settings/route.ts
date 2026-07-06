@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
-
-import { isAllowedOpenRouterModel } from "@/lib/llm/openrouter-models";
+import {
+  isAllowedOpenRouterModel,
+  normalizeOpenRouterModel,
+} from "@/lib/llm/openrouter-models";
+import { queueFailedAiPredictionsRetry } from "@/lib/llm/shadow-prediction";
 
 export async function POST(req: Request) {
   try {
@@ -19,8 +22,13 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const db = await getOrdersPrisma();
+
+    const tenantBefore = await db.tenant.findUnique({
+      where: { id: tenantId },
+      select: { openRouterModel: true },
+    });
     
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       aiEnabled: Boolean(body.aiEnabled),
     };
     
@@ -28,6 +36,7 @@ export async function POST(req: Request) {
       updateData.openRouterApiKey = body.apiKey.trim();
     }
 
+    let modelChanged = false;
     if (typeof body.openRouterModel === "string") {
       const model = body.openRouterModel.trim();
       if (!isAllowedOpenRouterModel(model)) {
@@ -37,6 +46,8 @@ export async function POST(req: Request) {
         );
       }
       updateData.openRouterModel = model;
+      const previousModel = normalizeOpenRouterModel(tenantBefore?.openRouterModel);
+      modelChanged = previousModel !== model;
     }
 
     await db.tenant.update({
@@ -44,7 +55,12 @@ export async function POST(req: Request) {
       data: updateData,
     });
 
-    return NextResponse.json({ ok: true });
+    let retryCount = 0;
+    if (modelChanged && Boolean(body.aiEnabled)) {
+      retryCount = await queueFailedAiPredictionsRetry(tenantId);
+    }
+
+    return NextResponse.json({ ok: true, retryCount });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
