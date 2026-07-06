@@ -11,7 +11,7 @@ export async function GET(req: Request) {
     const tenantId = await orderTenantIdForSession(s);
     if (!tenantId) return NextResponse.json({ error: "No tenant" }, { status: 403 });
     
-    if (s.role !== "OWNER") {
+    if (s.role !== "OWNER" && s.actualRole !== "OWNER") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

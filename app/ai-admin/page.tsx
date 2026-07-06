@@ -7,7 +7,7 @@ export const metadata = { title: "ИИ-Админ" };
 
 export default async function AiAdminPage() {
   const s = await getSessionFromCookies();
-  if (!s || s.role !== "OWNER") {
+  if (!s || (s.role !== "OWNER" && s.actualRole !== "OWNER")) {
     redirect("/");
   }
 
