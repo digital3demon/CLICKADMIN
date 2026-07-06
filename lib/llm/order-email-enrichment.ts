@@ -13,6 +13,7 @@ import { autoLabDueLocalFromLeadWorkingDays } from "@/lib/order-due-datetime";
 import { isoToDatetimeLocal, localDateTimeToIso } from "@/lib/datetime-local";
 import {
   resolveAiCompositionLines,
+  inferCompositionHintsFromOrderText,
   compositionLinesToOrderConstructions,
   loadActivePriceListItemNames,
   type CompositionHint,
@@ -80,33 +81,6 @@ function mergeCompositionHints(
     merged.push({ nameHint, quantity: 1 });
   }
   return merged;
-}
-
-/** «ретенционные капы на ВЧ и НЧ» → одна позиция прайса, qty 2. */
-const WORD_LEFT = String.raw`(?<![\p{L}\p{N}])`;
-const WORD_RIGHT = String.raw`(?![\p{L}\p{N}])`;
-
-function supplementCompositionHintsFromOrderText(
-  hints: CompositionHint[],
-  clientOrderText: string | null | undefined,
-): CompositionHint[] {
-  const text = clientOrderText?.trim() ?? "";
-  if (!text) return hints;
-
-  const lower = text.toLowerCase();
-  if (!/ретенцион/.test(lower) || !/кап/.test(lower)) return hints;
-
-  const hasUpper = new RegExp(
-    `${WORD_LEFT}(?:вч|верх(?:няя)?(?:\\s+челюсть)?)${WORD_RIGHT}`,
-    "iu",
-  ).test(lower);
-  const hasLower = new RegExp(
-    `${WORD_LEFT}(?:нч|ниж(?:няя)?(?:\\s+челюсть)?)${WORD_RIGHT}`,
-    "iu",
-  ).test(lower);
-  if (!hasUpper || !hasLower) return hints;
-
-  return [{ nameHint: "Каппа ретенционная", quantity: 2 }];
 }
 
 export async function enrichOrderEmailPrediction(
@@ -284,13 +258,14 @@ export async function enrichOrderEmailPrediction(
     }
   }
 
-  const compositionHints = mergeCompositionHints(
-    supplementCompositionHintsFromOrderText(
-      parseCompositionHints(out.compositionHints),
-      typeof out.clientOrderText === "string" ? out.clientOrderText : null,
-    ),
+  let compositionHints = mergeCompositionHints(
+    parseCompositionHints(out.compositionHints),
     subjectSplit.workNameHints,
   );
+  const clientText = typeof out.clientOrderText === "string" ? out.clientOrderText : "";
+  if (compositionHints.length === 0 && clientText.trim()) {
+    compositionHints = inferCompositionHintsFromOrderText(clientText, priceListNames);
+  }
   out.compositionHints = compositionHints;
 
   const composition = await resolveAiCompositionLines(compositionHints, {

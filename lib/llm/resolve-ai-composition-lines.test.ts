@@ -15,7 +15,10 @@ vi.mock("@/lib/price-overrides", () => ({
 }));
 
 import { getPricingPrismaClient } from "@/lib/prisma-pricing";
-import { resolveAiCompositionLines } from "./resolve-ai-composition-lines";
+import {
+  resolveAiCompositionLines,
+  inferCompositionHintsFromOrderText,
+} from "./resolve-ai-composition-lines";
 
 const mockItems = [
   {
@@ -101,7 +104,7 @@ describe("resolveAiCompositionLines", () => {
     expect(res.warnings).toHaveLength(0);
   });
 
-  it("matches retention capa VCH/NCH as one price item qty 2", async () => {
+  it("merges jaw-split hints into one price line", async () => {
     const res = await resolveAiCompositionLines(
       [
         { nameHint: "Ретенционная капа ВЧ", quantity: 1 },
@@ -132,5 +135,22 @@ describe("resolveAiCompositionLines", () => {
     );
     expect(res.lines).toHaveLength(0);
     expect(res.warnings.some((w) => w.includes("Не найдено в прайсе"))).toBe(true);
+  });
+});
+
+describe("inferCompositionHintsFromOrderText", () => {
+  const names = mockItems.map((item) => item.name);
+
+  it("infers price item from order text when hints are empty", () => {
+    expect(
+      inferCompositionHintsFromOrderText(
+        "необходимо изготовить ретенционные капы на ВЧ и НЧ",
+        names,
+      ),
+    ).toEqual([{ nameHint: "Каппа ретенционная\\элайнер", quantity: 2 }]);
+  });
+
+  it("returns empty when no catalog item matches", () => {
+    expect(inferCompositionHintsFromOrderText("просто осмотр", names)).toEqual([]);
   });
 });

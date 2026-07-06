@@ -83,7 +83,7 @@ const JAW_MARKER_RE = new RegExp(
   "giu",
 );
 
-/** Капа/капы/кап → канон «каппа» для сопоставления с прайсом. */
+/** Частые орфографические варианты (не привязка к одной позиции прайса). */
 export function normalizeCompositionHintForMatch(hint: string): string {
   return hint
     .toLowerCase()
@@ -97,6 +97,14 @@ export function normalizeCompositionHintForMatch(hint: string): string {
     .trim();
 }
 
+function tokensLooselyEqual(a: string, b: string): boolean {
+  if (a === b) return true;
+  const minLen = Math.min(a.length, b.length);
+  if (minLen < 4) return false;
+  const stemLen = Math.min(minLen, 5);
+  return a.slice(0, stemLen) === b.slice(0, stemLen);
+}
+
 function tokenizeForMatch(text: string): string[] {
   const normalized = normalizeCompositionHintForMatch(text);
   return normalized
@@ -106,12 +114,69 @@ function tokenizeForMatch(text: string): string[] {
     .filter((token) => token.length >= 3);
 }
 
-/** Все значимые слова hint есть в названии прайса (порядок не важен). */
+/** Все значимые слова hint есть в названии прайса (порядок и окончания не важны). */
 function hintTokensMatchName(hint: string, itemName: string): boolean {
   const hintTokens = tokenizeForMatch(hint);
   if (hintTokens.length === 0) return false;
-  const nameTokens = new Set(tokenizeForMatch(itemName));
-  return hintTokens.every((token) => nameTokens.has(token));
+  const nameTokens = tokenizeForMatch(itemName);
+  return hintTokens.every((token) =>
+    nameTokens.some((nameToken) => tokensLooselyEqual(token, nameToken)),
+  );
+}
+
+function scorePriceItemMentionInOrderText(itemName: string, orderText: string): number {
+  const itemTokens = tokenizeForMatch(itemName);
+  if (itemTokens.length === 0) return 0;
+  const textTokens = tokenizeForMatch(orderText);
+  if (textTokens.length === 0) return 0;
+
+  let matched = 0;
+  for (const itemToken of itemTokens) {
+    if (textTokens.some((textToken) => tokensLooselyEqual(itemToken, textToken))) {
+      matched++;
+    }
+  }
+  if (matched === 0) return 0;
+  if (matched === itemTokens.length) return matched * 10;
+  if (matched >= 2) return matched * 5;
+  if (itemTokens.length === 1 && matched === 1) return 5;
+  if (matched / itemTokens.length >= 0.66) return matched * 3;
+  return 0;
+}
+
+function orderTextImpliesJawPairQuantity(orderText: string): number | null {
+  const lower = orderText.toLowerCase();
+  const hasUpper = new RegExp(
+    `${WORD_LEFT}(?:вч|верх(?:няя)?(?:\\s+челюсть)?)${WORD_RIGHT}`,
+    "iu",
+  ).test(lower);
+  const hasLower = new RegExp(
+    `${WORD_LEFT}(?:нч|ниж(?:няя)?(?:\\s+челюсть)?)${WORD_RIGHT}`,
+    "iu",
+  ).test(lower);
+  if (hasUpper && hasLower) return 2;
+  return null;
+}
+
+/** Если ИИ не дал hints — ищем упоминания позиций прайса в тексте заказа. */
+export function inferCompositionHintsFromOrderText(
+  orderText: string,
+  priceListItemNames: string[],
+): CompositionHint[] {
+  const text = orderText.trim();
+  if (!text) return [];
+
+  const scored = priceListItemNames
+    .map((name) => ({ name, score: scorePriceItemMentionInOrderText(name, text) }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ru"));
+
+  if (scored.length === 0) return [];
+  const best = scored[0]!;
+  if (scored.length > 1 && scored[1]!.score >= best.score) return [];
+
+  const jawQty = orderTextImpliesJawPairQuantity(text);
+  return [{ nameHint: best.name, quantity: jawQty ?? 1 }];
 }
 
 function findAmbiguousMatches(hint: string, items: CatalogItem[]): CatalogItem[] {
