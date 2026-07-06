@@ -203,7 +203,7 @@ export function AiAdminClient({
                           <dl className="space-y-2 text-sm">
                             <div><dt className="text-[var(--app-text-secondary)] inline">Пациент:</dt> <dd className="inline font-medium">{diff.order.patientName || "—"}</dd></div>
                             <div><dt className="text-[var(--app-text-secondary)] inline">Клиника:</dt> <dd className="inline font-medium">{diff.order.clinic?.name || "—"}</dd></div>
-                            <div><dt className="text-[var(--app-text-secondary)] inline">Врач:</dt> <dd className="inline font-medium">{diff.order.doctor?.name || "—"}</dd></div>
+                            <div><dt className="text-[var(--app-text-secondary)] inline">Врач:</dt> <dd className="inline font-medium">{diff.order.doctor?.fullName || "—"}</dd></div>
                             <div><dt className="text-[var(--app-text-secondary)] inline">Срочно:</dt> <dd className="inline font-medium">{diff.order.isUrgent ? "Да" : "Нет"}</dd></div>
                             <div>
                               <dt className="text-[var(--app-text-secondary)] block mb-1">Описание работы:</dt>

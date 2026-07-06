@@ -110,6 +110,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CLICKMIG_REVIEW: "КликМиг: принять / отказать заявку",
   CLICKMIG_KANBAN: "КликМиг: канбан",
   CONFIG_CLICKMIG: "Конфиг: КликМиг",
+  AI_ADMIN: "ИИ-Админ",
 };
 
 /** Пока КликМиг только у владельца (OWNER); см. getEffectiveModuleAccess. */

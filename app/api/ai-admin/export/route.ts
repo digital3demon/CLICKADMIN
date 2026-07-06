@@ -24,7 +24,7 @@ export async function GET(req: Request) {
           select: {
             patientName: true,
             clinic: { select: { name: true } },
-            doctor: { select: { name: true } },
+            doctor: { select: { fullName: true } },
             clientOrderText: true,
             isUrgent: true,
           }
@@ -41,12 +41,12 @@ export async function GET(req: Request) {
 
     let jsonl = "";
     for (const link of links) {
-      const textBody = link.email.textBody || link.email.preview || "";
+      const textBody = link.email?.textBody || link.email?.preview || "";
       if (!textBody.trim()) continue;
 
       const prompt = `Ты — профессиональный ассистент зуботехнической лаборатории. Твоя задача — извлечь данные для нового наряда из текста письма от стоматологической клиники.
 
-Тема письма: ${link.email.subject || "(без темы)"}
+Тема письма: ${link.email?.subject || "(без темы)"}
 Текст письма:
 ${textBody}
 
@@ -59,11 +59,11 @@ ${textBody}
 - warnings: массив строк с предупреждениями (например, если в письме два разных пациента, или текст слишком короткий/непонятный).`;
 
       const completion = {
-        patientName: link.order.patientName,
-        clinicHint: link.order.clinic?.name || null,
-        doctorHint: link.order.doctor?.name || null,
-        workDescription: link.order.clientOrderText,
-        urgent: link.order.isUrgent,
+        patientName: link.order?.patientName,
+        clinicHint: link.order?.clinic?.name || null,
+        doctorHint: link.order?.doctor?.fullName || null,
+        workDescription: link.order?.clientOrderText,
+        urgent: link.order?.isUrgent,
         warnings: [],
       };
 

@@ -33,7 +33,7 @@ export async function GET(req: Request) {
             orderNumber: true,
             patientName: true,
             clinic: { select: { name: true } },
-            doctor: { select: { name: true } },
+            doctor: { select: { fullName: true } },
             clientOrderText: true,
             isUrgent: true,
           }
