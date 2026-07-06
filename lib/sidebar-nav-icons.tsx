@@ -11,6 +11,7 @@ import {
   Truck,
   Users,
   Wallet,
+  Bot,
 } from "lucide-react";
 
 const NAV_ICON_BY_HREF: Record<string, LucideIcon> = {
@@ -21,6 +22,7 @@ const NAV_ICON_BY_HREF: Record<string, LucideIcon> = {
   "/payroll": Wallet,
   "/finance-office": Calculator,
   "/mail": Mail,
+  "/ai-admin": Bot,
   "/shipments": Truck,
   "/warehouse": Package,
   "/clients": Users,

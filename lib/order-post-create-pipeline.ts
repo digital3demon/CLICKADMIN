@@ -17,6 +17,7 @@ import type { CreateOrderBody } from "@/lib/order-create-service";
 import { shouldScheduleKaitenSyncAfterOrderCreate } from "@/lib/order-create-service";
 import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
 import { logger } from "@/lib/server/logger";
+import { runShadowPredictionInBackground } from "@/lib/llm/shadow-prediction";
 
 export type SyncKaitenAfterCreateResult = {
   kaitenSyncError: string | null;
@@ -146,6 +147,12 @@ export async function runPostCreateOrderPipeline(
   const sourceEmailIds = Array.isArray(body.sourceEmailIds)
     ? body.sourceEmailIds.map((id) => id.trim()).filter(Boolean)
     : [];
+
+  // Shadow Mode: запускаем предсказание ИИ для первого письма
+  if (sourceEmailIds.length > 0) {
+    runShadowPredictionInBackground(tenantId, orderId, sourceEmailIds[0]);
+  }
+
   const replyToSourceEmailId = resolveReplyToSourceEmailId(
     sourceEmailIds,
     body.replyToSourceEmailId,

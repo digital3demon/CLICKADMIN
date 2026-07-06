@@ -1,0 +1,233 @@
+{
+  "sheets": [
+    {
+      "name": "Занесение",
+      "max_row": 2,
+      "max_col": 22,
+      "freeze": "A2",
+      "merged": [],
+      "columns": [
+        {
+          "col": "A",
+          "width": 17.36328125,
+          "header": "Зашла ",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Дата и время когда работа \"зашла\"- у нас есть такая графа в срм",
+          "example_fmt": "General",
+          "example_fill": "Values must be of type <class 'str'>"
+        },
+        {
+          "col": "B",
+          "width": 27.1796875,
+          "header": "Оформил",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Дата и время когда оформили работу",
+          "example_fmt": "General",
+          "example_fill": "Values must be of type <class 'str'>"
+        },
+        {
+          "col": "C",
+          "width": 31.90625,
+          "header": "Занес",
+          "header_fill": "FF8CB3E4",
+          "header_bold": false,
+          "example": "Оля- кто занес работу",
+          "example_fmt": "General",
+          "example_fill": "FF8CB3E4"
+        },
+        {
+          "col": "D",
+          "width": 9.0,
+          "header": "Номер наряда",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Номер заказ наряда",
+          "example_fmt": "General",
+          "example_fill": "Values must be of type <class 'str'>"
+        },
+        {
+          "col": "E",
+          "width": 10.7265625,
+          "header": "Пациент",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "ФАМИЛИЯ И.О. пациента",
+          "example_fmt": "General",
+          "example_fill": "FFF2F2F2"
+        },
+        {
+          "col": "F",
+          "width": 15.7265625,
+          "header": "Доктор",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Из блока доктор",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "G",
+          "width": 20.0,
+          "header": "Клиника",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Ищ блока клиника",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "H",
+          "width": 36.6328125,
+          "header": "Заказ, расшифровка",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Тут \"заказ от клиента\"",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "I",
+          "width": 15.81640625,
+          "header": "Протетика",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Список протетики из модуля протетика к этой работе",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "J",
+          "width": 14.26953125,
+          "header": "Что еще есть к работе",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "у нас ест ьтакой блок(есть кт, есть мрт и тд)",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "K",
+          "width": 31.0,
+          "header": "Комментарий от админов",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "У нас есть такой блок заказе",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "L",
+          "width": 15.1796875,
+          "header": "Дата лабораторная",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Дата лабораторного срока",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "M",
+          "width": 10.36328125,
+          "header": "Прием",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Запись пациент",
+          "example_fmt": "General",
+          "example_fill": "Values must be of type <class 'str'>"
+        },
+        {
+          "col": "N",
+          "width": 11.54296875,
+          "header": "Время",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "время записи пациента",
+          "example_fmt": "General",
+          "example_fill": "Values must be of type <class 'str'>"
+        },
+        {
+          "col": "O",
+          "width": 15.26953125,
+          "header": "Отгружено(такого то числа)",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Да или нет + дата",
+          "example_fmt": "General",
+          "example_fill": "Values must be of type <class 'str'>"
+        },
+        {
+          "col": "P",
+          "width": 26.453125,
+          "header": "Реквизиты контр агента",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "\"ООО «Ортодонтическая Студия» ООО сверка ЭДО\nИНН 7802880465\n\" реквищиты в таком виде",
+          "example_fmt": "General",
+          "example_fill": "Values must be of type <class 'str'>"
+        },
+        {
+          "col": "Q",
+          "width": 12.0,
+          "header": "Номер Счета ",
+          "header_fill": "FFD8D8D8",
+          "header_bold": false,
+          "example": "номер счета если есть и дата в счета",
+          "example_fmt": "General",
+          "example_fill": "FFD8D8D8"
+        },
+        {
+          "col": "R",
+          "width": 12.0,
+          "header": "Оплата",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Не оплачено\\оплаченсверка не оплачено\\сверка оплачено и тд",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "S",
+          "width": 20.0,
+          "header": "Сверка",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Нет- работает ли клиника по сверке",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "T",
+          "width": 20.90625,
+          "header": "Выставлено",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "\"1001 Сплинт сложный *17000*1\nКоэффициент Соколова В.В. х1.5\" состав работы на момент выгрузки этой таблицы(пример выше)",
+          "example_fmt": "General",
+          "example_fill": "Values must be of type <class 'str'>"
+        },
+        {
+          "col": "U",
+          "width": 26.90625,
+          "header": "Сумма",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "р.25 500- общая сумма",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        },
+        {
+          "col": "V",
+          "width": 35.26953125,
+          "header": "Карточка в кайтен/канбан создана",
+          "header_fill": "Values must be of type <class 'str'>",
+          "header_bold": false,
+          "example": "Да\\нет",
+          "example_fmt": "General",
+          "example_fill": "00000000"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { extractOrderFieldsFromEmail } from "./order-email-extract";
+import * as openrouterConfig from "./openrouter-config";
+import * as openrouterClient from "./openrouter-client";
+
+vi.mock("./openrouter-config", () => ({
+  getAiSettings: vi.fn(),
+}));
+
+vi.mock("./openrouter-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./openrouter-client")>();
+  return {
+    ...actual,
+    chatCompletion: vi.fn(),
+  };
+});
+
+describe("extractOrderFieldsFromEmail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns null if AI is disabled", async () => {
+    vi.mocked(openrouterConfig.getAiSettings).mockResolvedValueOnce({
+      enabled: false,
+      apiKey: null,
+      model: "test",
+      fallbackModels: [],
+      timeoutMs: 1000,
+    });
+
+    const res = await extractOrderFieldsFromEmail("t1", "Subj", "Body");
+    expect(res.result).toBeNull();
+    expect(res.error).toBe("AI is disabled");
+  });
+
+  it("parses valid JSON response", async () => {
+    vi.mocked(openrouterConfig.getAiSettings).mockResolvedValueOnce({
+      enabled: true,
+      apiKey: "sk-test",
+      model: "test",
+      fallbackModels: [],
+      timeoutMs: 1000,
+    });
+
+    vi.mocked(openrouterClient.chatCompletion).mockResolvedValueOnce({
+      ok: true,
+      content: JSON.stringify({
+        patientName: "Иванов Иван",
+        clinicHint: "Дента",
+        doctorHint: "Петров",
+        workDescription: "Коронка Emax",
+        urgent: true,
+        warnings: [],
+      }),
+      model: "test",
+      durationMs: 100,
+    });
+
+    const res = await extractOrderFieldsFromEmail("t1", "Заказ", "Срочно сделать коронку");
+    expect(res.result).toEqual({
+      patientName: "Иванов Иван",
+      clinicHint: "Дента",
+      doctorHint: "Петров",
+      workDescription: "Коронка Emax",
+      urgent: true,
+      warnings: [],
+    });
+  });
+
+  it("handles invalid JSON gracefully", async () => {
+    vi.mocked(openrouterConfig.getAiSettings).mockResolvedValueOnce({
+      enabled: true,
+      apiKey: "sk-test",
+      model: "test",
+      fallbackModels: [],
+      timeoutMs: 1000,
+    });
+
+    vi.mocked(openrouterClient.chatCompletion).mockResolvedValueOnce({
+      ok: true,
+      content: "This is not JSON",
+      model: "test",
+      durationMs: 100,
+    });
+
+    const res = await extractOrderFieldsFromEmail("t1", "Subj", "Body");
+    expect(res.result).toBeNull();
+    expect(res.error).toContain("JSON parse/validation error");
+  });
+});

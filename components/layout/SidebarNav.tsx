@@ -41,6 +41,9 @@ function isNavActive(pathname: string, href: string): boolean {
   if (href === "/mail") {
     return pathname === "/mail" || pathname.startsWith("/mail/");
   }
+  if (href === "/ai-admin") {
+    return pathname === "/ai-admin" || pathname.startsWith("/ai-admin/");
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -57,6 +60,7 @@ const baseNavItems: readonly {
   { href: "/finance-office", label: "ФинОтдел", module: "FINANCE_OFFICE" },
   { href: "/clickmig", label: "КликМиг", module: "CLICKMIG" },
   { href: "/mail", label: "Почта", module: "MAIL" },
+  { href: "/ai-admin", label: "ИИ-Админ", module: "AI_ADMIN" },
   { href: "/shipments", label: "Отгрузки", module: "SHIPMENTS" },
   { href: "/warehouse", label: "Склад", module: "WAREHOUSE" },
   { href: "/clients", label: "Клиенты", module: "CLIENTS_VIEW" },

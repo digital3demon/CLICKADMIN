@@ -92,6 +92,10 @@ model Tenant {
   adminSharedTelegramUsername     String?
   /// Уведомления на общий аккаунт (JSON); пока — упоминания в чатах и др.
   adminSharedMessengerNotifyPrefs Json?
+  /// Включен ли ИИ (OpenRouter) для этой организации
+  aiEnabled             Boolean          @default(false)
+  /// API-ключ OpenRouter (сохраняется в БД, чтобы не зависеть от .env)
+  openRouterApiKey      String?
   /// null — без срока / вечная лицензия
   subscriptionValidTo   DateTime?
   createdAt             DateTime         @default(now())
@@ -580,6 +584,8 @@ enum AppModule {
   FINANCE_OFFICE
   /// Почта CRM: общие ящики, письма, вложения и правила обработки
   MAIL
+  /// ИИ-Админ (Shadow Mode, Diff Viewer, Backtesting)
+  AI_ADMIN
   /// Отгрузки (даты, вкладки)
   SHIPMENTS
   /// Склад: раздел + API инвентаря
@@ -928,6 +934,7 @@ model Email {
   labelAssignments      EmailLabelAssignment[]
   sourceOrderLinks      EmailSourceOrder[]
   autoReplySourceLinks  EmailSourceOrder[] @relation("EmailSourceOrderAutoReply")
+  aiOrderPredictions    AiOrderPrediction[]
 
   @@unique([accountId, folderId, uid])
   @@unique([accountId, messageId])
@@ -991,6 +998,31 @@ model EmailSourceOrder {
   @@unique([orderId, emailId])
   @@index([tenantId, emailId])
   @@index([tenantId, orderId])
+}
+
+/// Предсказание ИИ (Shadow Mode) для наряда, созданного из письма.
+model AiOrderPrediction {
+  id               String   @id @default(cuid())
+  tenantId         String
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  emailId          String
+  email            Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  
+  /// Использованная модель (например, nvidia/nemotron-3-ultra-550b-a55b:free)
+  model            String
+  /// Время ответа API в мс
+  durationMs       Int
+  
+  /// Сырой JSON ответ от ИИ
+  predictionJson   Json
+  /// Была ли ошибка при парсинге JSON или запросе
+  error            String?
+  
+  createdAt        DateTime @default(now())
+
+  @@unique([orderId, emailId])
+  @@index([tenantId, createdAt])
 }
 
 /// Шаблон автоответа при создании наряда из письма (один на ящик).
@@ -1402,6 +1434,7 @@ model Order {
   kaitenLabMentionAcks           OrderKaitenLabMentionAck[]
   payrollWorkEntries             PayrollWorkEntry[]
   sourceEmailLinks               EmailSourceOrder[]
+  aiPredictions                  AiOrderPrediction[]
   /// Мягкое архивирование («удаление»): наряд скрыт из списков и канбана; номер YYMM-NNN снимается (плейхолдер `ARCH:id`), чтобы его можно было выдать другому наряду.
   archivedAt                     DateTime?
   createdAt                      DateTime                  @default(now())
