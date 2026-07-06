@@ -5,7 +5,7 @@ import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/toast-store";
 
-async function jsonFetch<T = any>(url: string, init?: RequestInit): Promise<T> {
+async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: {
