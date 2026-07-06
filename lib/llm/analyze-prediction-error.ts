@@ -1,7 +1,11 @@
+import "server-only";
 import type { PrismaClient } from "@prisma/client";
 import { resolveClientIdsFromPrediction } from "@/lib/ai-order-draft-from-prediction";
 import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
-import { getOpenRouterClient } from "@/lib/llm/openrouter-client";
+import { chatCompletion } from "@/lib/llm/openrouter-client";
+import { getAiSettings } from "@/lib/llm/openrouter-config";
+
+const REFLECTION_MODEL = "google/gemini-2.5-flash:free";
 
 export async function analyzePredictionError(
   db: PrismaClient,
@@ -21,11 +25,15 @@ export async function analyzePredictionError(
         },
       },
       email: true,
-      tenant: true,
     },
   });
 
-  if (!prediction || !prediction.order || !prediction.email || !prediction.tenant.openRouterApiKey) {
+  if (!prediction || !prediction.order || !prediction.email) {
+    return;
+  }
+
+  const settings = await getAiSettings(tenantId);
+  if (!settings.enabled || !settings.apiKey) {
     return;
   }
 
@@ -85,16 +93,20 @@ ${realSummary || "Ничего не найдено"}
 `.trim();
 
   try {
-    const openRouter = getOpenRouterClient(prediction.tenant.openRouterApiKey);
-    const response = await openRouter.chat.completions.create({
-      model: "google/gemini-2.5-flash", // Используем быструю и дешевую модель для рефлексии
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
-      max_tokens: 100,
-    });
+    const response = await chatCompletion(
+      { ...settings, model: REFLECTION_MODEL },
+      {
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.1,
+      },
+    );
 
-    const lesson = response.choices[0]?.message?.content?.trim();
+    if (!response.ok) {
+      console.error("[AI Self-Correction] Error generating lesson:", response.error);
+      return;
+    }
 
+    const lesson = response.content.trim();
     if (lesson) {
       // 4. Сохраняем правило в карточку врача
       const doctor = await db.doctor.findUnique({ where: { id: doctorId } });

@@ -134,7 +134,13 @@ export async function fetchClientOrderHistoryContext(
   beforeDate?: Date | null,
 ): Promise<ClientHistoryContext> {
   if (!doctorId) {
-    return { doctorParticulars: null, doctorHistory: [], patientHistory: [] };
+    return {
+      doctorParticulars: null,
+      doctorAiParticulars: null,
+      doctorAiLessons: null,
+      doctorHistory: [],
+      patientHistory: [],
+    };
   }
 
   const doctor = await db.doctor.findUnique({
