@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
@@ -113,11 +112,13 @@ function ToastCard({
   row,
   onDismiss,
   onOpenChat,
+  onOpenOrder,
 }: {
   kind: ToastKind;
   row: OrderToastRow;
   onDismiss: () => void;
   onOpenChat?: (row: OrderToastRow) => void;
+  onOpenOrder: (orderId: string) => void;
 }) {
   const body = (
     <>
@@ -136,28 +137,24 @@ function ToastCard({
     </>
   );
 
+  const open = () => {
+    if (kind === "chat" && onOpenChat) {
+      onOpenChat(row);
+    } else {
+      onOpenOrder(row.orderId);
+    }
+    onDismiss();
+  };
+
   return (
     <div className={shells[kind]}>
-      {kind === "chat" && onOpenChat ? (
-        <button
-          type="button"
-          onClick={() => {
-            onOpenChat(row);
-            onDismiss();
-          }}
-          className={`min-w-0 flex-1 text-left leading-snug ${linkTone[kind]}`}
-        >
-          {body}
-        </button>
-      ) : (
-        <Link
-          href={orderPathById(row.orderId)}
-          onClick={onDismiss}
-          className={`min-w-0 flex-1 text-left leading-snug ${linkTone[kind]}`}
-        >
-          {body}
-        </Link>
-      )}
+      <button
+        type="button"
+        onClick={open}
+        className={`min-w-0 flex-1 text-left leading-snug ${linkTone[kind]}`}
+      >
+        {body}
+      </button>
       <button
         type="button"
         className={`shrink-0 self-start rounded px-1.5 py-0.5 text-lg leading-none ${dismissTone[kind]}`}
@@ -379,6 +376,22 @@ export function OrderCorrectionToastStack() {
     setChatTarget({ orderId: row.orderId, orderNumber: row.orderNumber });
   }, []);
 
+  const openOrderFromToast = useCallback(
+    (orderId: string) => {
+      router.push(orderPathById(orderId));
+    },
+    [router],
+  );
+
+  const chatModal = chatTarget ? (
+    <OrderListKaitenChatModal
+      orderId={chatTarget.orderId}
+      orderNumber={chatTarget.orderNumber}
+      open
+      onClose={() => setChatTarget(null)}
+    />
+  ) : null;
+
   useEffect(() => {
     if (pendingCount === 0 && stackCollapsed) {
       setStackCollapsed(false);
@@ -392,23 +405,26 @@ export function OrderCorrectionToastStack() {
 
   if (stackCollapsed && pendingCount > 0) {
     return (
-      <div
-        className="pointer-events-none fixed z-[120] bottom-[max(3.25rem,calc(1rem+env(safe-area-inset-bottom,0px)))] right-[max(1rem,env(safe-area-inset-right,0px))] flex flex-col items-end"
-        aria-live="polite"
-      >
-        <button
-          type="button"
-          onClick={showAll}
-          className="pointer-events-auto rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]/95 px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shadow hover:bg-[var(--surface-muted)]"
+      <>
+        <div
+          className="pointer-events-none fixed z-[120] bottom-[max(3.25rem,calc(1rem+env(safe-area-inset-bottom,0px)))] right-[max(1rem,env(safe-area-inset-right,0px))] flex flex-col items-end"
+          aria-live="polite"
         >
-          Показать уведомления ({pendingCount})
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={showAll}
+            className="pointer-events-auto rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]/95 px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shadow hover:bg-[var(--surface-muted)]"
+          >
+            Показать уведомления ({pendingCount})
+          </button>
+        </div>
+        {chatModal}
+      </>
     );
   }
 
   if (pendingCount === 0) {
-    return null;
+    return chatModal;
   }
 
   const columns: Array<{
@@ -452,6 +468,7 @@ export function OrderCorrectionToastStack() {
                           ? openChatFromToast
                           : undefined
                       }
+                      onOpenOrder={openOrderFromToast}
                     />
                   ))}
                 </div>
@@ -467,14 +484,7 @@ export function OrderCorrectionToastStack() {
           </button>
         </div>
       </div>
-      {chatTarget ? (
-        <OrderListKaitenChatModal
-          orderId={chatTarget.orderId}
-          orderNumber={chatTarget.orderNumber}
-          open
-          onClose={() => setChatTarget(null)}
-        />
-      ) : null}
+      {chatModal}
     </>
   );
 }

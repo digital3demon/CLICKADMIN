@@ -478,7 +478,7 @@ export function OrderListKaitenChatModal({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-2 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[130] flex items-end justify-center bg-black/45 p-2 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -747,7 +747,7 @@ export function OrderListKaitenChatModal({
       </div>
       {openImage ? (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4"
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/75 p-4"
           role="dialog"
           aria-modal="true"
           onMouseDown={(e) => {
