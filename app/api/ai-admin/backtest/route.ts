@@ -48,8 +48,8 @@ export async function POST(req: Request) {
     // Запускаем предсказания в фоне
     for (const link of links) {
       runShadowPredictionInBackground(tenantId, link.orderId, link.emailId);
-      // Небольшая пауза между запусками
-      await new Promise(r => setTimeout(r, 500));
+      // Пауза 3 секунды между запусками, чтобы не упираться в лимиты бесплатных моделей OpenRouter
+      await new Promise(r => setTimeout(r, 3000));
     }
 
     return NextResponse.json({ message: "Backtest started", count: links.length });
