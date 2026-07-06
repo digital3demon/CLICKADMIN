@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Doctor" ADD COLUMN IF NOT EXISTS "aiParticulars" TEXT;
+ALTER TABLE "Doctor" ADD COLUMN IF NOT EXISTS "aiLessons" TEXT;
