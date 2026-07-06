@@ -11,7 +11,7 @@ export type AiSettings = {
 
 const DEFAULT_MODEL = "qwen/qwen3-next-80b-a3b-instruct:free";
 const DEFAULT_FALLBACKS = [
-  "google/gemini-2.0-flash-lite-preview-02-05:free",
+  "google/gemini-2.5-flash:free",
   "meta-llama/llama-3.3-70b-instruct:free",
 ];
 const DEFAULT_TIMEOUT_MS = 35000;
