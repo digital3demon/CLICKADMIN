@@ -72,6 +72,13 @@ export function AiAdminClient({
   async function handleRunBacktest() {
     setIsBacktesting(true);
     try {
+      // Сначала сохраняем настройки, чтобы бэкенд увидел актуальные значения
+      await jsonFetch("/api/ai-admin/settings", {
+        method: "POST",
+        body: { aiEnabled, apiKey: apiKey || undefined },
+      });
+      if (apiKey) setApiKey("");
+
       const res = await jsonFetch<{ message: string; count: number }>("/api/ai-admin/backtest", {
         method: "POST",
       });
