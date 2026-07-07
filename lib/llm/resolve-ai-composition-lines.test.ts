@@ -19,6 +19,8 @@ import {
   resolveAiCompositionLines,
   inferCompositionHintsFromOrderText,
   inferCompositionHintsFromEmailContext,
+  dedupeCompositionHintsBySpecificity,
+  isPriceNameStrictlyMoreSpecific,
 } from "./resolve-ai-composition-lines";
 
 const mockItems = [
@@ -69,6 +71,26 @@ const mockItems = [
     priceRub: 19000,
     leadWorkingDays: 10,
     sortOrder: 5,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-splint-simple",
+    code: "1001",
+    name: "Сплинт",
+    priceRub: 4000,
+    leadWorkingDays: 5,
+    sortOrder: 6,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-splint-complex",
+    code: "1001",
+    name: "Сплинт сложный",
+    priceRub: 19000,
+    leadWorkingDays: 7,
+    sortOrder: 7,
     isActive: true,
     priceListId: "pl-1",
   },
@@ -160,6 +182,35 @@ describe("resolveAiCompositionLines", () => {
     );
     expect(res.lines).toHaveLength(0);
     expect(res.warnings.some((w) => w.includes("Не найдено в прайсе"))).toBe(true);
+  });
+
+  it("drops generic splint when specific splint is also hinted", async () => {
+    const res = await resolveAiCompositionLines(
+      [
+        { nameHint: "Сплинт сложный", quantity: 1 },
+        { nameHint: "Сплинт", quantity: 1 },
+      ],
+      { clinicId: null, doctorId: null },
+    );
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines[0]?.name).toBe("Сплинт сложный");
+    expect(res.lines[0]?.unitPrice).toBe(19000);
+  });
+});
+
+describe("dedupeCompositionHintsBySpecificity", () => {
+  it("recognizes specific splint name", () => {
+    expect(isPriceNameStrictlyMoreSpecific("Сплинт сложный", "Сплинт")).toBe(true);
+    expect(isPriceNameStrictlyMoreSpecific("Сплинт", "Сплинт сложный")).toBe(false);
+  });
+
+  it("removes generic duplicate hints", () => {
+    expect(
+      dedupeCompositionHintsBySpecificity([
+        { nameHint: "Сплинт", quantity: 1 },
+        { nameHint: "Сплинт сложный", quantity: 1 },
+      ]),
+    ).toEqual([{ nameHint: "Сплинт сложный", quantity: 1 }]);
   });
 });
 

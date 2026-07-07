@@ -344,6 +344,49 @@ function mergeResolvedLinesByPriceItem(lines: ResolvedCompositionLine[]): Resolv
   return [...merged.values()];
 }
 
+/** generic «Сплинт» vs specific «Сплинт сложный» — оставляем specific. */
+export function isPriceNameStrictlyMoreSpecific(specific: string, generic: string): boolean {
+  const specificTokens = tokenizeForMatch(specific);
+  const genericTokens = tokenizeForMatch(generic);
+  if (genericTokens.length === 0 || specificTokens.length <= genericTokens.length) {
+    return false;
+  }
+  return genericTokens.every((genericToken) =>
+    specificTokens.some((specificToken) => tokensLooselyEqual(genericToken, specificToken)),
+  );
+}
+
+/** Убирает пары вроде «сплинт» + «сплинт сложный» из hints ИИ и эвристик. */
+export function dedupeCompositionHintsBySpecificity(hints: CompositionHint[]): CompositionHint[] {
+  if (hints.length <= 1) return hints;
+  const sorted = [...hints].sort(
+    (a, b) => tokenizeForMatch(b.nameHint).length - tokenizeForMatch(a.nameHint).length,
+  );
+  const kept: CompositionHint[] = [];
+  for (const hint of sorted) {
+    const name = hint.nameHint.trim();
+    if (!name) continue;
+    const dominated = kept.some((other) =>
+      isPriceNameStrictlyMoreSpecific(other.nameHint, name),
+    );
+    if (!dominated) kept.push(hint);
+  }
+  return kept;
+}
+
+function dedupeResolvedLinesByNameSpecificity(
+  lines: ResolvedCompositionLine[],
+): ResolvedCompositionLine[] {
+  return lines.filter(
+    (line) =>
+      !lines.some(
+        (other) =>
+          other.priceListItemId !== line.priceListItemId &&
+          isPriceNameStrictlyMoreSpecific(other.name, line.name),
+      ),
+  );
+}
+
 export async function resolveAiCompositionLines(
   hints: CompositionHint[] | null | undefined,
   opts: { clinicId: string | null; doctorId: string | null },
@@ -361,7 +404,7 @@ export async function resolveAiCompositionLines(
     name,
   }));
 
-  for (const hint of hints) {
+  for (const hint of dedupeCompositionHintsBySpecificity(hints)) {
     const nameHint = hint.nameHint?.trim();
     if (!nameHint) continue;
 
@@ -410,7 +453,9 @@ export async function resolveAiCompositionLines(
     });
   }
 
-  const mergedLines = mergeResolvedLinesByPriceItem(lines);
+  const mergedLines = dedupeResolvedLinesByNameSpecificity(
+    mergeResolvedLinesByPriceItem(lines),
+  );
   const maxLeadWorkingDays = mergedLines.reduce(
     (max, l) => Math.max(max, l.leadWorkingDays ?? 0),
     0,

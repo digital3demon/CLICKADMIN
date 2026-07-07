@@ -17,6 +17,7 @@ import {
   inferCompositionHintsFromEmailContext,
   compositionLinesToOrderConstructions,
   loadActivePriceListItemNames,
+  dedupeCompositionHintsBySpecificity,
   type CompositionHint,
 } from "./resolve-ai-composition-lines";
 import type { EmailAttachmentCatalogItem } from "./order-email-extract";
@@ -315,10 +316,11 @@ export async function enrichOrderEmailPrediction(
     },
     priceListNames,
   );
-  let compositionHints =
+  let compositionHints = dedupeCompositionHintsBySpecificity(
     aiCompositionHints.length === 0
       ? inferredHints
-      : mergeCompositionHintObjects(aiCompositionHints, inferredHints);
+      : mergeCompositionHintObjects(aiCompositionHints, inferredHints),
+  );
 
   let composition = await resolveAiCompositionLines(compositionHints, {
     clinicId: clinicIdForDb,
