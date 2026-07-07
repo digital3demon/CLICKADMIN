@@ -76,7 +76,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   KANBAN_MANAGE_PARTICIPANTS: "Канбан: менять участников",
   KANBAN_MOVE_TO_OTHER_BOARD: "Канбан: переносить на другую доску",
   KANBAN_MANAGE_CHECKLIST: "Канбан: чек-листы",
-  KANBAN_MANAGE_TIMER: "Канбан: таймеры",
+  KANBAN_MANAGE_TIMER: "Канбан: назначать таймеры (просмотр — у всех)",
   ORDER_HISTORY: "История изменений",
   ANALYTICS: "Аналитика",
   SIDEBAR_PAYMENTS: "Сайдбар: блок оплат",

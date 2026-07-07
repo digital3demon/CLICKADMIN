@@ -162,6 +162,19 @@ function postKanbanCrmTelegramNotify(payload: {
   }).catch(() => {});
 }
 
+function postKaitenAssigneesSync(
+  orderId: string,
+  assignees: string[],
+  participants: string[],
+) {
+  void fetch(`/api/orders/${encodeURIComponent(orderId)}/kaiten-assignees`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignees, participants }),
+  }).catch(() => {});
+}
+
 /** Короткая подпись расширения для бейджа слева от имени файла. */
 function cardFileExtensionLabel(fileName: string, mime: string): string {
   const base = fileName.trim();
@@ -635,6 +648,12 @@ export function KanbanCardModal({
           });
         }
       }
+    }
+    const oid = card.linkedOrderId?.trim();
+    if (oid && card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)) {
+      const nextAssign = pickerMode === "assign" ? [...pickerIds] : [...prevAssign];
+      const nextPart = pickerMode === "part" ? [...pickerIds] : [...prevPart];
+      postKaitenAssigneesSync(oid, nextAssign, nextPart);
     }
     setPickerMode(null);
   };
@@ -1578,6 +1597,11 @@ export function KanbanCardModal({
                 <IconPlus />
               </button>
             </div>
+            {card.kaitenMembersSyncWarning ? (
+              <p className="mt-1 max-w-md text-[0.65rem] leading-snug text-amber-700 dark:text-amber-300">
+                {card.kaitenMembersSyncWarning}
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-1.5 pl-1">
               <span className="text-[0.65rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                 Участн.
@@ -1776,7 +1800,7 @@ export function KanbanCardModal({
 
               <div className="mb-3">
                 <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-amber-800/90 dark:text-amber-300/90">
-                  Внутренний срок
+                  Срок
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <input
@@ -1786,27 +1810,12 @@ export function KanbanCardModal({
                     value={card.dueDate || ""}
                     onChange={(e) => {
                       const v = e.target.value;
-                      void (async () => {
-                        if (
-                          card.linkedOrderId &&
-                          card.kaitenCardId != null &&
-                          Number.isFinite(card.kaitenCardId)
-                        ) {
-                          const r = await patchOrderHeadFromKanban(card.linkedOrderId, {
-                            dueDate: v || null,
-                          });
-                          if (!r.ok) {
-                            toast(r.error, true);
-                            return;
-                          }
-                        }
-                        onApply((b) => {
-                          const fc = findCard(b, cardId);
-                          if (!fc) return;
-                          fc.card.dueDate = v;
-                          pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
-                        });
-                      })();
+                      onApply((b) => {
+                        const fc = findCard(b, cardId);
+                        if (!fc) return;
+                        fc.card.dueDate = v;
+                        pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
+                      });
                       if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
                         const titleLine = (card.title || "").trim() || "Без названия";
                         const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);

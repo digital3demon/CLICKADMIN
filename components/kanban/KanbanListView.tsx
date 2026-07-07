@@ -248,7 +248,7 @@ export function KanbanListView({
           </select>
         </div>
         <div
-          className={`mb-2 shrink-0 border-b border-[var(--kanban-border)] pb-1.5 ${LIST_GRID} text-[0.6rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)]`}
+          className={`mb-1.5 shrink-0 border-b border-[var(--kanban-border)] pb-1 ${LIST_GRID} text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)]`}
         >
           <div className="min-w-0">
             <SortHeaderButton
@@ -291,7 +291,7 @@ export function KanbanListView({
             />
           </div>
         </div>
-        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
         {rows.length === 0 ? (
           <p className="text-[0.875rem] text-[var(--kanban-text-muted)]">
             Нет карточек по текущим фильтрам и поиску.
@@ -319,9 +319,7 @@ export function KanbanListView({
             return (
               <div key={card.id} className="relative">
                 <article
-                  className={`relative overflow-hidden rounded-md border-y border-r border-black/[0.1] border-l-[3px] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1] ${
-                    blocked ? "opacity-95" : ""
-                  }`}
+                  className="relative overflow-hidden rounded-md border-y border-r border-black/[0.1] border-l-[3px] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1]"
                   style={{ borderLeftColor: accent }}
                   role="button"
                   tabIndex={0}
@@ -333,33 +331,33 @@ export function KanbanListView({
                     }
                   }}
                 >
-                  {blocked && (
-                    <div className="flex items-center gap-1.5 border-b border-red-900/40 bg-gradient-to-r from-red-700 to-red-900 px-2 py-0.5 text-[0.62rem] font-bold uppercase tracking-wide text-white">
-                      <IconBrick className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">
-                        {(card.blockReason || "").trim() || "Остановлена"}
-                      </span>
-                    </div>
-                  )}
-                  <div className={`${LIST_GRID} cursor-pointer px-2 py-1.5 sm:px-0 sm:py-0`}>
-                    <div className="flex min-w-0 items-start gap-1.5 sm:items-center sm:gap-2 sm:px-2 sm:py-1.5">
+                  <div className={`${LIST_GRID} cursor-pointer px-2 py-1 sm:px-0 sm:py-0`}>
+                    <div className="flex min-w-0 items-start gap-1.5 sm:items-center sm:gap-1.5 sm:px-2 sm:py-1">
                       <span
-                        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[0.65rem] font-bold text-white sm:mt-0"
+                        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.58rem] font-bold text-white sm:mt-0"
                         style={{ background: accent }}
                         title={ct?.name ?? "Тип"}
                       >
                         {initials}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="text-[0.6rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
+                        <div className="text-[0.55rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
                           {ct?.name ?? "—"}
                         </div>
-                        <div className="mt-0.5 flex min-w-0 items-start gap-2 text-[0.9rem] font-semibold leading-snug text-[var(--kanban-text)]">
+                        <div className="mt-0.5 flex min-w-0 items-start gap-1.5 text-[0.8rem] font-semibold leading-snug text-[var(--kanban-text)]">
                           <span className="min-w-0 flex-1">{card.title}</span>
+                          {blocked ? (
+                            <span
+                              className="mt-0.5 shrink-0"
+                              title={(card.blockReason || "").trim() || "Остановлена"}
+                            >
+                              <IconBrick className="h-4 w-4 text-red-600 dark:text-red-500" />
+                            </span>
+                          ) : null}
                           <KanbanTimerIcon
                             card={card}
                             className="mt-0.5"
-                            sizeClassName="h-5 w-5"
+                            sizeClassName="h-4 w-4"
                           />
                         </div>
                         {(appState.search.trim() || isKanbanAggregateBoardId(appState.activeBoardId)) &&
@@ -388,8 +386,8 @@ export function KanbanListView({
                           )}
                         </div>
                         <dl className="mt-1.5 space-y-1 text-[0.7rem] text-[var(--kanban-text-muted)] sm:hidden">
-                          <div className="flex items-start justify-between gap-2">
-                            <dt className="shrink-0 pt-0.5">Колонка</dt>
+                          <div className="flex justify-between gap-2">
+                            <dt>Колонка</dt>
                             <dd className="flex min-w-0 flex-1 items-center justify-end gap-1 text-[var(--kanban-text)]">
                               <span className="min-w-0 truncate text-right">{columnTitle}</span>
                               {onAdvanceCardColumn ? (
@@ -410,18 +408,20 @@ export function KanbanListView({
                               ) : null}
                             </dd>
                           </div>
-                          <div className="flex justify-between gap-2">
-                            <dt>Срок</dt>
-                            <dd
-                              className={
-                                card.dueDate && isDueUrgentRedInList(card.dueDate)
-                                  ? "font-semibold text-red-500 dark:text-red-400"
-                                  : "text-[var(--kanban-text)]"
-                              }
-                            >
-                              {card.dueDate ? formatDate(card.dueDate) : "—"}
-                            </dd>
-                          </div>
+                          {card.dueDate ? (
+                            <div className="flex justify-between gap-2">
+                              <dt>Срок</dt>
+                              <dd
+                                className={
+                                  isDueUrgentRedInList(card.dueDate)
+                                    ? "font-semibold text-red-500 dark:text-red-400"
+                                    : "text-[var(--kanban-text)]"
+                                }
+                              >
+                                {formatDate(card.dueDate)}
+                              </dd>
+                            </div>
+                          ) : null}
                           <div className="flex items-start justify-between gap-2">
                             <dt className="shrink-0 pt-0.5">Ответственный</dt>
                             <dd className="flex min-w-0 flex-1 justify-end">
@@ -469,7 +469,7 @@ export function KanbanListView({
                         </dl>
                       </div>
                     </div>
-                    <div className="hidden min-h-[2.25rem] sm:flex sm:items-center sm:justify-between sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
+                    <div className="hidden min-h-[1.75rem] sm:flex sm:items-center sm:justify-between sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
                       <span className="min-w-0 flex-1 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]">
                         {columnTitle}
                       </span>
@@ -491,15 +491,15 @@ export function KanbanListView({
                       ) : null}
                     </div>
                     <div
-                      className={`hidden text-[0.75rem] leading-tight sm:block sm:border-l sm:border-[var(--kanban-border)] sm:px-2 sm:py-1.5 ${
+                      className={`hidden text-[0.72rem] leading-tight sm:block sm:border-l sm:border-[var(--kanban-border)] sm:px-2 sm:py-1 ${
                         card.dueDate && isDueUrgentRedInList(card.dueDate)
                           ? "font-semibold text-red-500 dark:text-red-400"
                           : "text-[var(--kanban-text-muted)]"
                       }`}
                     >
-                      {card.dueDate ? formatDate(card.dueDate) : "—"}
+                      {card.dueDate ? formatDate(card.dueDate) : null}
                     </div>
-                    <div className="relative hidden min-h-[2.25rem] sm:flex sm:items-center sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
+                    <div className="relative hidden min-h-[1.75rem] sm:flex sm:items-center sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
                       {assignees.length > 0 ? (
                         <div className="-space-x-1.5 flex pl-0.5">
                           {assignees.slice(0, 5).map((uid) => (
@@ -518,7 +518,7 @@ export function KanbanListView({
                         <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">—</span>
                       )}
                     </div>
-                    <div className="relative hidden min-h-[2.25rem] sm:flex sm:items-center sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
+                    <div className="relative hidden min-h-[1.75rem] sm:flex sm:items-center sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
                       {participants.length > 0 ? (
                         <div className="-space-x-1.5 flex pl-0.5">
                           {participants.slice(0, 5).map((uid) => (

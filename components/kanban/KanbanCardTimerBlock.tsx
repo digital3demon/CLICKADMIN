@@ -225,7 +225,7 @@ export function KanbanCardTimerBlock({
       </div>
       {!canManage ? (
         <p className="mt-1.5 text-[0.65rem] leading-snug text-[var(--kaiten-modal-muted)]">
-          Назначить таймер могут роли с правом «Канбан: таймеры» (настройки доступа).
+          Таймер виден всем; назначать и менять интервал могут роли с правом «Канбан: назначать таймеры» в настройках доступа.
         </p>
       ) : null}
       {!started && canManage && card.timerDurationMs && card.timerDurationMs >= 60_000 ? (

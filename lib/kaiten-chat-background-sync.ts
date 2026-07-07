@@ -3,6 +3,7 @@ import type { KaitenAuth } from "@/lib/kaiten-rest";
 import {
   maybeRunActiveInboundKaitenSync,
 } from "@/lib/kaiten-inbound-active-sync";
+import { maybeRunMembersInboundKaitenSync } from "@/lib/kaiten-members-active-sync";
 import { syncKaitenChatCommentsForOrderIds } from "@/lib/order-chat-correction-kaiten-sync";
 import { syncAllUnpushedAttachmentsInBackground } from "@/lib/kaiten-sync";
 import { cronLogger, kaitenLogger } from "@/lib/server/logger";
@@ -110,6 +111,15 @@ export async function syncKaitenChatsInBackground(
       if (result.rateLimited) {
         rateLimited = true;
         break;
+      }
+
+      if (!rateLimited) {
+        try {
+          const mem = await maybeRunMembersInboundKaitenSync(db, tenantId, auth);
+          if (mem.rateLimited) rateLimited = true;
+        } catch (err) {
+          kaitenLogger.warn({ err, tenantId }, "background Kaiten members sync failed");
+        }
       }
     } catch (err) {
       errorCount += 1;

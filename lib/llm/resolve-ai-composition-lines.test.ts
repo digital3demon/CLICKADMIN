@@ -20,7 +20,9 @@ import {
   inferCompositionHintsFromOrderText,
   inferCompositionHintsFromEmailContext,
   dedupeCompositionHintsBySpecificity,
+  dedupeCompositionHintsBySiblingVariants,
   isPriceNameStrictlyMoreSpecific,
+  areSiblingPriceNameVariants,
   extractNegatedOrderPhrases,
   isPriceConceptNegatedInOrderText,
   filterCompositionHintsByNegation,
@@ -114,6 +116,36 @@ const mockItems = [
     priceRub: 1200,
     leadWorkingDays: 2,
     sortOrder: 9,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-immediate-screw",
+    code: "6015",
+    name: "Немедленная нагрузка на винтовой фиксации",
+    priceRub: 5000,
+    leadWorkingDays: 5,
+    sortOrder: 10,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-titan-base",
+    code: "6006",
+    name: "Титановое основание Ультрастом",
+    priceRub: 650,
+    leadWorkingDays: 3,
+    sortOrder: 11,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-immediate-reinf",
+    code: "6016",
+    name: "Немедленная нагрузка с армированием",
+    priceRub: 55000,
+    leadWorkingDays: 7,
+    sortOrder: 12,
     isActive: true,
     priceListId: "pl-1",
   },
@@ -232,6 +264,34 @@ describe("resolveAiCompositionLines", () => {
     expect(res.lines).toHaveLength(1);
     expect(res.lines[0]?.code).toBe("5001");
   });
+
+  it("keeps screw immediate loading and titanium base, drops sibling variant", async () => {
+    const orderText =
+      "немедленная нагрузка на винтовой фиксации, титановое основание ультрастом, 63 детали";
+    const res = await resolveAiCompositionLines(
+      [
+        { nameHint: "Немедленная нагрузка на винтовой фиксации", quantity: 1 },
+        { nameHint: "Титановое основание Ультрастом", quantity: 1 },
+        { nameHint: "Немедленная нагрузка с армированием", quantity: 1 },
+      ],
+      { clinicId: null, doctorId: null, negationOrderText: orderText },
+    );
+    expect(res.lines.map((line) => line.code).sort()).toEqual(["6006", "6015"]);
+  });
+
+  it("prefers cheaper immediate loading when order text is ambiguous", async () => {
+    const orderText = "немедленная нагрузка, 63 детали";
+    const res = await resolveAiCompositionLines(
+      [
+        { nameHint: "Немедленная нагрузка на винтовой фиксации", quantity: 1 },
+        { nameHint: "Немедленная нагрузка с армированием", quantity: 1 },
+      ],
+      { clinicId: null, doctorId: null, negationOrderText: orderText },
+    );
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines[0]?.code).toBe("6015");
+    expect(res.lines[0]?.unitPrice).toBe(5000);
+  });
 });
 
 describe("dedupeCompositionHintsBySpecificity", () => {
@@ -247,6 +307,54 @@ describe("dedupeCompositionHintsBySpecificity", () => {
         { nameHint: "Сплинт сложный", quantity: 1 },
       ]),
     ).toEqual([{ nameHint: "Сплинт сложный", quantity: 1 }]);
+  });
+});
+
+describe("sibling price name variants", () => {
+  it("detects immediate loading variants as siblings", () => {
+    expect(
+      areSiblingPriceNameVariants(
+        "Немедленная нагрузка на винтовой фиксации",
+        "Немедленная нагрузка с армированием",
+      ),
+    ).toBe(true);
+    expect(
+      areSiblingPriceNameVariants(
+        "Немедленная нагрузка на винтовой фиксации",
+        "Титановое основание Ультрастом",
+      ),
+    ).toBe(false);
+  });
+
+  it("dedupes sibling hints by order text", () => {
+    const orderText = "немедленная нагрузка на винтовой фиксации, титановое основание";
+    expect(
+      dedupeCompositionHintsBySiblingVariants(
+        [
+          { nameHint: "Немедленная нагрузка на винтовой фиксации", quantity: 1 },
+          { nameHint: "Титановое основание Ультрастом", quantity: 1 },
+          { nameHint: "Немедленная нагрузка с армированием", quantity: 1 },
+        ],
+        orderText,
+      ).map((hint) => hint.nameHint),
+    ).toEqual([
+      "Немедленная нагрузка на винтовой фиксации",
+      "Титановое основание Ультрастом",
+    ]);
+  });
+
+  it("prefers cheaper sibling when order text is ambiguous", async () => {
+    const orderText = "немедленная нагрузка, титановое основание ультрастом";
+    const res = await resolveAiCompositionLines(
+      [
+        { nameHint: "Немедленная нагрузка на винтовой фиксации", quantity: 1 },
+        { nameHint: "Немедленная нагрузка с армированием", quantity: 1 },
+        { nameHint: "Титановое основание Ультрастом", quantity: 1 },
+      ],
+      { clinicId: null, doctorId: null, negationOrderText: orderText },
+    );
+    expect(res.lines.map((line) => line.code).sort()).toEqual(["6006", "6015"]);
+    expect(res.lines.find((line) => line.code === "6015")?.unitPrice).toBe(5000);
   });
 });
 

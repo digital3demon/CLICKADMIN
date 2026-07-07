@@ -47,6 +47,8 @@
     "mail:rules:order:import": "node --env-file=.env scripts/import-order-digitaldemon-mail-rules.cjs",
     "mail:rules:order:apply": "node --env-file=.env scripts/apply-order-digitaldemon-mail-rules.cjs",
     "mail:rules:order:deploy": "node --env-file=.env scripts/deploy-order-digitaldemon-mail-rules.cjs",
+    "kanban:clear-lab-matched-due:deploy": "node --env-file=.env scripts/clear-kanban-card-stage-due-dates.cjs --auto-once",
+    "kanban:clear-lab-matched-due:dry-run": "node --env-file=.env scripts/clear-kanban-card-stage-due-dates.cjs --dry-run",
     "mail:reset:dry-run": "node --env-file=.env scripts/reset-mail-accounts.cjs",
     "mail:reset:apply": "node --env-file=.env scripts/reset-mail-accounts.cjs --apply",
     "db:reset": "node --env-file=.env scripts/reset-and-import.cjs --no-import",

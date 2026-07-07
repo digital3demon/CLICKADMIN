@@ -777,6 +777,255 @@ export async function kaitenFirstBoardIdInSpace(
   return { ok: true, boardId: id, error: null };
 }
 
+/** Kaiten card member: type 2 = responsible, иначе участник. */
+export const KAITEN_MEMBER_TYPE_MEMBER = 1;
+export const KAITEN_MEMBER_TYPE_RESPONSIBLE = 2;
+
+export type KaitenCardMemberRow = {
+  userId: number;
+  type: number;
+  email?: string;
+  fullName?: string;
+};
+
+export type KaitenSpaceUserRow = {
+  id: number;
+  email: string;
+  fullName: string;
+  username?: string;
+};
+
+function kaitenArrayFromResponseJson(json: unknown): unknown[] | null {
+  if (Array.isArray(json)) return json;
+  if (json != null && typeof json === "object" && !Array.isArray(json)) {
+    const o = json as Record<string, unknown>;
+    for (const k of ["data", "members", "items", "rows", "users", "result"]) {
+      const v = o[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return null;
+}
+
+function kaitenUserIdFromRecord(r: Record<string, unknown>): number | null {
+  for (const k of ["user_id", "userId", "id"] as const) {
+    const v = r[k];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && /^\d+$/.test(v.trim())) {
+      const n = Number(v.trim());
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  const nested = r.user ?? r.member;
+  if (nested != null && typeof nested === "object" && !Array.isArray(nested)) {
+    return kaitenUserIdFromRecord(nested as Record<string, unknown>);
+  }
+  return null;
+}
+
+function profileFromNestedUser(u: unknown): {
+  email?: string;
+  fullName?: string;
+} {
+  if (u == null || typeof u !== "object" || Array.isArray(u)) return {};
+  const o = u as Record<string, unknown>;
+  const email =
+    typeof o.email === "string" && o.email.includes("@")
+      ? o.email.trim().toLowerCase()
+      : undefined;
+  const fullName =
+    typeof o.full_name === "string" && o.full_name.trim()
+      ? o.full_name.trim()
+      : typeof o.fullName === "string" && o.fullName.trim()
+        ? o.fullName.trim()
+        : typeof o.name === "string" && o.name.trim()
+          ? o.name.trim()
+          : undefined;
+  return { email, fullName };
+}
+
+export function parseKaitenCardMemberRow(o: unknown): KaitenCardMemberRow | null {
+  if (o == null || typeof o !== "object" || Array.isArray(o)) return null;
+  const r = o as Record<string, unknown>;
+  const userId = kaitenUserIdFromRecord(r);
+  if (userId == null) return null;
+  const typeRaw = r.type;
+  const type =
+    typeof typeRaw === "number" && Number.isFinite(typeRaw)
+      ? typeRaw
+      : KAITEN_MEMBER_TYPE_MEMBER;
+  const profile = profileFromNestedUser(r.user ?? r.member ?? r);
+  return {
+    userId,
+    type,
+    ...(profile.email ? { email: profile.email } : {}),
+    ...(profile.fullName ? { fullName: profile.fullName } : {}),
+  };
+}
+
+export function parseKaitenSpaceUserRow(o: unknown): KaitenSpaceUserRow | null {
+  if (o == null || typeof o !== "object" || Array.isArray(o)) return null;
+  const r = o as Record<string, unknown>;
+  const id = kaitenUserIdFromRecord(r);
+  if (id == null) return null;
+  const profile = profileFromNestedUser(r);
+  const email = profile.email ?? "";
+  const fullName = profile.fullName ?? email.split("@")[0] ?? `user-${id}`;
+  const username =
+    typeof r.username === "string" && r.username.trim()
+      ? r.username.trim()
+      : undefined;
+  return { id, email, fullName, ...(username ? { username } : {}) };
+}
+
+/** GET /cards/{card_id}/members — участники и ответственные карточки. */
+export async function kaitenListCardMembers(
+  auth: KaitenAuth,
+  cardId: number,
+  opts?: KaitenHttpOpts,
+): Promise<{
+  ok: boolean;
+  status: number;
+  members: KaitenCardMemberRow[];
+  error: string | null;
+}> {
+  const r = await kaitenFetch(
+    auth,
+    `/cards/${cardId}/members`,
+    { method: "GET" },
+    opts,
+  );
+  const arr = kaitenArrayFromResponseJson(r.json);
+  if (!r.ok || !arr) {
+    return {
+      ok: false,
+      status: r.status,
+      members: [],
+      error: typeof r.text === "string" ? r.text.slice(0, 800) : "Kaiten error",
+    };
+  }
+  const members = arr
+    .map(parseKaitenCardMemberRow)
+    .filter((x): x is KaitenCardMemberRow => x != null);
+  return { ok: true, status: r.status, members, error: null };
+}
+
+/** GET /spaces/{space_id}/users — справочник пользователей пространства. */
+export async function kaitenListSpaceUsers(
+  auth: KaitenAuth,
+  spaceId: number,
+  opts?: KaitenHttpOpts,
+): Promise<{
+  ok: boolean;
+  status: number;
+  users: KaitenSpaceUserRow[];
+  error: string | null;
+}> {
+  const r = await kaitenFetch(
+    auth,
+    `/spaces/${spaceId}/users`,
+    { method: "GET" },
+    opts,
+  );
+  const arr = kaitenArrayFromResponseJson(r.json);
+  if (!r.ok || !arr) {
+    return {
+      ok: false,
+      status: r.status,
+      users: [],
+      error: typeof r.text === "string" ? r.text.slice(0, 800) : "Kaiten error",
+    };
+  }
+  const users = arr
+    .map(parseKaitenSpaceUserRow)
+    .filter((x): x is KaitenSpaceUserRow => x != null);
+  return { ok: true, status: r.status, users, error: null };
+}
+
+/** POST /cards/{card_id}/members */
+export async function kaitenAddCardMember(
+  auth: KaitenAuth,
+  cardId: number,
+  kaitenUserId: number,
+  type: number,
+  opts?: KaitenHttpOpts,
+): Promise<{ ok: boolean; status: number; error: string | null }> {
+  const bodies: Record<string, unknown>[] = [
+    { user_id: kaitenUserId, type },
+    { userId: kaitenUserId, type },
+  ];
+  let lastErr = "Kaiten error";
+  let lastStatus = 400;
+  for (const body of bodies) {
+    const r = await kaitenFetch(
+      auth,
+      `/cards/${cardId}/members`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      opts,
+    );
+    if (r.ok) return { ok: true, status: r.status, error: null };
+    lastStatus = r.status;
+    lastErr = typeof r.text === "string" ? r.text.slice(0, 800) : lastErr;
+  }
+  return { ok: false, status: lastStatus, error: lastErr };
+}
+
+/** PATCH /cards/{card_id}/members/{user_id} — смена роли (type). */
+export async function kaitenUpdateCardMemberRole(
+  auth: KaitenAuth,
+  cardId: number,
+  kaitenUserId: number,
+  type: number,
+  opts?: KaitenHttpOpts,
+): Promise<{ ok: boolean; status: number; error: string | null }> {
+  const bodies: Record<string, unknown>[] = [{ type }, { member_type: type }];
+  let lastErr = "Kaiten error";
+  let lastStatus = 400;
+  for (const body of bodies) {
+    const r = await kaitenFetch(
+      auth,
+      `/cards/${cardId}/members/${kaitenUserId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      opts,
+    );
+    if (r.ok) return { ok: true, status: r.status, error: null };
+    lastStatus = r.status;
+    lastErr = typeof r.text === "string" ? r.text.slice(0, 800) : lastErr;
+  }
+  return { ok: false, status: lastStatus, error: lastErr };
+}
+
+/** DELETE /cards/{card_id}/members/{user_id} */
+export async function kaitenRemoveCardMember(
+  auth: KaitenAuth,
+  cardId: number,
+  kaitenUserId: number,
+  opts?: KaitenHttpOpts,
+): Promise<{ ok: boolean; status: number; error: string | null }> {
+  const r = await kaitenFetch(
+    auth,
+    `/cards/${cardId}/members/${kaitenUserId}`,
+    { method: "DELETE" },
+    opts,
+  );
+  if (r.ok || r.status === 404) {
+    return { ok: true, status: r.status, error: null };
+  }
+  return {
+    ok: false,
+    status: r.status,
+    error: typeof r.text === "string" ? r.text.slice(0, 800) : "Kaiten error",
+  };
+}
+
 /** Определяет пространство CRM по board_id из env. */
 export function trackLaneForBoardId(
   boardId: number,

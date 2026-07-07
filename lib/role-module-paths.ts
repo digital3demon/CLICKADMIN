@@ -274,6 +274,9 @@ export function getModuleForPathname(pathname: string): AppModule | null {
   if (pathname === "/directory") {
     return null;
   }
+  if (/^\/api\/orders\/[^/]+\/kaiten-assignees\/?$/.test(pathname)) {
+    return "KANBAN_MANAGE_ASSIGNEES";
+  }
   for (const rule of RULES) {
     if (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`)) {
       return rule.module;

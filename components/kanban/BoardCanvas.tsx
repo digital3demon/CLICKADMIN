@@ -9,6 +9,7 @@ import {
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import { previewLinkedCardKaitenSortOrderAfterDrag } from "@/lib/kanban/kanban-card-move-preview";
 import {
+  annulKanbanStageTimerOnMemberAdvance,
   cardMatchesFilters,
   dueCategory,
   formatDate,
@@ -75,6 +76,8 @@ type BoardCanvasProps = {
   resolveCardHomeBoard: (card: KanbanCard) => KanbanBoard;
   /** Подпись текущего пользователя для журнала активности карточки. */
   activityActorLabel?: string;
+  /** CRM user id — для аннулирования этапного таймера при переносе. */
+  sessionUserId?: string | null;
   dndLocked: boolean;
   /** Виртуальные «Мои» / «Ответственный»: без перестановки колонок, без добавления колонок/карточек. */
   aggregateLayoutLocked?: boolean;
@@ -778,6 +781,7 @@ export function BoardCanvas({
   board,
   resolveCardHomeBoard,
   activityActorLabel,
+  sessionUserId,
   dndLocked,
   aggregateLayoutLocked = false,
   onAggregateCardDrag,
@@ -1276,6 +1280,16 @@ export function BoardCanvas({
           activityActorLabel,
         );
         if (fromContainer !== toColId) {
+          const fromIdx = b.columns.findIndex((col) => col.id === fromContainer);
+          const toIdx = b.columns.findIndex((col) => col.id === toColId);
+          annulKanbanStageTimerOnMemberAdvance(
+            card,
+            fromIdx,
+            toIdx,
+            sessionUserId,
+            b,
+            activityActorLabel,
+          );
           runKanbanAutomations(
             b,
             {
@@ -1320,6 +1334,7 @@ export function BoardCanvas({
       onPatchBoard,
       resolveCardHomeBoard,
       activityActorLabel,
+      sessionUserId,
       onLinkedOrderMovedToKaitenMirror,
       aggregateLayoutLocked,
       onAggregateCardDrag,

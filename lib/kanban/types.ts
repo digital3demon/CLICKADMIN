@@ -107,6 +107,12 @@ export type KanbanCard = {
   kaitenCardId?: number | null;
   /** Порядок в колонке Kaiten (`sort_order`); для сортировки зеркала и DnD → Kaiten */
   kaitenCardSortOrder?: number | null;
+  /** Отпечаток members из Kaiten (inbound sync) */
+  kaitenMembersFingerprint?: string | null;
+  /** Отпечаток после успешного push CRM → Kaiten (anti-loop) */
+  lastPushedMembersFingerprint?: string | null;
+  /** Предупреждение: Kaiten users без match в CRM */
+  kaitenMembersSyncWarning?: string | null;
   cardTypeId: string;
   assignees: string[];
   participants: string[];

@@ -448,6 +448,24 @@ function runOneTimeMailSeenReconcile() {
   }
 }
 
+function runOneTimeKanbanClearLabMatchedDueDates() {
+  if (String(process.env.KANBAN_CLEAR_STAGE_DUE_AUTORUN_DISABLE || "").trim() === "1") {
+    console.warn(
+      "[kanban-due] очистка этапных сроков отключена через KANBAN_CLEAR_STAGE_DUE_AUTORUN_DISABLE=1.",
+    );
+    return;
+  }
+  const script = pathToEnsure("clear-kanban-card-stage-due-dates.cjs");
+  if (!fs.existsSync(script)) {
+    console.warn("[kanban-due] clear-kanban-card-stage-due-dates.cjs не найден, пропускаю.");
+    return;
+  }
+  const run = spawnNodeScript(script, {}, ["--auto-once"]);
+  if (run.status !== 0) {
+    process.exit(run.status === null ? 1 : run.status);
+  }
+}
+
 function shouldSkipOptionalDeployHooks() {
   const flag = String(process.env.SKIP_DEPLOY_HOOKS || "").trim();
   if (flag === "1" || flag.toLowerCase() === "true") return true;
@@ -465,6 +483,7 @@ if (shouldSkipOptionalDeployHooks()) {
   runOneTimeMailResetBeforeRules();
   runOrderMailRulesOnDeploy();
   runOneTimeMailSeenReconcile();
+  runOneTimeKanbanClearLabMatchedDueDates();
 }
 
 console.log("single db mode: OK.");

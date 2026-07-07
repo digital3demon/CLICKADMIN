@@ -3,6 +3,7 @@ import type { KanbanAppState, KanbanBoard, KanbanCard } from "./types";import { 
 import { previewLinkedCardKaitenSortOrderAfterDrag } from "./kanban-card-move-preview";
 import { runKanbanAutomations } from "./automations";
 import {
+  annulKanbanStageTimerOnMemberAdvance,
   findCardInAppState,
   KANBAN_BOARD_ORTHODONTICS_ID,
   pushActivity,
@@ -36,7 +37,7 @@ export function applyAggregateCardDrag(
   displayBoard: KanbanBoard,
   cardHomeBoardId: Map<string, string>,
   drag: AggregateCardDragArgs,
-  opts: { activityUserId: string; activityActorLabel?: string },
+  opts: { activityUserId: string; activityActorLabel?: string; sessionUserId?: string | null },
 ): {
   ok: boolean;
   kaiten?: {
@@ -147,6 +148,18 @@ export function applyAggregateCardDrag(
       0,
       opts.activityActorLabel,
     );
+    if (fromHome.id === toHome.id) {
+      const fromIdx = fromHome.columns.findIndex((c) => c.id === fromCol.id);
+      const toIdx = toHome.columns.findIndex((c) => c.id === toCol.id);
+      annulKanbanStageTimerOnMemberAdvance(
+        card,
+        fromIdx,
+        toIdx,
+        opts.sessionUserId,
+        toHome,
+        opts.activityActorLabel,
+      );
+    }
   }
 
   let kaiten:

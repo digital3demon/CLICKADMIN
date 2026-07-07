@@ -73,6 +73,9 @@ export async function loadActivePriceListItemNames(): Promise<string[]> {
 
 const FUZZY_HINT_MIN_LEN = 4;
 
+/** Если scores близки — неоднозначно; при равной неясности берём более дешёвую позицию. */
+const AMBIGUOUS_MATCH_SCORE_MARGIN = 25;
+
 /** Латиница в прайсе vs кириллица в письме (Marco Rosa, Emax) — визуально похожие буквы. */
 const LATIN_TO_CYRILLIC_FOLD: Record<string, string> = {
   a: "а",
@@ -387,9 +390,16 @@ function findAmbiguousMatches(hint: string, items: CatalogItem[]): CatalogItem[]
     if (both.includes(q)) return true;
     return false;
   });
-  if (substringMatches.length > 0) return substringMatches;
+  if (substringMatches.length > 0) {
+    const picked = pickBestCatalogMatch(hint, substringMatches);
+    if (picked) return [picked];
+    return substringMatches;
+  }
 
-  return items.filter((it) => hintTokensMatchName(normalizedHint, it.name));
+  const tokenMatches = items.filter((it) => hintTokensMatchName(normalizedHint, it.name));
+  if (tokenMatches.length === 0) return [];
+  const picked = pickBestCatalogMatch(hint, tokenMatches);
+  return picked ? [picked] : tokenMatches;
 }
 
 function mergeResolvedLinesByPriceItem(lines: ResolvedCompositionLine[]): ResolvedCompositionLine[] {
@@ -416,6 +426,153 @@ export function isPriceNameStrictlyMoreSpecific(specific: string, generic: strin
   return genericTokens.every((genericToken) =>
     specificTokens.some((specificToken) => tokensLooselyEqual(genericToken, specificToken)),
   );
+}
+
+/** Варианты одной семьи прайса: «немедленная нагрузка …» vs «немедленная нагрузка …». */
+export function areSiblingPriceNameVariants(a: string, b: string): boolean {
+  if (isPriceNameStrictlyMoreSpecific(a, b) || isPriceNameStrictlyMoreSpecific(b, a)) {
+    return false;
+  }
+  const lowerA = a.toLowerCase();
+  const lowerB = b.toLowerCase();
+  const upperOnlyA =
+    new RegExp(`${WORD_LEFT}${JAW_UPPER_MARKER}${WORD_RIGHT}`, "iu").test(lowerA) &&
+    !new RegExp(`${WORD_LEFT}${JAW_LOWER_MARKER}${WORD_RIGHT}`, "iu").test(lowerA);
+  const lowerOnlyA =
+    new RegExp(`${WORD_LEFT}${JAW_LOWER_MARKER}${WORD_RIGHT}`, "iu").test(lowerA) &&
+    !new RegExp(`${WORD_LEFT}${JAW_UPPER_MARKER}${WORD_RIGHT}`, "iu").test(lowerA);
+  const upperOnlyB =
+    new RegExp(`${WORD_LEFT}${JAW_UPPER_MARKER}${WORD_RIGHT}`, "iu").test(lowerB) &&
+    !new RegExp(`${WORD_LEFT}${JAW_LOWER_MARKER}${WORD_RIGHT}`, "iu").test(lowerB);
+  const lowerOnlyB =
+    new RegExp(`${WORD_LEFT}${JAW_LOWER_MARKER}${WORD_RIGHT}`, "iu").test(lowerB) &&
+    !new RegExp(`${WORD_LEFT}${JAW_UPPER_MARKER}${WORD_RIGHT}`, "iu").test(lowerB);
+  if ((upperOnlyA && lowerOnlyB) || (lowerOnlyA && upperOnlyB)) {
+    return false;
+  }
+
+  const left = tokenizeForMatch(a);
+  const right = tokenizeForMatch(b);
+  let shared = 0;
+  for (const token of left) {
+    if (right.some((other) => tokensLooselyEqual(token, other))) shared++;
+  }
+  if (shared >= 2) return true;
+  const minLen = Math.min(left.length, right.length);
+  return minLen > 0 && shared / minLen >= 0.5;
+}
+
+function pickCheapestCatalogItem(candidates: CatalogItem[]): CatalogItem {
+  return [...candidates].sort(
+    (a, b) =>
+      (a.priceRub ?? 0) - (b.priceRub ?? 0) || a.name.localeCompare(b.name, "ru"),
+  )[0]!;
+}
+
+function pickBestSiblingVariant<T extends { nameHint?: string; name?: string; unitPrice?: number }>(
+  group: T[],
+  orderText: string,
+): T {
+  if (group.length === 1) return group[0]!;
+  const text = orderText.trim();
+
+  if (text) {
+    const scored = group.map((entry) => {
+      const label = entry.nameHint ?? entry.name ?? "";
+      return { entry, score: scorePriceItemMentionInOrderText(label, text) };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    const best = scored[0]!;
+    const second = scored[1];
+    if (second && best.score - second.score >= AMBIGUOUS_MATCH_SCORE_MARGIN) {
+      return best.entry;
+    }
+  }
+
+  return group.reduce((best, cur) => {
+    const bestPrice = best.unitPrice ?? Number.POSITIVE_INFINITY;
+    const curPrice = cur.unitPrice ?? Number.POSITIVE_INFINITY;
+    if (curPrice < bestPrice) return cur;
+    if (curPrice > bestPrice) return best;
+    const bestLabel = best.nameHint ?? best.name ?? "";
+    const curLabel = cur.nameHint ?? cur.name ?? "";
+    return tokenizeForMatch(curLabel).length > tokenizeForMatch(bestLabel).length ? cur : best;
+  });
+}
+
+/** Оставляет одну позицию из группы «немедленная нагрузка …» / «немедленная нагрузка …». */
+export function dedupeCompositionHintsBySiblingVariants(
+  hints: CompositionHint[],
+  orderText: string,
+): CompositionHint[] {
+  if (hints.length <= 1) return hints;
+  const groups: CompositionHint[][] = [];
+
+  for (const hint of hints) {
+    const name = hint.nameHint.trim();
+    if (!name) continue;
+    let placed = false;
+    for (const group of groups) {
+      if (areSiblingPriceNameVariants(name, group[0]!.nameHint)) {
+        group.push(hint);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) groups.push([hint]);
+  }
+
+  return groups.map((group) => pickBestSiblingVariant(group, orderText));
+}
+
+function dedupeResolvedLinesBySiblingVariants(
+  lines: ResolvedCompositionLine[],
+  orderText: string,
+): ResolvedCompositionLine[] {
+  if (lines.length <= 1) return lines;
+  const groups: ResolvedCompositionLine[][] = [];
+
+  for (const line of lines) {
+    let placed = false;
+    for (const group of groups) {
+      if (areSiblingPriceNameVariants(line.name, group[0]!.name)) {
+        group.push(line);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) groups.push([line]);
+  }
+
+  return groups.map((group) => pickBestSiblingVariant(group, orderText));
+}
+
+function scoreHintToCatalogItem(hint: string, item: CatalogItem): number {
+  const normalizedHint = normalizeCompositionHintForMatch(hint);
+  let score = 0;
+  const nameLower = item.name.toLowerCase();
+  const hintLower = normalizedHint.toLowerCase();
+  if (nameLower === hintLower) score += 1000;
+  if (hintTokensMatchName(normalizedHint, item.name)) score += 500;
+  score += tokenizeForMatch(item.name).length * 3;
+  if (nameLower.includes(hintLower)) score += 120;
+  if (hintLower.includes(nameLower)) score += 80;
+  return score;
+}
+
+function pickBestCatalogMatch(hint: string, candidates: CatalogItem[]): CatalogItem | null {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0]!;
+  const scored = candidates
+    .map((item) => ({ item, score: scoreHintToCatalogItem(hint, item) }))
+    .sort((a, b) => b.score - a.score);
+  const best = scored[0]!;
+  const second = scored[1];
+  if (!second || best.score - second.score >= AMBIGUOUS_MATCH_SCORE_MARGIN) {
+    const top = scored.filter((row) => row.score === best.score).map((row) => row.item);
+    return pickCheapestCatalogItem(top);
+  }
+  return pickCheapestCatalogItem(candidates);
 }
 
 /** Убирает пары вроде «сплинт» + «сплинт сложный» из hints ИИ и эвристик. */
@@ -489,15 +646,7 @@ export async function resolveAiCompositionLines(
       if (candidates.length === 1) {
         item = candidates[0];
       } else if (candidates.length > 1) {
-        const samePrice = new Set(candidates.map((c) => c.priceRub ?? 0));
-        if (samePrice.size === 1) {
-          item = candidates[0];
-        } else {
-          warnings.push(
-            `Неоднозначная позиция прайса: «${nameHint}» (${candidates.length} вариантов)`,
-          );
-          continue;
-        }
+        item = pickBestCatalogMatch(nameHint, candidates) ?? pickCheapestCatalogItem(candidates);
       } else {
         warnings.push(`Не найдено в прайсе: «${nameHint}»`);
         continue;
@@ -528,6 +677,7 @@ export async function resolveAiCompositionLines(
   let mergedLines = dedupeResolvedLinesByNameSpecificity(
     mergeResolvedLinesByPriceItem(lines),
   );
+  mergedLines = dedupeResolvedLinesBySiblingVariants(mergedLines, negationText);
   if (negationText) {
     mergedLines = filterResolvedLinesByNegation(mergedLines, negationText);
   }

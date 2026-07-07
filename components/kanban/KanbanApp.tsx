@@ -12,6 +12,7 @@ import type {
 import { runKanbanAutomations } from "@/lib/kanban/automations";
 import {
   canUserAccessBoard,
+  annulKanbanStageTimerOnMemberAdvance,
   applyKaitenApiCardTypesToMirrorBoards,
   applyBoardArchivePolicies,
   archiveCardByIdOnBoard,
@@ -874,7 +875,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           view.displayBoard,
           view.cardHomeBoardId,
           drag,
-          { activityUserId, activityActorLabel },
+          { activityUserId, activityActorLabel, sessionUserId: kanbanSessionUserId },
         );
         if (!res.ok) return s;
         if (res.kaiten) kaitenFollowUp = res.kaiten;
@@ -1206,6 +1207,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       c.lastMovedAt = now;
       c.updatedAt = now;
       pushActivity(c, `Перемещена в «${nextCol.title}»`, b.users[0]?.id, b, activityActorLabel);
+      annulKanbanStageTimerOnMemberAdvance(
+        c,
+        colIdx,
+        colIdx + 1,
+        kanbanSessionUserId,
+        b,
+        activityActorLabel,
+      );
       runKanbanAutomations(
         b,
         {
@@ -1394,6 +1403,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         c.lastMovedAt = now;
         c.updatedAt = now;
         pushActivity(c, `Перемещена в «${toCol.title}»`, b.users[0]?.id, b, activityActorLabel);
+        const fromIdx = b.columns.findIndex((col) => col.id === loc.col.id);
+        const toIdx = b.columns.findIndex((col) => col.id === toCol.id);
+        annulKanbanStageTimerOnMemberAdvance(
+          c,
+          fromIdx,
+          toIdx,
+          kanbanSessionUserId,
+          b,
+          activityActorLabel,
+        );
         runKanbanAutomations(
           b,
           {
@@ -1452,7 +1471,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       }
       showToast(`Этап: «${targetCol.title}»`);
     },
-    [appState, activityActorLabel, isDemo, showToast, syncKaitenMirrorAfterKanbanMove],
+    [appState, activityActorLabel, isDemo, kanbanSessionUserId, showToast, syncKaitenMirrorAfterKanbanMove],
   );
 
   const enrichProductionChecklistForChild = useCallback(async (boardId: string, childId: string) => {
@@ -1802,6 +1821,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               board={displayBoard}
               resolveCardHomeBoard={resolveCardHomeBoard}
               activityActorLabel={activityActorLabel}
+              sessionUserId={kanbanSessionUserId}
               dndLocked={dndLocked}
               aggregateLayoutLocked={aggregateView}
               onAggregateCardDrag={aggregateView ? handleAggregateCardDrag : undefined}

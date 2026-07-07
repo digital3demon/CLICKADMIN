@@ -1501,6 +1501,38 @@ export function pushActivity(
   card.updatedAt = entry.at;
 }
 
+/** Сброс этапного таймера, если ответственный/участник перенёс карточку на следующую колонку. */
+export function annulKanbanStageTimerOnMemberAdvance(
+  card: KanbanCard,
+  fromColumnIndex: number,
+  toColumnIndex: number,
+  sessionUserId: string | null | undefined,
+  board: KanbanBoard,
+  activityActorLabel?: string,
+): boolean {
+  if (toColumnIndex !== fromColumnIndex + 1) return false;
+  const uid = (sessionUserId ?? "").trim();
+  if (!uid) return false;
+  const assignees = card.assignees ?? [];
+  const participants = card.participants ?? [];
+  if (!assignees.includes(uid) && !participants.includes(uid)) return false;
+  const hadTimer =
+    Boolean(card.timerStartedAt) ||
+    (card.timerDurationMs != null && card.timerDurationMs > 0);
+  if (!hadTimer) return false;
+  card.timerStartedAt = null;
+  card.timerDurationMs = null;
+  card.timerFrozenAt = null;
+  pushActivity(
+    card,
+    "Таймер аннулирован (перенос на следующий этап)",
+    uid,
+    board,
+    activityActorLabel,
+  );
+  return true;
+}
+
 export function findCard(
   board: KanbanBoard,
   cardId: string,
@@ -2215,7 +2247,6 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         isUrgent: row.isUrgent,
         urgentCoefficient: row.urgentCoefficient,
       });
-      const dueStr = row.dueDate ? String(row.dueDate).slice(0, 10) : "";
       const desc = linkedOrderKanbanDescription(row, true);
       const effType = resolveLinkedOrderCardTypeId(activeBoard, row, true);
       const fallbackTypeId = effType || (activeBoard.cardTypes?.[0]?.id ?? "");
@@ -2236,7 +2267,6 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         applyContinuesFromOrderToKanbanCard(found.card, row);
         found.card.kaitenCardId = row.kaitenCardId ?? null;
         found.card.linkedOrderId = row.id;
-        found.card.dueDate = dueStr;
         found.card.urgent = row.isUrgent;
         found.card.cardTypeId = fallbackTypeId;
         found.card.trackLane = DEMO_KANBAN_TRACK_LANE_ID;
@@ -2255,7 +2285,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
           title,
           description: desc,
           cardTypeId: fallbackTypeId,
-          dueDate: dueStr,
+          dueDate: "",
           urgent: row.isUrgent,
           linkedOrderId: row.id,
           kaitenCardId: row.kaitenCardId ?? null,
@@ -2322,7 +2352,6 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       urgentCoefficient: row.urgentCoefficient,
     });
     const title = resolveLinkedOrderKanbanTitle(row, titleFromOrder);
-    const dueStr = row.dueDate ? String(row.dueDate).slice(0, 10) : "";
     const desc = linkedOrderKanbanDescription(row, false);
     const effType = resolveLinkedOrderCardTypeId(targetBoard, row, false);
     const fallbackTypeId = effType || (targetBoard.cardTypes?.[0]?.id ?? "");
@@ -2356,7 +2385,6 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       applyContinuesFromOrderToKanbanCard(foundEff.card, row);
       foundEff.card.kaitenCardId = row.kaitenCardId ?? null;
       foundEff.card.linkedOrderId = row.id;
-      foundEff.card.dueDate = dueStr;
       foundEff.card.urgent = row.isUrgent;
       foundEff.card.cardTypeId = fallbackTypeId;
       foundEff.card.trackLane = lane;
@@ -2375,7 +2403,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         title,
         description: desc,
         cardTypeId: fallbackTypeId,
-        dueDate: dueStr,
+        dueDate: "",
         urgent: row.isUrgent,
         linkedOrderId: row.id,
         kaitenCardId: row.kaitenCardId ?? null,
