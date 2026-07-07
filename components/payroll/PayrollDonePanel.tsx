@@ -249,7 +249,7 @@ export function PayrollDonePanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex flex-col">
       <div className="border-b border-[var(--kaiten-modal-border)] p-2">
         <label className="block text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
           Что сделано
@@ -312,7 +312,7 @@ export function PayrollDonePanel({
           <p className="mt-2 text-[0.72rem] font-medium text-red-300">{error}</p>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="p-2">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="text-[0.72rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
             Плашки

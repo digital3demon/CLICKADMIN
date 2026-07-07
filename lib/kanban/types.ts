@@ -120,7 +120,7 @@ export type KanbanCard = {
   dueDate: string;
   /** Этапный срок (поле «Срок» в канбане); не лабораторный срок наряда. */
   stageDueDate?: string;
-  /** Метка «срочно»: не связана со сроком, может быть без даты. */
+  /** Метка «срочно» для следующего отдела (только канбан; не Order.isUrgent в шапке). */
   urgent: boolean;
   checklist: ChecklistItem[];
   files: CardFile[];

@@ -105,7 +105,7 @@ export async function POST(
 
   if (!res.ok) {
     return NextResponse.json(
-      { error: res.error ?? "Не удалось отправить комментарий от админов в Kaiten" },
+      { error: res.error ?? "Не удалось отправить комментарий в Kaiten" },
       { status: 502 },
     );
   }

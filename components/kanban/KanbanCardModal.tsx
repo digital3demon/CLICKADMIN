@@ -18,7 +18,6 @@ import {
 import {
   deleteOrderAttachmentById,
   fetchKanbanMirrorCommentsForOrder,
-  patchOrderHeadFromKanban,
   patchOrderKaitenCard,
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
@@ -103,6 +102,7 @@ import {
 } from "@/lib/kanban-mention-telegram-html";
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
+import { LinkifiedPlainText } from "@/components/ui/LinkifiedPlainText";
 import { LinkifiedTextarea } from "@/components/ui/LinkifiedTextarea";
 
 type ChatAction = "comment" | "correction" | "prosthetics";
@@ -269,6 +269,7 @@ export function KanbanCardModal({
   const [pickerQuery, setPickerQuery] = useState("");
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
+  const [descExpanded, setDescExpanded] = useState(false);
   const [fileViewer, setFileViewer] = useState<
     | null
     | { mode: "image"; images: CardFile[]; index: number }
@@ -325,6 +326,7 @@ export function KanbanCardModal({
     setManualRouteOpen(false);
     setManualRoutePendingFiles([]);
     setManualRouteRows([]);
+    setDescExpanded(false);
   }, [cardId]);
 
   useEffect(() => {
@@ -691,7 +693,7 @@ export function KanbanCardModal({
             const fc = findCard(b, cardId);
             if (!fc) return;
             fc.card.comments = withImagePlaceholders(nextComments, fc.card);
-            pushActivity(fc.card, "Комментарий от админов", actor, b, act);
+            pushActivity(fc.card, "Комментарий", actor, b, act);
           });
           fireMentionTelegram();
           return true;
@@ -738,7 +740,7 @@ export function KanbanCardModal({
             const fc = findCard(b, cardId);
             if (!fc) return;
             fc.card.comments = withImagePlaceholders(nextComments, fc.card);
-            pushActivity(fc.card, "Комментарий от админов", actor, b, act);
+            pushActivity(fc.card, "Комментарий", actor, b, act);
           });
           fireMentionTelegram();
           return true;
@@ -762,7 +764,7 @@ export function KanbanCardModal({
         text: trimmed,
         createdAt: new Date().toISOString(),
       });
-      pushActivity(c, "Комментарий от админов", localActor, b, act);
+      pushActivity(c, "Комментарий", localActor, b, act);
     });
     fireMentionTelegram();
     if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
@@ -782,11 +784,11 @@ export function KanbanCardModal({
         kaitenCardId: card.kaitenCardId,
         event: "tg_comment_added",
         parseMode: "HTML",
-        lines: [`${who} оставил(а) комментарий от админов к ${linkHtml}\n«${snippet}»`],
+        lines: [`${who} оставил(а) комментарий к ${linkHtml}\n«${snippet}»`],
         ...(oid
           ? {
               linesAdmin: [
-                `${who} оставил(а) комментарий от админов к ${cardWord} и ${orderWord}\n«${snippet}»`,
+                `${who} оставил(а) комментарий к ${cardWord} и ${orderWord}\n«${snippet}»`,
               ],
             }
           : {}),
@@ -1058,7 +1060,7 @@ export function KanbanCardModal({
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4"
+      className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/45 p-4 py-6"
       role="dialog"
       aria-modal
       onMouseDown={(ev) => {
@@ -1324,7 +1326,7 @@ export function KanbanCardModal({
         )}
 
         <div
-          className={`relative flex min-h-[min(72vh,920px)] max-h-[min(96vh,1400px)] flex-col overflow-hidden border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] ${
+          className={`relative flex flex-col border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] ${
             blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
           }`}
         >
@@ -1557,9 +1559,9 @@ export function KanbanCardModal({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-start">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="px-3 pb-3 pt-2.5">
               <div className="mb-3 grid gap-3 sm:grid-cols-3">
                 <div>
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
@@ -1754,38 +1756,23 @@ export function KanbanCardModal({
                     }`}
                     title={
                       card.urgent
-                        ? "Снять метку «Срочно» (срок не меняется)"
-                        : "Пометить как срочное (срок не меняется)"
+                        ? "Снять метку «Срочно» для следующего отдела (только канбан)"
+                        : "Срочно для следующего отдела (только канбан, наряд не меняется)"
                     }
                     onClick={() => {
-                      void (async () => {
-                        const next = !card.urgent;
-                        if (
-                          card.linkedOrderId &&
-                          card.kaitenCardId != null &&
-                          Number.isFinite(card.kaitenCardId)
-                        ) {
-                          const r = await patchOrderHeadFromKanban(card.linkedOrderId, {
-                            urgent: next,
-                          });
-                          if (!r.ok) {
-                            toast(r.error, true);
-                            return;
-                          }
-                        }
-                        onApply((b) => {
-                          const fc = findCard(b, cardId);
-                          if (!fc) return;
-                          fc.card.urgent = next;
-                          pushActivity(
-                            fc.card,
-                            next ? "Отмечена как срочная" : "Снята метка «Срочно»",
-                            b.users[0]?.id,
-                            b,
-                            act,
-                          );
-                        });
-                      })();
+                      const next = !card.urgent;
+                      onApply((b) => {
+                        const fc = findCard(b, cardId);
+                        if (!fc) return;
+                        fc.card.urgent = next;
+                        pushActivity(
+                          fc.card,
+                          next ? "Отмечена как срочная" : "Снята метка «Срочно»",
+                          b.users[0]?.id,
+                          b,
+                          act,
+                        );
+                      });
                     }}
                   >
                     Срочно
@@ -1825,65 +1812,108 @@ export function KanbanCardModal({
                   </p>
                 ))}
                 <div className="grid min-h-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] sm:items-start">
-                  <LinkifiedTextarea
-                    className={baseInput}
-                    rows={3}
-                    value={descDraft}
-                    onChange={setDescDraft}
-                    onBlur={() => {
-                      void (async () => {
-                        if (descDraft === (card.description || "")) return;
-                        if (
-                          card.linkedOrderId &&
-                          card.kaitenCardId != null &&
-                          Number.isFinite(card.kaitenCardId)
-                        ) {
-                          const r = await patchOrderKaitenCard(card.linkedOrderId, {
-                            description: descDraft,
-                          });
-                          if (!r.ok) {
-                            toast(r.error, true);
-                            setDescDraft(card.description || "");
-                            return;
-                          }
-                        }
-                        onApply((b) => {
-                          const fc = findCard(b, cardId);
-                          if (!fc) return;
-                          fc.card.description = descDraft;
-                          pushActivity(fc.card, "Обновлено описание", b.users[0]?.id, b, act);
-                        });
-                        if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
-                          const titleLine = (card.title || "").trim() || "Без названия";
-                          const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
-                          const oid = card.linkedOrderId?.trim();
-                          const { cardWord, orderWord } = oid
-                            ? cardOrderWordLinks(oid, cardId, board.id)
-                            : { cardWord: "", orderWord: "" };
-                          postKanbanCrmTelegramNotify({
-                            kaitenCardId: card.kaitenCardId,
-                            event: "tg_description_changed",
-                            parseMode: "HTML",
-                            lines: [`Обновлено описание в ${linkHtml}`],
-                            ...(oid
-                              ? {
-                                  linesAdmin: [
-                                    `Обновлено описание в ${cardWord} и ${orderWord}`,
-                                  ],
-                                }
-                              : {}),
-                          });
-                        }
-                      })();
-                    }}
-                  />
+                  <div className="min-w-0">
+                    {descExpanded ? (
+                      <LinkifiedTextarea
+                        className={baseInput}
+                        rows={3}
+                        value={descDraft}
+                        onChange={setDescDraft}
+                        onBlur={() => {
+                          void (async () => {
+                            if (descDraft === (card.description || "")) return;
+                            if (
+                              card.linkedOrderId &&
+                              card.kaitenCardId != null &&
+                              Number.isFinite(card.kaitenCardId)
+                            ) {
+                              const r = await patchOrderKaitenCard(card.linkedOrderId, {
+                                description: descDraft,
+                              });
+                              if (!r.ok) {
+                                toast(r.error, true);
+                                setDescDraft(card.description || "");
+                                return;
+                              }
+                            }
+                            onApply((b) => {
+                              const fc = findCard(b, cardId);
+                              if (!fc) return;
+                              fc.card.description = descDraft;
+                              pushActivity(fc.card, "Обновлено описание", b.users[0]?.id, b, act);
+                            });
+                            if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
+                              const titleLine = (card.title || "").trim() || "Без названия";
+                              const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
+                              const oid = card.linkedOrderId?.trim();
+                              const { cardWord, orderWord } = oid
+                                ? cardOrderWordLinks(oid, cardId, board.id)
+                                : { cardWord: "", orderWord: "" };
+                              postKanbanCrmTelegramNotify({
+                                kaitenCardId: card.kaitenCardId,
+                                event: "tg_description_changed",
+                                parseMode: "HTML",
+                                lines: [`Обновлено описание в ${linkHtml}`],
+                                ...(oid
+                                  ? {
+                                      linesAdmin: [
+                                        `Обновлено описание в ${cardWord} и ${orderWord}`,
+                                      ],
+                                    }
+                                  : {}),
+                              });
+                            }
+                          })();
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className={`${baseInput} block w-full min-h-[4.5rem] max-h-[4.5rem] cursor-pointer overflow-hidden text-left sm:min-h-[5rem] sm:max-h-[5rem]`}
+                          onClick={(e) => {
+                            if ((e.target as HTMLElement).closest("a")) return;
+                            setDescExpanded(true);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setDescExpanded(true);
+                            }
+                          }}
+                          aria-expanded={false}
+                          aria-label="Развернуть описание заказа"
+                        >
+                          <span className="line-clamp-3 whitespace-pre-wrap break-words sm:line-clamp-4">
+                            {descDraft.trim() ? (
+                              <LinkifiedPlainText text={descDraft} />
+                            ) : (
+                              <span className="text-[var(--kaiten-modal-muted)]">
+                                Добавить описание…
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[0.65rem] font-normal leading-snug text-[var(--kaiten-modal-muted)]">
+                          <button
+                            type="button"
+                            className="cursor-pointer text-left text-[inherit] hover:text-[var(--kaiten-modal-text)]"
+                            onClick={() => setDescExpanded(true)}
+                          >
+                            нажмите на описание что бы увидеть полный текст
+                          </button>
+                        </p>
+                      </>
+                    )}
+                  </div>
                   <aside
-                    className={`flex min-h-[100px] flex-col rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] p-1.5 sm:min-h-[120px] sm:max-h-[min(22rem,50vh)]`}
+                    className="flex min-h-[100px] flex-col rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] p-1.5 sm:min-h-[120px]"
                   >
                     <div className="mb-1 shrink-0 text-[0.55rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                       Файлы наряда и чата
                     </div>
-                    <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden">
+                    <div className="space-y-1.5 overflow-x-hidden">
                       {(card.files || []).length === 0 ? (
                         <p className="m-0 px-0.5 py-1 text-[0.7rem] leading-snug text-[var(--kaiten-modal-muted)]">
                           {card.parentCardId || (card.childCardIds || []).length > 0
@@ -2141,7 +2171,7 @@ export function KanbanCardModal({
               ) : null}
             </div>
 
-            <div className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:border-l sm:border-t-0">
+            <div className="flex w-full shrink-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:border-l sm:border-t-0">
               <div className="flex overflow-hidden rounded-md border border-[var(--kaiten-modal-border)]">
                 {canUsePayrollDone ? (
                   <button
@@ -2165,7 +2195,7 @@ export function KanbanCardModal({
                   }`}
                   onClick={() => setRightTab("chat")}
                 >
-                  Комментарии от админов
+                  Комментарии
                 </button>
                 <button
                   type="button"
@@ -2198,7 +2228,7 @@ export function KanbanCardModal({
                   onOpenAttachment={openAttachment}
                 />
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 text-[0.8125rem]">
+                <div className="px-2 py-2 text-[0.8125rem]">
                   {(card.activity || []).slice(0, 40).map((a) => {
                     const u = board.users.find((x) => x.id === a.userId);
                     const name =
@@ -2600,7 +2630,6 @@ function ChatPanel({
   onOpenAttachment: (f: CardFile) => void;
 }) {
   const { byId: crmChatById, list: crmChatList } = useKanbanCrmUsers();
-  const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [inp, setInp] = useState("");
   const [caretPos, setCaretPos] = useState(0);
@@ -2695,17 +2724,6 @@ function ChatPanel({
     return base.slice(0, 8);
   }, [mentionDraft, mentionOptions]);
 
-  const lastChatCardIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!ref.current) return;
-    if (lastChatCardIdRef.current !== card.id) {
-      lastChatCardIdRef.current = card.id;
-      ref.current.scrollTop = 0;
-      return;
-    }
-    ref.current.scrollTop = ref.current.scrollHeight;
-  }, [card.id, card.comments?.length, card.files?.length, chatBlocks.length]);
-
   const flushFiles = (list: FileList | File[]) => {
     const arr = Array.from(list).filter((f) => f.size > 0);
     if (!arr.length) return;
@@ -2747,7 +2765,7 @@ function ChatPanel({
 
   return (
     <div
-      className={`flex min-h-0 flex-1 flex-col transition-[box-shadow] ${
+      className={`flex flex-col transition-[box-shadow] ${
         dragOver
           ? "ring-2 ring-[var(--kaiten-accent)] ring-inset ring-offset-0"
           : ""
@@ -2768,7 +2786,7 @@ function ChatPanel({
         if (e.dataTransfer.files?.length) flushFiles(e.dataTransfer.files);
       }}
     >
-      <div ref={ref} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <div className="px-2 py-2">
         {chatBlocks.map((block) => {
           if (block.kind === "imageRow") {
             const cm0 = block.comments[0];

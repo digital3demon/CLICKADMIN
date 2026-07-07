@@ -2272,7 +2272,6 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         applyContinuesFromOrderToKanbanCard(found.card, row);
         found.card.kaitenCardId = row.kaitenCardId ?? null;
         found.card.linkedOrderId = row.id;
-        found.card.urgent = row.isUrgent;
         found.card.cardTypeId = fallbackTypeId;
         found.card.trackLane = DEMO_KANBAN_TRACK_LANE_ID;
         found.card.blocked = !!row.kaitenBlocked;
@@ -2291,7 +2290,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
           description: desc,
           cardTypeId: fallbackTypeId,
           dueDate: "",
-          urgent: row.isUrgent,
+          urgent: false,
           linkedOrderId: row.id,
           kaitenCardId: row.kaitenCardId ?? null,
           kaitenCardSortOrder: row.kaitenCardSortOrder ?? null,
@@ -2390,7 +2389,6 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       applyContinuesFromOrderToKanbanCard(foundEff.card, row);
       foundEff.card.kaitenCardId = row.kaitenCardId ?? null;
       foundEff.card.linkedOrderId = row.id;
-      foundEff.card.urgent = row.isUrgent;
       foundEff.card.cardTypeId = fallbackTypeId;
       foundEff.card.trackLane = lane;
       foundEff.card.blocked = !!row.kaitenBlocked;
@@ -2409,7 +2407,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         description: desc,
         cardTypeId: fallbackTypeId,
         dueDate: "",
-        urgent: row.isUrgent,
+        urgent: false,
         linkedOrderId: row.id,
         kaitenCardId: row.kaitenCardId ?? null,
         kaitenCardSortOrder: row.kaitenCardSortOrder ?? null,

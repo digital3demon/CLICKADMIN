@@ -15,7 +15,7 @@ export const ADMIN_SHARED_MESSENGER_PREF_LABELS: Record<
   string
 > = {
   tg_mentioned_in_comment:
-    "Упоминания в комментариях от админов (канбан, чат наряда / Kaiten)",
+    "Упоминания в комментариях (канбан, чат наряда / Kaiten)",
   tg_order_correction_changed:
     "Корректировки в наряде (направление, причина, оплата)",
   tg_order_prosthetics_changed: "Протетика в наряде (состав, признак «заказано»)",

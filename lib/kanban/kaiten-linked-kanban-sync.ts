@@ -1,6 +1,5 @@
 import type { CardComment } from "@/lib/kanban/types";
 import { kaitenJsonIntId } from "@/lib/kaiten-comment-parse";
-import { URGENT_NO_COEF, URGENT_UNSET } from "@/lib/order-urgency";
 import {
   CRM_UPLOAD_MAX_BYTES,
   formatCrmUploadMaxShortRu,
@@ -121,7 +120,7 @@ export async function postOrderKaitenComment(
     });
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) {
-      return { ok: false, error: data.error ?? "Комментарий от админов не отправлен в Kaiten" };
+      return { ok: false, error: data.error ?? "Комментарий не отправлен в Kaiten" };
     }
     return { ok: true };
   } catch {
@@ -130,20 +129,17 @@ export async function postOrderKaitenComment(
 }
 
 /**
- * Срок/срочность из канбана → PATCH наряда → push шапки в Kaiten (через KAITEN_HEAD_PATCH_FIELDS).
+ * Лабораторный срок из канбана → PATCH наряда → push шапки в Kaiten (через KAITEN_HEAD_PATCH_FIELDS).
  */
 export async function patchOrderHeadFromKanban(
   orderId: string,
-  body: { dueDate?: string | null; urgent?: boolean },
+  body: { dueDate?: string | null },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const patch: Record<string, unknown> = {};
   if (body.dueDate !== undefined) {
     const v = body.dueDate?.trim() || null;
     patch.dueDate = v ? `${v}T09:00:00.000` : null;
     patch.kaitenAdminDueHasTime = false;
-  }
-  if (body.urgent !== undefined) {
-    patch.urgentSelection = body.urgent ? URGENT_NO_COEF : URGENT_UNSET;
   }
   if (Object.keys(patch).length === 0) {
     return { ok: true };

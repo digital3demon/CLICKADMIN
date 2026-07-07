@@ -466,14 +466,14 @@ export async function POST(
       );
       if (existingIndex < 0) {
         return NextResponse.json(
-          { error: "Комментарий от админов для повтора не найден" },
+          { error: "Комментарий для повтора не найден" },
           { status: 404 },
         );
       }
       const existing = normalizeCardComment(card.comments![existingIndex]!);
       if (existing.source !== "CRM") {
         return NextResponse.json(
-          { error: "Повторить можно только CRM-комментарий от админов" },
+          { error: "Повторить можно только CRM-комментарий" },
           { status: 400 },
         );
       }
@@ -616,7 +616,7 @@ export async function POST(
   }
 
   return NextResponse.json(
-    { error: "Не удалось сохранить комментарий от админов из-за конкурентного обновления" },
+    { error: "Не удалось сохранить комментарий из-за конкурентного обновления" },
     { status: 409 },
   );
 }

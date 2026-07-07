@@ -91,6 +91,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KanbanMembersBackfillButton } from "./KanbanMembersBackfillButton";
+import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
 import { TOAST_AUTO_HIDE_MS } from "@/components/ui/toast-store";
 import { BoardCanvas } from "./BoardCanvas";
 import { KanbanFiltersButton } from "./KanbanFiltersButton";
