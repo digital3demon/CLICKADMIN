@@ -1,12 +1,12 @@
 import { PrismaClient } from "@prisma/client";
-import { augmentSqliteDatasourceUrl } from "@/lib/sqlite-datasource-url";
+import { augmentDatasourceUrl } from "@/lib/sqlite-datasource-url";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
 function mainDatasourceUrl(): string | undefined {
   const u = process.env.DATABASE_URL?.trim();
   if (!u) return undefined;
-  return augmentSqliteDatasourceUrl(u);
+  return augmentDatasourceUrl(u);
 }
 
 const resolvedMainDbUrl = mainDatasourceUrl();
@@ -24,4 +24,4 @@ export const prisma =
     },
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+globalForPrisma.prisma = prisma;

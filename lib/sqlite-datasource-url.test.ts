@@ -26,9 +26,9 @@ describe("augmentSqliteDatasourceUrl", () => {
     expect(u).not.toContain("socket_timeout=600");
   });
 
-  it("не трогает не-sqlite URL", () => {
-    expect(augmentSqliteDatasourceUrl("postgresql://x/y")).toBe(
-      "postgresql://x/y",
-    );
+  it("добавляет connection_limit к postgres URL", () => {
+    const u = augmentSqliteDatasourceUrl("postgresql://user:pass@host:5432/db");
+    expect(u).toContain("connection_limit=5");
+    expect(u).toContain("pool_timeout=30");
   });
 });
