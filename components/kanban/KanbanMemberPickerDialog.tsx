@@ -13,6 +13,19 @@ import {
 const baseInput =
   "w-full rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2.5 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)]";
 
+/** Высота столбца: ~6 строк пользователей, дальше — прокрутка внутри столбца. */
+const PICKER_COLUMN_MAX_HEIGHT = "17.5rem";
+
+function splitPickerIntoColumns<T>(items: readonly T[]): [T[], T[], T[]] {
+  if (items.length === 0) return [[], [], []];
+  const size = Math.ceil(items.length / 3);
+  return [
+    items.slice(0, size),
+    items.slice(size, size * 2),
+    items.slice(size * 2),
+  ];
+}
+
 type KanbanMemberPickerDialogProps = {
   open: boolean;
   mode: KanbanMemberPickerMode;
@@ -41,8 +54,9 @@ export function KanbanMemberPickerDialog({
   }, [open, mode, initialUserIds]);
 
   const pickerMerged = useMemo(
-    () => mergeKanbanPickerUsers(crmList, board.users),
-    [crmList, board.users],
+    () =>
+      mergeKanbanPickerUsers(crmList, board.users, board.excludedCrmUserIds),
+    [crmList, board.users, board.excludedCrmUserIds],
   );
 
   const pickerFiltered = useMemo(() => {
@@ -54,6 +68,11 @@ export function KanbanMemberPickerDialog({
       return false;
     });
   }, [pickerMerged, pickerQuery]);
+
+  const pickerColumns = useMemo(
+    () => splitPickerIntoColumns(pickerFiltered),
+    [pickerFiltered],
+  );
 
   const togglePickerId = (uid: string) => {
     setPickerIds((prev) =>
@@ -71,14 +90,15 @@ export function KanbanMemberPickerDialog({
       }}
     >
       <div
-        className="w-full max-w-sm rounded-lg border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-4 text-[var(--kaiten-modal-text)] shadow-xl"
+        className="w-full max-w-3xl rounded-lg border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-4 text-[var(--kaiten-modal-text)] shadow-xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h3 className="m-0 text-sm font-semibold">
           {mode === "assign" ? "Ответственные" : "Участники"}
         </h3>
         <p className="mt-1 text-[0.75rem] text-[var(--kaiten-modal-muted)]">
-          Любой активный пользователь CRM. Ответственные — с золотой обводкой на карточке.
+          Любой активный пользователь CRM. Ответственные — с золотой обводкой на
+          карточке. Нажмите на строку, чтобы выбрать или снять выбор.
         </p>
         <input
           type="search"
@@ -88,34 +108,52 @@ export function KanbanMemberPickerDialog({
           className={`${baseInput} mt-2`}
           autoFocus
         />
-        <div className="mt-3 max-h-[240px] space-y-2 overflow-y-auto">
+        <div className="mt-3 grid grid-cols-3 gap-2">
           {pickerFiltered.length === 0 ? (
-            <p className="text-[0.8125rem] text-[var(--kaiten-modal-muted)]">
+            <p className="col-span-3 text-[0.8125rem] text-[var(--kaiten-modal-muted)]">
               {pickerMerged.length === 0
                 ? "Нет пользователей (проверьте доступ к CRM)."
                 : "Никого не найдено."}
             </p>
           ) : (
-            pickerFiltered.map((row) => (
-              <label
-                key={row.id}
-                className="flex cursor-pointer items-center gap-2 rounded-md border border-[var(--kaiten-modal-border)] px-2 py-1.5 text-[0.8125rem]"
+            pickerColumns.map((column, columnIndex) => (
+              <div
+                key={columnIndex}
+                className="min-w-0 overflow-y-auto"
+                style={{ maxHeight: PICKER_COLUMN_MAX_HEIGHT }}
               >
-                <input
-                  type="checkbox"
-                  checked={pickerIds.includes(row.id)}
-                  onChange={() => togglePickerId(row.id)}
-                  className="rounded"
-                />
-                <KanbanPersonAvatar
-                  userId={row.id}
-                  homeBoard={board}
-                  variant={mode === "assign" ? "assignee" : "participant"}
-                  size="picker"
-                  titleSuffix=""
-                />
-                {pickerRowLabel(row)}
-              </label>
+                <div className="flex flex-col gap-2">
+                  {column.map((row) => {
+                    const selected = pickerIds.includes(row.id);
+                    return (
+                      <button
+                        key={row.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => togglePickerId(row.id)}
+                        className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-left text-[0.8125rem] transition-colors ${
+                          selected
+                            ? mode === "assign"
+                              ? "border-amber-400/80 bg-amber-400/10"
+                              : "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)]/10"
+                            : "border-[var(--kaiten-modal-border)] hover:border-[var(--kaiten-modal-muted)]"
+                        }`}
+                      >
+                        <KanbanPersonAvatar
+                          userId={row.id}
+                          homeBoard={board}
+                          variant={mode === "assign" ? "assignee" : "participant"}
+                          size="picker"
+                          titleSuffix=""
+                        />
+                        <span className="min-w-0 truncate">
+                          {pickerRowLabel(row)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             ))
           )}
         </div>

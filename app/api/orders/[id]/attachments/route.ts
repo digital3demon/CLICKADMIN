@@ -259,14 +259,14 @@ export async function POST(req: Request, ctx: Ctx) {
     const prisma = await getOrdersPrisma();
     const session = await getSessionFromCookies();
     const tenantId = await orderTenantIdForSession(session);
-    if (!tenantId) {
+    if (!session || !tenantId) {
       return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
     }
 
     if (
-      !session?.demo &&
+      !session.demo &&
       !isSingleUserPortable() &&
-      session?.role !== "OWNER"
+      session.role !== "OWNER"
     ) {
       const access = await getEffectiveModuleAccess(tenantId, session.role);
       const pathname = new URL(req.url).pathname;

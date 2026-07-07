@@ -79,6 +79,7 @@ import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
 import { PayrollDonePanel } from "@/components/payroll/PayrollDonePanel";
 import { OrderSourceEmailsModal } from "@/components/orders/OrderSourceEmailsModal";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
+import { KanbanMemberPickerDialog } from "./KanbanMemberPickerDialog";
 import {
   KanbanPersonAvatar,
   mergeKanbanPickerUsers,
@@ -271,8 +272,6 @@ export function KanbanCardModal({
   const [blockPopupOpen, setBlockPopupOpen] = useState(false);
   const [blockReasonDraft, setBlockReasonDraft] = useState("");
   const [pickerMode, setPickerMode] = useState<null | "assign" | "part">(null);
-  const [pickerIds, setPickerIds] = useState<string[]>([]);
-  const [pickerQuery, setPickerQuery] = useState("");
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
   const [descExpanded, setDescExpanded] = useState(false);
@@ -338,15 +337,6 @@ export function KanbanCardModal({
   useEffect(() => {
     if (card) setDescDraft(card.description || "");
   }, [cardId, card?.description]);
-
-  useEffect(() => {
-    if (pickerMode === "assign" && card) {
-      setPickerIds([...(card.assignees || [])]);
-    } else if (pickerMode === "part" && card) {
-      setPickerIds([...(card.participants || [])]);
-    }
-    setPickerQuery("");
-  }, [pickerMode, card?.id, cardId]);
 
   const linkedOrderId = card?.linkedOrderId;
   const kaitenCardIdForChat = card?.kaitenCardId;
@@ -428,24 +418,6 @@ export function KanbanCardModal({
       window.clearInterval(iv);
     };
   }, [cardId, linkedOrderId, onApply]);
-
-  const pickerMerged = useMemo(
-    () =>
-      mergeKanbanPickerUsers(crmList, board.users, board.excludedCrmUserIds),
-    [crmList, board.users, board.excludedCrmUserIds],
-  );
-
-  const pickerFiltered = useMemo(() => {
-    const q = pickerQuery.trim().toLowerCase();
-    if (!q) return pickerMerged;
-    return pickerMerged.filter((r) => {
-      if (pickerRowLabel(r).toLowerCase().includes(q)) return true;
-      if ("email" in r && typeof r.email === "string" && r.email.toLowerCase().includes(q)) {
-        return true;
-      }
-      return false;
-    });
-  }, [pickerMerged, pickerQuery]);
 
   const adminMentionTag = useKanbanAdminMentionTag();
   const adminMentionUserIds = useMemo(
@@ -541,8 +513,8 @@ export function KanbanCardModal({
     });
   };
 
-  const savePicker = () => {
-    if (!pickerMode) return;
+  const savePicker = (userIds: string[]) => {
+    if (!pickerMode || !card) return;
     const prevAssign = card.assignees || [];
     const prevPart = card.participants || [];
     const actorId = (commentAuthorUserId ?? "").trim() || board.users[0]?.id || "";
@@ -552,7 +524,7 @@ export function KanbanCardModal({
       "Пользователь";
 
     onApply((b) => {
-      applyKanbanCardMembersOnBoard(b, cardId, pickerMode, pickerIds, act);
+      applyKanbanCardMembersOnBoard(b, cardId, pickerMode, userIds, act);
     });
 
     notifyKanbanCardMemberChange({
@@ -562,17 +534,11 @@ export function KanbanCardModal({
       mode: pickerMode,
       prevAssign,
       prevPart,
-      nextAssign: pickerMode === "assign" ? [...pickerIds] : [...prevAssign],
-      nextPart: pickerMode === "part" ? [...pickerIds] : [...prevPart],
+      nextAssign: pickerMode === "assign" ? [...userIds] : [...prevAssign],
+      nextPart: pickerMode === "part" ? [...userIds] : [...prevPart],
       actorLabel,
     });
     setPickerMode(null);
-  };
-
-  const togglePickerId = (uid: string) => {
-    setPickerIds((prev) =>
-      prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid],
-    );
   };
 
   const addCheckItem = () => {
@@ -1221,80 +1187,20 @@ export function KanbanCardModal({
         </div>
       )}
 
-      {pickerMode && (
-        <div
-          className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setPickerMode(null);
-          }}
-        >
-          <div
-            className="w-full max-w-sm rounded-lg border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-4 text-[var(--kaiten-modal-text)] shadow-xl"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <h3 className="m-0 text-sm font-semibold">
-              {pickerMode === "assign" ? "Ответственные" : "Участники"}
-            </h3>
-            <p className="mt-1 text-[0.75rem] text-[var(--kaiten-modal-muted)]">
-              Любой активный пользователь CRM. Ответственные — с золотой обводкой на карточке.
-            </p>
-            <input
-              type="search"
-              value={pickerQuery}
-              onChange={(e) => setPickerQuery(e.target.value)}
-              placeholder="Поиск по имени или email…"
-              className={`${baseInput} mt-2`}
-            />
-            <div className="mt-3 max-h-[240px] space-y-2 overflow-y-auto">
-              {pickerFiltered.length === 0 ? (
-                <p className="text-[0.8125rem] text-[var(--kaiten-modal-muted)]">
-                  {pickerMerged.length === 0
-                    ? "Нет пользователей (проверьте доступ к CRM)."
-                    : "Никого не найдено."}
-                </p>
-              ) : (
-                pickerFiltered.map((row) => (
-                  <label
-                    key={row.id}
-                    className="flex cursor-pointer items-center gap-2 rounded-md border border-[var(--kaiten-modal-border)] px-2 py-1.5 text-[0.8125rem]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={pickerIds.includes(row.id)}
-                      onChange={() => togglePickerId(row.id)}
-                      className="rounded"
-                    />
-                    <KanbanPersonAvatar
-                      userId={row.id}
-                      homeBoard={board}
-                      variant={pickerMode === "assign" ? "assignee" : "participant"}
-                      size="picker"
-                      titleSuffix=""
-                    />
-                    {pickerRowLabel(row)}
-                  </label>
-                ))
-              )}
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-[var(--kaiten-modal-border)] px-3 py-1.5 text-sm"
-                onClick={() => setPickerMode(null)}
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                className="rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-sm font-medium text-white"
-                onClick={savePicker}
-              >
-                Готово
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {pickerMode && card ? (
+        <KanbanMemberPickerDialog
+          open
+          mode={pickerMode}
+          board={board}
+          initialUserIds={
+            pickerMode === "assign"
+              ? [...(card.assignees || [])]
+              : [...(card.participants || [])]
+          }
+          onClose={() => setPickerMode(null)}
+          onSave={savePicker}
+        />
+      ) : null}
 
       <div
         className="flex w-full max-w-[min(1200px,100vw-24px)] flex-col"
