@@ -3,6 +3,7 @@
 import type { KanbanCard } from "@/lib/kanban/types";
 import {
   clampKanbanHoverPreviewPosition,
+  kanbanCardHoverPreviewBlockReason,
   kanbanCardHoverPreviewBody,
   kanbanCardHoverPreviewFooterLines,
 } from "@/lib/kanban/kanban-card-hover-preview";
@@ -21,6 +22,7 @@ export function KanbanCardHoverPreviewPopover({
   top: number;
 }) {
   const body = kanbanCardHoverPreviewBody(card);
+  const blockReason = kanbanCardHoverPreviewBlockReason(card);
   const footerLines = kanbanCardHoverPreviewFooterLines(card);
   const title = (card.title || "").trim() || "Без названия";
 
@@ -36,6 +38,16 @@ export function KanbanCardHoverPreviewPopover({
       <p className="mt-2 line-clamp-[10] whitespace-pre-wrap text-[0.75rem] leading-5 text-[var(--kanban-text-muted)]">
         {body || "Нет описания заказа"}
       </p>
+      {blockReason ? (
+        <div className="mt-2 rounded-md border border-red-900/45 bg-gradient-to-b from-red-950/50 to-red-950/30 px-2 py-1.5">
+          <p className="text-[0.625rem] font-bold uppercase tracking-wide text-red-400">
+            Причина блокировки
+          </p>
+          <p className="mt-0.5 whitespace-pre-wrap text-[0.75rem] font-medium leading-snug text-red-100">
+            {blockReason}
+          </p>
+        </div>
+      ) : null}
       {footerLines.length > 0 ? (
         <div className="mt-2 space-y-0.5 border-t border-[var(--kanban-border)] pt-2 text-[0.6875rem] font-medium text-[var(--kanban-text-muted)]">
           {footerLines.map((line) => (

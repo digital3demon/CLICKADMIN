@@ -36,10 +36,6 @@ export function kanbanCardHoverPreviewFooterLines(card: KanbanCard): string[] {
   const stageDue = getKanbanStageDue(card);
   if (stageDue) lines.push(`Срок: ${stageDue}`);
   if (card.urgent) lines.push("Срочно");
-  if (card.blocked) {
-    const reason = (card.blockReason || "").trim();
-    lines.push(reason ? `СТОП — ${reason}` : "Карточка остановлена");
-  }
   const cl = card.checklist || [];
   if (cl.length > 0) {
     const done = cl.filter((i) => i.completed).length;
@@ -51,6 +47,15 @@ export function kanbanCardHoverPreviewFooterLines(card: KanbanCard): string[] {
     lines.push(`Продолжение ${card.continuesFromOrderNumber.trim()}`);
   }
   return lines;
+}
+
+/** Текст причины блокировки для hover-предпросмотра; только если карточка заблокирована. */
+export function kanbanCardHoverPreviewBlockReason(
+  card: KanbanCard,
+): string | null {
+  if (!card.blocked) return null;
+  const reason = (card.blockReason || "").trim();
+  return reason || "Без указания причины";
 }
 
 export function clampKanbanHoverPreviewPosition(
