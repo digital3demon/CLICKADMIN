@@ -1,6 +1,6 @@
 "use client";
 
-import type { KaitenTrackLane, UserRole } from "@prisma/client";
+import type { AppModule, KaitenTrackLane, UserRole } from "@prisma/client";
 import type {
   KanbanAppState,
   KanbanArchivedCard,
@@ -120,20 +120,7 @@ type SessionUserLike = {
   role?: UserRole;
   mentionHandle?: string | null;
   avatarPresetId?: string | null;
-  moduleAccess?: Partial<
-    Record<
-      | "KANBAN_MOVE_COLUMNS"
-      | "KANBAN_EDIT_TITLE"
-      | "KANBAN_EDIT_DUE_DATE"
-      | "KANBAN_EDIT_TRACK"
-      | "KANBAN_MANAGE_ASSIGNEES"
-      | "KANBAN_MANAGE_PARTICIPANTS"
-      | "KANBAN_MOVE_TO_OTHER_BOARD"
-      | "KANBAN_MANAGE_CHECKLIST"
-      | "KANBAN_MANAGE_TIMER",
-      boolean
-    >
-  >;
+  moduleAccess?: Partial<Record<AppModule, boolean>>;
 };
 
 function formatActivityActorLabel(u: SessionUserLike | null | undefined): string | undefined {
@@ -324,7 +311,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     manageBlock: false,
   });
   const [kanbanModuleAccess, setKanbanModuleAccess] = useState<
-    Partial<Record<string, boolean>>
+    Partial<Record<AppModule, boolean>>
   >({});
   const prevModalCardRef = useRef<string | null>(null);
   const kaitenPullOnceRef = useRef(false);
