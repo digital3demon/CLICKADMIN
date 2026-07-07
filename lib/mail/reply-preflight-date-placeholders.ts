@@ -175,7 +175,7 @@ export function injectReplyInlineDatePickers(
   for (const def of defs) {
     const text = displayByKey[def.key]?.trim();
     if (!text) continue;
-    const span = `<span class="reply-inline-date-pick" data-reply-date-key="${def.key}" role="button" tabindex="0" title="Нажмите, чтобы изменить ${def.label.toLowerCase()}" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;text-decoration-color:#fb923c;">${text}</span>`;
+    const span = `<span class="reply-inline-date-pick" data-reply-date-key="${def.key}" role="button" tabindex="0" contenteditable="false" title="Нажмите, чтобы изменить ${def.label.toLowerCase()}" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;text-decoration-color:#fb923c;">${text}</span>`;
     out = out.replace(new RegExp(escapeRegExp(text)), span);
   }
   return out;

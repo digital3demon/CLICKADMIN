@@ -323,6 +323,15 @@ export async function extractOrderFieldsFromEmail(
     maxTokens: 4096,
   });
 
+  if (!response.ok) {
+    return {
+      result: null,
+      model: "none",
+      durationMs: response.durationMs,
+      error: response.error,
+    };
+  }
+
   const rawJson = stripMarkdownFences(response.content);
 
   try {

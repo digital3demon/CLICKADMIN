@@ -88,6 +88,7 @@ describe("inline date pickers in preview html", () => {
       display,
     );
     expect(html).toContain('data-reply-date-key="dueDate"');
+    expect(html).toContain('contenteditable="false"');
     expect(html).toContain("17.07.26, в течение дня");
     expect(stripReplyInlineDatePickers(html)).toBe(
       "<p>Срок 17.07.26, в течение дня</p>",

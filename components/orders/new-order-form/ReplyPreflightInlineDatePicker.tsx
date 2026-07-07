@@ -131,10 +131,11 @@ export function ReplyPreflightInlineDatePicker({
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node;
       if (popoverRef.current?.contains(t)) return;
+      if (t instanceof Element && t.closest?.("[data-reply-date-key]")) return;
       onClose();
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("mousedown", onDoc, true);
+    return () => document.removeEventListener("mousedown", onDoc, true);
   }, [open, onClose]);
 
   useEffect(() => {

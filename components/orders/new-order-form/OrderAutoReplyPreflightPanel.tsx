@@ -234,12 +234,21 @@ export function OrderAutoReplyPreflightPanel({
   );
 
   const handleDateApply = useCallback(
-    (key: ReplyDatePlaceholderKey, value: string, hasTime: boolean) => {
+    (
+      key: ReplyDatePlaceholderKey,
+      value: string,
+      hasTime: boolean,
+      def?: ReplyDatePlaceholderDef,
+    ) => {
       dirtyRef.current = true;
       setDatePickerState((prev) => ({ ...prev, [key]: { value, hasTime } }));
-      setActiveDatePicker(null);
+      const resolvedDef = def ?? datePlaceholderDefs.find((d) => d.key === key);
+      // datetime-local: после выбора дня оставляем попап открытым для выбора времени
+      if (resolvedDef?.inputType === "date" || hasTime) {
+        setActiveDatePicker(null);
+      }
     },
-    [],
+    [datePlaceholderDefs],
   );
 
   const handleTextOverride = useCallback((blockId: string, text: string) => {
@@ -392,7 +401,7 @@ export function OrderAutoReplyPreflightPanel({
     const root = editorRef.current;
     if (!root || layoutType !== "freeform") return;
 
-    const onClick = (e: MouseEvent) => {
+    const onMouseDown = (e: MouseEvent) => {
       if (!sendReply) return;
       const span = (e.target as HTMLElement | null)?.closest?.(
         "[data-reply-date-key]",
@@ -405,8 +414,8 @@ export function OrderAutoReplyPreflightPanel({
       handleInlineDateClick(key, span.getBoundingClientRect());
     };
 
-    root.addEventListener("click", onClick);
-    return () => root.removeEventListener("click", onClick);
+    root.addEventListener("mousedown", onMouseDown);
+    return () => root.removeEventListener("mousedown", onMouseDown);
   }, [layoutType, sendReply, handleInlineDateClick]);
 
   useEffect(() => {
@@ -558,7 +567,7 @@ export function OrderAutoReplyPreflightPanel({
           value={activeEntry?.value ?? ""}
           hasTime={activeEntry?.hasTime ?? false}
           onApply={(value, hasTime) =>
-            handleDateApply(activeDatePicker.key, value, hasTime)
+            handleDateApply(activeDatePicker.key, value, hasTime, activeDef)
           }
           onClose={() => setActiveDatePicker(null)}
         />

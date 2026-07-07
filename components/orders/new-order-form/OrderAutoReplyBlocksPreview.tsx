@@ -110,7 +110,7 @@ export function OrderAutoReplyBlocksPreview({
       onTextOverrideRef.current(blockId, extractCellPlainText(td as HTMLElement));
     };
 
-    const onClick = (e: MouseEvent) => {
+    const openInlineDatePicker = (e: MouseEvent) => {
       if (disabled) return;
       const span = (e.target as HTMLElement | null)?.closest?.(
         "[data-reply-date-key]",
@@ -121,6 +121,10 @@ export function OrderAutoReplyBlocksPreview({
       e.preventDefault();
       e.stopPropagation();
       onInlineDateClickRef.current?.(key, span.getBoundingClientRect());
+    };
+
+    const onMouseDown = (e: MouseEvent) => {
+      openInlineDatePicker(e);
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -138,12 +142,12 @@ export function OrderAutoReplyBlocksPreview({
 
     root.addEventListener("focusin", onFocusIn);
     root.addEventListener("focusout", onFocusOut);
-    root.addEventListener("click", onClick);
+    root.addEventListener("mousedown", onMouseDown);
     root.addEventListener("keydown", onKeyDown);
     return () => {
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
-      root.removeEventListener("click", onClick);
+      root.removeEventListener("mousedown", onMouseDown);
       root.removeEventListener("keydown", onKeyDown);
     };
   }, [editableBlockIds, disabled]);
