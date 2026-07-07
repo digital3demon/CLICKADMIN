@@ -44,7 +44,7 @@ import {
   mergeKanbanStatePreservingLocalBoards,
   withActiveBoard,
 } from "@/lib/kanban/model";
-import { applyKanbanLegacyStageDueClearMigration } from "@/lib/kanban/kanban-stage-due";
+import { applyKanbanLegacyStageDueClearMigration, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
   applyKanbanCardMembersOnBoard,
   notifyKanbanCardMemberChange,
@@ -77,8 +77,9 @@ import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
 import { kanbanCardIdFromSearchParams } from "@/lib/kanban-order-card-url";
 import { canUserManageKanbanBlockForCard } from "@/lib/kanban-block-permissions";
 import { postKanbanTelegramNotify } from "@/lib/kanban-crm-telegram-notify-client";
+import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
-import { telegramHtmlLink } from "@/lib/telegram-html";
+import { telegramHtmlLink, escapeTelegramHtml } from "@/lib/telegram-html";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import {
@@ -323,6 +324,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const mirrorSyncInFlightRef = useRef(false);
   const mirrorSyncQueuedRef = useRef(false);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
+  const kanbanPersistPausedRef = useRef(false);
   const childChecklistExpandInFlightRef = useRef<Set<string>>(new Set());
   const archiveSettingsReadyRef = useRef(false);
   const lastArchiveSettingsSigRef = useRef("");
@@ -512,7 +515,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo]);
 
   useEffect(() => {
-    if (!appState || !kanbanStateReady) return;
+    if (!appState || !kanbanStateReady || kanbanPersistPausedRef.current) return;
     saveKanbanState(appState, isDemo);
     const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
     const scope = isDemo ? "user" : "tenant";
@@ -535,6 +538,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     const demo = isDemo;
     return () => {
+      if (kanbanPersistPausedRef.current) return;
       const cur = appStateRef.current;
       if (!cur) return;
       const key = demo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
@@ -802,6 +806,83 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     [appState, activityActorLabel],
   );
 
+  const applyCardStageDueFromList = useCallback(
+    (cardId: string, homeBoardId: string, ymd: string) => {
+      if (!appState) return;
+      const loc = findCardInAppState(appState, cardId);
+      if (!loc) return;
+      setAppState((s) => {
+        if (!s) return s;
+        const next = structuredClone(s);
+        const found = findCardInAppState(next, cardId);
+        if (!found) return s;
+        const b = next.boards.find((x) => x.id === found.board.id);
+        if (!b) return s;
+        const fc = findCard(b, cardId);
+        if (!fc) return s;
+        setKanbanStageDue(fc.card, ymd);
+        pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, activityActorLabel);
+        syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+        return next;
+      });
+      const card = loc.card;
+      if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
+        const boardId = homeBoardId || loc.board.id;
+        const titleLine = (card.title || "").trim() || "Без названия";
+        const linkHtml = telegramHtmlLink(
+          kanbanCardAbsoluteUrl(cardId, boardId),
+          titleLine,
+        );
+        const duePart = ymd
+          ? `новый срок ${escapeTelegramHtml(ymd)}`
+          : "срок сброшен";
+        const oid = card.linkedOrderId?.trim();
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        postKanbanTelegramNotify({
+          kaitenCardId: card.kaitenCardId,
+          event: "tg_due_changed",
+          parseMode: "HTML",
+          lines: [`Изменён срок в ${linkHtml}: ${duePart}`],
+          ...(oid
+            ? {
+                linesAdmin: [
+                  `Изменён срок в ${telegramHtmlLink(kanbanCardAbsoluteUrl(cardId, boardId), "карточке")} и ${telegramHtmlLink(`${origin}/orders/${encodeURIComponent(oid)}`, "заказе")}: ${duePart}`,
+                ],
+              }
+            : {}),
+        });
+      }
+    },
+    [appState, activityActorLabel],
+  );
+
+  const applyCardUrgentFromList = useCallback(
+    (cardId: string, _homeBoardId: string, urgent: boolean) => {
+      if (!appState) return;
+      setAppState((s) => {
+        if (!s) return s;
+        const next = structuredClone(s);
+        const found = findCardInAppState(next, cardId);
+        if (!found) return s;
+        const b = next.boards.find((x) => x.id === found.board.id);
+        if (!b) return s;
+        const fc = findCard(b, cardId);
+        if (!fc) return s;
+        fc.card.urgent = urgent;
+        pushActivity(
+          fc.card,
+          urgent ? "Отмечена как срочная" : "Снята метка «Срочно»",
+          b.users[0]?.id,
+          b,
+          activityActorLabel,
+        );
+        syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+        return next;
+      });
+    },
+    [appState, activityActorLabel],
+  );
+
   useEffect(() => {
     if (!appState) return;
     if (!cardModalId) {
@@ -830,6 +911,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   const reloadKanbanStateFromTenant = useCallback(async () => {
     if (isDemo) return;
+    if (kanbanStateSaveTimerRef.current) {
+      clearTimeout(kanbanStateSaveTimerRef.current);
+      kanbanStateSaveTimerRef.current = null;
+    }
     const remote = await readClientState<unknown>("tenant", "kanbanAppStateV3");
     if (!remote || typeof remote !== "object") return;
     setAppState((prev) => {
@@ -1840,6 +1925,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             {!isDemo &&
             (kanbanCardPerms.manageAssignees || kanbanCardPerms.manageParticipants) ? (
               <KanbanMembersBackfillButton
+                onRunningChange={(running) => {
+                  kanbanPersistPausedRef.current = running;
+                  if (running && kanbanStateSaveTimerRef.current) {
+                    clearTimeout(kanbanStateSaveTimerRef.current);
+                    kanbanStateSaveTimerRef.current = null;
+                  }
+                }}
                 onComplete={reloadKanbanStateFromTenant}
                 showToast={showToast}
               />
@@ -2073,6 +2165,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               canManageAssignees={kanbanCardPerms.manageAssignees}
               canManageParticipants={kanbanCardPerms.manageParticipants}
               onUpdateCardMembers={applyCardMembersFromList}
+              canEditDueDate={kanbanCardPerms.editDueDate}
+              onUpdateStageDue={applyCardStageDueFromList}
+              onToggleUrgent={applyCardUrgentFromList}
             />
           )}
       </div>

@@ -31,6 +31,8 @@ export type KanbanMembersBackfillBatchResult = {
   changed: number;
   skipped: number;
   noCard: number;
+  /** Карточки, где в Kaiten есть люди, но email не сопоставился с CRM. */
+  unmapped: number;
   rateLimited: boolean;
   finished: boolean;
   afterOrderId: string | null;
@@ -69,6 +71,7 @@ export async function runKanbanMembersBackfillBatch(
     changed: 0,
     skipped: 0,
     noCard: 0,
+    unmapped: 0,
     rateLimited: false,
     finished: true,
     afterOrderId: null,
@@ -112,6 +115,7 @@ export async function runKanbanMembersBackfillBatch(
       changed: 0,
       skipped: orders.length,
       noCard: orders.length,
+      unmapped: 0,
       rateLimited: false,
       finished: orders.length < limit,
       afterOrderId,
@@ -121,6 +125,7 @@ export async function runKanbanMembersBackfillBatch(
   let changed = 0;
   let skipped = 0;
   let noCard = 0;
+  let unmapped = 0;
   let rateLimited = false;
   let lastOrderId: string | null = afterOrderId;
   let processed = 0;
@@ -158,6 +163,9 @@ export async function runKanbanMembersBackfillBatch(
 
     const fingerprint = kaitenMembersFingerprint(list.members);
     const mapped = await mapKaitenCardMembersToCrm(db, tenantId, auth, list.members);
+    if (mapped.unmappedLabels.length > 0) {
+      unmapped += 1;
+    }
     const card =
       state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
     const didChange = applyInboundMembersToKanbanCard(card, {
@@ -189,6 +197,7 @@ export async function runKanbanMembersBackfillBatch(
     changed,
     skipped,
     noCard,
+    unmapped,
     rateLimited,
     finished,
     afterOrderId: lastOrderId,

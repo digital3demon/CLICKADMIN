@@ -2,7 +2,6 @@
 
 import type { KanbanAppState, KanbanBoard } from "@/lib/kanban/types";
 import {
-  formatDate,
   getCardTypeAccent,
   isCardBlocked,
   isDueUrgentRedInList,
@@ -29,7 +28,7 @@ import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 const LIST_GRID =
-  "grid grid-cols-1 gap-y-1 gap-x-2 sm:grid-cols-[minmax(0,1.9fr)_minmax(6.5rem,1.05fr)_minmax(5.25rem,0.72fr)_minmax(5.25rem,0.72fr)_minmax(5.25rem,0.72fr)] sm:items-center sm:gap-y-0";
+  "grid grid-cols-1 gap-y-1 gap-x-2 sm:grid-cols-[minmax(0,1.9fr)_minmax(6.5rem,1.05fr)_minmax(7.5rem,1fr)_minmax(5.25rem,0.72fr)_minmax(5.25rem,0.72fr)] sm:items-center sm:gap-y-0";
 
 function IconChevronRight(props: { className?: string }) {
   return (
@@ -216,6 +215,60 @@ function SortHeaderButton({
   );
 }
 
+function ListStageDueCell({
+  stageDue,
+  urgent,
+  canEditDueDate,
+  onDueChange,
+  onUrgentChange,
+}: {
+  stageDue: string;
+  urgent: boolean;
+  canEditDueDate: boolean;
+  onDueChange?: (ymd: string) => void;
+  onUrgentChange?: (next: boolean) => void;
+}) {
+  const dueUrgentRed = stageDue ? isDueUrgentRedInList(stageDue) : false;
+  return (
+    <div
+      className="flex min-w-0 flex-wrap items-center gap-1"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <input
+        type="date"
+        disabled={!canEditDueDate || !onDueChange}
+        value={stageDue}
+        onChange={(e) => onDueChange?.(e.target.value)}
+        title={canEditDueDate ? "Срок этапа (канбан)" : "Нет прав менять срок"}
+        className={`min-w-0 max-w-full flex-1 rounded border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-1 py-0.5 text-[0.68rem] leading-tight text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-50 ${
+          dueUrgentRed ? "font-semibold text-red-500 dark:text-red-400" : ""
+        } [color-scheme:light] dark:[color-scheme:dark]`}
+      />
+      <label
+        className="inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded border border-[var(--kanban-border)] px-1 py-0.5 hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+        title="Срочно для следующего отдела (только канбан, наряд не меняется)"
+      >
+        <input
+          type="checkbox"
+          className="h-3.5 w-3.5 shrink-0 accent-orange-600"
+          checked={urgent}
+          disabled={!onUrgentChange}
+          onChange={(e) => onUrgentChange?.(e.target.checked)}
+          aria-label="Срочно"
+        />
+        <span
+          className={`text-[0.58rem] font-bold uppercase leading-none ${
+            urgent ? "text-orange-600 dark:text-orange-400" : "text-[var(--kanban-text-muted)]"
+          }`}
+        >
+          Ср
+        </span>
+      </label>
+    </div>
+  );
+}
+
 type KanbanListViewProps = {
   appState: KanbanAppState;
   board: KanbanBoard;
@@ -232,6 +285,9 @@ type KanbanListViewProps = {
     mode: KanbanMemberPickerMode,
     userIds: string[],
   ) => void;
+  canEditDueDate?: boolean;
+  onUpdateStageDue?: (cardId: string, homeBoardId: string, ymd: string) => void;
+  onToggleUrgent?: (cardId: string, homeBoardId: string, urgent: boolean) => void;
 };
 
 const MOBILE_SORT_OPTIONS: { value: string; label: string; sort: ListSort }[] = [
@@ -270,6 +326,9 @@ export function KanbanListView({
   canManageAssignees = true,
   canManageParticipants = true,
   onUpdateCardMembers,
+  canEditDueDate = true,
+  onUpdateStageDue,
+  onToggleUrgent,
 }: KanbanListViewProps) {
   const [sort, setSort] = useState<ListSort>(DEFAULT_LIST_SORT);
   const [picker, setPicker] = useState<null | {
@@ -527,11 +586,6 @@ export function KanbanListView({
                           </div>
                         ) : null}
                         <div className="mt-1 flex flex-wrap items-center gap-1 text-[0.7rem] text-[var(--kanban-text-muted)]">
-                          {urgent && (
-                            <span className="inline-flex shrink-0 items-center rounded-full border border-orange-400/40 bg-gradient-to-b from-orange-500 to-red-600 px-2 py-0.5 text-[0.6rem] font-bold uppercase leading-none tracking-wide text-white shadow-sm">
-                              Срочно
-                            </span>
-                          )}
                           {cl.length > 0 && (
                             <span className="inline-flex items-center gap-1">
                               <IconListCheck />
@@ -562,20 +616,26 @@ export function KanbanListView({
                               ) : null}
                             </dd>
                           </div>
-                          {stageDue ? (
-                            <div className="flex justify-between gap-2">
-                              <dt>Срок</dt>
-                              <dd
-                                className={
-                                  isDueUrgentRedInList(stageDue)
-                                    ? "font-semibold text-red-500 dark:text-red-400"
-                                    : "text-[var(--kanban-text)]"
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <dt className="shrink-0">Срок</dt>
+                            <dd className="min-w-0 flex-1 sm:max-w-none">
+                              <ListStageDueCell
+                                stageDue={stageDue}
+                                urgent={urgent}
+                                canEditDueDate={canEditDueDate}
+                                onDueChange={
+                                  onUpdateStageDue
+                                    ? (ymd) => onUpdateStageDue(card.id, homeBoardId, ymd)
+                                    : undefined
                                 }
-                              >
-                                {formatDate(stageDue)}
-                              </dd>
-                            </div>
-                          ) : null}
+                                onUrgentChange={
+                                  onToggleUrgent
+                                    ? (next) => onToggleUrgent(card.id, homeBoardId, next)
+                                    : undefined
+                                }
+                              />
+                            </dd>
+                          </div>
                           <div className="flex items-start justify-between gap-2">
                             <dt className="shrink-0 pt-0.5">Ответственный</dt>
                             <dd className="flex min-w-0 flex-1 justify-end">
@@ -630,14 +690,22 @@ export function KanbanListView({
                         </button>
                       ) : null}
                     </div>
-                    <div
-                      className={`hidden text-[0.72rem] leading-tight sm:block sm:border-l sm:border-[var(--kanban-border)] sm:px-2 sm:py-1 ${
-                        stageDue && isDueUrgentRedInList(stageDue)
-                          ? "font-semibold text-red-500 dark:text-red-400"
-                          : "text-[var(--kanban-text-muted)]"
-                      }`}
-                    >
-                      {stageDue ? formatDate(stageDue) : null}
+                    <div className="hidden sm:block sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
+                      <ListStageDueCell
+                        stageDue={stageDue}
+                        urgent={urgent}
+                        canEditDueDate={canEditDueDate}
+                        onDueChange={
+                          onUpdateStageDue
+                            ? (ymd) => onUpdateStageDue(card.id, homeBoardId, ymd)
+                            : undefined
+                        }
+                        onUrgentChange={
+                          onToggleUrgent
+                            ? (next) => onToggleUrgent(card.id, homeBoardId, next)
+                            : undefined
+                        }
+                      />
                     </div>
                     <div className="relative hidden min-h-[1.75rem] sm:flex sm:items-center sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
                       <ListMembersCell
