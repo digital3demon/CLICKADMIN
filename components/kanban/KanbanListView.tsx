@@ -28,7 +28,7 @@ import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 const LIST_GRID =
-  "grid grid-cols-1 gap-y-1 gap-x-2 sm:grid-cols-[minmax(0,1.9fr)_minmax(6.5rem,1.05fr)_minmax(7.5rem,1fr)_minmax(5.25rem,0.72fr)_minmax(5.25rem,0.72fr)] sm:items-center sm:gap-y-0";
+  "grid grid-cols-1 gap-y-1 gap-x-2 sm:grid-cols-[minmax(0,1.9fr)_minmax(6.5rem,1.05fr)_minmax(6.75rem,7.25rem)_minmax(5.25rem,0.72fr)_minmax(5.25rem,0.72fr)] sm:items-center sm:gap-y-0";
 
 function IconChevronRight(props: { className?: string }) {
   return (
@@ -231,7 +231,7 @@ function ListStageDueCell({
   const dueUrgentRed = stageDue ? isDueUrgentRedInList(stageDue) : false;
   return (
     <div
-      className="flex min-w-0 flex-wrap items-center gap-1"
+      className="flex min-w-0 flex-col gap-1"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
@@ -241,30 +241,27 @@ function ListStageDueCell({
         value={stageDue}
         onChange={(e) => onDueChange?.(e.target.value)}
         title={canEditDueDate ? "Срок этапа (канбан)" : "Нет прав менять срок"}
-        className={`min-w-0 max-w-full flex-1 rounded border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-1 py-0.5 text-[0.68rem] leading-tight text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-50 ${
+        className={`w-[6.85rem] max-w-full shrink-0 rounded border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-1 py-0.5 text-[0.65rem] leading-tight text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-50 ${
           dueUrgentRed ? "font-semibold text-red-500 dark:text-red-400" : ""
         } [color-scheme:light] dark:[color-scheme:dark]`}
       />
-      <label
-        className="inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded border border-[var(--kanban-border)] px-1 py-0.5 hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-        title="Срочно для следующего отдела (только канбан, наряд не меняется)"
+      <button
+        type="button"
+        disabled={!onUrgentChange}
+        title={
+          urgent
+            ? "Снять метку «Срочно» для следующего отдела (только канбан)"
+            : "Срочно для следующего отдела (только канбан, наряд не меняется)"
+        }
+        className={`w-fit max-w-full shrink-0 rounded border px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          urgent
+            ? "border-orange-600/80 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
+            : "border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] text-[var(--kanban-text-muted)] hover:border-orange-400/50 hover:text-orange-700 dark:hover:text-orange-300"
+        }`}
+        onClick={() => onUrgentChange?.(!urgent)}
       >
-        <input
-          type="checkbox"
-          className="h-3.5 w-3.5 shrink-0 accent-orange-600"
-          checked={urgent}
-          disabled={!onUrgentChange}
-          onChange={(e) => onUrgentChange?.(e.target.checked)}
-          aria-label="Срочно"
-        />
-        <span
-          className={`text-[0.58rem] font-bold uppercase leading-none ${
-            urgent ? "text-orange-600 dark:text-orange-400" : "text-[var(--kanban-text-muted)]"
-          }`}
-        >
-          Ср
-        </span>
-      </label>
+        Срочно
+      </button>
     </div>
   );
 }
