@@ -1,0 +1,76 @@
+import { describe, expect, it } from "vitest";
+import type { AppModule } from "@prisma/client";
+import {
+  BUNDLE_TO_ATOMIC,
+  collapseToBundles,
+  expandBundles,
+  inferBundleEnabledFromAtoms,
+  isBundleEnabled,
+} from "@/lib/role-module-bundles";
+import { defaultModuleAllowed } from "@/lib/role-module-defaults";
+
+function accessMap(pairs: Array<[AppModule, boolean]>): Record<AppModule, boolean> {
+  const out = {} as Record<AppModule, boolean>;
+  for (const [m, v] of pairs) out[m] = v;
+  return out;
+}
+
+describe("role-module-bundles", () => {
+  it("KANBAN_WORK пакет раскрывается из одного atomic", () => {
+    const raw = accessMap([["KANBAN_MOVE_COLUMNS", true]]);
+    const expanded = expandBundles(raw);
+    for (const m of BUNDLE_TO_ATOMIC.KANBAN_WORK) {
+      expect(expanded[m]).toBe(true);
+    }
+    expect(expanded.KANBAN).toBe(true);
+  });
+
+  it("KANBAN_COORDINATE включает WORK и базовый KANBAN", () => {
+    const raw = accessMap([["KANBAN_EDIT_TITLE", true]]);
+    const expanded = expandBundles(raw);
+    expect(expanded.KANBAN_DELETE_CARD).toBe(true);
+    expect(expanded.KANBAN_ATTACH_FILES).toBe(true);
+    expect(expanded.KANBAN).toBe(true);
+  });
+
+  it("collapseToBundles мигрирует granular overrides", () => {
+    const raw = accessMap([
+      ["KANBAN_CARD_CHAT", true],
+      ["KANBAN_MOVE_COLUMNS", true],
+    ]);
+    const bundles = collapseToBundles(raw);
+    expect(bundles.KANBAN).toBe(true);
+    expect(bundles.KANBAN_WORK).toBe(true);
+    expect(bundles.KANBAN_COORDINATE).toBe(false);
+  });
+
+  it("ORDERS пакет включает ORDERS_CHAT", () => {
+    const raw = accessMap([["ORDERS", true], ["ORDERS_CHAT", true]]);
+    expect(isBundleEnabled(raw, "ORDERS")).toBe(true);
+    expect(inferBundleEnabledFromAtoms(accessMap([["ORDERS_CHAT", true]]), "ORDERS")).toBe(
+      true,
+    );
+  });
+});
+
+describe("defaultModuleAllowed bundles alignment", () => {
+  it("USER: KANBAN_WORK без COORDINATE и без ORDERS", () => {
+    expect(defaultModuleAllowed("USER", "KANBAN_ATTACH_FILES")).toBe(true);
+    expect(defaultModuleAllowed("USER", "KANBAN_DELETE_CARD")).toBe(false);
+    expect(defaultModuleAllowed("USER", "ORDERS")).toBe(false);
+    expect(defaultModuleAllowed("USER", "ORDERS_NOTIFICATIONS")).toBe(false);
+  });
+
+  it("SENIOR_TECHNICIAN: полный канбан, без заказов и общих тостов", () => {
+    expect(defaultModuleAllowed("SENIOR_TECHNICIAN", "KANBAN_DELETE_CARD")).toBe(true);
+    expect(defaultModuleAllowed("SENIOR_TECHNICIAN", "ORDERS")).toBe(false);
+    expect(defaultModuleAllowed("SENIOR_TECHNICIAN", "ORDERS_NOTIFICATIONS")).toBe(false);
+  });
+
+  it("MANAGER: заказы + канбан + общие уведомления", () => {
+    expect(defaultModuleAllowed("MANAGER", "ORDERS")).toBe(true);
+    expect(defaultModuleAllowed("MANAGER", "ORDERS_CREATE")).toBe(true);
+    expect(defaultModuleAllowed("MANAGER", "KANBAN_DELETE_CARD")).toBe(true);
+    expect(defaultModuleAllowed("MANAGER", "ORDERS_NOTIFICATIONS")).toBe(true);
+  });
+});

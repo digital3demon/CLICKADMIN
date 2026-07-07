@@ -1,48 +1,85 @@
 import { describe, expect, it } from "vitest";
 import {
-  isOrderAttachmentUploadApiPath,
+  isKanbanAttachmentUploadRequest,
+  isOrderAttachmentUploadAllowed,
+  orderAttachmentUploadModule,
   orderChatApiModuleForPath,
-  requiredModuleForPath,
 } from "@/lib/role-module-paths";
 
+const kanbanHeaders = {
+  get: (n: string) => (n.toLowerCase() === "x-upload-context" ? "kanban" : null),
+};
+
 describe("orderChatApiModuleForPath", () => {
-  it("kanban-chat → ORDERS_CHAT", () => {
+  it("kanban-chat → KANBAN_CARD_CHAT", () => {
     expect(
       orderChatApiModuleForPath("/api/orders/abc/kanban-chat", "GET"),
-    ).toBe("ORDERS_CHAT");
+    ).toBe("KANBAN_CARD_CHAT");
     expect(
       orderChatApiModuleForPath("/api/orders/abc/kanban-chat", "POST"),
-    ).toBe("ORDERS_CHAT");
+    ).toBe("KANBAN_CARD_CHAT");
   });
 
-  it("GET chat-corrections остаётся на ORDERS", () => {
+  it("kaiten-lab-mention-ack → ORDERS (просмотр)", () => {
     expect(
-      requiredModuleForPath(
-        "/api/orders/abc/chat-corrections",
-        "ORDERS",
-        "GET",
-      ),
+      orderChatApiModuleForPath("/api/orders/abc/kaiten-lab-mention-ack", "POST"),
     ).toBe("ORDERS");
-  });
-
-  it("POST chat-corrections → ORDERS_CHAT", () => {
-    expect(
-      requiredModuleForPath(
-        "/api/orders/abc/chat-corrections",
-        "ORDERS",
-        "POST",
-      ),
-    ).toBe("ORDERS_CHAT");
   });
 });
 
-describe("isOrderAttachmentUploadApiPath", () => {
-  it("распознаёт POST вложений", () => {
+describe("orderAttachmentUploadModule", () => {
+  it("форма наряда → ORDERS_EDIT", () => {
     expect(
-      isOrderAttachmentUploadApiPath("/api/orders/x/attachments", "POST"),
+      orderAttachmentUploadModule("/api/orders/x/attachments", "POST"),
+    ).toBe("ORDERS_EDIT");
+  });
+
+  it("канбан (заголовок) → KANBAN_ATTACH_FILES", () => {
+    expect(
+      orderAttachmentUploadModule("/api/orders/x/attachments", "POST", {
+        get: (n) => (n.toLowerCase() === "x-upload-context" ? "kanban" : null),
+      }),
+    ).toBe("KANBAN_ATTACH_FILES");
+  });
+});
+
+describe("isKanbanAttachmentUploadRequest", () => {
+  it("распознаёт заголовок kanban", () => {
+    expect(
+      isKanbanAttachmentUploadRequest({
+        get: () => "kanban",
+      }),
     ).toBe(true);
+  });
+});
+
+describe("isOrderAttachmentUploadAllowed", () => {
+  const path = "/api/orders/x/attachments";
+
+  it("канбан: KANBAN_CARD_CHAT без KANBAN_ATTACH_FILES — разрешено", () => {
     expect(
-      isOrderAttachmentUploadApiPath("/api/orders/x/attachments", "GET"),
+      isOrderAttachmentUploadAllowed(
+        { KANBAN_CARD_CHAT: true, KANBAN_ATTACH_FILES: false },
+        path,
+        "POST",
+        kanbanHeaders,
+      ),
+    ).toBe(true);
+  });
+
+  it("канбан: без прав на работу с карточкой — запрещено", () => {
+    expect(
+      isOrderAttachmentUploadAllowed({}, path, "POST", kanbanHeaders),
     ).toBe(false);
+  });
+
+  it("форма наряда: ORDERS_CREATE без ORDERS_EDIT — разрешено", () => {
+    expect(
+      isOrderAttachmentUploadAllowed(
+        { ORDERS_CREATE: true, ORDERS_EDIT: false },
+        path,
+        "POST",
+      ),
+    ).toBe(true);
   });
 });

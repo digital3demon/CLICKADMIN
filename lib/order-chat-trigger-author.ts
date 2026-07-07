@@ -27,7 +27,7 @@ export function formatOrderChatSourceCaption(
 
 /** Заголовок глобального уведомления (тост) по типу заявки. */
 export function orderChatToastTitle(
-  kind: "correction" | "prosthetics" | "chat",
+  kind: "correction" | "prosthetics" | "chat" | "personal",
   authorLabel?: string | null,
 ): string {
   const who = trimOrderChatAuthorLabel(authorLabel);
@@ -36,6 +36,9 @@ export function orderChatToastTitle(
   }
   if (kind === "prosthetics") {
     return who ? `Заказ протетики от ${who}` : "Протетика";
+  }
+  if (kind === "personal") {
+    return who ? `Вас упомянули: ${who}` : "Персональное упоминание";
   }
   return who ? `Новое сообщение от ${who}` : "Новое сообщение в чате";
 }

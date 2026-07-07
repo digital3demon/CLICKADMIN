@@ -22,6 +22,7 @@ export type AiPredictionJson = {
   clientOrderText?: string | null;
   urgent?: boolean | null;
   warnings?: string[];
+  awaitingData?: { isAwaiting: boolean; reason: string | null } | null;
   suggestedAttachmentIds?: string[];
   matchedBySourceEmail?: boolean;
   sourceEmailAmbiguous?: boolean;

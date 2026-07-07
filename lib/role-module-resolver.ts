@@ -6,6 +6,7 @@ import {
   CLICKMIG_OWNER_ONLY_MODULES,
   defaultModuleAllowed,
 } from "@/lib/role-module-defaults";
+import { expandBundles } from "@/lib/role-module-bundles";
 import { hasDirectoryHubAccess } from "@/lib/role-module-nav";
 import {
   getModuleForPathname,
@@ -48,7 +49,7 @@ export async function getEffectiveModuleAccess(
   for (const m of CLICKMIG_OWNER_ONLY_MODULES) {
     out[m] = false;
   }
-  return out;
+  return expandBundles(out);
 }
 
 export function moduleAccessForResponse(

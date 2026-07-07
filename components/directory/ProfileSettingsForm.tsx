@@ -68,6 +68,7 @@ type ProfileUser = {
   telegramLinked?: boolean;
   telegramUsername?: string | null;
   telegramKanbanNotifyPrefs?: Record<KanbanTelegramPrefKey, boolean>;
+  orderToastsPersonalOnly?: boolean;
 };
 
 export function ProfileSettingsForm({
@@ -107,6 +108,8 @@ export function ProfileSettingsForm({
   );
   const [tgBusy, setTgBusy] = useState(false);
   const [tgError, setTgError] = useState<string | null>(null);
+  const [orderToastsPersonalOnly, setOrderToastsPersonalOnly] = useState(false);
+  const [crmToastPrefBusy, setCrmToastPrefBusy] = useState(false);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
 
   const load = useCallback(async () => {
@@ -149,6 +152,7 @@ export function ProfileSettingsForm({
       setTelegramLinked(Boolean(j.user.telegramLinked));
       setTelegramUsername(j.user.telegramUsername ?? null);
       setTgPrefs(j.user.telegramKanbanNotifyPrefs ?? null);
+      setOrderToastsPersonalOnly(j.user.orderToastsPersonalOnly === true);
       setUserRole(j.user.role ?? null);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
@@ -262,6 +266,38 @@ export function ProfileSettingsForm({
       setError("Ошибка сети");
     } finally {
       setAvatarUploadBusy(false);
+    }
+  };
+
+  const toggleCrmToastPersonalOnly = async () => {
+    const nextVal = !orderToastsPersonalOnly;
+    setCrmToastPrefBusy(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/me/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderToastsPersonalOnly: nextVal }),
+      });
+      const j = (await r.json().catch(() => ({}))) as {
+        user?: ProfileUser;
+        error?: string;
+      };
+      if (!r.ok) {
+        setError(j.error ?? "Не сохранено");
+        return;
+      }
+      setOrderToastsPersonalOnly(j.user?.orderToastsPersonalOnly === true);
+      setOkMsg(
+        nextVal
+          ? "Общие уведомления скрыты; персональные @ник остаются."
+          : "Общие уведомления снова показываются (если разрешены ролью).",
+      );
+    } catch {
+      setError("Ошибка сети");
+    } finally {
+      setCrmToastPrefBusy(false);
     }
   };
 
@@ -577,6 +613,31 @@ export function ProfileSettingsForm({
           ) : null}
         </div>
       ) : null}
+
+      <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          Уведомления в CRM
+        </p>
+        <label className="mt-3 flex cursor-pointer items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded border-[var(--input-border)] accent-[var(--sidebar-blue)] disabled:opacity-50"
+            checked={orderToastsPersonalOnly}
+            disabled={crmToastPrefBusy}
+            onChange={() => void toggleCrmToastPersonalOnly()}
+          />
+          <span>
+            <span className="font-medium text-[var(--app-text)]">
+              Скрыть все уведомления, кроме моих
+            </span>
+            <span className="mt-1 block text-xs text-[var(--text-muted)]">
+              Общие уведомления лаборатории (admin-тег, коррекции, протетика)
+              скрыты. Сообщения с вашим @ник по-прежнему видны — в том числе на
+              канбане.
+            </span>
+          </span>
+        </label>
+      </div>
 
       <div>
         <label

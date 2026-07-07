@@ -1,3 +1,5 @@
+import { dedupeDuplicateBracketUrls } from "@/lib/mail/mail-text-cleanup";
+
 export type PlainTextLinkSegment =
   | { kind: "text"; value: string }
   | { kind: "link"; href: string; display: string };
@@ -102,7 +104,7 @@ function splitPlainTextLinksBare(text: string): PlainTextLinkSegment[] {
 export function splitPlainTextLinks(text: string): PlainTextLinkSegment[] {
   if (!text) return [];
 
-  const prepared = mergeFilenameUrlLines(text);
+  const prepared = mergeFilenameUrlLines(dedupeDuplicateBracketUrls(text));
   const segments: PlainTextLinkSegment[] = [];
   let lastIndex = 0;
 

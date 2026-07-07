@@ -4,8 +4,7 @@ import {
   CRM_UPLOAD_MAX_BYTES,
   formatCrmUploadMaxShortRu,
 } from "@/lib/crm-upload-limits";
-import { normalizeOrderAttachmentImage } from "@/lib/order-attachment-image-normalize.client";
-import { requestOrderKaitenAttachmentSync } from "@/lib/order-kaiten-attachment-sync-client";
+import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
 
 /** Совпадает с POST `/api/orders/[id]/attachments`. */
 export const ORDER_ATTACHMENT_MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
@@ -198,39 +197,16 @@ export async function uploadOrderAttachmentFromFile(
       error: `Файл больше ${formatCrmUploadMaxShortRu()} (лимит вложений наряда)`,
     };
   }
-  try {
-    let prepared: File;
-    try {
-      prepared = await normalizeOrderAttachmentImage(file);
-    } catch (e) {
-      return {
-        ok: false,
-        error:
-          e instanceof Error ? e.message : "Не удалось подготовить изображение",
-      };
-    }
-    const buf = await prepared.arrayBuffer();
-    const res = await fetch(`/api/orders/${orderId}/attachments`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        "X-Upload-Filename": encodeURIComponent(prepared.name),
-        "X-Upload-Mime": prepared.type || "application/octet-stream",
-      },
-      body: buf,
-    });
-    const data = (await res.json().catch(() => ({}))) as { error?: string; id?: string };
-    if (!res.ok) {
-      return { ok: false, error: data.error ?? "Не удалось загрузить файл к наряду" };
-    }
-    const id = typeof data.id === "string" ? data.id : "";
-    if (!id) return { ok: false, error: "Сервер не вернул id вложения" };
-    void requestOrderKaitenAttachmentSync(orderId);
-    return { ok: true, id };
-  } catch {
-    return { ok: false, error: "Сеть недоступна" };
+  const up = await postOrderAttachmentWithRetries(orderId, file, {
+    uploadContext: "kanban",
+    syncKaitenAfter: true,
+  });
+  if (!up.ok) {
+    return { ok: false, error: up.error };
   }
+  const id = typeof up.data.id === "string" ? up.data.id : "";
+  if (!id) return { ok: false, error: "Сервер не вернул id вложения" };
+  return { ok: true, id };
 }
 
 export async function deleteOrderAttachmentById(

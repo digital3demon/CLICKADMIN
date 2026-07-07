@@ -24,6 +24,7 @@ const ME_PROFILE_SELECT = {
   avatarCustomUploadedAt: true,
   mentionHandle: true,
   ordersListPageSize: true,
+  orderToastsPersonalOnly: true,
   telegramId: true,
   telegramUsername: true,
   telegramKanbanNotifyPrefs: true,
@@ -211,6 +212,16 @@ export async function PATCH(req: Request) {
         );
       }
     }
+  }
+
+  if (body.orderToastsPersonalOnly !== undefined) {
+    if (typeof body.orderToastsPersonalOnly !== "boolean") {
+      return NextResponse.json(
+        { error: "orderToastsPersonalOnly: ожидается boolean" },
+        { status: 400 },
+      );
+    }
+    userPatch.orderToastsPersonalOnly = body.orderToastsPersonalOnly;
   }
 
   if (body.telegramKanbanNotifyPrefs !== undefined) {

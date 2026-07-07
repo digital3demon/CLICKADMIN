@@ -4,22 +4,39 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getPrisma } from "@/lib/get-prisma";
 import {
   ALL_APP_MODULES,
-  APP_MODULE_LABELS,
+  bundlesForAccessMatrix,
   defaultModuleAllowed,
-  isClickMigOwnerOnlyModule,
-  isKanbanCardSubmodule,
+  isClickMigOwnerOnlyBundle,
   ROLES_IN_ACCESS_MATRIX,
 } from "@/lib/role-module-defaults";
 import {
+  atomicModulesForBundleToggle,
+  BUNDLE_LABELS,
+  BUNDLE_MATRIX_GROUPS,
+  childBundlesOf,
+  collapseToBundles,
+  isBundleId,
+  requiredParentBundle,
+  type BundleId,
+} from "@/lib/role-module-bundles";
+import {
   getEffectiveModuleAccess,
-  moduleAccessForResponse,
 } from "@/lib/role-module-resolver";
 
 export const dynamic = "force-dynamic";
 
+function bundleAccessForResponse(
+  access: Record<AppModule, boolean>,
+): Record<string, boolean> {
+  const collapsed = collapseToBundles(access);
+  return Object.fromEntries(
+    bundlesForAccessMatrix().map((b) => [b, collapsed[b] === true]),
+  );
+}
+
 /**
- * Матрица «роль × модуль» (только владелец).
- * effective — итог с учётом БД; для OWNER не возвращаем (всегда полный доступ).
+ * Матрица «роль × пакет» (только владелец).
+ * effective — итог с учётом БД, свёрнутый до пакетов.
  */
 export async function GET() {
   const s = await getSessionFromCookies();
@@ -34,11 +51,20 @@ export async function GET() {
   const effective: Record<string, Record<string, boolean>> = {};
   for (const role of ROLES_IN_ACCESS_MATRIX) {
     const acc = await getEffectiveModuleAccess(tenantId, role);
-    effective[role] = moduleAccessForResponse(acc);
+    effective[role] = bundleAccessForResponse(acc);
   }
 
   return NextResponse.json({
-    modules: ALL_APP_MODULES.map((m) => ({ id: m, label: APP_MODULE_LABELS[m] })),
+    bundles: bundlesForAccessMatrix().map((b) => ({
+      id: b,
+      label: BUNDLE_LABELS[b],
+    })),
+    groups: BUNDLE_MATRIX_GROUPS.map((g) => ({
+      id: g.id,
+      title: g.title,
+      description: g.description,
+      bundles: g.bundles,
+    })),
     roles: ROLES_IN_ACCESS_MATRIX,
     effective,
   });
@@ -46,7 +72,7 @@ export async function GET() {
 
 type PutBody = {
   role?: UserRole;
-  module?: AppModule;
+  bundle?: BundleId;
   allowed?: boolean;
 };
 
@@ -68,14 +94,15 @@ export async function PUT(req: Request) {
   }
 
   const role = body.role;
-  const module = body.module;
+  const bundle = body.bundle;
   if (
     role == null ||
-    module == null ||
-    typeof body.allowed !== "boolean"
+    bundle == null ||
+    typeof body.allowed !== "boolean" ||
+    !isBundleId(bundle)
   ) {
     return NextResponse.json(
-      { error: "Ожидается role, module, allowed" },
+      { error: "Ожидается role, bundle, allowed" },
       { status: 400 },
     );
   }
@@ -88,10 +115,7 @@ export async function PUT(req: Request) {
   if (!ROLES_IN_ACCESS_MATRIX.includes(role)) {
     return NextResponse.json({ error: "Некорректная роль" }, { status: 400 });
   }
-  if (!ALL_APP_MODULES.includes(module)) {
-    return NextResponse.json({ error: "Некорректный модуль" }, { status: 400 });
-  }
-  if (isClickMigOwnerOnlyModule(module)) {
+  if (isClickMigOwnerOnlyBundle(bundle)) {
     return NextResponse.json(
       {
         error:
@@ -100,86 +124,57 @@ export async function PUT(req: Request) {
       { status: 400 },
     );
   }
-  if (module === "CLIENTS") {
-    return NextResponse.json(
-      {
-        error:
-          "Модуль «Клиенты» разделён: настройте «Клиенты: просмотр» и «Клиенты: изменение данных».",
-      },
-      { status: 400 },
-    );
-  }
 
   const accBefore = await getEffectiveModuleAccess(tenantId, role);
-  if (module === "CLIENTS_EDIT" && body.allowed === true && !accBefore.CLIENTS_VIEW) {
-    return NextResponse.json(
-      {
-        error:
-          "Сначала включите «Клиенты: просмотр» для этой роли.",
-      },
-      { status: 400 },
-    );
-  }
-  if (module === "CLIENTS_VIEW" && body.allowed === false && accBefore.CLIENTS_EDIT) {
-    return NextResponse.json(
-      {
-        error:
-          "Сначала отключите «Клиенты: изменение данных» для этой роли.",
-      },
-      { status: 400 },
-    );
-  }
-  if (module === "CONFIG_PRINT_EDIT" && body.allowed === true && !accBefore.CONFIG_PRINT) {
-    return NextResponse.json(
-      {
-        error:
-          "Сначала включите «Конфиг: печать (этикетки)» для этой роли.",
-      },
-      { status: 400 },
-    );
-  }
-  if (module === "CONFIG_PRINT" && body.allowed === false && accBefore.CONFIG_PRINT_EDIT) {
-    return NextResponse.json(
-      {
-        error:
-          "Сначала отключите «Конфиг: редактирование этикеток» для этой роли.",
-      },
-      { status: 400 },
-    );
-  }
+  const bundlesBefore = collapseToBundles(accBefore);
 
-  if (body.allowed && isKanbanCardSubmodule(module)) {
-    const acc = await getEffectiveModuleAccess(tenantId, role);
-    if (!acc.KANBAN) {
+  if (body.allowed) {
+    const parent = requiredParentBundle(bundle);
+    if (parent && !bundlesBefore[parent]) {
       return NextResponse.json(
         {
-          error:
-            "Для этой роли выключен модуль «Канбан». Сначала включите его, затем настройте права на карточку.",
+          error: `Сначала включите «${BUNDLE_LABELS[parent]}» для этой роли.`,
         },
         { status: 400 },
       );
     }
+  } else {
+    for (const child of childBundlesOf(bundle)) {
+      if (bundlesBefore[child]) {
+        return NextResponse.json(
+          {
+            error: `Сначала отключите «${BUNDLE_LABELS[child]}» для этой роли.`,
+          },
+          { status: 400 },
+        );
+      }
+    }
   }
 
-  const def = defaultModuleAllowed(role, module);
+  const modulesToWrite = atomicModulesForBundleToggle(bundle);
   const prisma = await getPrisma();
-  if (body.allowed === def) {
-    await prisma.roleModuleAccess.deleteMany({
-      where: { tenantId, role, module },
-    });
-  } else {
-    await prisma.roleModuleAccess.upsert({
-      where: {
-        tenantId_role_module: { tenantId, role, module },
-      },
-      create: {
-        tenantId,
-        role,
-        module,
-        allowed: body.allowed,
-      },
-      update: { allowed: body.allowed },
-    });
+
+  for (const module of modulesToWrite) {
+    if (!ALL_APP_MODULES.includes(module)) continue;
+    const def = defaultModuleAllowed(role, module);
+    if (body.allowed === def) {
+      await prisma.roleModuleAccess.deleteMany({
+        where: { tenantId, role, module },
+      });
+    } else {
+      await prisma.roleModuleAccess.upsert({
+        where: {
+          tenantId_role_module: { tenantId, role, module },
+        },
+        create: {
+          tenantId,
+          role,
+          module,
+          allowed: body.allowed,
+        },
+        update: { allowed: body.allowed },
+      });
+    }
   }
 
   return NextResponse.json({ ok: true });

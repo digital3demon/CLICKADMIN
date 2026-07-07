@@ -90,6 +90,8 @@ export async function postOrderAttachmentWithRetries(
     asInvoice?: boolean;
     /** Только бух-блок: не в общем списке файлов и без Kaiten. */
     paymentSlip?: boolean;
+    /** Заголовок X-Upload-Context: kanban — проверка KANBAN_ATTACH_FILES в middleware. */
+    uploadContext?: "kanban";
     /** После сохранения в CRM — отдельно догрузить в Kaiten (если карточка уже есть). */
     syncKaitenAfter?: boolean;
     signal?: AbortSignal;
@@ -125,6 +127,9 @@ export async function postOrderAttachmentWithRetries(
       }
       if (options?.paymentSlip) {
         headers["x-attachment-scope"] = "payment-slip";
+      }
+      if (options?.uploadContext === "kanban") {
+        headers["x-upload-context"] = "kanban";
       }
       const res = await fetch(`/api/orders/${orderId}/attachments`, {
         method: "POST",

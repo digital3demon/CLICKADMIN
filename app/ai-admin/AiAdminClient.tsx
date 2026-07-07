@@ -21,6 +21,8 @@ import {
 } from "@/lib/llm/ai-models";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 
+const DIFFS_PAGE_SIZE = 10;
+
 async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -288,26 +290,39 @@ export function AiAdminClient({
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [isBatchAnalyzing, setIsBatchAnalyzing] = useState(false);
   const [diffs, setDiffs] = useState<any[]>([]);
+  const [diffsPage, setDiffsPage] = useState(1);
+  const [diffsTotal, setDiffsTotal] = useState(0);
+  const [diffsTotalPages, setDiffsTotalPages] = useState(1);
   const [isLoadingDiffs, setIsLoadingDiffs] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   const [modalData, setModalData] = useState<DiffModalData | null>(null);
 
-  async function loadDiffs() {
+  const loadDiffs = useCallback(async (page = 1) => {
     setIsLoadingDiffs(true);
     try {
-      const res = await jsonFetch<{ items: any[]; total: number }>("/api/ai-admin/diffs");
+      const res = await jsonFetch<{
+        items: any[];
+        total: number;
+        page: number;
+        pageSize: number;
+        totalPages: number;
+      }>(`/api/ai-admin/diffs?page=${page}&limit=${DIFFS_PAGE_SIZE}`);
       setDiffs(res.items);
+      setDiffsTotal(res.total);
+      setDiffsPage(res.page);
+      setDiffsTotalPages(res.totalPages);
     } catch {
       toast.error("Ошибка загрузки предсказаний");
     } finally {
       setIsLoadingDiffs(false);
     }
-  }
+  }, []);
 
-  if (activeTab === "diffs" && diffs.length === 0 && !isLoadingDiffs) {
-    loadDiffs();
-  }
+  useEffect(() => {
+    if (activeTab !== "diffs") return;
+    void loadDiffs(diffsPage);
+  }, [activeTab, diffsPage, loadDiffs]);
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
@@ -515,10 +530,12 @@ export function AiAdminClient({
 
               <h2 className="text-xl font-semibold">Авто-анализ ошибок (Self-Correction)</h2>
               <p className="text-sm text-[var(--app-text-secondary)] mb-4">
-                Проанализировать старые предсказания, сравнить их с реальными нарядами и сгенерировать выводы для ИИ.
+                После каждого сохранения наряда система в фоне сравнивает предсказание ИИ с эталоном
+                администратора и добавляет выводы в карточку врача. Кнопка ниже — только для старых
+                нарядов, которые ещё не успели обработаться автоматически.
               </p>
               <Button onClick={handleRunBatchAnalyze} disabled={isBatchAnalyzing} variant="secondary">
-                Запустить анализ (20 нарядов)
+                Догнать старые наряды (до 20)
               </Button>
 
               <hr className="border-[var(--app-border)] my-8" />
@@ -539,10 +556,10 @@ export function AiAdminClient({
                 <div>
                   <h2 className="text-xl font-semibold">Сравнение: Админ vs ИИ</h2>
                   <p className="text-sm text-[var(--app-text-secondary)]">
-                    Последние 20 предсказаний ИИ в фоновом режиме.
+                    Все предсказания ИИ, от новых к старым. По {DIFFS_PAGE_SIZE} на странице.
                   </p>
                 </div>
-                <Button onClick={loadDiffs} disabled={isLoadingDiffs} variant="secondary">
+                <Button onClick={() => loadDiffs(diffsPage)} disabled={isLoadingDiffs} variant="secondary">
                   Обновить
                 </Button>
               </div>
@@ -668,6 +685,17 @@ export function AiAdminClient({
                                   </dd>
                                 </div>
                               )}
+                              {diff.predictionJson.awaitingData?.isAwaiting ? (
+                                <div className="mt-4">
+                                  <dt className="text-red-500 font-medium block mb-1">
+                                    Возможная блокировка от ИИ:
+                                  </dt>
+                                  <dd className="block bg-red-500/10 text-red-600 p-2 rounded text-xs border border-red-500/20">
+                                    Ожидание данных:{" "}
+                                    {diff.predictionJson.awaitingData.reason?.trim() || "не указано"}
+                                  </dd>
+                                </div>
+                              ) : null}
                             </dl>
                           )}
                         </div>
@@ -676,6 +704,75 @@ export function AiAdminClient({
                   ))}
                 </div>
               )}
+
+              {!isLoadingDiffs && diffsTotal > 0 ? (
+                <div className="flex flex-col gap-3 border-t border-[var(--app-border)] pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-[var(--app-text-secondary)]">
+                    Показано{" "}
+                    <span className="font-medium tabular-nums text-[var(--app-text)]">
+                      {(diffsPage - 1) * DIFFS_PAGE_SIZE + 1}–
+                      {Math.min(diffsPage * DIFFS_PAGE_SIZE, diffsTotal)}
+                    </span>{" "}
+                    из{" "}
+                    <span className="font-medium tabular-nums text-[var(--app-text)]">
+                      {diffsTotal}
+                    </span>
+                    {diffsTotalPages > 1 ? (
+                      <>
+                        {" "}
+                        · стр.{" "}
+                        <span className="font-medium tabular-nums text-[var(--app-text)]">
+                          {diffsPage}
+                        </span>{" "}
+                        из {diffsTotalPages}
+                      </>
+                    ) : null}
+                  </p>
+                  {diffsTotalPages > 1 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        disabled={diffsPage <= 1 || isLoadingDiffs}
+                        onClick={() => setDiffsPage((p) => Math.max(1, p - 1))}
+                      >
+                        Назад
+                      </Button>
+                      <nav className="flex flex-wrap items-center gap-1" aria-label="Страницы">
+                        {Array.from({ length: diffsTotalPages }, (_, i) => i + 1)
+                          .filter(
+                            (p) =>
+                              p === 1 ||
+                              p === diffsTotalPages ||
+                              Math.abs(p - diffsPage) <= 2,
+                          )
+                          .map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              disabled={isLoadingDiffs}
+                              aria-current={p === diffsPage ? "page" : undefined}
+                              className={
+                                p === diffsPage
+                                  ? "inline-flex min-w-8 justify-center rounded-md bg-[var(--app-accent)] px-2 py-1 text-xs font-semibold text-white"
+                                  : "inline-flex min-w-8 justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-1 text-xs font-medium text-[var(--app-text)] hover:bg-[var(--app-hover)] disabled:opacity-50"
+                              }
+                              onClick={() => setDiffsPage(p)}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                      </nav>
+                      <Button
+                        variant="secondary"
+                        disabled={diffsPage >= diffsTotalPages || isLoadingDiffs}
+                        onClick={() => setDiffsPage((p) => Math.min(diffsTotalPages, p + 1))}
+                      >
+                        Вперёд
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           )}
         </div>

@@ -64,6 +64,18 @@ export const OrderEmailExtractSchema = z.object({
     .max(100)
     .describe("Уверенность в разборе 0–100"),
   warnings: z.array(z.string()).describe("Предупреждения и логические проверки"),
+  awaitingData: z
+    .object({
+      isAwaiting: z.boolean(),
+      reason: z
+        .string()
+        .nullable()
+        .describe(
+          "Что именно обещают прислать (например: 'КТ', 'сканы', 'ссылку на Яндекс.Диск')",
+        ),
+    })
+    .nullable()
+    .optional(),
   /** @deprecated legacy — дублирует clientOrderText */
   workDescription: z.string().nullable().optional(),
 });
@@ -221,6 +233,7 @@ ${opts.emailsText}
 - compositionHints: [{ nameHint, quantity?, teethFdi? }] — все позиции работ. teethFdi — строки FDI («53», не число 53).
 - confidenceScore: 0–100 — насколько уверен в разборе
 - warnings: string[] — неоднозначности + логика («коронка без сканов/цвета», «несколько пациентов» и т.п.)
+- awaitingData: null или { isAwaiting: true, reason: string|null } — если клиент явно обещает дослать данные позже («сканы пришлю позже», «КТ дошлю», «файлы в пути», «ссылку пришлю»). reason — что именно обещают (КТ, МРТ, сканы, ссылка и т.п.); если не указано — null. Иначе null.
 
 Правила экспертизы:
 - ФОКУС НА ПРАЙС: nameHint — максимально близко к точному названию из каталога/истории врача, не выдумывай новых названий.

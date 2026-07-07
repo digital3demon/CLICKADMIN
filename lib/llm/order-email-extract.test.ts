@@ -82,6 +82,7 @@ describe("extractOrderFieldsFromEmail", () => {
         compositionHints: [{ nameHint: "Коронка Emax", teethFdi: ["46"] }],
         confidenceScore: 88,
         warnings: [],
+        awaitingData: null,
       }),
       model: "test",
       durationMs: 100,
@@ -107,6 +108,7 @@ describe("extractOrderFieldsFromEmail", () => {
       compositionHints: [{ nameHint: "Коронка Emax", teethFdi: ["46"] }],
       confidenceScore: 88,
       warnings: [],
+      awaitingData: null,
     });
   });
 
@@ -145,8 +147,26 @@ describe("OrderEmailExtractSchema", () => {
       compositionHints: [{ nameHint: "Аппарат Марко Росса", teethFdi: [53, 63, 55, 65] }],
       confidenceScore: 80,
       warnings: [],
+      awaitingData: null,
     });
     expect(parsed.compositionHints[0]?.teethFdi).toEqual(["53", "63", "55", "65"]);
+  });
+
+  it("parses awaitingData when client promises to send files later", () => {
+    const parsed = OrderEmailExtractSchema.parse({
+      patientName: "Игнатьева Ксения",
+      clinicId: null,
+      doctorId: null,
+      clientOrderText: "Сплинт, КТ пришлю позже",
+      patientAppointmentAt: null,
+      urgent: false,
+      suggestedAttachmentIds: [],
+      compositionHints: [{ nameHint: "Сплинт" }],
+      confidenceScore: 70,
+      warnings: ["КТ не приложены, указаны как 'пришлю'"],
+      awaitingData: { isAwaiting: true, reason: "КТ" },
+    });
+    expect(parsed.awaitingData).toEqual({ isAwaiting: true, reason: "КТ" });
   });
 
   it("coerces single teethFdi value and comma-separated string", () => {
@@ -161,6 +181,7 @@ describe("OrderEmailExtractSchema", () => {
       compositionHints: [{ nameHint: "Коронка", teethFdi: 46 }],
       confidenceScore: 80,
       warnings: [],
+      awaitingData: null,
     });
     expect(single.compositionHints[0]?.teethFdi).toEqual(["46"]);
 
@@ -175,6 +196,7 @@ describe("OrderEmailExtractSchema", () => {
       compositionHints: [{ nameHint: "Коронка", teethFdi: "46, 47" }],
       confidenceScore: 80,
       warnings: [],
+      awaitingData: null,
     });
     expect(list.compositionHints[0]?.teethFdi).toEqual(["46", "47"]);
   });
@@ -191,6 +213,7 @@ describe("mergeAiPredictionJson", () => {
         suggestedAttachmentIds: [],
         confidenceScore: 50,
         warnings: [],
+        awaitingData: null,
       },
       {
         preResolved: { clinicId: "c1", doctorId: "d1" },

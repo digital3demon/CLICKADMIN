@@ -1,0 +1,13 @@
+-- AlterEnum: new AppModule values
+ALTER TYPE "AppModule" ADD VALUE IF NOT EXISTS 'KANBAN_ATTACH_FILES';
+ALTER TYPE "AppModule" ADD VALUE IF NOT EXISTS 'KANBAN_STOP';
+ALTER TYPE "AppModule" ADD VALUE IF NOT EXISTS 'KANBAN_MANAGE_BLOCK';
+ALTER TYPE "AppModule" ADD VALUE IF NOT EXISTS 'KANBAN_DELETE_CARD';
+ALTER TYPE "AppModule" ADD VALUE IF NOT EXISTS 'ORDERS_NOTIFICATIONS';
+
+-- AlterEnum: personal mention inbox type
+ALTER TYPE "OrderChatInboxItemType" ADD VALUE IF NOT EXISTS 'USER_MENTION';
+
+-- AlterTable: profile preference + inbox target user
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "orderToastsPersonalOnly" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "OrderChatInboxItem" ADD COLUMN IF NOT EXISTS "targetUserId" TEXT;

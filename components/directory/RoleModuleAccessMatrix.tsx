@@ -1,18 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { AppModule, UserRole } from "@prisma/client";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import type { UserRole } from "@prisma/client";
 import { USER_ROLE_LABELS } from "@/lib/user-role-labels";
 import {
-  isClickMigOwnerOnlyModule,
-  isKanbanCardSubmodule,
+  BUNDLE_MATRIX_GROUPS,
+  isClickMigOwnerOnlyBundle,
   ROLES_IN_ACCESS_MATRIX,
 } from "@/lib/role-module-defaults";
+import {
+  childBundlesOf,
+  requiredParentBundle,
+  type BundleId,
+} from "@/lib/role-module-bundles";
 
-type ModRow = { id: AppModule; label: string };
+type BundleRow = { id: BundleId; label: string };
 
 type LoadPayload = {
-  modules: ModRow[];
+  bundles: BundleRow[];
   roles: UserRole[];
   effective: Record<string, Record<string, boolean>>;
 };
@@ -35,7 +40,7 @@ export function RoleModuleAccessMatrix() {
         return;
       }
       setData({
-        modules: j.modules,
+        bundles: j.bundles,
         roles: j.roles,
         effective: j.effective,
       });
@@ -51,15 +56,23 @@ export function RoleModuleAccessMatrix() {
     void load();
   }, [load]);
 
-  const setCell = async (role: UserRole, module: AppModule, allowed: boolean) => {
-    const key = `${role}:${module}`;
+  const bundleById = useMemo(() => {
+    const map = new Map<BundleId, BundleRow>();
+    for (const b of data?.bundles ?? []) {
+      map.set(b.id, b);
+    }
+    return map;
+  }, [data?.bundles]);
+
+  const setCell = async (role: UserRole, bundle: BundleId, allowed: boolean) => {
+    const key = `${role}:${bundle}`;
     setSaving(key);
     setError(null);
     try {
       const res = await fetch("/api/role-module-access", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, module, allowed }),
+        body: JSON.stringify({ role, bundle, allowed }),
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
@@ -69,11 +82,23 @@ export function RoleModuleAccessMatrix() {
       }
       setData((prev) => {
         if (!prev) return prev;
+        const nextRole = { ...prev.effective[role], [bundle]: allowed };
+        if (allowed) {
+          let p = requiredParentBundle(bundle);
+          while (p) {
+            nextRole[p] = true;
+            p = requiredParentBundle(p);
+          }
+        } else {
+          for (const child of childBundlesOf(bundle)) {
+            nextRole[child] = false;
+          }
+        }
         return {
           ...prev,
           effective: {
             ...prev.effective,
-            [role]: { ...prev.effective[role], [module]: allowed },
+            [role]: nextRole,
           },
         };
       });
@@ -84,6 +109,52 @@ export function RoleModuleAccessMatrix() {
       setSaving(null);
     }
   };
+
+  const renderBundleRow = (b: BundleRow) => (
+    <tr
+      key={b.id}
+      className="border-b border-[var(--border-subtle)] last:border-b-0"
+    >
+      <td className="max-w-[14rem] px-2 py-1.5 text-[var(--app-text)]">
+        {b.label}
+      </td>
+      {ROLES_IN_ACCESS_MATRIX.map((r) => {
+        const on = data!.effective[r]?.[b.id] === true;
+        const busy = saving === `${r}:${b.id}`;
+        const parent = requiredParentBundle(b.id);
+        const parentOn = parent ? data!.effective[r]?.[parent] === true : true;
+        const gatedByParent = parent != null && !parentOn;
+        const clickMigOwnerOnly = isClickMigOwnerOnlyBundle(b.id);
+        const impliedByChild =
+          !on &&
+          childBundlesOf(b.id).some((c) => data!.effective[r]?.[c] === true);
+        const cellDisabled =
+          busy || gatedByParent || clickMigOwnerOnly || impliedByChild;
+        const cellTitle = clickMigOwnerOnly
+          ? "КликМиг временно только у владельца (OWNER)."
+          : gatedByParent && parent
+            ? `Сначала включите «${bundleById.get(parent)?.label ?? parent}».`
+            : impliedByChild
+              ? "Включено через дочерний пакет — отключите его сначала."
+              : undefined;
+        return (
+          <td key={r} className="p-1 text-center align-middle">
+            <input
+              type="checkbox"
+              className="h-4 w-4 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              checked={on || impliedByChild}
+              disabled={cellDisabled}
+              title={cellTitle}
+              onChange={(e) => {
+                void setCell(r, b.id, e.target.checked);
+              }}
+              aria-label={`${USER_ROLE_LABELS[r]} — ${b.label}`}
+            />
+          </td>
+        );
+      })}
+    </tr>
+  );
 
   if (loading) {
     return <p className="text-sm text-[var(--text-muted)]">Загрузка…</p>;
@@ -103,18 +174,17 @@ export function RoleModuleAccessMatrix() {
         <p className="text-sm text-amber-700 dark:text-amber-200">{error}</p>
       ) : null}
       <p className="text-sm text-[var(--text-secondary)]">
-        Снимите галочку, чтобы отключить модуль для роли, или включите, чтобы
-        разрешить. «Конфигурация (хаб)» — вход в раздел; отдельно — плитки
-        (прайс, печать, редактирование этикеток, оформление и т.д.). Состояние «как в таблице по
-        умолчанию» — то же, что в CRM изначально для этой роли. У владельца
-        неизменяемо полный доступ.
+        Пакеты прав: канбан — 3 уровня (доски → работа → координация), заказы —
+        просмотр с чатом, ведение, общие уведомления. Персональные @ник — без
+        галочки. «Прочитано» @лаборатория — только админы. У владельца полный
+        доступ.
       </p>
       <div className="overflow-x-auto rounded-lg border border-[var(--card-border)]">
         <table className="min-w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-muted)]">
               <th className="px-2 py-2 text-xs font-semibold text-[var(--text-muted)]">
-                Модуль
+                Пакет
               </th>
               {ROLES_IN_ACCESS_MATRIX.map((r) => (
                 <th
@@ -127,45 +197,32 @@ export function RoleModuleAccessMatrix() {
             </tr>
           </thead>
           <tbody>
-            {data.modules.map((m) => (
-              <tr
-                key={m.id}
-                className="border-b border-[var(--border-subtle)] last:border-b-0"
-              >
-                <td className="max-w-[12rem] px-2 py-1.5 text-[var(--app-text)]">
-                  {m.label}
-                </td>
-                {ROLES_IN_ACCESS_MATRIX.map((r) => {
-                  const on = data.effective[r]?.[m.id] === true;
-                  const busy = saving === `${r}:${m.id}`;
-                  const kanbanBaseOn = data.effective[r]?.KANBAN === true;
-                  const gatedByKanban =
-                    isKanbanCardSubmodule(m.id) && !kanbanBaseOn;
-                  const clickMigOwnerOnly = isClickMigOwnerOnlyModule(m.id);
-                  const cellDisabled = busy || gatedByKanban || clickMigOwnerOnly;
-                  const cellTitle = clickMigOwnerOnly
-                    ? "КликМиг временно только у владельца (OWNER)."
-                    : gatedByKanban
-                      ? "Сначала включите модуль «Канбан» для этой роли."
-                      : undefined;
-                  return (
-                    <td key={r} className="p-1 text-center align-middle">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                        checked={on}
-                        disabled={cellDisabled}
-                        title={cellTitle}
-                        onChange={(e) => {
-                          void setCell(r, m.id, e.target.checked);
-                        }}
-                        aria-label={`${USER_ROLE_LABELS[r]} — ${m.label}`}
-                      />
+            {BUNDLE_MATRIX_GROUPS.map((group) => {
+              const rows = group.bundles
+                .map((id) => bundleById.get(id))
+                .filter((b): b is BundleRow => Boolean(b));
+              if (rows.length === 0) return null;
+              return (
+                <Fragment key={`hdr-${group.id}`}>
+                  <tr className="border-b border-[var(--card-border)] bg-[color-mix(in_srgb,var(--surface-muted)_70%,transparent)]">
+                    <td
+                      colSpan={1 + ROLES_IN_ACCESS_MATRIX.length}
+                      className="px-2 py-2"
+                    >
+                      <div className="text-xs font-bold uppercase tracking-wide text-[var(--text-body)]">
+                        {group.title}
+                      </div>
+                      {group.description ? (
+                        <p className="mt-0.5 text-[0.68rem] font-normal normal-case text-[var(--text-muted)]">
+                          {group.description}
+                        </p>
+                      ) : null}
                     </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  </tr>
+                  {rows.map((b) => renderBundleRow(b))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

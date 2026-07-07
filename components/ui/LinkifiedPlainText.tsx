@@ -23,6 +23,7 @@ export function LinkifiedPlainText({
             target="_blank"
             rel="noopener noreferrer"
             className={linkClassName}
+            onClick={(e) => e.stopPropagation()}
           >
             {segment.display}
           </a>

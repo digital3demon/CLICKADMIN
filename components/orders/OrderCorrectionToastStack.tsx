@@ -22,7 +22,7 @@ type OrderToastRow = {
   createdAt: string;
 };
 
-type ToastKind = "chat" | "correction" | "prosthetics";
+type ToastKind = "chat" | "correction" | "prosthetics" | "personal";
 
 const shells: Record<ToastKind, string> = {
   chat:
@@ -31,12 +31,15 @@ const shells: Record<ToastKind, string> = {
     "flex gap-2 rounded-lg border border-amber-200/90 bg-amber-50/95 pl-3 pr-1 py-2 text-sm shadow-lg backdrop-blur-sm dark:border-amber-800/60 dark:bg-amber-950/90",
   prosthetics:
     "flex gap-2 rounded-lg border border-sky-200/90 bg-sky-50/95 pl-3 pr-1 py-2 text-sm shadow-lg backdrop-blur-sm dark:border-sky-800/60 dark:bg-sky-950/90",
+  personal:
+    "flex gap-2 rounded-lg border border-emerald-200/90 bg-emerald-50/95 pl-3 pr-1 py-2 text-sm shadow-lg backdrop-blur-sm dark:border-emerald-800/60 dark:bg-emerald-950/90",
 };
 
 const titleTone: Record<ToastKind, string> = {
   chat: "text-violet-900/90 dark:text-violet-200/90",
   correction: "text-amber-900/90 dark:text-amber-200/90",
   prosthetics: "text-sky-800/90 dark:text-sky-200/90",
+  personal: "text-emerald-900/90 dark:text-emerald-200/90",
 };
 
 const dismissTone: Record<ToastKind, string> = {
@@ -45,12 +48,15 @@ const dismissTone: Record<ToastKind, string> = {
     "text-amber-900/70 hover:bg-amber-200/80 dark:text-amber-100/80 dark:hover:bg-amber-900/50",
   prosthetics:
     "text-sky-900/70 hover:bg-sky-200/80 dark:text-sky-100/80 dark:hover:bg-sky-900/50",
+  personal:
+    "text-emerald-900/70 hover:bg-emerald-200/80 dark:text-emerald-100/80 dark:hover:bg-emerald-900/50",
 };
 
 const linkTone: Record<ToastKind, string> = {
   chat: "text-violet-950 hover:underline dark:text-violet-50",
   correction: "text-amber-950 hover:underline dark:text-amber-50",
   prosthetics: "text-sky-950 hover:underline dark:text-sky-50",
+  personal: "text-emerald-950 hover:underline dark:text-emerald-50",
 };
 
 function writeStackCollapsed(collapsed: boolean) {
@@ -69,11 +75,13 @@ function toastRowKeys(
   chatList: OrderToastRow[],
   corrList: OrderToastRow[],
   proList: OrderToastRow[],
+  personalList: OrderToastRow[],
 ): Set<string> {
   const keys = new Set<string>();
   for (const r of chatList) keys.add(dismissKey("chat", r.id));
   for (const r of corrList) keys.add(dismissKey("correction", r.id));
   for (const r of proList) keys.add(dismissKey("prosthetics", r.id));
+  for (const r of personalList) keys.add(dismissKey("personal", r.id));
   return keys;
 }
 
@@ -138,7 +146,7 @@ function ToastCard({
   );
 
   const open = () => {
-    if (kind === "chat" && onOpenChat) {
+    if ((kind === "chat" || kind === "personal") && onOpenChat) {
       onOpenChat(row);
     } else {
       onOpenOrder(row.orderId);
@@ -189,6 +197,7 @@ export function OrderCorrectionToastStack() {
   const [prostheticsRequests, setProstheticsRequests] = useState<OrderToastRow[]>(
     [],
   );
+  const [personalMessages, setPersonalMessages] = useState<OrderToastRow[]>([]);
   const lastFpRef = useRef<string>("");
   const prevToastKeysRef = useRef<Set<string>>(new Set());
   const pollInFlightRef = useRef(false);
@@ -226,10 +235,11 @@ export function OrderCorrectionToastStack() {
   }, []);
 
   useEffect(() => {
-    if (isLogin || isKanban || isPublicSticker) {
+    if (isLogin || isPublicSticker) {
       setChatMessages([]);
       setCorrections([]);
       setProstheticsRequests([]);
+      setPersonalMessages([]);
       return;
     }
     let cancelled = false;
@@ -254,6 +264,7 @@ export function OrderCorrectionToastStack() {
           messages?: OrderToastRow[];
           corrections?: OrderToastRow[];
           requests?: OrderToastRow[];
+          personal?: OrderToastRow[];
           labMentionCount?: number;
         };
 
@@ -264,15 +275,16 @@ export function OrderCorrectionToastStack() {
           return;
         }
 
-        const chatList = Array.isArray(j.messages) ? j.messages : [];
-        const corrList = Array.isArray(j.corrections) ? j.corrections : [];
-        const proList = Array.isArray(j.requests) ? j.requests : [];
-        const labMentionCount = j.labMentionCount ?? 0;
+        const chatList = isKanban ? [] : Array.isArray(j.messages) ? j.messages : [];
+        const corrList = isKanban ? [] : Array.isArray(j.corrections) ? j.corrections : [];
+        const proList = isKanban ? [] : Array.isArray(j.requests) ? j.requests : [];
+        const personalList = Array.isArray(j.personal) ? j.personal : [];
+        const labMentionCount = isKanban ? 0 : (j.labMentionCount ?? 0);
 
-        const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}|lmc:${labMentionCount}`;
+        const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}|m:${personalList.map((x) => x.id).join(",")}|lmc:${labMentionCount}`;
         if (fp !== lastFpRef.current) {
           const hadPrevious = lastFpRef.current.length > 0;
-          const nextKeys = toastRowKeys(chatList, corrList, proList);
+          const nextKeys = toastRowKeys(chatList, corrList, proList, personalList);
           let hasNewToast = false;
           if (hadPrevious) {
             for (const key of nextKeys) {
@@ -287,6 +299,7 @@ export function OrderCorrectionToastStack() {
           setChatMessages(chatList);
           setCorrections(corrList);
           setProstheticsRequests(proList);
+          setPersonalMessages(personalList);
           if (hasNewToast) {
             setStackCollapsed(false);
             writeStackCollapsed(false);
@@ -341,17 +354,25 @@ export function OrderCorrectionToastStack() {
     const pro = prostheticsRequests.filter(
       (r) => !dismissed.has(dismissKey("prosthetics", r.id)),
     );
-    return { chat, corr, pro };
-  }, [chatMessages, corrections, prostheticsRequests, dismissed]);
+    const personal = personalMessages.filter(
+      (r) => !dismissed.has(dismissKey("personal", r.id)),
+    );
+    return { chat, corr, pro, personal };
+  }, [chatMessages, corrections, prostheticsRequests, personalMessages, dismissed]);
 
   const pendingCount =
-    pending.chat.length + pending.corr.length + pending.pro.length;
+    pending.chat.length +
+    pending.corr.length +
+    pending.pro.length +
+    pending.personal.length;
 
-  const { chatVisible, correctionVisible, prostheticsVisible } = useMemo(() => {
+  const { chatVisible, correctionVisible, prostheticsVisible, personalVisible } =
+    useMemo(() => {
     return {
       chatVisible: pending.chat.slice(0, MAX_PER_COLUMN),
       correctionVisible: pending.corr.slice(0, MAX_PER_COLUMN),
       prostheticsVisible: pending.pro.slice(0, MAX_PER_COLUMN),
+      personalVisible: pending.personal.slice(0, MAX_PER_COLUMN),
     };
   }, [pending]);
 
@@ -399,7 +420,7 @@ export function OrderCorrectionToastStack() {
     }
   }, [pendingCount, stackCollapsed]);
 
-  if (isLogin || isKanban || isPublicSticker) {
+  if (isLogin || isPublicSticker) {
     return null;
   }
 
@@ -432,6 +453,7 @@ export function OrderCorrectionToastStack() {
     label: string;
     items: OrderToastRow[];
   }> = [
+    { key: "personal" as const, label: "Для вас", items: personalVisible },
     { key: "chat" as const, label: "Чат", items: chatVisible },
     { key: "correction" as const, label: "Корректировки", items: correctionVisible },
     { key: "prosthetics" as const, label: "Заказ протетики", items: prostheticsVisible },
@@ -464,7 +486,7 @@ export function OrderCorrectionToastStack() {
                       row={r}
                       onDismiss={() => dismissOne(col.key, r.id)}
                       onOpenChat={
-                        col.key === "chat" && chatAllowed
+                        (col.key === "chat" || col.key === "personal") && chatAllowed
                           ? openChatFromToast
                           : undefined
                       }

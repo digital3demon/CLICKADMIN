@@ -2,26 +2,30 @@ import type { UserRole } from "@prisma/client";
 import type { KanbanCard } from "@/lib/kanban/types";
 import { cardInvolvesUser } from "@/lib/kanban/model";
 
-/** Кто может блокировать / разблокировать карточку в CRM-канбане (кроме участников и ответственных). */
-const KANBAN_BLOCK_ADMIN_ROLES: ReadonlySet<UserRole> = new Set([
+const KANBAN_BLOCK_COORDINATOR_ROLES: ReadonlySet<UserRole> = new Set([
+  "OWNER",
   "ADMINISTRATOR",
   "SENIOR_ADMINISTRATOR",
+  "SENIOR_TECHNICIAN",
+  "MANAGER",
 ]);
 
 export function isKanbanBlockAdministratorRole(
   role: UserRole | null | undefined,
 ): boolean {
-  return role != null && KANBAN_BLOCK_ADMIN_ROLES.has(role);
+  return role != null && KANBAN_BLOCK_COORDINATOR_ROLES.has(role);
 }
 
 /**
- * Блокировка и снятие блокировки в канбане: администратор или пользователь в ответственных / участниках карточки.
+ * Блокировка карточки: модуль KANBAN_MANAGE_BLOCK + координатор или участник карточки.
  */
 export function canUserManageKanbanBlockForCard(
   sessionUserId: string | null | undefined,
   sessionUserRole: UserRole | null | undefined,
   card: KanbanCard,
+  moduleAccess?: Partial<Record<string, boolean>> | null,
 ): boolean {
+  if (moduleAccess?.KANBAN_MANAGE_BLOCK !== true) return false;
   if (isKanbanBlockAdministratorRole(sessionUserRole)) return true;
   const uid = (sessionUserId || "").trim();
   if (!uid) return false;

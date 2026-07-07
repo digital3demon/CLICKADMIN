@@ -67,4 +67,32 @@ describe("splitPlainTextLinks", () => {
       },
     ]);
   });
+
+  it("не дублирует ссылку, если ниже строка [https://…] с тем же url", () => {
+    const segments = splitPlainTextLinks(
+      "Цвет https://disk.yandex.ru/d/cbZa2KJK1Suvdg\n[https://disk.yandex.ru/d/cbZa2KJK1Suvdg]\nСканы https://disk.yandex.ru/d/CvRJKYB4LZjsWA\n[https://disk.yandex.ru/d/CvRJKYB4LZjsWA]",
+    );
+    const links = segments.filter((s) => s.kind === "link");
+    expect(links).toHaveLength(2);
+    expect(links[0]?.href).toBe("https://disk.yandex.ru/d/cbZa2KJK1Suvdg");
+    expect(links[1]?.href).toBe("https://disk.yandex.ru/d/CvRJKYB4LZjsWA");
+    expect(segments.some((s) => s.kind === "text" && s.value.includes("[https://"))).toBe(
+      false,
+    );
+  });
+
+  it("дедуплицирует экранированные \\[https://…\\]", () => {
+    const segments = splitPlainTextLinks(
+      "RVG https://disk.yandex.ru/i/kiGouEaqpXUtMg\n\\[https://disk.yandex.ru/i/kiGouEaqpXUtMg\\]",
+    );
+    expect(segments.filter((s) => s.kind === "link")).toHaveLength(1);
+  });
+
+  it("дедуплицирует [url] в той же строке после голого url", () => {
+    const segments = splitPlainTextLinks(
+      "Цвет https://disk.yandex.ru/d/cbZa2KJK1Suvdg [https://disk.yandex.ru/d/cbZa2KJK1Suvdg]",
+    );
+    expect(segments.filter((s) => s.kind === "link")).toHaveLength(1);
+    expect(segments.some((s) => s.kind === "text" && s.value.includes("["))).toBe(false);
+  });
 });

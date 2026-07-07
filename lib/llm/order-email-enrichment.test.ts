@@ -103,6 +103,7 @@ describe("enrichOrderEmailPrediction Lebedeva-like case", () => {
         ],
         confidenceScore: 92,
         warnings: ["Несколько дат записи/доставки — выбрана первая"],
+        awaitingData: null,
       },
       attachments: [
         { id: "stl-1", fileName: "lower.stl", mimeType: "model/stl" },
@@ -137,7 +138,7 @@ describe("enrichOrderEmailPrediction Lebedeva-like case", () => {
 
     const enriched = await enrichOrderEmailPrediction(db as never, "tenant-1", {
       primaryEmailId: "email-1",
-      ai: { suggestedAttachmentIds: [], compositionHints: [], warnings: [] },
+      ai: { suggestedAttachmentIds: [], compositionHints: [], warnings: [], awaitingData: null },
       attachments: [],
       resolvedClinicId: "clinic-1",
       resolvedDoctorId: "doctor-1",

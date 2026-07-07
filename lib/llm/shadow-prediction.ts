@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { runOrderEmailPrediction } from "./run-order-email-prediction";
+import { runSelfCorrectionForOrderInBackground } from "./self-correction";
 import { logger } from "@/lib/server/logger";
 
 /** Один наряд за раз на tenant — следующий стартует только после завершения предыдущего. */
@@ -48,6 +49,10 @@ async function savePredictionRun(
     { orderId, emailId, model: run.model, durationMs: run.durationMs, ok: !run.error },
     mode === "create" ? "AI shadow prediction completed" : "AI prediction retry completed",
   );
+
+  if (!run.error) {
+    runSelfCorrectionForOrderInBackground(tenantId, orderId);
+  }
 }
 
 function enqueueSerialPredictionJob(tenantId: string, job: () => Promise<void>): void {

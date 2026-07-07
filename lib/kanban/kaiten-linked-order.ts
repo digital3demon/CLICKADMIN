@@ -61,9 +61,11 @@ export type KaitenLinkedOrderForKanban = {
 const CONTINUATION_HEAD_RE =
   /^(Продолжение работы|У этой работы есть продолжение)/u;
 
+import { dedupeDuplicateBracketUrls } from "@/lib/mail/mail-text-cleanup";
+
 /** Убирает блоки «продолжение» и служебный хвост CRM — они в канбане отдельно. */
 export function stripKaitenDescriptionForKanbanBody(text: string): string {
-  let body = text.trim();
+  let body = dedupeDuplicateBracketUrls(text).trim();
   while (body) {
     const lines = body.split("\n");
     const first = lines[0]?.trim() ?? "";

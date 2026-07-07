@@ -132,27 +132,96 @@ function rowIds(rows: Array<{ id: string }>): string {
   return rows.map((r) => r.id).sort().join(",");
 }
 
+export async function fetchPersonalMentionToastRows(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+): Promise<OrderNotificationToastRow[]> {
+  const tid = tenantId.trim();
+  const uid = userId.trim();
+  if (!uid) return [];
+  const rows = await (db as any).orderChatInboxItem.findMany({
+    where: {
+      type: "USER_MENTION",
+      targetUserId: uid,
+      resolvedAt: null,
+      rejectedAt: null,
+      order: {
+        archivedAt: null,
+        ...(tid ? { tenantId: tid } : {}),
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 32,
+    select: {
+      id: true,
+      text: true,
+      authorLabel: true,
+      createdAt: true,
+      order: { select: { id: true, orderNumber: true } },
+    },
+  });
+  return (rows as Array<{
+    id: string;
+    text: string;
+    authorLabel: string | null;
+    createdAt: Date;
+    order: { id: string; orderNumber: string };
+  }>).map((r) => ({
+    id: r.id,
+    text: r.text,
+    authorLabel: r.authorLabel,
+    orderId: r.order.id,
+    orderNumber: r.order.orderNumber,
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
 export async function fetchOrderNotificationToasts(
   db: PrismaClient,
   opts: {
     tenantId: string;
     userId: string | null | undefined;
+    generalNotificationsAllowed?: boolean;
+    personalOnlyPref?: boolean;
   },
 ): Promise<{
   messages: OrderNotificationToastRow[];
   corrections: OrderNotificationToastRow[];
   requests: OrderNotificationToastRow[];
+  personal: OrderNotificationToastRow[];
   labMentionCount: number;
 }> {
-  const [messages, corrections, requests, labMentionCount] = await Promise.all([
+  const showGeneral =
+    opts.generalNotificationsAllowed === true && opts.personalOnlyPref !== true;
+  const uid = opts.userId ?? "";
+
+  const personalPromise = uid
+    ? fetchPersonalMentionToastRows(db, opts.tenantId, uid)
+    : Promise.resolve([] as OrderNotificationToastRow[]);
+
+  if (!showGeneral) {
+    const personal = await personalPromise;
+    return {
+      messages: [],
+      corrections: [],
+      requests: [],
+      personal,
+      labMentionCount: 0,
+    };
+  }
+
+  const [messages, corrections, requests, labMentionCount, personal] =
+    await Promise.all([
     fetchOrderChatToastRows(db, opts.userId, opts.tenantId),
     fetchCorrectionToastRows(db, opts.tenantId),
     fetchProstheticsToastRows(db, opts.tenantId),
     countOrdersWithPendingKaitenLabMentionForUser(
       db,
       { archivedAt: null, tenantId: opts.tenantId },
-      opts.userId ?? undefined
+      opts.userId ?? undefined,
     ),
+    personalPromise,
   ]);
 
   const readNewEnabled = isOrderChatInboxReadNewEnabledForTenant(opts.tenantId);
@@ -224,9 +293,10 @@ export async function fetchOrderNotificationToasts(
       messages: newMessages,
       corrections: newCorrections,
       requests: newRequests,
+      personal,
       labMentionCount: newLabMentionCount,
     };
   }
 
-  return { messages, corrections, requests, labMentionCount };
+  return { messages, corrections, requests, personal, labMentionCount };
 }

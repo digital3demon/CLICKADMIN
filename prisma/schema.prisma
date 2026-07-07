@@ -542,6 +542,8 @@ enum OrderChatInboxItemType {
   CORRECTION
   PROSTHETICS
   LAB_MENTION
+  /// Персональное @упоминание пользователя в чате
+  USER_MENTION
 }
 
 enum OrderChatInboxSyncState {
@@ -559,9 +561,13 @@ enum AppModule {
   ORDERS_CREATE
   /// Редактирование существующего заказа
   ORDERS_EDIT
-  /// Чат наряда (Kaiten / канбан): чтение и отправка без права редактировать наряд
+  /// Чат в карточке наряда (список заказов, отгрузки, ФинОтдел) — не канбан
   ORDERS_CHAT
   KANBAN
+  /// Канбан: перемещать карточку по колонкам (зеркало Kaiten), без редактирования наряда
+  KANBAN_MOVE_COLUMNS
+  /// Канбан: чат в модалке карточки на доске
+  KANBAN_CARD_CHAT
   /// Канбан: можно менять заголовок карточки
   KANBAN_EDIT_TITLE
   /// Канбан: можно менять внутренний срок
@@ -578,6 +584,16 @@ enum AppModule {
   KANBAN_MANAGE_CHECKLIST
   /// Канбан: таймер обратного отсчёта на карточке
   KANBAN_MANAGE_TIMER
+  /// Канбан: прикреплять файлы к карточке
+  KANBAN_ATTACH_FILES
+  /// Канбан: СТОП на карточке
+  KANBAN_STOP
+  /// Канбан: блокировать / разблокировать карточку
+  KANBAN_MANAGE_BLOCK
+  /// Канбан: удалять карточку
+  KANBAN_DELETE_CARD
+  /// Общие тосты по нарядам (@админов, коррекции, протетика)
+  ORDERS_NOTIFICATIONS
   /// История изменений по нарядам
   ORDER_HISTORY
   /// Финансовая аналитика
@@ -750,6 +766,8 @@ model User {
   kaitenUserId              Int?
   /// Сколько нарядов на странице списка /orders (1–200); null — значение по умолчанию в приложении
   ordersListPageSize        Int?
+  /// Скрыть общие тосты по нарядам; персональные @ник — всегда видны
+  orderToastsPersonalOnly   Boolean           @default(false)
 
   telegramLinkTokens TelegramLinkToken[]
 
@@ -1027,6 +1045,11 @@ model AiOrderPrediction {
   predictionJson Json
   /// Была ли ошибка при парсинге JSON или запросе
   error          String?
+
+  /// Когда последний раз сравнили предсказание с эталоном админа (фоновый self-correction)
+  selfCorrectionAt      DateTime?
+  /// Снимок состава наряда на момент анализа — повтор не нужен, пока эталон не изменился
+  selfCorrectionRefHash String?
 
   createdAt DateTime @default(now())
 
@@ -1551,6 +1574,8 @@ model OrderChatInboxItem {
   resolvedByUserId String?
   rejectedAt       DateTime?
   rejectedByUserId String?
+  /// Для USER_MENTION — кому адресовано упоминание
+  targetUserId     String?
 
   @@unique([orderId, type, kaitenCommentId])
   @@unique([orderId, type, crmDraftId])

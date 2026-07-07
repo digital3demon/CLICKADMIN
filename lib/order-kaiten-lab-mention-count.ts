@@ -62,17 +62,27 @@ export async function countOrdersWithPendingKaitenLabMentionForUser(
   }
   const uid = String(userId || "").trim();
   if (uid) {
-    const ownAcks = await db.orderKaitenLabMentionAck.findMany({
-      where: {
-        orderId: { in: ids },
-        userId: uid,
-      },
-      select: { orderId: true, ackAt: true },
+    const userRow = await db.user.findUnique({
+      where: { id: uid },
+      select: { role: true },
     });
-    for (const a of ownAcks) {
-      const prev = ackByOrder.get(a.orderId);
-      if (!prev || a.ackAt.getTime() > prev.getTime()) {
-        ackByOrder.set(a.orderId, a.ackAt);
+    const canOwnAck =
+      userRow?.role === "OWNER" ||
+      userRow?.role === "ADMINISTRATOR" ||
+      userRow?.role === "SENIOR_ADMINISTRATOR";
+    if (canOwnAck) {
+      const ownAcks = await db.orderKaitenLabMentionAck.findMany({
+        where: {
+          orderId: { in: ids },
+          userId: uid,
+        },
+        select: { orderId: true, ackAt: true },
+      });
+      for (const a of ownAcks) {
+        const prev = ackByOrder.get(a.orderId);
+        if (!prev || a.ackAt.getTime() > prev.getTime()) {
+          ackByOrder.set(a.orderId, a.ackAt);
+        }
       }
     }
   }

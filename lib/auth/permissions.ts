@@ -93,14 +93,25 @@ export function canEditOrders(
   return false;
 }
 
-/** Чат наряда в списках заказов, отгрузок и ФинОтдела (без права редактировать наряд). */
+/** Чат наряда в списках заказов, отгрузок и ФинОтдела (пакет ORDERS / просмотр). */
 export function canAccessOrderChat(
   role: UserRole,
   moduleAccess?: Partial<Record<AppModule, boolean>> | null,
 ): boolean {
   if (role === "OWNER") return true;
-  if (moduleAccess?.ORDERS_CHAT === true) return true;
+  if (moduleAccess?.ORDERS === true || moduleAccess?.ORDERS_CHAT === true) {
+    return true;
+  }
   return false;
+}
+
+/** Снять подсветку @лаборатория для всей лаборатории — только админы и владелец. */
+export function canAckOrderChatLabMention(role: UserRole): boolean {
+  return (
+    role === "OWNER" ||
+    role === "ADMINISTRATOR" ||
+    role === "SENIOR_ADMINISTRATOR"
+  );
 }
 
 /** Модуль «Конфиг: почта» (/directory/mail) — глобальная галочка в матрице. */

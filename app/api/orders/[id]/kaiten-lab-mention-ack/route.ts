@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { canAckOrderChatLabMention } from "@/lib/auth/permissions";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
-/** POST — пользователь открыл чат Kaiten и подтвердил просмотр упоминания лаборатории для этого наряда. */
+/** POST — админ подтвердил просмотр упоминания лаборатории для этого наряда. */
 export async function POST(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -12,6 +13,12 @@ export async function POST(
   const session = await getSessionFromCookies();
   if (!session?.sub) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+  if (!canAckOrderChatLabMention(session.role)) {
+    return NextResponse.json(
+      { error: "Отметить прочитанным могут только администраторы" },
+      { status: 403 },
+    );
   }
   const tenantId = await orderTenantIdForSession(session);
   if (!tenantId) {

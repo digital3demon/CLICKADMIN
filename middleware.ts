@@ -13,7 +13,7 @@ import {
 } from "@/lib/auth/jwt";
 import {
   getModuleForPathname,
-  isOrderAttachmentUploadApiPath,
+  isOrderAttachmentUploadAllowed,
   requiredModuleForPath,
 } from "@/lib/role-module-paths";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
@@ -589,6 +589,7 @@ export async function middleware(req: NextRequest) {
       mod,
       req.method,
       req.nextUrl.search,
+      req.headers,
     );
     if (requiredModule != null && access[requiredModule] !== true) {
       let moduleAllowed = false;
@@ -607,14 +608,16 @@ export async function middleware(req: NextRequest) {
           access,
         );
       }
-      if (!moduleAllowed) {
-        if (
-          requiredModule === "ORDERS_EDIT" &&
-          isOrderAttachmentUploadApiPath(pathname, req.method) &&
-          (access.ORDERS_CHAT === true || access.ORDERS_CREATE === true)
-        ) {
-          moduleAllowed = true;
-        }
+      if (
+        !moduleAllowed &&
+        isOrderAttachmentUploadAllowed(
+          access,
+          pathname,
+          req.method,
+          req.headers,
+        )
+      ) {
+        moduleAllowed = true;
       }
       if (!moduleAllowed) {
         if (pathname.startsWith("/api/")) {

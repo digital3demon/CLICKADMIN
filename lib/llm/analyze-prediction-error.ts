@@ -4,6 +4,27 @@ import { resolveClientIdsFromPrediction } from "@/lib/ai-order-draft-from-predic
 import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
 import { chatCompletion } from "@/lib/llm/llm-client";
 import { getAiSettings } from "@/lib/llm/llm-config";
+import {
+  summarizeAiConstructions,
+  summarizeOrderConstructions,
+  type AiConstructionLine,
+} from "@/lib/llm/prediction-composition-summary";
+import { buildDatasetJsonlLine } from "@/lib/llm/dataset-export";
+import { appendToDatasetFile } from "@/lib/llm/dataset-storage";
+
+async function markSelfCorrectionDone(
+  db: PrismaClient,
+  predictionId: string,
+  refHash: string,
+): Promise<void> {
+  await db.aiOrderPrediction.update({
+    where: { id: predictionId },
+    data: {
+      selfCorrectionAt: new Date(),
+      selfCorrectionRefHash: refHash,
+    },
+  });
+}
 
 export async function analyzePredictionError(
   db: PrismaClient,
@@ -35,42 +56,61 @@ export async function analyzePredictionError(
     return;
   }
 
-  const json = prediction.predictionJson as Record<string, any>;
+  const json = prediction.predictionJson as Record<string, unknown>;
   if (!json || typeof json !== "object") return;
 
-  // 1. Сравниваем состав
-  const aiConstructions = Array.isArray(json.resolvedConstructions) ? json.resolvedConstructions : [];
+  const aiConstructions = Array.isArray(json.resolvedConstructions)
+    ? (json.resolvedConstructions as AiConstructionLine[])
+    : [];
   const realConstructions = prediction.order.constructions;
 
-  const aiSummary = aiConstructions
-    .map((c: any) => `${c.quantity}x ${c.priceListItem?.name || "Неизвестно"}`)
-    .sort()
-    .join(", ");
-  
-  const realSummary = realConstructions
-    .map((c) => `${c.quantity}x ${c.priceListItem?.name || "Неизвестно"}`)
-    .sort()
-    .join(", ");
+  const aiSummary = summarizeAiConstructions(aiConstructions);
+  const realSummary = summarizeOrderConstructions(realConstructions);
+  const refHash = realSummary;
 
-  // Если состав совпадает, считаем, что всё ок (пока упрощенно)
-  if (aiSummary === realSummary) {
+  if (
+    prediction.selfCorrectionRefHash === refHash &&
+    prediction.selfCorrectionAt != null
+  ) {
     return;
   }
 
-  // 2. Ищем врача
+  // 1. Запись в датасет (Ground Truth)
+  // Мы делаем это всегда при изменении refHash, независимо от того, ошибся ИИ или нет.
+  try {
+    const jsonlLine = await buildDatasetJsonlLine(db, tenantId, prediction.order, [prediction.email]);
+    if (jsonlLine) {
+      await appendToDatasetFile(tenantId, jsonlLine);
+    }
+  } catch (e) {
+    console.error("[AI Dataset] Error appending to dataset:", e);
+  }
+
+  // 2. Генерация уроков (Self-Correction)
+  // Это делаем только если ИИ ошибся в составе.
+  if (aiSummary === realSummary) {
+    await markSelfCorrectionDone(db, predictionId, refHash);
+    return;
+  }
+
   const emailMatch = await resolveClientIdsFromOrderSourceEmail(
     db,
     tenantId,
     prediction.email.fromAddress,
-    { preferOrderId: prediction.orderId }
+    { preferOrderId: prediction.orderId },
   );
 
-  const resolvedIds = resolveClientIdsFromPrediction(json, emailMatch.matched ? emailMatch : undefined);
+  const resolvedIds = resolveClientIdsFromPrediction(
+    json,
+    emailMatch.matched ? emailMatch : undefined,
+  );
   const doctorId = resolvedIds.doctorId || prediction.order.doctorId;
 
-  if (!doctorId) return;
+  if (!doctorId) {
+    await markSelfCorrectionDone(db, predictionId, refHash);
+    return;
+  }
 
-  // 3. Формируем запрос к ИИ
   const prompt = `
 Ты — AI-ассистент в зуботехнической лаборатории. Твоя задача — проанализировать свою ошибку при разборе наряда и сделать короткий вывод на будущее.
 
@@ -91,13 +131,10 @@ ${realSummary || "Ничего не найдено"}
 `.trim();
 
   try {
-    const response = await chatCompletion(
-      settings,
-      {
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.1,
-      },
-    );
+    const response = await chatCompletion(settings, {
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+    });
 
     if (!response.ok) {
       console.error("[AI Self-Correction] Error generating lesson:", response.error);
@@ -106,25 +143,28 @@ ${realSummary || "Ничего не найдено"}
 
     const lesson = response.content.trim();
     if (lesson) {
-      // 4. Сохраняем правило в карточку врача
       const doctor = await db.doctor.findUnique({ where: { id: doctorId } });
       if (doctor) {
-        const existingLessons = doctor.aiLessons ? doctor.aiLessons.split("\n").filter(Boolean) : [];
-        
-        // Избегаем дубликатов
+        const existingLessons = doctor.aiLessons
+          ? doctor.aiLessons.split("\n").filter(Boolean)
+          : [];
+
         if (!existingLessons.includes(lesson)) {
           existingLessons.push(lesson);
-          // Храним максимум 5 последних уроков, чтобы не раздувать промпт
           const newLessons = existingLessons.slice(-5).join("\n");
-          
+
           await db.doctor.update({
             where: { id: doctorId },
             data: { aiLessons: newLessons },
           });
-          console.log(`[AI Self-Correction] Added lesson for doctor ${doctorId}: ${lesson}`);
+          console.log(
+            `[AI Self-Correction] Added lesson for doctor ${doctorId}: ${lesson}`,
+          );
         }
       }
     }
+
+    await markSelfCorrectionDone(db, predictionId, refHash);
   } catch (e) {
     console.error("[AI Self-Correction] Error generating lesson:", e);
   }

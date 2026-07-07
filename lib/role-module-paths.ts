@@ -32,14 +32,28 @@ export function orderChatApiModuleForPath(
   if (!m) return null;
   const tail = m.tail;
   const http = method.toUpperCase();
-  if (tail === "kanban-chat") return "ORDERS_CHAT";
-  if (tail === "kaiten-lab-mention-ack") return "ORDERS_CHAT";
-  if (tail === "kaiten/chat") return "ORDERS_CHAT";
-  if (tail === "kaiten/comments") return "ORDERS_CHAT";
+  if (tail === "kanban-chat") return "KANBAN_CARD_CHAT";
+  if (tail === "kaiten-lab-mention-ack") return "ORDERS";
+  if (tail === "kaiten/chat") return "ORDERS";
+  if (tail === "kaiten/comments") return "ORDERS";
   if (tail === "chat-corrections" && !HTTP_READ_METHODS.has(http)) {
-    return "ORDERS_CHAT";
+    return "ORDERS";
   }
   return null;
+}
+
+/**
+ * PATCH карточки Kaiten по наряду (колонка, sort_order, блок…) — канбан,
+ * не редактирование наряда (ORDERS_EDIT).
+ */
+export function orderKaitenMirrorApiModuleForPath(
+  pathname: string,
+  method: string,
+): AppModule | null {
+  const t = orderIdApiTail(pathname);
+  if (!t || t.tail !== "kaiten") return null;
+  if (HTTP_READ_METHODS.has(method.toUpperCase())) return null;
+  return "KANBAN_MOVE_COLUMNS";
 }
 
 function orderIdApiTail(pathname: string): { tail: string } | null {
@@ -48,7 +62,7 @@ function orderIdApiTail(pathname: string): { tail: string } | null {
   return { tail: m[1].replace(/\/$/, "") };
 }
 
-/** POST вложения к наряду: достаточно ORDERS_EDIT, ORDERS_CREATE или ORDERS_CHAT. */
+/** POST вложения к наряду из формы наряда — ORDERS_EDIT; из канбана — KANBAN_ATTACH_FILES. */
 export function isOrderAttachmentUploadApiPath(
   pathname: string,
   method: string,
@@ -56,6 +70,64 @@ export function isOrderAttachmentUploadApiPath(
   if (method.toUpperCase() !== "POST") return false;
   const t = orderIdApiTail(pathname);
   return t?.tail === "attachments";
+}
+
+/** Заголовок X-Upload-Context: kanban — загрузка из CRM-канбана. */
+export function isKanbanAttachmentUploadRequest(headers: {
+  get(name: string): string | null;
+}): boolean {
+  const ctx = (headers.get("x-upload-context") || "").trim().toLowerCase();
+  return ctx === "kanban";
+}
+
+export function orderAttachmentUploadModule(
+  pathname: string,
+  method: string,
+  headers?: { get(name: string): string | null },
+): AppModule | null {
+  if (!isOrderAttachmentUploadApiPath(pathname, method)) return null;
+  if (headers && isKanbanAttachmentUploadRequest(headers)) {
+    return "KANBAN_ATTACH_FILES";
+  }
+  return "ORDERS_EDIT";
+}
+
+/** Доступ к POST `/api/orders/:id/attachments` с учётом контекста (канбан / форма наряда). */
+export function isOrderAttachmentUploadAllowed(
+  access: Partial<Record<AppModule, boolean>>,
+  pathname: string,
+  method: string,
+  headers?: { get(name: string): string | null },
+): boolean {
+  const required = orderAttachmentUploadModule(pathname, method, headers);
+  if (!required) return true;
+  if (access[required] === true) return true;
+  if (!isOrderAttachmentUploadApiPath(pathname, method)) return false;
+
+  if (
+    required === "KANBAN_ATTACH_FILES" &&
+    headers &&
+    isKanbanAttachmentUploadRequest(headers)
+  ) {
+    return (
+      access.KANBAN_ATTACH_FILES === true ||
+      access.KANBAN_CARD_CHAT === true ||
+      access.KANBAN_MOVE_COLUMNS === true ||
+      access.KANBAN_MANAGE_CHECKLIST === true ||
+      access.KANBAN === true
+    );
+  }
+
+  if (required === "ORDERS_EDIT") {
+    return (
+      access.ORDERS_EDIT === true ||
+      access.ORDERS_CHAT === true ||
+      access.ORDERS_CREATE === true ||
+      access.KANBAN_ATTACH_FILES === true
+    );
+  }
+
+  return false;
 }
 
 /** API настроек печати: GET — просмотр, PATCH — редактирование шаблонов. */
@@ -231,9 +303,21 @@ export function requiredModuleForPath(
   base: AppModule | null,
   method?: string,
   search = "",
+  headers?: { get(name: string): string | null },
 ): AppModule | null {
   const chatModule = orderChatApiModuleForPath(pathname, method ?? "GET");
   if (chatModule) return chatModule;
+  const kaitenMirrorModule = orderKaitenMirrorApiModuleForPath(
+    pathname,
+    method ?? "GET",
+  );
+  if (kaitenMirrorModule) return kaitenMirrorModule;
+  const attachModule = orderAttachmentUploadModule(
+    pathname,
+    method ?? "GET",
+    headers,
+  );
+  if (attachModule) return attachModule;
   if (base == null) return null;
   const m = (method ?? "GET").toUpperCase();
   if (base === "CLIENTS") return clientsBranchModuleForMethod(m);

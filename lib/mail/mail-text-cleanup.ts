@@ -40,8 +40,14 @@ function stripDuplicateBracketUrls(text: string): string {
     .join("\n");
 }
 
+/** Убирает `[https://…]`, если тот же URL уже есть в тексте без скобок (типично для писем с Яндекса). */
+export function dedupeDuplicateBracketUrls(text: string | null | undefined): string {
+  const raw = (text ?? "").replace(/\\\[/g, "[").replace(/\\\]/g, "]");
+  return stripDuplicateBracketUrls(raw);
+}
+
 export function cleanMailTextBody(text: string | null | undefined): string {
-  const deduped = stripDuplicateBracketUrls(
+  const deduped = dedupeDuplicateBracketUrls(
     (text ?? "").replace(MARKDOWN_IMAGE_RE, " "),
   );
   return deduped

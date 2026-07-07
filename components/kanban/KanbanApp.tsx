@@ -122,6 +122,7 @@ type SessionUserLike = {
   avatarPresetId?: string | null;
   moduleAccess?: Partial<
     Record<
+      | "KANBAN_MOVE_COLUMNS"
       | "KANBAN_EDIT_TITLE"
       | "KANBAN_EDIT_DUE_DATE"
       | "KANBAN_EDIT_TRACK"
@@ -308,15 +309,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const [kanbanSessionUserId, setKanbanSessionUserId] = useState<string | null>(null);
   const [kanbanSessionRole, setKanbanSessionRole] = useState<UserRole | null>(null);
   const [kanbanCardPerms, setKanbanCardPerms] = useState({
-    editTitle: true,
-    editDueDate: true,
-    editTrack: true,
-    manageAssignees: true,
-    manageParticipants: true,
-    moveToOtherBoard: true,
-    manageKanbanChecklist: true,
-    manageKanbanTimer: true,
+    moveColumns: false,
+    editTitle: false,
+    editDueDate: false,
+    editTrack: false,
+    manageAssignees: false,
+    manageParticipants: false,
+    moveToOtherBoard: false,
+    manageKanbanChecklist: false,
+    manageKanbanTimer: false,
+    attachFiles: false,
+    stop: false,
+    deleteCard: false,
+    manageBlock: false,
   });
+  const [kanbanModuleAccess, setKanbanModuleAccess] = useState<
+    Partial<Record<string, boolean>>
+  >({});
   const prevModalCardRef = useRef<string | null>(null);
   const kaitenPullOnceRef = useRef(false);
   const standalonePushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -644,30 +653,42 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         setKanbanSessionUserId(j.user?.id?.trim() ? j.user.id : null);
         setKanbanSessionRole(j.user?.role ?? null);
         const access = j.user?.moduleAccess ?? {};
+        setKanbanModuleAccess(access);
         setKanbanCardPerms({
-          editTitle: access.KANBAN_EDIT_TITLE !== false,
-          editDueDate: access.KANBAN_EDIT_DUE_DATE !== false,
-          editTrack: access.KANBAN_EDIT_TRACK !== false,
-          manageAssignees: access.KANBAN_MANAGE_ASSIGNEES !== false,
-          manageParticipants: access.KANBAN_MANAGE_PARTICIPANTS !== false,
-          moveToOtherBoard: access.KANBAN_MOVE_TO_OTHER_BOARD !== false,
-          manageKanbanChecklist: access.KANBAN_MANAGE_CHECKLIST !== false,
-          manageKanbanTimer: access.KANBAN_MANAGE_TIMER !== false,
+          moveColumns: access.KANBAN_MOVE_COLUMNS === true,
+          editTitle: access.KANBAN_EDIT_TITLE === true,
+          editDueDate: access.KANBAN_EDIT_DUE_DATE === true,
+          editTrack: access.KANBAN_EDIT_TRACK === true,
+          manageAssignees: access.KANBAN_MANAGE_ASSIGNEES === true,
+          manageParticipants: access.KANBAN_MANAGE_PARTICIPANTS === true,
+          moveToOtherBoard: access.KANBAN_MOVE_TO_OTHER_BOARD === true,
+          manageKanbanChecklist: access.KANBAN_MANAGE_CHECKLIST === true,
+          manageKanbanTimer: access.KANBAN_MANAGE_TIMER === true,
+          attachFiles: access.KANBAN_ATTACH_FILES === true,
+          stop: access.KANBAN_STOP === true,
+          deleteCard: access.KANBAN_DELETE_CARD === true,
+          manageBlock: access.KANBAN_MANAGE_BLOCK === true,
         });
       } catch {
         if (!cancelled) {
           setActivityActorLabel(undefined);
           setKanbanSessionUserId(null);
           setKanbanSessionRole(null);
+          setKanbanModuleAccess({});
           setKanbanCardPerms({
-            editTitle: true,
-            editDueDate: true,
-            editTrack: true,
-            manageAssignees: true,
-            manageParticipants: true,
-            moveToOtherBoard: true,
-            manageKanbanChecklist: true,
-            manageKanbanTimer: true,
+            moveColumns: false,
+            editTitle: false,
+            editDueDate: false,
+            editTrack: false,
+            manageAssignees: false,
+            manageParticipants: false,
+            moveToOtherBoard: false,
+            manageKanbanChecklist: false,
+            manageKanbanTimer: false,
+            attachFiles: false,
+            stop: false,
+            deleteCard: false,
+            manageBlock: false,
           });
         }
       }
@@ -729,8 +750,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       kanbanSessionUserId,
       kanbanSessionRole,
       modalCardForBlockPerm,
+      kanbanModuleAccess,
     );
-  }, [isDemo, modalCardForBlockPerm, kanbanSessionUserId, kanbanSessionRole]);
+  }, [isDemo, modalCardForBlockPerm, kanbanSessionUserId, kanbanSessionRole, kanbanModuleAccess]);
 
   const archivedCards = useMemo<KanbanArchivedCard[]>(() => {
     if (!board) return [];
@@ -1002,6 +1024,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   const handleAggregateCardDrag = useCallback(
     (drag: AggregateCardDragArgs) => {
+      if (!kanbanCardPerms.moveColumns) {
+        showToast("Нет права перемещать карточки по колонкам", true);
+        return;
+      }
       let kaitenFollowUp:
         | {
             orderId: string;
@@ -1044,6 +1070,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       kanbanSessionRole,
       activityActorLabel,
       isDemo,
+      kanbanCardPerms.moveColumns,
+      showToast,
       syncKaitenMirrorAfterKanbanMove,
     ],
   );
@@ -1085,10 +1113,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   const aggregateView =
     Boolean(appState) && isKanbanAggregateBoardId(appState!.activeBoardId);
-  const dndLocked = !!(
+  const dndLockedByPerms = Boolean(appState && !kanbanCardPerms.moveColumns);
+  const dndLockedByFilters = Boolean(
     appState &&
-    (appState.search.trim() || countActiveKanbanFilters(appState.filters) > 0)
+      (appState.search.trim() || countActiveKanbanFilters(appState.filters) > 0),
   );
+  const dndLocked = dndLockedByPerms || dndLockedByFilters;
 
   const addColumn = () => {
     applyToBoard((b) => {
@@ -1313,6 +1343,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const moveCardToNextStage = (cardId: string) => {
+    if (!kanbanCardPerms.moveColumns) {
+      showToast("Нет права перемещать карточки по колонкам", true);
+      return;
+    }
     if (!appState) return;
     const found = findCardInAppState(appState, cardId);
     if (!found) return;
@@ -1429,6 +1463,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const moveCardToPrevStage = (cardId: string) => {
+    if (!kanbanCardPerms.moveColumns) {
+      showToast("Нет права перемещать карточки по колонкам", true);
+      return;
+    }
     if (!appState) return;
     const found = findCardInAppState(appState, cardId);
     if (!found) return;
@@ -1525,6 +1563,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   const moveCardToColumn = useCallback(
     (cardId: string, targetColumnId: string) => {
+      if (!kanbanCardPerms.moveColumns) {
+        showToast("Нет права перемещать карточки по колонкам", true);
+        return;
+      }
       if (!appState) return;
       const found = findCardInAppState(appState, cardId);
       if (!found) return;
@@ -1625,7 +1667,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       }
       showToast(`Этап: «${targetCol.title}»`);
     },
-    [appState, activityActorLabel, isDemo, kanbanSessionUserId, showToast, syncKaitenMirrorAfterKanbanMove],
+    [appState, activityActorLabel, isDemo, kanbanCardPerms.moveColumns, kanbanSessionUserId, showToast, syncKaitenMirrorAfterKanbanMove],
   );
 
   const enrichProductionChecklistForChild = useCallback(async (boardId: string, childId: string) => {
@@ -1971,7 +2013,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             ) : null}
             {dndLocked && (
               <span className="text-[0.75rem] text-amber-700 dark:text-amber-300">
-                Перетаскивание карточек отключено при поиске/фильтрах
+                {dndLockedByPerms
+                  ? "Перетаскивание карточек отключено: нет права «перемещать по колонкам»"
+                  : "Перетаскивание карточек отключено при поиске/фильтрах"}
               </span>
             )}
           </div>
@@ -2006,8 +2050,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 setMoveTargetBoardId("");
               }}
               onRequestArchiveCard={archiveCard}
-              onRequestStopCard={stopCard}
-              onRequestDeleteCard={deleteCard}
+              onRequestStopCard={kanbanCardPerms.stop ? stopCard : undefined}
+              onRequestDeleteCard={kanbanCardPerms.deleteCard ? deleteCard : () => {}}
               allowMoveToOtherBoard={
                 appState.boards.length > 1 && kanbanCardPerms.moveToOtherBoard
               }
@@ -2161,7 +2205,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               board={displayBoard}
               cardHomeBoardId={cardHomeBoardId}
               onOpenCard={openKanbanCard}
-              onAdvanceCardColumn={moveCardToNextStage}
+              onAdvanceCardColumn={
+                kanbanCardPerms.moveColumns ? moveCardToNextStage : undefined
+              }
               canManageAssignees={kanbanCardPerms.manageAssignees}
               canManageParticipants={kanbanCardPerms.manageParticipants}
               onUpdateCardMembers={applyCardMembersFromList}
@@ -2190,11 +2236,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           moveCardToNextStage(id);
           setCardModalId(id);
         }}
-        onMoveToColumn={(id, targetColumnId) => {
-          moveCardToColumn(id, targetColumnId);
-          setCardModalId(id);
-        }}
+        onMoveToColumn={
+          kanbanCardPerms.moveColumns
+            ? (id, targetColumnId) => {
+                moveCardToColumn(id, targetColumnId);
+                setCardModalId(id);
+              }
+            : undefined
+        }
         onCopyCardLink={copyCardLink}
+        canMoveColumns={kanbanCardPerms.moveColumns}
         canEditTitle={kanbanCardPerms.editTitle}
         canEditDueDate={kanbanCardPerms.editDueDate}
         canEditTrack={kanbanCardPerms.editTrack}
@@ -2202,6 +2253,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         canManageParticipants={kanbanCardPerms.manageParticipants}
         canManageKanbanChecklist={kanbanCardPerms.manageKanbanChecklist}
         canManageKanbanTimer={kanbanCardPerms.manageKanbanTimer}
+        canAttachFiles={kanbanCardPerms.attachFiles}
         canManageKanbanBlock={canManageKanbanBlock}
         onOpenLinkedCard={(id) => setCardModalId(id)}
         onParentProductionFilesUpdated={syncParentProductionChildrenAfterFilesAttach}

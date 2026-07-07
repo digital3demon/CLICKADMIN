@@ -217,6 +217,10 @@ type KanbanCardModalProps = {
   canManageKanbanChecklist?: boolean;
   /** Назначать таймер на карточке (модуль KANBAN_MANAGE_TIMER). */
   canManageKanbanTimer?: boolean;
+  /** Перемещать карточку по колонкам (модуль KANBAN_MOVE_COLUMNS). */
+  canMoveColumns?: boolean;
+  /** Прикреплять файлы к карточке (модуль KANBAN_ATTACH_FILES). */
+  canAttachFiles?: boolean;
   /** Блокировка / снятие блокировки: ответственные и участники карточки либо администратор CRM. */
   canManageKanbanBlock?: boolean;
   onOpenLinkedCard?: (cardId: string) => void;
@@ -257,6 +261,8 @@ export function KanbanCardModal({
   canManageParticipants = true,
   canManageKanbanChecklist = true,
   canManageKanbanTimer = false,
+  canMoveColumns = true,
+  canAttachFiles = true,
   canManageKanbanBlock = false,
   onOpenLinkedCard,
   onParentProductionFilesUpdated,
@@ -910,7 +916,7 @@ export function KanbanCardModal({
   };
 
   const attachFilesFromChat = async (fileList: File[]) => {
-    if (!fileList.length) return;
+    if (!fileList.length || !canAttachFiles) return;
     const shouldPromptManual =
       productionSettingsForCard.manualRoutingEnabled === true &&
       parentInProductionColumn &&
@@ -1463,6 +1469,7 @@ export function KanbanCardModal({
             <button
               type="button"
               title={movePrevTitle}
+              disabled={!canMoveColumns}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40"
               onClick={() => onMovePrevStage(cardId)}
             >
@@ -1471,6 +1478,7 @@ export function KanbanCardModal({
             <button
               type="button"
               title={moveNextTitle}
+              disabled={!canMoveColumns}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40"
               onClick={() => onMoveNextStage(cardId)}
             >
@@ -1599,7 +1607,7 @@ export function KanbanCardModal({
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                     Столбец
                   </div>
-                  {columnTransfer ? (
+                  {columnTransfer && canMoveColumns ? (
                     <select
                       className={baseInput}
                       value={columnTransfer.currentColumnId}
@@ -1781,8 +1789,28 @@ export function KanbanCardModal({
               </div>
 
               <div className="mb-3">
-                <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-sky-800/90 dark:text-sky-300/90">
-                  Описание и детали заказа
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                  <div className="text-[0.625rem] font-medium uppercase tracking-wide text-sky-800/90 dark:text-sky-300/90">
+                    Описание и детали заказа
+                  </div>
+                  {descDraft.trim() ? (
+                    <button
+                      type="button"
+                      className="shrink-0 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-border)]"
+                      onClick={() => setDescExpanded((v) => !v)}
+                      aria-expanded={descExpanded}
+                    >
+                      {descExpanded ? "Свернуть описание" : "Развернуть описание"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="shrink-0 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
+                      onClick={() => setDescExpanded(true)}
+                    >
+                      Добавить описание
+                    </button>
+                  )}
                 </div>
                 {card.continuesFromOrderId && card.continuesFromOrderNumber ? (
                   <p className="mb-2 text-sm text-[var(--kaiten-modal-text)]">
@@ -1867,44 +1895,20 @@ export function KanbanCardModal({
                         }}
                       />
                     ) : (
-                      <>
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className={`${baseInput} block w-full min-h-[4.5rem] max-h-[4.5rem] cursor-pointer overflow-hidden text-left sm:min-h-[5rem] sm:max-h-[5rem]`}
-                          onClick={(e) => {
-                            if ((e.target as HTMLElement).closest("a")) return;
-                            setDescExpanded(true);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              setDescExpanded(true);
-                            }
-                          }}
-                          aria-expanded={false}
-                          aria-label="Развернуть описание заказа"
-                        >
-                          <span className="line-clamp-3 whitespace-pre-wrap break-words sm:line-clamp-4">
-                            {descDraft.trim() ? (
-                              <LinkifiedPlainText text={descDraft} />
-                            ) : (
-                              <span className="text-[var(--kaiten-modal-muted)]">
-                                Добавить описание…
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[0.65rem] font-normal leading-snug text-[var(--kaiten-modal-muted)]">
-                          <button
-                            type="button"
-                            className="cursor-pointer text-left text-[inherit] hover:text-[var(--kaiten-modal-text)]"
-                            onClick={() => setDescExpanded(true)}
-                          >
-                            нажмите на описание что бы увидеть полный текст
-                          </button>
-                        </p>
-                      </>
+                      <div
+                        className={`${baseInput} block w-full min-h-[4.5rem] max-h-[4.5rem] overflow-hidden text-left sm:min-h-[5rem] sm:max-h-[5rem]`}
+                        aria-label="Описание заказа (сокращённо)"
+                      >
+                        <span className="line-clamp-3 whitespace-pre-wrap break-words sm:line-clamp-4">
+                          {descDraft.trim() ? (
+                            <LinkifiedPlainText text={descDraft} />
+                          ) : (
+                            <span className="text-[var(--kaiten-modal-muted)]">
+                              Описание пустое
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     )}
                   </div>
                   <aside

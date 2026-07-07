@@ -35,8 +35,14 @@ export function LinkifiedTextarea({
         tabIndex={0}
         aria-multiline="true"
         className={`${sharedClass} cursor-text`}
-        onClick={() => setEditing(true)}
-        onFocus={() => setEditing(true)}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("a")) return;
+          setEditing(true);
+        }}
+        onFocus={(e) => {
+          if ((e.target as HTMLElement).closest("a")) return;
+          setEditing(true);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();

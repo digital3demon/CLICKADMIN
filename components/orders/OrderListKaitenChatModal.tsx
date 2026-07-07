@@ -10,6 +10,8 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import type { KaitenTrackLane } from "@prisma/client";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
+import { canAckOrderChatLabMention } from "@/lib/auth/permissions";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { OrderFilesPanel } from "@/components/orders/OrderFilesPanel";
 import {
@@ -141,6 +143,9 @@ export function OrderListKaitenChatModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const { user } = useSessionUser();
+  const canAckLabMention =
+    user != null && canAckOrderChatLabMention(user.role);
   const titleId = useId();
   const [snap, setSnap] = useState<KaitenSnapshot | null>(null);
   const [chatMode, setChatMode] = useState<"kaiten" | "kanban">("kaiten");
@@ -253,7 +258,7 @@ export function OrderListKaitenChatModal({
   useEffect(() => {
     // Отправляем ack только при ЗАКРЫТИИ модалки (если она была открыта), 
     // чтобы она не исчезала из отфильтрованного списка прямо во время чтения
-    if (open || !hasOpened) return;
+    if (open || !hasOpened || !canAckLabMention) return;
 
     void (async () => {
       try {
@@ -266,7 +271,7 @@ export function OrderListKaitenChatModal({
         /* ignore */
       }
     })();
-  }, [open, hasOpened, orderId, router]);
+  }, [open, hasOpened, orderId, router, canAckLabMention]);
 
   useEffect(() => {
     if (!open) return;

@@ -1,9 +1,15 @@
 import { OrderAttachmentScope, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { extractInvoiceNumberFromPdfBuffer } from "@/lib/extract-invoice-number-from-pdf";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
+import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
+import {
+  isKanbanAttachmentUploadRequest,
+  isOrderAttachmentUploadAllowed,
+} from "@/lib/role-module-paths";
 import { buildInvoiceCaptionRuFromFileName } from "@/lib/format-invoice-number-ru";
 import {
   extractInvoiceNumberFromFileName,
@@ -255,6 +261,28 @@ export async function POST(req: Request, ctx: Ctx) {
     const tenantId = await orderTenantIdForSession(session);
     if (!tenantId) {
       return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+
+    if (
+      !session?.demo &&
+      !isSingleUserPortable() &&
+      session?.role !== "OWNER"
+    ) {
+      const access = await getEffectiveModuleAccess(tenantId, session.role);
+      const pathname = new URL(req.url).pathname;
+      if (
+        !isOrderAttachmentUploadAllowed(access, pathname, "POST", req.headers)
+      ) {
+        const fromKanban = isKanbanAttachmentUploadRequest(req.headers);
+        return NextResponse.json(
+          {
+            error: fromKanban
+              ? "Нет права прикреплять файлы в канбане"
+              : "Нет права добавлять файлы к наряду",
+          },
+          { status: 403 },
+        );
+      }
     }
 
     const order = await prisma.order.findFirst({
