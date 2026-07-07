@@ -298,7 +298,7 @@ function KanbanCardView({
             {blocked && (
               <div
                 className="flex items-start gap-1 border-b-2 border-[#7f1d1d] bg-gradient-to-b from-[#dc2626] to-[#b91c1c] py-1.5 pl-2 pr-7 text-[0.62rem] font-bold uppercase leading-snug tracking-wide text-white max-md:gap-1 max-md:py-1 max-md:pl-1.5 max-md:pr-6 max-md:text-[0.58rem] dark:from-[#c02626] dark:to-[#991b1b]"
-                title={(card.blockReason || "").trim() || "Карточка остановлена"}
+                aria-label={(card.blockReason || "").trim() || "Карточка остановлена"}
               >
                 <IconBrick className="h-3.5 w-3.5 shrink-0 text-white max-md:h-3 max-md:w-3" />
                 <span className="line-clamp-4 min-w-0 break-words">

@@ -13,6 +13,7 @@ import {
   buildKanbanListViewRows,
   DEFAULT_LIST_SORT,
   defaultDirForSortKey,
+  isDefaultListSort,
   loadListSort,
   type ListSort,
   type ListSortKey,
@@ -179,7 +180,7 @@ function SortHeaderButton({
       : sortKey === "title"
         ? "По названию"
         : sortKey === "column"
-          ? "По колонке доски"
+          ? "По колонке доски (внутри колонки — новые сверху)"
           : sortKey === "due"
             ? "По сроку"
             : sortKey === "assignee"
@@ -310,6 +311,12 @@ export function KanbanListView({
     [board.id],
   );
 
+  const resetSort = useCallback(() => {
+    onSortChange(DEFAULT_LIST_SORT);
+  }, [onSortChange]);
+
+  const sortIsDefault = isDefaultListSort(sort);
+
   const { onPreviewMove, onPreviewLeave, previewNode } = useKanbanCardHoverPreview(true);
 
   const rows = useMemo(
@@ -353,21 +360,43 @@ export function KanbanListView({
           >
             Порядок списка
           </label>
-          <select
-            id="kanban-list-sort-mobile"
-            className="w-full max-w-full rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-1.5 text-[0.75rem] text-[var(--kanban-text)]"
-            value={mobileSelectValue}
-            onChange={(e) => {
-              const opt = MOBILE_SORT_OPTIONS.find((o) => o.value === e.target.value);
-              if (opt) onSortChange(opt.sort);
-            }}
+          <div className="flex items-center gap-2">
+            <select
+              id="kanban-list-sort-mobile"
+              className="min-w-0 flex-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-1.5 text-[0.75rem] text-[var(--kanban-text)]"
+              value={mobileSelectValue}
+              onChange={(e) => {
+                const opt = MOBILE_SORT_OPTIONS.find((o) => o.value === e.target.value);
+                if (opt) onSortChange(opt.sort);
+              }}
+            >
+              {MOBILE_SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={sortIsDefault}
+              title="Вернуть сортировку по умолчанию: новые карточки сверху"
+              className="shrink-0 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-1.5 text-[0.68rem] font-medium text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-default disabled:opacity-45 dark:hover:bg-white/[0.08]"
+              onClick={resetSort}
+            >
+              Сброс
+            </button>
+          </div>
+        </div>
+        <div className="mb-1 flex shrink-0 justify-end">
+          <button
+            type="button"
+            disabled={sortIsDefault}
+            title="Вернуть сортировку по умолчанию: новые карточки сверху"
+            className="hidden rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-0.5 text-[0.62rem] font-medium text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-default disabled:opacity-45 dark:hover:bg-white/[0.08] sm:inline-flex"
+            onClick={resetSort}
           >
-            {MOBILE_SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            Сброс сортировки
+          </button>
         </div>
         <div
           className={`mb-1.5 shrink-0 border-b border-[var(--kanban-border)] pb-1 ${LIST_GRID} text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)]`}
@@ -474,7 +503,7 @@ export function KanbanListView({
                           {blocked ? (
                             <span
                               className="mt-0.5 shrink-0"
-                              title={(card.blockReason || "").trim() || "Остановлена"}
+                              aria-label={(card.blockReason || "").trim() || "Остановлена"}
                             >
                               <IconBrick className="h-4 w-4 text-red-600 dark:text-red-500" />
                             </span>

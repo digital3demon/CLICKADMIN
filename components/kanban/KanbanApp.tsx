@@ -90,7 +90,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
+import { KanbanMembersBackfillButton } from "./KanbanMembersBackfillButton";
 import { TOAST_AUTO_HIDE_MS } from "@/components/ui/toast-store";
 import { BoardCanvas } from "./BoardCanvas";
 import { KanbanFiltersButton } from "./KanbanFiltersButton";
@@ -826,6 +826,22 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       setToasts((t) => t.filter((x) => x.id !== id));
     }, err ? TOAST_AUTO_HIDE_MS.error : TOAST_AUTO_HIDE_MS.default);
   }, []);
+
+  const reloadKanbanStateFromTenant = useCallback(async () => {
+    if (isDemo) return;
+    const remote = await readClientState<unknown>("tenant", "kanbanAppStateV3");
+    if (!remote || typeof remote !== "object") return;
+    setAppState((prev) => {
+      if (!prev) return prev;
+      const merged = mergeKanbanStatePreservingLocalBoards(
+        prev,
+        remote as KanbanAppState,
+      );
+      const finalState = applyKanbanLegacyStageDueClearMigration(merged).state;
+      saveKanbanState(finalState, false);
+      return finalState;
+    });
+  }, [isDemo]);
 
   useEffect(() => {
     if (!appState) return;
@@ -1820,6 +1836,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               patchApp={patchApp}
               showToast={showToast}
             />
+            {!isDemo &&
+            (kanbanCardPerms.manageAssignees || kanbanCardPerms.manageParticipants) ? (
+              <KanbanMembersBackfillButton
+                onComplete={reloadKanbanStateFromTenant}
+                showToast={showToast}
+              />
+            ) : null}
             <button
               id="kanban-stop-drop-target"
               type="button"

@@ -16,6 +16,10 @@ export type ListSort = { key: ListSortKey; dir: ListSortDir };
 
 export const DEFAULT_LIST_SORT: ListSort = { key: "created", dir: "desc" };
 
+export function isDefaultListSort(sort: ListSort): boolean {
+  return sort.key === DEFAULT_LIST_SORT.key && sort.dir === DEFAULT_LIST_SORT.dir;
+}
+
 export type ListViewRow = {
   card: KanbanCard;
   columnTitle: string;
@@ -111,6 +115,13 @@ function comparePrimary(
   }
 }
 
+function compareCreatedDesc(a: ListViewRow, b: ListViewRow): number {
+  const ta = new Date(a.card.createdAt).getTime();
+  const tb = new Date(b.card.createdAt).getTime();
+  if (ta !== tb) return tb - ta;
+  return a.card.id.localeCompare(b.card.id);
+}
+
 function compareRows(
   a: ListViewRow,
   b: ListViewRow,
@@ -121,6 +132,9 @@ function compareRows(
   const primary = comparePrimary(a, b, sort.key, board, allBoards);
   const directed = sort.dir === "asc" ? primary : -primary;
   if (directed !== 0) return directed;
+  if (sort.key === "column") {
+    return compareCreatedDesc(a, b);
+  }
   return a.card.id.localeCompare(b.card.id);
 }
 

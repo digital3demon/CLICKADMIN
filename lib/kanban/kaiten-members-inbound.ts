@@ -81,6 +81,33 @@ async function mapMembersToCrm(
   return { assignees, participants, unmappedLabels };
 }
 
+export async function mapKaitenCardMembersToCrm(
+  db: PrismaClient,
+  tenantId: string,
+  auth: KaitenAuth,
+  members: KaitenCardMemberRow[],
+): Promise<{
+  assignees: string[];
+  participants: string[];
+  unmappedLabels: string[];
+}> {
+  return mapMembersToCrm(db, tenantId, auth, members);
+}
+
+export function applyInboundMembersToKanbanCard(
+  card: KanbanCard,
+  input: {
+    assignees: string[];
+    participants: string[];
+    fingerprint: string;
+    unmappedLabels: string[];
+    skipIfPushedFingerprint?: string | null;
+    forceApply?: boolean;
+  },
+): boolean {
+  return applyMembersToCard(card, input);
+}
+
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const sa = [...a].sort();
@@ -96,15 +123,18 @@ function applyMembersToCard(
     fingerprint: string;
     unmappedLabels: string[];
     skipIfPushedFingerprint?: string | null;
+    /** Одноразовый backfill: всегда перезаписать assignees/participants из Kaiten. */
+    forceApply?: boolean;
   },
 ): boolean {
   if (
+    !input.forceApply &&
     input.skipIfPushedFingerprint &&
     input.skipIfPushedFingerprint === input.fingerprint
   ) {
     return false;
   }
-  if (card.kaitenMembersFingerprint === input.fingerprint) {
+  if (!input.forceApply && card.kaitenMembersFingerprint === input.fingerprint) {
     const warn =
       input.unmappedLabels.length > 0
         ? `Из Kaiten не сопоставлены: ${input.unmappedLabels.slice(0, 3).join("; ")}`
@@ -145,6 +175,7 @@ export async function syncKaitenMembersInboundForOrder(
     tenantId: string;
     orderId: string;
     kaitenCardId: number;
+    forceApply?: boolean;
   },
 ): Promise<InboundMembersApplyResult> {
   const tenantId = input.tenantId.trim();
@@ -210,7 +241,10 @@ export async function syncKaitenMembersInboundForOrder(
       participants: mapped.participants,
       fingerprint,
       unmappedLabels: mapped.unmappedLabels,
-      skipIfPushedFingerprint: card.lastPushedMembersFingerprint ?? null,
+      skipIfPushedFingerprint: input.forceApply
+        ? null
+        : (card.lastPushedMembersFingerprint ?? null),
+      forceApply: input.forceApply,
     });
 
     if (!changed) {
