@@ -21,6 +21,9 @@ import {
   inferCompositionHintsFromEmailContext,
   dedupeCompositionHintsBySpecificity,
   isPriceNameStrictlyMoreSpecific,
+  extractNegatedOrderPhrases,
+  isPriceConceptNegatedInOrderText,
+  filterCompositionHintsByNegation,
 } from "./resolve-ai-composition-lines";
 
 const mockItems = [
@@ -91,6 +94,26 @@ const mockItems = [
     priceRub: 19000,
     leadWorkingDays: 7,
     sortOrder: 7,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-model",
+    code: "5001",
+    name: "Модель неразборная/диагностическая",
+    priceRub: 3500,
+    leadWorkingDays: 3,
+    sortOrder: 8,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-key",
+    code: "4002",
+    name: "Силиконовый ключ (1 печатной модели)",
+    priceRub: 1200,
+    leadWorkingDays: 2,
+    sortOrder: 9,
     isActive: true,
     priceListId: "pl-1",
   },
@@ -196,6 +219,19 @@ describe("resolveAiCompositionLines", () => {
     expect(res.lines[0]?.name).toBe("Сплинт сложный");
     expect(res.lines[0]?.unitPrice).toBe(19000);
   });
+
+  it("drops silicone key when order text says bez klyucha", async () => {
+    const orderText = "Модель 2 сектора без ключа";
+    const res = await resolveAiCompositionLines(
+      [
+        { nameHint: "Модель неразборная/диагностическая", quantity: 1 },
+        { nameHint: "Силиконовый ключ", quantity: 1 },
+      ],
+      { clinicId: null, doctorId: null, negationOrderText: orderText },
+    );
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines[0]?.code).toBe("5001");
+  });
 });
 
 describe("dedupeCompositionHintsBySpecificity", () => {
@@ -211,6 +247,42 @@ describe("dedupeCompositionHintsBySpecificity", () => {
         { nameHint: "Сплинт сложный", quantity: 1 },
       ]),
     ).toEqual([{ nameHint: "Сплинт сложный", quantity: 1 }]);
+  });
+});
+
+describe("order negation phrases", () => {
+  const orderText = "Модель 2 сектора без ключа";
+
+  it("extracts negated phrase", () => {
+    expect(extractNegatedOrderPhrases(orderText)).toEqual(["ключа"]);
+  });
+
+  it("marks silicone key as negated but keeps model", () => {
+    expect(isPriceConceptNegatedInOrderText("Силиконовый ключ (1 печатной модели)", orderText)).toBe(
+      true,
+    );
+    expect(isPriceConceptNegatedInOrderText("Модель неразборная/диагностическая", orderText)).toBe(
+      false,
+    );
+  });
+
+  it("infers only model from order text with negation", () => {
+    const names = mockItems.map((item) => item.name);
+    expect(inferCompositionHintsFromOrderText(orderText, names)).toEqual([
+      { nameHint: "Модель неразборная/диагностическая", quantity: 1 },
+    ]);
+  });
+
+  it("filters negated hints", () => {
+    expect(
+      filterCompositionHintsByNegation(
+        [
+          { nameHint: "Модель неразборная/диагностическая", quantity: 1 },
+          { nameHint: "Силиконовый ключ", quantity: 1 },
+        ],
+        orderText,
+      ),
+    ).toEqual([{ nameHint: "Модель неразборная/диагностическая", quantity: 1 }]);
   });
 });
 

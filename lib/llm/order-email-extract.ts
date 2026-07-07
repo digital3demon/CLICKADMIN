@@ -8,10 +8,33 @@ import type { ClientHistoryContext } from "./client-history-context";
 
 const FdiToothCodeSchema = z.union([z.string(), z.number()]).transform((value) => String(value).trim());
 
+/** LLM часто шлёт один зуб строкой/числом вместо массива — нормализуем до string[]|null. */
+function normalizeTeethFdiInput(value: unknown): unknown {
+  if (value == null) return null;
+  if (Array.isArray(value)) return value;
+  if (typeof value === "number" || typeof value === "string") {
+    const str = String(value).trim();
+    if (!str) return null;
+    if (/[,;\s]/.test(str)) {
+      return str
+        .split(/[,;\s]+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    }
+    return [str];
+  }
+  return null;
+}
+
+const TeethFdiSchema = z.preprocess(
+  normalizeTeethFdiInput,
+  z.array(FdiToothCodeSchema).nullable().optional(),
+);
+
 const CompositionHintSchema = z.object({
   nameHint: z.string().describe("Название работы как в письме или уточнённый синоним для прайса"),
   quantity: z.number().nullable().optional(),
-  teethFdi: z.array(FdiToothCodeSchema).nullable().optional(),
+  teethFdi: TeethFdiSchema,
 });
 
 export const OrderEmailExtractSchema = z.object({
@@ -202,6 +225,7 @@ ${opts.emailsText}
 Правила экспертизы:
 - ФОКУС НА ПРАЙС: nameHint — максимально близко к точному названию из каталога/истории врача, не выдумывай новых названий.
 - БЕЗ ДУБЛЕЙ ПРАЙСА: одна работа = одна строка compositionHints — самая точная позиция. Не добавляй и «сплинт», и «сплинт сложный»; и «коронка emax», и «коронка emax премиум» — только одну, наиболее подходящую по тексту заказа.
+- ОТРИЦАНИЕ: «без ключа», «без силиконового ключа», «ключ не нужен» — эту позицию НЕ включай в compositionHints. Отрицание важнее любых ассоциаций с прайсом.
 - ЧЕЛЮСТИ: ВЧ/НЧ/верхняя/нижняя — обычно НЕ отдельные позиции прайса. Одна работа на обе челюсти → одна строка compositionHints с quantity: 2, а не две строки «… ВЧ» и «… НЧ».
 - СОКРАЩЕНИЯ: если врач пишет бытовое название («капа», «коронка emax»), подбери ближайшую позицию из каталога/истории — не придумывай синоним с нуля.
 - PDF НАРЯД: если есть блок «PDF наряд» — patientName, clinicHint/doctorHint, clientOrderText, compositionHints и даты бери оттуда; имя файла «Фамилия Имя Отчество.pdf» тоже может быть пациентом.

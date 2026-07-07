@@ -18,6 +18,7 @@ import {
   compositionLinesToOrderConstructions,
   loadActivePriceListItemNames,
   dedupeCompositionHintsBySpecificity,
+  filterCompositionHintsByNegation,
   type CompositionHint,
 } from "./resolve-ai-composition-lines";
 import type { EmailAttachmentCatalogItem } from "./order-email-extract";
@@ -308,6 +309,10 @@ export async function enrichOrderEmailPrediction(
   const clientText = typeof out.clientOrderText === "string" ? out.clientOrderText : "";
   const pdfOrderText =
     typeof out.clickOrderPdfContext === "string" ? out.clickOrderPdfContext : null;
+  const negationOrderText = [clientText, pdfOrderText, primaryEmail?.subject ?? ""]
+    .map((part) => part?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n");
   const inferredHints = inferCompositionHintsFromEmailContext(
     {
       clientOrderText: clientText,
@@ -316,15 +321,19 @@ export async function enrichOrderEmailPrediction(
     },
     priceListNames,
   );
-  let compositionHints = dedupeCompositionHintsBySpecificity(
-    aiCompositionHints.length === 0
-      ? inferredHints
-      : mergeCompositionHintObjects(aiCompositionHints, inferredHints),
+  let compositionHints = filterCompositionHintsByNegation(
+    dedupeCompositionHintsBySpecificity(
+      aiCompositionHints.length === 0
+        ? inferredHints
+        : mergeCompositionHintObjects(aiCompositionHints, inferredHints),
+    ),
+    negationOrderText,
   );
 
   let composition = await resolveAiCompositionLines(compositionHints, {
     clinicId: clinicIdForDb,
     doctorId: doctorId || null,
+    negationOrderText,
   });
   let compositionWarnings = composition.warnings;
 
@@ -333,10 +342,12 @@ export async function enrichOrderEmailPrediction(
       resolveAiCompositionLines(aiCompositionHints, {
         clinicId: clinicIdForDb,
         doctorId: doctorId || null,
+        negationOrderText,
       }),
       resolveAiCompositionLines(inferredHints, {
         clinicId: clinicIdForDb,
         doctorId: doctorId || null,
+        negationOrderText,
       }),
     ]);
     if (aiOnly.lines.length === 0 && inferredOnly.lines.length > 0) {
@@ -348,6 +359,7 @@ export async function enrichOrderEmailPrediction(
     const retry = await resolveAiCompositionLines(inferredHints, {
       clinicId: clinicIdForDb,
       doctorId: doctorId || null,
+      negationOrderText,
     });
     if (retry.lines.length > 0) {
       composition = retry;

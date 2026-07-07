@@ -113,6 +113,64 @@ const JAW_MARKER_RE = new RegExp(
   "giu",
 );
 
+/** «без ключа», «без силиконового ключа» — позиция не входит в состав. */
+const ORDER_NEGATION_RE = new RegExp(
+  `${WORD_LEFT}(?:без|не\\s+(?:нуж(?:ен|на|ны|но)|требу(?:ется|ются)|делать|изготавливать))\\s+([^\\n,.;()]{2,80})`,
+  "giu",
+);
+
+export function extractNegatedOrderPhrases(orderText: string): string[] {
+  const out: string[] = [];
+  for (const match of orderText.matchAll(ORDER_NEGATION_RE)) {
+    const phrase = match[1]?.trim().replace(/\s+/g, " ");
+    if (phrase && phrase.length >= 2) out.push(phrase);
+  }
+  return out;
+}
+
+export function stripNegatedPhrasesForMatching(orderText: string): string {
+  return orderText.replace(ORDER_NEGATION_RE, " ").replace(/\s+/g, " ").trim();
+}
+
+export function isPriceConceptNegatedInOrderText(concept: string, orderText: string): boolean {
+  const negatedPhrases = extractNegatedOrderPhrases(orderText);
+  if (negatedPhrases.length === 0) return false;
+
+  const conceptTokens = tokenizeForMatch(concept);
+  if (conceptTokens.length === 0) return false;
+
+  for (const negated of negatedPhrases) {
+    const negTokens = tokenizeForMatch(negated);
+    if (negTokens.length === 0) continue;
+    const negMatchesConcept = negTokens.every((negToken) =>
+      conceptTokens.some((conceptToken) => tokensLooselyEqual(negToken, conceptToken)),
+    );
+    const conceptMatchesNeg = conceptTokens.some((conceptToken) =>
+      negTokens.some((negToken) => tokensLooselyEqual(negToken, conceptToken)),
+    );
+    if (negMatchesConcept || conceptMatchesNeg) return true;
+  }
+  return false;
+}
+
+export function filterCompositionHintsByNegation(
+  hints: CompositionHint[],
+  orderText: string,
+): CompositionHint[] {
+  const text = orderText.trim();
+  if (!text) return hints;
+  return hints.filter((hint) => !isPriceConceptNegatedInOrderText(hint.nameHint, text));
+}
+
+export function filterResolvedLinesByNegation(
+  lines: ResolvedCompositionLine[],
+  orderText: string,
+): ResolvedCompositionLine[] {
+  const text = orderText.trim();
+  if (!text) return lines;
+  return lines.filter((line) => !isPriceConceptNegatedInOrderText(line.name, text));
+}
+
 /** Частые орфографические варианты (не привязка к одной позиции прайса). */
 export function normalizeCompositionHintForMatch(hint: string): string {
   return hint
@@ -253,9 +311,13 @@ export function inferCompositionHintsFromOrderText(
   const text = orderText.trim();
   if (!text) return [];
 
+  const matchText = stripNegatedPhrasesForMatching(text);
   const scored = priceListItemNames
-    .map((name) => ({ name, score: scorePriceItemMentionInOrderText(name, text) }))
-    .filter((row) => row.score > 0)
+    .map((name) => ({
+      name,
+      score: scorePriceItemMentionInOrderText(name, matchText || text),
+    }))
+    .filter((row) => row.score > 0 && !isPriceConceptNegatedInOrderText(row.name, text))
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ru"));
 
   if (scored.length === 0) return [];
@@ -389,12 +451,22 @@ function dedupeResolvedLinesByNameSpecificity(
 
 export async function resolveAiCompositionLines(
   hints: CompositionHint[] | null | undefined,
-  opts: { clinicId: string | null; doctorId: string | null },
+  opts: {
+    clinicId: string | null;
+    doctorId: string | null;
+    negationOrderText?: string | null;
+  },
 ): Promise<ResolveCompositionResult> {
   const warnings: string[] = [];
   const lines: ResolvedCompositionLine[] = [];
   if (!hints?.length) {
     return { lines, warnings, maxLeadWorkingDays: 0 };
+  }
+
+  const negationText = opts.negationOrderText?.trim() ?? "";
+  let workingHints = dedupeCompositionHintsBySpecificity(hints);
+  if (negationText) {
+    workingHints = filterCompositionHintsByNegation(workingHints, negationText);
   }
 
   const catalog = await loadPriceListItemsForClient(opts.clinicId, opts.doctorId);
@@ -404,7 +476,7 @@ export async function resolveAiCompositionLines(
     name,
   }));
 
-  for (const hint of dedupeCompositionHintsBySpecificity(hints)) {
+  for (const hint of workingHints) {
     const nameHint = hint.nameHint?.trim();
     if (!nameHint) continue;
 
@@ -453,9 +525,12 @@ export async function resolveAiCompositionLines(
     });
   }
 
-  const mergedLines = dedupeResolvedLinesByNameSpecificity(
+  let mergedLines = dedupeResolvedLinesByNameSpecificity(
     mergeResolvedLinesByPriceItem(lines),
   );
+  if (negationText) {
+    mergedLines = filterResolvedLinesByNegation(mergedLines, negationText);
+  }
   const maxLeadWorkingDays = mergedLines.reduce(
     (max, l) => Math.max(max, l.leadWorkingDays ?? 0),
     0,

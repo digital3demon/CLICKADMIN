@@ -25,38 +25,42 @@ vi.mock("@/lib/order-due-datetime", () => ({
   autoLabDueLocalFromLeadWorkingDays: vi.fn().mockReturnValue("2026-06-11T12:00"),
 }));
 
-vi.mock("./resolve-ai-composition-lines", () => ({
-  loadActivePriceListItemNames: vi.fn().mockResolvedValue([
-    "Аппарат Андрезена",
-    "Коронка Emax",
-  ]),
-  inferCompositionHintsFromEmailContext: vi.fn().mockReturnValue([]),
-  resolveAiCompositionLines: vi.fn().mockResolvedValue({
-    lines: [
-      {
-        priceListItemId: "pli-1",
-        code: "001",
-        name: "Аппарат Андрезена",
-        quantity: 1,
-        unitPrice: 12000,
-        leadWorkingDays: 5,
-        teethFdi: [],
-      },
-      {
-        priceListItemId: "pli-2",
-        code: "002",
-        name: "Коронка Emax",
-        quantity: 1,
-        unitPrice: 8000,
-        leadWorkingDays: 3,
-        teethFdi: ["46"],
-      },
-    ],
-    warnings: [],
-    maxLeadWorkingDays: 5,
-  }),
-  compositionLinesToOrderConstructions: vi.fn().mockReturnValue([]),
-}));
+vi.mock("./resolve-ai-composition-lines", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./resolve-ai-composition-lines")>();
+  return {
+    ...actual,
+    loadActivePriceListItemNames: vi.fn().mockResolvedValue([
+      "Аппарат Андрезена",
+      "Коронка Emax",
+    ]),
+    inferCompositionHintsFromEmailContext: vi.fn().mockReturnValue([]),
+    resolveAiCompositionLines: vi.fn().mockResolvedValue({
+      lines: [
+        {
+          priceListItemId: "pli-1",
+          code: "001",
+          name: "Аппарат Андрезена",
+          quantity: 1,
+          unitPrice: 12000,
+          leadWorkingDays: 5,
+          teethFdi: [],
+        },
+        {
+          priceListItemId: "pli-2",
+          code: "002",
+          name: "Коронка Emax",
+          quantity: 1,
+          unitPrice: 8000,
+          leadWorkingDays: 3,
+          teethFdi: ["46"],
+        },
+      ],
+      warnings: [],
+      maxLeadWorkingDays: 5,
+    }),
+    compositionLinesToOrderConstructions: vi.fn().mockReturnValue([]),
+  };
+});
 
 import { enrichOrderEmailPrediction } from "./order-email-enrichment";
 import { ORDER_EMAIL_ENRICHMENT_VERSION } from "./order-email-enrichment-version";

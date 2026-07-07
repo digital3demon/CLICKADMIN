@@ -148,6 +148,36 @@ describe("OrderEmailExtractSchema", () => {
     });
     expect(parsed.compositionHints[0]?.teethFdi).toEqual(["53", "63", "55", "65"]);
   });
+
+  it("coerces single teethFdi value and comma-separated string", () => {
+    const single = OrderEmailExtractSchema.parse({
+      patientName: "X",
+      clinicId: null,
+      doctorId: null,
+      clientOrderText: "коронка 46",
+      patientAppointmentAt: null,
+      urgent: false,
+      suggestedAttachmentIds: [],
+      compositionHints: [{ nameHint: "Коронка", teethFdi: 46 }],
+      confidenceScore: 80,
+      warnings: [],
+    });
+    expect(single.compositionHints[0]?.teethFdi).toEqual(["46"]);
+
+    const list = OrderEmailExtractSchema.parse({
+      patientName: "X",
+      clinicId: null,
+      doctorId: null,
+      clientOrderText: "коронки",
+      patientAppointmentAt: null,
+      urgent: false,
+      suggestedAttachmentIds: [],
+      compositionHints: [{ nameHint: "Коронка", teethFdi: "46, 47" }],
+      confidenceScore: 80,
+      warnings: [],
+    });
+    expect(list.compositionHints[0]?.teethFdi).toEqual(["46", "47"]);
+  });
 });
 
 describe("mergeAiPredictionJson", () => {
