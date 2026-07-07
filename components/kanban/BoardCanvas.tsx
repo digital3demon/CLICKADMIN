@@ -67,6 +67,7 @@ import {
   IconTrash,
 } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
+import { useKanbanCardHoverPreview } from "./KanbanCardHoverPreview";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import type { AggregateCardDragArgs } from "@/lib/kanban/aggregate-card-drag";
 
@@ -163,6 +164,9 @@ function KanbanCardView({
   dragListeners,
   dragVibrate = false,
   allowMoveToOtherBoard = true,
+  hoverPreviewEnabled = true,
+  onPreviewMove,
+  onPreviewLeave,
 }: {
   card: KanbanCard;
   homeBoard: KanbanBoard;
@@ -179,6 +183,9 @@ function KanbanCardView({
   /** Touch: анимация «вибрации» на время перетаскивания (DragOverlay). */
   dragVibrate?: boolean;
   allowMoveToOtherBoard?: boolean;
+  hoverPreviewEnabled?: boolean;
+  onPreviewMove?: (card: KanbanCard, event: React.MouseEvent) => void;
+  onPreviewLeave?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuFixed, setMenuFixed] = useState<{ top: number; left: number } | null>(null);
@@ -278,6 +285,10 @@ function KanbanCardView({
               : "transition-[box-shadow,transform,border-color]"
           }`}
           {...(dragListeners ?? {})}
+          onMouseMove={(event) => {
+            if (hoverPreviewEnabled && onPreviewMove) onPreviewMove(card, event);
+          }}
+          onMouseLeave={() => onPreviewLeave?.()}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest(".card-more-menu")) return;
             onOpen();
@@ -523,6 +534,9 @@ function SortableKanbanCard({
   onRequestStopCard,
   onRequestDeleteCard,
   allowMoveToOtherBoard,
+  hoverPreviewEnabled = true,
+  onPreviewMove,
+  onPreviewLeave,
 }: {
   card: KanbanCard;
   homeBoard: KanbanBoard;
@@ -535,6 +549,9 @@ function SortableKanbanCard({
   onRequestStopCard?: (id: string) => void;
   onRequestDeleteCard: (id: string) => void;
   allowMoveToOtherBoard: boolean;
+  hoverPreviewEnabled?: boolean;
+  onPreviewMove?: (card: KanbanCard, event: React.MouseEvent) => void;
+  onPreviewLeave?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
@@ -562,6 +579,9 @@ function SortableKanbanCard({
         onDeleteCard={() => onRequestDeleteCard(card.id)}
         dragListeners={dndLocked ? undefined : listeners}
         allowMoveToOtherBoard={allowMoveToOtherBoard}
+        hoverPreviewEnabled={hoverPreviewEnabled && !isDragging}
+        onPreviewMove={onPreviewMove}
+        onPreviewLeave={onPreviewLeave}
       />
     </div>
   );
@@ -824,6 +844,7 @@ export function BoardCanvas({
     startY: number;
   } | null>(null);
   const [activeDragCardId, setActiveDragCardId] = useState<string | null>(null);
+  const { onPreviewMove, onPreviewLeave, previewNode } = useKanbanCardHoverPreview(true);
   /** Горизонтальная полоса колонок: wheel без passive — только горизонтальный жест / Shift+колесо. */
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
   const coarsePointer = useKanbanCoarsePointer();
@@ -1120,9 +1141,10 @@ export function BoardCanvas({
         setActiveDragCardId(null);
         return;
       }
+      onPreviewLeave();
       setActiveDragCardId(aid);
     },
-    [columnIds],
+    [columnIds, onPreviewLeave],
   );
 
   const onDragMove = useCallback((event: DragMoveEvent) => {
@@ -1345,6 +1367,7 @@ export function BoardCanvas({
   );
 
   return (
+    <>
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}
@@ -1421,6 +1444,8 @@ export function BoardCanvas({
                                     onRequestStopCard={onRequestStopCard}
                                     onRequestDeleteCard={onRequestDeleteCard}
                                     allowMoveToOtherBoard={allowMoveToOtherBoard}
+                                    onPreviewMove={onPreviewMove}
+                                    onPreviewLeave={onPreviewLeave}
                                   />
                                 );
                               })}
@@ -1491,6 +1516,8 @@ export function BoardCanvas({
                                 onRequestStopCard={onRequestStopCard}
                                 onRequestDeleteCard={onRequestDeleteCard}
                                 allowMoveToOtherBoard={allowMoveToOtherBoard}
+                                onPreviewMove={onPreviewMove}
+                                onPreviewLeave={onPreviewLeave}
                               />
                             );
                           })}
@@ -1548,5 +1575,7 @@ export function BoardCanvas({
         ) : null}
       </DragOverlay>
     </DndContext>
+    {previewNode}
+    </>
   );
 }

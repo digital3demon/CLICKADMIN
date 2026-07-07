@@ -53,6 +53,10 @@ import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
+  applyKanbanCardMembersOnBoard,
+  notifyKanbanCardMemberChange,
+} from "@/lib/kanban/kanban-card-members-client";
+import {
   findCard,
   formatBlockedAt,
   formatDate,
@@ -160,19 +164,6 @@ function postKanbanCrmTelegramNotify(payload: {
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  }).catch(() => {});
-}
-
-function postKaitenAssigneesSync(
-  orderId: string,
-  assignees: string[],
-  participants: string[],
-) {
-  void fetch(`/api/orders/${encodeURIComponent(orderId)}/kaiten-assignees`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ assignees, participants }),
   }).catch(() => {});
 }
 
@@ -546,117 +537,27 @@ export function KanbanCardModal({
     if (!pickerMode) return;
     const prevAssign = card.assignees || [];
     const prevPart = card.participants || [];
-    const kaitenId = card.kaitenCardId;
-    const titleLine = (card.title || "").trim() || "Без названия";
     const actorId = (commentAuthorUserId ?? "").trim() || board.users[0]?.id || "";
     const actorLabel =
       crmById.get(actorId)?.displayName ??
       userNameById(board, actorId) ??
       "Пользователь";
 
-    if (pickerMode === "assign") {
-      onApply((b) => {
-        const fc = findCard(b, cardId);
-        if (!fc) return;
-        fc.card.assignees = [...pickerIds];
-        pushActivity(fc.card, "Изменены ответственные", b.users[0]?.id, b, act);
-      });
-      if (!shouldSkipCrmKanbanTelegram(kaitenId)) {
-        const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
-        const who = escapeTelegramHtml(actorLabel);
-        const oid = card.linkedOrderId?.trim();
-        const { cardWord, orderWord } = oid
-          ? cardOrderWordLinks(oid, cardId, board.id)
-          : { cardWord: "", orderWord: "" };
-        const added = pickerIds.filter((id) => !prevAssign.includes(id));
-        const removed = prevAssign.filter((id) => !pickerIds.includes(id));
-        if (added.length) {
-          postKanbanCrmTelegramNotify({
-            kaitenCardId: kaitenId,
-            event: "tg_person_assigned_responsible",
-            targetUserIds: added,
-            parseMode: "HTML",
-            lines: [`${who} назначил(а) вас ответственным в ${linkHtml}`],
-            ...(oid
-              ? {
-                  linesAdmin: [
-                    `${who} назначил(а) вас ответственным в ${cardWord} и ${orderWord}`,
-                  ],
-                }
-              : {}),
-          });
-        }
-        if (removed.length) {
-          postKanbanCrmTelegramNotify({
-            kaitenCardId: kaitenId,
-            event: "tg_person_removed_from_card",
-            targetUserIds: removed,
-            parseMode: "HTML",
-            lines: [`${who} снял(а) вас с ответственных по ${linkHtml}`],
-            ...(oid
-              ? {
-                  linesAdmin: [
-                    `${who} снял(а) вас с ответственных по ${cardWord} и ${orderWord}`,
-                  ],
-                }
-              : {}),
-          });
-        }
-      }
-    } else {
-      onApply((b) => {
-        const fc = findCard(b, cardId);
-        if (!fc) return;
-        fc.card.participants = [...pickerIds];
-        pushActivity(fc.card, "Изменён состав участников", b.users[0]?.id, b, act);
-      });
-      if (!shouldSkipCrmKanbanTelegram(kaitenId)) {
-        const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
-        const who = escapeTelegramHtml(actorLabel);
-        const oid = card.linkedOrderId?.trim();
-        const { cardWord, orderWord } = oid
-          ? cardOrderWordLinks(oid, cardId, board.id)
-          : { cardWord: "", orderWord: "" };
-        const added = pickerIds.filter((id) => !prevPart.includes(id));
-        const removed = prevPart.filter((id) => !pickerIds.includes(id));
-        if (added.length) {
-          postKanbanCrmTelegramNotify({
-            kaitenCardId: kaitenId,
-            event: "tg_person_added_to_card",
-            targetUserIds: added,
-            parseMode: "HTML",
-            lines: [`${who} добавил(а) вас в ${linkHtml}`],
-            ...(oid
-              ? {
-                  linesAdmin: [`${who} добавил(а) вас в ${cardWord} и ${orderWord}`],
-                }
-              : {}),
-          });
-        }
-        if (removed.length) {
-          postKanbanCrmTelegramNotify({
-            kaitenCardId: kaitenId,
-            event: "tg_person_removed_from_card",
-            targetUserIds: removed,
-            parseMode: "HTML",
-            lines: [`${who} исключил(а) вас из участников ${linkHtml}`],
-            ...(oid
-              ? {
-                  linesAdmin: [
-                    `${who} исключил(а) вас из участников ${cardWord} и ${orderWord}`,
-                  ],
-                }
-              : {}),
-          });
-        }
-      }
-    }
-    const oid = card.linkedOrderId?.trim();
-    if (oid && card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)) {
-      const nextAssign = pickerMode === "assign" ? [...pickerIds] : [...prevAssign];
-      const nextPart = pickerMode === "part" ? [...pickerIds] : [...prevPart];
-      postKaitenAssigneesSync(oid, nextAssign, nextPart);
-    }
+    onApply((b) => {
+      applyKanbanCardMembersOnBoard(b, cardId, pickerMode, pickerIds, act);
+    });
+
+    notifyKanbanCardMemberChange({
+      card,
+      cardId,
+      boardId: board.id,
+      mode: pickerMode,
+      prevAssign,
+      prevPart,
+      nextAssign: pickerMode === "assign" ? [...pickerIds] : [...prevAssign],
+      nextPart: pickerMode === "part" ? [...pickerIds] : [...prevPart],
+      actorLabel,
+    });
     setPickerMode(null);
   };
 

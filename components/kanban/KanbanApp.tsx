@@ -46,6 +46,11 @@ import {
 } from "@/lib/kanban/model";
 import { applyKanbanLegacyStageDueClearMigration } from "@/lib/kanban/kanban-stage-due";
 import {
+  applyKanbanCardMembersOnBoard,
+  notifyKanbanCardMemberChange,
+  type KanbanMemberPickerMode,
+} from "@/lib/kanban/kanban-card-members-client";
+import {
   autoArchiveReadyProductionChildren,
   expandProductionChecklistFromArchives,
   isProductionChildDone,
@@ -751,6 +756,49 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       });
     },
     [cardModalId],
+  );
+
+  const applyCardMembersFromList = useCallback(
+    (
+      cardId: string,
+      homeBoardId: string,
+      mode: KanbanMemberPickerMode,
+      userIds: string[],
+    ) => {
+      if (!appState) return;
+      const loc = findCardInAppState(appState, cardId);
+      if (!loc) return;
+      const prevAssign = loc.card.assignees || [];
+      const prevPart = loc.card.participants || [];
+      const actorLabel = activityActorLabel?.trim() || "Пользователь";
+
+      setAppState((s) => {
+        if (!s) return s;
+        const next = structuredClone(s);
+        const found = findCardInAppState(next, cardId);
+        if (!found) return s;
+        const b = next.boards.find((x) => x.id === found.board.id);
+        if (!b) return s;
+        if (!applyKanbanCardMembersOnBoard(b, cardId, mode, userIds, activityActorLabel)) {
+          return s;
+        }
+        syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+        return next;
+      });
+
+      notifyKanbanCardMemberChange({
+        card: loc.card,
+        cardId,
+        boardId: homeBoardId,
+        mode,
+        prevAssign,
+        prevPart,
+        nextAssign: mode === "assign" ? userIds : prevAssign,
+        nextPart: mode === "part" ? userIds : prevPart,
+        actorLabel,
+      });
+    },
+    [appState, activityActorLabel],
   );
 
   useEffect(() => {
@@ -1998,6 +2046,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               cardHomeBoardId={cardHomeBoardId}
               onOpenCard={openKanbanCard}
               onAdvanceCardColumn={moveCardToNextStage}
+              canManageAssignees={kanbanCardPerms.manageAssignees}
+              canManageParticipants={kanbanCardPerms.manageParticipants}
+              onUpdateCardMembers={applyCardMembersFromList}
             />
           )}
       </div>

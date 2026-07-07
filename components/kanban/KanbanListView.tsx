@@ -18,9 +18,12 @@ import {
   type ListSortKey,
 } from "@/lib/kanban/list-view-sort";
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import type { KanbanMemberPickerMode } from "@/lib/kanban/kanban-card-members-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { IconBrick, IconListCheck } from "./kanban-icons";
+import { IconBrick, IconListCheck, IconPlus } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
+import { KanbanMemberPickerDialog } from "./KanbanMemberPickerDialog";
+import { useKanbanCardHoverPreview } from "./KanbanCardHoverPreview";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 
@@ -49,6 +52,85 @@ function homeColumnIndexForCard(homeBoard: KanbanBoard, cardId: string): number 
     if (homeBoard.columns[i].cards.some((c) => c.id === cardId)) return i;
   }
   return -1;
+}
+
+function ListMemberAddButton({
+  title,
+  disabled,
+  onClick,
+  size = "sm",
+}: {
+  title: string;
+  disabled?: boolean;
+  onClick: () => void;
+  size?: "xs" | "sm";
+}) {
+  const dim = size === "xs" ? "h-[18px] w-[18px]" : "h-6 w-6";
+  const icon = size === "xs" ? "h-2.5 w-2.5" : "h-3 w-3";
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      className={`inline-flex ${dim} shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--kanban-text-muted)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40`}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      <IconPlus className={icon} />
+    </button>
+  );
+}
+
+function ListMembersCell({
+  userIds,
+  variant,
+  homeBoard,
+  canManage,
+  onAdd,
+  size = "sm",
+}: {
+  userIds: string[];
+  variant: "assignee" | "participant";
+  homeBoard: KanbanBoard;
+  canManage: boolean;
+  onAdd: () => void;
+  size?: "xs" | "sm";
+}) {
+  const avatarSize = size === "xs" ? "xs" : "sm";
+  return (
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-0.5 sm:justify-start">
+      {userIds.length > 0 ? (
+        <div className={`-space-x-1.5 flex pl-0.5 ${size === "xs" ? "justify-end" : ""}`}>
+          {userIds.slice(0, 5).map((uid) => (
+            <span key={uid} className="first:ml-0">
+              <KanbanPersonAvatar
+                userId={uid}
+                homeBoard={homeBoard}
+                variant={variant}
+                size={avatarSize}
+                titleSuffix=""
+              />
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {canManage ? (
+        <ListMemberAddButton
+          title={
+            variant === "assignee" ? "Добавить ответственного" : "Добавить участника"
+          }
+          onClick={onAdd}
+          size={size}
+        />
+      ) : userIds.length === 0 ? (
+        <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">—</span>
+      ) : null}
+    </div>
+  );
 }
 
 function SortArrows({
@@ -141,6 +223,14 @@ type KanbanListViewProps = {
   onOpenCard: (cardId: string) => void;
   /** Следующая колонка на доске-владельце (как «вперёд» на доске). */
   onAdvanceCardColumn?: (cardId: string) => void;
+  canManageAssignees?: boolean;
+  canManageParticipants?: boolean;
+  onUpdateCardMembers?: (
+    cardId: string,
+    homeBoardId: string,
+    mode: KanbanMemberPickerMode,
+    userIds: string[],
+  ) => void;
 };
 
 const MOBILE_SORT_OPTIONS: { value: string; label: string; sort: ListSort }[] = [
@@ -176,8 +266,17 @@ export function KanbanListView({
   cardHomeBoardId,
   onOpenCard,
   onAdvanceCardColumn,
+  canManageAssignees = true,
+  canManageParticipants = true,
+  onUpdateCardMembers,
 }: KanbanListViewProps) {
   const [sort, setSort] = useState<ListSort>(DEFAULT_LIST_SORT);
+  const [picker, setPicker] = useState<null | {
+    cardId: string;
+    homeBoardId: string;
+    mode: KanbanMemberPickerMode;
+    initialUserIds: string[];
+  }>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,6 +310,8 @@ export function KanbanListView({
     [board.id],
   );
 
+  const { onPreviewMove, onPreviewLeave, previewNode } = useKanbanCardHoverPreview(true);
+
   const rows = useMemo(
     () =>
       buildKanbanListViewRows(board, appState, sort, {
@@ -221,6 +322,26 @@ export function KanbanListView({
   );
 
   const mobileSelectValue = sortToSelectValue(sort);
+
+  const pickerBoard = useMemo(() => {
+    if (!picker) return board;
+    return appState.boards.find((b) => b.id === picker.homeBoardId) ?? board;
+  }, [picker, appState.boards, board]);
+
+  const openMemberPicker = useCallback(
+    (
+      cardId: string,
+      homeBoardId: string,
+      mode: KanbanMemberPickerMode,
+      initialUserIds: string[],
+    ) => {
+      if (mode === "assign" && !canManageAssignees) return;
+      if (mode === "part" && !canManageParticipants) return;
+      if (!onUpdateCardMembers) return;
+      setPicker({ cardId, homeBoardId, mode, initialUserIds });
+    },
+    [canManageAssignees, canManageParticipants, onUpdateCardMembers],
+  );
 
   return (
     <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden self-start py-2 pl-2 pr-1 sm:pl-3 sm:pr-2">
@@ -325,6 +446,8 @@ export function KanbanListView({
                   style={{ borderLeftColor: accent }}
                   role="button"
                   tabIndex={0}
+                  onMouseMove={(event) => onPreviewMove(card, event)}
+                  onMouseLeave={onPreviewLeave}
                   onClick={() => onOpenCard(card.id)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -427,45 +550,31 @@ export function KanbanListView({
                           <div className="flex items-start justify-between gap-2">
                             <dt className="shrink-0 pt-0.5">Ответственный</dt>
                             <dd className="flex min-w-0 flex-1 justify-end">
-                              {assignees.length > 0 ? (
-                                <div className="flex flex-wrap justify-end gap-0.5">
-                                  {assignees.slice(0, 5).map((uid) => (
-                                    <span key={uid}>
-                                      <KanbanPersonAvatar
-                                        userId={uid}
-                                        homeBoard={rowBoard}
-                                        variant="assignee"
-                                        size="xs"
-                                        titleSuffix=""
-                                      />
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-[var(--kanban-text-muted)]">—</span>
-                              )}
+                              <ListMembersCell
+                                userIds={assignees}
+                                variant="assignee"
+                                homeBoard={rowBoard}
+                                canManage={Boolean(onUpdateCardMembers && canManageAssignees)}
+                                onAdd={() =>
+                                  openMemberPicker(card.id, homeBoardId, "assign", assignees)
+                                }
+                                size="xs"
+                              />
                             </dd>
                           </div>
                           <div className="flex items-start justify-between gap-2">
                             <dt className="shrink-0 pt-0.5">Участники</dt>
                             <dd className="flex min-w-0 flex-1 justify-end">
-                              {participants.length > 0 ? (
-                                <div className="flex flex-wrap justify-end gap-0.5">
-                                  {participants.slice(0, 5).map((uid) => (
-                                    <span key={uid}>
-                                      <KanbanPersonAvatar
-                                        userId={uid}
-                                        homeBoard={rowBoard}
-                                        variant="participant"
-                                        size="xs"
-                                        titleSuffix=""
-                                      />
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-[var(--kanban-text-muted)]">—</span>
-                              )}
+                              <ListMembersCell
+                                userIds={participants}
+                                variant="participant"
+                                homeBoard={rowBoard}
+                                canManage={Boolean(onUpdateCardMembers && canManageParticipants)}
+                                onAdd={() =>
+                                  openMemberPicker(card.id, homeBoardId, "part", participants)
+                                }
+                                size="xs"
+                              />
                             </dd>
                           </div>
                         </dl>
@@ -502,42 +611,26 @@ export function KanbanListView({
                       {stageDue ? formatDate(stageDue) : null}
                     </div>
                     <div className="relative hidden min-h-[1.75rem] sm:flex sm:items-center sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
-                      {assignees.length > 0 ? (
-                        <div className="-space-x-1.5 flex pl-0.5">
-                          {assignees.slice(0, 5).map((uid) => (
-                            <span key={uid} className="first:ml-0">
-                              <KanbanPersonAvatar
-                                userId={uid}
-                                homeBoard={rowBoard}
-                                variant="assignee"
-                                size="sm"
-                                titleSuffix=""
-                              />
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">—</span>
-                      )}
+                      <ListMembersCell
+                        userIds={assignees}
+                        variant="assignee"
+                        homeBoard={rowBoard}
+                        canManage={Boolean(onUpdateCardMembers && canManageAssignees)}
+                        onAdd={() =>
+                          openMemberPicker(card.id, homeBoardId, "assign", assignees)
+                        }
+                      />
                     </div>
                     <div className="relative hidden min-h-[1.75rem] sm:flex sm:items-center sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
-                      {participants.length > 0 ? (
-                        <div className="-space-x-1.5 flex pl-0.5">
-                          {participants.slice(0, 5).map((uid) => (
-                            <span key={uid} className="first:ml-0">
-                              <KanbanPersonAvatar
-                                userId={uid}
-                                homeBoard={rowBoard}
-                                variant="participant"
-                                size="sm"
-                                titleSuffix=""
-                              />
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">—</span>
-                      )}
+                      <ListMembersCell
+                        userIds={participants}
+                        variant="participant"
+                        homeBoard={rowBoard}
+                        canManage={Boolean(onUpdateCardMembers && canManageParticipants)}
+                        onAdd={() =>
+                          openMemberPicker(card.id, homeBoardId, "part", participants)
+                        }
+                      />
                     </div>
                   </div>
                 </article>
@@ -547,6 +640,25 @@ export function KanbanListView({
         )}
         </div>
       </div>
+      {picker && onUpdateCardMembers ? (
+        <KanbanMemberPickerDialog
+          open
+          mode={picker.mode}
+          board={pickerBoard}
+          initialUserIds={picker.initialUserIds}
+          onClose={() => setPicker(null)}
+          onSave={(userIds) => {
+            onUpdateCardMembers(
+              picker.cardId,
+              picker.homeBoardId,
+              picker.mode,
+              userIds,
+            );
+            setPicker(null);
+          }}
+        />
+      ) : null}
+      {previewNode}
     </div>
   );
 }
