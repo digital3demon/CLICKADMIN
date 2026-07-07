@@ -116,7 +116,10 @@ export type KanbanCard = {
   cardTypeId: string;
   assignees: string[];
   participants: string[];
+  /** @deprecated legacy — читать/писать через lib/kanban/kanban-stage-due.ts */
   dueDate: string;
+  /** Этапный срок (поле «Срок» в канбане); не лабораторный срок наряда. */
+  stageDueDate?: string;
   /** Метка «срочно»: не связана со сроком, может быть без даты. */
   urgent: boolean;
   checklist: ChecklistItem[];
@@ -312,4 +315,6 @@ export type KanbanAppState = {
   filterTemplates: KanbanFilterTemplate[];
   /** Наряды, убранные с доски вручную (не показывать при синхронизации с Kaiten) */
   hiddenLinkedOrderIds?: string[];
+  /** Одноразовая миграция: сброс legacy dueDate в карточках (этапный срок). */
+  legacyStageDueClearVersion?: string;
 };

@@ -1,4 +1,5 @@
 import type { KanbanAppState, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
+import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { cardMatchesFilters } from "@/lib/kanban/model";
 
 export type ListSortKey =
@@ -74,8 +75,8 @@ function comparePrimary(
       });
     }
     case "due": {
-      const da = dueTime(a.card.dueDate);
-      const db = dueTime(b.card.dueDate);
+      const da = dueTime(getKanbanStageDue(a.card));
+      const db = dueTime(getKanbanStageDue(b.card));
       if (da == null && db == null) return 0;
       if (da == null) return 1;
       if (db == null) return -1;

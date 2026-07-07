@@ -8,6 +8,7 @@ import {
 } from "@/lib/kanban/board-visible-cards";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import { previewLinkedCardKaitenSortOrderAfterDrag } from "@/lib/kanban/kanban-card-move-preview";
+import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
   annulKanbanStageTimerOnMemberAdvance,
   cardMatchesFilters,
@@ -244,11 +245,12 @@ function KanbanCardView({
   const assignees = card.assignees || [];
   /** Участники — отдельная роль от ответственных; один пользователь может быть в обоих списках. */
   const participants = card.participants || [];
+  const stageDue = getKanbanStageDue(card);
 
   let dueClass =
     "rounded border px-1 py-0.5 text-[0.62rem] font-semibold leading-none max-md:px-1 max-md:py-[1px] max-md:text-[0.55rem]";
-  if (card.dueDate) {
-    const cat = dueCategory(card.dueDate);
+  if (stageDue) {
+    const cat = dueCategory(stageDue);
     if (cat === "overdue")
       dueClass +=
         " border-[color-mix(in_srgb,var(--kanban-overdue)_25%,transparent)] bg-[color-mix(in_srgb,var(--kanban-overdue)_8%,transparent)] text-[var(--kanban-overdue)]";
@@ -319,11 +321,11 @@ function KanbanCardView({
               </div>
               <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 max-md:mt-1 max-md:gap-1">
                 <div className="flex flex-wrap items-center gap-1 text-[0.68rem] text-[var(--kanban-text-muted)] max-md:gap-1 max-md:text-[0.62rem]">
-                  {card.dueDate && (
+                  {stageDue && (
                     <span className={dueClass}>
                       <span className="inline-flex items-center gap-1 max-md:gap-0.5">
                         <IconClock className="h-3.5 w-3.5 max-md:h-3 max-md:w-3" />
-                        {formatDate(card.dueDate)}
+                        {formatDate(stageDue)}
                       </span>
                     </span>
                   )}

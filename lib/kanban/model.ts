@@ -19,6 +19,7 @@ import {
   resolveLinkedOrderKanbanTitle,
   type KaitenLinkedOrderForKanban,
 } from "@/lib/kanban/kaiten-linked-order";
+import { applyKanbanLegacyStageDueClearMigration, getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 
 export const STORAGE_KEY = "kanban-app-state-v3";
 export const STORAGE_KEY_LEGACY = "kanban-app-state-v2";
@@ -860,7 +861,8 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
     cardTypeId: partial.cardTypeId != null ? partial.cardTypeId : "",
     assignees: partial.assignees || [],
     participants: partial.participants || [],
-    dueDate: partial.dueDate || "",
+    stageDueDate: partial.stageDueDate ?? "",
+    dueDate: "",
     urgent: !!partial.urgent,
     checklist: Array.isArray(partial.checklist)
       ? partial.checklist.map((row) => ({
@@ -1439,6 +1441,8 @@ export function loadKanbanState(isDemo = false): KanbanAppState {
     if (!isDemo) {
       ensureMirroredKanbanBoardsForKaiten(merged);
       ensureProductionBoardInState(merged);
+      const migrated = applyKanbanLegacyStageDueClearMigration(merged);
+      return migrated.state;
     }
     return merged;
   } catch {
@@ -1740,13 +1744,14 @@ export function cardMatchesFilters(
   const fd = state.filters.due;
   if (fd) {
     if (fd === "urgent" && !card.urgent) return false;
-    const cat = dueCategory(card.dueDate);
+    const stageDue = getKanbanStageDue(card);
+    const cat = dueCategory(stageDue);
     if (fd === "none" && cat !== "none") return false;
     if (fd === "overdue" && cat !== "overdue") return false;
     if (fd === "today" && cat !== "today") return false;
     if (fd === "week") {
-      if (!card.dueDate) return false;
-      const d = new Date(card.dueDate + "T12:00:00");
+      if (!stageDue) return false;
+      const d = new Date(stageDue + "T12:00:00");
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       const end = new Date(start);

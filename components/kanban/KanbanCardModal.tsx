@@ -51,6 +51,7 @@ import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-m
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
+import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
   findCard,
   formatBlockedAt,
@@ -469,7 +470,8 @@ export function KanbanCardModal({
   if (!cardId || !card) return null;
 
   const blocked = isCardBlocked(card);
-  const dueHintKind = deadlineHintKind(card.dueDate);
+  const stageDue = getKanbanStageDue(card);
+  const dueHintKind = deadlineHintKind(stageDue);
   const currentColumnIndex = board.columns.findIndex((col) => col.id === found.col.id);
   const prevColumnTitle =
     currentColumnIndex > 0 ? board.columns[currentColumnIndex - 1]?.title || "" : "";
@@ -1807,13 +1809,13 @@ export function KanbanCardModal({
                     type="date"
                     className={`${baseInput} max-w-[12rem]`}
                     disabled={!canEditDueDate}
-                    value={card.dueDate || ""}
+                    value={stageDue}
                     onChange={(e) => {
                       const v = e.target.value;
                       onApply((b) => {
                         const fc = findCard(b, cardId);
                         if (!fc) return;
-                        fc.card.dueDate = v;
+                        setKanbanStageDue(fc.card, v);
                         pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
                       });
                       if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {

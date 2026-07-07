@@ -7,6 +7,7 @@ import {
   isKanbanAggregateBoardId,
   textOnAccentHex,
 } from "@/lib/kanban/model";
+import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 
 type KanbanCalendarProps = {
@@ -69,8 +70,9 @@ export function KanbanCalendar({
   const byDate: Record<string, KanbanCard[]> = {};
   allBoardCards(board).forEach((card) => {
     const hb = resolveCardHomeBoard(card);
-    if (!card.dueDate || !cardMatchesFilters(card, hb, appState)) return;
-    const key = card.dueDate;
+    const stageDue = getKanbanStageDue(card);
+    if (!stageDue || !cardMatchesFilters(card, hb, appState)) return;
+    const key = stageDue;
     if (!byDate[key]) byDate[key] = [];
     byDate[key].push(card);
   });

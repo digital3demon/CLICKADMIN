@@ -17,6 +17,7 @@ import {
   type ListSort,
   type ListSortKey,
 } from "@/lib/kanban/list-view-sort";
+import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { IconBrick, IconListCheck } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
@@ -310,6 +311,7 @@ export function KanbanListView({
             const done = cl.filter((i) => i.completed).length;
             const assignees = card.assignees || [];
             const participants = card.participants || [];
+            const stageDue = getKanbanStageDue(card);
             const homeColIdx = homeColumnIndexForCard(rowBoard, card.id);
             const canAdvance =
               homeColIdx >= 0 &&
@@ -408,17 +410,17 @@ export function KanbanListView({
                               ) : null}
                             </dd>
                           </div>
-                          {card.dueDate ? (
+                          {stageDue ? (
                             <div className="flex justify-between gap-2">
                               <dt>Срок</dt>
                               <dd
                                 className={
-                                  isDueUrgentRedInList(card.dueDate)
+                                  isDueUrgentRedInList(stageDue)
                                     ? "font-semibold text-red-500 dark:text-red-400"
                                     : "text-[var(--kanban-text)]"
                                 }
                               >
-                                {formatDate(card.dueDate)}
+                                {formatDate(stageDue)}
                               </dd>
                             </div>
                           ) : null}
@@ -492,12 +494,12 @@ export function KanbanListView({
                     </div>
                     <div
                       className={`hidden text-[0.72rem] leading-tight sm:block sm:border-l sm:border-[var(--kanban-border)] sm:px-2 sm:py-1 ${
-                        card.dueDate && isDueUrgentRedInList(card.dueDate)
+                        stageDue && isDueUrgentRedInList(stageDue)
                           ? "font-semibold text-red-500 dark:text-red-400"
                           : "text-[var(--kanban-text-muted)]"
                       }`}
                     >
-                      {card.dueDate ? formatDate(card.dueDate) : null}
+                      {stageDue ? formatDate(stageDue) : null}
                     </div>
                     <div className="relative hidden min-h-[1.75rem] sm:flex sm:items-center sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
                       {assignees.length > 0 ? (

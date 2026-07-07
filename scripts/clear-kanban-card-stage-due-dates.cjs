@@ -1,67 +1,18 @@
 /**
- * One-time deploy: сброс card.dueDate в канбане, если совпадает с Order.dueDate (лаб. срок).
- * Не трогает Order, Kaiten, вручную выставленные этапные сроки (≠ лаб.).
- *
- * Запуск:
- *   node --env-file=.env scripts/clear-kanban-card-stage-due-dates.cjs --auto-once
- *   node --env-file=.env scripts/clear-kanban-card-stage-due-dates.cjs --dry-run
+ * One-time deploy: сброс этапных сроков ТОЛЬКО в JSON канбана.
+ * TenantClientState kanbanAppStateV3 + KanbanStandaloneCard.payload.
+ * Order.dueDate, Kaiten, заголовки карточек — не трогаем.
  */
+const path = require("node:path");
 const { PrismaClient } = require("@prisma/client");
+const stageDue = require(path.join(__dirname, "..", "lib", "kanban", "kanban-stage-due.runtime.cjs"));
 
 const APPLY = process.argv.includes("--apply") || process.argv.includes("--auto-once");
 const AUTO_ONCE = process.argv.includes("--auto-once");
+const FORCE = process.argv.includes("--force");
 const DRY_RUN = process.argv.includes("--dry-run");
-const MARKER_KEY = "kanban-clear-stage-due-lab-match-20260707-v1";
+const MARKER_KEY = stageDue.KANBAN_CLEAR_ALL_STAGE_DUE_MARKER_KEY;
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
-
-/** Держать в sync с lib/kanban/clear-kanban-lab-matched-due-dates.ts */
-function normalizeKanbanDueDate(raw) {
-  const s = String(raw ?? "").trim();
-  if (!s) return "";
-  return s.slice(0, 10);
-}
-
-function clearLabMatchedDueDateOnCard(card, orderDueById) {
-  if (!card || typeof card !== "object") return false;
-  const linked = String(card.linkedOrderId ?? "").trim();
-  if (!linked) return false;
-  const labDue = normalizeKanbanDueDate(orderDueById.get(linked));
-  if (!labDue) return false;
-  const cardDue = normalizeKanbanDueDate(card.dueDate);
-  if (!cardDue || cardDue !== labDue) return false;
-  card.dueDate = "";
-  return true;
-}
-
-function clearLabMatchedDueDatesInKanbanState(state, orderDueById) {
-  let clearedCount = 0;
-  const touch = (card) => {
-    if (clearLabMatchedDueDateOnCard(card, orderDueById)) clearedCount += 1;
-  };
-  for (const board of state.boards ?? []) {
-    for (const col of board.columns ?? []) {
-      for (const card of col.cards ?? []) touch(card);
-    }
-    for (const ac of board.archivedCards ?? []) {
-      if (ac?.card) touch(ac.card);
-    }
-    for (const sc of board.stoppedCards ?? []) {
-      if (sc?.card) touch(sc.card);
-    }
-  }
-  return clearedCount;
-}
-
-function orderDueMapFromRows(rows) {
-  const map = new Map();
-  for (const row of rows) {
-    const id = String(row.id ?? "").trim();
-    if (!id) continue;
-    const due = row.dueDate instanceof Date ? row.dueDate.toISOString().slice(0, 10) : "";
-    map.set(id, due);
-  }
-  return map;
-}
 
 async function hasMarkerForTenant(prisma, tenantId) {
   const row = await prisma.tenantClientState.findUnique({
@@ -77,14 +28,18 @@ async function allTenantIds(prisma) {
     return tenants.map((t) => t.id).filter(Boolean);
   } catch (err) {
     if (err && typeof err === "object" && (err.code === "P2021" || err.code === "P2022")) {
-      const rows = await prisma.order.findMany({ select: { tenantId: true }, distinct: ["tenantId"] });
+      const rows = await prisma.tenantClientState.findMany({
+        where: { key: KANBAN_STATE_KEY },
+        select: { tenantId: true },
+        distinct: ["tenantId"],
+      });
       return rows.map((r) => r.tenantId).filter(Boolean);
     }
     throw err;
   }
 }
 
-async function processTenant(prisma, tenantId, orderDueById, dryRun) {
+async function processTenant(prisma, tenantId, dryRun) {
   let clearedInState = 0;
   let clearedInStandalone = 0;
 
@@ -94,8 +49,8 @@ async function processTenant(prisma, tenantId, orderDueById, dryRun) {
   });
   if (stateRow?.value && typeof stateRow.value === "object") {
     const state = structuredClone(stateRow.value);
-    clearedInState = clearLabMatchedDueDatesInKanbanState(state, orderDueById);
-    if (clearedInState > 0 && !dryRun) {
+    clearedInState = stageDue.applyKanbanStageDueClearToState(state);
+    if (!dryRun) {
       await prisma.tenantClientState.upsert({
         where: { tenantId_key: { tenantId, key: KANBAN_STATE_KEY } },
         create: { tenantId, key: KANBAN_STATE_KEY, value: state },
@@ -114,7 +69,7 @@ async function processTenant(prisma, tenantId, orderDueById, dryRun) {
         ? structuredClone(row.payload)
         : null;
     if (!payload) continue;
-    if (!clearLabMatchedDueDateOnCard(payload, orderDueById)) continue;
+    if (!stageDue.clearKanbanStageDue(payload)) continue;
     clearedInStandalone += 1;
     if (!dryRun) {
       await prisma.kanbanStandaloneCard.update({
@@ -147,56 +102,57 @@ async function main() {
   try {
     const tenantIds = await allTenantIds(prisma);
     if (tenantIds.length === 0) {
-      console.log("[kanban-due] tenants not found, skip.");
+      console.log("[kanban-stage-due] tenants not found, skip.");
       return;
     }
 
-    if (AUTO_ONCE) {
+    if (AUTO_ONCE && !FORCE) {
       const marked = [];
       for (const tenantId of tenantIds) {
         if (await hasMarkerForTenant(prisma, tenantId)) marked.push(tenantId);
       }
       if (marked.length === tenantIds.length) {
-        console.log("[kanban-due] already cleared for all tenants; skip.");
+        console.log("[kanban-stage-due] marker exists; skip. Use --force to rerun.");
         return;
       }
+    }
+
+    if (FORCE && !dryRun) {
+      console.log("[kanban-stage-due] --force: повторный сброс этапных сроков в канбане.");
     }
 
     let totalState = 0;
     let totalStandalone = 0;
 
     for (const tenantId of tenantIds) {
-      if (AUTO_ONCE && (await hasMarkerForTenant(prisma, tenantId))) {
-        console.log(`[kanban-due] tenant ${tenantId}: marker exists, skip.`);
+      if (AUTO_ONCE && !FORCE && (await hasMarkerForTenant(prisma, tenantId))) {
+        console.log(`[kanban-stage-due] tenant ${tenantId}: marker exists, skip.`);
         continue;
       }
-
-      const orders = await prisma.order.findMany({
-        where: { tenantId },
-        select: { id: true, dueDate: true },
-      });
-      const orderDueById = orderDueMapFromRows(orders);
 
       const { clearedInState, clearedInStandalone } = await processTenant(
         prisma,
         tenantId,
-        orderDueById,
         dryRun,
       );
       totalState += clearedInState;
       totalStandalone += clearedInStandalone;
 
       console.log(
-        `[kanban-due] tenant ${tenantId}: state=${clearedInState}, standalone=${clearedInStandalone}${dryRun ? " (dry-run)" : ""}`,
+        `[kanban-stage-due] tenant ${tenantId}: state=${clearedInState}, standalone=${clearedInStandalone}${dryRun ? " (dry-run)" : ""}`,
       );
 
       if (AUTO_ONCE && APPLY && !dryRun) {
-        await writeMarker(prisma, tenantId, { clearedInState, clearedInStandalone });
+        await writeMarker(prisma, tenantId, {
+          clearedInState,
+          clearedInStandalone,
+          force: FORCE,
+        });
       }
     }
 
     console.log(
-      `[kanban-due] done: state=${totalState}, standalone=${totalStandalone}, dryRun=${dryRun}`,
+      `[kanban-stage-due] done: state=${totalState}, standalone=${totalStandalone}, dryRun=${dryRun}`,
     );
   } finally {
     await prisma.$disconnect();
@@ -204,6 +160,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("[kanban-due] failed:", err);
+  console.error("[kanban-stage-due] failed:", err);
   process.exit(1);
 });

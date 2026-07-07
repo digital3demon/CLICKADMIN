@@ -6,6 +6,11 @@ import type {
   KanbanCard,
 } from "./types";
 import {
+  clearKanbanStageDue,
+  getKanbanStageDue,
+  setKanbanStageDue,
+} from "./kanban-stage-due";
+import {
   actorUserId,
   findCard,
   generateId,
@@ -115,13 +120,13 @@ function applyNonMoveAction(
       return true;
     }
     case "set_due_in_days": {
-      card.dueDate = addDaysISO(action.days);
+      setKanbanStageDue(card, addDaysISO(action.days));
       card.updatedAt = new Date().toISOString();
       return true;
     }
     case "clear_due": {
-      if (!card.dueDate) return false;
-      card.dueDate = "";
+      if (!getKanbanStageDue(card)) return false;
+      clearKanbanStageDue(card);
       card.updatedAt = new Date().toISOString();
       return true;
     }

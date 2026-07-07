@@ -44,6 +44,7 @@ import {
   mergeKanbanStatePreservingLocalBoards,
   withActiveBoard,
 } from "@/lib/kanban/model";
+import { applyKanbanLegacyStageDueClearMigration } from "@/lib/kanban/kanban-stage-due";
 import {
   autoArchiveReadyProductionChildren,
   expandProductionChecklistFromArchives,
@@ -451,11 +452,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             ? normalizeDemoKanbanAppState(remote as KanbanAppState)
             : (remote as KanbanAppState);
           const merged = mergeKanbanStatePreservingLocalBoards(prev, remoteState);
-          if (currentCard && !findCardInAppState(merged, currentCard)) {
+          const finalState = isDemo
+            ? merged
+            : applyKanbanLegacyStageDueClearMigration(merged).state;
+          if (currentCard && !findCardInAppState(finalState, currentCard)) {
             setCardModalId(null);
           }
-          saveKanbanState(merged, isDemo);
-          return merged;
+          saveKanbanState(finalState, isDemo);
+          return finalState;
         });
       }
       setKanbanStateReady(true);
