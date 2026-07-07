@@ -476,7 +476,8 @@ export function AiAdminClient({
                   />
                 ) : null}
                 <p className="text-sm text-[var(--app-text-secondary)]">
-                  SprutDock — OpenAI-совместимый шлюз. Можно указать slug вручную, например{" "}
+                  SprutDock — OpenAI-совместимый шлюз. Бесплатная Nvidia Ultra может отвечать 1–2 минуты.
+                  Можно указать slug вручную, например{" "}
                   <span className="font-mono">anthropic/claude-sonnet-4-6</span>.
                   Запасные модели отключены.
                 </p>

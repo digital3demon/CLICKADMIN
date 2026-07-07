@@ -60,7 +60,7 @@ describe("resolveModel", () => {
 });
 
 describe("DEFAULT_AI_MODEL", () => {
-  it("is free Nvidia Ultra", () => {
+  it("is free Nvidia Ultra on SprutDock", () => {
     expect(DEFAULT_AI_MODEL).toBe("nvidia/nemotron-3-ultra-550b-a55b:free");
   });
 });

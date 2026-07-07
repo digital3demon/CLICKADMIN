@@ -7,6 +7,8 @@ export type ChatCompletionOptions = {
   messages: ChatMessage[];
   responseFormat?: "json_object";
   temperature?: number;
+  /** Ограничивает длину ответа; ускоряет большие модели. */
+  maxTokens?: number;
 };
 
 export type ChatCompletionResult = {

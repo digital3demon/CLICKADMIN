@@ -10,7 +10,7 @@ export type AiSettings = {
   timeoutMs: number;
 };
 
-const DEFAULT_TIMEOUT_MS = 35000;
+const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
  * Настройки ИИ из конфигурации организации (Tenant).

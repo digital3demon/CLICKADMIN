@@ -3,10 +3,13 @@ export type AiModelOption = {
   label: string;
 };
 
+/** Slug бесплатной Nvidia Ultra на SprutDock. */
+export const DEFAULT_AI_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+
 /** Модели SprutDock для ИИ-Админа. */
 export const AI_MODEL_OPTIONS: AiModelOption[] = [
   {
-    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    id: DEFAULT_AI_MODEL,
     label: "Nvidia Nemotron 3 Ultra (free)",
   },
   {
@@ -28,8 +31,6 @@ export const AI_MODEL_OPTIONS: AiModelOption[] = [
 ];
 
 export const AI_CUSTOM_MODEL_VALUE = "__custom__";
-
-export const DEFAULT_AI_MODEL = AI_MODEL_OPTIONS[0].id;
 
 /** Slug: provider/model или provider/model:variant */
 export function isValidAiModelSlug(model: string): boolean {

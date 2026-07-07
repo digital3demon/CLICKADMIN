@@ -256,6 +256,7 @@ ${emailsText}
   const response = await chatCompletion(settings, {
     messages: [{ role: "user", content: prompt }],
     responseFormat: "json_object",
+    maxTokens: 512,
   });
 
   if (!response.ok) {
@@ -319,11 +320,8 @@ export async function extractOrderFieldsFromEmail(
   const response = await chatCompletion(settings, {
     messages: [{ role: "user", content: prompt }],
     responseFormat: "json_object",
+    maxTokens: 4096,
   });
-
-  if (!response.ok) {
-    return { result: null, model: "none", durationMs: response.durationMs, error: response.error };
-  }
 
   const rawJson = stripMarkdownFences(response.content);
 

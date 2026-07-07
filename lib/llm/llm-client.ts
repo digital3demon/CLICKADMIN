@@ -44,6 +44,9 @@ export async function chatCompletion(
         if (opts.temperature !== undefined) {
           body.temperature = opts.temperature;
         }
+        if (opts.maxTokens !== undefined) {
+          body.max_tokens = opts.maxTokens;
+        }
 
         const response = await fetch(SPRUTDOCK_CHAT_COMPLETIONS_URL, {
           method: "POST",
@@ -90,8 +93,13 @@ export async function chatCompletion(
           durationMs: Date.now() - startTime,
         };
       } catch (e: any) {
-        lastError = e.name === "AbortError" ? "Timeout" : e.message;
-        logger.warn({ model, err: e }, "SprutDock fetch failed");
+        if (e.name === "AbortError") {
+          const timeoutSec = Math.round(settings.timeoutMs / 1000);
+          lastError = `Таймаут SprutDock (${timeoutSec} с). Модель ${model} не успела ответить — попробуйте снова или выберите более быструю модель.`;
+        } else {
+          lastError = e.message;
+        }
+        logger.warn({ model, err: e, timeoutMs: settings.timeoutMs }, "SprutDock fetch failed");
         break;
       }
     }
