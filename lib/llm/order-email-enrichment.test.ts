@@ -221,4 +221,47 @@ describe("enrichOrderEmailPrediction Lebedeva-like case", () => {
     );
     expect(enriched.warnings.some((w) => /несколько пациент/i.test(String(w)))).toBe(false);
   });
+
+  it("marks hasScans when STL files are in email but AI omitted attachment ids", async () => {
+    vi.mocked(db.email.findUnique).mockResolvedValueOnce({
+      subject: "РемиКИдс_БурдунАО_МР с крючками",
+      receivedAt: new Date("2026-07-08T10:00:00.000Z"),
+      sentAt: null,
+      createdAt: new Date("2026-07-08T10:00:00.000Z"),
+      textBody:
+        "аппарат Марко Роса с опорой на 53, 55, 63, 65, титановый + крючки для лицевой маски",
+      htmlBody: null,
+      preview: null,
+    });
+
+    const enriched = await enrichOrderEmailPrediction(db as never, "tenant-1", {
+      primaryEmailId: "email-1",
+      ai: {
+        patientName: "Бурдун Агата Олеговна",
+        clientOrderText:
+          "аппарат Марко Роса с опорой на 53, 55, 63, 65, титановый + крючки для лицевой маски",
+        suggestedAttachmentIds: [],
+        hasScans: false,
+        compositionHints: [{ nameHint: "Аппарат Марко Росса/HAAS" }],
+        warnings: [],
+      },
+      attachments: [
+        {
+          id: "stl-l",
+          fileName: "308113407_shell_occlusion_l.stl",
+          mimeType: "model/stl",
+        },
+        {
+          id: "stl-u",
+          fileName: "308113407_shell_occlusion_u.stl",
+          mimeType: "model/stl",
+        },
+      ],
+      resolvedClinicId: "clinic-1",
+      resolvedDoctorId: "doctor-1",
+    });
+
+    expect(enriched.hasScans).toBe(true);
+    expect(enriched.suggestedAttachmentIds).toEqual(["stl-l", "stl-u"]);
+  });
 });

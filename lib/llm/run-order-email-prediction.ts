@@ -233,7 +233,8 @@ export async function runOrderEmailPrediction(
   const clientOrderText =
     structured.clientOrderText ?? buildClientOrderTextFromBody(effectiveBody);
   const useHeuristicPrefill =
-    (opts?.forPrefill || orderId == null) &&
+    !opts?.forPrefill &&
+    orderId == null &&
     canUseHeuristicPrefill({
       patientName,
       doctorHint: structured.doctorHint,

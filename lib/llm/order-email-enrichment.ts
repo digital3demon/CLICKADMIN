@@ -5,7 +5,7 @@ import { getClientsPrisma } from "@/lib/get-domain-prisma";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 import { emailEffectiveReceivedAt } from "@/lib/mail/order-source-work-received";
 import { normalizeClientOrderText } from "@/lib/order-email-client-text";
-import { deriveSourceDataFlagsFromAttachments } from "@/lib/order-email-attachment-heuristics";
+import { deriveSourceDataFlagsFromAttachments, collectScanLikeAttachmentIds } from "@/lib/order-email-attachment-heuristics";
 import { parseOptionalIsoDate, parseFirstDateFromText } from "@/lib/order-email-date-parse";
 import { resolveClientBillingForOrder } from "@/lib/order-client-billing-for-order";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
@@ -18,7 +18,10 @@ import {
   compositionLinesToOrderConstructions,
   loadActivePriceListItemNames,
   dedupeCompositionHintsBySpecificity,
+  dedupeCompositionHintsBySiblingVariants,
   filterCompositionHintsByNegation,
+  filterCompositionHintsByOrderTextEvidence,
+  hasOrderTextEvidenceForPriceHint,
   type CompositionHint,
 } from "./resolve-ai-composition-lines";
 import type { EmailAttachmentCatalogItem } from "./order-email-extract";
@@ -33,6 +36,7 @@ import {
   normalizeAwaitingDataFromEmailText,
 } from "./order-email-awaiting-data-guard";
 import { normalizeWarningsForShipTogetherRequest } from "./order-email-shipment-together-guard";
+import { enrichCompositionHintsWithTeethFdi } from "@/lib/order-text-teeth-fdi";
 
 export type EnrichedPrediction = Record<string, unknown>;
 
@@ -130,6 +134,27 @@ function mergeCompositionHintObjects(
     merged.push(hint);
   }
   return merged;
+}
+
+function mergeAiAndInferredCompositionHints(
+  aiHints: CompositionHint[],
+  inferredHints: CompositionHint[],
+  orderText: string,
+): CompositionHint[] {
+  if (aiHints.length === 0) return inferredHints;
+  if (inferredHints.length === 0) {
+    return filterCompositionHintsByOrderTextEvidence(aiHints, orderText);
+  }
+
+  const inferredKeys = new Set(
+    inferredHints.map((hint) => hint.nameHint.trim().toLowerCase()).filter(Boolean),
+  );
+  const filteredAi = aiHints.filter((hint) => {
+    const key = hint.nameHint.trim().toLowerCase();
+    if (inferredKeys.has(key)) return true;
+    return hasOrderTextEvidenceForPriceHint(hint.nameHint, orderText);
+  });
+  return mergeCompositionHintObjects(filteredAi, inferredHints);
 }
 
 export async function enrichOrderEmailPrediction(
@@ -294,6 +319,12 @@ export async function enrichOrderEmailPrediction(
   out.hasMri = flags.hasMri;
   out.hasPhoto = flags.hasPhoto;
 
+  const scanAttachmentIds = collectScanLikeAttachmentIds(input.attachments);
+  const mergedSuggestedIds = [...new Set([...suggestedIds, ...scanAttachmentIds])];
+  if (mergedSuggestedIds.length > 0) {
+    out.suggestedAttachmentIds = mergedSuggestedIds;
+  }
+
   let appointmentIso = parseOptionalIsoDate(out.patientAppointmentAt);
   if (!appointmentIso && typeof out.patientAppointmentAt === "string") {
     const parsed = parseFirstDateFromText(out.patientAppointmentAt);
@@ -342,13 +373,22 @@ export async function enrichOrderEmailPrediction(
     priceListNames,
   );
   let compositionHints = filterCompositionHintsByNegation(
-    dedupeCompositionHintsBySpecificity(
-      aiCompositionHints.length === 0
-        ? inferredHints
-        : mergeCompositionHintObjects(aiCompositionHints, inferredHints),
+    dedupeCompositionHintsBySiblingVariants(
+      dedupeCompositionHintsBySpecificity(
+        aiCompositionHints.length === 0
+          ? inferredHints
+          : mergeAiAndInferredCompositionHints(
+              aiCompositionHints,
+              inferredHints,
+              negationOrderText,
+            ),
+      ),
+      negationOrderText,
     ),
     negationOrderText,
   );
+
+  compositionHints = enrichCompositionHintsWithTeethFdi(compositionHints, negationOrderText);
 
   let composition = await resolveAiCompositionLines(compositionHints, {
     clinicId: clinicIdForDb,

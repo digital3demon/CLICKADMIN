@@ -47,13 +47,25 @@ export function deriveSourceDataFlagsFromAttachments(
   let hasMri = aiFlags.hasMri === true;
   let hasPhoto = aiFlags.hasPhoto === true;
 
+  // Любой .stl / scan-файл в письме — сканы есть, даже если ИИ не выбрал ID вложений.
+  for (const a of attachments) {
+    if (isScanLikeAttachment(a.fileName, a.mimeType)) hasScans = true;
+    if (isCtLikeAttachment(a.fileName, a.mimeType)) hasCt = true;
+  }
+
   for (const id of selectedIds) {
     const a = byId.get(id);
     if (!a) continue;
-    if (isScanLikeAttachment(a.fileName, a.mimeType)) hasScans = true;
-    if (isCtLikeAttachment(a.fileName, a.mimeType)) hasCt = true;
     if (isPhotoLikeAttachment(a.fileName, a.mimeType)) hasPhoto = true;
   }
 
   return { hasScans, hasCt, hasMri, hasPhoto };
+}
+
+export function collectScanLikeAttachmentIds(
+  attachments: Array<{ id: string; fileName: string; mimeType?: string }>,
+): string[] {
+  return attachments
+    .filter((a) => isScanLikeAttachment(a.fileName, a.mimeType))
+    .map((a) => a.id);
 }

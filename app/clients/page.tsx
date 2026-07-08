@@ -401,6 +401,11 @@ export default async function ClientsPage({ searchParams }: PageProps) {
       where: { deletedAt: null },
       orderBy: { fullName: "asc" },
       include: {
+        _count: {
+          select: {
+            orders: { where: { archivedAt: null } },
+          },
+        },
         clinicLinks: {
           include: {
             clinic: {
@@ -503,6 +508,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                 <th className="px-3 py-3">День рождения</th>
                 <th className="px-3 py-3">Особенности</th>
                 <th className="px-3 py-3">Клиники</th>
+                <th className="px-3 py-3 text-center">Заказов</th>
                 <th className="px-3 py-3 text-center">Частное лицо</th>
               </tr>
             </thead>
@@ -510,7 +516,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
               {doctors.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-3 py-8 text-center text-[var(--text-muted)]"
                   >
                     Врачей пока нет. Нажмите «Добавить врача» над таблицей,
@@ -520,7 +526,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
               ) : visibleDoctors.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-3 py-8 text-center text-sm text-[var(--text-secondary)]"
                   >
                     По запросу «{doctorSearchRaw}» врачей не найдено. Измените
@@ -577,6 +583,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                         <span className="line-clamp-2 whitespace-pre-line">
                           {clinicsLabel}
                         </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center tabular-nums text-[var(--text-strong)]">
+                        {d._count.orders}
                       </td>
                       <td className="px-3 py-2.5 text-center text-[var(--text-strong)]">
                         {d.acceptsPrivatePractice ? "Да" : "—"}

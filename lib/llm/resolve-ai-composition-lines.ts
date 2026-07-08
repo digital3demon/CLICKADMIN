@@ -6,6 +6,7 @@ import {
   resolvePriceListItem,
   type PriceListItemRef,
 } from "@/lib/order-import-export";
+import { enrichCompositionHintsWithTeethFdi } from "@/lib/order-text-teeth-fdi";
 
 export type CompositionHint = {
   nameHint: string;
@@ -76,6 +77,38 @@ const FUZZY_HINT_MIN_LEN = 4;
 /** Если scores близки — неоднозначно; при равной неясности берём более дешёвую позицию. */
 const AMBIGUOUS_MATCH_SCORE_MARGIN = 25;
 
+/** Слова, которые сами по себе не доказывают позицию в тексте заказа. */
+const GENERIC_CATALOG_TOKENS = new Set([
+  "аппарат",
+  "коронка",
+  "каппа",
+  "сплинт",
+  "модель",
+  "ключ",
+  "силиконовый",
+  "печатной",
+  "из",
+  "для",
+  "лечения",
+  "на",
+  "с",
+  "и",
+  "или",
+  "прайс",
+  "работа",
+  "haas",
+  "немедленная",
+  "нагрузка",
+  "разборная",
+  "неразборная",
+  "диагностическая",
+  "сложный",
+  "премиум",
+  "сектора",
+  "печатной",
+  "модели",
+]);
+
 /** Латиница в прайсе vs кириллица в письме (Marco Rosa, Emax) — визуально похожие буквы. */
 const LATIN_TO_CYRILLIC_FOLD: Record<string, string> = {
   a: "а",
@@ -105,6 +138,74 @@ function foldScriptLookalikes(token: string): string {
 /** JS `\b` не считает кириллицу «словом» — явные границы букв/цифр. */
 const WORD_LEFT = String.raw`(?<![\p{L}\p{N}])`;
 const WORD_RIGHT = String.raw`(?![\p{L}\p{N}])`;
+
+const TITAN_TOKEN_RE = new RegExp(`${WORD_LEFT}титан(?:овый|овая|овое)?${WORD_RIGHT}`, "iu");
+
+function normalizeMaterialTokens(text: string): string {
+  return text
+    .replace(new RegExp(`${WORD_LEFT}титановый${WORD_RIGHT}`, "giu"), " титан ")
+    .replace(new RegExp(`${WORD_LEFT}титановая${WORD_RIGHT}`, "giu"), " титан ")
+    .replace(new RegExp(`${WORD_LEFT}титановое${WORD_RIGHT}`, "giu"), " титан ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function materialVariantBoost(label: string, orderText: string): number {
+  const text = normalizeMaterialTokens(orderText.toLowerCase());
+  const hasTitanInText = TITAN_TOKEN_RE.test(text);
+  const labelLower = label.toLowerCase();
+  const hasTitanInLabel = TITAN_TOKEN_RE.test(labelLower);
+  if (hasTitanInText && hasTitanInLabel) return 80;
+  if (hasTitanInText && !hasTitanInLabel && /марко|росса|роса|haas/i.test(labelLower)) {
+    return -60;
+  }
+  return 0;
+}
+
+function getDistinctiveCatalogTokens(name: string): string[] {
+  return tokenizeForMatch(name).filter(
+    (token) => token.length >= 3 && !GENERIC_CATALOG_TOKENS.has(token),
+  );
+}
+
+/** Есть ли в тексте заказа опора для hint (отсекает «храп» при заказе «марко роса»). */
+export function hasOrderTextEvidenceForPriceHint(hintName: string, orderText: string): boolean {
+  const text = normalizeMaterialTokens(stripNegatedPhrasesForMatching(orderText));
+  if (!text.trim()) return true;
+
+  const score = scorePriceItemMentionInOrderText(hintName, text);
+  if (score <= 0) return false;
+
+  const textTokens = tokenizeForMatch(normalizeMaterialTokens(text));
+  const distinctiveStrong = getDistinctiveCatalogTokens(hintName).filter((token) => token.length >= 5);
+  if (distinctiveStrong.length === 0) return true;
+
+  const matchedStrong = distinctiveStrong.filter((token) =>
+    textTokens.some((textToken) => tokenMatchStrength(token, textToken) > 0),
+  );
+  if (matchedStrong.length > 0) return true;
+
+  const familyHead = tokenizeForMatch(hintName).find((token) =>
+    ["модель", "сплинт", "коронка", "каппа", "аппарат", "немедленная", "нагрузка"].includes(token),
+  );
+  if (
+    familyHead &&
+    textTokens.some((textToken) => tokenMatchStrength(familyHead, textToken) > 0)
+  ) {
+    return !distinctiveStrong.some((token) => /храп/i.test(token));
+  }
+
+  return false;
+}
+
+export function filterCompositionHintsByOrderTextEvidence(
+  hints: CompositionHint[],
+  orderText: string,
+): CompositionHint[] {
+  const text = orderText.trim();
+  if (!text) return hints;
+  return hints.filter((hint) => hasOrderTextEvidenceForPriceHint(hint.nameHint, text));
+}
 
 /** Верхняя/верхнюю/на верхнюю челюсть — не часть названия прайса. */
 const JAW_UPPER_MARKER = String.raw`(?:вч|(?:на\s+)?верх(?:нюю|няя|ней)(?:\s+челюсть)?|upper)`;
@@ -262,9 +363,9 @@ function tokenMatchStrength(itemToken: string, textToken: string): number {
 }
 
 function scorePriceItemMentionInOrderText(itemName: string, orderText: string): number {
-  const itemTokens = tokenizeForMatch(itemName);
+  const itemTokens = tokenizeForMatch(normalizeMaterialTokens(itemName));
   if (itemTokens.length === 0) return 0;
-  const textTokens = tokenizeForMatch(orderText);
+  const textTokens = tokenizeForMatch(normalizeMaterialTokens(orderText));
   if (textTokens.length === 0) return 0;
 
   let matched = 0;
@@ -325,8 +426,29 @@ export function inferCompositionHintsFromOrderText(
 
   if (scored.length === 0) return [];
   const best = scored[0]!;
-  if (scored.length > 1 && scored[1]!.score === best.score) {
-    return [];
+  const closeCandidates = scored.filter(
+    (row) => best.score - row.score < AMBIGUOUS_MATCH_SCORE_MARGIN,
+  );
+  if (closeCandidates.length > 1) {
+    const textHasMaterial = TITAN_TOKEN_RE.test(normalizeMaterialTokens(text.toLowerCase()));
+    let chosenName = best.name;
+    if (textHasMaterial) {
+      const picked = pickBestSiblingVariant(
+        closeCandidates.map((row) => ({ nameHint: row.name, unitPrice: 0 })),
+        text,
+      );
+      chosenName = picked.nameHint ?? best.name;
+    } else {
+      chosenName = closeCandidates
+        .slice()
+        .sort(
+          (a, b) =>
+            tokenizeForMatch(a.name).length - tokenizeForMatch(b.name).length ||
+            a.name.localeCompare(b.name, "ru"),
+        )[0]!.name;
+    }
+    const jawQty = orderTextImpliesJawPairQuantity(text);
+    return [{ nameHint: chosenName, quantity: jawQty ?? 1 }];
   }
 
   const jawQty = orderTextImpliesJawPairQuantity(text);
@@ -378,7 +500,11 @@ export function inferCompositionHintsFromEmailContext(
   return inferCompositionHintsFromOrderText(combined, priceListItemNames);
 }
 
-function findAmbiguousMatches(hint: string, items: CatalogItem[]): CatalogItem[] {
+function findAmbiguousMatches(
+  hint: string,
+  items: CatalogItem[],
+  orderText?: string,
+): CatalogItem[] {
   const normalizedHint = normalizeCompositionHintForMatch(hint);
   const q = normalizedHint.trim().toLowerCase();
   if (q.length < FUZZY_HINT_MIN_LEN) return [];
@@ -391,14 +517,14 @@ function findAmbiguousMatches(hint: string, items: CatalogItem[]): CatalogItem[]
     return false;
   });
   if (substringMatches.length > 0) {
-    const picked = pickBestCatalogMatch(hint, substringMatches);
+    const picked = pickBestCatalogMatch(hint, substringMatches, orderText);
     if (picked) return [picked];
     return substringMatches;
   }
 
   const tokenMatches = items.filter((it) => hintTokensMatchName(normalizedHint, it.name));
   if (tokenMatches.length === 0) return [];
-  const picked = pickBestCatalogMatch(hint, tokenMatches);
+  const picked = pickBestCatalogMatch(hint, tokenMatches, orderText);
   return picked ? [picked] : tokenMatches;
 }
 
@@ -479,7 +605,9 @@ function pickBestSiblingVariant<T extends { nameHint?: string; name?: string; un
   if (text) {
     const scored = group.map((entry) => {
       const label = entry.nameHint ?? entry.name ?? "";
-      return { entry, score: scorePriceItemMentionInOrderText(label, text) };
+      let score = scorePriceItemMentionInOrderText(label, text);
+      score += materialVariantBoost(label, text);
+      return { entry, score };
     });
     scored.sort((a, b) => b.score - a.score);
     const best = scored[0]!;
@@ -560,19 +688,68 @@ function scoreHintToCatalogItem(hint: string, item: CatalogItem): number {
   return score;
 }
 
-function pickBestCatalogMatch(hint: string, candidates: CatalogItem[]): CatalogItem | null {
+function catalogItemSiblingPick(candidates: CatalogItem[], orderText: string): CatalogItem {
+  if (candidates.length === 1) return candidates[0]!;
+  const picked = pickBestSiblingVariant(
+    candidates.map((item) => ({ name: item.name, unitPrice: item.priceRub })),
+    orderText,
+  );
+  const pickedName = picked.name ?? candidates[0]!.name;
+  return candidates.find((item) => item.name === pickedName) ?? pickCheapestCatalogItem(candidates);
+}
+
+function pickBestCatalogMatch(
+  hint: string,
+  candidates: CatalogItem[],
+  orderText?: string,
+): CatalogItem | null {
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0]!;
   const scored = candidates
-    .map((item) => ({ item, score: scoreHintToCatalogItem(hint, item) }))
+    .map((item) => {
+      let score = scoreHintToCatalogItem(hint, item);
+      if (orderText?.trim()) {
+        score += scorePriceItemMentionInOrderText(item.name, orderText) * 0.4;
+        score += materialVariantBoost(item.name, orderText);
+      }
+      return { item, score };
+    })
     .sort((a, b) => b.score - a.score);
   const best = scored[0]!;
   const second = scored[1];
   if (!second || best.score - second.score >= AMBIGUOUS_MATCH_SCORE_MARGIN) {
     const top = scored.filter((row) => row.score === best.score).map((row) => row.item);
-    return pickCheapestCatalogItem(top);
+    return orderText?.trim()
+      ? catalogItemSiblingPick(top, orderText)
+      : pickCheapestCatalogItem(top);
   }
-  return pickCheapestCatalogItem(candidates);
+  return orderText?.trim()
+    ? catalogItemSiblingPick(candidates, orderText)
+    : pickCheapestCatalogItem(candidates);
+}
+
+function upgradeCatalogItemForOrderMaterial(
+  item: CatalogItem,
+  catalog: CatalogItem[],
+  orderText: string,
+): CatalogItem {
+  const text = orderText.trim();
+  if (!text) return item;
+
+  const textHasTitan = TITAN_TOKEN_RE.test(normalizeMaterialTokens(text.toLowerCase()));
+  const itemHasTitan = TITAN_TOKEN_RE.test(item.name.toLowerCase());
+  if (!textHasTitan) return item;
+  if (itemHasTitan) return item;
+
+  const upgrades = catalog.filter(
+    (candidate) =>
+      candidate.id !== item.id &&
+      isPriceNameStrictlyMoreSpecific(candidate.name, item.name) &&
+      TITAN_TOKEN_RE.test(candidate.name.toLowerCase()),
+  );
+  if (upgrades.length === 0) return item;
+  if (upgrades.length === 1) return upgrades[0]!;
+  return pickBestCatalogMatch(item.name, upgrades, orderText) ?? upgrades[0]!;
 }
 
 /** Убирает пары вроде «сплинт» + «сплинт сложный» из hints ИИ и эвристик. */
@@ -624,6 +801,8 @@ export async function resolveAiCompositionLines(
   let workingHints = dedupeCompositionHintsBySpecificity(hints);
   if (negationText) {
     workingHints = filterCompositionHintsByNegation(workingHints, negationText);
+    workingHints = filterCompositionHintsByOrderTextEvidence(workingHints, negationText);
+    workingHints = enrichCompositionHintsWithTeethFdi(workingHints, negationText);
   }
 
   const catalog = await loadPriceListItemsForClient(opts.clinicId, opts.doctorId);
@@ -642,18 +821,24 @@ export async function resolveAiCompositionLines(
       item = resolvePriceListItem(nameHint, catalogRefs);
     }
     if (!item) {
-      const candidates = findAmbiguousMatches(nameHint, catalog);
+      const candidates = findAmbiguousMatches(nameHint, catalog, negationText);
       if (candidates.length === 1) {
         item = candidates[0];
       } else if (candidates.length > 1) {
-        item = pickBestCatalogMatch(nameHint, candidates) ?? pickCheapestCatalogItem(candidates);
+        item =
+          pickBestCatalogMatch(nameHint, candidates, negationText) ??
+          pickCheapestCatalogItem(candidates);
       } else {
         warnings.push(`Не найдено в прайсе: «${nameHint}»`);
         continue;
       }
     }
 
-    const full = catalog.find((c) => c.id === item!.id);
+    let full = catalog.find((c) => c.id === item!.id);
+    if (full && negationText) {
+      full = upgradeCatalogItemForOrderMaterial(full, catalog, negationText);
+      item = full;
+    }
     const qty =
       hint.quantity != null && Number.isFinite(hint.quantity) && hint.quantity >= 1
         ? Math.floor(hint.quantity)

@@ -5,8 +5,8 @@ import { ClinicCommercialTermsPanel } from "@/components/clients/ClinicCommercia
 import { ClinicOverviewEditCard } from "@/components/clients/ClinicOverviewEditCard";
 import { ClinicPriceOverridesPanel } from "@/components/clients/ClinicPriceOverridesPanel";
 import { ClientsBackLink } from "@/components/clients/ClientsBackLink";
+import { ClientCardOrdersTable } from "@/components/clients/ClientCardOrdersTable";
 import { ClientCardTabs } from "@/components/clients/ClientCardTabs";
-import { ClientOrderPreviewButton } from "@/components/clients/ClientOrderPreviewButton";
 import { ContractorDeletedNotice } from "@/components/clients/ContractorDeletedNotice";
 import { FinancePanel } from "@/components/clients/FinancePanel";
 import { RequisitesPanel } from "@/components/clients/RequisitesPanel";
@@ -20,10 +20,7 @@ import {
 } from "@/lib/clinic-finance";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getPrisma } from "@/lib/get-prisma";
-import {
-  clientCardOrderStageLabel,
-  formatClientCardShippedAt,
-} from "@/lib/client-card-orders-table";
+import { toClientCardOrderItem } from "@/lib/client-card-orders-table";
 import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 import { listClinicOrderSourceEmails } from "@/lib/client-order-source-emails";
 
@@ -204,8 +201,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
   }
 
   const totalOrders = clinic._count.orders;
-  const shownOrders = clinic.orders.length;
-  const hasMoreOrders = totalOrders > shownOrders;
+  const clientCardOrders = clinic.orders.map((o) => toClientCardOrderItem(o));
 
   let allTimeFinance = {
     totalRub: 0,
@@ -351,87 +347,12 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
             />
           </div>
 
-          <section className="mt-8">
-            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-              <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                Заказы
-              </h2>
-              {hasMoreOrders ? (
-                <p className="text-xs text-[var(--text-muted)]">
-                  Показаны последние {shownOrders} из {totalOrders}
-                </p>
-              ) : null}
-            </div>
-            <div className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm">
-              <table className="w-full min-w-[860px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-                    <th className="px-3 py-3">Номер</th>
-                    <th className="px-3 py-3">Врач</th>
-                    <th className="px-3 py-3">Пациент</th>
-                    <th className="px-3 py-3">Этап</th>
-                    <th className="px-3 py-3">Срочно</th>
-                    <th className="px-3 py-3">Создан</th>
-                    <th className="px-3 py-3">Дата отгрузки</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clinic.orders.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-3 py-8 text-center text-[var(--text-muted)]"
-                      >
-                        По этой клинике заказов ещё нет.
-                      </td>
-                    </tr>
-                  ) : (
-                    clinic.orders.map((o) => (
-                      <tr
-                        key={o.id}
-                        className="border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--table-row-hover)]"
-                      >
-                        <td className="px-3 py-2.5">
-                          <ClientOrderPreviewButton
-                            orderId={o.id}
-                            orderNumber={o.orderNumber}
-                          />
-                        </td>
-                        <td className="max-w-[180px] truncate px-3 py-2.5 text-[var(--text-strong)]">
-                          {o.doctor.fullName}
-                        </td>
-                        <td className="max-w-[160px] truncate px-3 py-2.5 text-[var(--text-body)]">
-                          {o.patientName ?? "—"}
-                        </td>
-                        <td className="px-3 py-2.5 text-[var(--text-strong)]">
-                          {clientCardOrderStageLabel(o)}
-                        </td>
-                        <td className="px-3 py-2.5 text-[var(--text-body)]">
-                          {!o.isUrgent
-                            ? "—"
-                            : o.urgentCoefficient != null
-                              ? `×${o.urgentCoefficient}`
-                              : "Срочно"}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-[var(--text-secondary)]">
-                          {o.createdAt.toLocaleString("ru-RU", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-[var(--text-secondary)]">
-                          {formatClientCardShippedAt(o)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <ClientCardOrdersTable
+            variant="clinic"
+            orders={clientCardOrders}
+            totalOrders={totalOrders}
+            emptyMessage="По этой клинике заказов ещё нет."
+          />
         </>
       ) : null}
     </ModuleFrame>

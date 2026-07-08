@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ClientCardOrdersTable } from "@/components/clients/ClientCardOrdersTable";
 import { ClientCardTabs } from "@/components/clients/ClientCardTabs";
 import { ClientsBackLink } from "@/components/clients/ClientsBackLink";
 import { ContractorDeletedNotice } from "@/components/clients/ContractorDeletedNotice";
@@ -20,13 +21,9 @@ import {
 } from "@/lib/clinic-finance";
 import { getPrisma } from "@/lib/get-prisma";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
-import { ClientOrderPreviewButton } from "@/components/clients/ClientOrderPreviewButton";
 import { ClientOrderSourceEmailsField } from "@/components/clients/ClientOrderSourceEmailsField";
 import { listDoctorOrderSourceEmails } from "@/lib/client-order-source-emails";
-import {
-  clientCardOrderStageLabel,
-  formatClientCardShippedAt,
-} from "@/lib/client-card-orders-table";
+import { toClientCardOrderItem } from "@/lib/client-card-orders-table";
 const ORDERS_PREVIEW = 100;
 
 function firstSearchParam(
@@ -264,8 +261,7 @@ export default async function DoctorCardPage({
   }
 
   const totalOrders = doctor._count.orders;
-  const shownOrders = doctor.orders.length;
-  const hasMoreOrders = totalOrders > shownOrders;
+  const clientCardOrders = doctor.orders.map((o) => toClientCardOrderItem(o));
 
   const frameDescription =
     activeTab === "requisites"
@@ -531,98 +527,12 @@ export default async function DoctorCardPage({
             />
           </div>
 
-          <section className="mt-8">
-            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-              <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                Заказы
-              </h2>
-              {hasMoreOrders ? (
-                <p className="text-xs text-[var(--text-muted)]">
-                  Показаны последние {shownOrders} из {totalOrders}
-                </p>
-              ) : null}
-            </div>
-            <div className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm">
-              <table className="w-full min-w-[920px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-                    <th className="px-3 py-3">Номер</th>
-                    <th className="px-3 py-3">Клиника</th>
-                    <th className="px-3 py-3">Пациент</th>
-                    <th className="px-3 py-3">Этап</th>
-                    <th className="px-3 py-3">Срочно</th>
-                    <th className="px-3 py-3">Создан</th>
-                    <th className="px-3 py-3">Дата отгрузки</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {doctor.orders.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-3 py-8 text-center text-[var(--text-muted)]"
-                      >
-                        По этому врачу заказов ещё нет.
-                      </td>
-                    </tr>
-                  ) : (
-                    doctor.orders.map((o) => (
-                      <tr
-                        key={o.id}
-                        className="border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--table-row-hover)]"
-                      >
-                        <td className="px-3 py-2.5">
-                          <ClientOrderPreviewButton
-                            orderId={o.id}
-                            orderNumber={o.orderNumber}
-                          />
-                        </td>
-                        <td className="max-w-[200px] truncate px-3 py-2.5 text-[var(--text-strong)]">
-                          {o.clinic ? (
-                            <Link
-                              href={`/clients/${o.clinic.id}`}
-                              className="text-[var(--sidebar-blue)] hover:underline"
-                            >
-                              {o.clinic.name}
-                            </Link>
-                          ) : (
-                            <span className="text-[var(--text-muted)]">
-                              Частная практика
-                            </span>
-                          )}
-                        </td>
-                        <td className="max-w-[160px] truncate px-3 py-2.5 text-[var(--text-body)]">
-                          {o.patientName ?? "—"}
-                        </td>
-                        <td className="px-3 py-2.5 text-[var(--text-strong)]">
-                          {clientCardOrderStageLabel(o)}
-                        </td>
-                        <td className="px-3 py-2.5 text-[var(--text-body)]">
-                          {!o.isUrgent
-                            ? "—"
-                            : o.urgentCoefficient != null
-                              ? `×${o.urgentCoefficient}`
-                              : "Срочно"}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-[var(--text-secondary)]">
-                          {o.createdAt.toLocaleString("ru-RU", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-[var(--text-secondary)]">
-                          {formatClientCardShippedAt(o)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <ClientCardOrdersTable
+            variant="doctor"
+            orders={clientCardOrders}
+            totalOrders={totalOrders}
+            emptyMessage="По этому врачу заказов ещё нет."
+          />
         </>
       ) : null}
     </ModuleFrame>

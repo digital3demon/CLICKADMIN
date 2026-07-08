@@ -26,6 +26,8 @@ import {
   extractNegatedOrderPhrases,
   isPriceConceptNegatedInOrderText,
   filterCompositionHintsByNegation,
+  filterCompositionHintsByOrderTextEvidence,
+  hasOrderTextEvidenceForPriceHint,
 } from "./resolve-ai-composition-lines";
 
 const mockItems = [
@@ -75,6 +77,26 @@ const mockItems = [
     name: "Аппарат Марко Росса/HAAS титан",
     priceRub: 19000,
     leadWorkingDays: 10,
+    sortOrder: 5,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-5b",
+    code: "005b",
+    name: "Аппарат Марко Росса/HAAS",
+    priceRub: 15000,
+    leadWorkingDays: 10,
+    sortOrder: 5,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-snore",
+    code: "3300",
+    name: "Аппарат для лечения храпа",
+    priceRub: 33000,
+    leadWorkingDays: 14,
     sortOrder: 5,
     isActive: true,
     priceListId: "pl-1",
@@ -416,7 +438,7 @@ describe("inferCompositionHintsFromOrderText", () => {
       "Корона из циркония Marco Rosa (многослойный)",
     ];
     expect(inferCompositionHintsFromOrderText("марко роса", extendedNames)).toEqual([
-      { nameHint: "Аппарат Марко Росса/HAAS титан", quantity: 1 },
+      { nameHint: "Аппарат Марко Росса/HAAS", quantity: 1 },
     ]);
   });
 });
@@ -433,16 +455,16 @@ describe("inferCompositionHintsFromEmailContext", () => {
         },
         names,
       ),
-    ).toEqual([{ nameHint: "Аппарат Марко Росса/HAAS титан", quantity: 1 }]);
+    ).toEqual([{ nameHint: "Аппарат Марко Росса/HAAS", quantity: 1 }]);
   });
 
   it("matches typo rosa vs rossa in price list name", async () => {
     const res = await resolveAiCompositionLines(
       [{ nameHint: "марко роса", quantity: 1 }],
-      { clinicId: null, doctorId: null },
+      { clinicId: null, doctorId: null, negationOrderText: "марко роса" },
     );
     expect(res.lines).toHaveLength(1);
-    expect(res.lines[0].code).toBe("005");
+    expect(res.lines[0].code).toBe("005b");
   });
 
   it("ignores hallucinated AI hint when marco rosa maps to apparatus", async () => {
@@ -465,6 +487,47 @@ describe("inferCompositionHintsFromEmailContext", () => {
     });
     expect(aiOnly.lines).toHaveLength(0);
     expect(inferredOnly.lines).toHaveLength(1);
-    expect(inferredOnly.lines[0].code).toBe("005");
+    expect(inferredOnly.lines[0].code).toBe("005b");
+  });
+});
+
+const remiKidsOrderText =
+  "аппарат Марко Роса с опорой на 53, 55, 63, 65, титановый + крючки для лицевой маски";
+
+describe("Marco Rosa titanium and hallucination guard", () => {
+  it("rejects snoring hint without evidence in order text", () => {
+    expect(hasOrderTextEvidenceForPriceHint("Аппарат для лечения храпа", remiKidsOrderText)).toBe(
+      false,
+    );
+    expect(
+      filterCompositionHintsByOrderTextEvidence(
+        [
+          { nameHint: "Аппарат Марко Росса/HAAS", quantity: 1 },
+          { nameHint: "Аппарат для лечения храпа", quantity: 1 },
+        ],
+        remiKidsOrderText,
+      ),
+    ).toEqual([{ nameHint: "Аппарат Марко Росса/HAAS", quantity: 1 }]);
+  });
+
+  it("resolves titanium Marco Rosa when order text says титановый", async () => {
+    const res = await resolveAiCompositionLines(
+      [
+        { nameHint: "Аппарат Марко Росса/HAAS", quantity: 1 },
+        { nameHint: "Аппарат для лечения храпа", quantity: 1 },
+      ],
+      { clinicId: null, doctorId: null, negationOrderText: remiKidsOrderText },
+    );
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines[0]?.code).toBe("005");
+    expect(res.lines[0]?.name).toContain("титан");
+    expect(res.lines[0]?.teethFdi).toEqual(["53", "55", "63", "65"]);
+  });
+
+  it("infers titanium variant from full Remi Kids order text", () => {
+    const names = mockItems.map((item) => item.name);
+    expect(inferCompositionHintsFromOrderText(remiKidsOrderText, names)).toEqual([
+      { nameHint: "Аппарат Марко Росса/HAAS титан", quantity: 1 },
+    ]);
   });
 });

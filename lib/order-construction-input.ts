@@ -4,7 +4,7 @@ import {
   type Prisma,
   type PrismaClient,
 } from "@prisma/client";
-import { isValidPermanentFdi } from "@/lib/fdi-teeth";
+import { isValidFdi } from "@/lib/fdi-teeth";
 import { resolvePriceOverrideMap } from "@/lib/price-overrides";
 
 export const JAW_ARCH_SET = new Set<string>(["UPPER", "LOWER", "BOTH"]);
@@ -168,7 +168,7 @@ export async function buildConstructionCreatesFromInput(
     const materialId = trimOrNull(c.materialId);
 
     if (bf && bt) {
-      if (!isValidPermanentFdi(bf) || !isValidPermanentFdi(bt)) {
+      if (!isValidFdi(bf) || !isValidFdi(bt)) {
         return {
           ok: false,
           err: {
@@ -206,7 +206,7 @@ export async function buildConstructionCreatesFromInput(
       if ("teethFdi" in c && Array.isArray(c.teethFdi)) {
         const teeth = c.teethFdi.map((x) => String(x));
         for (const tf of teeth) {
-          if (!isValidPermanentFdi(tf)) {
+          if (!isValidFdi(tf)) {
             return {
               ok: false,
               err: {
@@ -278,7 +278,7 @@ export async function buildConstructionCreatesFromInput(
     if ("teethFdi" in c && Array.isArray(c.teethFdi)) {
       const teeth = c.teethFdi.map((x) => String(x));
       for (const tf of teeth) {
-        if (!isValidPermanentFdi(tf)) {
+        if (!isValidFdi(tf)) {
           return {
             ok: false,
             err: {

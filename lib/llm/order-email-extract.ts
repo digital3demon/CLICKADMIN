@@ -381,15 +381,7 @@ export async function extractOrderFieldsFromEmail(
   }
 
   const fullCatalog = await fetchClinicDoctorCatalog(tenantId);
-  const catalog =
-    options?.forPrefill &&
-    !options.preResolved?.doctorId &&
-    !options.preResolved?.clinicId
-      ? filterCatalogForPrefill(
-          fullCatalog,
-          `${options.fromAddress ?? ""}\n${options.emailBodyForCatalogFilter ?? ""}`,
-        )
-      : fullCatalog;
+  const catalog = fullCatalog;
   const catalogText = formatCatalogForPrompt(catalog);
   const attachments = options?.emailAttachments ?? [];
   const attachmentsText = formatAttachmentsForPrompt(attachments);
@@ -408,7 +400,7 @@ export async function extractOrderFieldsFromEmail(
   const response = await chatCompletion(settings, {
     messages: [{ role: "user", content: prompt }],
     responseFormat: "json_object",
-    maxTokens: options?.forPrefill ? 2048 : 4096,
+    maxTokens: 4096,
   });
 
   if (!response.ok) {

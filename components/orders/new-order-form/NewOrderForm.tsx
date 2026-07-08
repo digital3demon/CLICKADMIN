@@ -2231,6 +2231,18 @@ export function NewOrderForm({
         ) : null}
       </header>
 
+      {aiMode && !previewMode ? (
+        <div className="sticky top-0 z-20 shrink-0 border-b border-violet-200/80 bg-[var(--card-bg)] px-3 py-2 shadow-sm dark:border-violet-900/40 sm:px-4 sm:py-2.5">
+          <OrderAiPrefillPanel
+            status={aiPrefillStatus}
+            confidenceScore={aiConfidenceScore}
+            warnings={aiWarnings}
+            missingFields={aiUnfilledFields}
+            errorMessage={aiPrefillError}
+          />
+        </div>
+      ) : null}
+
       <div className="relative z-0 shrink-0 overflow-x-hidden bg-[var(--card-bg)] px-3 py-2 sm:px-4 sm:py-2.5">
         {aiPrefillLoading ? (
           <div
@@ -2675,16 +2687,6 @@ export function NewOrderForm({
               patientName={patientName}
               onChange={setQuickOrder}
             />
-
-            {aiMode && !previewMode ? (
-              <OrderAiPrefillPanel
-                status={aiPrefillStatus}
-                confidenceScore={aiConfidenceScore}
-                warnings={aiWarnings}
-                missingFields={aiUnfilledFields}
-                errorMessage={aiPrefillError}
-              />
-            ) : null}
 
             <div
               className="h-[calc(3.25rem+env(safe-area-inset-bottom))] shell-desktop:hidden"

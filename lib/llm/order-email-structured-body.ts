@@ -93,7 +93,7 @@ export function buildClientOrderTextFromBody(text: string | null | undefined): s
   return joined || null;
 }
 
-/** ИИ-prefill: достаточно текста + пациент/врач — без полного LLM. */
+/** Быстрый путь без LLM; в форме «новый заказ» (forPrefill) не используется — там тот же полный LLM, что в diff viewer. */
 export function canUseHeuristicPrefill(input: {
   patientName: string | null;
   doctorHint: string | null;

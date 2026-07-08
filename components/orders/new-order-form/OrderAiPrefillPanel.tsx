@@ -85,7 +85,7 @@ export function OrderAiPrefillPanel({
 
   return (
     <section
-      className="mt-4 border-t border-[var(--card-border)] pt-4"
+      className="rounded-lg border border-violet-200/90 bg-violet-50/40 px-3 py-3 dark:border-violet-900/45 dark:bg-violet-950/20 sm:px-4"
       aria-live="polite"
       aria-busy={status === "loading"}
     >
