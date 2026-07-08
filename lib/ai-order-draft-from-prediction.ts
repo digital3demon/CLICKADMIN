@@ -9,7 +9,10 @@ import { compositionLinesToOrderConstructions } from "@/lib/llm/resolve-ai-compo
 import { fetchOrderSourceEmails } from "@/lib/mail/order-source-emails";
 import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
 import { predictionNeedsReEnrichment } from "@/lib/llm/order-email-enrichment-version";
-import type { EmailAttachmentRow } from "@/lib/ai-prefill-draft-build";
+import {
+  resolveClientIdsFromPrediction,
+  type EmailAttachmentRow,
+} from "@/lib/ai-prefill-draft-build";
 export {
   aiResolvedConstructionsToDetailDraft,
   buildVirtualOrderDraftFromPrediction,
