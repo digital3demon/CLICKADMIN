@@ -220,6 +220,24 @@ export async function markOrderChatInboxDraftSyncFailed(
   return upd.count > 0;
 }
 
+/** Записать персональные USER_MENTION при отправке комментария (триггер POST, не фон). */
+export async function recordUserMentionsFromOrderComment(
+  db: PrismaClient,
+  input: {
+    tenantId: string;
+    orderId: string;
+    text: string;
+    authorLabel?: string | null;
+    crmDraftId?: string | null;
+    kaitenCommentId?: number | null;
+    syncState: ChatInboxSyncState;
+    source: OrderChatCorrectionSource;
+    kanbanAdminMentionTag?: string | null;
+  },
+): Promise<boolean> {
+  return createUserMentionInboxItems(db, input);
+}
+
 export async function syncOrderChatInboxFromKaitenComments(
   db: PrismaClient,
   input: {
@@ -242,10 +260,24 @@ export async function syncOrderChatInboxFromKaitenComments(
   for (const c of input.comments) {
     const kaitenCommentId = Math.trunc(c.id);
     if (!Number.isFinite(kaitenCommentId) || kaitenCommentId <= 0) continue;
-    const types = detectChatInboxTypes(c.text, input.kanbanAdminMentionTag);
-    if (types.length === 0) continue;
     const authorLabel = trimOrderChatAuthorLabel(c.authorName);
     const crmDraftId = String(c.crmDraftId || "").trim() || null;
+
+    const userMentionChanged = await createUserMentionInboxItems(db, {
+      tenantId,
+      orderId,
+      text: c.text,
+      authorLabel,
+      crmDraftId: crmDraftId ?? undefined,
+      kaitenCommentId,
+      syncState: "SYNCED_EXTERNAL",
+      source: "KAITEN",
+      kanbanAdminMentionTag: input.kanbanAdminMentionTag,
+    });
+    if (userMentionChanged) changed = true;
+
+    const types = detectChatInboxTypes(c.text, input.kanbanAdminMentionTag);
+    if (types.length === 0) continue;
 
     for (const type of types) {
       if (crmDraftId) {
@@ -293,17 +325,6 @@ export async function syncOrderChatInboxFromKaitenComments(
       });
       changed = true;
     }
-    await createUserMentionInboxItems(db, {
-      tenantId,
-      orderId,
-      text: c.text,
-      authorLabel,
-      crmDraftId: crmDraftId ?? undefined,
-      kaitenCommentId,
-      syncState: "SYNCED_EXTERNAL",
-      source: "KAITEN",
-      kanbanAdminMentionTag: input.kanbanAdminMentionTag,
-    });
   }
 
   return changed;

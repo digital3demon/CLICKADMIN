@@ -25,6 +25,7 @@ import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import { notifyTelegramForMentionsInOrderKaitenComment } from "@/lib/order-kaiten-comment-mention-telegram";
+import { recordUserMentionsFromOrderComment } from "@/lib/order-chat-inbox-db";
 import { getSiteOrigin } from "@/lib/site-origin-server";
 
 type PostBody = {
@@ -111,9 +112,9 @@ export async function POST(
   }
 
   let needCommentBackfill = false;
+  const kid = kaitenApiCommentNumericId(res.comment);
   try {
     if (isOrderChatCorrectionTrigger(text)) {
-      const kid = kaitenApiCommentNumericId(res.comment);
       if (kid != null) {
         await createOrderChatCorrectionIfNeeded(prisma, order.id, text, "KAITEN", {
           kaitenCommentId: kid,
@@ -127,7 +128,6 @@ export async function POST(
       }
     }
     if (isOrderProstheticsRequestTrigger(text)) {
-      const kid = kaitenApiCommentNumericId(res.comment);
       if (kid != null) {
         await createOrderProstheticsRequestIfNeeded(prisma, order.id, text, "KAITEN", {
           kaitenCommentId: kid,
@@ -142,6 +142,27 @@ export async function POST(
     }
   } catch (e) {
     console.error("[kaiten comments] correction record", e);
+  }
+
+  if (kid != null) {
+    try {
+      const tenantTagRow = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { kanbanAdminMentionTag: true },
+      });
+      await recordUserMentionsFromOrderComment(prisma, {
+        tenantId,
+        orderId: order.id,
+        text,
+        authorLabel: label,
+        kaitenCommentId: kid,
+        syncState: "SYNCED_EXTERNAL",
+        source: "KAITEN",
+        kanbanAdminMentionTag: tenantTagRow?.kanbanAdminMentionTag,
+      });
+    } catch (e) {
+      console.error("[kaiten comments] user mention inbox", e);
+    }
   }
 
   try {

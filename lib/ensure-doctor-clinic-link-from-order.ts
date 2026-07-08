@@ -4,8 +4,8 @@ import { revalidateAfterDoctorClinicLinkChange } from "@/lib/revalidate-after-do
 import { logger } from "@/lib/server/logger";
 
 /**
- * После создания/сохранения наряда: upsert DoctorOnClinic и сброс кэша карточек клиники/врача.
- * Идемпотентно — безопасно вызывать в after() на каждом PATCH/POST.
+ * После создания/смены врача или клиники в наряде: upsert DoctorOnClinic.
+ * Вызывается только по явному триггеру (POST наряда, PATCH с новым doctorId/clinicId).
  */
 export async function ensureDoctorClinicLinkAfterOrderSave(
   clientsDb: PrismaClient,

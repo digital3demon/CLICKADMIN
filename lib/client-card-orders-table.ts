@@ -1,4 +1,5 @@
-import { kaitenStatusDisplay } from "@/lib/kaiten-column-title";
+import type { DemoKanbanColumn } from "@prisma/client";
+import { demoKanbanColumnRu } from "@/lib/kanban-tenant-state-snippet-for-order";
 import {
   LAB_WORK_STATUS_LABELS,
   normalizeLegacyLabWorkStatus,
@@ -8,33 +9,24 @@ import { formatMoscowDate } from "@/lib/moscow-datetime-format";
 
 export type ClientCardOrderRow = {
   labWorkStatus: string;
-  kaitenColumnTitle: string | null;
-  kaitenCardId: number | null;
   demoKanbanColumn: string | null;
-  kaitenCardType?: { name: string } | null;
   adminShippedOtpr: boolean;
+  adminShippedAt: Date | null;
 };
 
-/** Подпись этапа: колонка Kaiten / демо-канбан, иначе labWorkStatus. */
+/** Подпись этапа из полей наряда в БД (без синхронизации Kaiten). */
 export function clientCardOrderStageLabel(o: ClientCardOrderRow): string {
-  const kaiten = kaitenStatusDisplay({
-    kaitenColumnTitle: o.kaitenColumnTitle,
-    kaitenCardId: o.kaitenCardId,
-    demoKanbanColumn: o.demoKanbanColumn,
-    demoCardTypeName: o.kaitenCardType?.name ?? null,
-  });
-  if (kaiten !== "Нет в Kaiten" && kaiten !== "—") {
-    return kaiten;
-  }
+  const demo = demoKanbanColumnRu(o.demoKanbanColumn as DemoKanbanColumn | null);
+  if (demo) return demo;
   const s = normalizeLegacyLabWorkStatus(o.labWorkStatus);
   return LAB_WORK_STATUS_LABELS[s as LabWorkStatus];
 }
 
-export function formatClientCardShippedAt(
-  adminShippedOtpr: boolean,
-  sentAt: Date | null | undefined,
-): string {
-  if (!adminShippedOtpr) return "—";
-  if (sentAt) return formatMoscowDate(sentAt);
+export function formatClientCardShippedAt(o: {
+  adminShippedOtpr: boolean;
+  adminShippedAt: Date | null;
+}): string {
+  if (!o.adminShippedOtpr) return "—";
+  if (o.adminShippedAt) return formatMoscowDate(o.adminShippedAt);
   return "—";
 }

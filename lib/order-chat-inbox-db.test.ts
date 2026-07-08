@@ -7,9 +7,14 @@ import {
 } from "@/lib/order-chat-inbox-db";
 
 describe("order-chat-inbox-db", () => {
+  const emptyUsersDb = () =>
+    ({
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    }) as const;
+
   it("creates deterministic inbox items from CRM comment triggers", async () => {
     const upsert = vi.fn().mockResolvedValue({});
-    const db = { orderChatInboxItem: { upsert } } as any;
+    const db = { orderChatInboxItem: { upsert }, ...emptyUsersDb() } as any;
     const changed = await createOrderChatInboxItemsFromCrmComment(db, {
       tenantId: "t1",
       orderId: "o1",
@@ -50,7 +55,10 @@ describe("order-chat-inbox-db", () => {
   it("upserts external kaiten comments by deterministic key", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 0 });
     const upsert = vi.fn().mockResolvedValue({});
-    const db = { orderChatInboxItem: { updateMany, upsert } } as any;
+    const db = {
+      orderChatInboxItem: { updateMany, upsert },
+      ...emptyUsersDb(),
+    } as any;
     const changed = await syncOrderChatInboxFromKaitenComments(db, {
       tenantId: "t1",
       orderId: "o1",
@@ -65,5 +73,37 @@ describe("order-chat-inbox-db", () => {
     });
     expect(changed).toBe(true);
     expect(upsert).toHaveBeenCalledTimes(2); // prosthetics + lab mention
+  });
+
+  it("создаёт USER_MENTION для обычного @ник без !!!/???/@lab", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const upsert = vi.fn().mockResolvedValue({});
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: "u-demon",
+        mentionHandle: "digitaldemon",
+        email: null,
+        displayName: null,
+        role: "OWNER",
+      },
+    ]);
+    const db = {
+      orderChatInboxItem: { updateMany, upsert },
+      user: { findMany },
+    } as any;
+    const changed = await syncOrderChatInboxFromKaitenComments(db, {
+      tenantId: "t1",
+      orderId: "o1",
+      comments: [{ id: 99, text: "@digitaldemon тест", authorName: "Всеволод" }],
+    });
+    expect(changed).toBe(true);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          type: "USER_MENTION",
+          targetUserId: "u-demon",
+        }),
+      }),
+    );
   });
 });

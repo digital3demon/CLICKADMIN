@@ -510,6 +510,7 @@ export async function PATCH(
       correctionReason: true,
       correctionPaid: true,
       prostheticsOrdered: true,
+      adminShippedOtpr: true,
     },
   });
   if (!existing) {
@@ -749,7 +750,13 @@ export async function PATCH(
     scalarData.narjadPrinted = Boolean(body.narjadPrinted);
   }
   if (body.adminShippedOtpr !== undefined) {
-    scalarData.adminShippedOtpr = Boolean(body.adminShippedOtpr);
+    const next = Boolean(body.adminShippedOtpr);
+    scalarData.adminShippedOtpr = next;
+    if (next && !existing.adminShippedOtpr) {
+      scalarData.adminShippedAt = new Date();
+    } else if (!next && existing.adminShippedOtpr) {
+      scalarData.adminShippedAt = null;
+    }
   }
 
   if (body.shippedDescription !== undefined) {
@@ -1249,10 +1256,15 @@ export async function PATCH(
         // Фоновое сравнение предсказания ИИ с эталоном админа после сохранения
         runSelfCorrectionForOrderInBackground(order.tenantId, orderId);
 
-        await ensureDoctorClinicLinkAfterOrderSave(clientsPrisma, {
-          doctorId: order.doctorId,
-          clinicId: order.clinicId,
-        });
+        const clientContextChanged =
+          order.doctorId !== existing.doctorId ||
+          order.clinicId !== existing.clinicId;
+        if (clientContextChanged) {
+          await ensureDoctorClinicLinkAfterOrderSave(clientsPrisma, {
+            doctorId: order.doctorId,
+            clinicId: order.clinicId,
+          });
+        }
 
         const touchedCorrection =
           body.correctionTrack !== undefined ||

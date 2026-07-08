@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { after } from "next/server";
 import { Suspense } from "react";
 import { ClientsAddNewPanel } from "@/components/clients/ClientsAddNewPanel";
 import { ClientsClinicSortSelect } from "@/components/clients/ClientsClinicSortSelect";
@@ -28,7 +27,6 @@ import {
 } from "@/lib/clients-list-search";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getPrisma } from "@/lib/get-prisma";
-import { repairDoctorLinksFromOrders } from "@/lib/repair-clinic-doctor-links";
 
 function firstSearchParam(
   v: string | string[] | undefined,
@@ -87,61 +85,50 @@ export default async function ClientsPage({ searchParams }: PageProps) {
         },
       });
 
-      const clinicsNeedingLinks = clinics.filter(
-        (c) => c._count.orders > 0 && c._count.doctorLinks === 0,
-      );
-      if (clinicsNeedingLinks.length > 0) {
-        after(async () => {
-          const prismaAfter = await getPrisma();
-          await Promise.all(
-            clinicsNeedingLinks.map((c) =>
-              repairDoctorLinksFromOrders(prismaAfter, c.id).catch((e) => {
-                console.error("[clients list] repair doctor links", c.id, e);
-              }),
-            ),
-          );
-        });
-      }
-
       const visibleClinics = clinicSearchRaw
         ? clinics.filter((c) => clinicMatchesSearch(c, clinicSearchRaw))
         : clinics;
 
       let turnoverMap = new Map<string, number>();
-      try {
-        turnoverMap = await clinicTurnoverTotalsByIds(
-          visibleClinics.map((c) => c.id),
-        );
-      } catch (e) {
-        console.error("[clients page] clinicTurnoverTotalsByIds", e);
-      }
+      let sorted = [...visibleClinics];
 
-      const sorted = [...visibleClinics].sort((a, b) => {
-        let cmp = 0;
-        switch (listState.clinicSort) {
-          case "name":
-            cmp = a.name.localeCompare(b.name, "ru");
-            break;
-          case "reconciliation":
-            cmp =
-              Number(a.worksWithReconciliation) -
-              Number(b.worksWithReconciliation);
-            break;
-          case "doctors":
-            cmp = a._count.doctorLinks - b._count.doctorLinks;
-            break;
-          case "orders":
-            cmp = a._count.orders - b._count.orders;
-            break;
-          case "turnover":
-            cmp =
-              (turnoverMap.get(a.id) ?? 0) - (turnoverMap.get(b.id) ?? 0);
-            break;
-          default:
-            cmp = 0;
+      if (listState.clinicSort === "turnover") {
+        try {
+          turnoverMap = await clinicTurnoverTotalsByIds(
+            visibleClinics.map((c) => c.id),
+          );
+        } catch (e) {
+          console.error("[clients page] clinicTurnoverTotalsByIds", e);
         }
-        return listState.clinicDir === "asc" ? cmp : -cmp;
-      });
+        sorted.sort((a, b) => {
+          const cmp =
+            (turnoverMap.get(a.id) ?? 0) - (turnoverMap.get(b.id) ?? 0);
+          return listState.clinicDir === "asc" ? cmp : -cmp;
+        });
+      } else {
+        sorted.sort((a, b) => {
+          let cmp = 0;
+          switch (listState.clinicSort) {
+            case "name":
+              cmp = a.name.localeCompare(b.name, "ru");
+              break;
+            case "reconciliation":
+              cmp =
+                Number(a.worksWithReconciliation) -
+                Number(b.worksWithReconciliation);
+              break;
+            case "doctors":
+              cmp = a._count.doctorLinks - b._count.doctorLinks;
+              break;
+            case "orders":
+              cmp = a._count.orders - b._count.orders;
+              break;
+            default:
+              cmp = 0;
+          }
+          return listState.clinicDir === "asc" ? cmp : -cmp;
+        });
+      }
 
       const totalClinicRows = sorted.length;
       const totalClinicPages = Math.max(
@@ -153,6 +140,16 @@ export default async function ClientsPage({ searchParams }: PageProps) {
         (clinicPageEff - 1) * CLIENTS_PAGE_SIZE,
         clinicPageEff * CLIENTS_PAGE_SIZE,
       );
+
+      if (listState.clinicSort !== "turnover") {
+        try {
+          turnoverMap = await clinicTurnoverTotalsByIds(
+            pageClinics.map((c) => c.id),
+          );
+        } catch (e) {
+          console.error("[clients page] clinicTurnoverTotalsByIds", e);
+        }
+      }
 
       const clinicNavState: ClientsListUrlState = {
         ...listState,

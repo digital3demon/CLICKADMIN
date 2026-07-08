@@ -15,14 +15,11 @@ import type { ClinicRequisiteKey } from "@/lib/clinic-requisites";
 import { CLINIC_REQUISITE_ROWS } from "@/lib/clinic-requisites";
 import {
   defaultFinanceMonthRangeUTC,
-  loadOrderSentAtByIds,
   parseDateRangeUTC,
   sumClinicConstructionTotals,
 } from "@/lib/clinic-finance";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getPrisma } from "@/lib/get-prisma";
-import { repairDoctorLinksFromOrders } from "@/lib/repair-clinic-doctor-links";
-import { syncClientCardOrderKaitenTitles } from "@/lib/client-card-kaiten-sync";
 import {
   clientCardOrderStageLabel,
   formatClientCardShippedAt,
@@ -44,7 +41,6 @@ export const dynamic = "force-dynamic";
 
 const CLIENT_CARD_ORDERS_INCLUDE = {
   doctor: { select: { fullName: true } },
-  kaitenCardType: { select: { name: true } },
 } as const;
 
 type PageProps = {
@@ -206,53 +202,6 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
       </ModuleFrame>
     );
   }
-
-  /** Синхронизируем M:N по нарядам с этой клиникой; перечитываем карточку, чтобы счётчик и список совпали с БД. */
-  if (clinic._count.orders > 0) {
-    const previewOrderIds = clinic.orders.map((o) => o.id);
-    try {
-      await repairDoctorLinksFromOrders(prisma, id);
-    } catch (e) {
-      console.error("[client card] repair doctor links", e);
-    }
-    try {
-      await syncClientCardOrderKaitenTitles(prisma, previewOrderIds);
-    } catch (e) {
-      console.error("[client card] kaiten titles", e);
-    }
-    clinic = await prisma.clinic.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: {
-            orders: { where: { archivedAt: null } },
-            doctorLinks: true,
-          },
-        },
-        contractDoc: { select: { updatedAt: true } },
-        doctorLinks: {
-          orderBy: { doctor: { fullName: "asc" } },
-          include: {
-            doctor: { select: { id: true, fullName: true, deletedAt: true } },
-          },
-        },
-        orders: {
-          where: { archivedAt: null },
-          orderBy: { createdAt: "desc" },
-          take: ORDERS_PREVIEW,
-          include: CLIENT_CARD_ORDERS_INCLUDE,
-        },
-      },
-    });
-    if (!clinic) {
-      notFound();
-    }
-  }
-
-  const sentAtByOrderId =
-    clinic._count.orders > 0
-      ? await loadOrderSentAtByIds(clinic.orders.map((o) => o.id))
-      : new Map<string, Date | null>();
 
   const totalOrders = clinic._count.orders;
   const shownOrders = clinic.orders.length;
@@ -474,10 +423,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
                           })}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 text-[var(--text-secondary)]">
-                          {formatClientCardShippedAt(
-                            o.adminShippedOtpr,
-                            sentAtByOrderId.get(o.id),
-                          )}
+                          {formatClientCardShippedAt(o)}
                         </td>
                       </tr>
                     ))

@@ -1,8 +1,8 @@
 import { revalidatePath } from "next/cache";
 
 /**
- * Сбрасывает кэш страниц после изменения связи врач ↔ клиника,
- * чтобы карточки и список «Клиенты» обновлялись без полной перезагрузки.
+ * Сбрасывает кэш карточек после изменения связи врач ↔ клиника.
+ * Список /clients не инвалидируем — он и так force-dynamic.
  */
 export function revalidateAfterDoctorClinicLinkChange(
   clinicId: string,
@@ -10,5 +10,4 @@ export function revalidateAfterDoctorClinicLinkChange(
 ): void {
   revalidatePath(`/clients/${clinicId}`);
   revalidatePath(`/clients/doctors/${doctorId}`);
-  revalidatePath("/clients");
 }

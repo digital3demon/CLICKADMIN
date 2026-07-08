@@ -5,39 +5,42 @@ import {
 } from "./client-card-orders-table";
 
 describe("clientCardOrderStageLabel", () => {
-  it("показывает колонку Kaiten, а не устаревший labWorkStatus", () => {
+  it("показывает labWorkStatus из БД", () => {
     const label = clientCardOrderStageLabel({
-      labWorkStatus: "TO_EXECUTION",
-      kaitenColumnTitle: "Сдана админам",
-      kaitenCardId: 42,
+      labWorkStatus: "TO_ADMINS",
       demoKanbanColumn: null,
       adminShippedOtpr: false,
+      adminShippedAt: null,
     });
     expect(label).toBe("Сдана админам");
   });
 
-  it("fallback на labWorkStatus без Kaiten", () => {
+  it("показывает колонку демо-канбана", () => {
     const label = clientCardOrderStageLabel({
-      labWorkStatus: "TO_ADMINS",
-      kaitenColumnTitle: null,
-      kaitenCardId: null,
-      demoKanbanColumn: null,
+      labWorkStatus: "TO_EXECUTION",
+      demoKanbanColumn: "IN_PROGRESS",
       adminShippedOtpr: false,
+      adminShippedAt: null,
     });
-    expect(label).toBe("Сдана админам");
+    expect(label).toBe("Канбан CRM: В работе");
   });
 });
 
 describe("formatClientCardShippedAt", () => {
   it("дата в МСК при отмеченной отгрузке", () => {
-    const text = formatClientCardShippedAt(
-      true,
-      new Date("2025-06-04T09:38:00.000Z"),
-    );
+    const text = formatClientCardShippedAt({
+      adminShippedOtpr: true,
+      adminShippedAt: new Date("2025-06-04T09:38:00.000Z"),
+    });
     expect(text).toMatch(/04\.06\.2025/);
   });
 
   it("прочерк без отгрузки", () => {
-    expect(formatClientCardShippedAt(false, null)).toBe("—");
+    expect(
+      formatClientCardShippedAt({
+        adminShippedOtpr: false,
+        adminShippedAt: null,
+      }),
+    ).toBe("—");
   });
 });

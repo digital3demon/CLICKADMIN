@@ -1400,6 +1400,8 @@ model Order {
   narjadPrinted                      Boolean                    @default(false)
   /// Отправлено: работа отгружена / отправлена клиенту (внутренний флаг админов)
   adminShippedOtpr                   Boolean                    @default(false)
+  /// Момент отметки «отгружено» (записывается при adminShippedOtpr false→true)
+  adminShippedAt                     DateTime?
   /// Что фактически отгружено (текст при отметке «Работа отправлена»)
   shippedDescription                 String?
   /// Разбор счёта PDF: строки позиций (JSON-массив `{ name, qty, code? }[]`)

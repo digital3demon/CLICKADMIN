@@ -1,11 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
 
 /**
- * Восстанавливает DoctorOnClinic по нарядам с этой клиникой (order.clinicId + doctorId).
+ * Ручное восстановление DoctorOnClinic по нарядам (скрипты / разовая миграция).
+ * В UI «Клиенты» не вызывается — связь пишется при POST/PATCH наряда.
+ *
  * Один врач может быть в нескольких клиниках и одновременно вести частную практику
  * (наряды с clinicId = null) — сюда попадают только наряды, явно привязанные к клинике.
- *
- * Для каждой пары врач–клиника — upsert (SQLite в Prisma не даёт skipDuplicates на этой связи).
+ * Для каждой пары врач–клиника — upsert.
  */
 export async function repairDoctorLinksFromOrders(
   db: PrismaClient,
