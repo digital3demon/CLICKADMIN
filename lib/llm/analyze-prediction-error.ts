@@ -41,9 +41,19 @@ export async function analyzePredictionError(
           },
           clinic: true,
           doctor: true,
+          attachments: {
+            select: { fileName: true, mimeType: true },
+            where: { scope: "GENERAL" },
+          },
         },
       },
-      email: true,
+      email: {
+        include: {
+          attachments: {
+            select: { id: true, fileName: true, mimeType: true, size: true },
+          },
+        },
+      },
     },
   });
 
