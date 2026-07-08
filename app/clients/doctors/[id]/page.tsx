@@ -14,19 +14,21 @@ import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { displayOrDash } from "@/lib/format-display";
 import {
   defaultFinanceMonthRangeUTC,
+  loadOrderSentAtByIds,
   parseDateRangeUTC,
   sumDoctorConstructionTotals,
 } from "@/lib/clinic-finance";
-import {
-  LAB_WORK_STATUS_LABELS,
-  normalizeLegacyLabWorkStatus,
-  type LabWorkStatus,
-} from "@/lib/lab-work-status";
 import { getPrisma } from "@/lib/get-prisma";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { ClientOrderPreviewButton } from "@/components/clients/ClientOrderPreviewButton";
 import { ClientOrderSourceEmailsField } from "@/components/clients/ClientOrderSourceEmailsField";
 import { listDoctorOrderSourceEmails } from "@/lib/client-order-source-emails";
+import { repairClinicLinksFromOrdersForDoctor } from "@/lib/repair-clinic-doctor-links";
+import { syncClientCardOrderKaitenTitles } from "@/lib/client-card-kaiten-sync";
+import {
+  clientCardOrderStageLabel,
+  formatClientCardShippedAt,
+} from "@/lib/client-card-orders-table";
 const ORDERS_PREVIEW = 100;
 
 function firstSearchParam(
@@ -45,10 +47,10 @@ function safeClientsReturnTo(raw: string | undefined, fallback: string): string 
 
 export const dynamic = "force-dynamic";
 
-function labelForLabStatus(status: string): string {
-  const s = normalizeLegacyLabWorkStatus(status);
-  return LAB_WORK_STATUS_LABELS[s as LabWorkStatus];
-}
+const CLIENT_CARD_ORDERS_INCLUDE = {
+  clinic: { select: { id: true, name: true } },
+  kaitenCardType: { select: { name: true } },
+} as const;
 
 type PageProps = {
   params?: Promise<{ id: string }>;
@@ -194,9 +196,7 @@ export default async function DoctorCardPage({
           where: { archivedAt: null },
           orderBy: { createdAt: "desc" },
           take: ORDERS_PREVIEW,
-          include: {
-            clinic: { select: { id: true, name: true } },
-          },
+          include: CLIENT_CARD_ORDERS_INCLUDE,
         },
         telegramGroups: {
           orderBy: { createdAt: "asc" },
@@ -226,6 +226,90 @@ export default async function DoctorCardPage({
   }
 
   if (!doctor) notFound();
+
+  /** Синхронизируем M:N по нарядам этого врача; перечитываем карточку для актуального списка клиник. */
+  if (doctor._count.orders > 0) {
+    const prisma = await getPrisma();
+    const previewOrderIds = doctor.orders.map((o) => o.id);
+    try {
+      await repairClinicLinksFromOrdersForDoctor(prisma, id);
+    } catch (e) {
+      console.error("[doctor card] repair clinic links", e);
+    }
+    try {
+      await syncClientCardOrderKaitenTitles(prisma, previewOrderIds);
+    } catch (e) {
+      console.error("[doctor card] kaiten titles", e);
+    }
+    const refreshed = await prisma.doctor.findUnique({
+      where: { id },
+      include: {
+        ipClinicAsSource: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            legalFullName: true,
+            legalAddress: true,
+            inn: true,
+            kpp: true,
+            ogrn: true,
+            bankName: true,
+            bik: true,
+            settlementAccount: true,
+            correspondentAccount: true,
+            phone: true,
+            email: true,
+            ceoName: true,
+            deletedAt: true,
+            billingLegalForm: true,
+            orderPriceListKind: true,
+            worksWithReconciliation: true,
+            reconciliationFrequency: true,
+            contractSigned: true,
+            contractNumber: true,
+            contractDoc: { select: { updatedAt: true } },
+            worksWithEdo: true,
+          },
+        },
+        clinicLinks: {
+          include: {
+            clinic: {
+              select: {
+                id: true,
+                name: true,
+                address: true,
+                deletedAt: true,
+              },
+            },
+          },
+          orderBy: { clinic: { name: "asc" } },
+        },
+        _count: {
+          select: { orders: { where: { archivedAt: null } } },
+        },
+        orders: {
+          where: { archivedAt: null },
+          orderBy: { createdAt: "desc" },
+          take: ORDERS_PREVIEW,
+          include: CLIENT_CARD_ORDERS_INCLUDE,
+        },
+        telegramGroups: {
+          orderBy: { createdAt: "asc" },
+          select: { id: true, telegramChatId: true, label: true },
+        },
+      },
+    });
+    if (!refreshed) {
+      notFound();
+    }
+    doctor = refreshed;
+  }
+
+  const sentAtByOrderId =
+    doctor._count.orders > 0
+      ? await loadOrderSentAtByIds(doctor.orders.map((o) => o.id))
+      : new Map<string, Date | null>();
 
   const orderSourceEmails = await listDoctorOrderSourceEmails(
     await getPrisma(),
@@ -554,7 +638,7 @@ export default async function DoctorCardPage({
               ) : null}
             </div>
             <div className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm">
-              <table className="w-full min-w-[780px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[920px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                     <th className="px-3 py-3">Номер</th>
@@ -563,13 +647,14 @@ export default async function DoctorCardPage({
                     <th className="px-3 py-3">Этап</th>
                     <th className="px-3 py-3">Срочно</th>
                     <th className="px-3 py-3">Создан</th>
+                    <th className="px-3 py-3">Дата отгрузки</th>
                   </tr>
                 </thead>
                 <tbody>
                   {doctor.orders.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-3 py-8 text-center text-[var(--text-muted)]"
                       >
                         По этому врачу заказов ещё нет.
@@ -605,7 +690,7 @@ export default async function DoctorCardPage({
                           {o.patientName ?? "—"}
                         </td>
                         <td className="px-3 py-2.5 text-[var(--text-strong)]">
-                          {labelForLabStatus(String(o.labWorkStatus))}
+                          {clientCardOrderStageLabel(o)}
                         </td>
                         <td className="px-3 py-2.5 text-[var(--text-body)]">
                           {!o.isUrgent
@@ -622,6 +707,12 @@ export default async function DoctorCardPage({
                             hour: "2-digit",
                             minute: "2-digit",
                           })}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-[var(--text-secondary)]">
+                          {formatClientCardShippedAt(
+                            o.adminShippedOtpr,
+                            sentAtByOrderId.get(o.id),
+                          )}
                         </td>
                       </tr>
                     ))

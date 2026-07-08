@@ -34,6 +34,18 @@ export type ReconciliationRow = {
 
 type OrderTimelineDates = { approvedAt: Date | null; sentAt: Date | null };
 
+/** Дата отгрузки по ревизиям (adminShippedOtpr false→true); fallback — updatedAt. */
+export async function loadOrderSentAtByIds(
+  orderIds: string[],
+): Promise<Map<string, Date | null>> {
+  const timeline = await loadOrderTimelineDates(orderIds);
+  const out = new Map<string, Date | null>();
+  for (const [id, t] of timeline) {
+    out.set(id, t.sentAt);
+  }
+  return out;
+}
+
 async function loadOrderTimelineDates(
   orderIds: string[],
 ): Promise<Map<string, OrderTimelineDates>> {

@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { ClinicDoctorLinkPanel } from "@/components/clients/ClinicDoctorLinkPanel";
 import { DoctorClinicUnlinkButton } from "@/components/clients/DoctorClinicUnlinkButton";
-import { emitClinicDoctorLinkDelta } from "@/lib/client-link-sync-events";
+import {
+  emitDoctorClinicLinkChanged,
+  subscribeDoctorClinicLinkChanged,
+} from "@/lib/client-link-sync-events";
 
 export type ClinicDoctorLinkInitial = {
   doctorId: string;
@@ -30,12 +34,49 @@ export function ClinicLinkedDoctorsSection({
   canEditClients: boolean;
   initialLinks: ClinicDoctorLinkInitial[];
 }) {
+  const router = useRouter();
   const [links, setLinks] = useState<ClinicDoctorLinkInitial[]>(initialLinks);
+
+  useEffect(() => {
+    setLinks(initialLinks);
+  }, [initialLinks]);
 
   const activeLinks = useMemo(
     () => links.filter((l) => !isDeleted(l.doctor.deletedAt)),
     [links],
   );
+
+  const refreshAfterLinkChange = useCallback(() => {
+    startTransition(() => {
+      router.refresh();
+    });
+  }, [router]);
+
+  useEffect(() => {
+    return subscribeDoctorClinicLinkChanged((detail) => {
+      if (detail.clinicId !== clinicId) return;
+      if (detail.action === "link" && detail.doctor) {
+        setLinks((prev) => {
+          if (prev.some((x) => x.doctorId === detail.doctor!.id)) return prev;
+          return [
+            ...prev,
+            {
+              doctorId: detail.doctor!.id,
+              doctor: {
+                id: detail.doctor!.id,
+                fullName: detail.doctor!.fullName,
+                deletedAt: null,
+              },
+            },
+          ];
+        });
+        return;
+      }
+      if (detail.action === "unlink") {
+        setLinks((prev) => prev.filter((x) => x.doctorId !== detail.doctorId));
+      }
+    });
+  }, [clinicId]);
 
   const onDoctorLinked = useCallback(
     (doctor: { id: string; fullName: string }) => {
@@ -53,17 +94,28 @@ export function ClinicLinkedDoctorsSection({
           },
         ];
       });
-      emitClinicDoctorLinkDelta(clinicId, 1);
+      emitDoctorClinicLinkChanged({
+        clinicId,
+        doctorId: doctor.id,
+        action: "link",
+        doctor,
+      });
+      refreshAfterLinkChange();
     },
-    [clinicId],
+    [clinicId, refreshAfterLinkChange],
   );
 
   const onDoctorUnlinked = useCallback(
     (doctorId: string) => {
       setLinks((prev) => prev.filter((x) => x.doctorId !== doctorId));
-      emitClinicDoctorLinkDelta(clinicId, -1);
+      emitDoctorClinicLinkChanged({
+        clinicId,
+        doctorId,
+        action: "unlink",
+      });
+      refreshAfterLinkChange();
     },
-    [clinicId],
+    [clinicId, refreshAfterLinkChange],
   );
 
   return (

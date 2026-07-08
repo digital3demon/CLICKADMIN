@@ -20,6 +20,7 @@ import {
   runPostCreateOrderPipeline,
   syncKaitenAfterOrderCreate,
 } from "@/lib/order-post-create-pipeline";
+import { ensureDoctorClinicLinkAfterOrderSave } from "@/lib/ensure-doctor-clinic-link-from-order";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
@@ -169,6 +170,13 @@ export async function POST(req: Request) {
           );
         }
       }
+
+      after(() =>
+        ensureDoctorClinicLinkAfterOrderSave(clientsPrisma, {
+          doctorId: result.order.doctorId,
+          clinicId: result.order.clinicId,
+        }),
+      );
 
       return NextResponse.json({
         ...result.order,

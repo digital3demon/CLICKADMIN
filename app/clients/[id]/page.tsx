@@ -15,17 +15,18 @@ import type { ClinicRequisiteKey } from "@/lib/clinic-requisites";
 import { CLINIC_REQUISITE_ROWS } from "@/lib/clinic-requisites";
 import {
   defaultFinanceMonthRangeUTC,
+  loadOrderSentAtByIds,
   parseDateRangeUTC,
   sumClinicConstructionTotals,
 } from "@/lib/clinic-finance";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getPrisma } from "@/lib/get-prisma";
 import { repairDoctorLinksFromOrders } from "@/lib/repair-clinic-doctor-links";
+import { syncClientCardOrderKaitenTitles } from "@/lib/client-card-kaiten-sync";
 import {
-  LAB_WORK_STATUS_LABELS,
-  normalizeLegacyLabWorkStatus,
-  type LabWorkStatus,
-} from "@/lib/lab-work-status";
+  clientCardOrderStageLabel,
+  formatClientCardShippedAt,
+} from "@/lib/client-card-orders-table";
 import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 import { listClinicOrderSourceEmails } from "@/lib/client-order-source-emails";
 
@@ -48,10 +49,10 @@ function safeClientsReturnTo(raw: string | undefined, fallback: string): string 
 
 export const dynamic = "force-dynamic";
 
-function labelForLabStatus(status: string): string {
-  const s = normalizeLegacyLabWorkStatus(status);
-  return LAB_WORK_STATUS_LABELS[s as LabWorkStatus];
-}
+const CLIENT_CARD_ORDERS_INCLUDE = {
+  doctor: { select: { fullName: true } },
+  kaitenCardType: { select: { name: true } },
+} as const;
 
 type PageProps = {
   params?: Promise<{ id: string }>;
@@ -157,9 +158,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
           where: { archivedAt: null },
           orderBy: { createdAt: "desc" },
           take: ORDERS_PREVIEW,
-          include: {
-            doctor: { select: { fullName: true } },
-          },
+          include: CLIENT_CARD_ORDERS_INCLUDE,
         },
       },
     });
@@ -220,10 +219,16 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
 
   /** Синхронизируем M:N по нарядам с этой клиникой; перечитываем карточку, чтобы счётчик и список совпали с БД. */
   if (clinic._count.orders > 0) {
+    const previewOrderIds = clinic.orders.map((o) => o.id);
     try {
       await repairDoctorLinksFromOrders(prisma, id);
     } catch (e) {
       console.error("[client card] repair doctor links", e);
+    }
+    try {
+      await syncClientCardOrderKaitenTitles(prisma, previewOrderIds);
+    } catch (e) {
+      console.error("[client card] kaiten titles", e);
     }
     clinic = await prisma.clinic.findUnique({
       where: { id },
@@ -245,9 +250,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
           where: { archivedAt: null },
           orderBy: { createdAt: "desc" },
           take: ORDERS_PREVIEW,
-          include: {
-            doctor: { select: { fullName: true } },
-          },
+          include: CLIENT_CARD_ORDERS_INCLUDE,
         },
       },
     });
@@ -255,6 +258,11 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
       notFound();
     }
   }
+
+  const sentAtByOrderId =
+    clinic._count.orders > 0
+      ? await loadOrderSentAtByIds(clinic.orders.map((o) => o.id))
+      : new Map<string, Date | null>();
 
   const totalOrders = clinic._count.orders;
   const shownOrders = clinic.orders.length;
@@ -417,7 +425,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
               ) : null}
             </div>
             <div className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm">
-              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[860px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                     <th className="px-3 py-3">Номер</th>
@@ -426,13 +434,14 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
                     <th className="px-3 py-3">Этап</th>
                     <th className="px-3 py-3">Срочно</th>
                     <th className="px-3 py-3">Создан</th>
+                    <th className="px-3 py-3">Дата отгрузки</th>
                   </tr>
                 </thead>
                 <tbody>
                   {clinic.orders.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-3 py-8 text-center text-[var(--text-muted)]"
                       >
                         По этой клинике заказов ещё нет.
@@ -457,7 +466,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
                           {o.patientName ?? "—"}
                         </td>
                         <td className="px-3 py-2.5 text-[var(--text-strong)]">
-                          {labelForLabStatus(String(o.labWorkStatus))}
+                          {clientCardOrderStageLabel(o)}
                         </td>
                         <td className="px-3 py-2.5 text-[var(--text-body)]">
                           {!o.isUrgent
@@ -474,6 +483,12 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
                             hour: "2-digit",
                             minute: "2-digit",
                           })}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-[var(--text-secondary)]">
+                          {formatClientCardShippedAt(
+                            o.adminShippedOtpr,
+                            sentAtByOrderId.get(o.id),
+                          )}
                         </td>
                       </tr>
                     ))

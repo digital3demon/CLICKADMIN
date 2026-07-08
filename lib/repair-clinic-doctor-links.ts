@@ -44,3 +44,45 @@ export async function repairDoctorLinksFromOrders(
   }
   return doctorIds.length;
 }
+
+/**
+ * Восстанавливает DoctorOnClinic по нарядам этого врача (order.doctorId + clinicId).
+ * Симметрично repairDoctorLinksFromOrders для карточки врача.
+ */
+export async function repairClinicLinksFromOrdersForDoctor(
+  db: PrismaClient,
+  doctorId: string,
+): Promise<number> {
+  const orders = await db.order.findMany({
+    where: { doctorId, clinicId: { not: null } },
+    select: { clinicId: true },
+  });
+  if (orders.length === 0) return 0;
+
+  const clinicIds = [
+    ...new Set(
+      orders
+        .map((o) => o.clinicId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  if (clinicIds.length === 0) return 0;
+
+  const suppressed = await db.doctorClinicLinkSuppression.findMany({
+    where: { doctorId, clinicId: { in: clinicIds } },
+    select: { clinicId: true },
+  });
+  const suppressedSet = new Set(suppressed.map((s) => s.clinicId));
+
+  for (const clinicId of clinicIds) {
+    if (suppressedSet.has(clinicId)) continue;
+    await db.doctorOnClinic.upsert({
+      where: {
+        doctorId_clinicId: { doctorId, clinicId },
+      },
+      create: { doctorId, clinicId },
+      update: {},
+    });
+  }
+  return clinicIds.length;
+}

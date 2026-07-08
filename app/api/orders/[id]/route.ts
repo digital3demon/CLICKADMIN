@@ -20,6 +20,7 @@ import {
   getPricingPrisma,
 } from "@/lib/get-domain-prisma";
 import { ensureDoctorClinicLink } from "@/lib/ensure-doctor-clinic-link";
+import { ensureDoctorClinicLinkAfterOrderSave } from "@/lib/ensure-doctor-clinic-link-from-order";
 import { buildConstructionCreatesFromInput } from "@/lib/order-construction-input";
 import { isLabWorkStatus } from "@/lib/lab-work-status";
 import { parseUrgentSelection } from "@/lib/order-urgency";
@@ -1247,6 +1248,11 @@ export async function PATCH(
 
         // Фоновое сравнение предсказания ИИ с эталоном админа после сохранения
         runSelfCorrectionForOrderInBackground(order.tenantId, orderId);
+
+        await ensureDoctorClinicLinkAfterOrderSave(clientsPrisma, {
+          doctorId: order.doctorId,
+          clinicId: order.clinicId,
+        });
 
         const touchedCorrection =
           body.correctionTrack !== undefined ||

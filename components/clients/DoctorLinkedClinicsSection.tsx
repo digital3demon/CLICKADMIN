@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { DoctorClinicLinkPanel } from "@/components/clients/DoctorClinicLinkPanel";
 import { DoctorClinicUnlinkButton } from "@/components/clients/DoctorClinicUnlinkButton";
-import { emitDoctorClinicLinkDelta } from "@/lib/client-link-sync-events";
+import {
+  emitDoctorClinicLinkChanged,
+  subscribeDoctorClinicLinkChanged,
+} from "@/lib/client-link-sync-events";
 
 export type DoctorClinicLinkInitial = {
   clinicId: string;
@@ -32,12 +36,50 @@ export function DoctorLinkedClinicsSection({
   canEditClients: boolean;
   initialLinks: DoctorClinicLinkInitial[];
 }) {
+  const router = useRouter();
   const [links, setLinks] = useState<DoctorClinicLinkInitial[]>(initialLinks);
+
+  useEffect(() => {
+    setLinks(initialLinks);
+  }, [initialLinks]);
 
   const activeLinks = useMemo(
     () => links.filter((l) => !isDeleted(l.clinic.deletedAt)),
     [links],
   );
+
+  const refreshAfterLinkChange = useCallback(() => {
+    startTransition(() => {
+      router.refresh();
+    });
+  }, [router]);
+
+  useEffect(() => {
+    return subscribeDoctorClinicLinkChanged((detail) => {
+      if (detail.doctorId !== doctorId) return;
+      if (detail.action === "link" && detail.clinic) {
+        setLinks((prev) => {
+          if (prev.some((x) => x.clinicId === detail.clinic!.id)) return prev;
+          return [
+            ...prev,
+            {
+              clinicId: detail.clinic!.id,
+              clinic: {
+                id: detail.clinic!.id,
+                name: detail.clinic!.name,
+                address: detail.clinic!.address,
+                deletedAt: null,
+              },
+            },
+          ];
+        });
+        return;
+      }
+      if (detail.action === "unlink") {
+        setLinks((prev) => prev.filter((x) => x.clinicId !== detail.clinicId));
+      }
+    });
+  }, [doctorId]);
 
   const onClinicLinked = useCallback(
     (clinic: { id: string; name: string; address: string | null }) => {
@@ -56,17 +98,28 @@ export function DoctorLinkedClinicsSection({
           },
         ];
       });
-      emitDoctorClinicLinkDelta(doctorId, 1);
+      emitDoctorClinicLinkChanged({
+        clinicId: clinic.id,
+        doctorId,
+        action: "link",
+        clinic,
+      });
+      refreshAfterLinkChange();
     },
-    [doctorId],
+    [doctorId, refreshAfterLinkChange],
   );
 
   const onClinicUnlinked = useCallback(
     (clinicId: string) => {
       setLinks((prev) => prev.filter((x) => x.clinicId !== clinicId));
-      emitDoctorClinicLinkDelta(doctorId, -1);
+      emitDoctorClinicLinkChanged({
+        clinicId,
+        doctorId,
+        action: "unlink",
+      });
+      refreshAfterLinkChange();
     },
-    [doctorId],
+    [doctorId, refreshAfterLinkChange],
   );
 
   return (
