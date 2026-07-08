@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { ClinicLinkedDoctorsSection } from "@/components/clients/ClinicLinkedDoctorsSection";
 import { ClinicCommercialTermsPanel } from "@/components/clients/ClinicCommercialTermsPanel";
 import { ClinicOverviewEditCard } from "@/components/clients/ClinicOverviewEditCard";
 import { ClinicPriceOverridesPanel } from "@/components/clients/ClinicPriceOverridesPanel";
+import { ClientsBackLink } from "@/components/clients/ClientsBackLink";
 import { ClientCardTabs } from "@/components/clients/ClientCardTabs";
 import { ClientOrderPreviewButton } from "@/components/clients/ClientOrderPreviewButton";
 import { ContractorDeletedNotice } from "@/components/clients/ContractorDeletedNotice";
@@ -38,13 +38,6 @@ function firstSearchParam(
 ): string | undefined {
   if (v == null) return undefined;
   return Array.isArray(v) ? v[0] : v;
-}
-
-function safeClientsReturnTo(raw: string | undefined, fallback: string): string {
-  const v = raw?.trim();
-  if (!v) return fallback;
-  if (!v.startsWith("/clients") || v.startsWith("//")) return fallback;
-  return v;
 }
 
 export const dynamic = "force-dynamic";
@@ -113,10 +106,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
     }
   }
   const tab = firstSearchParam(query.tab);
-  const clientsBackHref = safeClientsReturnTo(
-    firstSearchParam(query.returnTo),
-    "/clients",
-  );
+  const returnToFromList = firstSearchParam(query.returnTo);
   const activeTab =
     tab === "requisites"
       ? "requisites"
@@ -172,12 +162,12 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
             Выполните{" "}
             <code className="rounded bg-amber-100 px-1">npx prisma db push</code>
           </p>
-          <Link
-            href={clientsBackHref}
+          <ClientsBackLink
+            returnToFromQuery={returnToFromList}
             className="mt-4 inline-block text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
           >
             ← К списку клиентов
-          </Link>
+          </ClientsBackLink>
         </div>
       </ModuleFrame>
     );
@@ -200,12 +190,12 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
         description="Запись удалена из списков."
       >
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <Link
-            href={clientsBackHref}
+          <ClientsBackLink
+            returnToFromQuery={returnToFromList}
             className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
           >
             ← Все клиенты
-          </Link>
+          </ClientsBackLink>
         </div>
         <ContractorDeletedNotice
           variant="clinic"
@@ -300,19 +290,18 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
       description={frameDescription}
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Link
-          href={clientsBackHref}
+        <ClientsBackLink
+          returnToFromQuery={returnToFromList}
           className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
         >
           ← Все клиенты
-        </Link>
+        </ClientsBackLink>
       </div>
 
       <ClientCardTabs
         basePath={`/clients/${id}`}
         active={activeTab}
         showPriceTab
-        returnTo={clientsBackHref}
       />
 
       {activeTab === "requisites" ? (

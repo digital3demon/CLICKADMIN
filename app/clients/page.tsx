@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { Suspense } from "react";
 import { ClientsAddNewPanel } from "@/components/clients/ClientsAddNewPanel";
 import { ClientsClinicSortSelect } from "@/components/clients/ClientsClinicSortSelect";
+import { ClientsListReturnSync } from "@/components/clients/ClientsListReturnSync";
 import { ClientsListSearch } from "@/components/clients/ClientsListSearch";
 import {
   buildClientPageLinks,
@@ -43,11 +44,6 @@ function moneyRub(n: number): string {
     currency: "RUB",
     maximumFractionDigits: 2,
   }).format(x);
-}
-
-function withClientsReturnTo(path: string, returnTo: string): string {
-  const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}returnTo=${encodeURIComponent(returnTo)}`;
 }
 
 export const dynamic = "force-dynamic";
@@ -163,7 +159,6 @@ export default async function ClientsPage({ searchParams }: PageProps) {
         view: "clinic",
         clinicPage: clinicPageEff,
       };
-      const clinicReturnTo = buildClientsListUrl(clinicNavState);
 
       const prevClinicHref =
         clinicPageEff > 1
@@ -199,6 +194,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
 
       return (
         <ModuleFrame title="Клиенты">
+          <Suspense fallback={null}>
+            <ClientsListReturnSync />
+          </Suspense>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <ClientsViewTabs active="clinic" listState={clinicNavState} />
             <Link
@@ -331,7 +329,8 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                     >
                       <td className="px-3 py-2.5">
                         <Link
-                          href={withClientsReturnTo(`/clients/${c.id}`, clinicReturnTo)}
+                          href={`/clients/${c.id}`}
+                          prefetch={false}
                           className="font-medium text-[var(--sidebar-blue)] hover:underline"
                         >
                           <span className="whitespace-pre-line">{c.name}</span>
@@ -442,7 +441,6 @@ export default async function ClientsPage({ searchParams }: PageProps) {
       view: "doctor",
       doctorPage: doctorPageEff,
     };
-    const doctorReturnTo = buildClientsListUrl(doctorNavState);
 
     const prevDoctorHref =
       doctorPageEff > 1
@@ -467,6 +465,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
 
     return (
       <ModuleFrame title="Клиенты">
+        <Suspense fallback={null}>
+          <ClientsListReturnSync />
+        </Suspense>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <ClientsViewTabs active="doctor" listState={doctorNavState} />
           <Link
@@ -550,10 +551,8 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                     >
                       <td className="px-3 py-2.5">
                         <Link
-                          href={withClientsReturnTo(
-                            `/clients/doctors/${d.id}`,
-                            doctorReturnTo,
-                          )}
+                          href={`/clients/doctors/${d.id}`}
+                          prefetch={false}
                           className="font-medium text-[var(--sidebar-blue)] hover:underline"
                         >
                           {d.fullName}

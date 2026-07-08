@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClientCardTabs } from "@/components/clients/ClientCardTabs";
+import { ClientsBackLink } from "@/components/clients/ClientsBackLink";
 import { ContractorDeletedNotice } from "@/components/clients/ContractorDeletedNotice";
 import { DoctorLinkedClinicsCount } from "@/components/clients/DoctorLinkedClinicsCount";
 import { DoctorLinkedClinicsSection } from "@/components/clients/DoctorLinkedClinicsSection";
@@ -36,13 +37,6 @@ function firstSearchParam(
 ): string | undefined {
   if (v == null) return undefined;
   return Array.isArray(v) ? v[0] : v;
-}
-
-function safeClientsReturnTo(raw: string | undefined, fallback: string): string {
-  const v = raw?.trim();
-  if (!v) return fallback;
-  if (!v.startsWith("/clients") || v.startsWith("//")) return fallback;
-  return v;
 }
 
 export const dynamic = "force-dynamic";
@@ -123,10 +117,7 @@ export default async function DoctorCardPage({
     }
   }
   const tab = firstSearchParam(query.tab);
-  const clientsBackHref = safeClientsReturnTo(
-    firstSearchParam(query.returnTo),
-    "/clients?view=doctor",
-  );
+  const returnToFromList = firstSearchParam(query.returnTo);
   const activeTab =
     tab === "requisites"
       ? "requisites"
@@ -214,12 +205,13 @@ export default async function DoctorCardPage({
             Выполните{" "}
             <code className="rounded bg-amber-100 px-1">npx prisma db push</code>
           </p>
-          <Link
-            href={clientsBackHref}
+          <ClientsBackLink
+            returnToFromQuery={returnToFromList}
+            fallback="/clients?view=doctor"
             className="mt-4 inline-block text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
           >
             ← К списку врачей
-          </Link>
+          </ClientsBackLink>
         </div>
       </ModuleFrame>
     );
@@ -324,12 +316,13 @@ export default async function DoctorCardPage({
         description="Запись удалена из списков."
       >
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <Link
-            href={clientsBackHref}
+          <ClientsBackLink
+            returnToFromQuery={returnToFromList}
+            fallback="/clients?view=doctor"
             className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
           >
             ← Все врачи
-          </Link>
+          </ClientsBackLink>
         </div>
         <ContractorDeletedNotice
           variant="doctor"
@@ -375,18 +368,18 @@ export default async function DoctorCardPage({
       description={frameDescription}
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Link
-          href={clientsBackHref}
+        <ClientsBackLink
+          returnToFromQuery={returnToFromList}
+          fallback="/clients?view=doctor"
           className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
         >
           ← Все врачи
-        </Link>
+        </ClientsBackLink>
       </div>
 
       <ClientCardTabs
         basePath={`/clients/doctors/${id}`}
         active={activeTab}
-        returnTo={clientsBackHref}
       />
 
       {activeTab === "requisites" ? (

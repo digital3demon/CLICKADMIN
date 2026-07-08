@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 type TabId = "overview" | "requisites" | "finance" | "price";
@@ -8,10 +10,9 @@ const BASE_ITEMS: { id: Exclude<TabId, "price">; label: string }[] = [
   { id: "finance", label: "Финансы" },
 ];
 
-function tabHref(base: string, tab: TabId, returnTo?: string | null): string {
+function tabHref(base: string, tab: TabId): string {
   const p = new URLSearchParams();
   if (tab !== "overview") p.set("tab", tab);
-  if (returnTo) p.set("returnTo", returnTo);
   const q = p.toString();
   return q ? `${base}?${q}` : base;
 }
@@ -20,15 +21,12 @@ export function ClientCardTabs({
   basePath,
   active,
   showPriceTab = false,
-  returnTo = null,
 }: {
   /** Напр. `/clients/abc` или `/clients/doctors/abc` */
   basePath: string;
   active: TabId;
   /** Вкладка «Прайс» нужна только в карточке клиники */
   showPriceTab?: boolean;
-  /** URL списка, куда ведёт кнопка «Все клиенты/врачи». */
-  returnTo?: string | null;
 }) {
   const base = basePath.replace(/\/$/, "");
   const items = showPriceTab
@@ -43,7 +41,7 @@ export function ClientCardTabs({
     >
       {items.map((item) => {
         const isActive = item.id === active;
-        const href = tabHref(base, item.id, returnTo);
+        const href = tabHref(base, item.id);
         return (
           <Link
             key={item.id}

@@ -9,7 +9,7 @@ import {
   parseClinicOrderSelectValue,
   parseClinicSort,
 } from "@/lib/clients-list-search";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 const OPTION_VALUES = new Set(CLINIC_ORDER_OPTIONS.map((o) => o.value));
@@ -22,7 +22,6 @@ type Props = {
 };
 
 export function ClientsClinicSortSelect({ initialValue }: Props) {
-  const router = useRouter();
   const sp = useSearchParams();
   const [value, setValue] = useState(initialValue);
 
@@ -56,7 +55,7 @@ export function ClientsClinicSortSelect({ initialValue }: Props) {
           const parsed = parseClinicOrderSelectValue(v);
           if (!parsed) return;
           const base = clientsListStateFromSearchParams(sp, "clinic");
-          router.replace(
+          window.location.assign(
             buildClientsListUrl({
               ...base,
               view: "clinic",
@@ -64,7 +63,6 @@ export function ClientsClinicSortSelect({ initialValue }: Props) {
               clinicDir: parsed.clinicDir,
               clinicPage: 1,
             }),
-            { scroll: false },
           );
         }}
       >
