@@ -195,12 +195,18 @@ async function fetchAiPrefillWithTimeout(
   url: string,
   init: RequestInit | undefined,
   timeoutMs: number,
+  parentSignal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
+  const onParentAbort = () => controller.abort();
+  parentSignal?.addEventListener("abort", onParentAbort);
   const timerId = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (e) {
+    if (parentSignal?.aborted) {
+      throw new DOMException("The user aborted a request.", "AbortError");
+    }
     if (e instanceof DOMException && e.name === "AbortError") {
       throw new Error(
         `Таймаут ${Math.round(timeoutMs / 1000)} с — разбор не завершился. Обновите страницу или смените модель в ИИ-Админ.`,
@@ -209,6 +215,7 @@ async function fetchAiPrefillWithTimeout(
     throw e;
   } finally {
     window.clearTimeout(timerId);
+    parentSignal?.removeEventListener("abort", onParentAbort);
   }
 }
 
@@ -365,7 +372,6 @@ export function NewOrderForm({
   const [correctionReason, setCorrectionReason] = useState("");
   const [correctionPaid, setCorrectionPaid] = useState(false);
   const hydratedRef = useRef(false);
-  const aiPrefillStartedRef = useRef(false);
   const [aiPrefillStatus, setAiPrefillStatus] = useState<
     "idle" | "loading" | "done" | "error"
   >(() => (aiMode ? "loading" : "idle"));
@@ -388,6 +394,7 @@ export function NewOrderForm({
   const aiHighlightAppointment = aiUnfilledFields.includes("appointment");
   const aiHighlightDetails = aiUnfilledFields.includes("details");
   const aiPrefillLoading = aiMode && !previewMode && aiPrefillStatus === "loading";
+  const primaryAiEmailId = sourceEmails[0]?.id ?? "";
   const prevClinicIdForLegalRef = useRef<string | null>(null);
   const canUseTestOrder = sessionRole === "OWNER";
 
@@ -736,8 +743,8 @@ export function NewOrderForm({
   }, [initialSnapshot]);
 
   useEffect(() => {
-    if (!aiMode || previewMode || initialSnapshot || aiPrefillStartedRef.current) return;
-    const primaryEmailId = sourceEmails[0]?.id;
+    if (!aiMode || previewMode || initialSnapshot) return;
+    const primaryEmailId = primaryAiEmailId;
     if (!primaryEmailId) {
       setAiPrefillStatus("idle");
       setAiPrefillError(null);
@@ -747,15 +754,16 @@ export function NewOrderForm({
       return;
     }
 
-    aiPrefillStartedRef.current = true;
+    const abort = new AbortController();
     let cancelled = false;
     setAiPrefillStatus("loading");
     setAiPrefillError(null);
     setAiConfidenceScore(null);
     setAiWarnings([]);
     setAiUnfilledFields([]);
+    setAiPrefillModelLabel(null);
 
-    void fetch("/api/orders/ai-prefill")
+    void fetch("/api/orders/ai-prefill", { signal: abort.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { model?: string } | null) => {
         if (cancelled || !data?.model) return;
@@ -770,9 +778,10 @@ export function NewOrderForm({
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ emailId: primaryEmailId }),
+            body: JSON.stringify({ emailId: primaryAiEmailId }),
           },
           AI_PREFILL_TIMEOUT_MS,
+          abort.signal,
         );
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;
@@ -872,8 +881,9 @@ export function NewOrderForm({
 
     return () => {
       cancelled = true;
+      abort.abort();
     };
-  }, [aiMode, previewMode, initialSnapshot, sourceEmails, labDueHmSlots, workReceivedLockedFromMail]);
+  }, [aiMode, previewMode, initialSnapshot, primaryAiEmailId, labDueHmSlots, workReceivedLockedFromMail]);
 
   useEffect(() => {
     if (!aiPrefillLoading) {
