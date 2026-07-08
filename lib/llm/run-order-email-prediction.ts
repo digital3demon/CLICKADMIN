@@ -22,6 +22,9 @@ import {
   stripWorkNamesFromPatientName,
   parsePatientNameFromEmailBody,
 } from "./order-email-subject-parse";
+import { parseStructuredClinicEmailBody } from "./order-email-structured-body";
+import { loadClinicDoctorCatalog } from "./order-email-extract";
+import { resolveDoctorId } from "@/lib/order-import-export";
 
 export type RunOrderEmailPredictionResult = {
   model: string;
@@ -209,48 +212,87 @@ export async function runOrderEmailPrediction(
   const priceListNames = await loadActivePriceListItemNames();
   const primaryBlock = emailBlocks.find((b) => b.isPrimary) ?? emailBlocks[0];
   const subjectSplit = splitSubjectWorkAndPatient(primaryBlock?.subject, priceListNames);
+  const structured = parseStructuredClinicEmailBody(effectiveBody);
 
   let patientName =
+    structured.patientName ??
     subjectSplit.patientName ??
     parsePatientNameFromEmailBody(primaryBody) ??
     pdfContext.primaryPatientName ??
     pdfContext.clickOrderPdfs[0]?.patientName ??
     null;
-  if (!patientName) {
-    const extracted = await extractPatientNameOnly(tenantId, emailBlocks);
-    patientName =
-      stripWorkNamesFromPatientName(extracted.patientName, priceListNames) ??
-      extracted.patientName;
+
+  const fastPathStart = Date.now();
+  let parsedAi: Record<string, unknown> | null = null;
+  let model = "structured-fast-path";
+  let durationMs = 0;
+  let llmError: string | undefined;
+
+  if (structured.isStructured && structured.clientOrderText) {
+    let clinicId = preResolved?.clinicId ?? null;
+    let doctorId = preResolved?.doctorId ?? null;
+
+    if (!doctorId && structured.doctorHint) {
+      const catalog = await loadClinicDoctorCatalog(tenantId);
+      doctorId = resolveDoctorId(structured.doctorHint, catalog.doctors);
+    }
+
+    if (doctorId) {
+      parsedAi = {
+        patientName: patientName ?? structured.patientName,
+        clinicId,
+        doctorId,
+        clinicHint: structured.clinicHint,
+        doctorHint: structured.doctorHint,
+        clientOrderText: structured.clientOrderText,
+        confidenceScore: 80,
+        warnings: [] as string[],
+        compositionHints: [],
+        suggestedAttachmentIds: [],
+        urgent: false,
+      };
+      durationMs = Date.now() - fastPathStart;
+    }
   }
 
-  const historyContext = await fetchClientOrderHistoryContext(
-    db,
-    tenantId,
-    preResolved?.doctorId ?? null,
-    patientName,
-  );
+  if (!parsedAi) {
+    if (!patientName) {
+      const extracted = await extractPatientNameOnly(tenantId, emailBlocks);
+      patientName =
+        stripWorkNamesFromPatientName(extracted.patientName, priceListNames) ??
+        extracted.patientName;
+    }
 
-  const { result, model, durationMs, error, rawJson } = await extractOrderFieldsFromEmail(
-    tenantId,
-    emailBlocks,
-    {
+    const historyContext = await fetchClientOrderHistoryContext(
+      db,
+      tenantId,
+      preResolved?.doctorId ?? null,
+      patientName,
+    );
+
+    const llmRun = await extractOrderFieldsFromEmail(tenantId, emailBlocks, {
       fromAddress: primaryEmail.fromAddress,
       emailAttachments,
       pdfOrderText: pdfContext.promptBlock,
       preResolved,
       historyContext,
-    },
-  );
+    });
 
-  let parsedAi: Record<string, unknown> = {};
-  if (rawJson) {
-    try {
-      parsedAi = JSON.parse(rawJson) as Record<string, unknown>;
-    } catch {
-      parsedAi = (result as Record<string, unknown> | null) ?? {};
+    model = llmRun.model;
+    durationMs = llmRun.durationMs;
+    llmError = llmRun.error;
+
+    if (llmRun.rawJson) {
+      try {
+        parsedAi = JSON.parse(llmRun.rawJson) as Record<string, unknown>;
+      } catch {
+        parsedAi = (llmRun.result as Record<string, unknown> | null) ?? {};
+      }
+    } else if (llmRun.result) {
+      parsedAi = { ...llmRun.result };
+    } else {
+      parsedAi = {};
     }
-  } else if (result) {
-    parsedAi = { ...result };
   }
 
   parsedAi = mergePdfHintsIntoPrediction(parsedAi, pdfContext);
@@ -279,5 +321,5 @@ export async function runOrderEmailPrediction(
     resolvedDoctorId: resolvedIds.doctorId,
   });
 
-  return { model, durationMs, error, predictionJson };
+  return { model, durationMs, error: llmError, predictionJson };
 }

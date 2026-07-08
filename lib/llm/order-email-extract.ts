@@ -118,6 +118,10 @@ async function fetchClinicDoctorCatalog(tenantId: string) {
   return { clinics, doctors };
 }
 
+export async function loadClinicDoctorCatalog(tenantId: string) {
+  return fetchClinicDoctorCatalog(tenantId);
+}
+
 function formatCatalogForPrompt(catalog: Awaited<ReturnType<typeof fetchClinicDoctorCatalog>>) {
   const clinicLines = catalog.clinics.map((c) => `  "${c.id}": ${c.name}`);
   const doctorLines = catalog.doctors.map((d) => `  "${d.id}": ${d.fullName}`);

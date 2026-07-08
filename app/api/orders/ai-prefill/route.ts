@@ -15,6 +15,8 @@ import {
   resolveClientIdsFromOrderSourceEmail,
 } from "@/lib/client-order-source-emails";
 import { runOrderEmailPrediction } from "@/lib/llm/run-order-email-prediction";
+import { getAiSettings } from "@/lib/llm/llm-config";
+import { normalizeModel } from "@/lib/llm/ai-models";
 import { withApiTiming } from "@/lib/server/api-timing";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 
@@ -23,6 +25,28 @@ export const maxDuration = 130;
 type Body = {
   emailId?: string;
 };
+
+/** GET — какая модель будет использована (без вызова LLM). */
+export async function GET() {
+  const session = await getSessionFromCookies();
+  if (!session) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+  const tenantId = await requireSessionTenantId(session);
+  const moduleAccess = await getEffectiveModuleAccess(tenantId, session.role);
+  if (
+    session.role !== "OWNER" &&
+    !canUseAiOrderMode(session.role, moduleAccess)
+  ) {
+    return NextResponse.json({ error: "Нет доступа к ИИ-Режиму" }, { status: 403 });
+  }
+
+  const settings = await getAiSettings(tenantId);
+  return NextResponse.json({
+    model: normalizeModel(settings.model),
+    aiEnabled: settings.enabled,
+  });
+}
 
 /** POST — предзаполнение черновика наряда из письма через ИИ (без создания Order). */
 export async function POST(req: Request) {
@@ -160,6 +184,7 @@ export async function POST(req: Request) {
         model,
         durationMs,
         fromCache,
+        fastPath: model === "structured-fast-path",
       });
     },
   );

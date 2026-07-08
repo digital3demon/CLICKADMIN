@@ -348,6 +348,7 @@ export function NewOrderForm({
     [],
   );
   const [aiPrefillElapsedSec, setAiPrefillElapsedSec] = useState(0);
+  const [aiPrefillModelLabel, setAiPrefillModelLabel] = useState<string | null>(null);
   const clearAiUnfilled = useCallback((key: AiPrefillFieldKey) => {
     setAiUnfilledFields((prev) => prev.filter((field) => field !== key));
   }, []);
@@ -726,6 +727,15 @@ export function NewOrderForm({
     setAiWarnings([]);
     setAiUnfilledFields([]);
 
+    void fetch("/api/orders/ai-prefill")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { model?: string } | null) => {
+        if (cancelled || !data?.model) return;
+        const short = data.model.split("/").pop() ?? data.model;
+        setAiPrefillModelLabel(short);
+      })
+      .catch(() => {});
+
     void (async () => {
       try {
         const res = await fetch("/api/orders/ai-prefill", {
@@ -741,8 +751,12 @@ export function NewOrderForm({
           model?: string;
           durationMs?: number;
           fromCache?: boolean;
+          fastPath?: boolean;
         };
         if (cancelled) return;
+        if (data.model) {
+          setAiPrefillModelLabel(data.model.split("/").pop() ?? data.model);
+        }
         if (!res.ok) {
           setAiPrefillStatus("error");
           setAiPrefillError(data.error ?? "Не удалось разобрать письмо через ИИ");
@@ -2187,9 +2201,14 @@ export function NewOrderForm({
             {aiPrefillElapsedSec > 0 ? (
               <p className="max-w-sm text-center text-xs text-[var(--app-text-secondary)]">
                 {aiPrefillElapsedSec} с
+                {aiPrefillModelLabel ? ` · ${aiPrefillModelLabel}` : null}
                 {aiPrefillElapsedSec >= 15
                   ? " · бесплатная модель может отвечать 1–2 минуты"
                   : null}
+              </p>
+            ) : aiPrefillModelLabel ? (
+              <p className="max-w-sm text-center text-xs text-[var(--app-text-secondary)]">
+                Модель: {aiPrefillModelLabel}
               </p>
             ) : null}
           </div>
