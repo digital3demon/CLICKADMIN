@@ -32,6 +32,7 @@ import {
   deriveSourceDataFlagsFromEmailText,
   normalizeAwaitingDataFromEmailText,
 } from "./order-email-awaiting-data-guard";
+import { normalizeWarningsForShipTogetherRequest } from "./order-email-shipment-together-guard";
 
 export type EnrichedPrediction = Record<string, unknown>;
 
@@ -418,9 +419,20 @@ export async function enrichOrderEmailPrediction(
     }
   }
 
+  const shipTogether = normalizeWarningsForShipTogetherRequest(
+    warnings,
+    emailBodyForGuards,
+    typeof out.patientName === "string" ? out.patientName : null,
+  );
+  if (shipTogether.shipTogetherRequest) {
+    out.shipTogetherRequest = shipTogether.shipTogetherRequest;
+  } else {
+    delete out.shipTogetherRequest;
+  }
+
   out.warnings = [
     ...new Set(
-      filterMisleadingAiWarnings(warnings, {
+      filterMisleadingAiWarnings(shipTogether.warnings, {
         clientMatchedByEmail: out.matchedBySourceEmail === true,
         patientFixedFromSubject,
         attachmentFileNames: input.attachments.map((a) => a.fileName),

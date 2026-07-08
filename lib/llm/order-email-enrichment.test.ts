@@ -179,4 +179,46 @@ describe("enrichOrderEmailPrediction Lebedeva-like case", () => {
     expect(enriched.hasCt).toBe(true);
     expect(enriched.hasScans).toBe(true);
   });
+
+  it("replaces false multiple-patients warning when client asks to ship with previous order", async () => {
+    vi.mocked(db.email.findUnique).mockResolvedValueOnce({
+      subject: "Аппарат Хааса",
+      receivedAt: new Date("2026-07-08T10:00:00.000Z"),
+      sentAt: null,
+      createdAt: new Date("2026-07-08T10:00:00.000Z"),
+      textBody:
+        "пациент Зенкина Полина, аппарат Хааса на индивидуальных кольцах с замками паз 022. " +
+        "Если будет возможность, отправьте, пожалуйста, работу вместе с предыдущим заказом (Донцов Матвей, аппарат Хааса).",
+      htmlBody: null,
+      preview: null,
+    });
+
+    const enriched = await enrichOrderEmailPrediction(db as never, "tenant-1", {
+      primaryEmailId: "email-1",
+      ai: {
+        patientName: "Зенкина Полина",
+        clientOrderText:
+          "пациент Зенкина Полина, аппарат Хааса на индивидуальных кольцах с замками паз 022. " +
+          "Если будет возможность, отправьте, пожалуйста, работу вместе с предыдущим заказом (Донцов Матвей, аппарат Хааса).",
+        suggestedAttachmentIds: [],
+        compositionHints: [{ nameHint: "Аппарат Хааса" }],
+        warnings: ["несколько пациентов в одном письме — обработан только первый: Зенкина Полина"],
+      },
+      attachments: [],
+      resolvedClinicId: "clinic-1",
+      resolvedDoctorId: "doctor-1",
+    });
+
+    expect(enriched.shipTogetherRequest).toEqual({
+      relatedPatientName: "Донцов Матвей",
+      relatedOrderNote: "Донцов Матвей, аппарат Хааса",
+    });
+    expect(enriched.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("вместе с другим заказом"),
+        expect.stringContaining("Донцов Матвей"),
+      ]),
+    );
+    expect(enriched.warnings.some((w) => /несколько пациент/i.test(String(w)))).toBe(false);
+  });
 });
