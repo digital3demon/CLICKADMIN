@@ -40,7 +40,7 @@ export function compositionHintsFromOrderConstructions(
   constructions: Array<{
     quantity: number;
     teethFdi: unknown;
-    priceListItem: { code: string; name: string } | null;
+    priceListItem: { code: string | null; name: string } | null;
   }>,
 ): CompositionHint[] {
   return constructions

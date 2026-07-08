@@ -26,7 +26,7 @@ export function emailBodyText(email: {
 
 export function groundTruthSuggestedAttachmentIds(
   order: {
-    hasScans: boolean;
+    hasScans: boolean | null;
     attachments: Array<{ fileName: string; mimeType: string }>;
   },
   emailAttachments: EmailAttachmentCatalogItem[],
