@@ -88,3 +88,24 @@ export function resolveModel(
   if (source === "custom") return customModel.trim();
   return presetModel.trim();
 }
+
+export type AiModelDisplay = {
+  full: string;
+  short: string;
+  kind: "preset" | "custom";
+};
+
+export function modelSourceKind(model: string): "preset" | "custom" {
+  return isPresetModel(normalizeModel(model)) ? "preset" : "custom";
+}
+
+/** Подпись модели для UI: пресет → label, своя → короткий хвост slug. */
+export function modelDisplayLabel(model: string | null | undefined): AiModelDisplay {
+  const full = normalizeModel(model);
+  const preset = AI_MODEL_OPTIONS.find((m) => m.id === full);
+  return {
+    full,
+    short: preset?.label ?? full.split("/").pop() ?? full,
+    kind: modelSourceKind(full),
+  };
+}

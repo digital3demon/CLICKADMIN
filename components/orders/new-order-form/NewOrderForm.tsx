@@ -347,6 +347,7 @@ export function NewOrderForm({
   const [aiUnfilledFields, setAiUnfilledFields] = useState<AiPrefillFieldKey[]>(
     [],
   );
+  const [aiPrefillElapsedSec, setAiPrefillElapsedSec] = useState(0);
   const clearAiUnfilled = useCallback((key: AiPrefillFieldKey) => {
     setAiUnfilledFields((prev) => prev.filter((field) => field !== key));
   }, []);
@@ -737,6 +738,9 @@ export function NewOrderForm({
           draft?: OrderDraftSnapshot;
           warnings?: string[];
           confidenceScore?: number | null;
+          model?: string;
+          durationMs?: number;
+          fromCache?: boolean;
         };
         if (cancelled) return;
         if (!res.ok) {
@@ -821,6 +825,19 @@ export function NewOrderForm({
       cancelled = true;
     };
   }, [aiMode, previewMode, initialSnapshot, sourceEmails, labDueHmSlots, workReceivedLockedFromMail]);
+
+  useEffect(() => {
+    if (!aiPrefillLoading) {
+      setAiPrefillElapsedSec(0);
+      return;
+    }
+    const started = Date.now();
+    setAiPrefillElapsedSec(0);
+    const timerId = window.setInterval(() => {
+      setAiPrefillElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, [aiPrefillLoading]);
 
   useEffect(() => {
     if (correctionTrack == null) {
@@ -2167,6 +2184,14 @@ export function NewOrderForm({
             <p className="max-w-sm text-center text-sm font-medium text-[var(--app-text)]">
               ИИ разбирает письмо и заполняет наряд…
             </p>
+            {aiPrefillElapsedSec > 0 ? (
+              <p className="max-w-sm text-center text-xs text-[var(--app-text-secondary)]">
+                {aiPrefillElapsedSec} с
+                {aiPrefillElapsedSec >= 15
+                  ? " · бесплатная модель может отвечать 1–2 минуты"
+                  : null}
+              </p>
+            ) : null}
           </div>
         ) : null}
         <div className={aiPrefillLoading ? "pointer-events-none select-none" : undefined}>

@@ -47,17 +47,23 @@ export async function POST(req: Request) {
       modelChanged = previousModel !== model;
     }
 
-    await db.tenant.update({
+    const updated = await db.tenant.update({
       where: { id: tenantId },
       data: updateData,
+      select: { aiEnabled: true, aiModel: true },
     });
 
     let retryCount = 0;
-    if (modelChanged && Boolean(body.aiEnabled)) {
+    if (modelChanged && updated.aiEnabled) {
       retryCount = await queueFailedAiPredictionsRetry(tenantId);
     }
 
-    return NextResponse.json({ ok: true, retryCount });
+    return NextResponse.json({
+      ok: true,
+      aiEnabled: updated.aiEnabled,
+      aiModel: normalizeModel(updated.aiModel),
+      retryCount,
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

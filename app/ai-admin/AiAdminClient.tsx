@@ -17,6 +17,8 @@ import {
   AI_MODEL_OPTIONS,
   initialAiModelState,
   isValidAiModelSlug,
+  modelDisplayLabel,
+  normalizeModel,
   resolveModel,
 } from "@/lib/llm/ai-models";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
@@ -284,7 +286,20 @@ export function AiAdminClient({
   const [modelSource, setModelSource] = useState<"preset" | "custom">(initialModel.source);
   const [presetModel, setPresetModel] = useState(initialModel.presetModel);
   const [customModel, setCustomModel] = useState(initialModel.customModel);
-  const aiModel = resolveModel(modelSource, presetModel, customModel);
+  const draftModel = resolveModel(modelSource, presetModel, customModel);
+  const [savedAiModel, setSavedAiModel] = useState(() => normalizeModel(initialAiModel));
+  const [savedAiEnabled, setSavedAiEnabled] = useState(initialAiEnabled);
+  const hasUnsavedModelChanges =
+    draftModel !== savedAiModel || aiEnabled !== savedAiEnabled;
+  const savedModelDisplay = modelDisplayLabel(savedAiModel);
+  const draftModelDisplay = modelDisplayLabel(draftModel);
+  const [isTestingModel, setIsTestingModel] = useState(false);
+  const [modelTestStatus, setModelTestStatus] = useState<{
+    ok: boolean;
+    message: string;
+    usedModel?: string;
+    durationMs?: number;
+  } | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isBacktesting, setIsBacktesting] = useState(false);
@@ -355,10 +370,22 @@ export function AiAdminClient({
 
     setIsSaving(true);
     try {
-      const res = await jsonFetch<{ ok: boolean; retryCount?: number }>("/api/ai-admin/settings", {
+      const res = await jsonFetch<{
+        ok: boolean;
+        aiModel?: string;
+        aiEnabled?: boolean;
+        retryCount?: number;
+      }>("/api/ai-admin/settings", {
         method: "POST",
-        body: { aiEnabled, apiKey: apiKey || undefined, aiModel },
+        body: { aiEnabled, apiKey: apiKey || undefined, aiModel: draftModel },
       });
+      if (typeof res.aiModel === "string") {
+        setSavedAiModel(res.aiModel);
+      }
+      if (typeof res.aiEnabled === "boolean") {
+        setSavedAiEnabled(res.aiEnabled);
+      }
+      setModelTestStatus(null);
       if (res.retryCount && res.retryCount > 0) {
         toast.success(`Настройки сохранены. Пересчёт ${res.retryCount} ошибок запущен в фоне`);
       } else {
@@ -372,6 +399,35 @@ export function AiAdminClient({
     }
   }
 
+  async function handleTestModel() {
+    setIsTestingModel(true);
+    setModelTestStatus(null);
+    try {
+      const res = await jsonFetch<{
+        ok: boolean;
+        requestedModel?: string;
+        usedModel?: string;
+        durationMs?: number;
+        snippet?: string;
+        error?: string;
+      }>("/api/ai-admin/test-model", { method: "POST" });
+      const used = res.usedModel ?? res.requestedModel ?? savedAiModel;
+      setModelTestStatus({
+        ok: true,
+        message: `Отвечает · ${Math.round(res.durationMs ?? 0)} ms`,
+        usedModel: used,
+        durationMs: res.durationMs,
+      });
+      toast.success(`Модель отвечает (${used})`);
+    } catch (e: any) {
+      const message = e.message || "Модель не ответила";
+      setModelTestStatus({ ok: false, message });
+      toast.error(message);
+    } finally {
+      setIsTestingModel(false);
+    }
+  }
+
   async function handleRunBacktest() {
     if (modelSource === "custom" && !isValidAiModelSlug(customModel)) {
       toast.error("Укажите slug модели в формате provider/model или provider/model:free");
@@ -380,10 +436,20 @@ export function AiAdminClient({
 
     setIsBacktesting(true);
     try {
-      await jsonFetch("/api/ai-admin/settings", {
+      const settingsRes = await jsonFetch<{
+        ok: boolean;
+        aiModel?: string;
+        aiEnabled?: boolean;
+      }>("/api/ai-admin/settings", {
         method: "POST",
-        body: { aiEnabled, apiKey: apiKey || undefined, aiModel },
+        body: { aiEnabled, apiKey: apiKey || undefined, aiModel: draftModel },
       });
+      if (typeof settingsRes.aiModel === "string") {
+        setSavedAiModel(settingsRes.aiModel);
+      }
+      if (typeof settingsRes.aiEnabled === "boolean") {
+        setSavedAiEnabled(settingsRes.aiEnabled);
+      }
       if (apiKey) setApiKey("");
 
       const res = await jsonFetch<{ message: string; count: number }>("/api/ai-admin/backtest", {
@@ -490,6 +556,86 @@ export function AiAdminClient({
                     className="w-full px-3 py-2 border border-[var(--app-border)] rounded-md bg-[var(--app-bg-secondary)] font-mono text-sm"
                   />
                 ) : null}
+                <div
+                  className={`rounded-md border p-3 text-sm space-y-2 ${
+                    hasUnsavedModelChanges
+                      ? "border-amber-500/40 bg-amber-500/5"
+                      : "border-emerald-500/30 bg-emerald-500/5"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">
+                      {hasUnsavedModelChanges ? "Не сохранено" : "Активна в БД"}
+                    </span>
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs ${
+                        savedModelDisplay.kind === "custom"
+                          ? "bg-violet-500/10 text-violet-700"
+                          : "bg-sky-500/10 text-sky-700"
+                      }`}
+                    >
+                      {savedModelDisplay.kind === "custom" ? "Своя" : "Пресет"}
+                    </span>
+                  </div>
+                  {hasUnsavedModelChanges ? (
+                    <div className="space-y-1 text-[var(--app-text-secondary)]">
+                      <div>
+                        В форме:{" "}
+                        <span className="font-mono text-[var(--app-text)]" title={draftModelDisplay.full}>
+                          {draftModelDisplay.full}
+                        </span>
+                      </div>
+                      <div>
+                        В БД:{" "}
+                        <span className="font-mono text-[var(--app-text)]" title={savedModelDisplay.full}>
+                          {savedModelDisplay.full}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="font-mono text-[var(--app-text)] break-all"
+                      title={savedModelDisplay.full}
+                    >
+                      {savedModelDisplay.full}
+                    </div>
+                  )}
+                  {hasUnsavedModelChanges ? (
+                    <p className="text-xs text-amber-700">
+                      Сохраните настройки, чтобы применить модель из формы.
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void handleTestModel()}
+                      disabled={isTestingModel || isSaving || !aiEnabled || !hasApiKey}
+                    >
+                      {isTestingModel ? "Проверка…" : "Проверить модель"}
+                    </Button>
+                    {hasUnsavedModelChanges ? (
+                      <span className="text-xs text-[var(--app-text-secondary)]">
+                        Проверяется модель из БД, не из формы.
+                      </span>
+                    ) : null}
+                  </div>
+                  {modelTestStatus ? (
+                    <p
+                      className={`text-xs ${
+                        modelTestStatus.ok ? "text-emerald-700" : "text-red-600"
+                      }`}
+                    >
+                      {modelTestStatus.message}
+                      {modelTestStatus.usedModel ? (
+                        <>
+                          {" "}
+                          · <span className="font-mono">{modelTestStatus.usedModel}</span>
+                        </>
+                      ) : null}
+                    </p>
+                  ) : null}
+                </div>
                 <p className="text-sm text-[var(--app-text-secondary)]">
                   SprutDock — OpenAI-совместимый шлюз. Бесплатная Nvidia Ultra может отвечать 1–2 минуты.
                   Можно указать slug вручную, например{" "}
@@ -557,6 +703,13 @@ export function AiAdminClient({
                   <h2 className="text-xl font-semibold">Сравнение: Админ vs ИИ</h2>
                   <p className="text-sm text-[var(--app-text-secondary)]">
                     Все предсказания ИИ, от новых к старым. По {DIFFS_PAGE_SIZE} на странице.
+                  </p>
+                  <p className="text-sm text-[var(--app-text-secondary)] mt-1">
+                    <span className="font-medium text-[var(--app-text)]">Текущая модель:</span>{" "}
+                    <span className="font-mono" title={savedModelDisplay.full}>
+                      {savedModelDisplay.full}
+                    </span>
+                    {" "}· в карточках ниже — модель того прогона (может отличаться).
                   </p>
                 </div>
                 <Button onClick={() => loadDiffs(diffsPage)} disabled={isLoadingDiffs} variant="secondary">

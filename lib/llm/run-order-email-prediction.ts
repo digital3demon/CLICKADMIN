@@ -13,13 +13,14 @@ import {
 import { enrichOrderEmailPrediction } from "./order-email-enrichment";
 import { resolveClientIdsFromPrediction } from "@/lib/ai-order-draft-from-prediction";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
-import { loadEmailAttachmentOrderContext } from "./email-attachment-order-context";
+import { loadEmailAttachmentOrderContext, type EmailAttachmentOrderContext } from "./email-attachment-order-context";
 
 import { fetchClientOrderHistoryContext } from "./client-history-context";
 import { loadActivePriceListItemNames } from "./resolve-ai-composition-lines";
 import {
   splitSubjectWorkAndPatient,
   stripWorkNamesFromPatientName,
+  parsePatientNameFromEmailBody,
 } from "./order-email-subject-parse";
 
 export type RunOrderEmailPredictionResult = {
@@ -27,6 +28,20 @@ export type RunOrderEmailPredictionResult = {
   durationMs: number;
   error?: string;
   predictionJson: Record<string, unknown>;
+};
+
+export type RunOrderEmailPredictionOptions = {
+  /** Для резолва врача по истории, без подмешивания писем чужого наряда. */
+  preferOrderIdForSource?: string | null;
+};
+
+const MIN_BODY_CHARS_SKIP_PDF = 120;
+
+const EMPTY_ATTACHMENT_CONTEXT: EmailAttachmentOrderContext = {
+  clickOrderPdfs: [],
+  promptBlock: "",
+  primaryPatientName: null,
+  suggestedAttachmentIds: [],
 };
 
 function emailBodyText(input: {
@@ -84,6 +99,7 @@ export async function runOrderEmailPrediction(
   tenantId: string,
   emailId: string,
   orderId?: string | null,
+  opts?: RunOrderEmailPredictionOptions,
 ): Promise<RunOrderEmailPredictionResult | null> {
   const primaryEmail = await db.email.findUnique({
     where: { id: emailId },
@@ -144,7 +160,10 @@ export async function runOrderEmailPrediction(
     }
   }
 
-  const pdfContext = await loadEmailAttachmentOrderContext(db, tenantId, attachmentRefs);
+  let pdfContext = EMPTY_ATTACHMENT_CONTEXT;
+  if (primaryBody.trim().length < MIN_BODY_CHARS_SKIP_PDF) {
+    pdfContext = await loadEmailAttachmentOrderContext(db, tenantId, attachmentRefs);
+  }
   const pdfFallbackBody = pdfContext.clickOrderPdfs[0]?.clientOrderText?.trim() ?? "";
   const effectiveBody = primaryBody.trim() || pdfFallbackBody;
 
@@ -179,7 +198,7 @@ export async function runOrderEmailPrediction(
     db,
     tenantId,
     primaryEmail.fromAddress,
-    { preferOrderId: orderId ?? null },
+    { preferOrderId: orderId ?? opts?.preferOrderIdForSource ?? null },
   );
 
   const preResolved =
@@ -193,6 +212,7 @@ export async function runOrderEmailPrediction(
 
   let patientName =
     subjectSplit.patientName ??
+    parsePatientNameFromEmailBody(primaryBody) ??
     pdfContext.primaryPatientName ??
     pdfContext.clickOrderPdfs[0]?.patientName ??
     null;

@@ -4,6 +4,8 @@ import {
   initialAiModelState,
   isAllowedModel,
   isValidAiModelSlug,
+  modelDisplayLabel,
+  modelSourceKind,
   resolveModel,
 } from "./ai-models";
 
@@ -62,5 +64,34 @@ describe("resolveModel", () => {
 describe("DEFAULT_AI_MODEL", () => {
   it("is free Nvidia Ultra on SprutDock", () => {
     expect(DEFAULT_AI_MODEL).toBe("nvidia/nemotron-3-ultra-550b-a55b:free");
+  });
+});
+
+describe("modelDisplayLabel", () => {
+  it("uses preset label for known models", () => {
+    expect(modelDisplayLabel("google/gemini-2.5-flash")).toEqual({
+      full: "google/gemini-2.5-flash",
+      short: "Gemini 2.5 Flash",
+      kind: "preset",
+    });
+  });
+
+  it("uses slug tail for custom models", () => {
+    expect(modelDisplayLabel("meta-llama/llama-3.3-70b-instruct:free")).toEqual({
+      full: "meta-llama/llama-3.3-70b-instruct:free",
+      short: "llama-3.3-70b-instruct:free",
+      kind: "custom",
+    });
+  });
+
+  it("falls back to default when model is empty", () => {
+    expect(modelDisplayLabel(null).full).toBe(DEFAULT_AI_MODEL);
+  });
+});
+
+describe("modelSourceKind", () => {
+  it("marks presets and custom slugs", () => {
+    expect(modelSourceKind("google/gemini-2.5-flash")).toBe("preset");
+    expect(modelSourceKind("meta-llama/llama-3.3-70b-instruct:free")).toBe("custom");
   });
 });

@@ -65,3 +65,12 @@ export function stripWorkNamesFromPatientName(
   if (split.workNameHints.length > 0) return null;
   return trimmed;
 }
+
+/** «Пациент: …» в теле письма — без отдельного LLM-запроса. */
+export function parsePatientNameFromEmailBody(text: string | null | undefined): string | null {
+  const body = text?.trim() ?? "";
+  if (!body) return null;
+  const match = body.match(/(?:^|\n)\s*Пациент\s*:\s*([^\n]+)/iu);
+  const raw = match?.[1]?.trim();
+  return raw && raw.length > 1 ? raw : null;
+}

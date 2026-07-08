@@ -6,13 +6,19 @@ import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import {
   buildVirtualOrderDraftFromPrediction,
+  ensurePredictionEnriched,
   resolveClientIdsFromPrediction,
   type AiPredictionJson,
 } from "@/lib/ai-order-draft-from-prediction";
-import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
+import {
+  findLatestOrderIdForSenderEmail,
+  resolveClientIdsFromOrderSourceEmail,
+} from "@/lib/client-order-source-emails";
 import { runOrderEmailPrediction } from "@/lib/llm/run-order-email-prediction";
 import { withApiTiming } from "@/lib/server/api-timing";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
+
+export const maxDuration = 130;
 
 type Body = {
   emailId?: string;
@@ -69,20 +75,59 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Письмо не найдено" }, { status: 404 });
       }
 
-      const run = await runOrderEmailPrediction(db, tenantId, emailId, null);
-      if (!run) {
-        return NextResponse.json({ error: "Не удалось разобрать письмо" }, { status: 422 });
-      }
-      if (run.error) {
-        return NextResponse.json({ error: run.error }, { status: 422 });
+      const preferOrderIdForSource = await findLatestOrderIdForSenderEmail(
+        db,
+        tenantId,
+        email.fromAddress,
+      );
+
+      const cached = await db.aiOrderPrediction.findFirst({
+        where: { tenantId, emailId, error: null },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          orderId: true,
+          predictionJson: true,
+          model: true,
+          durationMs: true,
+        },
+      });
+
+      let model = cached?.model ?? "none";
+      let durationMs = cached?.durationMs ?? 0;
+      let fromCache = false;
+      let predictionJson: AiPredictionJson;
+
+      if (cached?.predictionJson && typeof cached.predictionJson === "object") {
+        fromCache = true;
+        predictionJson = await ensurePredictionEnriched(db, tenantId, {
+          predictionId: cached.id,
+          orderId: cached.orderId,
+          emailId,
+          predictionJson: cached.predictionJson as AiPredictionJson,
+          persist: true,
+        });
+      } else {
+        const run = await runOrderEmailPrediction(db, tenantId, emailId, null, {
+          preferOrderIdForSource,
+        });
+        if (!run) {
+          return NextResponse.json({ error: "Не удалось разобрать письмо" }, { status: 422 });
+        }
+        if (run.error) {
+          return NextResponse.json({ error: run.error }, { status: 422 });
+        }
+        model = run.model;
+        durationMs = run.durationMs;
+        predictionJson = run.predictionJson as AiPredictionJson;
+        fromCache = false;
       }
 
-      const predictionJson = run.predictionJson as AiPredictionJson;
       const sourceMatch = await resolveClientIdsFromOrderSourceEmail(
         db,
         tenantId,
         email.fromAddress,
-        { preferOrderId: null },
+        { preferOrderId: preferOrderIdForSource },
       );
       const effectiveSourceMatch = sourceMatch.matched
         ? sourceMatch
@@ -112,8 +157,9 @@ export async function POST(req: Request) {
         draft,
         warnings,
         confidenceScore: predictionJson.confidenceScore ?? null,
-        model: run.model,
-        durationMs: run.durationMs,
+        model,
+        durationMs,
+        fromCache,
       });
     },
   );

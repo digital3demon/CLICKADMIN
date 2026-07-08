@@ -236,6 +236,33 @@ export async function resolveClientIdsFromOrderSourceEmail(
   return resolveOrderSourceEmailClientMatch(historyPairs, catalog, preferOrder);
 }
 
+/** Последний наряд с письмом от того же отправителя — подсказка для резолва врача. */
+export async function findLatestOrderIdForSenderEmail(
+  db: PrismaClient,
+  tenantId: string,
+  fromAddress: string | null | undefined,
+): Promise<string | null> {
+  const normalized = normalizeOrderSourceEmailAddress(fromAddress);
+  if (!normalized) return null;
+
+  const links = await db.emailSourceOrder.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+    take: 400,
+    select: {
+      orderId: true,
+      email: { select: { fromAddress: true } },
+    },
+  });
+
+  for (const link of links) {
+    if (normalizeOrderSourceEmailAddress(link.email.fromAddress) === normalized) {
+      return link.orderId;
+    }
+  }
+  return null;
+}
+
 /** Для тестов и offline-разбора: группировка адресов → пары клиентов. */
 export function buildOrderSourceEmailPairIndex(
   rows: Array<{
