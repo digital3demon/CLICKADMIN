@@ -183,6 +183,7 @@ ensurePrismaGenerateBeforeStuckScript();
 for (const stuckScript of [
   "prisma-resolve-stuck-kaiten-blocked-at-migration.cjs",
   "prisma-resolve-stuck-email-reply-template-migration.cjs",
+  "prisma-resolve-stuck-admin-shipped-at-migration.cjs",
 ]) {
   const fixPath = pathToEnsure(stuckScript);
   if (!fs.existsSync(fixPath)) {
