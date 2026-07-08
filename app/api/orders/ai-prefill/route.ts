@@ -17,6 +17,8 @@ import {
 import { runOrderEmailPrediction } from "@/lib/llm/run-order-email-prediction";
 import { getAiSettings } from "@/lib/llm/llm-config";
 import { normalizeModel } from "@/lib/llm/ai-models";
+import { parseStructuredClinicEmailBody } from "@/lib/llm/order-email-structured-body";
+import { cleanMailTextBody, mailHtmlToText } from "@/lib/mail/mail-text-cleanup";
 import { withApiTiming } from "@/lib/server/api-timing";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 
@@ -93,11 +95,24 @@ export async function POST(req: Request) {
 
       const email = await db.email.findFirst({
         where: { id: emailId, tenantId },
-        select: { id: true, fromAddress: true },
+        select: {
+          id: true,
+          fromAddress: true,
+          textBody: true,
+          htmlBody: true,
+          preview: true,
+        },
       });
       if (!email) {
         return NextResponse.json({ error: "Письмо не найдено" }, { status: 404 });
       }
+
+      const emailBodyText =
+        cleanMailTextBody(email.textBody) ||
+        (email.htmlBody ? mailHtmlToText(email.htmlBody) : "") ||
+        cleanMailTextBody(email.preview) ||
+        "";
+      const structuredEligible = parseStructuredClinicEmailBody(emailBodyText).isStructured;
 
       const preferOrderIdForSource = await findLatestOrderIdForSenderEmail(
         db,
@@ -122,7 +137,11 @@ export async function POST(req: Request) {
       let fromCache = false;
       let predictionJson: AiPredictionJson;
 
-      if (cached?.predictionJson && typeof cached.predictionJson === "object") {
+      if (
+        cached?.predictionJson &&
+        typeof cached.predictionJson === "object" &&
+        !(structuredEligible && cached.model !== "structured-fast-path")
+      ) {
         fromCache = true;
         predictionJson = await ensurePredictionEnriched(db, tenantId, {
           predictionId: cached.id,

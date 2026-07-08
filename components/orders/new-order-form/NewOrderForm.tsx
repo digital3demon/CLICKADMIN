@@ -184,6 +184,34 @@ const PLACEHOLDER_DOCTOR_ID = "sys-placeholder-doctor-reimport";
 const CLIENT_ORDER_TEXTAREA_MAX_HEIGHT = 240;
 const COMMENTS_TEXTAREA_MAX_HEIGHT = 160;
 
+const AI_PREFILL_TIMEOUT_MS = 135_000;
+
+function shortAiPrefillModelLabel(model: string): string {
+  if (model === "structured-fast-path") return "без ИИ";
+  return model.split("/").pop() ?? model;
+}
+
+async function fetchAiPrefillWithTimeout(
+  url: string,
+  init: RequestInit | undefined,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timerId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error(
+        `Таймаут ${Math.round(timeoutMs / 1000)} с — разбор не завершился. Обновите страницу или смените модель в ИИ-Админ.`,
+      );
+    }
+    throw e;
+  } finally {
+    window.clearTimeout(timerId);
+  }
+}
+
 function detailLineLooksLikeCorrectionKp(l: DetailLine): boolean {
   if (l.kind !== "priceList") return false;
   return detailPriceListLabelLooksLikeCorrectionKp(l.label);
@@ -731,18 +759,21 @@ export function NewOrderForm({
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { model?: string } | null) => {
         if (cancelled || !data?.model) return;
-        const short = data.model.split("/").pop() ?? data.model;
-        setAiPrefillModelLabel(short);
+        setAiPrefillModelLabel(shortAiPrefillModelLabel(data.model));
       })
       .catch(() => {});
 
     void (async () => {
       try {
-        const res = await fetch("/api/orders/ai-prefill", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ emailId: primaryEmailId }),
-        });
+        const res = await fetchAiPrefillWithTimeout(
+          "/api/orders/ai-prefill",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ emailId: primaryEmailId }),
+          },
+          AI_PREFILL_TIMEOUT_MS,
+        );
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;
           draft?: OrderDraftSnapshot;
@@ -755,7 +786,7 @@ export function NewOrderForm({
         };
         if (cancelled) return;
         if (data.model) {
-          setAiPrefillModelLabel(data.model.split("/").pop() ?? data.model);
+          setAiPrefillModelLabel(shortAiPrefillModelLabel(data.model));
         }
         if (!res.ok) {
           setAiPrefillStatus("error");
@@ -827,10 +858,14 @@ export function NewOrderForm({
             : null,
         );
         setAiPrefillStatus("done");
-      } catch {
+      } catch (e) {
         if (!cancelled) {
           setAiPrefillStatus("error");
-          setAiPrefillError("Ошибка сети при разборе письма через ИИ");
+          setAiPrefillError(
+            e instanceof Error
+              ? e.message
+              : "Ошибка сети при разборе письма через ИИ",
+          );
         }
       }
     })();
@@ -2203,7 +2238,12 @@ export function NewOrderForm({
                 {aiPrefillElapsedSec} с
                 {aiPrefillModelLabel ? ` · ${aiPrefillModelLabel}` : null}
                 {aiPrefillElapsedSec >= 15
-                  ? " · бесплатная модель может отвечать 1–2 минуты"
+                  ? aiPrefillModelLabel === "без ИИ"
+                    ? null
+                    : " · бесплатная модель может отвечать 1–2 минуты"
+                  : null}
+                {aiPrefillElapsedSec >= 130
+                  ? " · превышено ожидаемое время"
                   : null}
               </p>
             ) : aiPrefillModelLabel ? (

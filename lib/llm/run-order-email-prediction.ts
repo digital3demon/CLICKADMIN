@@ -24,7 +24,7 @@ import {
 } from "./order-email-subject-parse";
 import { parseStructuredClinicEmailBody } from "./order-email-structured-body";
 import { loadClinicDoctorCatalog } from "./order-email-extract";
-import { resolveDoctorId } from "@/lib/order-import-export";
+import { resolveClinicId, resolveDoctorId } from "@/lib/order-import-export";
 
 export type RunOrderEmailPredictionResult = {
   model: string;
@@ -232,27 +232,32 @@ export async function runOrderEmailPrediction(
     let clinicId = preResolved?.clinicId ?? null;
     let doctorId = preResolved?.doctorId ?? null;
 
+    const catalog = await loadClinicDoctorCatalog(tenantId);
     if (!doctorId && structured.doctorHint) {
-      const catalog = await loadClinicDoctorCatalog(tenantId);
       doctorId = resolveDoctorId(structured.doctorHint, catalog.doctors);
     }
-
-    if (doctorId) {
-      parsedAi = {
-        patientName: patientName ?? structured.patientName,
-        clinicId,
-        doctorId,
-        clinicHint: structured.clinicHint,
-        doctorHint: structured.doctorHint,
-        clientOrderText: structured.clientOrderText,
-        confidenceScore: 80,
-        warnings: [] as string[],
-        compositionHints: [],
-        suggestedAttachmentIds: [],
-        urgent: false,
-      };
-      durationMs = Date.now() - fastPathStart;
+    if (!clinicId && structured.clinicHint) {
+      clinicId = resolveClinicId(structured.clinicHint, catalog.clinics);
     }
+
+    parsedAi = {
+      patientName: patientName ?? structured.patientName,
+      clinicId,
+      doctorId,
+      clinicHint: structured.clinicHint,
+      doctorHint: structured.doctorHint,
+      clientOrderText: structured.clientOrderText,
+      confidenceScore: doctorId ? 80 : 65,
+      warnings: doctorId
+        ? ([] as string[])
+        : ([
+            "Врач не найден в справочнике — выберите вручную в форме",
+          ] as string[]),
+      compositionHints: [],
+      suggestedAttachmentIds: [],
+      urgent: false,
+    };
+    durationMs = Date.now() - fastPathStart;
   }
 
   if (!parsedAi) {

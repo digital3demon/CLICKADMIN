@@ -109,9 +109,14 @@ export async function chatCompletion(
         if (e.name === "AbortError") {
           const timeoutSec = Math.round(timeoutMs / 1000);
           lastError = `Таймаут SprutDock (${timeoutSec} с). Модель ${model} не успела ответить — попробуйте снова или выберите более быструю модель.`;
-        } else {
-          lastError = e.message;
+          logger.warn({ model, timeoutMs }, "SprutDock request timed out");
+          return {
+            ok: false,
+            error: lastError,
+            durationMs: Date.now() - startTime,
+          };
         }
+        lastError = e.message;
         logger.warn({ model, err: e, timeoutMs }, "SprutDock fetch failed");
         break;
       }
