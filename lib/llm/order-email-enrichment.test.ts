@@ -146,4 +146,37 @@ describe("enrichOrderEmailPrediction Lebedeva-like case", () => {
 
     expect(enriched.clientOrderText).toBe("Коронка 46");
   });
+
+  it("clears false awaitingData when Yandex link with CT/scans is already in email", async () => {
+    vi.mocked(db.email.findUnique).mockResolvedValueOnce({
+      subject: "Декомпрессионный сплинт",
+      receivedAt: new Date("2026-06-02T10:00:00.000Z"),
+      sentAt: null,
+      createdAt: new Date("2026-06-02T10:00:00.000Z"),
+      textBody:
+        "Прикрепляю ссылку на яндекс диск, где есть КТ, сканы пациента\nhttps://disk.yandex.ru/d/JtJRXnmwEUry0Q",
+      htmlBody: null,
+      preview: null,
+    });
+
+    const enriched = await enrichOrderEmailPrediction(db as never, "tenant-1", {
+      primaryEmailId: "email-1",
+      ai: {
+        patientName: "Столбун Андрей Викторович",
+        clientOrderText:
+          "Прикрепляю ссылку на яндекс диск, где есть КТ, сканы пациента\nhttps://disk.yandex.ru/d/JtJRXnmwEUry0Q",
+        awaitingData: { isAwaiting: true, reason: "ссылка" },
+        suggestedAttachmentIds: [],
+        compositionHints: [{ nameHint: "Декомпрессионный сплинт" }],
+        warnings: ["Дата сдачи не указана, ориентируемся на согласование"],
+      },
+      attachments: [],
+      resolvedClinicId: "clinic-1",
+      resolvedDoctorId: "doctor-1",
+    });
+
+    expect(enriched.awaitingData).toBeNull();
+    expect(enriched.hasCt).toBe(true);
+    expect(enriched.hasScans).toBe(true);
+  });
 });

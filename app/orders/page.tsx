@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
+import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
@@ -933,14 +934,24 @@ export default async function OrdersPage({
                       )}
                     </div>
                   </td>
-                  <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle font-mono font-medium text-[var(--app-text)] sm:px-1.5 sm:py-1.5">
-                    <Link
-                      href={orderPathById(o.id)}
-                      className="text-[var(--sidebar-blue)] hover:underline"
-                      title={`${o.orderNumber} — открыть наряд`}
-                    >
-                      {o.orderNumber}
-                    </Link>
+                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
+                    <div className="flex min-h-[2.5rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
+                      <Link
+                        href={orderPathById(o.id)}
+                        className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
+                        title={`${o.orderNumber} — открыть наряд`}
+                      >
+                        {o.orderNumber}
+                      </Link>
+                      <OrderListKaitenColumnTag
+                        kaitenCardId={o.kaitenCardId}
+                        demoKanbanColumn={o.demoKanbanColumn}
+                        demoCardTypeName={o.kaitenCardType?.name ?? null}
+                        kaitenColumnTitle={o.kaitenColumnTitle}
+                        filterHref={kaitenStatusFilterHref}
+                        placement="underOrderNumber"
+                      />
+                    </div>
                   </td>
                   <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
                     {o.clinic ? (
@@ -1018,7 +1029,7 @@ export default async function OrdersPage({
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
                   <td className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5">
-                    {renderTagsNode()}
+                    {renderTagsNode({ omitKaitenColumnTag: true })}
                   </td>
                 </OrdersListTableRow>
               );

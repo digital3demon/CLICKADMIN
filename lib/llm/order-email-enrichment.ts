@@ -28,6 +28,10 @@ import {
   splitSubjectWorkAndPatient,
   stripWorkNamesFromPatientName,
 } from "./order-email-subject-parse";
+import {
+  deriveSourceDataFlagsFromEmailText,
+  normalizeAwaitingDataFromEmailText,
+} from "./order-email-awaiting-data-guard";
 
 export type EnrichedPrediction = Record<string, unknown>;
 
@@ -262,13 +266,28 @@ export async function enrichOrderEmailPrediction(
   }
   out.clientOrderText = normalizeClientOrderText(rawClientText);
 
+  const emailBodyForGuards =
+    rawClientText.trim() ||
+    (primaryEmail
+      ? cleanMailTextBody(primaryEmail.textBody) ||
+        (primaryEmail.htmlBody ? mailHtmlToText(primaryEmail.htmlBody) : "") ||
+        cleanMailTextBody(primaryEmail.preview) ||
+        ""
+      : "");
+
+  out.awaitingData = normalizeAwaitingDataFromEmailText(
+    out.awaitingData as Parameters<typeof normalizeAwaitingDataFromEmailText>[0],
+    emailBodyForGuards,
+  );
+
   const suggestedIds = asStringArray(out.suggestedAttachmentIds);
-  const flags = deriveSourceDataFlagsFromAttachments(input.attachments, suggestedIds, {
+  const flagsFromAttachments = deriveSourceDataFlagsFromAttachments(input.attachments, suggestedIds, {
     hasScans: out.hasScans === true,
     hasCt: out.hasCt === true,
     hasMri: out.hasMri === true,
     hasPhoto: out.hasPhoto === true,
   });
+  const flags = deriveSourceDataFlagsFromEmailText(emailBodyForGuards, flagsFromAttachments);
   out.hasScans = flags.hasScans;
   out.hasCt = flags.hasCt;
   out.hasMri = flags.hasMri;
