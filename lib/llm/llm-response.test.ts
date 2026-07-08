@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractChatCompletionText,
   extractMessageContent,
   formatLlmApiError,
   parseRateLimitWaitMs,
@@ -20,6 +21,34 @@ describe("extractMessageContent", () => {
     expect(
       extractMessageContent([{ type: "text", text: '{"patientName":"Иванов"}' }]),
     ).toBe('{"patientName":"Иванов"}');
+  });
+
+  it("returns null for empty string content", () => {
+    expect(extractMessageContent("   ")).toBeNull();
+  });
+});
+
+describe("extractChatCompletionText", () => {
+  it("reads message.content from standard OpenAI shape", () => {
+    expect(
+      extractChatCompletionText({
+        model: "nvidia/nemotron-nano-9b-v2:free",
+        choices: [{ message: { content: "OK" }, finish_reason: "stop" }],
+      }),
+    ).toEqual({
+      content: "OK",
+      finishReason: "stop",
+      responseModel: "nvidia/nemotron-nano-9b-v2:free",
+      hasChoice: true,
+    });
+  });
+
+  it("falls back to reasoning field for reasoning models", () => {
+    expect(
+      extractChatCompletionText({
+        choices: [{ message: { content: "", reasoning: "OK" } }],
+      }).content,
+    ).toBe("OK");
   });
 });
 

@@ -1,7 +1,7 @@
 import "server-only";
 import { type AiSettings } from "./llm-config";
 import {
-  extractMessageContent,
+  extractChatCompletionText,
   formatLlmApiError,
   parseRateLimitWaitMs,
 } from "./llm-response";
@@ -26,12 +26,14 @@ export async function chatCompletion(
   const modelsToTry = [settings.model, ...settings.fallbackModels];
   let lastError = "Unknown error";
   const startTime = Date.now();
+  const timeoutMs = opts.timeoutMs ?? settings.timeoutMs;
+  const maxRateLimitRetries = opts.maxRateLimitRetries ?? MAX_RATE_LIMIT_RETRIES;
 
   for (const model of modelsToTry) {
-    for (let rateLimitAttempt = 0; rateLimitAttempt <= MAX_RATE_LIMIT_RETRIES; rateLimitAttempt++) {
+    for (let rateLimitAttempt = 0; rateLimitAttempt <= maxRateLimitRetries; rateLimitAttempt++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), settings.timeoutMs);
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
         const body: Record<string, unknown> = {
           model,
@@ -65,7 +67,7 @@ export async function chatCompletion(
           lastError = formatLlmApiError(response.status, errText);
           logger.warn({ model, status: response.status, errText }, "SprutDock API error");
 
-          if (response.status === 429 && rateLimitAttempt < MAX_RATE_LIMIT_RETRIES) {
+          if (response.status === 429 && rateLimitAttempt < maxRateLimitRetries) {
             const waitMs = parseRateLimitWaitMs(response, errText);
             logger.warn({ model, waitMs, attempt: rateLimitAttempt + 1 }, "SprutDock rate limit, retrying");
             await sleep(waitMs);
@@ -79,27 +81,38 @@ export async function chatCompletion(
         }
 
         const data = await response.json();
-        const content = extractMessageContent(data.choices?.[0]?.message?.content);
+        const parsed = extractChatCompletionText(data);
+        const content = parsed.content;
 
         if (!content) {
-          lastError = "Invalid response format from SprutDock";
+          if (opts.acceptEmptyContent && parsed.hasChoice) {
+            return {
+              ok: true,
+              content: "",
+              model: parsed.responseModel ?? model,
+              durationMs: Date.now() - startTime,
+            };
+          }
+          lastError = parsed.finishReason
+            ? `SprutDock вернул пустой ответ (finish_reason: ${parsed.finishReason})`
+            : "SprutDock вернул ответ без текста";
           break;
         }
 
         return {
           ok: true,
           content,
-          model,
+          model: parsed.responseModel ?? model,
           durationMs: Date.now() - startTime,
         };
       } catch (e: any) {
         if (e.name === "AbortError") {
-          const timeoutSec = Math.round(settings.timeoutMs / 1000);
+          const timeoutSec = Math.round(timeoutMs / 1000);
           lastError = `Таймаут SprutDock (${timeoutSec} с). Модель ${model} не успела ответить — попробуйте снова или выберите более быструю модель.`;
         } else {
           lastError = e.message;
         }
-        logger.warn({ model, err: e, timeoutMs: settings.timeoutMs }, "SprutDock fetch failed");
+        logger.warn({ model, err: e, timeoutMs }, "SprutDock fetch failed");
         break;
       }
     }

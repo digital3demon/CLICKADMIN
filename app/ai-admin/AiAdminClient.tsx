@@ -24,6 +24,7 @@ import {
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 
 const DIFFS_PAGE_SIZE = 10;
+const TEST_MODEL_CLIENT_TIMEOUT_MS = 35_000;
 
 async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> & { body?: any }): Promise<T> {
   const res = await fetch(url, {
@@ -39,6 +40,42 @@ async function jsonFetch<T = any>(url: string, init?: Omit<RequestInit, "body"> 
     throw new Error(err.error || "Ошибка запроса");
   }
   return res.json();
+}
+
+async function jsonFetchWithTimeout<T = any>(
+  url: string,
+  init: Omit<RequestInit, "body"> & { body?: any },
+  timeoutMs: number,
+): Promise<T> {
+  const controller = new AbortController();
+  const timerId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const raw =
+        (typeof err.error === "string" && err.error) ||
+        (typeof err.message === "string" && err.message) ||
+        "Ошибка запроса";
+      throw new Error(raw.replace(/^All models failed\. Last error:\s*/i, ""));
+    }
+    return res.json();
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error(`Таймаут ${Math.round(timeoutMs / 1000)} с — SprutDock не ответил`);
+    }
+    throw e;
+  } finally {
+    window.clearTimeout(timerId);
+  }
 }
 
 type DiffModalData = {
@@ -294,6 +331,7 @@ export function AiAdminClient({
   const savedModelDisplay = modelDisplayLabel(savedAiModel);
   const draftModelDisplay = modelDisplayLabel(draftModel);
   const [isTestingModel, setIsTestingModel] = useState(false);
+  const [testModelElapsedSec, setTestModelElapsedSec] = useState(0);
   const [modelTestStatus, setModelTestStatus] = useState<{
     ok: boolean;
     message: string;
@@ -338,6 +376,19 @@ export function AiAdminClient({
     if (activeTab !== "diffs") return;
     void loadDiffs(diffsPage);
   }, [activeTab, diffsPage, loadDiffs]);
+
+  useEffect(() => {
+    if (!isTestingModel) {
+      setTestModelElapsedSec(0);
+      return;
+    }
+    const started = Date.now();
+    setTestModelElapsedSec(0);
+    const timerId = window.setInterval(() => {
+      setTestModelElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, [isTestingModel]);
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
@@ -403,14 +454,14 @@ export function AiAdminClient({
     setIsTestingModel(true);
     setModelTestStatus(null);
     try {
-      const res = await jsonFetch<{
+      const res = await jsonFetchWithTimeout<{
         ok: boolean;
         requestedModel?: string;
         usedModel?: string;
         durationMs?: number;
         snippet?: string;
         error?: string;
-      }>("/api/ai-admin/test-model", { method: "POST" });
+      }>("/api/ai-admin/test-model", { method: "POST" }, TEST_MODEL_CLIENT_TIMEOUT_MS);
       const used = res.usedModel ?? res.requestedModel ?? savedAiModel;
       setModelTestStatus({
         ok: true,
@@ -612,7 +663,9 @@ export function AiAdminClient({
                       onClick={() => void handleTestModel()}
                       disabled={isTestingModel || isSaving || !aiEnabled || !hasApiKey}
                     >
-                      {isTestingModel ? "Проверка…" : "Проверить модель"}
+                      {isTestingModel
+                        ? `Проверка…${testModelElapsedSec > 0 ? ` (${testModelElapsedSec} с)` : ""}`
+                        : "Проверить модель"}
                     </Button>
                     {hasUnsavedModelChanges ? (
                       <span className="text-xs text-[var(--app-text-secondary)]">

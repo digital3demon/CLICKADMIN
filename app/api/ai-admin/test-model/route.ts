@@ -5,7 +5,9 @@ import { getAiSettings } from "@/lib/llm/llm-config";
 import { chatCompletion } from "@/lib/llm/llm-client";
 import { normalizeModel } from "@/lib/llm/ai-models";
 
-export const maxDuration = 130;
+export const maxDuration = 45;
+
+const TEST_MODEL_TIMEOUT_MS = 25_000;
 
 /** POST — короткий запрос к SprutDock с моделью из настроек tenant (smoke-test). */
 export async function POST() {
@@ -37,12 +39,12 @@ export async function POST() {
     }
 
     const result = await chatCompletion(settings, {
-      messages: [
-        { role: "system", content: "Reply with exactly: OK" },
-        { role: "user", content: "ping" },
-      ],
-      maxTokens: 10,
+      messages: [{ role: "user", content: "Ответь одним словом: OK" }],
+      maxTokens: 64,
       temperature: 0,
+      timeoutMs: TEST_MODEL_TIMEOUT_MS,
+      maxRateLimitRetries: 1,
+      acceptEmptyContent: true,
     });
 
     if (!result.ok) {
@@ -62,7 +64,7 @@ export async function POST() {
       requestedModel,
       usedModel: result.model,
       durationMs: result.durationMs,
-      snippet: result.content.trim().slice(0, 80),
+      snippet: result.content.trim().slice(0, 80) || "(пустой текст, шлюз доступен)",
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";

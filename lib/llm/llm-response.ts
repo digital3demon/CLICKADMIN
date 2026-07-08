@@ -24,7 +24,10 @@ export function parseRateLimitWaitMs(response: Response, errText: string): numbe
 }
 
 export function extractMessageContent(content: unknown): string | null {
-  if (typeof content === "string") return content;
+  if (typeof content === "string") {
+    const trimmed = content.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
   if (!Array.isArray(content)) return null;
 
   const parts = content
@@ -36,6 +39,62 @@ export function extractMessageContent(content: unknown): string | null {
     .filter((part): part is string => Boolean(part));
 
   return parts.length > 0 ? parts.join("\n") : null;
+}
+
+type ChatCompletionChoice = {
+  message?: {
+    content?: unknown;
+    reasoning?: unknown;
+    refusal?: unknown;
+  };
+  text?: unknown;
+  finish_reason?: unknown;
+};
+
+/** Извлекает текст из тела OpenAI-совместимого chat/completions. */
+export function extractChatCompletionText(data: unknown): {
+  content: string | null;
+  finishReason: string | null;
+  responseModel: string | null;
+  hasChoice: boolean;
+} {
+  if (!data || typeof data !== "object") {
+    return { content: null, finishReason: null, responseModel: null, hasChoice: false };
+  }
+
+  const body = data as {
+    model?: unknown;
+    choices?: ChatCompletionChoice[];
+  };
+  const choice = Array.isArray(body.choices) ? body.choices[0] : undefined;
+  if (!choice) {
+    return {
+      content: null,
+      finishReason: null,
+      responseModel: typeof body.model === "string" ? body.model : null,
+      hasChoice: false,
+    };
+  }
+
+  const message = choice.message;
+  const fromMessage =
+    extractMessageContent(message?.content) ||
+    (typeof message?.reasoning === "string" && message.reasoning.trim()
+      ? message.reasoning.trim()
+      : null) ||
+    (typeof message?.refusal === "string" && message.refusal.trim()
+      ? message.refusal.trim()
+      : null);
+  const fromLegacyText =
+    typeof choice.text === "string" && choice.text.trim() ? choice.text.trim() : null;
+
+  return {
+    content: fromMessage || fromLegacyText,
+    finishReason:
+      typeof choice.finish_reason === "string" ? choice.finish_reason : null,
+    responseModel: typeof body.model === "string" ? body.model : null,
+    hasChoice: true,
+  };
 }
 
 function parseSprutDockErrorMessage(errText: string): string | null {
