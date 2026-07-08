@@ -177,5 +177,9 @@ export async function PUT(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true });
+  const accAfter = await getEffectiveModuleAccess(tenantId, role);
+  return NextResponse.json({
+    ok: true,
+    effective: bundleAccessForResponse(accAfter),
+  });
 }

@@ -1,5 +1,4 @@
 import type { AppModule, UserRole } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import {
   ALL_APP_MODULES,
@@ -12,6 +11,7 @@ import {
   getModuleForPathname,
   requiredModuleForPath,
 } from "@/lib/role-module-paths";
+import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
 
 /**
  * Эффективный набор флагов по модулям: переопределения в БД или дефолт из
@@ -29,7 +29,8 @@ export async function getEffectiveModuleAccess(
     return all;
   }
 
-  const rows = await prisma.roleModuleAccess.findMany({
+  const db = await resolveTenantPrismaClient(tenantId);
+  const rows = await db.roleModuleAccess.findMany({
     where: { tenantId, role },
     select: { module: true, allowed: true },
   });

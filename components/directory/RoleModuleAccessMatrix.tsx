@@ -74,34 +74,28 @@ export function RoleModuleAccessMatrix() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role, bundle, allowed }),
       });
-      const j = (await res.json()) as { error?: string };
+      const j = (await res.json()) as {
+        error?: string;
+        effective?: Record<string, boolean>;
+      };
       if (!res.ok) {
         setError(j.error ?? "Сохранение не удалось");
         await load();
         return;
       }
-      setData((prev) => {
-        if (!prev) return prev;
-        const nextRole = { ...prev.effective[role], [bundle]: allowed };
-        if (allowed) {
-          let p = requiredParentBundle(bundle);
-          while (p) {
-            nextRole[p] = true;
-            p = requiredParentBundle(p);
-          }
-        } else {
-          for (const child of childBundlesOf(bundle)) {
-            nextRole[child] = false;
-          }
-        }
-        return {
-          ...prev,
-          effective: {
-            ...prev.effective,
-            [role]: nextRole,
-          },
-        };
-      });
+      if (j.effective) {
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            effective: {
+              ...prev.effective,
+              [role]: j.effective!,
+            },
+          };
+        });
+        return;
+      }
     } catch {
       setError("Сеть недоступна");
       await load();
