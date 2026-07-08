@@ -12,6 +12,7 @@ import {
 import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
 import { runOrderEmailPrediction } from "@/lib/llm/run-order-email-prediction";
 import { withApiTiming } from "@/lib/server/api-timing";
+import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 
 type Body = {
   emailId?: string;
@@ -97,7 +98,12 @@ export async function POST(req: Request) {
         predictionJson,
         effectiveSourceMatch,
       );
-      const draft = buildVirtualOrderDraftFromPrediction(predictionJson, resolvedIds);
+      const { slots: labDueHmSlots } = await getLabDueSettingsForTenant(tenantId);
+      const draft = buildVirtualOrderDraftFromPrediction(
+        predictionJson,
+        resolvedIds,
+        { labDueHmSlots },
+      );
       const warnings = Array.isArray(predictionJson.warnings)
         ? predictionJson.warnings.filter((w) => typeof w === "string")
         : [];

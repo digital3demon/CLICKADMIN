@@ -36,7 +36,15 @@ describe("computeAiMissingFields", () => {
         correctionReason: "",
         correctionPaid: false,
       }),
-    ).toEqual(["doctor", "clinic", "patient", "clientOrder"]);
+    ).toEqual([
+      "doctor",
+      "clinic",
+      "patient",
+      "clientOrder",
+      "labDue",
+      "appointment",
+      "details",
+    ]);
   });
 
   it("treats private clinic id as filled clinic", () => {
@@ -71,6 +79,6 @@ describe("computeAiMissingFields", () => {
         correctionReason: "",
         correctionPaid: false,
       }),
-    ).toEqual([]);
+    ).toEqual(["labDue", "appointment", "details"]);
   });
 });

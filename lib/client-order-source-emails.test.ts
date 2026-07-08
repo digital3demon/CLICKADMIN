@@ -10,7 +10,7 @@ import {
   buildVirtualOrderDraftFromPrediction,
   resolveClientIdsFromPrediction,
   resolveSuggestedAttachments,
-} from "./ai-order-draft-from-prediction";
+} from "./ai-prefill-draft-build";
 import { ORDER_CLINIC_PRIVATE } from "./clients-order-ui";
 import { URGENT_NO_COEF, URGENT_UNSET } from "./order-urgency";
 
@@ -199,6 +199,53 @@ describe("buildVirtualOrderDraftFromPrediction", () => {
       { clinicId: "", doctorId: "" },
     );
     expect(draft.urgentSelection).toBe(URGENT_UNSET);
+  });
+
+  it("maps appointment, lab due and price-list detail lines", () => {
+    const draft = buildVirtualOrderDraftFromPrediction(
+      {
+        patientName: "Маркова ОВ",
+        clientOrderText: "Ретенционные каппы",
+        patientAppointmentAt: "2026-07-14T10:00:00.000Z",
+        dueDate: "2026-07-12T08:00:00.000Z",
+        resolvedConstructions: [
+          {
+            category: "PRICE_LIST",
+            constructionTypeId: null,
+            priceListItemId: "pli-retainer",
+            priceListItem: {
+              id: "pli-retainer",
+              code: "5001",
+              name: "Ретенционные каппы",
+              priceRub: 3500,
+              leadWorkingDays: 3,
+              variablePrice: false,
+            },
+            materialId: null,
+            shade: null,
+            quantity: 1,
+            unitPrice: 3500,
+            lineDiscountPercent: 0,
+            teethFdi: ["17", "27", "37", "47"],
+            bridgeFromFdi: null,
+            bridgeToFdi: null,
+            arch: null,
+          },
+        ],
+      },
+      { clinicId: "c1", doctorId: "d1" },
+      { labDueHmSlots: ["08:00", "12:00"] },
+    );
+
+    expect(draft.patientAppointmentLocal).toMatch(/^2026-07-14T/);
+    expect(draft.workDueLocal).toMatch(/^2026-07-12T/);
+    expect(draft.appointmentWholeDay).toBe(false);
+    expect(draft.detailLines).toHaveLength(1);
+    expect(draft.detailLines[0]).toMatchObject({
+      kind: "priceList",
+      priceListItemId: "pli-retainer",
+      quantity: 1,
+    });
   });
 });
 

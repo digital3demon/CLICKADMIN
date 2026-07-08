@@ -3,13 +3,23 @@
 import type { OrderDraftSnapshot } from "@/lib/order-draft-snapshot";
 import { Spinner } from "@/components/ui/Spinner";
 
-export type AiPrefillFieldKey = "doctor" | "clinic" | "patient" | "clientOrder";
+export type AiPrefillFieldKey =
+  | "doctor"
+  | "clinic"
+  | "patient"
+  | "clientOrder"
+  | "labDue"
+  | "appointment"
+  | "details";
 
 export const AI_PREFILL_FIELD_LABELS: Record<AiPrefillFieldKey, string> = {
   doctor: "Доктор",
   clinic: "Клиника",
   patient: "Пациент",
   clientOrder: "Заказ от клиента",
+  labDue: "Срок лаборатории",
+  appointment: "Запись",
+  details: "Подробно (состав)",
 };
 
 export function computeAiMissingFields(
@@ -21,6 +31,9 @@ export function computeAiMissingFields(
   if (!draft.clinicId?.trim()) missing.push("clinic");
   if (!draft.patientName?.trim()) missing.push("patient");
   if (!draft.clientOrderText?.trim()) missing.push("clientOrder");
+  if (!draft.workDueLocal?.trim()) missing.push("labDue");
+  if (!draft.patientAppointmentLocal?.trim()) missing.push("appointment");
+  if (!draft.detailLines?.length) missing.push("details");
   return missing;
 }
 

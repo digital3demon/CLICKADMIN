@@ -354,6 +354,9 @@ export function NewOrderForm({
   const aiHighlightClinic = aiUnfilledFields.includes("clinic");
   const aiHighlightPatient = aiUnfilledFields.includes("patient");
   const aiHighlightClientOrder = aiUnfilledFields.includes("clientOrder");
+  const aiHighlightLabDue = aiUnfilledFields.includes("labDue");
+  const aiHighlightAppointment = aiUnfilledFields.includes("appointment");
+  const aiHighlightDetails = aiUnfilledFields.includes("details");
   const aiPrefillLoading = aiMode && !previewMode && aiPrefillStatus === "loading";
   const prevClinicIdForLegalRef = useRef<string | null>(null);
   const canUseTestOrder = sessionRole === "OWNER";
@@ -757,6 +760,41 @@ export function NewOrderForm({
           setHasMri(s.hasMri === true);
           setHasPhoto(s.hasPhoto === true);
           if (s.urgentSelection) setUrgentSelection(s.urgentSelection);
+
+          if (s.workDueLocal?.trim()) {
+            const wd = snapDatetimeLocalToLabDueGrid(s.workDueLocal, labDueHmSlots);
+            setWorkDueLocal(wd);
+            setLabDueAutoByPrice(false);
+            if (typeof s.labWholeDay === "boolean") {
+              setLabWholeDay(s.labWholeDay);
+            } else {
+              const hm = parseHmFromDueGridLocal(wd);
+              setLabWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
+            }
+          }
+
+          if (s.patientAppointmentLocal?.trim()) {
+            const pa = snapDatetimeLocalToDueGrid(s.patientAppointmentLocal);
+            setPatientAppointmentLocal(pa);
+            if (typeof s.appointmentWholeDay === "boolean") {
+              setAppointmentWholeDay(s.appointmentWholeDay);
+            } else {
+              const hm = parseHmFromDueGridLocal(pa);
+              setAppointmentWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
+            }
+          }
+
+          if (!workReceivedLockedFromMail && s.workReceivedLocal?.trim()) {
+            setWorkReceivedLocal(snapDatetimeLocalToDueGrid(s.workReceivedLocal));
+          }
+
+          if (s.detailLines?.length) {
+            setDetailLines(JSON.parse(JSON.stringify(s.detailLines)));
+          }
+          if (s.bridgeLines?.length) {
+            setBridgeLines(JSON.parse(JSON.stringify(s.bridgeLines)));
+          }
+
           setAiUnfilledFields(computeAiMissingFields(s));
         }
 
@@ -782,7 +820,7 @@ export function NewOrderForm({
     return () => {
       cancelled = true;
     };
-  }, [aiMode, previewMode, initialSnapshot, sourceEmails]);
+  }, [aiMode, previewMode, initialSnapshot, sourceEmails, labDueHmSlots, workReceivedLockedFromMail]);
 
   useEffect(() => {
     if (correctionTrack == null) {
@@ -1991,6 +2029,7 @@ export function NewOrderForm({
                         ? ""
                         : snapDatetimeLocalToLabDueGrid(raw, labDueHmSlots);
                     setWorkDueLocal(s);
+                    if (s.trim()) clearAiUnfilled("labDue");
                     if (!s.trim()) {
                       setLabWholeDay(true);
                       return;
@@ -1999,7 +2038,10 @@ export function NewOrderForm({
                     if (hm && hm !== DUE_DAY_DEFAULT_HM) setLabWholeDay(false);
                   }}
                   title={`Срок лаборатории: ${labDueHmSlots.join(", ")} или «В теч. дня»`}
-                  className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
+                  className={aiPrefillHighlightClass(
+                    "w-full min-w-0 sm:min-w-[12rem] sm:flex-1",
+                    aiHighlightLabDue,
+                  )}
                   calendarFooter={
                     <label
                       htmlFor={`${titleId}-lab-whole-day`}
@@ -2026,6 +2068,7 @@ export function NewOrderForm({
                     const s =
                       raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
                     setPatientAppointmentLocal(s);
+                    if (s.trim()) clearAiUnfilled("appointment");
                     if (!s.trim()) {
                       setAppointmentWholeDay(true);
                       return;
@@ -2035,7 +2078,10 @@ export function NewOrderForm({
                       setAppointmentWholeDay(false);
                   }}
                   title="Дата и время записи пациента (8:00–23:30, шаг 30 мин)"
-                  className="w-full min-w-0 sm:min-w-[12rem] sm:flex-1"
+                  className={aiPrefillHighlightClass(
+                    "w-full min-w-0 sm:min-w-[12rem] sm:flex-1",
+                    aiHighlightAppointment,
+                  )}
                   calendarFooter={
                     <label
                       htmlFor={`${titleId}-appt-whole-day`}
@@ -2510,12 +2556,23 @@ export function NewOrderForm({
               />
             ) : null}
 
-            <PodrobnoSection
-              lines={detailLines}
-              clinicId={effectiveClinicIdForPrice}
-              doctorId={doctorId || null}
-              onLinesChange={setDetailLines}
-            />
+            <div
+              className={
+                aiHighlightDetails
+                  ? "rounded-lg ring-2 ring-amber-400/50 dark:ring-amber-600/40"
+                  : undefined
+              }
+            >
+              <PodrobnoSection
+                lines={detailLines}
+                clinicId={effectiveClinicIdForPrice}
+                doctorId={doctorId || null}
+                onLinesChange={(next) => {
+                  setDetailLines(next);
+                  if (next.length > 0) clearAiUnfilled("details");
+                }}
+              />
+            </div>
 
             <QuickOrderSection
               value={quickOrder}
