@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseStructuredClinicEmailBody } from "./order-email-structured-body";
+import {
+  parseStructuredClinicEmailBody,
+  canUseHeuristicPrefill,
+  buildClientOrderTextFromBody,
+} from "./order-email-structured-body";
 
 describe("parseStructuredClinicEmailBody", () => {
   it("parses typical splint order email", () => {
@@ -41,6 +45,39 @@ describe("parseStructuredClinicEmailBody", () => {
       ].join("\n"),
       isStructured: true,
     });
+  });
+
+  it("canUseHeuristicPrefill when patient and doctor line present", () => {
+    const body = [
+      "Atribeante СПб Новочеркасская",
+      "Врач: Невский Денис Дмитриевич",
+      "Пациент: Павлухин СО",
+      "Шаблон под пилотное сверление Nobel во 2 секторе 24 26 27",
+    ].join("\n");
+    const parsed = parseStructuredClinicEmailBody(body);
+    expect(
+      canUseHeuristicPrefill({
+        patientName: parsed.patientName,
+        doctorHint: parsed.doctorHint,
+        clinicHint: parsed.clinicHint,
+        clientOrderText: parsed.clientOrderText ?? buildClientOrderTextFromBody(body),
+        hasResolvedDoctor: false,
+        hasResolvedClinic: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("canUseHeuristicPrefill with sender-resolved doctor only", () => {
+    expect(
+      canUseHeuristicPrefill({
+        patientName: "Иванов И.И.",
+        doctorHint: null,
+        clinicHint: null,
+        clientOrderText: "Коронка 16, цвет A2, срок на пятницу",
+        hasResolvedDoctor: true,
+        hasResolvedClinic: false,
+      }),
+    ).toBe(true);
   });
 
   it("returns isStructured false for unstructured text", () => {

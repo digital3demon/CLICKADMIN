@@ -122,6 +122,40 @@ export async function loadClinicDoctorCatalog(tenantId: string) {
   return fetchClinicDoctorCatalog(tenantId);
 }
 
+const PREFILL_CATALOG_FALLBACK_CLINICS = 40;
+const PREFILL_CATALOG_FALLBACK_DOCTORS = 80;
+
+/** Урезанный справочник для prefill — не заливать весь каталог в промпт. */
+export function filterCatalogForPrefill(
+  catalog: Awaited<ReturnType<typeof fetchClinicDoctorCatalog>>,
+  haystack: string,
+): Awaited<ReturnType<typeof fetchClinicDoctorCatalog>> {
+  const text = haystack.toLowerCase();
+  const matchedDoctors = catalog.doctors.filter((d) => {
+    const parts = d.fullName.toLowerCase().split(/\s+/).filter(Boolean);
+    const surname = parts[0] ?? "";
+    return surname.length >= 4 && text.includes(surname);
+  });
+  const matchedClinics = catalog.clinics.filter((c) => {
+    const tokens = c.name
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((t) => t.length >= 4);
+    return tokens.some((t) => text.includes(t));
+  });
+
+  return {
+    clinics:
+      matchedClinics.length > 0
+        ? matchedClinics
+        : catalog.clinics.slice(0, PREFILL_CATALOG_FALLBACK_CLINICS),
+    doctors:
+      matchedDoctors.length > 0
+        ? matchedDoctors
+        : catalog.doctors.slice(0, PREFILL_CATALOG_FALLBACK_DOCTORS),
+  };
+}
+
 function formatCatalogForPrompt(catalog: Awaited<ReturnType<typeof fetchClinicDoctorCatalog>>) {
   const clinicLines = catalog.clinics.map((c) => `  "${c.id}": ${c.name}`);
   const doctorLines = catalog.doctors.map((d) => `  "${d.id}": ${d.fullName}`);
@@ -327,6 +361,8 @@ export async function extractOrderFieldsFromEmail(
     pdfOrderText?: string | null;
     preResolved?: PreResolvedClientIds | null;
     historyContext?: ClientHistoryContext | null;
+    forPrefill?: boolean;
+    emailBodyForCatalogFilter?: string | null;
   },
 ): Promise<{
   result: OrderEmailExtractResult | null;
@@ -344,7 +380,16 @@ export async function extractOrderFieldsFromEmail(
     return { result: null, model: "none", durationMs: 0, error: "Empty email blocks" };
   }
 
-  const catalog = await fetchClinicDoctorCatalog(tenantId);
+  const fullCatalog = await fetchClinicDoctorCatalog(tenantId);
+  const catalog =
+    options?.forPrefill &&
+    !options.preResolved?.doctorId &&
+    !options.preResolved?.clinicId
+      ? filterCatalogForPrefill(
+          fullCatalog,
+          `${options.fromAddress ?? ""}\n${options.emailBodyForCatalogFilter ?? ""}`,
+        )
+      : fullCatalog;
   const catalogText = formatCatalogForPrompt(catalog);
   const attachments = options?.emailAttachments ?? [];
   const attachmentsText = formatAttachmentsForPrompt(attachments);
@@ -363,7 +408,7 @@ export async function extractOrderFieldsFromEmail(
   const response = await chatCompletion(settings, {
     messages: [{ role: "user", content: prompt }],
     responseFormat: "json_object",
-    maxTokens: 4096,
+    maxTokens: options?.forPrefill ? 2048 : 4096,
   });
 
   if (!response.ok) {

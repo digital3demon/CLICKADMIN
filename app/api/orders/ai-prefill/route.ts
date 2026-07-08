@@ -6,7 +6,6 @@ import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import {
   buildVirtualOrderDraftFromPrediction,
-  ensurePredictionEnriched,
   resolveClientIdsFromPrediction,
   type AiPredictionJson,
 } from "@/lib/ai-order-draft-from-prediction";
@@ -17,8 +16,6 @@ import {
 import { runOrderEmailPrediction } from "@/lib/llm/run-order-email-prediction";
 import { getAiSettings } from "@/lib/llm/llm-config";
 import { normalizeModel } from "@/lib/llm/ai-models";
-import { parseStructuredClinicEmailBody } from "@/lib/llm/order-email-structured-body";
-import { cleanMailTextBody, mailHtmlToText } from "@/lib/mail/mail-text-cleanup";
 import { withApiTiming } from "@/lib/server/api-timing";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 
@@ -95,24 +92,11 @@ export async function POST(req: Request) {
 
       const email = await db.email.findFirst({
         where: { id: emailId, tenantId },
-        select: {
-          id: true,
-          fromAddress: true,
-          textBody: true,
-          htmlBody: true,
-          preview: true,
-        },
+        select: { id: true, fromAddress: true },
       });
       if (!email) {
         return NextResponse.json({ error: "Письмо не найдено" }, { status: 404 });
       }
-
-      const emailBodyText =
-        cleanMailTextBody(email.textBody) ||
-        (email.htmlBody ? mailHtmlToText(email.htmlBody) : "") ||
-        cleanMailTextBody(email.preview) ||
-        "";
-      const structuredEligible = parseStructuredClinicEmailBody(emailBodyText).isStructured;
 
       const preferOrderIdForSource = await findLatestOrderIdForSenderEmail(
         db,
@@ -120,51 +104,20 @@ export async function POST(req: Request) {
         email.fromAddress,
       );
 
-      const cached = await db.aiOrderPrediction.findFirst({
-        where: { tenantId, emailId, error: null },
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          orderId: true,
-          predictionJson: true,
-          model: true,
-          durationMs: true,
-        },
+      const run = await runOrderEmailPrediction(db, tenantId, emailId, null, {
+        preferOrderIdForSource,
+        forPrefill: true,
       });
-
-      let model = cached?.model ?? "none";
-      let durationMs = cached?.durationMs ?? 0;
-      let fromCache = false;
-      let predictionJson: AiPredictionJson;
-
-      if (
-        cached?.predictionJson &&
-        typeof cached.predictionJson === "object" &&
-        !(structuredEligible && cached.model !== "structured-fast-path")
-      ) {
-        fromCache = true;
-        predictionJson = await ensurePredictionEnriched(db, tenantId, {
-          predictionId: cached.id,
-          orderId: cached.orderId,
-          emailId,
-          predictionJson: cached.predictionJson as AiPredictionJson,
-          persist: true,
-        });
-      } else {
-        const run = await runOrderEmailPrediction(db, tenantId, emailId, null, {
-          preferOrderIdForSource,
-        });
-        if (!run) {
-          return NextResponse.json({ error: "Не удалось разобрать письмо" }, { status: 422 });
-        }
-        if (run.error) {
-          return NextResponse.json({ error: run.error }, { status: 422 });
-        }
-        model = run.model;
-        durationMs = run.durationMs;
-        predictionJson = run.predictionJson as AiPredictionJson;
-        fromCache = false;
+      if (!run) {
+        return NextResponse.json({ error: "Не удалось разобрать письмо" }, { status: 422 });
       }
+      if (run.error) {
+        return NextResponse.json({ error: run.error }, { status: 422 });
+      }
+      const model = run.model;
+      const durationMs = run.durationMs;
+      const predictionJson = run.predictionJson as AiPredictionJson;
+      const fromCache = false;
 
       const sourceMatch = await resolveClientIdsFromOrderSourceEmail(
         db,

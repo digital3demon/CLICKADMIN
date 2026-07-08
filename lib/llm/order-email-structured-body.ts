@@ -77,3 +77,40 @@ export function parseStructuredClinicEmailBody(
 
   return { patientName, doctorHint, clinicHint, clientOrderText, isStructured };
 }
+
+/** Текст заказа без служебных строк «Врач:/Пациент:/…». */
+export function buildClientOrderTextFromBody(text: string | null | undefined): string | null {
+  const body = text?.trim() ?? "";
+  if (!body) return null;
+
+  const workLines: string[] = [];
+  for (const line of body.split(/\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || LABELED_LINE_RE.test(trimmed)) continue;
+    workLines.push(trimmed);
+  }
+  const joined = workLines.join("\n").trim();
+  return joined || null;
+}
+
+/** ИИ-prefill: достаточно текста + пациент/врач — без полного LLM. */
+export function canUseHeuristicPrefill(input: {
+  patientName: string | null;
+  doctorHint: string | null;
+  clinicHint: string | null;
+  clientOrderText: string | null;
+  hasResolvedDoctor: boolean;
+  hasResolvedClinic: boolean;
+}): boolean {
+  const work = input.clientOrderText?.trim() ?? "";
+  if (work.length < 8) return false;
+
+  const hasPatient = Boolean(input.patientName?.trim());
+  const hasDoctorSignal =
+    input.hasResolvedDoctor ||
+    Boolean(input.doctorHint?.trim()) ||
+    input.hasResolvedClinic ||
+    Boolean(input.clinicHint?.trim());
+
+  return hasPatient && hasDoctorSignal;
+}

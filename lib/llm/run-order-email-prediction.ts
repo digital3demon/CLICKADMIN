@@ -22,7 +22,7 @@ import {
   stripWorkNamesFromPatientName,
   parsePatientNameFromEmailBody,
 } from "./order-email-subject-parse";
-import { parseStructuredClinicEmailBody } from "./order-email-structured-body";
+import { parseStructuredClinicEmailBody, buildClientOrderTextFromBody, canUseHeuristicPrefill } from "./order-email-structured-body";
 import { loadClinicDoctorCatalog } from "./order-email-extract";
 import { resolveClinicId, resolveDoctorId } from "@/lib/order-import-export";
 
@@ -36,6 +36,8 @@ export type RunOrderEmailPredictionResult = {
 export type RunOrderEmailPredictionOptions = {
   /** Для резолва врача по истории, без подмешивания писем чужого наряда. */
   preferOrderIdForSource?: string | null;
+  /** Черновик наряда до сохранения — эвристика вместо тяжёлого LLM, без historyContext. */
+  forPrefill?: boolean;
 };
 
 const MIN_BODY_CHARS_SKIP_PDF = 120;
@@ -228,7 +230,20 @@ export async function runOrderEmailPrediction(
   let durationMs = 0;
   let llmError: string | undefined;
 
-  if (structured.isStructured && structured.clientOrderText) {
+  const clientOrderText =
+    structured.clientOrderText ?? buildClientOrderTextFromBody(effectiveBody);
+  const useHeuristicPrefill =
+    (opts?.forPrefill || orderId == null) &&
+    canUseHeuristicPrefill({
+      patientName,
+      doctorHint: structured.doctorHint,
+      clinicHint: structured.clinicHint,
+      clientOrderText,
+      hasResolvedDoctor: Boolean(preResolved?.doctorId),
+      hasResolvedClinic: Boolean(preResolved?.clinicId),
+    });
+
+  if (useHeuristicPrefill && clientOrderText) {
     let clinicId = preResolved?.clinicId ?? null;
     let doctorId = preResolved?.doctorId ?? null;
 
@@ -246,7 +261,7 @@ export async function runOrderEmailPrediction(
       doctorId,
       clinicHint: structured.clinicHint,
       doctorHint: structured.doctorHint,
-      clientOrderText: structured.clientOrderText,
+      clientOrderText,
       confidenceScore: doctorId ? 80 : 65,
       warnings: doctorId
         ? ([] as string[])
@@ -261,19 +276,22 @@ export async function runOrderEmailPrediction(
   }
 
   if (!parsedAi) {
-    if (!patientName) {
+    if (!patientName && !opts?.forPrefill) {
       const extracted = await extractPatientNameOnly(tenantId, emailBlocks);
       patientName =
         stripWorkNamesFromPatientName(extracted.patientName, priceListNames) ??
         extracted.patientName;
     }
 
-    const historyContext = await fetchClientOrderHistoryContext(
-      db,
-      tenantId,
-      preResolved?.doctorId ?? null,
-      patientName,
-    );
+    const historyContext =
+      orderId != null && !opts?.forPrefill
+        ? await fetchClientOrderHistoryContext(
+            db,
+            tenantId,
+            preResolved?.doctorId ?? null,
+            patientName,
+          )
+        : null;
 
     const llmRun = await extractOrderFieldsFromEmail(tenantId, emailBlocks, {
       fromAddress: primaryEmail.fromAddress,
@@ -281,6 +299,8 @@ export async function runOrderEmailPrediction(
       pdfOrderText: pdfContext.promptBlock,
       preResolved,
       historyContext,
+      forPrefill: opts?.forPrefill ?? orderId == null,
+      emailBodyForCatalogFilter: effectiveBody,
     });
 
     model = llmRun.model;
