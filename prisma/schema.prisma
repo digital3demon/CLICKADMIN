@@ -608,6 +608,8 @@ enum AppModule {
   MAIL
   /// ИИ-Админ (Shadow Mode, Diff Viewer, Backtesting)
   AI_ADMIN
+  /// ИИ-Режим: предзаполнение нового наряда через ИИ (галочка на странице заказов)
+  AI_MODE
   /// Отгрузки (даты, вкладки)
   SHIPMENTS
   /// Склад: раздел + API инвентаря

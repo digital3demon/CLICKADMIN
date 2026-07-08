@@ -1,3 +1,4 @@
+import { OrdersPageTitleExtras } from "@/components/orders/OrdersPageTitleExtras";
 import Link from "next/link";
 import { Suspense } from "react";
 import type { Prisma } from "@prisma/client";
@@ -394,14 +395,7 @@ export default async function OrdersPage({
       <ModuleFrame
         title="Заказы"
         rootClassName={ORDERS_FRAME_ROOT}
-        titleBesideEnd={
-          <Link
-            href="/orders/archived"
-            className="text-[0.7rem] font-light tracking-wide text-[var(--text-muted)] hover:text-[var(--app-text)] hover:underline sm:text-xs"
-          >
-            Архив
-          </Link>
-        }
+        titleBesideEnd={<OrdersPageTitleExtras />}
       >
         <div className={ORDERS_MAIN_LAYOUT}>
           {tenantMissing ? (
@@ -439,14 +433,7 @@ export default async function OrdersPage({
     <ModuleFrame
       title="Заказы"
       rootClassName={ORDERS_FRAME_ROOT}
-      titleBesideEnd={
-        <Link
-          href="/orders/archived"
-          className="text-[0.7rem] font-light tracking-wide text-[var(--text-muted)] hover:text-[var(--app-text)] hover:underline sm:text-xs"
-        >
-          Архив
-        </Link>
-      }
+      titleBesideEnd={<OrdersPageTitleExtras />}
     >
       <div className={`${ORDERS_MAIN_LAYOUT} space-y-4`}>
       <OrdersListKaitenChatShell

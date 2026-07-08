@@ -101,6 +101,7 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CLICKMIG_KANBAN",
   "CONFIG_CLICKMIG",
   "AI_ADMIN",
+  "AI_MODE",
 ];
 
 /** @deprecated Матрица теперь по пакетам. */
@@ -164,6 +165,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CLICKMIG_KANBAN: "КликМиг: канбан",
   CONFIG_CLICKMIG: "Конфиг: КликМиг",
   AI_ADMIN: "ИИ-Админ",
+  AI_MODE: "ИИ-Режим (заказы)",
 };
 
 export { BUNDLE_LABELS };
@@ -274,6 +276,7 @@ export function defaultModuleAllowed(
     if (module === "CONFIG_USER_INVITES") return false;
     if (module === "ORDERS" || module === "ORDERS_CHAT") return true;
     if (module === "ORDERS_CREATE" || module === "ORDERS_EDIT") return true;
+    if (module === "AI_MODE") return true;
     if (
       KANBAN_WORK_MODULES.includes(module) ||
       KANBAN_COORDINATE_EXTRA.includes(module)
@@ -365,6 +368,8 @@ export function defaultModuleAllowed(
       return false;
     case "AI_ADMIN":
       return false;
+    case "AI_MODE":
+      return role === "ADMINISTRATOR" || role === "SENIOR_ADMINISTRATOR";
     default:
       return true;
   }

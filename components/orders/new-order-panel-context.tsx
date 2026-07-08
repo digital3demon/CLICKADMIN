@@ -4,16 +4,21 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import type { UserRole } from "@prisma/client";
-import { canCreateOrders } from "@/lib/auth/permissions";
+import { canCreateOrders, canUseAiOrderMode } from "@/lib/auth/permissions";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import type { OrderDraftSnapshot } from "@/lib/order-draft-snapshot";
 import { isDraftWorthy } from "@/lib/order-draft-snapshot";
+import {
+  readOrdersAiModeEnabled,
+  writeOrdersAiModeEnabled,
+} from "@/lib/orders-ai-mode-storage";
 import {
   addDraft,
   type StoredOrderDraft,
@@ -47,6 +52,8 @@ export type NewOrderPanelItem = {
   collapsed: boolean;
   initialSnapshot?: OrderDraftSnapshot | null;
   sourceEmails?: OrderSourceEmail[];
+  /** Предзаполнение через ИИ при открытии (галочка «ИИ-Режим»). */
+  aiMode?: boolean;
 };
 
 type NewOrderPanelContextValue = {
@@ -66,6 +73,9 @@ type NewOrderPanelContextValue = {
   canCreate: boolean;
   createAccessReady: boolean;
   sessionRole: UserRole | null;
+  canUseAiMode: boolean;
+  aiModeEnabled: boolean;
+  setAiModeEnabled: (enabled: boolean) => void;
 };
 
 const NewOrderPanelContext = createContext<NewOrderPanelContextValue | null>(
@@ -82,6 +92,7 @@ function newId() {
 export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
   const { user, ready: createAccessReady } = useSessionUser();
   const [panels, setPanels] = useState<NewOrderPanelItem[]>([]);
+  const [aiModeEnabled, setAiModeEnabledState] = useState(false);
   const gettersRef = useRef(new Map<string, PanelSnapshotGetter>());
 
   const sessionRole = user?.role ?? null;
@@ -89,6 +100,23 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
     user != null &&
     (user.actualRole === "OWNER" ||
       canCreateOrders(user.role, user.moduleAccess));
+  const canUseAiMode =
+    user != null &&
+    (user.actualRole === "OWNER" ||
+      canUseAiOrderMode(user.role, user.moduleAccess));
+
+  useEffect(() => {
+    if (!canUseAiMode) {
+      setAiModeEnabledState(false);
+      return;
+    }
+    setAiModeEnabledState(readOrdersAiModeEnabled());
+  }, [canUseAiMode]);
+
+  const setAiModeEnabled = useCallback((enabled: boolean) => {
+    setAiModeEnabledState(enabled);
+    writeOrdersAiModeEnabled(enabled);
+  }, []);
 
   const registerPanelSnapshot = useCallback(
     (panelId: string, getter: PanelSnapshotGetter) => {
@@ -114,11 +142,12 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
           id: newId(),
           collapsed: false,
           sourceEmails: options?.sourceEmails?.slice(0, 20),
+          aiMode: canUseAiMode && aiModeEnabled,
         },
       ];
     });
     return added;
-  }, [canCreate]);
+  }, [canCreate, canUseAiMode, aiModeEnabled]);
 
   const close = useCallback((id: string, options?: { skipDraft?: boolean }) => {
     setPanels((prev) => {
@@ -216,6 +245,9 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
       canCreate,
       createAccessReady,
       sessionRole,
+      canUseAiMode,
+      aiModeEnabled,
+      setAiModeEnabled,
     }),
     [
       open,
@@ -230,6 +262,9 @@ export function NewOrderPanelProvider({ children }: { children: ReactNode }) {
       canCreate,
       createAccessReady,
       sessionRole,
+      canUseAiMode,
+      aiModeEnabled,
+      setAiModeEnabled,
     ],
   );
 

@@ -255,6 +255,7 @@ const RULES: Rule[] = [
   { prefix: "/api/directory", module: "DIRECTORY" },
   { prefix: "/orders/history", module: "ORDER_HISTORY" },
   { prefix: "/orders", module: "ORDERS" },
+  { prefix: "/api/orders/ai-prefill", module: "AI_MODE" },
   { prefix: "/api/orders", module: "ORDERS" },
   { prefix: "/api/order-number-settings", module: "ORDERS" },
   { prefix: "/api/construction-types", module: "ORDERS" },

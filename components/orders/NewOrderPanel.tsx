@@ -173,6 +173,7 @@ export function NewOrderPanel() {
                   titleId={titleId}
                   initialSnapshot={p.initialSnapshot ?? null}
                   sourceEmails={p.sourceEmails ?? []}
+                  aiMode={p.aiMode === true}
                   onCollapse={() => collapse(p.id)}
                   onClose={() => close(p.id)}
                   onAfterSuccessfulSave={() =>

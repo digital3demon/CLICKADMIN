@@ -1,0 +1,1 @@
+ALTER TYPE "AppModule" ADD VALUE 'AI_MODE';

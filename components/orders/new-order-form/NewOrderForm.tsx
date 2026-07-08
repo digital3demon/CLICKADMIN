@@ -97,6 +97,13 @@ import {
 } from "./NewOrderDuplicatePreflightModal";
 import { QuickOrderSection } from "./QuickOrderSection";
 import {
+  aiPrefillHighlightClass,
+  computeAiMissingFields,
+  OrderAiPrefillPanel,
+  type AiPrefillFieldKey,
+} from "./OrderAiPrefillPanel";
+import { Spinner } from "@/components/ui/Spinner";
+import {
   mergeQuickOrderFromSnapshot,
   type QuickOrderState,
 } from "./quick-order-types";
@@ -189,6 +196,7 @@ export function NewOrderForm({
   sourceEmails = [],
   previewMode = false,
   virtualSuggestedAttachments = [],
+  aiMode = false,
   onCollapse,
   onClose,
   onAfterSuccessfulSave,
@@ -198,6 +206,8 @@ export function NewOrderForm({
   titleId: string;
   initialSnapshot?: OrderDraftSnapshot | null;
   sourceEmails?: OrderSourceEmail[];
+  /** Предзаполнение полей через ИИ при открытии из письма. */
+  aiMode?: boolean;
   /** Только просмотр виртуального наряда ИИ (Diff Viewer). */
   previewMode?: boolean;
   virtualSuggestedAttachments?: Array<{ fileName: string; mimeType?: string }>;
@@ -327,6 +337,24 @@ export function NewOrderForm({
   const [correctionReason, setCorrectionReason] = useState("");
   const [correctionPaid, setCorrectionPaid] = useState(false);
   const hydratedRef = useRef(false);
+  const aiPrefillStartedRef = useRef(false);
+  const [aiPrefillStatus, setAiPrefillStatus] = useState<
+    "idle" | "loading" | "done" | "error"
+  >(() => (aiMode ? "loading" : "idle"));
+  const [aiPrefillError, setAiPrefillError] = useState<string | null>(null);
+  const [aiConfidenceScore, setAiConfidenceScore] = useState<number | null>(null);
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
+  const [aiUnfilledFields, setAiUnfilledFields] = useState<AiPrefillFieldKey[]>(
+    [],
+  );
+  const clearAiUnfilled = useCallback((key: AiPrefillFieldKey) => {
+    setAiUnfilledFields((prev) => prev.filter((field) => field !== key));
+  }, []);
+  const aiHighlightDoctor = aiUnfilledFields.includes("doctor");
+  const aiHighlightClinic = aiUnfilledFields.includes("clinic");
+  const aiHighlightPatient = aiUnfilledFields.includes("patient");
+  const aiHighlightClientOrder = aiUnfilledFields.includes("clientOrder");
+  const aiPrefillLoading = aiMode && !previewMode && aiPrefillStatus === "loading";
   const prevClinicIdForLegalRef = useRef<string | null>(null);
   const canUseTestOrder = sessionRole === "OWNER";
 
@@ -675,6 +703,88 @@ export function NewOrderForm({
   }, [initialSnapshot]);
 
   useEffect(() => {
+    if (!aiMode || previewMode || initialSnapshot || aiPrefillStartedRef.current) return;
+    const primaryEmailId = sourceEmails[0]?.id;
+    if (!primaryEmailId) {
+      setAiPrefillStatus("idle");
+      setAiPrefillError(null);
+      setAiConfidenceScore(null);
+      setAiWarnings([]);
+      setAiUnfilledFields([]);
+      return;
+    }
+
+    aiPrefillStartedRef.current = true;
+    let cancelled = false;
+    setAiPrefillStatus("loading");
+    setAiPrefillError(null);
+    setAiConfidenceScore(null);
+    setAiWarnings([]);
+    setAiUnfilledFields([]);
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/orders/ai-prefill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ emailId: primaryEmailId }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          draft?: OrderDraftSnapshot;
+          warnings?: string[];
+          confidenceScore?: number | null;
+        };
+        if (cancelled) return;
+        if (!res.ok) {
+          setAiPrefillStatus("error");
+          setAiPrefillError(data.error ?? "Не удалось разобрать письмо через ИИ");
+          return;
+        }
+
+        const s = data.draft;
+        if (s) {
+          if (s.clinicId) setClinicId(s.clinicId);
+          if (s.doctorId) setDoctorId(s.doctorId);
+          if (s.legalEntity) setLegalEntity(s.legalEntity);
+          if (s.payment) setPayment(canonicalOrderPayment(s.payment));
+          if (s.patientName) setPatientName(s.patientName);
+          if (typeof s.clientOrderText === "string" && s.clientOrderText.trim()) {
+            setClientOrderText(s.clientOrderText);
+          }
+          setHasScans(s.hasScans === true);
+          setHasCt(s.hasCt === true);
+          setHasMri(s.hasMri === true);
+          setHasPhoto(s.hasPhoto === true);
+          if (s.urgentSelection) setUrgentSelection(s.urgentSelection);
+          setAiUnfilledFields(computeAiMissingFields(s));
+        }
+
+        const warnings = Array.isArray(data.warnings)
+          ? data.warnings.filter((w) => typeof w === "string" && w.trim())
+          : [];
+        setAiWarnings(warnings);
+        setAiConfidenceScore(
+          typeof data.confidenceScore === "number" &&
+            Number.isFinite(data.confidenceScore)
+            ? data.confidenceScore
+            : null,
+        );
+        setAiPrefillStatus("done");
+      } catch {
+        if (!cancelled) {
+          setAiPrefillStatus("error");
+          setAiPrefillError("Ошибка сети при разборе письма через ИИ");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aiMode, previewMode, initialSnapshot, sourceEmails]);
+
+  useEffect(() => {
     if (correctionTrack == null) {
       setCorrectionReason("");
       setCorrectionPaid(false);
@@ -906,6 +1016,7 @@ export function NewOrderForm({
   const onClinicChange = useCallback(
     (id: string) => {
       setClinicId(id);
+      if (id.trim()) clearAiUnfilled("clinic");
       const row =
         id && id !== ORDER_CLINIC_PRIVATE
           ? clinics.find((c) => c.id === id)
@@ -925,7 +1036,7 @@ export function NewOrderForm({
         return allowed.some((d) => d.id === prev) ? prev : "";
       });
     },
-    [clinics, privatePracticeDoctors, allDoctors],
+    [clinics, privatePracticeDoctors, allDoctors, clearAiUnfilled],
   );
 
   const submitNewClient = useCallback(async () => {
@@ -1812,7 +1923,7 @@ export function NewOrderForm({
                 <button
                   type="button"
                   onClick={() => void requestSave()}
-                  disabled={saving}
+                  disabled={saving || aiPrefillLoading}
                   className="h-8 min-w-0 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-2 text-[0.62rem] font-semibold uppercase leading-none tracking-wide text-white shadow-sm transition-colors hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-60"
                 >
                   {saving ? "…" : "Сохранить"}
@@ -1970,7 +2081,7 @@ export function NewOrderForm({
             <button
               type="button"
               onClick={() => void requestSave()}
-              disabled={saving}
+              disabled={saving || aiPrefillLoading}
               className="h-11 rounded-md bg-[var(--sidebar-blue)] px-5 text-sm font-semibold uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-60"
             >
               {saving ? "Сохранение…" : "Сохранить"}
@@ -1999,7 +2110,20 @@ export function NewOrderForm({
       </header>
 
       <div className="relative z-0 shrink-0 overflow-x-hidden bg-[var(--card-bg)] px-3 py-2 sm:px-4 sm:py-2.5">
-        <div>
+        {aiPrefillLoading ? (
+          <div
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-[var(--card-bg)]/80 px-4 backdrop-blur-[2px]"
+            role="status"
+            aria-live="polite"
+            aria-label="ИИ разбирает письмо"
+          >
+            <Spinner size="lg" className="text-violet-600 dark:text-violet-300" />
+            <p className="max-w-sm text-center text-sm font-medium text-[var(--app-text)]">
+              ИИ разбирает письмо и заполняет наряд…
+            </p>
+          </div>
+        ) : null}
+        <div className={aiPrefillLoading ? "pointer-events-none select-none" : undefined}>
             {loadError ? (
               <p className="mb-4 text-sm text-red-600">{loadError}</p>
             ) : null}
@@ -2029,10 +2153,16 @@ export function NewOrderForm({
                   <div>
                     <PrefixSearchCombobox
                       id={`${titleId}-doctor`}
-                      className={`${inputClass} cursor-text`}
+                      className={aiPrefillHighlightClass(
+                        `${inputClass} cursor-text`,
+                        aiHighlightDoctor,
+                      )}
                       options={doctorComboboxOptions}
                       value={doctorId}
-                      onChange={setDoctorId}
+                      onChange={(id) => {
+                        setDoctorId(id);
+                        if (id) clearAiUnfilled("doctor");
+                      }}
                       placeholder="Сначала выберите врача (ФИО)…"
                       emptyOptionLabel="Выбрать из списка"
                     />
@@ -2059,7 +2189,10 @@ export function NewOrderForm({
                   <div>
                     <PrefixSearchCombobox
                       id={`${titleId}-clinic`}
-                      className={`${inputClass} cursor-text`}
+                      className={aiPrefillHighlightClass(
+                        `${inputClass} cursor-text`,
+                        aiHighlightClinic,
+                      )}
                       options={clinicComboboxOptions}
                       value={clinicId}
                       onChange={onClinicChange}
@@ -2085,9 +2218,13 @@ export function NewOrderForm({
                     <input
                       id={`${titleId}-patient`}
                       type="text"
-                      className={inputClass}
+                      className={aiPrefillHighlightClass(inputClass, aiHighlightPatient)}
                       value={patientName}
-                      onChange={(e) => setPatientName(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setPatientName(value);
+                        if (value.trim()) clearAiUnfilled("patient");
+                      }}
                       placeholder="Фамилия И.О."
                       autoComplete="name"
                     />
@@ -2290,10 +2427,17 @@ export function NewOrderForm({
                   <textarea
                     ref={clientOrderTextareaRef}
                     id={`${titleId}-client-order`}
-                    className={`${inputClass} min-h-[72px] w-full resize-none overflow-hidden lg:min-h-[88px]`}
+                    className={aiPrefillHighlightClass(
+                      `${inputClass} min-h-[72px] w-full resize-none overflow-hidden lg:min-h-[88px]`,
+                      aiHighlightClientOrder,
+                    )}
                     rows={3}
                     value={clientOrderText}
-                    onChange={(e) => setClientOrderText(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setClientOrderText(value);
+                      if (value.trim()) clearAiUnfilled("clientOrder");
+                    }}
                     placeholder="Текст заказа от клиента…"
                   />
                 </section>
@@ -2380,6 +2524,17 @@ export function NewOrderForm({
               patientName={patientName}
               onChange={setQuickOrder}
             />
+
+            {aiMode && !previewMode ? (
+              <OrderAiPrefillPanel
+                status={aiPrefillStatus}
+                confidenceScore={aiConfidenceScore}
+                warnings={aiWarnings}
+                missingFields={aiUnfilledFields}
+                errorMessage={aiPrefillError}
+              />
+            ) : null}
+
             <div
               className="h-[calc(3.25rem+env(safe-area-inset-bottom))] shell-desktop:hidden"
               aria-hidden="true"
@@ -2391,7 +2546,7 @@ export function NewOrderForm({
         <button
           type="button"
           onClick={() => void requestSave()}
-          disabled={saving}
+          disabled={saving || aiPrefillLoading}
           className="min-h-[44px] w-full rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-60"
         >
           {saving ? "Сохранение…" : "Создать заказ"}

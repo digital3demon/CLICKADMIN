@@ -32,7 +32,8 @@ export type BundleId =
   | "CLICKMIG_REVIEW"
   | "CLICKMIG_KANBAN"
   | "CONFIG_CLICKMIG"
-  | "AI_ADMIN";
+  | "AI_ADMIN"
+  | "AI_MODE";
 
 /** Модули, не входящие ни в один пакет (legacy / совместимость). */
 const STANDALONE_ATOMIC_MODULES: AppModule[] = ["CLIENTS"];
@@ -101,6 +102,7 @@ export const BUNDLE_TO_ATOMIC: Record<BundleId, readonly AppModule[]> = {
   CLICKMIG_KANBAN: ["CLICKMIG_KANBAN"],
   CONFIG_CLICKMIG: ["CONFIG_CLICKMIG"],
   AI_ADMIN: ["AI_ADMIN"],
+  AI_MODE: ["AI_MODE"],
 };
 
 /** Иерархия пакетов: включение дочернего требует родителя; выключение родителя — выключает детей. */
@@ -179,7 +181,7 @@ export const BUNDLE_MATRIX_GROUPS: BundleMatrixGroup[] = [
   {
     id: "other",
     title: "Прочее",
-    bundles: ["AI_ADMIN"],
+    bundles: ["AI_ADMIN", "AI_MODE"],
   },
 ];
 
@@ -228,6 +230,7 @@ export const BUNDLE_LABELS: Record<BundleId, string> = {
   CLICKMIG_KANBAN: "КликМиг: канбан",
   CONFIG_CLICKMIG: "Конфиг: КликМиг",
   AI_ADMIN: "ИИ-Админ",
+  AI_MODE: "ИИ-Режим (заказы)",
 };
 
 /** Все atomic-модули, покрытые пакетами. */

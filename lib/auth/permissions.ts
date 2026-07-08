@@ -83,6 +83,16 @@ export function canCreateOrders(
   return false;
 }
 
+/** Галочка «ИИ-Режим» на странице заказов и предзаполнение наряда через ИИ. */
+export function canUseAiOrderMode(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (role === "OWNER") return true;
+  if (moduleAccess?.AI_MODE === true) return true;
+  return false;
+}
+
 /** Редактирование полей существующего наряда (форма, PATCH, быстрые отметки в списке). */
 export function canEditOrders(
   role: UserRole,
