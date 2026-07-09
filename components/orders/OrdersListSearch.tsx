@@ -1,6 +1,7 @@
 "use client";
 
 import { normalizeOrdersSearchQuery, ordersListHref } from "@/lib/orders-list-query";
+import { pickOrdersShipmentHrefOpts } from "@/lib/orders-shipment-list-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -109,6 +110,7 @@ export function OrdersListSearch({
           q: q || undefined,
           from,
           to,
+          ...pickOrdersShipmentHrefOpts(cur),
         }),
         { scroll: false },
       );
@@ -146,6 +148,7 @@ export function OrdersListSearch({
         onlyShipped: onlyShipped === true,
         from,
         to,
+        ...pickOrdersShipmentHrefOpts(spRef.current),
       }),
       { scroll: false },
     );

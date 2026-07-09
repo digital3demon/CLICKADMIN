@@ -7,8 +7,8 @@ export default async function ShipmentsPeriodRedirectPage({
 }) {
   const sp = await searchParams;
   const q = new URLSearchParams();
-  q.set("tab", "period");
-  if (sp.from) q.set("from", sp.from);
-  if (sp.to) q.set("to", sp.to);
-  redirect(`/shipments?${q.toString()}`);
+  q.set("ship", "period");
+  if (sp.from) q.set("shipFrom", sp.from);
+  if (sp.to) q.set("shipTo", sp.to);
+  redirect(`/orders?${q.toString()}`);
 }

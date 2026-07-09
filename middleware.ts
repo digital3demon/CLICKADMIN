@@ -16,6 +16,7 @@ import {
   isOrderAttachmentUploadAllowed,
   requiredModuleForPath,
 } from "@/lib/role-module-paths";
+import { isOrdersShipmentListPath } from "@/lib/orders-shipment-list-query";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { canOpenMailSettingsModule } from "@/lib/mail/mail-settings-access";
@@ -480,7 +481,11 @@ export async function middleware(req: NextRequest) {
   }
 
   if (!planAllowsShipments(plan)) {
-    if (pathname.startsWith("/shipments") || pathname.startsWith("/api/shipments")) {
+    if (
+      pathname.startsWith("/shipments") ||
+      pathname.startsWith("/api/shipments") ||
+      isOrdersShipmentListPath(pathname, req.nextUrl.search)
+    ) {
       if (pathname.startsWith("/api/")) {
         const out = NextResponse.json(
           { error: "Отгрузки доступны с тарифа «Оптимальный»" },
@@ -616,6 +621,20 @@ export async function middleware(req: NextRequest) {
           req.method,
           req.headers,
         )
+      ) {
+        moduleAllowed = true;
+      }
+      if (
+        !moduleAllowed &&
+        isOrdersShipmentListPath(pathname, req.nextUrl.search) &&
+        (access.ORDERS === true || access.SHIPMENTS === true)
+      ) {
+        moduleAllowed = true;
+      }
+      if (
+        !moduleAllowed &&
+        pathname === "/api/shipments/orders-list-pdf" &&
+        (access.ORDERS === true || access.SHIPMENTS === true)
       ) {
         moduleAllowed = true;
       }

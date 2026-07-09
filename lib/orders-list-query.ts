@@ -1,3 +1,10 @@
+import {
+  appendOrdersShipmentParams,
+  type OrdersListHrefShipmentOpts,
+} from "./orders-shipment-list-query";
+
+export type { OrdersListHrefShipmentOpts };
+
 /** Нормализация строки поиска по списку заказов (URL `q`). */
 export function normalizeOrdersSearchQuery(
   raw: string | null | undefined,
@@ -23,6 +30,10 @@ export function ordersListHref(opts: {
   from?: string | null;
   /** Дата создания наряда по (YYYY-MM-DD, МСК). */
   to?: string | null;
+  /** Режим отгрузок на странице заказов. */
+  ship?: OrdersListHrefShipmentOpts["ship"];
+  shipFrom?: string | null;
+  shipTo?: string | null;
 }): string {
   const p = new URLSearchParams();
   if (
@@ -45,6 +56,11 @@ export function ordersListHref(opts: {
   const to = opts.to?.trim() || "";
   if (from) p.set("from", from);
   if (to) p.set("to", to);
+  appendOrdersShipmentParams(p, {
+    ship: opts.ship ?? null,
+    shipFrom: opts.shipFrom,
+    shipTo: opts.shipTo,
+  });
   const q = p.toString();
   return q ? `/orders?${q}` : "/orders";
 }

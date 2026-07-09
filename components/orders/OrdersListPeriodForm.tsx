@@ -4,6 +4,7 @@ import {
   normalizeOrdersSearchQuery,
   ordersListHref,
 } from "@/lib/orders-list-query";
+import { pickOrdersShipmentHrefOpts } from "@/lib/orders-shipment-list-query";
 import { ordersListPeriodDefaultDraft } from "@/lib/orders-list-period";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -52,6 +53,7 @@ export function OrdersListPeriodForm({
         q,
         from: f || undefined,
         to: t || undefined,
+        ...pickOrdersShipmentHrefOpts(sp),
       });
     },
     [pageSize, sp],
@@ -76,6 +78,7 @@ export function OrdersListPeriodForm({
         hideShipped: hideShipped || undefined,
         onlyShipped: onlyShipped || undefined,
         q,
+        ...pickOrdersShipmentHrefOpts(sp),
       }),
     );
   }, [router, pageSize, sp]);

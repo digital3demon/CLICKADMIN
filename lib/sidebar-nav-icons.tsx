@@ -23,6 +23,7 @@ const NAV_ICON_BY_HREF: Record<string, LucideIcon> = {
   "/finance-office": Calculator,
   "/mail": Mail,
   "/ai-admin": Bot,
+  "/orders?ship=actual": Truck,
   "/shipments": Truck,
   "/warehouse": Package,
   "/clients": Users,

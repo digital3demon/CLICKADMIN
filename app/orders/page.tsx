@@ -15,7 +15,7 @@ import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTri
 import { OrderPostingMonthBar } from "@/components/orders/OrderPostingMonthBar";
 import { OrdersListShippedToolbar } from "@/components/orders/OrdersListShippedToolbar";
 import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePref";
-import { OrdersListFiltersBar } from "@/components/orders/OrdersListFiltersBar";
+import { OrdersListFiltersRow } from "@/components/orders/OrdersListFiltersRow";
 import { OrdersListStickySearch } from "@/components/orders/OrdersListStickySearch";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
 import { OrdersListChrome } from "@/components/orders/OrdersListChrome";
@@ -23,6 +23,7 @@ import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { getSiteOrigin } from "@/lib/site-origin-server";
 import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
+import { fetchOrdersShipmentListPage } from "@/lib/fetch-orders-shipment-list-page";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 import {
   humanListTagLabel,
@@ -40,6 +41,10 @@ import {
   normalizeOrdersSearchQuery,
   ordersListHref,
 } from "@/lib/orders-list-query";
+import {
+  ordersShipmentModeLabel,
+  parseOrdersShipmentParams,
+} from "@/lib/orders-shipment-list-query";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
@@ -186,6 +191,9 @@ export default async function OrdersPage({
     q?: string;
     from?: string;
     to?: string;
+    ship?: string;
+    shipFrom?: string;
+    shipTo?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -237,20 +245,41 @@ export default async function OrdersPage({
   const listSearchQ = normalizeOrdersSearchQuery(sp.q);
   const fromUrl = sp.from?.trim() || null;
   const toUrl = sp.to?.trim() || null;
+  const shipParsed = parseOrdersShipmentParams({
+    ship: sp.ship,
+    shipFrom: sp.shipFrom,
+    shipTo: sp.shipTo,
+  });
+  const shipmentModeActive =
+    shipParsed.mode != null && shipParsed.periodError == null;
+  const shipFromUrl = sp.shipFrom?.trim() || null;
+  const shipToUrl = sp.shipTo?.trim() || null;
+  const shipmentModeLabel = ordersShipmentModeLabel(shipParsed);
   const periodParsed = ordersListCreatedAtPeriod(fromUrl, toUrl);
   const periodError =
     periodParsed.mode === "error" ? periodParsed.message : null;
   const createdAtRange =
-    periodParsed.mode === "range"
+    !shipmentModeActive && periodParsed.mode === "range"
       ? {
           start: periodParsed.start,
           endExclusive: periodParsed.endExclusive,
         }
       : null;
   const periodLabelActive =
-    periodParsed.mode === "range"
+    !shipmentModeActive && periodParsed.mode === "range"
       ? `${periodParsed.fromYmd} — ${periodParsed.toYmd}`
       : null;
+  const listHrefCommon = {
+    tag: rawTag ?? undefined,
+    hideShipped: hideShippedActive,
+    onlyShipped: onlyShippedActive,
+    q: listSearchQ || undefined,
+    from: shipmentModeActive ? undefined : (fromUrl ?? undefined),
+    to: shipmentModeActive ? undefined : (toUrl ?? undefined),
+    ship: shipmentModeActive ? shipParsed.mode ?? undefined : undefined,
+    shipFrom: shipmentModeActive ? shipFromUrl ?? undefined : undefined,
+    shipTo: shipmentModeActive ? shipToUrl ?? undefined : undefined,
+  };
   const baseCountParts: Prisma.OrderWhereInput[] = [
     { tenantId: tenantId ?? "__missing_tenant__" },
     { archivedAt: null },
@@ -363,30 +392,54 @@ export default async function OrdersPage({
     ReturnType<typeof fetchOrdersListPage>
   >["orders"];
   let nextCursor: string | null = null;
+  let shipmentListTruncated = false;
   let labDueHmSlots: string[] = [];
   try {
     if (!tenantId) {
       throw new Error("tenant_context_required");
     }
-    const [page, slots] = await Promise.all([
-      fetchOrdersListPage(ordersPrisma, {
-        tenantId,
-        cursor: sp.cursor,
-        pageSize,
-        tag: activeFilter ? rawTag : undefined,
-        hideShipped: hideShippedActive,
-        onlyShipped: onlyShippedActive,
-        search: listSearchQ || undefined,
-        createdAtRange: createdAtRange ?? undefined,
-        ordersListForUserId: session?.sub ?? null,
-        viewerRole: session?.role ?? null,
-        viewerUserId: session?.sub ?? null,
-      }),
-      getLabDueHmSlotsForTenant(tenantId),
-    ]);
-    orders = page.orders;
-    nextCursor = page.nextCursor;
-    labDueHmSlots = slots;
+    if (shipmentModeActive && shipParsed.mode) {
+      const [page, slots] = await Promise.all([
+        fetchOrdersShipmentListPage(ordersPrisma, {
+          tenantId,
+          cursor: sp.cursor,
+          pageSize,
+          shipmentMode: shipParsed.mode,
+          shipFrom: shipParsed.shipFrom,
+          shipTo: shipParsed.shipTo,
+          tag: activeFilter ? rawTag : undefined,
+          search: listSearchQ || undefined,
+          ordersListForUserId: session?.sub ?? null,
+          viewerRole: session?.role ?? null,
+          viewerUserId: session?.sub ?? null,
+        }),
+        getLabDueHmSlotsForTenant(tenantId),
+      ]);
+      orders = page.orders;
+      nextCursor = page.nextCursor;
+      shipmentListTruncated = page.truncated;
+      labDueHmSlots = slots;
+    } else {
+      const [page, slots] = await Promise.all([
+        fetchOrdersListPage(ordersPrisma, {
+          tenantId,
+          cursor: sp.cursor,
+          pageSize,
+          tag: activeFilter ? rawTag : undefined,
+          hideShipped: hideShippedActive,
+          onlyShipped: onlyShippedActive,
+          search: listSearchQ || undefined,
+          createdAtRange: createdAtRange ?? undefined,
+          ordersListForUserId: session?.sub ?? null,
+          viewerRole: session?.role ?? null,
+          viewerUserId: session?.sub ?? null,
+        }),
+        getLabDueHmSlotsForTenant(tenantId),
+      ]);
+      orders = page.orders;
+      nextCursor = page.nextCursor;
+      labDueHmSlots = slots;
+    }
   } catch (e) {
     console.error("[orders page] prisma", e);
     const msg = e instanceof Error ? e.message : String(e);
@@ -491,6 +544,28 @@ export default async function OrdersPage({
             <Link
               href={ordersListHref({
                 limit: pageSize,
+                ...listHrefCommon,
+                from: undefined,
+                to: undefined,
+              })}
+              className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
+            >
+              Сбросить период
+            </Link>
+          </div>
+        ) : null}
+        {shipmentModeActive && shipmentModeLabel ? (
+          <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/25 sm:px-4 sm:py-2.5 sm:text-base">
+            <span className="text-[var(--text-body)]">
+              Отгрузки:{" "}
+              <strong className="font-mono text-[var(--text-strong)]">
+                {shipmentModeLabel}
+              </strong>
+              {" "}· только неотгруженные · сортировка по дате записи (старые сверху)
+            </span>
+            <Link
+              href={ordersListHref({
+                limit: pageSize,
                 tag: rawTag ?? undefined,
                 hideShipped: hideShippedActive,
                 onlyShipped: onlyShippedActive,
@@ -498,8 +573,23 @@ export default async function OrdersPage({
               })}
               className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
             >
-              Сбросить период
+              Сбросить отгрузки
             </Link>
+          </div>
+        ) : null}
+        {shipmentModeActive ? (
+          <p className="text-sm text-[var(--text-secondary)]">
+            Режим отгрузок: фильтр по дате создания наряда (слева) не действует.
+          </p>
+        ) : null}
+        {shipParsed.periodError ? (
+          <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            {shipParsed.periodError} Режим отгрузок не применён.
+          </div>
+        ) : null}
+        {shipmentListTruncated ? (
+          <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            Показаны первые 5000 неотгруженных нарядов по фильтру — уточните период или поиск.
           </div>
         ) : null}
         <Suspense
@@ -508,7 +598,7 @@ export default async function OrdersPage({
           }
         >
           <div className="hidden md:block">
-            <OrdersListFiltersBar
+            <OrdersListFiltersRow
               pageSize={pageSize}
               appliedFrom={fromUrl}
               appliedTo={toUrl}
@@ -516,10 +606,13 @@ export default async function OrdersPage({
               tag={rawTag ?? undefined}
               hideShipped={hideShippedActive}
               onlyShipped={onlyShippedActive}
+              appliedShipFrom={shipFromUrl}
+              appliedShipTo={shipToUrl}
+              shipMode={shipmentModeActive ? shipParsed.mode : null}
             />
           </div>
           <div className="md:hidden">
-            <OrdersListFiltersBar
+            <OrdersListFiltersRow
               pageSize={pageSize}
               appliedFrom={fromUrl}
               appliedTo={toUrl}
@@ -528,6 +621,9 @@ export default async function OrdersPage({
               hideShipped={hideShippedActive}
               onlyShipped={onlyShippedActive}
               showSearch={false}
+              appliedShipFrom={shipFromUrl}
+              appliedShipTo={shipToUrl}
+              shipMode={shipmentModeActive ? shipParsed.mode : null}
             />
           </div>
         </Suspense>
@@ -539,9 +635,7 @@ export default async function OrdersPage({
               href={ordersListHref({
                 limit: pageSize,
                 tag: LIST_TAG_ORDER_ATTENTION,
-                hideShipped: hideShippedActive,
-                onlyShipped: onlyShippedActive,
-                q: listSearchQ || undefined,
+                ...listHrefCommon,
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "orderAttention"
@@ -563,9 +657,7 @@ export default async function OrdersPage({
               href={ordersListHref({
                 limit: pageSize,
                 tag: LIST_TAG_PROSTHETICS_PENDING,
-                hideShipped: hideShippedActive,
-                onlyShipped: onlyShippedActive,
-                q: listSearchQ || undefined,
+                ...listHrefCommon,
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "prostheticsPending"
@@ -587,11 +679,7 @@ export default async function OrdersPage({
               href={ordersListHref({
                 limit: pageSize,
                 tag: LIST_TAG_KAITEN_LAB_MENTION,
-                hideShipped: hideShippedActive,
-                onlyShipped: onlyShippedActive,
-                q: listSearchQ || undefined,
-                from: fromUrl ?? undefined,
-                to: toUrl ?? undefined,
+                ...listHrefCommon,
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "kaitenLabMention"
@@ -619,11 +707,8 @@ export default async function OrdersPage({
               <Link
                 href={ordersListHref({
                   limit: pageSize,
-                  hideShipped: hideShippedActive,
-                  onlyShipped: onlyShippedActive,
-                  q: listSearchQ || undefined,
-                  from: fromUrl ?? undefined,
-                  to: toUrl ?? undefined,
+                  ...listHrefCommon,
+                  tag: undefined,
                 })}
                 className="shrink-0 whitespace-nowrap rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1 text-xs font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
               >
@@ -646,11 +731,7 @@ export default async function OrdersPage({
                     href={ordersListHref({
                       limit: pageSize,
                       tag: opt.tag,
-                      hideShipped: hideShippedActive,
-                      onlyShipped: onlyShippedActive,
-                      q: listSearchQ || undefined,
-                      from: fromUrl ?? undefined,
-                      to: toUrl ?? undefined,
+                      ...listHrefCommon,
                     })}
                     className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
                       isActive
@@ -719,7 +800,9 @@ export default async function OrdersPage({
                     ? "Нет заказов с выбранным тегом на этой странице."
                     : listSearchQ
                       ? "Ничего не найдено по этому запросу. Измените текст поиска или сбросьте фильтр."
-                      : periodLabelActive
+                      : shipmentModeActive
+                        ? "Нет неотгруженных нарядов в выбранном режиме отгрузок на этой странице."
+                        : periodLabelActive
                         ? "Нет нарядов с датой создания в выбранном периоде (МСК) на этой странице. Измените диапазон, сбросьте период или перейдите к следующей странице."
                         : onlyShippedActive
                           ? "Нет отгруженных нарядов на этой странице. Снимите фильтр «только отгруженные» или перейдите к следующей странице."
@@ -753,11 +836,7 @@ export default async function OrdersPage({
                   ? ordersListHref({
                       limit: pageSize,
                       tag: listTagKaitenColumnTitle(kaitenColTrimmed),
-                      hideShipped: hideShippedActive,
-                      onlyShipped: onlyShippedActive,
-                      q: listSearchQ || undefined,
-                      from: fromUrl ?? undefined,
-                      to: toUrl ?? undefined,
+                      ...listHrefCommon,
                     })
                   : null;
                 const rowClass = blocked
@@ -1032,12 +1111,7 @@ export default async function OrdersPage({
               <Link
                 href={ordersListHref({
                   limit: pageSize,
-                  tag: rawTag ?? undefined,
-                  hideShipped: hideShippedActive,
-                  onlyShipped: onlyShippedActive,
-                  q: listSearchQ || undefined,
-                  from: fromUrl ?? undefined,
-                  to: toUrl ?? undefined,
+                  ...listHrefCommon,
                 })}
                 className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)] sm:text-base"
               >
@@ -1049,12 +1123,7 @@ export default async function OrdersPage({
                 href={ordersListHref({
                   limit: pageSize,
                   cursor: nextCursor,
-                  tag: rawTag ?? undefined,
-                  hideShipped: hideShippedActive,
-                  onlyShipped: onlyShippedActive,
-                  q: listSearchQ || undefined,
-                  from: fromUrl ?? undefined,
-                  to: toUrl ?? undefined,
+                  ...listHrefCommon,
                 })}
                 className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-4 py-2 text-sm font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-base"
               >
@@ -1074,6 +1143,9 @@ export default async function OrdersPage({
                 q={listSearchQ || undefined}
                 from={fromUrl ?? undefined}
                 to={toUrl ?? undefined}
+                ship={shipmentModeActive ? shipParsed.mode ?? undefined : undefined}
+                shipFrom={shipFromUrl ?? undefined}
+                shipTo={shipToUrl ?? undefined}
               />
             </div>
           ) : null}

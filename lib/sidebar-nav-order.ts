@@ -10,22 +10,32 @@ export const DEFAULT_SIDEBAR_HREF_ORDER = [
   "/clickmig",
   "/mail",
   "/ai-admin",
-  "/shipments",
+  "/orders?ship=actual",
   "/warehouse",
   "/clients",
   "/directory",
 ] as const;
 
-const KNOWN_SIDEBAR_HREFS = new Set<string>(DEFAULT_SIDEBAR_HREF_ORDER);
+const SIDEBAR_HREF_ALIASES: Record<string, string> = {
+  "/shipments": "/orders?ship=actual",
+};
+
+const KNOWN_SIDEBAR_HREFS = new Set<string>([
+  ...DEFAULT_SIDEBAR_HREF_ORDER,
+  "/shipments",
+]);
 
 export function normalizeSidebarNavOrder(raw: unknown): string[] | null {
   if (!Array.isArray(raw)) return null;
   const out: string[] = [];
   for (const item of raw) {
     if (typeof item !== "string") continue;
-    const href = item.trim();
-    if (!KNOWN_SIDEBAR_HREFS.has(href) || out.includes(href)) continue;
-    out.push(href);
+    const href = SIDEBAR_HREF_ALIASES[item.trim()] ?? item.trim();
+    if (!KNOWN_SIDEBAR_HREFS.has(href) && !KNOWN_SIDEBAR_HREFS.has(item.trim())) {
+      continue;
+    }
+    const canonical = SIDEBAR_HREF_ALIASES[href] ?? href;
+    if (!out.includes(canonical)) out.push(canonical);
   }
   return out.length > 0 ? out : null;
 }

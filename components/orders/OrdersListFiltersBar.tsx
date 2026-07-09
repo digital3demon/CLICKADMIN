@@ -17,6 +17,7 @@ type Props = {
   onlyShipped?: boolean
   /** false — поиск вынесен в липкую полосу над списком (мобильная версия). */
   showSearch?: boolean
+  className?: string
 }
 
 export function OrdersListFiltersBar({
@@ -28,15 +29,21 @@ export function OrdersListFiltersBar({
   hideShipped,
   onlyShipped,
   showSearch = true,
+  className = '',
 }: Props) {
   const { activeCount, resetFilters, setFilters } = useUrlFilters()
   const isHarmony = useUiDesign() === 'harmony'
   const filtersPanelId = useId()
   const [filtersOpen, setFiltersOpen] = useState(true)
 
-  const cardClass = isHarmony
-    ? 'no-print w-full min-w-0 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 card-shadow'
-    : 'no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]'
+  const cardClass = [
+    isHarmony
+      ? 'no-print w-full min-w-0 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 card-shadow'
+      : 'no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className={cardClass}>

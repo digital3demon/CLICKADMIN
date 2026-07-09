@@ -81,7 +81,7 @@ export type OrderListPageRow = Omit<
   listKaitenLabMentionHighlight: boolean;
 };
 
-function toOrderListPageRow(o: OrderListPageRowRaw): OrderListPageRow {
+export function toOrderListPageRow(o: OrderListPageRowRaw): OrderListPageRow {
   const {
     constructions,
     chatCorrections,
