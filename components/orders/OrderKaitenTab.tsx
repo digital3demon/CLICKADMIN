@@ -458,6 +458,7 @@ export function OrderKaitenTab({
         }
         persistedWorkLabelRef.current = workLabel.trim();
         if (
+          !titleDirtyRef.current &&
           typeof orderData.kaitenCardTitleMirror === "string" &&
           orderData.kaitenCardTitleMirror.trim()
         ) {

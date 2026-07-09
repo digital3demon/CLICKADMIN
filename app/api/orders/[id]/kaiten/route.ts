@@ -1389,6 +1389,16 @@ export async function PATCH(
         ? { kaitenCardDescriptionMirror: mirrorFields.kaitenCardDescriptionMirror }
         : {};
 
+  const titleMirrorPatch =
+    typeof body.title === "string"
+      ? {
+          kaitenCardTitleMirror: body.title.trim() || null,
+          kaitenCardTitleManual: true,
+        }
+      : mirrorFields.kaitenCardTitleMirror !== undefined
+        ? { kaitenCardTitleMirror: mirrorFields.kaitenCardTitleMirror }
+        : {};
+
   try {
     const cardObj = updated.card as Record<string, unknown>;
     const sortPatch =
@@ -1403,6 +1413,7 @@ export async function PATCH(
         kaitenSyncError: null,
         ...(laneToStore != null ? { kaitenTrackLane: laneToStore } : {}),
         ...(titleUpdate ?? {}),
+        ...titleMirrorPatch,
         ...descriptionMirrorPatch,
         ...sortPatch,
         ...kaitenUrgentPatchFromCard(cardObj, order.isUrgent),

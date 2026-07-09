@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { processTelegramBotUpdate } from "@/lib/telegram-bot-process-update";
 import { getTelegramBotUserIdStr } from "@/lib/telegram-bot-identity";
@@ -44,6 +44,10 @@ export async function GET() {
     webhookInfo?.ok === true &&
     webhookInfo.url.includes("/api/telegram/webhook");
 
+  const telegramOutboundFailed =
+    (webhookInfo?.ok === false && webhookInfo.error === "fetch failed") ||
+    (botMe?.ok === false && botMe.error === "fetch failed");
+
   return NextResponse.json({
     ok: true,
     hasBotToken: hasToken,
@@ -72,6 +76,9 @@ export async function GET() {
         : null,
       webhookInfo?.ok === true && !webhookUrlOk
         ? "В Telegram зарегистрирован другой URL вебхука — обновите setWebhook."
+        : null,
+      telegramOutboundFailed
+        ? "Сервер не достучался до api.telegram.org (fetch failed). Ответы бота и getWebhookInfo будут с задержкой или ретраями — проверьте исходящий HTTPS/DNS с хоста CRM."
         : null,
       "После правок .env перезапустите процесс Node (pm2/docker/systemd).",
     ].filter(Boolean),
@@ -111,32 +118,45 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 
-  let handledGroup = false;
-  try {
-    await getTelegramBotUserIdStr(token);
-    await tryTelegramBotAddedChatIdAnnounce(body, token);
-    handledGroup = await tryTelegramDoctorGroupsAndMessenger(body, token);
-    if (!handledGroup) {
-      await processTelegramBotUpdate(body, token);
-    }
-  } catch (e) {
-    console.error("[telegram webhook]", e);
-  }
+  const updateId = body.update_id;
+  const debug = process.env.TELEGRAM_WEBHOOK_DEBUG === "1";
 
-  if (process.env.TELEGRAM_WEBHOOK_DEBUG === "1") {
-    const msg = body.message ?? body.edited_message ?? body.business_message;
-    const chat = msg && typeof msg === "object" ? (msg as { chat?: { type?: string } }).chat : null;
-    const text =
-      msg && typeof msg === "object" && typeof (msg as { text?: unknown }).text === "string"
-        ? String((msg as { text: string }).text).slice(0, 80)
-        : "";
-    console.info("[telegram webhook] ok", {
-      updateId: body.update_id,
-      chatType: chat?.type,
-      handledGroup,
-      text,
-    });
-  }
+  after(async () => {
+    const startedAt = Date.now();
+    let handledGroup = false;
+    try {
+      await getTelegramBotUserIdStr(token);
+      await tryTelegramBotAddedChatIdAnnounce(body, token);
+      handledGroup = await tryTelegramDoctorGroupsAndMessenger(body, token);
+      if (!handledGroup) {
+        await processTelegramBotUpdate(body, token);
+      }
+    } catch (e) {
+      console.error("[telegram webhook]", e);
+    }
+
+    const ms = Date.now() - startedAt;
+    if (debug || ms >= 3000) {
+      const msg = body.message ?? body.edited_message ?? body.business_message;
+      const chat =
+        msg && typeof msg === "object"
+          ? (msg as { chat?: { type?: string } }).chat
+          : null;
+      const text =
+        msg &&
+        typeof msg === "object" &&
+        typeof (msg as { text?: unknown }).text === "string"
+          ? String((msg as { text: string }).text).slice(0, 80)
+          : "";
+      console.info("[telegram webhook] processed", {
+        updateId,
+        ms,
+        chatType: chat?.type,
+        handledGroup,
+        text,
+      });
+    }
+  });
 
   return NextResponse.json({ ok: true });
 }

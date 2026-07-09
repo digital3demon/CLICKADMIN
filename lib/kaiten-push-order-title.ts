@@ -1,4 +1,4 @@
-import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
+import { buildKaitenCardTitle, resolveKaitenPushTitle } from "@/lib/kaiten-card-title";
 import { buildKaitenCardDescription } from "@/lib/kaiten-order-sync";
 import {
   activeContinuationChildrenWhere,
@@ -17,6 +17,8 @@ type HeadSelect = {
   dueDate: Date | null;
   kaitenAdminDueHasTime: boolean | null;
   kaitenCardTitleLabel: string | null;
+  kaitenCardTitleManual: boolean;
+  kaitenCardTitleMirror: string | null;
   isUrgent: boolean;
   urgentCoefficient: number | null;
   clientOrderText: string | null;
@@ -47,6 +49,8 @@ async function loadOrderForKaitenHead(
       dueDate: true,
       kaitenAdminDueHasTime: true,
       kaitenCardTitleLabel: true,
+      kaitenCardTitleManual: true,
+      kaitenCardTitleMirror: true,
       isUrgent: true,
       urgentCoefficient: true,
       clientOrderText: true,
@@ -73,6 +77,7 @@ async function loadOrderForKaitenHead(
 async function computeKaitenHeadForOrder(orderId: string): Promise<{
   kaitenCardId: number | null;
   title: string;
+  titleManual: boolean;
   description: string;
   descriptionMirror: string | null;
   asap: boolean;
@@ -106,7 +111,7 @@ async function computeKaitenHeadForOrder(orderId: string): Promise<{
   );
   const descriptionMirror = description.trim() ? description : null;
 
-  const title = buildKaitenCardTitle({
+  const computedTitle = buildKaitenCardTitle({
     orderNumber: order.orderNumber,
     patientName: order.patientName,
     doctor: { fullName: doctor?.fullName ?? "—" },
@@ -117,10 +122,16 @@ async function computeKaitenHeadForOrder(orderId: string): Promise<{
     isUrgent: order.isUrgent,
     urgentCoefficient: order.urgentCoefficient,
   });
+  const title = resolveKaitenPushTitle(
+    computedTitle,
+    order.kaitenCardTitleManual,
+    order.kaitenCardTitleMirror,
+  );
 
   return {
     kaitenCardId: order.kaitenCardId,
     title,
+    titleManual: order.kaitenCardTitleManual,
     description,
     descriptionMirror,
     asap: order.isUrgent === true,
@@ -130,15 +141,18 @@ async function computeKaitenHeadForOrder(orderId: string): Promise<{
 async function persistOrderKaitenHeadMirrors(
   orderId: string,
   head: { title: string; descriptionMirror: string | null },
+  opts?: { autoTitle?: boolean; autoDescription?: boolean },
 ): Promise<void> {
   const prisma = await getOrdersPrisma();
+  const autoTitle = opts?.autoTitle !== false;
+  const autoDescription = opts?.autoDescription !== false;
   await prisma.order.update({
     where: { id: orderId },
     data: {
       kaitenCardTitleMirror: head.title,
       kaitenCardDescriptionMirror: head.descriptionMirror,
-      kaitenCardTitleManual: false,
-      kaitenCardDescriptionManual: false,
+      ...(autoTitle ? { kaitenCardTitleManual: false } : {}),
+      ...(autoDescription ? { kaitenCardDescriptionManual: false } : {}),
     },
   });
 }
@@ -184,8 +198,13 @@ export async function pushKaitenCardTitleForOrderIfLinked(
   const head = await computeKaitenHeadForOrder(orderId);
   if (!head) return { ok: true, title: "", descriptionMirror: null };
 
+  const persistOpts = {
+    autoTitle: !head.titleManual,
+    autoDescription: true,
+  };
+
   if (!auth || !head.kaitenCardId) {
-    await persistOrderKaitenHeadMirrors(orderId, head);
+    await persistOrderKaitenHeadMirrors(orderId, head, persistOpts);
     return {
       ok: true,
       title: head.title,
@@ -210,7 +229,7 @@ export async function pushKaitenCardTitleForOrderIfLinked(
     };
   }
 
-  await persistOrderKaitenHeadMirrors(orderId, head);
+  await persistOrderKaitenHeadMirrors(orderId, head, persistOpts);
   invalidateKaitenSnapshotCache(orderId);
   return {
     ok: true,

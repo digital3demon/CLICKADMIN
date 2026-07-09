@@ -152,3 +152,16 @@ export function buildKaitenCardTitle(
   const line2 = `${doctor} ${work}${coef} ${labDue}`;
   return `${line1}\n${line2}`;
 }
+
+/** Какой заголовок пушить в Kaiten: ручной mirror или пересчёт из полей наряда. */
+export function resolveKaitenPushTitle(
+  computedTitle: string,
+  kaitenCardTitleManual: boolean,
+  kaitenCardTitleMirror: string | null | undefined,
+): string {
+  if (kaitenCardTitleManual) {
+    const manual = kaitenCardTitleMirror?.trim();
+    if (manual) return manual;
+  }
+  return computedTitle;
+}

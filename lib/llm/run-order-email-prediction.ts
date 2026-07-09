@@ -345,7 +345,7 @@ export async function runOrderEmailPrediction(
     }
   }
 
-  parsedAi = mergePdfHintsIntoPrediction(parsedAi, pdfContext);
+  parsedAi = mergePdfHintsIntoPrediction(parsedAi ?? {}, pdfContext);
 
   let predictionJson = mergeAiPredictionJson(parsedAi, {
     preResolved,
