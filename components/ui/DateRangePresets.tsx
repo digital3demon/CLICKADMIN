@@ -6,6 +6,8 @@ interface DateRangePresetsProps {
   onSelect: (from: string, to: string) => void
   currentFrom?: string
   currentTo?: string
+  /** В одной строке с датами — без растягивания на всю ширину */
+  compact?: boolean
 }
 
 type PresetKey = 'today' | 'week' | 'month' | 'quarter'
@@ -56,15 +58,20 @@ export function DateRangePresets({
   onSelect,
   currentFrom,
   currentTo,
+  compact = false,
 }: DateRangePresetsProps) {
   const isHarmony = useUiDesign() === 'harmony'
 
   return (
     <div
       className={
-        isHarmony
-          ? 'inline-flex w-full max-w-full flex-shrink-0 items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--app-bg)] p-1'
-          : 'inline-flex w-full max-w-full items-center justify-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-0.5'
+        compact
+          ? isHarmony
+            ? 'inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--app-bg)] p-1'
+            : 'inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-0.5'
+          : isHarmony
+            ? 'inline-flex w-full max-w-full flex-shrink-0 items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--app-bg)] p-1'
+            : 'inline-flex w-full max-w-full items-center justify-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-0.5'
       }
     >
       {PRESETS.map(({ key, label }) => {

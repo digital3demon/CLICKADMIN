@@ -33,6 +33,7 @@ import {
 } from "@/lib/kanban/chat-sync";
 import { textIncludesAdminLabMention } from "@/lib/kaiten-comment-parse";
 import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
+import { isKanbanChatLocalOnlyRequest } from "@/lib/kanban/kanban-chat-local-query";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
@@ -287,7 +288,7 @@ async function loadKaitenCommentsFallbackForOrder(
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const session = await getSessionFromCookies();
@@ -303,9 +304,19 @@ export async function GET(
   if (!orderId) {
     return NextResponse.json({ error: "Не указан id" }, { status: 400 });
   }
+  const localOnly = isKanbanChatLocalOnlyRequest(new URL(req.url));
   const statePayload = await loadTenantKanbanState(tenantId);
   const state = statePayload.state;
   if (!state) {
+    if (localOnly) {
+      return NextResponse.json({
+        ok: true,
+        mode: "kanban",
+        hasCard: false,
+        comments: [],
+        cardImages: [],
+      });
+    }
     const fallbackComments = await loadKaitenCommentsFallbackForOrder(tenantId, orderId);
     return NextResponse.json({
       ok: true,
@@ -317,6 +328,15 @@ export async function GET(
   }
   const loc = findCardByLinkedOrderId(state, orderId);
   if (!loc) {
+    if (localOnly) {
+      return NextResponse.json({
+        ok: true,
+        mode: "kanban",
+        hasCard: false,
+        comments: [],
+        cardImages: [],
+      });
+    }
     const fallbackComments = await loadKaitenCommentsFallbackForOrder(tenantId, orderId);
     return NextResponse.json({
       ok: true,
@@ -328,7 +348,7 @@ export async function GET(
   }
   const card = state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
   const linkedKaiten = card.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
-  if (linkedKaiten) {
+  if (!localOnly && linkedKaiten) {
     const auth = getKaitenRestAuth();
     if (auth) {
       const list = await kaitenListComments(auth, card.kaitenCardId as number);

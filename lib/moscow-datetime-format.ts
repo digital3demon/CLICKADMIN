@@ -41,6 +41,15 @@ export function formatMoscowDate(date: Date): string {
   return `${partValue(parts, "day")}.${partValue(parts, "month")}.${partValue(parts, "year")}`;
 }
 
+/** `дд.мм` по календарю Москвы (без года). */
+export function formatMoscowDateDayMonth(date: Date): string {
+  const parts = moscowParts(date, {
+    day: "2-digit",
+    month: "2-digit",
+  });
+  return `${partValue(parts, "day")}.${partValue(parts, "month")}`;
+}
+
 /** `HH:mm` по календарю Москвы. */
 export function formatMoscowTime(date: Date): string {
   const parts = moscowParts(date, {

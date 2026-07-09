@@ -1,24 +1,24 @@
-'use client'
+"use client";
 
-import { useId, useState } from 'react'
-import { DateRangePresets, FilterBadge } from '@/components/ui'
-import { useUrlFilters } from '@/lib/hooks/useUrlFilters'
-import { useUiDesign } from '@/lib/hooks/useUiDesign'
-import { OrdersListPeriodForm } from '@/components/orders/OrdersListPeriodForm'
-import { OrdersListSearch } from '@/components/orders/OrdersListSearch'
+import { useId, useState } from "react";
+import { DateRangePresets, FilterBadge } from "@/components/ui";
+import { useUrlFilters } from "@/lib/hooks/useUrlFilters";
+import { useUiDesign } from "@/lib/hooks/useUiDesign";
+import { OrdersListPeriodForm } from "@/components/orders/OrdersListPeriodForm";
+import { OrdersListSearch } from "@/components/orders/OrdersListSearch";
 
 type Props = {
-  pageSize: number
-  appliedFrom: string | null
-  appliedTo: string | null
-  initialSearchQ: string
-  tag?: string | null
-  hideShipped?: boolean
-  onlyShipped?: boolean
+  pageSize: number;
+  appliedFrom: string | null;
+  appliedTo: string | null;
+  initialSearchQ: string;
+  tag?: string | null;
+  hideShipped?: boolean;
+  onlyShipped?: boolean;
   /** false — поиск вынесен в липкую полосу над списком (мобильная версия). */
-  showSearch?: boolean
-  className?: string
-}
+  showSearch?: boolean;
+  className?: string;
+};
 
 export function OrdersListFiltersBar({
   pageSize,
@@ -29,21 +29,21 @@ export function OrdersListFiltersBar({
   hideShipped,
   onlyShipped,
   showSearch = true,
-  className = '',
+  className = "",
 }: Props) {
-  const { activeCount, resetFilters, setFilters } = useUrlFilters()
-  const isHarmony = useUiDesign() === 'harmony'
-  const filtersPanelId = useId()
-  const [filtersOpen, setFiltersOpen] = useState(true)
+  const { activeCount, resetFilters, setFilters } = useUrlFilters();
+  const isHarmony = useUiDesign() === "harmony";
+  const filtersPanelId = useId();
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   const cardClass = [
     isHarmony
-      ? 'no-print w-full min-w-0 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 card-shadow'
-      : 'no-print w-full min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]',
+      ? "no-print flex w-full min-w-0 flex-col gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 card-shadow"
+      : "no-print flex w-full min-w-0 flex-col gap-3 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
     className,
   ]
     .filter(Boolean)
-    .join(' ')
+    .join(" ");
 
   return (
     <div className={cardClass}>
@@ -58,40 +58,34 @@ export function OrdersListFiltersBar({
         />
       ) : null}
 
-      <div
-        id={filtersPanelId}
-        hidden={!filtersOpen}
-        className={[
-          'flex min-w-0 flex-col gap-3',
-          showSearch ? 'mt-3' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-      >
-        <div className="flex w-full justify-center">
+      {/* Макет: даты + Показать + пресеты + Фильтры — одна строка */}
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <OrdersListPeriodForm
+          pageSize={pageSize}
+          appliedFrom={appliedFrom}
+          appliedTo={appliedTo}
+          className="min-w-0"
+        />
+        <div
+          id={filtersPanelId}
+          hidden={!filtersOpen}
+          className="min-w-0 shrink-0"
+        >
           <DateRangePresets
             currentFrom={appliedFrom ?? undefined}
             currentTo={appliedTo ?? undefined}
             onSelect={(from, to) => setFilters({ from, to })}
+            compact
           />
         </div>
-
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <OrdersListPeriodForm
-            pageSize={pageSize}
-            appliedFrom={appliedFrom}
-            appliedTo={appliedTo}
-            className="min-w-0 flex-1"
-          />
-          <FilterBadge
-            count={activeCount}
-            onReset={resetFilters}
-            onToggle={() => setFiltersOpen((open) => !open)}
-            expanded={filtersOpen}
-            controlsId={filtersPanelId}
-          />
-        </div>
+        <FilterBadge
+          count={activeCount}
+          onReset={resetFilters}
+          onToggle={() => setFiltersOpen((open) => !open)}
+          expanded={filtersOpen}
+          controlsId={filtersPanelId}
+        />
       </div>
     </div>
-  )
+  );
 }

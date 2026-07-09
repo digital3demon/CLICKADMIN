@@ -20,6 +20,7 @@ import {
   type KaitenLinkedOrderForKanban,
 } from "@/lib/kanban/kaiten-linked-order";
 import { applyKanbanLegacyStageDueClearMigration, getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
 
 export const STORAGE_KEY = "kanban-app-state-v3";
 export const STORAGE_KEY_LEGACY = "kanban-app-state-v2";
@@ -1201,9 +1202,19 @@ function normalizeBoardTitleForSystemLookup(title: string | null | undefined): s
   return String(title || "").trim().toLowerCase();
 }
 
-/** Снимок для client-state: поиск эфемерен и не должен восстанавливаться после ухода с доски. */
-export function kanbanStateForPersistence(state: KanbanAppState): KanbanAppState {
-  return { ...state, search: "" };
+/**
+ * Снимок для client-state.
+ * Tenant: только доски/карточки (персональный UI — в user kanbanBoardUiV1).
+ * Demo: полный state в user-scope, поиск по-прежнему не персистим.
+ */
+export function kanbanStateForPersistence(
+  state: KanbanAppState,
+  isDemo = false,
+): KanbanAppState {
+  if (isDemo) {
+    return { ...state, search: "" };
+  }
+  return stripPersonalKanbanUiForTenant(state);
 }
 
 export function mergeKanbanStatePreservingLocalBoards(
@@ -1211,7 +1222,15 @@ export function mergeKanbanStatePreservingLocalBoards(
   remoteState: KanbanAppState,
 ): KanbanAppState {
   const merged = structuredClone(remoteState);
+  // Персональный UI всегда с локальной сессии — remote tenant не должен его затирать.
   merged.search = localState.search ?? "";
+  merged.filters = structuredClone(localState.filters);
+  merged.filterTemplates = structuredClone(localState.filterTemplates ?? []);
+  merged.viewMode = localState.viewMode ?? "board";
+  merged.calendarMonth = structuredClone(
+    localState.calendarMonth ?? merged.calendarMonth,
+  );
+  merged.activeBoardId = localState.activeBoardId;
   const remoteById = new Set(merged.boards.map((b) => b.id));
   const remoteByTitle = new Set(
     merged.boards.map((b) => normalizeBoardTitleForSystemLookup(b.title)),
@@ -1224,9 +1243,18 @@ export function mergeKanbanStatePreservingLocalBoards(
     remoteById.add(localBoard.id);
     if (titleKey) remoteByTitle.add(titleKey);
   }
-  const hasActiveBoard = merged.boards.some((b) => b.id === merged.activeBoardId);
-  if (!hasActiveBoard && localState.boards.some((b) => b.id === localState.activeBoardId)) {
-    merged.activeBoardId = localState.activeBoardId;
+  const hasActiveBoard =
+    merged.boards.some((b) => b.id === merged.activeBoardId) ||
+    isKanbanAggregateBoardId(merged.activeBoardId);
+  if (!hasActiveBoard) {
+    if (
+      localState.boards.some((b) => b.id === localState.activeBoardId) ||
+      isKanbanAggregateBoardId(localState.activeBoardId)
+    ) {
+      merged.activeBoardId = localState.activeBoardId;
+    } else if (merged.boards[0]) {
+      merged.activeBoardId = merged.boards[0].id;
+    }
   }
   return merged;
 }

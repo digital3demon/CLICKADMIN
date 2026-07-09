@@ -87,6 +87,12 @@ import {
   extractKanbanArchiveSettings,
   KANBAN_ARCHIVE_SETTINGS_KEY,
 } from "@/lib/kanban/archive-settings-sync";
+import {
+  KANBAN_BOARD_UI_KEY,
+  applyKanbanBoardUiState,
+  extractKanbanBoardUiState,
+  normalizeKanbanBoardUiState,
+} from "@/lib/kanban/user-board-ui-state";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -320,6 +326,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const mirrorSyncInFlightRef = useRef(false);
   const mirrorSyncQueuedRef = useRef(false);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const kanbanUiSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
   const kanbanPersistPausedRef = useRef(false);
   const childChecklistExpandInFlightRef = useRef<Set<string>>(new Set());
@@ -467,6 +474,33 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           return finalState;
         });
       }
+
+      // Персональный UI (фильтры, вид, активная доска) — отдельно на пользователя.
+      if (!isDemo) {
+        const uiRaw = await readClientState<unknown>("user", KANBAN_BOARD_UI_KEY);
+        if (cancelled) return;
+        const ui = normalizeKanbanBoardUiState(uiRaw);
+        if (ui) {
+          setAppState((prev) => {
+            if (!prev) return prev;
+            const next = applyKanbanBoardUiState(prev, ui);
+            saveKanbanState(next, false);
+            return next;
+          });
+        } else {
+          // Миграция: один раз перенести UI из текущего снимка в user-ключ.
+          setAppState((prev) => {
+            if (!prev) return prev;
+            void writeClientState(
+              "user",
+              KANBAN_BOARD_UI_KEY,
+              extractKanbanBoardUiState(prev),
+            );
+            return prev;
+          });
+        }
+      }
+
       setKanbanStateReady(true);
     })();
     return () => {
@@ -515,7 +549,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     saveKanbanState(appState, isDemo);
     const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
     const scope = isDemo ? "user" : "tenant";
-    const payload = kanbanStateForPersistence(appState);
+    const payload = kanbanStateForPersistence(appState, isDemo);
     if (kanbanStateSaveTimerRef.current) {
       clearTimeout(kanbanStateSaveTimerRef.current);
     }
@@ -531,6 +565,36 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     };
   }, [appState, isDemo, kanbanStateReady]);
 
+  // Персональный UI — отдельный debounce в user client-state.
+  useEffect(() => {
+    if (isDemo || !appState || !kanbanStateReady || kanbanPersistPausedRef.current) {
+      return;
+    }
+    const uiPayload = extractKanbanBoardUiState(appState);
+    if (kanbanUiSaveTimerRef.current) {
+      clearTimeout(kanbanUiSaveTimerRef.current);
+    }
+    kanbanUiSaveTimerRef.current = setTimeout(() => {
+      kanbanUiSaveTimerRef.current = null;
+      void writeClientState("user", KANBAN_BOARD_UI_KEY, uiPayload);
+    }, 400);
+    return () => {
+      if (kanbanUiSaveTimerRef.current) {
+        clearTimeout(kanbanUiSaveTimerRef.current);
+        kanbanUiSaveTimerRef.current = null;
+      }
+    };
+  }, [
+    isDemo,
+    kanbanStateReady,
+    appState?.filters,
+    appState?.filterTemplates,
+    appState?.activeBoardId,
+    appState?.viewMode,
+    appState?.calendarMonth,
+    appState?.search,
+  ]);
+
   useEffect(() => {
     const demo = isDemo;
     return () => {
@@ -539,7 +603,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       if (!cur) return;
       const key = demo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
       const scope = demo ? "user" : "tenant";
-      void writeClientState(scope, key, kanbanStateForPersistence(cur));
+      void writeClientState(scope, key, kanbanStateForPersistence(cur, demo));
+      if (!demo) {
+        void writeClientState(
+          "user",
+          KANBAN_BOARD_UI_KEY,
+          extractKanbanBoardUiState(cur),
+        );
+      }
     };
   }, [isDemo]);
 

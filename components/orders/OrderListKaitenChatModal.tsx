@@ -165,9 +165,10 @@ export function OrderListKaitenChatModal({
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    setChatMode("kaiten");
+    setChatMode("kanban");
     try {
-      const chatRes = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+      // local=1: зеркало CRM без live Kaiten — как карточка на доске канбана.
+      const chatRes = await fetch(`/api/orders/${orderId}/kanban-chat?local=1`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -178,56 +179,44 @@ export function OrderListKaitenChatModal({
           : chatRes.ok && Array.isArray(chatData.comments) && chatData.comments.length > 0
             ? normalizeKanbanChatComments(chatData.comments)
             : [];
+      const kanbanImages =
+        chatRes.ok && Array.isArray(chatData.cardImages) ? chatData.cardImages : [];
 
+      if (chatRes.ok && (chatData.hasCard === true || kanbanComments.length > 0)) {
+        setChatMode("kanban");
+        setSnap({
+          configured: true,
+          card: {},
+          trackLane: null,
+          columns: [],
+          lanes: [],
+          comments: kanbanComments,
+          cardImages: kanbanImages,
+          kaitenCardUrl: null,
+        });
+        return;
+      }
+
+      // Нет карточки канбана — fallback на полный snapshot Kaiten.
       const kaitenRes = await fetch(`/api/orders/${orderId}/kaiten`);
       const kaitenData = (await kaitenRes.json().catch(() => ({}))) as {
         error?: string;
       } & Partial<KaitenSnapshot>;
-      const kaitenComments = kaitenRes.ok
-        ? kaitenSnapshotToCommentRows((kaitenData as KaitenSnapshot).comments)
-        : [];
-      const displayComments = mergeChatCommentsForDisplay(kanbanComments, kaitenComments);
-
-      const kanbanImages =
-        chatRes.ok && Array.isArray(chatData.cardImages) ? chatData.cardImages : [];
-
       if (kaitenRes.ok) {
         const s = kaitenData as KaitenSnapshot;
+        const kaitenComments = kaitenSnapshotToCommentRows(s.comments);
+        setChatMode("kaiten");
         setSnap({
           ...s,
-          comments: displayComments,
+          comments: mergeChatCommentsForDisplay(kanbanComments, kaitenComments),
           cardImages: kanbanImages.length > 0 ? kanbanImages : s.cardImages ?? [],
         });
         return;
       }
 
-      if (isNoKaitenCardError(kaitenData.error) && chatData.hasCard === true) {
-        setChatMode("kanban");
-        setSnap({
-          configured: true,
-          card: {},
-          trackLane: null,
-          columns: [],
-          lanes: [],
-          comments: displayComments,
-          cardImages: kanbanImages,
-          kaitenCardUrl: null,
-        });
-        return;
-      }
-
-      if (chatData.hasCard === true || displayComments.length > 0) {
-        setChatMode("kanban");
-        setSnap({
-          configured: true,
-          card: {},
-          trackLane: null,
-          columns: [],
-          lanes: [],
-          comments: displayComments,
-          cardImages: kanbanImages,
-          kaitenCardUrl: null,
-        });
+      if (isNoKaitenCardError(kaitenData.error)) {
+        setLoadError(kaitenData.error ?? "Нет карточки чата для этого наряда");
+        setSnap(null);
         return;
       }
 
@@ -334,7 +323,7 @@ export function OrderListKaitenChatModal({
         setPostError(data.error ?? "Не отправлено");
         return;
       }
-      const refreshed = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+      const refreshed = await fetch(`/api/orders/${orderId}/kanban-chat?local=1`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -543,8 +532,8 @@ export function OrderListKaitenChatModal({
               ) : null}
               <p className="mb-2 text-[0.65rem] text-[var(--text-muted)]">
                 {isKanbanMode
-                  ? "Kaiten-карточка не привязана: используем чат карточки CRM-канбана."
-                  : "Сообщения из чата CRM-канбана (зеркало Kaiten). Отправка уходит в Kaiten."}
+                  ? "Чат карточки CRM-канбана. Отправка сохраняется в канбан (и синхронизируется с Kaiten в фоне, если карточка привязана)."
+                  : "Сообщения из Kaiten (карточки канбана в CRM нет). Отправка уходит в Kaiten."}
               </p>
               <ul className="space-y-3">
                 {roots.length === 0 ? (
@@ -728,7 +717,7 @@ export function OrderListKaitenChatModal({
             onClick={() => void sendComment()}
             className="mt-2 w-full rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
           >
-            {posting ? "Отправка…" : isKanbanMode ? "Отправить в канбан" : "Отправить в Kaiten"}
+            {posting ? "Отправка…" : isKanbanMode ? "Отправить" : "Отправить в Kaiten"}
           </button>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button

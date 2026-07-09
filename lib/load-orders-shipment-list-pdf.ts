@@ -10,7 +10,11 @@ import {
 } from "@/lib/orders-shipment-list-filter";
 import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { ordersShipmentModeLabel } from "@/lib/orders-shipment-list-query";
-import { formatMoscowDateTime } from "@/lib/moscow-datetime-format";
+import {
+  formatMoscowDateDayMonth,
+  formatMoscowDateTime,
+  formatMoscowTime,
+} from "@/lib/moscow-datetime-format";
 import { orderShipmentListStatusLabel } from "@/lib/order-shipment-list-status-label";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 
@@ -68,13 +72,18 @@ function formatClinicLine(
   return addr ? `${clinic.name}, ${addr}` : clinic.name;
 }
 
-function formatAppointmentLine(order: {
+function formatAppointmentParts(order: {
   appointmentDate: Date | null;
   dueToAdminsAt: Date | null;
-}): string {
+}): { appointmentDateLabel: string; appointmentTimeLabel: string } {
   const d = effectiveAppointmentDate(order);
-  if (!d) return "—";
-  return formatMoscowDateTime(d);
+  if (!d) {
+    return { appointmentDateLabel: "—", appointmentTimeLabel: "" };
+  }
+  return {
+    appointmentDateLabel: formatMoscowDateDayMonth(d),
+    appointmentTimeLabel: formatMoscowTime(d),
+  };
 }
 
 export async function loadOrdersShipmentListPdf(
@@ -222,6 +231,6 @@ function mapShipmentPdfRow(
     doctorName: doctor?.fullName?.trim() || "—",
     clinicLine: formatClinicLine(clinic),
     compositionBrief: formatOrderCompositionBrief(hydratedConstructions),
-    appointmentLine: formatAppointmentLine(o),
+    ...formatAppointmentParts(o),
   };
 }

@@ -58,10 +58,17 @@ describe("kanban production routing", () => {
     expect(merged.search).toBe("");
   });
 
-  it("strips search before persisting kanban state", () => {
+  it("strips personal UI before persisting tenant kanban state", () => {
     const state = defaultAppState();
     state.search = "013";
+    state.filters.assigneeUserId = "roman";
+    state.viewMode = "list";
     expect(kanbanStateForPersistence(state).search).toBe("");
+    expect(kanbanStateForPersistence(state).filters.assigneeUserId).toBe("");
+    expect(kanbanStateForPersistence(state).viewMode).toBe("board");
+    expect(kanbanStateForPersistence(state, true).filters.assigneeUserId).toBe(
+      "roman",
+    );
     expect(state.search).toBe("013");
   });
 

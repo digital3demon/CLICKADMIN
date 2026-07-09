@@ -3,9 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
-import {
-  ordersListPeriodDefaultDraft,
-} from "@/lib/orders-list-period";
+import { ordersListPeriodDefaultDraft } from "@/lib/orders-list-period";
 import {
   normalizeOrdersSearchQuery,
   ordersListHref,
@@ -112,16 +110,33 @@ export function OrdersShipmentPanel({
   }, [shipMode, appliedShipFrom, appliedShipTo, from, to]);
 
   const printBtnClass = isHarmony
-    ? "w-full rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm font-semibold text-[var(--text-strong)] transition-colors hover:bg-[var(--surface-hover)]"
-    : "w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-4 py-2 text-sm font-semibold text-[var(--text-strong)] shadow-sm transition-colors hover:bg-[var(--table-row-hover)]";
+    ? "shrink-0 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] transition-colors hover:bg-[var(--surface-hover)] sm:text-sm"
+    : "shrink-0 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] shadow-sm transition-colors hover:bg-[var(--table-row-hover)] sm:text-sm";
 
   return (
     <div className={cardClass}>
-      <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-strong)]">
-        <span aria-hidden className="text-base">
-          📦
-        </span>
-        <span>Отгрузки</span>
+      {/* Макет: заголовок слева, Печать списка справа */}
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-[var(--text-strong)]">
+          <span aria-hidden className="text-base">
+            📦
+          </span>
+          <span>Отгрузки</span>
+        </div>
+        {printPdfHref ? (
+          <a
+            href={printPdfHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={printBtnClass}
+          >
+            Печать списка
+          </a>
+        ) : (
+          <button type="button" disabled className={`${printBtnClass} opacity-50`}>
+            Печать списка
+          </button>
+        )}
       </div>
 
       <button
@@ -178,21 +193,6 @@ export function OrdersShipmentPanel({
           </button>
         </div>
       </div>
-
-      {printPdfHref ? (
-        <a
-          href={printPdfHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={printBtnClass}
-        >
-          Печать списка
-        </a>
-      ) : (
-        <button type="button" disabled className={`${printBtnClass} opacity-50`}>
-          Печать списка
-        </button>
-      )}
     </div>
   );
 }

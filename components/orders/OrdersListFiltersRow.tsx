@@ -31,7 +31,7 @@ export function OrdersListFiltersRow({
   shipMode,
 }: Props) {
   return (
-    <div className="grid w-full min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+    <div className="grid w-full min-w-0 grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(16rem,1fr)]">
       <OrdersListFiltersBar
         pageSize={pageSize}
         appliedFrom={appliedFrom}
@@ -41,7 +41,7 @@ export function OrdersListFiltersRow({
         hideShipped={hideShipped}
         onlyShipped={onlyShipped}
         showSearch={showSearch}
-        className="min-w-0"
+        className="min-w-0 h-full"
       />
       <OrdersShipmentPanel
         pageSize={pageSize}

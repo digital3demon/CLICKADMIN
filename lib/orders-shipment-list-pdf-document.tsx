@@ -36,11 +36,13 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: "row",
+    alignItems: "stretch",
     borderBottomWidth: 1,
     borderColor: "#e5e7eb",
   },
   headRow: {
     flexDirection: "row",
+    alignItems: "stretch",
     backgroundColor: "#f3f4f6",
     borderBottomWidth: 1,
     borderColor: "#d1d5db",
@@ -68,6 +70,8 @@ const styles = StyleSheet.create({
   cAppointment: { width: "17%", borderRightWidth: 0 },
   lastCell: { borderRightWidth: 0 },
   emph: { fontSize: 8.5, fontWeight: 700 },
+  appointmentDate: { fontSize: 9.5, fontWeight: 700 },
+  appointmentTime: { fontSize: 7, color: "#374151" },
   muted: { color: "#6b7280" },
   empty: {
     padding: 12,
@@ -84,17 +88,22 @@ function PdfRow({
   index: number;
 }) {
   const bg = index % 2 === 1 ? "#f9fafb" : "#ffffff";
+  // wrap={false}: строка целиком уходит на следующую страницу —
+  // иначе ячейки с длинным текстом «отрываются» от статуса/номера на конце листа.
   return (
-    <View style={[styles.row, { backgroundColor: bg }]}>
+    <View wrap={false} style={[styles.row, { backgroundColor: bg }]}>
       <Text style={[styles.cell, styles.cStatus]}>{row.status}</Text>
       <Text style={[styles.cell, styles.cOrder, styles.emph]}>{row.orderNumber}</Text>
       <Text style={[styles.cell, styles.cPatient, styles.emph]}>{row.patientName}</Text>
       <Text style={[styles.cell, styles.cDoctor]}>{row.doctorName}</Text>
       <Text style={[styles.cell, styles.cClinic]}>{row.clinicLine}</Text>
       <Text style={[styles.cell, styles.cComposition]}>{row.compositionBrief}</Text>
-      <Text style={[styles.cell, styles.cAppointment, styles.lastCell]}>
-        {row.appointmentLine}
-      </Text>
+      <View style={[styles.cell, styles.cAppointment, styles.lastCell]}>
+        <Text style={styles.appointmentDate}>{row.appointmentDateLabel}</Text>
+        {row.appointmentTimeLabel ? (
+          <Text style={styles.appointmentTime}>{row.appointmentTimeLabel}</Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -127,7 +136,7 @@ export function OrdersShipmentListPdfDocument({
           <Text style={styles.empty}>Нет неотгруженных нарядов в выбранном режиме.</Text>
         ) : (
           <View style={styles.table}>
-            <View style={styles.headRow}>
+            <View wrap={false} style={styles.headRow}>
               <Text style={[styles.headCell, styles.cStatus]}>Статус</Text>
               <Text style={[styles.headCell, styles.cOrder]}>№ наряда</Text>
               <Text style={[styles.headCell, styles.cPatient]}>Пациент</Text>

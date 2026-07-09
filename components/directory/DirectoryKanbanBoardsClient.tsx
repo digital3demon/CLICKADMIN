@@ -125,7 +125,7 @@ export function DirectoryKanbanBoardsClient({
     saveKanbanState(appState, isDemo);
     const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
     const scope = isDemo ? "user" : "tenant";
-    const payload = kanbanStateForPersistence(appState);
+    const payload = kanbanStateForPersistence(appState, isDemo);
     if (kanbanStateSaveTimerRef.current) {
       clearTimeout(kanbanStateSaveTimerRef.current);
     }
