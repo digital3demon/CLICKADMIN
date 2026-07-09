@@ -45,20 +45,10 @@ export function aiPrefillHighlightClass(
   return `${baseClass} border-amber-400 bg-amber-50/40 ring-2 ring-amber-400/50 dark:border-amber-600 dark:bg-amber-950/25 dark:ring-amber-600/40`;
 }
 
-function confidenceTone(score: number): string {
-  if (score >= 75) {
-    return "text-emerald-700 dark:text-emerald-300";
-  }
-  if (score >= 50) {
-    return "text-amber-800 dark:text-amber-200";
-  }
-  return "text-red-700 dark:text-red-300";
-}
-
 function confidenceBarTone(score: number): string {
-  if (score >= 75) return "bg-emerald-500";
-  if (score >= 50) return "bg-amber-500";
-  return "bg-red-500";
+  if (score >= 75) return "bg-emerald-400";
+  if (score >= 50) return "bg-amber-400";
+  return "bg-red-400";
 }
 
 type OrderAiPrefillPanelProps = {
@@ -77,10 +67,33 @@ function FillWithoutAiButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-900 shadow-sm transition-colors hover:border-violet-400 hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-100 dark:hover:bg-violet-900/50"
+      className="shrink-0 rounded-md border border-violet-300/80 bg-violet-950/50 px-2.5 py-1 text-xs font-medium text-violet-100 transition-colors hover:bg-violet-900/70"
     >
-      Заполнить без ИИ-расчёта
+      Без ИИ
     </button>
+  );
+}
+
+function ConfidenceBadge({ score }: { score: number }) {
+  return (
+    <div className="flex w-[7.5rem] shrink-0 flex-col items-end gap-0.5 sm:w-36">
+      <span className="text-[10px] font-semibold tabular-nums text-violet-100 sm:text-xs">
+        Уверенность: {score}%
+      </span>
+      <div
+        className="h-1 w-full overflow-hidden rounded-full bg-violet-950/80"
+        role="progressbar"
+        aria-valuenow={score}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Уверенность ИИ"
+      >
+        <div
+          className={`h-full rounded-full transition-[width] duration-500 ${confidenceBarTone(score)}`}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -101,107 +114,70 @@ export function OrderAiPrefillPanel({
       ? Math.max(0, Math.min(100, Math.round(confidenceScore)))
       : null;
 
-  return (
-    <section
-      className="rounded-lg border border-violet-200/90 bg-violet-50/40 px-3 py-3 dark:border-violet-900/45 dark:bg-violet-950/20 sm:px-4"
-      aria-live="polite"
-      aria-busy={status === "loading"}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--app-text)] sm:text-base">
-          ИИ-разбор
-        </h3>
-        {score != null && status !== "loading" ? (
-          <div className="flex min-w-[9rem] flex-col items-end gap-1">
-            <span
-              className={`text-xs font-semibold tabular-nums sm:text-sm ${confidenceTone(score)}`}
-            >
-              Уверенность: {score}%
-            </span>
-            <div
-              className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]"
-              role="progressbar"
-              aria-valuenow={score}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Уверенность ИИ"
-            >
-              <div
-                className={`h-full rounded-full transition-[width] duration-500 ${confidenceBarTone(score)}`}
-                style={{ width: `${score}%` }}
-              />
-            </div>
-          </div>
-        ) : null}
-      </div>
+  const shellClass =
+    "rounded-md border border-violet-400/50 bg-violet-950/55 px-2.5 py-1.5 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.12)] dark:border-violet-500/40 dark:bg-violet-950/70 sm:px-3";
 
-      {status === "loading" ? (
-        <div className="mt-3 flex flex-col gap-3 rounded-lg border border-violet-200 bg-violet-50/90 px-3 py-3 text-sm text-violet-950 dark:border-violet-900/50 dark:bg-violet-950/25 dark:text-violet-100 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex items-center gap-3">
-              <Spinner size="sm" className="shrink-0 text-violet-600 dark:text-violet-300" />
-              <p>Разбираем письмо и заполняем поля наряда…</p>
-            </div>
-            {elapsedSec > 0 || modelLabel ? (
-              <p className="pl-8 text-xs text-violet-800/90 dark:text-violet-200/90">
-                {elapsedSec > 0 ? `${elapsedSec} с` : null}
-                {elapsedSec > 0 && modelLabel ? " · " : null}
-                {modelLabel ?? null}
-                {elapsedSec >= 15 && modelLabel && modelLabel !== "без ИИ"
-                  ? " · бесплатная модель может отвечать 1–2 минуты"
-                  : null}
-                {elapsedSec >= 130 ? " · превышено ожидаемое время" : null}
-              </p>
+  if (status === "loading") {
+    return (
+      <section className={shellClass} aria-live="polite" aria-busy>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+          <Spinner size="sm" className="shrink-0 text-violet-300" />
+          <p className="min-w-0 flex-1 text-xs text-violet-50 sm:text-sm">
+            Разбираем письмо…
+            {elapsedSec > 0 ? (
+              <span className="text-violet-200/90"> · {elapsedSec} с</span>
             ) : null}
-          </div>
-          {onFillWithoutAi ? (
-            <FillWithoutAiButton onClick={onFillWithoutAi} />
-          ) : null}
-        </div>
-      ) : null}
-
-      {status === "error" && errorMessage ? (
-        <div className="mt-3 space-y-3">
-          <p
-            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100"
-            role="alert"
-          >
-            {errorMessage}
+            {modelLabel ? (
+              <span className="text-violet-200/90"> · {modelLabel}</span>
+            ) : null}
           </p>
-          {onFillWithoutAi ? (
-            <FillWithoutAiButton onClick={onFillWithoutAi} />
-          ) : null}
+          {onFillWithoutAi ? <FillWithoutAiButton onClick={onFillWithoutAi} /> : null}
         </div>
-      ) : null}
+      </section>
+    );
+  }
 
-      {status === "done" ? (
-        <div className="mt-3 space-y-3">
-          {missingFields.length > 0 ? (
-            <p className="rounded-lg border border-amber-300/80 bg-amber-50/80 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/20 dark:text-amber-100">
+  if (status === "error") {
+    return (
+      <section className={shellClass} aria-live="polite">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <p className="min-w-0 flex-1 text-xs text-amber-100 sm:text-sm" role="alert">
+            {errorMessage ?? "Ошибка ИИ-разбора"}
+          </p>
+          {onFillWithoutAi ? <FillWithoutAiButton onClick={onFillWithoutAi} /> : null}
+        </div>
+      </section>
+    );
+  }
+
+  // done — компактная полоса как на макете
+  const showWarnings = warnings.length > 0;
+  const showMissing = missingFields.length > 0;
+  if (!showWarnings && !showMissing && score == null) return null;
+
+  return (
+    <section className={shellClass} aria-live="polite">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[11px] font-bold uppercase tracking-wide text-white sm:text-xs">
+            Предупреждения и предложения от ИИ
+          </h3>
+          {showMissing ? (
+            <p className="mt-0.5 text-[11px] leading-snug text-amber-100/95 sm:text-xs">
               {modelLabel === "без ИИ" ? "Не заполнено" : "ИИ не заполнил"}:{" "}
               {missingFields.map((key) => AI_PREFILL_FIELD_LABELS[key]).join(", ")}
-              . Поля подсвечены — проверьте вручную.
             </p>
-          ) : (
-            <p className="text-sm text-[var(--text-secondary)]">
-              Черновик заполнен — проверьте поля перед сохранением.
-            </p>
-          )}
-
-          {warnings.length > 0 ? (
-            <div className="rounded-lg border border-violet-200/90 bg-violet-50/60 px-3 py-2.5 dark:border-violet-900/40 dark:bg-violet-950/20">
-              <p className="text-xs font-semibold uppercase tracking-wide text-violet-900 dark:text-violet-200">
-                Предупреждения и предложения
-              </p>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-violet-950 dark:text-violet-100">
-                {warnings.map((warning, index) => (
-                  <li key={`${index}-${warning.slice(0, 24)}`}>{warning}</li>
-                ))}
-              </ul>
-            </div>
+          ) : null}
+          {showWarnings ? (
+            <ul className="mt-0.5 list-disc space-y-0.5 pl-4 text-[11px] leading-snug text-violet-50 sm:text-xs">
+              {warnings.map((warning, index) => (
+                <li key={`${index}-${warning.slice(0, 24)}`}>{warning}</li>
+              ))}
+            </ul>
           ) : null}
         </div>
-      ) : null}
+        {score != null ? <ConfidenceBadge score={score} /> : null}
+      </div>
     </section>
   );
 }

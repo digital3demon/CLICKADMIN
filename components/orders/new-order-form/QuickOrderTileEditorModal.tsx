@@ -116,10 +116,9 @@ export function QuickOrderTileEditorModal({
       basePriceListItemId: baseId,
       basePriceSummary: baseId ? draft.basePriceSummary : null,
       baseActive: baseId ? draft.baseActive : false,
+      // Блокировку и причину задают на плашке в наряде — в редакторе не трогаем.
       blockOnSave: draft.blockOnSave,
-      blockReason: draft.blockOnSave
-        ? draft.blockReason.trim().slice(0, MAX_TILE_BLOCK_REASON_LEN)
-        : "",
+      blockReason: draft.blockReason.trim().slice(0, MAX_TILE_BLOCK_REASON_LEN),
       options: draft.options.map((o) => ({
         ...o,
         label: o.label.trim().slice(0, MAX_OPTION_LABEL_LEN),
@@ -134,9 +133,6 @@ export function QuickOrderTileEditorModal({
   }, [draft, onSave, onClose]);
 
   if (!open) return null;
-
-  const blockSaveInvalid =
-    draft.blockOnSave && !draft.blockReason.trim();
 
   return (
     <>
@@ -341,46 +337,10 @@ export function QuickOrderTileEditorModal({
             </ul>
           </div>
 
-          <div className="mt-5 rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] p-3">
-            <label className="flex cursor-pointer items-start gap-2">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--input-border)] text-[var(--sidebar-blue)] focus:ring-[var(--sidebar-blue)]"
-                checked={draft.blockOnSave}
-                onChange={(e) =>
-                  setDraft((d) => ({
-                    ...d,
-                    blockOnSave: e.target.checked,
-                    blockReason: e.target.checked ? d.blockReason : "",
-                  }))
-                }
-              />
-              <span className="text-sm font-semibold text-[var(--text-strong)]">
-                Блокировка при сохранении
-              </span>
-            </label>
-            <p className="mt-1 pl-6 text-xs text-[var(--text-muted)]">
-              Если плашка активна в наряде, карточка сразу заблокируется с указанной
-              причиной.
-            </p>
-            {draft.blockOnSave ? (
-              <label className="mt-3 block pl-6">
-                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                  Причина блокировки
-                </span>
-                <textarea
-                  className="mt-1 w-full rounded-md border border-[var(--input-border)] px-3 py-2 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
-                  rows={3}
-                  value={draft.blockReason}
-                  maxLength={MAX_TILE_BLOCK_REASON_LEN}
-                  placeholder="Например: ждём сканы с КТ"
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, blockReason: e.target.value }))
-                  }
-                />
-              </label>
-            ) : null}
-          </div>
+          <p className="mt-5 text-xs text-[var(--text-muted)]">
+            Блокировку карточки и причину можно включить прямо на плашке в наряде
+            (для каждого заказа своя).
+          </p>
 
           <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button
@@ -392,7 +352,7 @@ export function QuickOrderTileEditorModal({
             </button>
             <button
               type="button"
-              disabled={!draft.title.trim() || blockSaveInvalid}
+              disabled={!draft.title.trim()}
               className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={commit}
             >

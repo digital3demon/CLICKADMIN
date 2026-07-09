@@ -12,6 +12,7 @@ import {
   accentBackgroundCss,
   accentTileBackground,
   MAX_QUICK_TILES,
+  MAX_TILE_BLOCK_REASON_LEN,
   normalizeAccentColor,
   type QuickOrderState,
   type QuickOrderTile,
@@ -229,16 +230,43 @@ export function QuickOrderSection({
                   </ul>
                 ) : null}
 
-                {tile.blockOnSave ? (
-                  <p className="text-[10px] font-medium text-red-700 dark:text-red-300">
-                    Стоп при сохранении
-                    {tile.blockReason.trim()
-                      ? `: ${tile.blockReason.trim().slice(0, 48)}${
-                          tile.blockReason.trim().length > 48 ? "…" : ""
-                        }`
-                      : " — укажите причину в настройках"}
-                  </p>
-                ) : null}
+                <div className="border-t border-[var(--card-border)]/80 pt-1.5">
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-red-400/70 text-red-600 focus:ring-red-500"
+                      checked={tile.blockOnSave}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        patchTile(tile.id, {
+                          blockOnSave: on,
+                          blockReason: on ? tile.blockReason : "",
+                        });
+                      }}
+                    />
+                    <span className="text-[11px] font-semibold text-red-700 dark:text-red-300">
+                      Блокировка при сохранении
+                    </span>
+                  </label>
+                  {tile.blockOnSave ? (
+                    <textarea
+                      className="mt-1.5 w-full resize-y rounded-md border border-red-300/50 bg-[var(--card-bg)] px-2 py-1.5 text-[11px] leading-snug text-[var(--app-text)] shadow-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400/50 dark:border-red-800/50"
+                      rows={2}
+                      value={tile.blockReason}
+                      maxLength={MAX_TILE_BLOCK_REASON_LEN}
+                      placeholder="Причина (необязательно), напр. ждём сканы с КТ"
+                      onChange={(e) =>
+                        patchTile(tile.id, {
+                          blockReason: e.target.value.slice(
+                            0,
+                            MAX_TILE_BLOCK_REASON_LEN,
+                          ),
+                        })
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : null}
+                </div>
 
                 <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--card-border)]/60 pt-1.5">
                   <button

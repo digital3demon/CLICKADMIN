@@ -24,9 +24,9 @@ export type QuickOrderTile = {
   basePriceSummary: string | null;
   /** Основная позиция прайса включена в наряд */
   baseActive: boolean;
-  /** При сохранении наряда с активной плашкой — заблокировать карточку */
+  /** На плашке в наряде: при сохранении заблокировать карточку */
   blockOnSave: boolean;
-  /** Причина блокировки (если blockOnSave) */
+  /** Причина для этого наряда (может быть пустой → «Без указания причины») */
   blockReason: string;
   options: QuickOrderTileOption[];
 };

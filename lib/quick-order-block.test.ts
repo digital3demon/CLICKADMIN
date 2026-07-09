@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { QuickOrderState } from "@/components/orders/new-order-form/quick-order-types";
 import {
+  QUICK_ORDER_BLOCK_REASON_FALLBACK,
   quickOrderBlockReasonFromState,
   quickOrderBlockValidationError,
 } from "./quick-order-block";
@@ -32,6 +33,17 @@ describe("quickOrderBlockReasonFromState", () => {
     expect(quickOrderBlockReasonFromState(q)).toBe("ждём КТ");
   });
 
+  it("uses fallback when reason empty", () => {
+    const q: QuickOrderState = {
+      v: 2,
+      tiles: [tile({ blockOnSave: true, blockReason: "  " })],
+      continueWork: null,
+    };
+    expect(quickOrderBlockReasonFromState(q)).toBe(
+      QUICK_ORDER_BLOCK_REASON_FALLBACK,
+    );
+  });
+
   it("ignores inactive tiles", () => {
     const q: QuickOrderState = {
       v: 2,
@@ -49,12 +61,12 @@ describe("quickOrderBlockReasonFromState", () => {
 });
 
 describe("quickOrderBlockValidationError", () => {
-  it("requires reason when blockOnSave on active tile", () => {
+  it("does not require reason", () => {
     const q: QuickOrderState = {
       v: 2,
-      tiles: [tile({ blockOnSave: true, blockReason: "  " })],
+      tiles: [tile({ blockOnSave: true, blockReason: "" })],
       continueWork: null,
     };
-    expect(quickOrderBlockValidationError(q)).toContain("Сплинт");
+    expect(quickOrderBlockValidationError(q)).toBeNull();
   });
 });

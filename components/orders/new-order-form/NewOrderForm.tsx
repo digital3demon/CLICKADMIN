@@ -2271,7 +2271,7 @@ export function NewOrderForm({
       </header>
 
       {aiMode && !previewMode ? (
-        <div className="sticky top-0 z-20 shrink-0 border-b border-violet-200/80 bg-[var(--card-bg)] px-3 py-2 shadow-sm dark:border-violet-900/40 sm:px-4 sm:py-2.5">
+        <div className="sticky top-0 z-20 shrink-0 border-b border-violet-900/30 bg-[var(--card-bg)] px-3 py-1.5 sm:px-4">
           <OrderAiPrefillPanel
             status={aiPrefillStatus}
             confidenceScore={aiConfidenceScore}
