@@ -22,6 +22,7 @@ import {
   filterCompositionHintsByNegation,
   filterCompositionHintsByOrderTextEvidence,
   hasOrderTextEvidenceForPriceHint,
+  ensurePmmaCompositionHints,
   type CompositionHint,
 } from "./resolve-ai-composition-lines";
 import type { EmailAttachmentCatalogItem } from "./order-email-extract";
@@ -399,6 +400,11 @@ export async function enrichOrderEmailPrediction(
     negationOrderText,
   );
 
+  compositionHints = ensurePmmaCompositionHints(
+    compositionHints,
+    negationOrderText,
+    priceListNames,
+  );
   compositionHints = enrichCompositionHintsWithTeethFdi(compositionHints, negationOrderText);
 
   let composition = await resolveAiCompositionLines(compositionHints, {

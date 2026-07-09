@@ -21,6 +21,12 @@ describe("extractTeethFdiFromOrderText", () => {
     expect(extractTeethFdiFromOrderText("Коронка Emax на зубы 46, 47")).toEqual(["46", "47"]);
   });
 
+  it("expands FDI range 12-22 plus 24 from вид работы", () => {
+    expect(
+      extractTeethFdiFromOrderText("Вид работы: 12-22, 24 ПММА, А3,5"),
+    ).toEqual(["12", "11", "21", "22", "24"]);
+  });
+
   it("does not treat delivery date as tooth numbers", () => {
     expect(
       extractTeethFdiFromOrderText(
@@ -53,5 +59,21 @@ describe("enrichCompositionHintsWithTeethFdi", () => {
         remiKidsOrderText,
       ),
     ).toEqual([{ nameHint: "Коронка Emax", quantity: 1, teethFdi: ["46"] }]);
+  });
+
+  it("sets quantity from teeth for temporary crown hint", () => {
+    const orderText = "Вид работы: 12-22, 24 ПММА, А3,5\nОснования Ультрастом";
+    expect(
+      enrichCompositionHintsWithTeethFdi(
+        [{ nameHint: "Временная коронка композитная", quantity: 1 }],
+        orderText,
+      ),
+    ).toEqual([
+      {
+        nameHint: "Временная коронка композитная",
+        quantity: 5,
+        teethFdi: ["12", "11", "21", "22", "24"],
+      },
+    ]);
   });
 });

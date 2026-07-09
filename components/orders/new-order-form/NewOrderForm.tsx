@@ -323,6 +323,11 @@ export function NewOrderForm({
     return mergeQuickOrderFromSnapshot();
   });
   const quickOrderTemplateHydratedRef = useRef(false);
+  /** Пользователь уже менял плашки — не затирать удаление поздним hydrate из DB. */
+  const quickOrderUserEditedRef = useRef(false);
+  const quickOrderSkipAutosaveRef = useRef(true);
+  const quickOrderLatestRef = useRef(quickOrder);
+  quickOrderLatestRef.current = quickOrder;
   const [detailLines, setDetailLines] = useState<DetailLine[]>([]);
   const [bridgeLines, setBridgeLines] = useState<BridgeLineInput[]>([]);
   const [prosthetics, setProsthetics] = useState<OrderProstheticsV1>(() =>
@@ -1053,18 +1058,33 @@ export function NewOrderForm({
     quickOrderTemplateHydratedRef.current = true;
     void (async () => {
       const tpl = await loadQuickOrderTemplateFromDb();
-      if (!tpl) return;
+      if (quickOrderUserEditedRef.current) return;
+      if (!tpl) {
+        setQuickOrder(mergeQuickOrderFromSnapshot());
+        return;
+      }
       setQuickOrder(quickOrderTemplateAsNewOrderDefaults(tpl));
     })();
   }, [initialSnapshot]);
 
   useEffect(() => {
-    if (quickOrder.tiles.length === 0) return;
+    if (quickOrderSkipAutosaveRef.current) {
+      quickOrderSkipAutosaveRef.current = false;
+      return;
+    }
+    quickOrderUserEditedRef.current = true;
     const t = window.setTimeout(() => {
-      saveQuickOrderTemplate(quickOrder);
+      saveQuickOrderTemplate(quickOrderLatestRef.current);
     }, 500);
     return () => clearTimeout(t);
   }, [quickOrder]);
+
+  useEffect(() => {
+    return () => {
+      if (!quickOrderUserEditedRef.current) return;
+      saveQuickOrderTemplate(quickOrderLatestRef.current);
+    };
+  }, []);
 
   const loadClinics = useCallback(async () => {
     setLoadError(null);
@@ -1657,9 +1677,7 @@ export function NewOrderForm({
             /* наряд уже сохранён */
           });
         }
-        if (quickOrder.tiles.length > 0) {
-          saveQuickOrderTemplate(quickOrder);
-        }
+        saveQuickOrderTemplate(quickOrder);
         if (replyOk) {
           toast.success(`${orderNumberLabel} сохранено и отвечено успешно`);
         } else if (!replySend) {

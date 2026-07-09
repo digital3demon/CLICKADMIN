@@ -54,7 +54,10 @@ export type OrdersShipmentListPdfRow = {
   doctorName: string;
   clinicLine: string;
   compositionBrief: string;
-  appointmentLine: string;
+  /** Дата записи: dd.mm (без года), крупнее в PDF. */
+  appointmentDateLabel: string;
+  /** Время записи отдельной строкой; пусто если даты нет. */
+  appointmentTimeLabel: string;
 };
 
 export type OrdersShipmentListPdfPayload = {

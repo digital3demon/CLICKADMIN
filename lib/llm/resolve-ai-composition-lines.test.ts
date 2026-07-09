@@ -29,6 +29,11 @@ import {
   filterCompositionHintsByOrderTextEvidence,
   hasOrderTextEvidenceForPriceHint,
   isGumIndividualizationHallucination,
+  isGeoBaseFromScanMarkerHallucination,
+  ensurePmmaCompositionHints,
+  orderTextMentionsPmmaTemporaryCrown,
+  orderTextImpliesScrewRetainedTempCrown,
+  pickPmmaCrownPriceListName,
 } from "./resolve-ai-composition-lines";
 
 const mockItems = [
@@ -143,12 +148,32 @@ const mockItems = [
     priceListId: "pl-1",
   },
   {
+    id: "pli-temp-crown",
+    code: "3101",
+    name: "Временная коронка композитная",
+    priceRub: 5500,
+    leadWorkingDays: 3,
+    sortOrder: 9,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-temp-crown-screw",
+    code: "3112",
+    name: "Временная коронка принт/фрез на винтовой фиксации",
+    priceRub: 6500,
+    leadWorkingDays: 4,
+    sortOrder: 10,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
     id: "pli-immediate-screw",
     code: "6015",
     name: "Немедленная нагрузка на винтовой фиксации",
     priceRub: 5000,
     leadWorkingDays: 5,
-    sortOrder: 10,
+    sortOrder: 11,
     isActive: true,
     priceListId: "pl-1",
   },
@@ -158,7 +183,7 @@ const mockItems = [
     name: "Индивидуализация десны на РММА 1 челюсть",
     priceRub: 3104,
     leadWorkingDays: 3,
-    sortOrder: 11,
+    sortOrder: 12,
     isActive: true,
     priceListId: "pl-1",
   },
@@ -168,7 +193,27 @@ const mockItems = [
     name: "Титановое основание Ультрастом",
     priceRub: 650,
     leadWorkingDays: 3,
-    sortOrder: 11,
+    sortOrder: 13,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-geo-base",
+    code: "6007",
+    name: "Титановое основание ГЕО",
+    priceRub: 3200,
+    leadWorkingDays: 3,
+    sortOrder: 14,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-analog-ultra",
+    code: "6008",
+    name: "Аналог Ультрастом",
+    priceRub: 1000,
+    leadWorkingDays: 2,
+    sortOrder: 15,
     isActive: true,
     priceListId: "pl-1",
   },
@@ -178,11 +223,18 @@ const mockItems = [
     name: "Немедленная нагрузка с армированием",
     priceRub: 55000,
     leadWorkingDays: 7,
-    sortOrder: 12,
+    sortOrder: 16,
     isActive: true,
     priceListId: "pl-1",
   },
 ];
+
+const pmmaOrderText = [
+  "Вид работы: 12-22, 24 ПММА, А3,5",
+  "12-22 Astra EV, MIO Ультрастом, скан-маркеры Ультрастом",
+  "24 Astra EV 3,6, Гео длинный скан-маркер",
+  "Основания Ультрастом",
+].join("\n");
 
 describe("resolveAiCompositionLines", () => {
   beforeEach(() => {
@@ -579,5 +631,169 @@ describe("kappa trim instructions vs gum individualization", () => {
     expect(inferCompositionHintsFromOrderText(kappaTrimOrderText, names)).toEqual([
       { nameHint: "Каппа ретенционная\\элайнер", quantity: 1 },
     ]);
+  });
+});
+
+describe("PMMA temporary crown + Ultrastom bases", () => {
+  const names = mockItems.map((item) => item.name);
+  const teeth5 = ["12", "11", "21", "22", "24"];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getPricingPrismaClient).mockReturnValue({
+      priceListItem: {
+        findMany: vi.fn().mockResolvedValue(mockItems),
+      },
+    } as never);
+  });
+
+  it("detects ПММА as temporary crown synonym", () => {
+    expect(orderTextMentionsPmmaTemporaryCrown(pmmaOrderText)).toBe(true);
+    expect(orderTextMentionsPmmaTemporaryCrown("индивидуализация десны на РММА")).toBe(false);
+  });
+
+  it("rejects GEO base when Гео only names a scan marker", () => {
+    expect(
+      isGeoBaseFromScanMarkerHallucination("Титановое основание ГЕО", pmmaOrderText),
+    ).toBe(true);
+    expect(hasOrderTextEvidenceForPriceHint("Титановое основание ГЕО", pmmaOrderText)).toBe(
+      false,
+    );
+  });
+
+  it("implies screw-retained from scan markers / bases / phrase, not from ПММА alone", () => {
+    expect(orderTextImpliesScrewRetainedTempCrown(pmmaOrderText)).toBe(true);
+    expect(orderTextImpliesScrewRetainedTempCrown("Вид работы: 12-22 ПММА, А3")).toBe(false);
+    expect(
+      orderTextImpliesScrewRetainedTempCrown("ПММА на винтовой фиксации, зуб 24"),
+    ).toBe(true);
+    expect(
+      orderTextImpliesScrewRetainedTempCrown("ПММА, титановые основания, зуб 24"),
+    ).toBe(true);
+    expect(orderTextImpliesScrewRetainedTempCrown("ПММА, скан-маркеры")).toBe(true);
+  });
+
+  it("does not treat ПММА alone as evidence for immediate loading", () => {
+    expect(
+      hasOrderTextEvidenceForPriceHint(
+        "Немедленная нагрузка на винтовой фиксации",
+        pmmaOrderText,
+      ),
+    ).toBe(false);
+    expect(
+      hasOrderTextEvidenceForPriceHint(
+        "Временная коронка принт/фрез на винтовой фиксации",
+        pmmaOrderText,
+      ),
+    ).toBe(true);
+    expect(
+      hasOrderTextEvidenceForPriceHint(
+        "Временная коронка принт/фрез на винтовой фиксации",
+        "Вид работы: 12-22 ПММА, А3",
+      ),
+    ).toBe(false);
+  });
+
+  it("picks crown name only from active price list (no invented labels)", () => {
+    expect(pickPmmaCrownPriceListName(names, pmmaOrderText)).toBe(
+      "Временная коронка принт/фрез на винтовой фиксации",
+    );
+    expect(pickPmmaCrownPriceListName(names, "Вид работы: 12 ПММА")).toBe(
+      "Временная коронка композитная",
+    );
+    expect(pickPmmaCrownPriceListName(["Аппарат Андрезена"], pmmaOrderText)).toBeNull();
+  });
+
+  it("ensures screw temp crown + base matched from text brand when markers/bases present", () => {
+    const ensured = ensurePmmaCompositionHints(
+      [
+        { nameHint: "Немедленная нагрузка на винтовой фиксации", quantity: 1 },
+        { nameHint: "Титановое основание ГЕО", quantity: 1 },
+        { nameHint: "Аналог Ультрастом", quantity: 1 },
+      ],
+      pmmaOrderText,
+      names,
+    );
+    expect(ensured.some((h) => /немедленн/i.test(h.nameHint))).toBe(false);
+    const crown = ensured.find((h) => /временн/i.test(h.nameHint) && /коронк/i.test(h.nameHint));
+    const base = ensured.find((h) => /основан/i.test(h.nameHint));
+    expect(crown?.nameHint).toBe("Временная коронка принт/фрез на винтовой фиксации");
+    expect(crown?.quantity).toBe(5);
+    expect(crown?.teethFdi).toEqual(teeth5);
+    expect(base?.nameHint).toMatch(/ультрастом/i);
+    expect(base?.quantity).toBe(5);
+    expect(base?.teethFdi).toEqual(teeth5);
+  });
+
+  it("uses plain temporary crown from price list when ПММА without screw signals", () => {
+    const plainText = "Вид работы: 12-22, 24 ПММА, А3,5";
+    const ensured = ensurePmmaCompositionHints([], plainText, names);
+    expect(ensured).toEqual([
+      {
+        nameHint: "Временная коронка композитная",
+        quantity: 5,
+        teethFdi: teeth5,
+      },
+    ]);
+  });
+
+  it("does not invent crown when price list has no temporary crown", () => {
+    const ensured = ensurePmmaCompositionHints(
+      [],
+      "Вид работы: 12 ПММА, скан-маркеры",
+      ["Аппарат Андрезена", "Титановое основание Ультрастом"],
+    );
+    expect(ensured.some((h) => /коронк|пмма|pmma/i.test(h.nameHint))).toBe(false);
+  });
+
+  it("matches GEO base when text says основания ГЕО (any brand from text)", () => {
+    const geoText = "Вид работы: 24 ПММА\nОснования ГЕО, скан-маркер";
+    const ensured = ensurePmmaCompositionHints([], geoText, names);
+    expect(
+      ensured.some((h) => h.nameHint === "Временная коронка принт/фрез на винтовой фиксации"),
+    ).toBe(true);
+    expect(ensured.some((h) => /основан/i.test(h.nameHint) && /гео/i.test(h.nameHint))).toBe(
+      true,
+    );
+  });
+
+  it("resolves PMMA+markers order to screw crown ×5 and text-matched base ×5", async () => {
+    const hints = ensurePmmaCompositionHints(
+      filterCompositionHintsByOrderTextEvidence(
+        [
+          { nameHint: "Титановое основание ГЕО", quantity: 1 },
+          { nameHint: "Аналог Ультрастом", quantity: 1 },
+        ],
+        pmmaOrderText,
+      ),
+      pmmaOrderText,
+      names,
+    );
+    const res = await resolveAiCompositionLines(hints, {
+      clinicId: null,
+      doctorId: null,
+      negationOrderText: pmmaOrderText,
+    });
+    const byCode = Object.fromEntries(res.lines.map((l) => [l.code, l]));
+    expect(byCode["3112"]?.quantity).toBe(5);
+    expect(byCode["3112"]?.teethFdi).toEqual(teeth5);
+    expect(byCode["6006"]?.quantity).toBe(5);
+    expect(byCode["3101"]).toBeUndefined();
+    expect(byCode["6015"]).toBeUndefined();
+    expect(byCode["6007"]).toBeUndefined();
+  });
+
+  it("infers screw PMMA crown from email context when markers/bases present", () => {
+    const inferred = inferCompositionHintsFromEmailContext(
+      { clientOrderText: pmmaOrderText },
+      names,
+    );
+    expect(
+      inferred.some(
+        (h) => h.nameHint === "Временная коронка принт/фрез на винтовой фиксации",
+      ),
+    ).toBe(true);
+    expect(inferred.some((h) => /немедленн/i.test(h.nameHint))).toBe(false);
+    expect(inferred.some((h) => /основан/i.test(h.nameHint))).toBe(true);
   });
 });

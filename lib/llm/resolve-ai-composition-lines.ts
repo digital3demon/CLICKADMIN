@@ -6,7 +6,10 @@ import {
   resolvePriceListItem,
   type PriceListItemRef,
 } from "@/lib/order-import-export";
-import { enrichCompositionHintsWithTeethFdi } from "@/lib/order-text-teeth-fdi";
+import {
+  enrichCompositionHintsWithTeethFdi,
+  extractTeethFdiFromOrderText,
+} from "@/lib/order-text-teeth-fdi";
 
 export type CompositionHint = {
   nameHint: string;
@@ -186,9 +189,55 @@ export function isGumIndividualizationHallucination(
   return hasKappaFamily && hasTrimInstruction && /десн/i.test(orderText);
 }
 
+/**
+ * «Гео … скан-маркер» ≠ титановое основание ГЕО.
+ * Основание ГЕО только если в тексте есть связка основание+гео.
+ */
+export function isGeoBaseFromScanMarkerHallucination(
+  hintName: string,
+  orderText: string,
+): boolean {
+  if (!/основан/i.test(hintName) || !/гео|geo/i.test(hintName)) return false;
+  if (
+    /основан\p{L}*.{0,48}(?:гео|geo)|(?:гео|geo).{0,48}основан/iu.test(orderText)
+  ) {
+    return false;
+  }
+  return /(?:гео|geo).{0,40}скан[\s-]?марк|скан[\s-]?марк.{0,40}(?:гео|geo)/iu.test(
+    orderText,
+  );
+}
+
 /** Есть ли в тексте заказа опора для hint (отсекает «храп» при заказе «марко роса»). */
 export function hasOrderTextEvidenceForPriceHint(hintName: string, orderText: string): boolean {
   if (isGumIndividualizationHallucination(hintName, orderText)) return false;
+  if (isGeoBaseFromScanMarkerHallucination(hintName, orderText)) return false;
+
+  // «ПММА» в заказе ≠ позиция «индивидуализация десны на РММА».
+  if (
+    /индивидуализац/i.test(hintName) &&
+    /(?:рмма|пмма|pmma)/i.test(hintName) &&
+    orderTextMentionsPmmaTemporaryCrown(orderText) &&
+    !/индивидуализац/i.test(orderText)
+  ) {
+    return false;
+  }
+
+  // ПММА = временная коронка; «на винтовой» — только при маркерах/основаниях/явной фразе.
+  if (orderTextMentionsPmmaTemporaryCrown(orderText) && hintLooksLikePmmaTempCrown(hintName)) {
+    if (hintLooksLikeScrewRetainedTempCrown(hintName)) {
+      return orderTextImpliesScrewRetainedTempCrown(orderText);
+    }
+    return true;
+  }
+
+  // «Немедленная нагрузка» — только если явно в тексте; одного ПММА недостаточно.
+  if (
+    hintLooksLikeImmediateLoading(hintName) &&
+    !orderTextMentionsImmediateLoading(orderText)
+  ) {
+    return false;
+  }
 
   const text = normalizeMaterialTokens(stripNegatedPhrasesForMatching(orderText));
   if (!text.trim()) return true;
@@ -295,12 +344,242 @@ export function filterResolvedLinesByNegation(
   return lines.filter((line) => !isPriceConceptNegatedInOrderText(line.name, text));
 }
 
-/** Частые орфографические варианты (не привязка к одной позиции прайса). */
+/**
+ * ПММА/PMMA → временная коронка из активного прайса (без выдуманных названий).
+ * «на винтовой» — только при скан-маркерах / основаниях / явной «винтовой фиксации».
+ * «Немедленная нагрузка» — только при явной фразе в тексте.
+ * Не путать с «РММА» в «индивидуализация десны» (кириллическая Р).
+ */
+const PMMA_TEMP_CROWN_RE = new RegExp(`${WORD_LEFT}(?:пмма|pmma)${WORD_RIGHT}`, "iu");
+/** `\w` не матчит кириллицу — только `\p{L}`. */
+const IMMEDIATE_LOADING_RE = /немедленн\p{L}*\s+нагрузк/iu;
+const SCREW_FIXATION_PHRASE_RE = /винтов\p{L}*\s+фиксац/iu;
+const SCAN_MARKER_RE = /скан[\s-]?марк/iu;
+/** «титановое основание» / «основания …»; не «на основании …». */
+const TITANIUM_BASE_MENTION_RE = new RegExp(
+  `(?<![Нн]а\\s)${WORD_LEFT}(?:титанов\\p{L}*\\s+)?основани(?:е|я|й)${WORD_RIGHT}`,
+  "iu",
+);
+
+export function orderTextMentionsPmmaTemporaryCrown(orderText: string): boolean {
+  return PMMA_TEMP_CROWN_RE.test(orderText);
+}
+
+export function orderTextMentionsImmediateLoading(orderText: string): boolean {
+  return IMMEDIATE_LOADING_RE.test(orderText);
+}
+
+export function orderTextMentionsTitaniumBase(orderText: string): boolean {
+  return TITANIUM_BASE_MENTION_RE.test(orderText);
+}
+
+/** Скан-маркеры / титановые основания / явная «винтовая фиксация» — без списка брендов. */
+export function orderTextImpliesScrewRetainedTempCrown(orderText: string): boolean {
+  const text = orderText.trim();
+  if (!text) return false;
+  if (SCREW_FIXATION_PHRASE_RE.test(text)) return true;
+  if (SCAN_MARKER_RE.test(text)) return true;
+  if (orderTextMentionsTitaniumBase(text)) return true;
+  return false;
+}
+
+function isTempCrownPriceName(name: string): boolean {
+  return /временн/i.test(name) && /коронк/i.test(name);
+}
+
+function isScrewTempCrownPriceName(name: string): boolean {
+  return isTempCrownPriceName(name) && /винтов/i.test(name);
+}
+
+/** Предпочитаем позицию с PMMA в названии, иначе более короткое имя из прайса. */
+function preferPmmaTempCrownName(candidates: string[]): string | null {
+  if (candidates.length === 0) return null;
+  const withPmma = candidates.filter((n) => /pmma|пмма/i.test(n));
+  const pool = withPmma.length > 0 ? withPmma : candidates;
+  return [...pool].sort(
+    (a, b) => a.length - b.length || a.localeCompare(b, "ru"),
+  )[0]!;
+}
+
+/**
+ * Выбирает имя временной коронки строго из переданного прайса.
+ * Если подходящей позиции нет — null (не выдумываем название).
+ */
+export function pickPmmaCrownPriceListName(
+  priceListItemNames: string[],
+  orderText: string,
+): string | null {
+  const names = priceListItemNames.map((n) => n.trim()).filter(Boolean);
+  const wantScrew = orderTextImpliesScrewRetainedTempCrown(orderText);
+  if (wantScrew) {
+    const screw = preferPmmaTempCrownName(names.filter(isScrewTempCrownPriceName));
+    if (screw) return screw;
+  }
+  const plain = preferPmmaTempCrownName(
+    names.filter((n) => isTempCrownPriceName(n) && !/винтов/i.test(n)),
+  );
+  if (plain) return plain;
+  // В прайсе только винтовые варианты — берём их, даже без сигналов (лучше чем ничего).
+  return preferPmmaTempCrownName(names.filter(isTempCrownPriceName));
+}
+
+/** Фрагменты «основания …» / «титановое основание …» — бренд рядом с словом, не из скан-маркера. */
+function extractTitaniumBaseMentionFragments(orderText: string): string[] {
+  const fragments: string[] = [];
+  const re = new RegExp(
+    `${WORD_LEFT}(?:титанов\\p{L}*\\s+)?основани(?:е|я|й)${WORD_RIGHT}[^\\n,.;]{0,48}`,
+    "giu",
+  );
+  for (const match of orderText.matchAll(re)) {
+    const frag = match[0]?.trim();
+    if (frag) fragments.push(frag);
+  }
+  return fragments;
+}
+
+/** Лучшее «основание …» из прайса по тексту заказа (бренд из письма, не хардкод). */
+function pickTitaniumBasePriceListName(
+  priceListItemNames: string[],
+  orderText: string,
+): string | null {
+  const baseNames = priceListItemNames
+    .map((n) => n.trim())
+    .filter(
+      (n) =>
+        /основан/i.test(n) && !isGeoBaseFromScanMarkerHallucination(n, orderText),
+    );
+  if (baseNames.length === 0) return null;
+
+  const baseFragments = extractTitaniumBaseMentionFragments(orderText);
+  const matchText =
+    baseFragments.length > 0
+      ? baseFragments.join("\n")
+      : stripNegatedPhrasesForMatching(orderText) || orderText;
+
+  const scored = baseNames
+    .map((name) => ({
+      name,
+      score: scorePriceItemMentionInOrderText(name, matchText),
+    }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ru"));
+
+  if (scored.length > 0) return scored[0]!.name;
+
+  // В тексте есть «основания», но бренд не сматчился — не угадываем бренд.
+  return null;
+}
+
+function hintLooksLikePmmaTempCrown(nameHint: string): boolean {
+  if (PMMA_TEMP_CROWN_RE.test(nameHint)) return true;
+  return /временн/i.test(nameHint) && /коронк/i.test(nameHint);
+}
+
+function hintLooksLikeScrewRetainedTempCrown(nameHint: string): boolean {
+  return hintLooksLikePmmaTempCrown(nameHint) && /винтов/i.test(nameHint);
+}
+
+function hintLooksLikeImmediateLoading(nameHint: string): boolean {
+  return /немедленн/i.test(nameHint) && /нагрузк/i.test(nameHint);
+}
+
+function hintLooksLikeTitaniumBase(nameHint: string): boolean {
+  return /основан/i.test(nameHint);
+}
+
+/**
+ * Если в тексте есть ПММА — подставляем временную коронку из активного прайса
+ * (винтовую или обычную по сигналам) и при упоминании оснований — основание по матчу.
+ * Не выдумываем названия вне прайса; не подменяем на «немедленную нагрузку» без явной фразы.
+ */
+export function ensurePmmaCompositionHints(
+  hints: CompositionHint[],
+  orderText: string,
+  priceListItemNames: string[],
+): CompositionHint[] {
+  const text = orderText.trim();
+  if (!text || !orderTextMentionsPmmaTemporaryCrown(text)) return hints;
+
+  const teeth = extractTeethFdiFromOrderText(text);
+  const qty = teeth.length > 0 ? teeth.length : 1;
+  const teethFdi = teeth.length > 0 ? teeth : null;
+  const wantScrew = orderTextImpliesScrewRetainedTempCrown(text);
+  const crownName = pickPmmaCrownPriceListName(priceListItemNames, text);
+  let next = [...hints];
+
+  // ПММА без явной «немедленной нагрузки» — убираем ошибочно подставленную нагрузку.
+  if (!orderTextMentionsImmediateLoading(text)) {
+    next = next.filter((h) => !hintLooksLikeImmediateLoading(h.nameHint));
+  }
+
+  // Без сигналов винтовой — не оставляем «… на винтовой фиксации».
+  if (!wantScrew) {
+    next = next.filter((h) => !hintLooksLikeScrewRetainedTempCrown(h.nameHint));
+  }
+
+  const hasCrown = next.some((h) => hintLooksLikePmmaTempCrown(h.nameHint));
+  if (!hasCrown) {
+    if (crownName) {
+      next = [{ nameHint: crownName, quantity: qty, teethFdi }, ...next];
+    }
+  } else if (crownName) {
+    next = next.map((h) => {
+      if (!hintLooksLikePmmaTempCrown(h.nameHint)) return h;
+      const patched: CompositionHint = {
+        ...h,
+        nameHint: crownName,
+      };
+      if (!patched.teethFdi?.length && teethFdi) patched.teethFdi = teethFdi;
+      if (patched.quantity == null || patched.quantity === 1) patched.quantity = qty;
+      return patched;
+    });
+  } else {
+    next = next.map((h) => {
+      if (!hintLooksLikePmmaTempCrown(h.nameHint)) return h;
+      const patched: CompositionHint = { ...h };
+      if (!patched.teethFdi?.length && teethFdi) patched.teethFdi = teethFdi;
+      if (patched.quantity == null || patched.quantity === 1) patched.quantity = qty;
+      return patched;
+    });
+  }
+
+  // «бренд + скан-маркер» ≠ основание того же бренда.
+  next = next.filter((h) => !isGeoBaseFromScanMarkerHallucination(h.nameHint, text));
+
+  if (orderTextMentionsTitaniumBase(text)) {
+    const matchedBaseName = pickTitaniumBasePriceListName(priceListItemNames, text);
+    const baseHints = next.filter((h) => hintLooksLikeTitaniumBase(h.nameHint));
+    if (matchedBaseName) {
+      // Подменяем/добавляем основание по матчу с текстом (любой бренд из письма).
+      next = next.filter((h) => !hintLooksLikeTitaniumBase(h.nameHint));
+      next.push({ nameHint: matchedBaseName, quantity: qty, teethFdi });
+    } else if (baseHints.length > 0) {
+      next = next.map((h) => {
+        if (!hintLooksLikeTitaniumBase(h.nameHint)) return h;
+        const patched: CompositionHint = { ...h };
+        if (!patched.teethFdi?.length && teethFdi) patched.teethFdi = teethFdi;
+        if (patched.quantity == null || patched.quantity === 1) patched.quantity = qty;
+        return patched;
+      });
+    }
+  }
+
+  return next;
+}
+
+/**
+ * Орфографические/бытовые варианты для матча с прайсом.
+ * ПММА → токены «временная коронка» (синоним материала), не конкретный код прайса.
+ */
 export function normalizeCompositionHintForMatch(hint: string): string {
   return hint
     .toLowerCase()
     .replace(/\\/g, " ")
     .replace(JAW_MARKER_RE, " ")
+    .replace(
+      new RegExp(`${WORD_LEFT}(?:пмма|pmma)${WORD_RIGHT}`, "giu"),
+      " временная коронка ",
+    )
     .replace(new RegExp(`${WORD_LEFT}капы${WORD_RIGHT}`, "gu"), "каппа")
     .replace(new RegExp(`${WORD_LEFT}капу${WORD_RIGHT}`, "gu"), "каппа")
     .replace(new RegExp(`${WORD_LEFT}капа${WORD_RIGHT}`, "gu"), "каппа")
@@ -516,13 +795,20 @@ export function inferCompositionHintsFromEmailContext(
     }
   }
 
-  if (mergedHints.length > 0) return mergedHints;
-
   const combined = [parts.clientOrderText, parts.emailSubject, parts.pdfOrderText]
     .map((part) => part?.trim() ?? "")
     .filter(Boolean)
     .join("\n");
-  return inferCompositionHintsFromOrderText(combined, priceListItemNames);
+
+  if (mergedHints.length > 0) {
+    return ensurePmmaCompositionHints(mergedHints, combined, priceListItemNames);
+  }
+
+  return ensurePmmaCompositionHints(
+    inferCompositionHintsFromOrderText(combined, priceListItemNames),
+    combined,
+    priceListItemNames,
+  );
 }
 
 function findAmbiguousMatches(

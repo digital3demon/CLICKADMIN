@@ -5,7 +5,11 @@ import {
   type QuickOrderTile,
 } from "@/components/orders/new-order-form/quick-order-types";
 import { readClientStorageBucket } from "@/lib/client-storage-bucket";
-import { readClientState, writeClientState } from "@/lib/client-state-client";
+import {
+  deleteClientState,
+  readClientState,
+  writeClientState,
+} from "@/lib/client-state-client";
 
 const STORAGE_PREFIX = "dental-lab-crm:quick-order-template:v1";
 
@@ -15,11 +19,15 @@ function templateStorageKey(): string {
 
 let cachedTemplate: QuickOrderState | null = null;
 let bootstrappedKey: string | null = null;
+/** Инкремент при каждом save — чтобы поздний ответ read не откатил удаление. */
+let storageGeneration = 0;
 
 function resetTileSelections(tiles: QuickOrderTile[]): QuickOrderTile[] {
   return tiles.map((t) => ({
     ...t,
     baseActive: false,
+    blockOnSave: false,
+    blockReason: "",
     options: t.options.map((o) => ({ ...o, checked: false })),
   }));
 }
@@ -47,23 +55,49 @@ export async function loadQuickOrderTemplateFromDb(): Promise<QuickOrderState | 
   const key = templateStorageKey();
   if (bootstrappedKey === key) return cachedTemplate;
   bootstrappedKey = key;
+  const genAtStart = storageGeneration;
   const raw = await readClientState<unknown>("user", key);
+  // Пока ждали сеть, пользователь уже сохранили/удалили шаблон — не откатываем.
+  if (storageGeneration !== genAtStart) {
+    return cachedTemplate;
+  }
   if (!raw) {
     cachedTemplate = null;
     return null;
   }
   const q = mergeQuickOrderFromSnapshot(raw);
+  // Пустой список в storage = шаблон удалён.
   cachedTemplate = q.tiles.length > 0 ? q : null;
+  if (!cachedTemplate) {
+    void deleteClientState("user", key);
+  }
   return cachedTemplate;
 }
 
-/** Сохраняет плашки (и v) для следующих окон «Новый наряд». */
+/**
+ * Сохраняет плашки для следующих окон «Новый наряд».
+ * Пустой список — удаляет шаблон (иначе удалённые плашки «воскресают»).
+ */
 export function saveQuickOrderTemplate(q: QuickOrderState): void {
+  storageGeneration += 1;
+  const tiles = JSON.parse(JSON.stringify(q.tiles ?? [])) as QuickOrderTile[];
+  if (tiles.length === 0) {
+    cachedTemplate = null;
+    void deleteClientState("user", templateStorageKey());
+    return;
+  }
   const payload: QuickOrderState = {
     v: QUICK_ORDER_VERSION,
-    tiles: JSON.parse(JSON.stringify(q.tiles)) as QuickOrderTile[],
+    tiles,
     continueWork: null,
   };
   cachedTemplate = payload;
   void writeClientState("user", templateStorageKey(), payload);
+}
+
+/** Только для тестов. */
+export function __resetQuickOrderTemplateStorageForTests(): void {
+  cachedTemplate = null;
+  bootstrappedKey = null;
+  storageGeneration = 0;
 }
