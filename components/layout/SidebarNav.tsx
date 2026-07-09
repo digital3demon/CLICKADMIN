@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppModule, UserRole } from "@prisma/client";
 import {
@@ -17,26 +17,12 @@ import {
 } from "@/lib/sidebar-nav-order";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { sidebarNavIconForHref } from "@/lib/sidebar-nav-icons";
-import { parseOrdersShipmentMode } from "@/lib/orders-shipment-list-query";
-
-const ORDERS_SHIPMENTS_NAV_HREF = "/orders?ship=actual";
-
-function isNavActive(
-  pathname: string,
-  href: string,
-  shipMode: ReturnType<typeof parseOrdersShipmentMode>,
-): boolean {
-  if (href === ORDERS_SHIPMENTS_NAV_HREF) {
-    return (
-      pathname === "/shipments" ||
-      pathname.startsWith("/shipments/") ||
-      (pathname === "/orders" && shipMode != null)
-    );
-  }
+function isNavActive(pathname: string, href: string): boolean {
   if (href === "/orders") {
-    if (pathname === "/orders" && shipMode != null) return false;
     return (
       pathname === "/orders" ||
+      pathname === "/shipments" ||
+      pathname.startsWith("/shipments/") ||
       (pathname.startsWith("/orders/") &&
         !pathname.startsWith("/orders/history"))
     );
@@ -73,7 +59,6 @@ const baseNavItems: readonly {
   { href: "/clickmig", label: "КликМиг", module: "CLICKMIG" },
   { href: "/mail", label: "Почта", module: "MAIL" },
   { href: "/ai-admin", label: "ИИ-Админ", module: "AI_ADMIN" },
-  { href: ORDERS_SHIPMENTS_NAV_HREF, label: "Отгрузки", module: "SHIPMENTS" },
   { href: "/warehouse", label: "Склад", module: "WAREHOUSE" },
   { href: "/clients", label: "Клиенты", module: "CLIENTS_VIEW" },
   { href: "/directory", label: "Конфигурация", module: "DIRECTORY" },
@@ -175,8 +160,6 @@ async function writeSidebarOrderToServer(order: string[]): Promise<boolean> {
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const shipMode = parseOrdersShipmentMode(searchParams.get("ship"));
   const [role, setRole] = useState<UserRole | null>(null);
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean> | null>(null);
   const [orderHrefs, setOrderHrefs] = useState<string[]>(DEFAULT_HREF_ORDER);
@@ -415,7 +398,7 @@ export function SidebarNav() {
     >
       <ul className={isHarmony ? "flex flex-col gap-1" : "flex flex-col gap-0"}>
         {orderedNav.map((item, index) => {
-          const active = isNavActive(pathname, item.href, shipMode);
+          const active = isNavActive(pathname, item.href);
           const Icon = isHarmony ? sidebarNavIconForHref(item.href) : null;
 
           if (isHarmony) {

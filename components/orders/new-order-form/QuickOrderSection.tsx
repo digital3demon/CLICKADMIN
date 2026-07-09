@@ -12,7 +12,6 @@ import {
   accentBackgroundCss,
   accentTileBackground,
   MAX_QUICK_TILES,
-  MAX_TILE_BLOCK_REASON_LEN,
   normalizeAccentColor,
   type QuickOrderState,
   type QuickOrderTile,
@@ -117,11 +116,13 @@ export function QuickOrderSection({
           {tiles.map((tile) => {
             const accent = normalizeAccentColor(tile.accentColor);
             const hasBase = Boolean(tile.basePriceListItemId?.trim());
-            const selected =
-              (hasBase && tile.baseActive) ||
-              tile.options.some(
-                (o) => o.checked && Boolean(o.priceListItemId?.trim()),
-              );
+            const selected = tile.isBlockTile
+              ? tile.blockOnSave
+              : (hasBase && tile.baseActive) ||
+                tile.options.some(
+                  (o) => o.checked && Boolean(o.priceListItemId?.trim()),
+                );
+            const borderAccent = tile.isBlockTile ? "#ef4444" : accent;
             return (
               <div
                 key={tile.id}
@@ -136,137 +137,149 @@ export function QuickOrderSection({
                 style={
                   selected
                     ? {
-                        borderColor: accent,
-                        backgroundColor: accentTileBackground(accent, resolvedDark),
-                        boxShadow: `0 0 0 3px ${accent}, 0 0 32px -2px ${accentBackgroundCss(accent, 0.55)}, 0 14px 36px -10px rgba(0, 0, 0, 0.42)`,
+                        borderColor: borderAccent,
+                        backgroundColor: accentTileBackground(
+                          tile.isBlockTile ? "#ef4444" : accent,
+                          resolvedDark,
+                        ),
+                        boxShadow: `0 0 0 3px ${borderAccent}, 0 0 32px -2px ${accentBackgroundCss(borderAccent, 0.55)}, 0 14px 36px -10px rgba(0, 0, 0, 0.42)`,
                       }
                     : undefined
                 }
               >
-                <div className="flex min-w-0 items-start justify-between gap-1">
-                  {hasBase ? (
+                {tile.isBlockTile ? (
+                  <>
                     <button
                       type="button"
-                      aria-pressed={tile.baseActive}
-                      className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-blue)]"
+                      aria-pressed={tile.blockOnSave}
+                      className="min-w-0 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                       onClick={() =>
-                        patchTile(tile.id, { baseActive: !tile.baseActive })
+                        patchTile(tile.id, {
+                          blockOnSave: !tile.blockOnSave,
+                        })
                       }
                     >
                       <span
                         className={`text-xs font-bold uppercase leading-tight tracking-wide sm:text-sm ${
-                          tile.baseActive
-                            ? "text-[var(--app-text)]"
+                          tile.blockOnSave
+                            ? "text-red-800 dark:text-red-200"
                             : "text-[var(--text-secondary)]"
                         }`}
                       >
                         {tile.title}
                       </span>
-                      {tile.basePriceSummary ? (
-                        <span className="mt-0.5 block truncate text-[10px] font-normal normal-case text-[var(--text-secondary)]">
-                          {tile.basePriceSummary}
-                        </span>
-                      ) : null}
+                      <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-red-700/90 dark:text-red-300/90">
+                        Блокировка карточки
+                      </span>
                     </button>
-                  ) : (
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-bold uppercase leading-tight tracking-wide text-[var(--text-strong)] sm:text-sm">
-                        {tile.title}
-                      </span>
-                      <span className="mt-0.5 block text-[10px] font-normal normal-case text-[var(--text-muted)]">
-                        Основной прайс не задан — отметьте варианты ниже
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {tile.options.length > 0 ? (
-                  <ul className="flex flex-col gap-1 border-t border-[var(--card-border)]/80 pt-1.5">
-                    {tile.options.map((o) => {
-                      const linked = Boolean(o.priceListItemId?.trim());
-                      return (
-                        <li key={o.id}>
-                          <label
-                            className={`flex cursor-pointer items-start gap-2 text-xs ${
-                              linked
-                                ? "text-[var(--text-strong)]"
-                                : "cursor-not-allowed text-[var(--text-placeholder)]"
+                    {tile.blockOnSave ? (
+                      <p className="border-t border-red-300/40 pt-1.5 text-[11px] leading-snug text-[var(--text-strong)] dark:border-red-800/40">
+                        {tile.blockReason.trim() ||
+                          "Без указания причины"}
+                      </p>
+                    ) : (
+                      <p className="border-t border-[var(--card-border)]/80 pt-1.5 text-[10px] text-[var(--text-muted)]">
+                        Выключено для этого наряда — нажмите заголовок, чтобы
+                        снова блокировать карточку
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex min-w-0 items-start justify-between gap-1">
+                      {hasBase ? (
+                        <button
+                          type="button"
+                          aria-pressed={tile.baseActive}
+                          className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-blue)]"
+                          onClick={() =>
+                            patchTile(tile.id, {
+                              baseActive: !tile.baseActive,
+                            })
+                          }
+                        >
+                          <span
+                            className={`text-xs font-bold uppercase leading-tight tracking-wide sm:text-sm ${
+                              tile.baseActive
+                                ? "text-[var(--app-text)]"
+                                : "text-[var(--text-secondary)]"
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-[var(--input-border)] text-[var(--sidebar-blue)] focus:ring-[var(--sidebar-blue)]"
-                              checked={Boolean(linked && o.checked)}
-                              disabled={!linked}
-                              aria-checked={linked ? o.checked : undefined}
-                              title={
-                                linked
-                                  ? undefined
-                                  : "Настройте плашку и привяжите позицию прайса"
-                              }
-                              onChange={() => {
-                                if (!linked) return;
-                                patchTile(tile.id, {
-                                  options: tile.options.map((x) =>
-                                    x.id === o.id
-                                      ? { ...x, checked: !x.checked }
-                                      : x,
-                                  ),
-                                });
-                              }}
-                            />
-                            <span className="min-w-0 leading-snug">
-                              <span className="font-medium">{o.label || "—"}</span>
-                              {o.priceSummary ? (
-                                <span className="mt-0.5 block truncate text-[10px] text-[var(--text-muted)]">
-                                  {o.priceSummary}
-                                </span>
-                              ) : null}
+                            {tile.title}
+                          </span>
+                          {tile.basePriceSummary ? (
+                            <span className="mt-0.5 block truncate text-[10px] font-normal normal-case text-[var(--text-secondary)]">
+                              {tile.basePriceSummary}
                             </span>
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : null}
+                          ) : null}
+                        </button>
+                      ) : (
+                        <div className="min-w-0 flex-1">
+                          <span className="text-xs font-bold uppercase leading-tight tracking-wide text-[var(--text-strong)] sm:text-sm">
+                            {tile.title}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] font-normal normal-case text-[var(--text-muted)]">
+                            Основной прайс не задан — отметьте варианты ниже
+                          </span>
+                        </div>
+                      )}
+                    </div>
 
-                <div className="border-t border-[var(--card-border)]/80 pt-1.5">
-                  <label className="flex cursor-pointer items-start gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-red-400/70 text-red-600 focus:ring-red-500"
-                      checked={tile.blockOnSave}
-                      onChange={(e) => {
-                        const on = e.target.checked;
-                        patchTile(tile.id, {
-                          blockOnSave: on,
-                          blockReason: on ? tile.blockReason : "",
-                        });
-                      }}
-                    />
-                    <span className="text-[11px] font-semibold text-red-700 dark:text-red-300">
-                      Блокировка при сохранении
-                    </span>
-                  </label>
-                  {tile.blockOnSave ? (
-                    <textarea
-                      className="mt-1.5 w-full resize-y rounded-md border border-red-300/50 bg-[var(--card-bg)] px-2 py-1.5 text-[11px] leading-snug text-[var(--app-text)] shadow-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400/50 dark:border-red-800/50"
-                      rows={2}
-                      value={tile.blockReason}
-                      maxLength={MAX_TILE_BLOCK_REASON_LEN}
-                      placeholder="Причина (необязательно), напр. ждём сканы с КТ"
-                      onChange={(e) =>
-                        patchTile(tile.id, {
-                          blockReason: e.target.value.slice(
-                            0,
-                            MAX_TILE_BLOCK_REASON_LEN,
-                          ),
-                        })
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : null}
-                </div>
+                    {tile.options.length > 0 ? (
+                      <ul className="flex flex-col gap-1 border-t border-[var(--card-border)]/80 pt-1.5">
+                        {tile.options.map((o) => {
+                          const linked = Boolean(o.priceListItemId?.trim());
+                          return (
+                            <li key={o.id}>
+                              <label
+                                className={`flex cursor-pointer items-start gap-2 text-xs ${
+                                  linked
+                                    ? "text-[var(--text-strong)]"
+                                    : "cursor-not-allowed text-[var(--text-placeholder)]"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-[var(--input-border)] text-[var(--sidebar-blue)] focus:ring-[var(--sidebar-blue)]"
+                                  checked={Boolean(linked && o.checked)}
+                                  disabled={!linked}
+                                  aria-checked={
+                                    linked ? o.checked : undefined
+                                  }
+                                  title={
+                                    linked
+                                      ? undefined
+                                      : "Настройте плашку и привяжите позицию прайса"
+                                  }
+                                  onChange={() => {
+                                    if (!linked) return;
+                                    patchTile(tile.id, {
+                                      options: tile.options.map((x) =>
+                                        x.id === o.id
+                                          ? { ...x, checked: !x.checked }
+                                          : x,
+                                      ),
+                                    });
+                                  }}
+                                />
+                                <span className="min-w-0 leading-snug">
+                                  <span className="font-medium">
+                                    {o.label || "—"}
+                                  </span>
+                                  {o.priceSummary ? (
+                                    <span className="mt-0.5 block truncate text-[10px] text-[var(--text-muted)]">
+                                      {o.priceSummary}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
+                  </>
+                )}
 
                 <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--card-border)]/60 pt-1.5">
                   <button

@@ -4,6 +4,7 @@ import {
   QUICK_ORDER_BLOCK_REASON_FALLBACK,
   quickOrderBlockReasonFromState,
   quickOrderBlockValidationError,
+  tileRequestsKaitenBlock,
 } from "./quick-order-block";
 
 function tile(
@@ -16,6 +17,7 @@ function tile(
     basePriceListItemId: "pli-1",
     basePriceSummary: "001 · Сплинт",
     baseActive: true,
+    isBlockTile: false,
     blockOnSave: false,
     blockReason: "",
     options: [],
@@ -23,8 +25,75 @@ function tile(
   };
 }
 
+describe("tileRequestsKaitenBlock", () => {
+  it("block tile blocks without price selection", () => {
+    expect(
+      tileRequestsKaitenBlock(
+        tile({
+          isBlockTile: true,
+          blockOnSave: true,
+          blockReason: "ждём сканы",
+          basePriceListItemId: null,
+          basePriceSummary: null,
+          baseActive: false,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("block tile off does not block", () => {
+    expect(
+      tileRequestsKaitenBlock(
+        tile({
+          isBlockTile: true,
+          blockOnSave: false,
+          blockReason: "ждём сканы",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("legacy: needs selected composition", () => {
+    expect(
+      tileRequestsKaitenBlock(
+        tile({
+          isBlockTile: false,
+          blockOnSave: true,
+          baseActive: false,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      tileRequestsKaitenBlock(
+        tile({
+          isBlockTile: false,
+          blockOnSave: true,
+          baseActive: true,
+        }),
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("quickOrderBlockReasonFromState", () => {
-  it("returns reason from active tile with blockOnSave", () => {
+  it("returns reason from block tile without composition", () => {
+    const q: QuickOrderState = {
+      v: 2,
+      tiles: [
+        tile({
+          isBlockTile: true,
+          blockOnSave: true,
+          blockReason: "ждём КТ",
+          basePriceListItemId: null,
+          baseActive: false,
+        }),
+      ],
+      continueWork: null,
+    };
+    expect(quickOrderBlockReasonFromState(q)).toBe("ждём КТ");
+  });
+
+  it("returns reason from active tile with blockOnSave (legacy)", () => {
     const q: QuickOrderState = {
       v: 2,
       tiles: [tile({ blockOnSave: true, blockReason: "ждём КТ" })],
@@ -36,7 +105,15 @@ describe("quickOrderBlockReasonFromState", () => {
   it("uses fallback when reason empty", () => {
     const q: QuickOrderState = {
       v: 2,
-      tiles: [tile({ blockOnSave: true, blockReason: "  " })],
+      tiles: [
+        tile({
+          isBlockTile: true,
+          blockOnSave: true,
+          blockReason: "  ",
+          baseActive: false,
+          basePriceListItemId: null,
+        }),
+      ],
       continueWork: null,
     };
     expect(quickOrderBlockReasonFromState(q)).toBe(
@@ -44,7 +121,7 @@ describe("quickOrderBlockReasonFromState", () => {
     );
   });
 
-  it("ignores inactive tiles", () => {
+  it("ignores inactive legacy tiles", () => {
     const q: QuickOrderState = {
       v: 2,
       tiles: [
@@ -64,7 +141,13 @@ describe("quickOrderBlockValidationError", () => {
   it("does not require reason", () => {
     const q: QuickOrderState = {
       v: 2,
-      tiles: [tile({ blockOnSave: true, blockReason: "" })],
+      tiles: [
+        tile({
+          isBlockTile: true,
+          blockOnSave: true,
+          blockReason: "",
+        }),
+      ],
       continueWork: null,
     };
     expect(quickOrderBlockValidationError(q)).toBeNull();

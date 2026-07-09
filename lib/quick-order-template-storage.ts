@@ -22,12 +22,16 @@ let bootstrappedKey: string | null = null;
 /** Инкремент при каждом save — чтобы поздний ответ read не откатил удаление. */
 let storageGeneration = 0;
 
+/**
+ * Сброс отметок состава для нового наряда.
+ * У плашки-блокировки сохраняем isBlockTile, причину и включаем blockOnSave.
+ */
 function resetTileSelections(tiles: QuickOrderTile[]): QuickOrderTile[] {
   return tiles.map((t) => ({
     ...t,
     baseActive: false,
-    blockOnSave: false,
-    blockReason: "",
+    blockOnSave: Boolean(t.isBlockTile),
+    blockReason: t.isBlockTile ? t.blockReason : "",
     options: t.options.map((o) => ({ ...o, checked: false })),
   }));
 }

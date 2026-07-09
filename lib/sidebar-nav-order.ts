@@ -10,19 +10,21 @@ export const DEFAULT_SIDEBAR_HREF_ORDER = [
   "/clickmig",
   "/mail",
   "/ai-admin",
-  "/orders?ship=actual",
   "/warehouse",
   "/clients",
   "/directory",
 ] as const;
 
+/** Старые пункты меню → канон (отгрузки убраны из сайдбара, живут в Заказах). */
 const SIDEBAR_HREF_ALIASES: Record<string, string> = {
-  "/shipments": "/orders?ship=actual",
+  "/shipments": "/orders",
+  "/orders?ship=actual": "/orders",
 };
 
 const KNOWN_SIDEBAR_HREFS = new Set<string>([
   ...DEFAULT_SIDEBAR_HREF_ORDER,
   "/shipments",
+  "/orders?ship=actual",
 ]);
 
 export function normalizeSidebarNavOrder(raw: unknown): string[] | null {
@@ -30,8 +32,9 @@ export function normalizeSidebarNavOrder(raw: unknown): string[] | null {
   const out: string[] = [];
   for (const item of raw) {
     if (typeof item !== "string") continue;
-    const href = SIDEBAR_HREF_ALIASES[item.trim()] ?? item.trim();
-    if (!KNOWN_SIDEBAR_HREFS.has(href) && !KNOWN_SIDEBAR_HREFS.has(item.trim())) {
+    const trimmed = item.trim();
+    const href = SIDEBAR_HREF_ALIASES[trimmed] ?? trimmed;
+    if (!KNOWN_SIDEBAR_HREFS.has(href) && !KNOWN_SIDEBAR_HREFS.has(trimmed)) {
       continue;
     }
     const canonical = SIDEBAR_HREF_ALIASES[href] ?? href;
@@ -46,7 +49,10 @@ export function coalesceSidebarNavOrder(
 ): string[] {
   const out: string[] = [];
   for (const href of saved) {
-    if (allowedHrefs.has(href) && !out.includes(href)) out.push(href);
+    const canonical = SIDEBAR_HREF_ALIASES[href] ?? href;
+    if (allowedHrefs.has(canonical) && !out.includes(canonical)) {
+      out.push(canonical);
+    }
   }
   for (const href of DEFAULT_SIDEBAR_HREF_ORDER) {
     if (allowedHrefs.has(href) && !out.includes(href)) out.push(href);

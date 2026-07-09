@@ -24,9 +24,17 @@ export type QuickOrderTile = {
   basePriceSummary: string | null;
   /** Основная позиция прайса включена в наряд */
   baseActive: boolean;
-  /** На плашке в наряде: при сохранении заблокировать карточку */
+  /**
+   * Плашка-блокировка (задаётся в редакторе): при сохранении наряда
+   * блокирует карточку в канбан/Kaiten — состав работы не нужен.
+   */
+  isBlockTile: boolean;
+  /**
+   * В этом наряде применить блокировку.
+   * Для isBlockTile по умолчанию true; можно выключить на конкретном заказе.
+   */
   blockOnSave: boolean;
-  /** Причина для этого наряда (может быть пустой → «Без указания причины») */
+  /** Причина блокировки (в редакторе плашки; может быть пустой → fallback) */
   blockReason: string;
   options: QuickOrderTileOption[];
 };
@@ -52,6 +60,7 @@ export function newQuickOrderTile(): QuickOrderTile {
     basePriceListItemId: null,
     basePriceSummary: null,
     baseActive: false,
+    isBlockTile: false,
     blockOnSave: false,
     blockReason: "",
     options: [],
@@ -154,6 +163,7 @@ function normalizeTileV2(raw: unknown): QuickOrderTile | null {
     basePriceListItemId?: unknown;
     basePriceSummary?: unknown;
     baseActive?: unknown;
+    isBlockTile?: unknown;
     blockOnSave?: unknown;
     blockReason?: unknown;
     options?: unknown;
@@ -171,6 +181,14 @@ function normalizeTileV2(raw: unknown): QuickOrderTile | null {
     const n = normalizeOption(o);
     if (n) options.push(n);
   }
+  const blockReason = String(r.blockReason ?? "")
+    .trim()
+    .slice(0, MAX_TILE_BLOCK_REASON_LEN);
+  const isBlockTile = Boolean(r.isBlockTile);
+  const blockOnSave =
+    r.blockOnSave !== undefined
+      ? Boolean(r.blockOnSave)
+      : isBlockTile;
   return {
     id,
     title,
@@ -178,10 +196,9 @@ function normalizeTileV2(raw: unknown): QuickOrderTile | null {
     basePriceListItemId: baseId || null,
     basePriceSummary: String(r.basePriceSummary ?? "").trim() || null,
     baseActive: Boolean(r.baseActive),
-    blockOnSave: Boolean(r.blockOnSave),
-    blockReason: String(r.blockReason ?? "")
-      .trim()
-      .slice(0, MAX_TILE_BLOCK_REASON_LEN),
+    isBlockTile,
+    blockOnSave,
+    blockReason,
     options: options.slice(0, 30),
   };
 }
@@ -222,6 +239,7 @@ function migrateFromLegacyV1(p: Record<string, unknown>): QuickOrderState {
         basePriceListItemId: null,
         basePriceSummary: null,
         baseActive: Boolean(r.active),
+        isBlockTile: false,
         blockOnSave: false,
         blockReason: "",
         options: [],

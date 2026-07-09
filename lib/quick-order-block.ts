@@ -8,7 +8,15 @@ export const MAX_QUICK_TILE_BLOCK_REASON_LEN = 500;
 /** Если причина не указана — всё равно блокируем с этой формулировкой. */
 export const QUICK_ORDER_BLOCK_REASON_FALLBACK = "Без указания причины";
 
-function isQuickOrderTileSelected(tile: QuickOrderTile): boolean {
+/**
+ * Плашка даёт блокировку карточки (канбан/Kaiten), если:
+ * — это плашка-блокировка (isBlockTile) и blockOnSave включён, или
+ * — обычная плашка с blockOnSave (legacy) и есть выбранный состав.
+ * Состав работы для isBlockTile не требуется.
+ */
+export function tileRequestsKaitenBlock(tile: QuickOrderTile): boolean {
+  if (!tile.blockOnSave) return false;
+  if (tile.isBlockTile) return true;
   const hasBase = Boolean(tile.basePriceListItemId?.trim());
   return (
     (hasBase && tile.baseActive) ||
@@ -17,15 +25,15 @@ function isQuickOrderTileSelected(tile: QuickOrderTile): boolean {
 }
 
 /**
- * Причина блокировки от активной плашки с включённой блокировкой.
- * Причина на плашке в наряде может быть пустой — тогда fallback.
+ * Причина блокировки от первой плашки, которая запрашивает блок.
+ * Причина может быть пустой — тогда fallback.
  */
 export function quickOrderBlockReasonFromState(
   q: QuickOrderState,
 ): string | null {
   if (q.v !== 2) return null;
   for (const tile of q.tiles) {
-    if (!isQuickOrderTileSelected(tile) || !tile.blockOnSave) continue;
+    if (!tileRequestsKaitenBlock(tile)) continue;
     const reason = tile.blockReason?.trim() ?? "";
     return (reason || QUICK_ORDER_BLOCK_REASON_FALLBACK).slice(
       0,

@@ -18,9 +18,13 @@ import {
   __resetQuickOrderTemplateStorageForTests,
   loadQuickOrderTemplate,
   loadQuickOrderTemplateFromDb,
+  quickOrderTemplateAsNewOrderDefaults,
   saveQuickOrderTemplate,
 } from "./quick-order-template-storage";
-import { QUICK_ORDER_VERSION } from "@/components/orders/new-order-form/quick-order-types";
+import {
+  QUICK_ORDER_VERSION,
+  mergeQuickOrderFromSnapshot,
+} from "@/components/orders/new-order-form/quick-order-types";
 
 describe("saveQuickOrderTemplate", () => {
   beforeEach(() => {
@@ -39,6 +43,7 @@ describe("saveQuickOrderTemplate", () => {
           basePriceListItemId: null,
           basePriceSummary: null,
           baseActive: false,
+          isBlockTile: false,
           blockOnSave: false,
           blockReason: "",
           options: [],
@@ -62,6 +67,7 @@ describe("saveQuickOrderTemplate", () => {
           basePriceListItemId: null,
           basePriceSummary: null,
           baseActive: false,
+          isBlockTile: false,
           blockOnSave: false,
           blockReason: "",
           options: [],
@@ -118,6 +124,7 @@ describe("saveQuickOrderTemplate", () => {
           basePriceListItemId: null,
           basePriceSummary: null,
           baseActive: false,
+          isBlockTile: false,
           blockOnSave: false,
           blockReason: "",
           options: [],
@@ -128,5 +135,75 @@ describe("saveQuickOrderTemplate", () => {
 
     await expect(loadPromise).resolves.toBeNull();
     expect(loadQuickOrderTemplate()).toBeNull();
+  });
+});
+
+describe("quickOrderTemplateAsNewOrderDefaults", () => {
+  it("keeps block-tile reason and turns block on for new order", () => {
+    const next = quickOrderTemplateAsNewOrderDefaults({
+      v: QUICK_ORDER_VERSION,
+      tiles: [
+        {
+          id: "b1",
+          title: "Ждём сканы",
+          accentColor: "#ef4444",
+          basePriceListItemId: null,
+          basePriceSummary: null,
+          baseActive: true,
+          isBlockTile: true,
+          blockOnSave: false,
+          blockReason: "нет КТ",
+          options: [],
+        },
+      ],
+      continueWork: { href: "/orders/1", label: "x" },
+    });
+    expect(next.continueWork).toBeNull();
+    expect(next.tiles[0]).toMatchObject({
+      isBlockTile: true,
+      blockOnSave: true,
+      blockReason: "нет КТ",
+      baseActive: false,
+    });
+  });
+});
+
+describe("mergeQuickOrderFromSnapshot block tile", () => {
+  it("reads isBlockTile and reason from snapshot", () => {
+    const q = mergeQuickOrderFromSnapshot({
+      v: 2,
+      tiles: [
+        {
+          id: "t1",
+          title: "Блок",
+          accentColor: "#0ea5e9",
+          isBlockTile: true,
+          blockOnSave: true,
+          blockReason: "ждём",
+          options: [],
+        },
+      ],
+    });
+    expect(q.tiles[0]?.isBlockTile).toBe(true);
+    expect(q.tiles[0]?.blockReason).toBe("ждём");
+  });
+
+  it("does not treat legacy composition+block as block tile", () => {
+    const q = mergeQuickOrderFromSnapshot({
+      v: 2,
+      tiles: [
+        {
+          id: "t1",
+          title: "Сплинт",
+          accentColor: "#0ea5e9",
+          basePriceListItemId: "pli-1",
+          blockOnSave: true,
+          blockReason: "разово",
+          options: [],
+        },
+      ],
+    });
+    expect(q.tiles[0]?.isBlockTile).toBe(false);
+    expect(q.tiles[0]?.blockOnSave).toBe(true);
   });
 });
