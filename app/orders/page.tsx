@@ -634,8 +634,8 @@ export default async function OrdersPage({
             <Link
               href={ordersListHref({
                 limit: pageSize,
-                tag: LIST_TAG_ORDER_ATTENTION,
                 ...listHrefCommon,
+                tag: LIST_TAG_ORDER_ATTENTION,
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "orderAttention"
@@ -656,8 +656,8 @@ export default async function OrdersPage({
             <Link
               href={ordersListHref({
                 limit: pageSize,
-                tag: LIST_TAG_PROSTHETICS_PENDING,
                 ...listHrefCommon,
+                tag: LIST_TAG_PROSTHETICS_PENDING,
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "prostheticsPending"
@@ -678,8 +678,8 @@ export default async function OrdersPage({
             <Link
               href={ordersListHref({
                 limit: pageSize,
-                tag: LIST_TAG_KAITEN_LAB_MENTION,
                 ...listHrefCommon,
+                tag: LIST_TAG_KAITEN_LAB_MENTION,
               })}
               className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
                 activeFilter?.kind === "kaitenLabMention"
@@ -730,8 +730,8 @@ export default async function OrdersPage({
                     key={opt.tag}
                     href={ordersListHref({
                       limit: pageSize,
-                      tag: opt.tag,
                       ...listHrefCommon,
+                      tag: opt.tag,
                     })}
                     className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
                       isActive
@@ -835,8 +835,8 @@ export default async function OrdersPage({
                 const kaitenStatusFilterHref = kaitenColTrimmed
                   ? ordersListHref({
                       limit: pageSize,
-                      tag: listTagKaitenColumnTitle(kaitenColTrimmed),
                       ...listHrefCommon,
+                      tag: listTagKaitenColumnTitle(kaitenColTrimmed),
                     })
                   : null;
                 const rowClass = blocked

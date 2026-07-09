@@ -20,6 +20,7 @@ import {
   collectReplyDatePlaceholdersInHaystack,
   injectReplyInlineDatePickers,
   initialReplyDatePickerState,
+  refreshReplyDatesInTextOverrides,
   replyDateStateToLegacyValues,
   stripReplyInlineDatePickers,
   type ReplyDatePlaceholderDef,
@@ -136,11 +137,7 @@ export function OrderAutoReplyPreflightPanel({
     ) => {
       const effectiveDateState = opts?.dateState ?? datePickerState;
       const effectiveDefs = opts?.defs ?? datePlaceholderDefs;
-      const dateVal =
-        effectiveDateState.date?.value?.trim() ||
-        /(\d{4}-\d{2}-\d{2})/.exec(dueDateLocal.trim())?.[1] ||
-        /(\d{4}-\d{2}-\d{2})/.exec(appointmentLocal.trim())?.[1] ||
-        null;
+      const dateVal = effectiveDateState.date?.value?.trim() || null;
       const appointmentVal =
         effectiveDateState.appointmentDate?.value?.trim() ||
         appointmentLocal.trim() ||
@@ -241,7 +238,18 @@ export function OrderAutoReplyPreflightPanel({
       def?: ReplyDatePlaceholderDef,
     ) => {
       dirtyRef.current = true;
-      setDatePickerState((prev) => ({ ...prev, [key]: { value, hasTime } }));
+      setDatePickerState((prev) => {
+        const next = { ...prev, [key]: { value, hasTime } };
+        setTextOverrides((textPrev) =>
+          refreshReplyDatesInTextOverrides(
+            textPrev,
+            datePlaceholderDefs,
+            prev,
+            next,
+          ),
+        );
+        return next;
+      });
       const resolvedDef = def ?? datePlaceholderDefs.find((d) => d.key === key);
       // datetime-local: после выбора дня оставляем попап открытым для выбора времени
       if (resolvedDef?.inputType === "date" || hasTime) {

@@ -95,11 +95,10 @@ export function initialReplyDatePickerState(
   const out: ReplyDatePickerState = {};
   for (const def of defs) {
     if (def.key === "date") {
+      // Ожидаемый срок отгрузки в письме — только для ответа, не из полей наряда.
       const ymd =
         localInputToDateYmd(dueDateLocal) ||
-        localInputToDateYmd(appointmentLocal) ||
         /(\d{4}-\d{2}-\d{2})/.exec(dueDateLocal.trim())?.[1] ||
-        /(\d{4}-\d{2}-\d{2})/.exec(appointmentLocal.trim())?.[1] ||
         "";
       if (ymd) out.date = { value: ymd, hasTime: false };
     } else if (def.key === "appointmentDate") {
@@ -143,9 +142,12 @@ export function formatReplyDateForEmailContext(
 ): string {
   const value = entry?.value?.trim() ?? "";
   if (!value) return "";
-  if (def.key === "date") return formatMailDate(value);
   const datePart = formatMailDate(value);
-  if (!entry?.hasTime) return `${datePart}, в течение дня`;
+  if (def.key === "date") {
+    if (!entry?.hasTime) return `${datePart} в течение дня`;
+    return formatMailDateTime(value);
+  }
+  if (!entry?.hasTime) return `${datePart} в течение дня`;
   return formatMailDateTime(value);
 }
 
@@ -166,12 +168,47 @@ function escapeRegExp(text: string): string {
 }
 
 /** Оборачивает подставленные даты в кликабельные span для префлайта. */
+/** Обновляет даты в сохранённых правках текста блоков (contentEditable без {{date}}). */
+export function refreshReplyDatesInTextOverrides(
+  textOverrides: Record<string, string>,
+  defs: readonly ReplyDatePlaceholderDef[],
+  prevState: ReplyDatePickerState,
+  nextState: ReplyDatePickerState,
+): Record<string, string> {
+  let changed = false;
+  const out = { ...textOverrides };
+  for (const [blockId, text] of Object.entries(textOverrides)) {
+    let updated = text;
+    for (const def of defs) {
+      const oldFmt = formatReplyDateForEmailContext(def, prevState[def.key]);
+      const newFmt = formatReplyDateForEmailContext(def, nextState[def.key]);
+      if (!oldFmt || !newFmt || oldFmt === newFmt) continue;
+      if (updated.includes(oldFmt)) {
+        updated = updated.split(oldFmt).join(newFmt);
+        changed = true;
+        continue;
+      }
+      // Старые сохранённые тексты могли содержать запятую перед «в течение дня».
+      const legacyOldFmt = oldFmt.replace(
+        /^(\d{2}\.\d{2}\.\d{2}) в течение дня$/,
+        "$1, в течение дня",
+      );
+      if (legacyOldFmt !== oldFmt && updated.includes(legacyOldFmt)) {
+        updated = updated.split(legacyOldFmt).join(newFmt);
+        changed = true;
+      }
+    }
+    if (updated !== text) out[blockId] = updated;
+  }
+  return changed ? out : textOverrides;
+}
+
 export function injectReplyInlineDatePickers(
   html: string,
   defs: readonly ReplyDatePlaceholderDef[],
   displayByKey: Partial<Record<ReplyDatePlaceholderKey, string>>,
 ): string {
-  let out = html;
+  let out = stripReplyInlineDatePickers(html);
   for (const def of defs) {
     const text = displayByKey[def.key]?.trim();
     if (!text) continue;

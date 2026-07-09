@@ -106,6 +106,12 @@ export function OrderAutoReplyBlocksPreview({
       if (!blockId || !editableBlockIds.includes(blockId) || !td) return;
       const next = e.relatedTarget as Node | null;
       if (next && root.contains(next)) return;
+      if (
+        next instanceof Element &&
+        next.closest?.("[data-reply-date-key], [role='dialog'][aria-label]")
+      ) {
+        return;
+      }
       focusedBlockRef.current = null;
       onTextOverrideRef.current(blockId, extractCellPlainText(td as HTMLElement));
     };
@@ -120,6 +126,8 @@ export function OrderAutoReplyBlocksPreview({
       if (!key) return;
       e.preventDefault();
       e.stopPropagation();
+      // Не восстанавливать устаревший HTML редактируемого блока после смены даты.
+      focusedBlockRef.current = null;
       onInlineDateClickRef.current?.(key, span.getBoundingClientRect());
     };
 
