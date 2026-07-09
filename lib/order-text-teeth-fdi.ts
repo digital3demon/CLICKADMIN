@@ -172,11 +172,55 @@ export function extractTeethFdiFromOrderText(orderText: string): string[] {
   return extractValidFdiFromFragment(text, { fullText: text, fragmentStart: 0 });
 }
 
+/** Единица работы в лаб-стенографии: «12-22» = мост, отдельные зубы — одиночки. */
+export type FdiWorkUnit =
+  | { kind: "bridge"; fromFdi: string; toFdi: string; teethFdi: string[] }
+  | { kind: "single"; teethFdi: string[] };
+
+/**
+ * Разбирает «Вид работы: 12-22, 24 ПММА» → мост 12–22 (12,11,21,22) + одиночка 24.
+ * Диапазоны ищем в строке «вид работы», иначе во всём тексте.
+ */
+export function extractFdiWorkUnitsFromOrderText(orderText: string): FdiWorkUnit[] {
+  const text = orderText.trim();
+  if (!text) return [];
+
+  const workLine = WORK_TYPE_LINE_RE.exec(text);
+  const source = workLine?.[1]?.trim() || text;
+  const fragmentStart = workLine?.[1] ? Math.max(0, text.indexOf(workLine[1])) : 0;
+
+  const units: FdiWorkUnit[] = [];
+  const teethInRanges = new Set<string>();
+
+  FDI_RANGE_RE.lastIndex = 0;
+  for (const match of source.matchAll(FDI_RANGE_RE)) {
+    if (match.index == null) continue;
+    const absIndex = fragmentStart + match.index;
+    if (isInsideRanges(absIndex, dateExcludeRanges(text))) continue;
+    const fromFdi = match[1]!;
+    const toFdi = match[2]!;
+    const expanded = expandFdiToothRange(fromFdi, toFdi);
+    if (!expanded || expanded.length < 2) continue;
+    units.push({ kind: "bridge", fromFdi, toFdi, teethFdi: expanded });
+    for (const t of expanded) teethInRanges.add(t);
+  }
+
+  for (const code of extractValidFdiFromFragment(source, {
+    fullText: text,
+    fragmentStart,
+  })) {
+    if (teethInRanges.has(code)) continue;
+    teethInRanges.add(code);
+    units.push({ kind: "single", teethFdi: [code] });
+  }
+
+  return units;
+}
+
 const TOOTH_BEARING_HINT_RE =
   /аппарат|коронк|мост|винир|накладк|культ|абатмент|имплант|сплинт|элайнер|капп|вкладк|немедленн|винтов|пмма|pmma|основан/i;
 
-const PER_TOOTH_QTY_HINT_RE =
-  /коронк|немедленн|винир|накладк|основан|абатмент|временн|винтов|пмма|pmma/i;
+const PER_IMPLANT_QTY_HINT_RE = /основан|абатмент/i;
 
 /** Подставляет teethFdi и quantity в hints, если ИИ/эвристика их не заполнили. */
 export function enrichCompositionHintsWithTeethFdi(
@@ -192,9 +236,10 @@ export function enrichCompositionHintsWithTeethFdi(
     const next: CompositionHint = { ...hint };
     if (!next.teethFdi?.length) next.teethFdi = teeth;
     const toothCount = next.teethFdi?.length ?? 0;
+    // Кол-во коронок при «12-22, 24» задаёт ensurePmma (мост + одиночки), не число зубов.
     if (
       toothCount > 1 &&
-      PER_TOOTH_QTY_HINT_RE.test(next.nameHint) &&
+      PER_IMPLANT_QTY_HINT_RE.test(next.nameHint) &&
       (next.quantity == null || next.quantity === 1)
     ) {
       next.quantity = toothCount;

@@ -9,6 +9,7 @@ import {
 import {
   enrichCompositionHintsWithTeethFdi,
   extractTeethFdiFromOrderText,
+  extractFdiWorkUnitsFromOrderText,
 } from "@/lib/order-text-teeth-fdi";
 
 export type CompositionHint = {
@@ -487,6 +488,27 @@ function hintLooksLikeTitaniumBase(nameHint: string): boolean {
   return /основан/i.test(nameHint);
 }
 
+/** Дробит коронки по мостам/одиночкам: «12-22, 24» → 2 позиции (мост + 24). */
+function splitCrownHintsByFdiWorkUnits(
+  hints: CompositionHint[],
+  orderText: string,
+): CompositionHint[] {
+  const units = extractFdiWorkUnitsFromOrderText(orderText);
+  if (units.length === 0) return hints;
+
+  const crowns = hints.filter((h) => hintLooksLikePmmaTempCrown(h.nameHint));
+  if (crowns.length === 0) return hints;
+
+  const template = crowns[0]!;
+  const rest = hints.filter((h) => !hintLooksLikePmmaTempCrown(h.nameHint));
+  const splitCrowns = units.map((unit) => ({
+    ...template,
+    quantity: 1,
+    teethFdi: unit.teethFdi,
+  }));
+  return [...splitCrowns, ...rest];
+}
+
 /**
  * Если в тексте есть ПММА — подставляем временную коронку из активного прайса
  * (винтовую или обычную по сигналам) и при упоминании оснований — основание по матчу.
@@ -501,7 +523,10 @@ export function ensurePmmaCompositionHints(
   if (!text || !orderTextMentionsPmmaTemporaryCrown(text)) return hints;
 
   const teeth = extractTeethFdiFromOrderText(text);
-  const qty = teeth.length > 0 ? teeth.length : 1;
+  const workUnits = extractFdiWorkUnitsFromOrderText(text);
+  const crownQty =
+    workUnits.length > 0 ? workUnits.length : teeth.length > 0 ? teeth.length : 1;
+  const baseQty = teeth.length > 0 ? teeth.length : 1;
   const teethFdi = teeth.length > 0 ? teeth : null;
   const wantScrew = orderTextImpliesScrewRetainedTempCrown(text);
   const crownName = pickPmmaCrownPriceListName(priceListItemNames, text);
@@ -520,7 +545,7 @@ export function ensurePmmaCompositionHints(
   const hasCrown = next.some((h) => hintLooksLikePmmaTempCrown(h.nameHint));
   if (!hasCrown) {
     if (crownName) {
-      next = [{ nameHint: crownName, quantity: qty, teethFdi }, ...next];
+      next = [{ nameHint: crownName, quantity: crownQty, teethFdi }, ...next];
     }
   } else if (crownName) {
     next = next.map((h) => {
@@ -530,7 +555,7 @@ export function ensurePmmaCompositionHints(
         nameHint: crownName,
       };
       if (!patched.teethFdi?.length && teethFdi) patched.teethFdi = teethFdi;
-      if (patched.quantity == null || patched.quantity === 1) patched.quantity = qty;
+      if (patched.quantity == null || patched.quantity === 1) patched.quantity = crownQty;
       return patched;
     });
   } else {
@@ -538,7 +563,7 @@ export function ensurePmmaCompositionHints(
       if (!hintLooksLikePmmaTempCrown(h.nameHint)) return h;
       const patched: CompositionHint = { ...h };
       if (!patched.teethFdi?.length && teethFdi) patched.teethFdi = teethFdi;
-      if (patched.quantity == null || patched.quantity === 1) patched.quantity = qty;
+      if (patched.quantity == null || patched.quantity === 1) patched.quantity = crownQty;
       return patched;
     });
   }
@@ -552,19 +577,19 @@ export function ensurePmmaCompositionHints(
     if (matchedBaseName) {
       // Подменяем/добавляем основание по матчу с текстом (любой бренд из письма).
       next = next.filter((h) => !hintLooksLikeTitaniumBase(h.nameHint));
-      next.push({ nameHint: matchedBaseName, quantity: qty, teethFdi });
+      next.push({ nameHint: matchedBaseName, quantity: baseQty, teethFdi });
     } else if (baseHints.length > 0) {
       next = next.map((h) => {
         if (!hintLooksLikeTitaniumBase(h.nameHint)) return h;
         const patched: CompositionHint = { ...h };
         if (!patched.teethFdi?.length && teethFdi) patched.teethFdi = teethFdi;
-        if (patched.quantity == null || patched.quantity === 1) patched.quantity = qty;
+        if (patched.quantity == null || patched.quantity === 1) patched.quantity = baseQty;
         return patched;
       });
     }
   }
 
-  return next;
+  return splitCrownHintsByFdiWorkUnits(next, text);
 }
 
 /**
@@ -842,9 +867,10 @@ function findAmbiguousMatches(
 function mergeResolvedLinesByPriceItem(lines: ResolvedCompositionLine[]): ResolvedCompositionLine[] {
   const merged = new Map<string, ResolvedCompositionLine>();
   for (const line of lines) {
-    const existing = merged.get(line.priceListItemId);
+    const key = `${line.priceListItemId}|${line.teethFdi.join(",")}`;
+    const existing = merged.get(key);
     if (!existing) {
-      merged.set(line.priceListItemId, { ...line, teethFdi: [...line.teethFdi] });
+      merged.set(key, { ...line, teethFdi: [...line.teethFdi] });
       continue;
     }
     existing.quantity += line.quantity;
@@ -950,9 +976,14 @@ export function dedupeCompositionHintsBySiblingVariants(
   for (const hint of hints) {
     const name = hint.nameHint.trim();
     if (!name) continue;
+    const teethKey = (hint.teethFdi ?? []).map(String).join(",");
     let placed = false;
     for (const group of groups) {
-      if (areSiblingPriceNameVariants(name, group[0]!.nameHint)) {
+      const groupTeeth = (group[0]!.teethFdi ?? []).map(String).join(",");
+      if (
+        teethKey === groupTeeth &&
+        areSiblingPriceNameVariants(name, group[0]!.nameHint)
+      ) {
         group.push(hint);
         placed = true;
         break;
@@ -972,9 +1003,14 @@ function dedupeResolvedLinesBySiblingVariants(
   const groups: ResolvedCompositionLine[][] = [];
 
   for (const line of lines) {
+    const teethKey = line.teethFdi.join(",");
     let placed = false;
     for (const group of groups) {
-      if (areSiblingPriceNameVariants(line.name, group[0]!.name)) {
+      const groupTeeth = group[0]!.teethFdi.join(",");
+      if (
+        teethKey === groupTeeth &&
+        areSiblingPriceNameVariants(line.name, group[0]!.name)
+      ) {
         group.push(line);
         placed = true;
         break;

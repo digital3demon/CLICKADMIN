@@ -180,6 +180,51 @@ describe("enrichOrderEmailPrediction Lebedeva-like case", () => {
     expect(enriched.hasScans).toBe(true);
   });
 
+  it("builds full clientOrderText from email when AI shortened it", async () => {
+    const emailBody = [
+      "Вид работы: 12-22, 24 ПММА, А3,5",
+      "12-22 Astra EV, МЮ Ультрастом, скан-маркеры Ультрастом",
+      "24 Astra EV 3,6, Гео длинный скан-маркер",
+      "Основания Ультрастом",
+      "Сканы, фото по ссылке:",
+      "https://disk.yandex.ru/d/NuiCmc5SQFNZpQ",
+    ].join("\n");
+
+    vi.mocked(db.email.findUnique).mockResolvedValueOnce({
+      receivedAt: new Date("2026-07-09T10:00:00.000Z"),
+      sentAt: null,
+      createdAt: new Date("2026-07-09T10:00:00.000Z"),
+      textBody: emailBody,
+      htmlBody: null,
+      preview: null,
+    });
+
+    const enriched = await enrichOrderEmailPrediction(db as never, "tenant-1", {
+      primaryEmailId: "email-1",
+      ai: {
+        clientOrderText:
+          "12-22, 24 ПММА, А3,5 12-22 Astra EV, МЮ Ультрастом, скан-маркеры Ультрастом",
+        suggestedAttachmentIds: [],
+        compositionHints: [],
+        warnings: [],
+      },
+      attachments: [],
+      resolvedClinicId: "clinic-1",
+      resolvedDoctorId: "doctor-1",
+    });
+
+    expect(enriched.clientOrderText).toBe(
+      [
+        "12-22, 24 ПММА, А3,5",
+        "12-22 Astra EV, МЮ Ультрастом, скан-маркеры Ультрастом",
+        "24 Astra EV 3,6, Гео длинный скан-маркер",
+        "Основания Ультрастом",
+        "Сканы, фото по ссылке:",
+        "https://disk.yandex.ru/d/NuiCmc5SQFNZpQ",
+      ].join("\n"),
+    );
+  });
+
   it("replaces false multiple-patients warning when client asks to ship with previous order", async () => {
     vi.mocked(db.email.findUnique).mockResolvedValueOnce({
       subject: "Аппарат Хааса",
@@ -243,7 +288,9 @@ describe("enrichOrderEmailPrediction Lebedeva-like case", () => {
         suggestedAttachmentIds: [],
         hasScans: false,
         compositionHints: [{ nameHint: "Аппарат Марко Росса/HAAS" }],
-        warnings: [],
+        warnings: [
+          "Отсутствуют сканы или STL-файлы, но заказ на аппарат Марко-Росса обычно требует их",
+        ],
       },
       attachments: [
         {
@@ -263,6 +310,11 @@ describe("enrichOrderEmailPrediction Lebedeva-like case", () => {
 
     expect(enriched.hasScans).toBe(true);
     expect(enriched.suggestedAttachmentIds).toEqual(["stl-l", "stl-u"]);
+    expect(
+      enriched.warnings.some((w) =>
+        /отсутствуют\s+скан|stl-файл/i.test(String(w)),
+      ),
+    ).toBe(false);
   });
 
   it("infers appointment from «На готово чт 16.07» when fast-path omitted date", async () => {

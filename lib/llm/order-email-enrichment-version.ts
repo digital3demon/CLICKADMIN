@@ -1,5 +1,5 @@
 /** Версия серверного обогащения predictionJson; bump при изменении enrich-логики. */
-export const ORDER_EMAIL_ENRICHMENT_VERSION = 11;
+export const ORDER_EMAIL_ENRICHMENT_VERSION = 15;
 
 export function predictionNeedsReEnrichment(json: Record<string, unknown> | null | undefined): boolean {
   if (!json || typeof json !== "object") return true;

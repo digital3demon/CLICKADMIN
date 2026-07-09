@@ -4,8 +4,10 @@ import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-
 import { getClientsPrisma } from "@/lib/get-domain-prisma";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 import { emailEffectiveReceivedAt } from "@/lib/mail/order-source-work-received";
-import { normalizeClientOrderText } from "@/lib/order-email-client-text";
-import { deriveSourceDataFlagsFromAttachments, collectScanLikeAttachmentIds } from "@/lib/order-email-attachment-heuristics";
+import {
+  resolveClientOrderTextFromEmailAndAi,
+} from "@/lib/order-email-client-text";
+import { deriveSourceDataFlagsFromAttachments, collectScanLikeAttachmentIds, isScanLikeAttachment } from "@/lib/order-email-attachment-heuristics";
 import { parseOptionalIsoDate, parseFirstDateFromText, parseAppointmentDateFromOrderEmailText } from "@/lib/order-email-date-parse";
 import { resolveClientBillingForOrder } from "@/lib/order-client-billing-for-order";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
@@ -69,18 +71,37 @@ function parseCompositionHints(v: unknown): CompositionHint[] {
   return out;
 }
 
+function warningClaimsMissingScans(w: string): boolean {
+  const lower = w.toLowerCase();
+  const mentionsScans =
+    /(?:^|[^\p{L}])(?:скан|stl|слепок)/iu.test(lower) ||
+    lower.includes("stl-файл");
+  if (!mentionsScans) return false;
+  return (
+    /отсутств|не\s+(?:приложен|найден|обнаружен)|нет\s+(?:ни\s+)?|без\s+(?:указан|приложен)?/iu.test(
+      lower,
+    ) || /(?:скан|stl|слепок).{0,40}(?:отсутств|не\s+приложен|не\s+найден|нет)/iu.test(lower)
+  );
+}
+
 function filterMisleadingAiWarnings(
   warnings: string[],
   opts: {
     clientMatchedByEmail: boolean;
     patientFixedFromSubject: boolean;
     attachmentFileNames?: string[];
+    hasScans?: boolean;
   },
 ): string[] {
   const catalogNames = (opts.attachmentFileNames ?? []).map((name) => name.toLowerCase());
+  const hasScanAttachments = catalogNames.some((name) =>
+    isScanLikeAttachment(name),
+  );
+  const scansPresent = opts.hasScans === true || hasScanAttachments;
 
   return warnings.filter((w) => {
     const lower = w.toLowerCase();
+    if (scansPresent && warningClaimsMissingScans(w)) return false;
     if (opts.clientMatchedByEmail) {
       if (lower.includes("не определен врач") && lower.includes("из темы")) return false;
       if (lower.includes("не определена клиника") && lower.includes("отправител")) return false;
@@ -291,7 +312,6 @@ export async function enrichOrderEmailPrediction(
       cleanMailTextBody(primaryEmail.preview) ||
       "";
   }
-  out.clientOrderText = normalizeClientOrderText(rawClientText);
 
   const emailBodyForGuards =
     rawClientText.trim() ||
@@ -301,6 +321,19 @@ export async function enrichOrderEmailPrediction(
         cleanMailTextBody(primaryEmail.preview) ||
         ""
       : "");
+
+  const fullEmailBodyForLinks = primaryEmail
+    ? cleanMailTextBody(primaryEmail.textBody) ||
+      (primaryEmail.htmlBody ? mailHtmlToText(primaryEmail.htmlBody) : "") ||
+      cleanMailTextBody(primaryEmail.preview) ||
+      ""
+    : emailBodyForGuards;
+
+  out.clientOrderText = resolveClientOrderTextFromEmailAndAi(
+    rawClientText,
+    fullEmailBodyForLinks,
+  );
+
 
   out.awaitingData = normalizeAwaitingDataFromEmailText(
     out.awaitingData as Parameters<typeof normalizeAwaitingDataFromEmailText>[0],
@@ -493,6 +526,7 @@ export async function enrichOrderEmailPrediction(
         clientMatchedByEmail: out.matchedBySourceEmail === true,
         patientFixedFromSubject,
         attachmentFileNames: input.attachments.map((a) => a.fileName),
+        hasScans: out.hasScans === true,
       }),
     ),
   ];

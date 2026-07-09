@@ -718,8 +718,16 @@ describe("PMMA temporary crown + Ultrastom bases", () => {
     const crown = ensured.find((h) => /временн/i.test(h.nameHint) && /коронк/i.test(h.nameHint));
     const base = ensured.find((h) => /основан/i.test(h.nameHint));
     expect(crown?.nameHint).toBe("Временная коронка принт/фрез на винтовой фиксации");
-    expect(crown?.quantity).toBe(5);
-    expect(crown?.teethFdi).toEqual(teeth5);
+    expect(crown?.quantity).toBe(1);
+    expect(crown?.teethFdi).toEqual(["12", "11", "21", "22"]);
+    const crown24 = ensured.filter(
+      (h) =>
+        /временн/i.test(h.nameHint) &&
+        /коронк/i.test(h.nameHint) &&
+        h.teethFdi?.includes("24"),
+    );
+    expect(crown24).toHaveLength(1);
+    expect(crown24[0]?.quantity).toBe(1);
     expect(base?.nameHint).toMatch(/ультрастом/i);
     expect(base?.quantity).toBe(5);
     expect(base?.teethFdi).toEqual(teeth5);
@@ -731,8 +739,13 @@ describe("PMMA temporary crown + Ultrastom bases", () => {
     expect(ensured).toEqual([
       {
         nameHint: "Временная коронка композитная",
-        quantity: 5,
-        teethFdi: teeth5,
+        quantity: 1,
+        teethFdi: ["12", "11", "21", "22"],
+      },
+      {
+        nameHint: "Временная коронка композитная",
+        quantity: 1,
+        teethFdi: ["24"],
       },
     ]);
   });
@@ -775,8 +788,12 @@ describe("PMMA temporary crown + Ultrastom bases", () => {
       negationOrderText: pmmaOrderText,
     });
     const byCode = Object.fromEntries(res.lines.map((l) => [l.code, l]));
-    expect(byCode["3112"]?.quantity).toBe(5);
-    expect(byCode["3112"]?.teethFdi).toEqual(teeth5);
+    const crowns = res.lines.filter((l) => l.code === "3112");
+    expect(crowns).toHaveLength(2);
+    expect(crowns.map((l) => l.teethFdi).sort((a, b) => a.join().localeCompare(b.join()))).toEqual(
+      [["12", "11", "21", "22"], ["24"]].sort((a, b) => a.join().localeCompare(b.join())),
+    );
+    expect(crowns.every((l) => l.quantity === 1)).toBe(true);
     expect(byCode["6006"]?.quantity).toBe(5);
     expect(byCode["3101"]).toBeUndefined();
     expect(byCode["6015"]).toBeUndefined();

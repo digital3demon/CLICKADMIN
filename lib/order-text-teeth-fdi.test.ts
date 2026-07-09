@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   enrichCompositionHintsWithTeethFdi,
   extractTeethFdiFromOrderText,
+  extractFdiWorkUnitsFromOrderText,
 } from "./order-text-teeth-fdi";
 
 const remiKidsOrderText =
@@ -25,6 +26,15 @@ describe("extractTeethFdiFromOrderText", () => {
     expect(
       extractTeethFdiFromOrderText("Вид работы: 12-22, 24 ПММА, А3,5"),
     ).toEqual(["12", "11", "21", "22", "24"]);
+  });
+
+  it("splits 12-22, 24 into bridge unit and single tooth", () => {
+    expect(
+      extractFdiWorkUnitsFromOrderText("Вид работы: 12-22, 24 ПММА, А3,5"),
+    ).toEqual([
+      { kind: "bridge", fromFdi: "12", toFdi: "22", teethFdi: ["12", "11", "21", "22"] },
+      { kind: "single", teethFdi: ["24"] },
+    ]);
   });
 
   it("does not treat delivery date as tooth numbers", () => {
@@ -61,8 +71,20 @@ describe("enrichCompositionHintsWithTeethFdi", () => {
     ).toEqual([{ nameHint: "Коронка Emax", quantity: 1, teethFdi: ["46"] }]);
   });
 
-  it("sets quantity from teeth for temporary crown hint", () => {
+  it("sets quantity from teeth for titanium base hint only", () => {
     const orderText = "Вид работы: 12-22, 24 ПММА, А3,5\nОснования Ультрастом";
+    expect(
+      enrichCompositionHintsWithTeethFdi(
+        [{ nameHint: "Титановое основание Ультрастом", quantity: 1 }],
+        orderText,
+      ),
+    ).toEqual([
+      {
+        nameHint: "Титановое основание Ультрастом",
+        quantity: 5,
+        teethFdi: ["12", "11", "21", "22", "24"],
+      },
+    ]);
     expect(
       enrichCompositionHintsWithTeethFdi(
         [{ nameHint: "Временная коронка композитная", quantity: 1 }],
@@ -71,7 +93,7 @@ describe("enrichCompositionHintsWithTeethFdi", () => {
     ).toEqual([
       {
         nameHint: "Временная коронка композитная",
-        quantity: 5,
+        quantity: 1,
         teethFdi: ["12", "11", "21", "22", "24"],
       },
     ]);
