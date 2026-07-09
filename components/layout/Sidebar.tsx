@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { Suspense, useCallback } from "react";
 import {
   canAccessSidebarPayments,
   isKanbanOnlyUser,
@@ -187,7 +187,10 @@ export function Sidebar() {
             <CommandPalette />
           </div>
         )}
-        <SidebarNav />
+        {/* useSearchParams в SidebarNav — иначе падает prerender /_not-found */}
+        <Suspense fallback={<nav className="min-h-0 flex-1 overflow-y-auto px-2" aria-hidden />}>
+          <SidebarNav />
+        </Suspense>
 
         {isEffectiveKanbanOnly ? null : (
           <>
