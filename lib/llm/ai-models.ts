@@ -59,6 +59,22 @@ export function isAllowedModel(model: string): boolean {
   return isPresetModel(trimmed) || isValidAiModelSlug(trimmed);
 }
 
+/** modality=image в витрине SprutDock — только POST /v1/images/generations. */
+export function isImageModelSlug(model: string): boolean {
+  const lower = model.trim().toLowerCase();
+  if (!lower) return false;
+  return (
+    lower.includes("dall-e") ||
+    lower.includes("gpt-image") ||
+    /gemini[^/]*image/.test(lower) ||
+    /\/[^/]*image[^/]*/.test(lower)
+  );
+}
+
+export function isTextChatModelSlug(model: string): boolean {
+  return isAllowedModel(model) && !isImageModelSlug(model);
+}
+
 export function normalizeModel(model: string | null | undefined): string {
   const trimmed = model?.trim();
   if (trimmed && isAllowedModel(trimmed)) return trimmed;

@@ -264,4 +264,33 @@ describe("enrichOrderEmailPrediction Lebedeva-like case", () => {
     expect(enriched.hasScans).toBe(true);
     expect(enriched.suggestedAttachmentIds).toEqual(["stl-l", "stl-u"]);
   });
+
+  it("infers appointment from «На готово чт 16.07» when fast-path omitted date", async () => {
+    vi.mocked(db.email.findUnique).mockResolvedValueOnce({
+      receivedAt: new Date("2026-07-09T10:00:00.000Z"),
+      sentAt: null,
+      createdAt: new Date("2026-07-09T10:00:00.000Z"),
+      textBody: null,
+      htmlBody: null,
+      preview: null,
+    });
+
+    const enriched = await enrichOrderEmailPrediction(db as never, "tenant-1", {
+      primaryEmailId: "email-1",
+      ai: {
+        patientName: "Соколова Антонина Андреевна",
+        clientOrderText:
+          "для Всеволода, планирование работы\nСканы и фото по ссылке\nНа готово чт 16.07.",
+        suggestedAttachmentIds: [],
+        compositionHints: [],
+        warnings: [],
+      },
+      attachments: [],
+      resolvedClinicId: "clinic-1",
+      resolvedDoctorId: "doctor-1",
+    });
+
+    expect(enriched.dueToAdminsAt).toContain("2026-07-16");
+    expect(enriched.patientAppointmentAt).toContain("2026-07-16");
+  });
 });

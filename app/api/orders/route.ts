@@ -4,6 +4,8 @@ import {
   getOrdersPrisma,
   getPricingPrisma,
 } from "@/lib/get-domain-prisma";
+import { applyKaitenBlockForOrderIfUnblocked } from "@/lib/apply-kaiten-block-from-list-tag";
+import { normalizeKaitenBlockReasonInput } from "@/lib/kaiten-card-block";
 import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
 import { clampOrdersPageSize } from "@/lib/orders-list-cursor";
 import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
@@ -128,6 +130,9 @@ export async function POST(req: Request) {
       const needsKaiten = shouldScheduleKaitenSyncAfterOrderCreate(body);
       const awaitKaiten =
         body.waitForKaitenBeforePrint === true || sendAutoReply;
+      const pendingBlockReason = normalizeKaitenBlockReasonInput(
+        body.kaitenBlockReason ?? "",
+      );
 
       let kaitenSyncError: string | null = null;
       let autoReply = undefined as
@@ -146,6 +151,9 @@ export async function POST(req: Request) {
         kaitenSyncError = pipeline.kaitenSyncError;
         autoReply = pipeline.autoReply;
         if (body.waitForKaitenBeforePrint === true && kaitenSyncError) {
+          if (pendingBlockReason) {
+            await applyKaitenBlockForOrderIfUnblocked(orderId, pendingBlockReason);
+          }
           return NextResponse.json({
             ...result.order,
             kaitenPrintSyncError: kaitenSyncError,
@@ -157,6 +165,9 @@ export async function POST(req: Request) {
           const kaiten = await syncKaitenAfterOrderCreate(orderId, ordersPrisma);
           kaitenSyncError = kaiten.kaitenSyncError;
           if (body.waitForKaitenBeforePrint === true && kaitenSyncError) {
+            if (pendingBlockReason) {
+              await applyKaitenBlockForOrderIfUnblocked(orderId, pendingBlockReason);
+            }
             return NextResponse.json({
               ...result.order,
               kaitenPrintSyncError: kaitenSyncError,
@@ -164,11 +175,25 @@ export async function POST(req: Request) {
           }
         } else {
           after(() =>
-            syncKaitenAfterOrderCreate(orderId, ordersPrisma).catch((e) => {
+            (async () => {
+              await syncKaitenAfterOrderCreate(orderId, ordersPrisma);
+              if (pendingBlockReason) {
+                await applyKaitenBlockForOrderIfUnblocked(
+                  orderId,
+                  pendingBlockReason,
+                );
+              }
+            })().catch((e) => {
               logger.error({ err: e, orderId }, "POST /api/orders kaiten background");
             }),
           );
         }
+      } else if (pendingBlockReason) {
+        await applyKaitenBlockForOrderIfUnblocked(orderId, pendingBlockReason);
+      }
+
+      if (pendingBlockReason && (sendAutoReply || (needsKaiten && awaitKaiten))) {
+        await applyKaitenBlockForOrderIfUnblocked(orderId, pendingBlockReason);
       }
 
       after(() =>

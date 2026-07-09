@@ -308,15 +308,14 @@ export async function runOrderEmailPrediction(
         extracted.patientName;
     }
 
-    const historyContext =
-      orderId != null && !opts?.forPrefill
-        ? await fetchClientOrderHistoryContext(
-            db,
-            tenantId,
-            preResolved?.doctorId ?? null,
-            patientName,
-          )
-        : null;
+    const historyContext = preResolved?.doctorId
+      ? await fetchClientOrderHistoryContext(
+          db,
+          tenantId,
+          preResolved.doctorId,
+          patientName,
+        )
+      : null;
 
     const llmRun = await extractOrderFieldsFromEmail(tenantId, emailBlocks, {
       fromAddress: primaryEmail.fromAddress,

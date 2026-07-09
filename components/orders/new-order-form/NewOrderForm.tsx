@@ -65,6 +65,10 @@ import type { BridgeLineInput } from "@/lib/detail-lines-to-constructions";
 import { detailLinesAndBridgesToConstructionsJson } from "@/lib/detail-lines-to-constructions";
 import { constructionsFromQuickOrder } from "@/lib/quick-order-constructions";
 import {
+  quickOrderBlockReasonFromState,
+  quickOrderBlockValidationError,
+} from "@/lib/quick-order-block";
+import {
   loadQuickOrderTemplate,
   loadQuickOrderTemplateFromDb,
   quickOrderTemplateAsNewOrderDefaults,
@@ -102,7 +106,6 @@ import {
   OrderAiPrefillPanel,
   type AiPrefillFieldKey,
 } from "./OrderAiPrefillPanel";
-import { Spinner } from "@/components/ui/Spinner";
 import {
   mergeQuickOrderFromSnapshot,
   type QuickOrderState,
@@ -1239,6 +1242,11 @@ export function NewOrderForm({
       setSaveError("Укажите дату записи (Запись)");
       return;
     }
+    const blockErr = quickOrderBlockValidationError(quickOrder);
+    if (blockErr) {
+      setSaveError(blockErr);
+      return;
+    }
     if (isTestOrder) {
       // Для тестового наряда тоже показываем preflight:
       // пользователь выбирает сценарий создания карточки в CRM-канбане.
@@ -1298,6 +1306,7 @@ export function NewOrderForm({
     patientName,
     patientAppointmentLocal,
     legalEntity,
+    quickOrder,
   ]);
 
   const performSave = useCallback(
@@ -1327,6 +1336,12 @@ export function NewOrderForm({
         setSaveError("Укажите корректную дату записи (Запись)");
         return;
       }
+      const blockErr = quickOrderBlockValidationError(quickOrder);
+      if (blockErr) {
+        setSaveError(blockErr);
+        return;
+      }
+      const kaitenBlockReason = quickOrderBlockReasonFromState(quickOrder);
       let parsedPaymentPartialRub: number | null = null;
       if (payment === ORDER_PAYMENT_PARTIAL) {
         const n = Number(paymentPartialRubText.trim());
@@ -1389,6 +1404,7 @@ export function NewOrderForm({
                   )
                 : null,
             quickOrder,
+            ...(kaitenBlockReason ? { kaitenBlockReason } : {}),
             constructions: [
               ...detailLinesAndBridgesToConstructionsJson(
                 detailLines,
@@ -2263,50 +2279,14 @@ export function NewOrderForm({
             missingFields={aiUnfilledFields}
             errorMessage={aiPrefillError}
             onFillWithoutAi={fillWithoutAi}
+            elapsedSec={aiPrefillElapsedSec}
+            modelLabel={aiPrefillModelLabel}
           />
         </div>
       ) : null}
 
       <div className="relative z-0 shrink-0 overflow-x-hidden bg-[var(--card-bg)] px-3 py-2 sm:px-4 sm:py-2.5">
-        {aiPrefillLoading ? (
-          <div
-            className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-[var(--card-bg)]/80 px-4 backdrop-blur-[2px]"
-            role="status"
-            aria-live="polite"
-            aria-label="ИИ разбирает письмо"
-          >
-            <Spinner size="lg" className="text-violet-600 dark:text-violet-300" />
-            <p className="max-w-sm text-center text-sm font-medium text-[var(--app-text)]">
-              ИИ разбирает письмо и заполняет наряд…
-            </p>
-            {aiPrefillElapsedSec > 0 ? (
-              <p className="max-w-sm text-center text-xs text-[var(--app-text-secondary)]">
-                {aiPrefillElapsedSec} с
-                {aiPrefillModelLabel ? ` · ${aiPrefillModelLabel}` : null}
-                {aiPrefillElapsedSec >= 15
-                  ? aiPrefillModelLabel === "без ИИ"
-                    ? null
-                    : " · бесплатная модель может отвечать 1–2 минуты"
-                  : null}
-                {aiPrefillElapsedSec >= 130
-                  ? " · превышено ожидаемое время"
-                  : null}
-              </p>
-            ) : aiPrefillModelLabel ? (
-              <p className="max-w-sm text-center text-xs text-[var(--app-text-secondary)]">
-                Модель: {aiPrefillModelLabel}
-              </p>
-            ) : null}
-            <button
-              type="button"
-              onClick={fillWithoutAi}
-              className="rounded-lg border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-900 shadow-sm transition-colors hover:border-violet-400 hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-100 dark:hover:bg-violet-900/50"
-            >
-              Заполнить без ИИ-расчёта
-            </button>
-          </div>
-        ) : null}
-        <div className={aiPrefillLoading ? "pointer-events-none select-none" : undefined}>
+        <div className={aiPrefillLoading ? "pointer-events-none select-none opacity-60" : undefined}>
             {loadError ? (
               <p className="mb-4 text-sm text-red-600">{loadError}</p>
             ) : null}

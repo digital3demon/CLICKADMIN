@@ -333,6 +333,7 @@ export async function processTelegramBotUpdate(
     : sharedTenant
       ? UserRole.MANAGER
       : null;
+  const effectiveCrmUserId = linkedUser?.id ?? null;
 
   if (listCmd) {
     if (!effectiveTenantId || !effectiveRole) {
@@ -350,6 +351,7 @@ export async function processTelegramBotUpdate(
         command: listCmd,
         tenantId: effectiveTenantId,
         role: effectiveRole,
+        crmUserId: effectiveCrmUserId,
       });
       if (listReply) {
         let sent = false;
@@ -394,7 +396,7 @@ export async function processTelegramBotUpdate(
       await replyWithRoleKeyboard(
         botToken,
         chatId,
-        "Неизвестная команда. Отгрузки: /shiptd /shiptm /shipw. Сроки канбана: /dlinetd /dlinetm /dlinew. Или кнопки ниже.",
+        "Неизвестная команда. Отгрузки: /shiptd /shiptm /shipw. Лаб. срок (админ/владелец): /dlinetd /dlinetm /dlinew. Срок карточек (владелец): /cardtd /cardtm /cardw. Или кнопки ниже.",
         effectiveRole,
         true,
       );
@@ -410,7 +412,7 @@ export async function processTelegramBotUpdate(
       await replyWithRoleKeyboard(
         botToken,
         chatId,
-        "Выберите действие кнопкой ниже или команды: /shiptd /shiptm /shipw /dlinetd /dlinetm /dlinew. Привязка почты: /start.",
+        "Выберите действие кнопкой ниже или команды из подсказки /help. Привязка Telegram: /start.",
         effectiveRole,
         true,
       );

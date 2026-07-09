@@ -28,6 +28,7 @@ import {
   filterCompositionHintsByNegation,
   filterCompositionHintsByOrderTextEvidence,
   hasOrderTextEvidenceForPriceHint,
+  isGumIndividualizationHallucination,
 } from "./resolve-ai-composition-lines";
 
 const mockItems = [
@@ -148,6 +149,16 @@ const mockItems = [
     priceRub: 5000,
     leadWorkingDays: 5,
     sortOrder: 10,
+    isActive: true,
+    priceListId: "pl-1",
+  },
+  {
+    id: "pli-gum",
+    code: "3104",
+    name: "Индивидуализация десны на РММА 1 челюсть",
+    priceRub: 3104,
+    leadWorkingDays: 3,
+    sortOrder: 11,
     isActive: true,
     priceListId: "pl-1",
   },
@@ -528,6 +539,45 @@ describe("Marco Rosa titanium and hallucination guard", () => {
     const names = mockItems.map((item) => item.name);
     expect(inferCompositionHintsFromOrderText(remiKidsOrderText, names)).toEqual([
       { nameHint: "Аппарат Марко Росса/HAAS титан", quantity: 1 },
+    ]);
+  });
+});
+
+const kappaTrimOrderText =
+  "ретенционная капа на вч, обрезка не заходя десну чтобы заканчивалась на зубах";
+
+describe("kappa trim instructions vs gum individualization", () => {
+  it("treats gum mention in trim context as hallucination", () => {
+    expect(
+      isGumIndividualizationHallucination(
+        "Индивидуализация десны на РММА 1 челюсть",
+        kappaTrimOrderText,
+      ),
+    ).toBe(true);
+    expect(
+      hasOrderTextEvidenceForPriceHint(
+        "Индивидуализация десны на РММА 1 челюсть",
+        kappaTrimOrderText,
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps only kappa when AI adds gum individualization", async () => {
+    const res = await resolveAiCompositionLines(
+      [
+        { nameHint: "Индивидуализация десны на РММА 1 челюсть", quantity: 1 },
+        { nameHint: "Каппа ретенционная\\элайнер", quantity: 1 },
+      ],
+      { clinicId: null, doctorId: null, negationOrderText: kappaTrimOrderText },
+    );
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines[0]?.code).toBe("7208");
+  });
+
+  it("does not infer gum individualization from trim-only order text", () => {
+    const names = mockItems.map((item) => item.name);
+    expect(inferCompositionHintsFromOrderText(kappaTrimOrderText, names)).toEqual([
+      { nameHint: "Каппа ретенционная\\элайнер", quantity: 1 },
     ]);
   });
 });

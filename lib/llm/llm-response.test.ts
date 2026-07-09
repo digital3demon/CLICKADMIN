@@ -3,6 +3,7 @@ import {
   extractChatCompletionText,
   extractMessageContent,
   formatLlmApiError,
+  normalizeLlmNetworkError,
   parseRateLimitWaitMs,
 } from "./llm-response";
 
@@ -62,6 +63,26 @@ describe("formatLlmApiError", () => {
       error_code: "INSUFFICIENT_FUNDS",
       message_ru: "Недостаточно средств для выполнения запроса.",
     });
-    expect(formatLlmApiError(402, errText)).toContain("Недостаточно средств");
+    expect(formatLlmApiError(402, errText)).toBe(
+      "Недостаточно средств для выполнения запроса.",
+    );
+  });
+
+  it("uses message_ru for content policy violation", () => {
+    const errText = JSON.stringify({
+      error_code: "CONTENT_POLICY_VIOLATION",
+      message_ru: "Запрос нарушает политику допустимого контента.",
+    });
+    expect(formatLlmApiError(400, errText)).toBe(
+      "Запрос нарушает политику допустимого контента.",
+    );
+  });
+});
+
+describe("normalizeLlmNetworkError", () => {
+  it("расшифровывает fetch failed для UI", () => {
+    expect(normalizeLlmNetworkError(new Error("fetch failed"))).toContain(
+      "sprutdock.ru",
+    );
   });
 });

@@ -68,6 +68,8 @@ type OrderAiPrefillPanelProps = {
   missingFields: AiPrefillFieldKey[];
   errorMessage?: string | null;
   onFillWithoutAi?: () => void;
+  elapsedSec?: number;
+  modelLabel?: string | null;
 };
 
 function FillWithoutAiButton({ onClick }: { onClick: () => void }) {
@@ -89,6 +91,8 @@ export function OrderAiPrefillPanel({
   missingFields,
   errorMessage,
   onFillWithoutAi,
+  elapsedSec = 0,
+  modelLabel = null,
 }: OrderAiPrefillPanelProps) {
   if (status === "idle") return null;
 
@@ -133,9 +137,22 @@ export function OrderAiPrefillPanel({
 
       {status === "loading" ? (
         <div className="mt-3 flex flex-col gap-3 rounded-lg border border-violet-200 bg-violet-50/90 px-3 py-3 text-sm text-violet-950 dark:border-violet-900/50 dark:bg-violet-950/25 dark:text-violet-100 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <Spinner size="sm" className="shrink-0 text-violet-600 dark:text-violet-300" />
-            <p>Разбираем письмо и заполняем поля наряда…</p>
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <Spinner size="sm" className="shrink-0 text-violet-600 dark:text-violet-300" />
+              <p>Разбираем письмо и заполняем поля наряда…</p>
+            </div>
+            {elapsedSec > 0 || modelLabel ? (
+              <p className="pl-8 text-xs text-violet-800/90 dark:text-violet-200/90">
+                {elapsedSec > 0 ? `${elapsedSec} с` : null}
+                {elapsedSec > 0 && modelLabel ? " · " : null}
+                {modelLabel ?? null}
+                {elapsedSec >= 15 && modelLabel && modelLabel !== "без ИИ"
+                  ? " · бесплатная модель может отвечать 1–2 минуты"
+                  : null}
+                {elapsedSec >= 130 ? " · превышено ожидаемое время" : null}
+              </p>
+            ) : null}
           </div>
           {onFillWithoutAi ? (
             <FillWithoutAiButton onClick={onFillWithoutAi} />
@@ -161,7 +178,7 @@ export function OrderAiPrefillPanel({
         <div className="mt-3 space-y-3">
           {missingFields.length > 0 ? (
             <p className="rounded-lg border border-amber-300/80 bg-amber-50/80 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/20 dark:text-amber-100">
-              ИИ не заполнил:{" "}
+              {modelLabel === "без ИИ" ? "Не заполнено" : "ИИ не заполнил"}:{" "}
               {missingFields.map((key) => AI_PREFILL_FIELD_LABELS[key]).join(", ")}
               . Поля подсвечены — проверьте вручную.
             </p>

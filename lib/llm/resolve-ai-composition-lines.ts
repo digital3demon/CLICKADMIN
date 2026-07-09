@@ -168,8 +168,28 @@ function getDistinctiveCatalogTokens(name: string): string[] {
   );
 }
 
+/** «обрезка не заходя десну» при заказе каппы — не «индивидуализация десны» из прайса. */
+export function isGumIndividualizationHallucination(
+  hintName: string,
+  orderText: string,
+): boolean {
+  if (!/индивидуализац/i.test(hintName) || !/десн/i.test(hintName)) return false;
+  if (/индивидуализац/i.test(orderText)) return false;
+
+  const hasKappaFamily = new RegExp(
+    `${WORD_LEFT}(?:капп|капа|капу|элайнер|ретенц)${WORD_RIGHT}`,
+    "iu",
+  ).test(orderText);
+  const hasTrimInstruction = /обрезк|не\s+заход(?:я|ить)|заканчивал(?:ась|ся)|на\s+зуб/iu.test(
+    orderText,
+  );
+  return hasKappaFamily && hasTrimInstruction && /десн/i.test(orderText);
+}
+
 /** Есть ли в тексте заказа опора для hint (отсекает «храп» при заказе «марко роса»). */
 export function hasOrderTextEvidenceForPriceHint(hintName: string, orderText: string): boolean {
+  if (isGumIndividualizationHallucination(hintName, orderText)) return false;
+
   const text = normalizeMaterialTokens(stripNegatedPhrasesForMatching(orderText));
   if (!text.trim()) return true;
 
@@ -421,7 +441,12 @@ export function inferCompositionHintsFromOrderText(
       name,
       score: scorePriceItemMentionInOrderText(name, matchText || text),
     }))
-    .filter((row) => row.score > 0 && !isPriceConceptNegatedInOrderText(row.name, text))
+    .filter(
+      (row) =>
+        row.score > 0 &&
+        !isPriceConceptNegatedInOrderText(row.name, text) &&
+        !isGumIndividualizationHallucination(row.name, text),
+    )
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ru"));
 
   if (scored.length === 0) return [];

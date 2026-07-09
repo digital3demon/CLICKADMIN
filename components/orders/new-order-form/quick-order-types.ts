@@ -5,6 +5,7 @@ export const DEFAULT_QUICK_TILE_ACCENT = "#0ea5e9";
 export const MAX_QUICK_TILES = 40;
 export const MAX_TILE_TITLE_LEN = 120;
 export const MAX_OPTION_LABEL_LEN = 80;
+export const MAX_TILE_BLOCK_REASON_LEN = 500;
 
 export type QuickOrderTileOption = {
   id: string;
@@ -23,6 +24,10 @@ export type QuickOrderTile = {
   basePriceSummary: string | null;
   /** Основная позиция прайса включена в наряд */
   baseActive: boolean;
+  /** При сохранении наряда с активной плашкой — заблокировать карточку */
+  blockOnSave: boolean;
+  /** Причина блокировки (если blockOnSave) */
+  blockReason: string;
   options: QuickOrderTileOption[];
 };
 
@@ -47,6 +52,8 @@ export function newQuickOrderTile(): QuickOrderTile {
     basePriceListItemId: null,
     basePriceSummary: null,
     baseActive: false,
+    blockOnSave: false,
+    blockReason: "",
     options: [],
   };
 }
@@ -147,6 +154,8 @@ function normalizeTileV2(raw: unknown): QuickOrderTile | null {
     basePriceListItemId?: unknown;
     basePriceSummary?: unknown;
     baseActive?: unknown;
+    blockOnSave?: unknown;
+    blockReason?: unknown;
     options?: unknown;
   };
   const title = String(r.title ?? "").trim().slice(0, MAX_TILE_TITLE_LEN);
@@ -169,6 +178,10 @@ function normalizeTileV2(raw: unknown): QuickOrderTile | null {
     basePriceListItemId: baseId || null,
     basePriceSummary: String(r.basePriceSummary ?? "").trim() || null,
     baseActive: Boolean(r.baseActive),
+    blockOnSave: Boolean(r.blockOnSave),
+    blockReason: String(r.blockReason ?? "")
+      .trim()
+      .slice(0, MAX_TILE_BLOCK_REASON_LEN),
     options: options.slice(0, 30),
   };
 }
@@ -209,6 +222,8 @@ function migrateFromLegacyV1(p: Record<string, unknown>): QuickOrderState {
         basePriceListItemId: null,
         basePriceSummary: null,
         baseActive: Boolean(r.active),
+        blockOnSave: false,
+        blockReason: "",
         options: [],
       });
     }

@@ -3,6 +3,8 @@ import {
   DEFAULT_AI_MODEL,
   initialAiModelState,
   isAllowedModel,
+  isImageModelSlug,
+  isTextChatModelSlug,
   isValidAiModelSlug,
   modelDisplayLabel,
   modelSourceKind,
@@ -93,5 +95,20 @@ describe("modelSourceKind", () => {
   it("marks presets and custom slugs", () => {
     expect(modelSourceKind("google/gemini-2.5-flash")).toBe("preset");
     expect(modelSourceKind("meta-llama/llama-3.3-70b-instruct:free")).toBe("custom");
+  });
+});
+
+describe("isImageModelSlug", () => {
+  it("detects SprutDock image model slugs", () => {
+    expect(isImageModelSlug("openai/dall-e-3")).toBe(true);
+    expect(isImageModelSlug("openai/gpt-image-1")).toBe(true);
+    expect(isImageModelSlug("google/gemini-3.1-flash-image-preview")).toBe(true);
+    expect(isImageModelSlug("google/gemini-2.5-flash")).toBe(false);
+    expect(isImageModelSlug(DEFAULT_AI_MODEL)).toBe(false);
+  });
+
+  it("isTextChatModelSlug excludes image models", () => {
+    expect(isTextChatModelSlug("openai/dall-e-3")).toBe(false);
+    expect(isTextChatModelSlug(DEFAULT_AI_MODEL)).toBe(true);
   });
 });

@@ -14,7 +14,8 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
  * Настройки ИИ из конфигурации организации (Tenant).
- * API: SprutDock (OpenAI-совместимый).
+ * SprutDock: text → POST /v1/chat/completions; image → POST /v1/images/generations.
+ * @see https://sprutdock.ru/docs
  */
 export async function getAiSettings(tenantId: string): Promise<AiSettings> {
   const db = await getOrdersPrisma();

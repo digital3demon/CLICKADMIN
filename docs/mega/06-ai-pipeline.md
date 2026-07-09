@@ -35,6 +35,15 @@ analyzePredictionError
 
 HTTP клиент: `lib/llm/llm-client.ts` — `chatCompletion`, `stripMarkdownFences`.
 
+SprutDock (OpenAI-совместимый, `https://sprutdock.ru/v1`):
+
+| modality | Эндпоинт | Биллинг |
+|----------|----------|---------|
+| `text` | `POST /v1/chat/completions` | токены |
+| `image` | `POST /v1/images/generations` | за изображение |
+
+CRM использует только **text** (`chatCompletion`). Клиент image: `lib/llm/image-generation.ts` (`imageGeneration`). Витрина моделей: `GET /v1/models?modality=image`.
+
 ---
 
 ## 6.3. Shadow prediction

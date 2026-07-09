@@ -9,6 +9,7 @@ import {
 } from "@/lib/tenant-prisma-resolver";
 
 export type TelegramLinkedUserPick = {
+  id: string;
   tenantId: string;
   role: UserRole;
 };
@@ -22,7 +23,7 @@ async function pickUserByTelegramId(
     where: {
       OR: [{ telegramId: tid }, { telegramId: telegramUserIdStr }],
     },
-    select: { tenantId: true, role: true },
+    select: { id: true, tenantId: true, role: true },
   });
 }
 

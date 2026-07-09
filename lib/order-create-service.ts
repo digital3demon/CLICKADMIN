@@ -133,6 +133,8 @@ export type CreateOrderBody = {
   sendAutoReply?: boolean;
   autoReplySubject?: string | null;
   autoReplyHtml?: string | null;
+  /** Блокировка карточки после создания (из плашки быстрого наряда). */
+  kaitenBlockReason?: string | null;
 };
 
 export type CreateOrderResult =

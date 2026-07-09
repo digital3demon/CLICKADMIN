@@ -3,7 +3,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { getAiSettings } from "@/lib/llm/llm-config";
 import { chatCompletion } from "@/lib/llm/llm-client";
-import { normalizeModel } from "@/lib/llm/ai-models";
+import { isImageModelSlug, normalizeModel } from "@/lib/llm/ai-models";
 
 export const maxDuration = 45;
 
@@ -24,6 +24,17 @@ export async function POST() {
 
     const settings = await getAiSettings(tenantId);
     const requestedModel = normalizeModel(settings.model);
+
+    if (isImageModelSlug(requestedModel)) {
+      return NextResponse.json(
+        {
+          error:
+            "Выбрана image-модель (генерация картинок). Для разбора писем нужна text-модель — POST /v1/chat/completions. Image-модели: POST /v1/images/generations (см. sprutdock.ru/docs).",
+          requestedModel,
+        },
+        { status: 400 },
+      );
+    }
 
     if (!settings.enabled) {
       return NextResponse.json(

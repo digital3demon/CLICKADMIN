@@ -124,3 +124,33 @@ export function parseOptionalIsoDate(v: unknown): string | null {
   }
   return null;
 }
+
+const APPOINTMENT_READY_LINE_RE =
+  /(?:^|\n)\s*на\s+готов(?:о|ность)?\s*(?:[^\d\n]{0,24})?(\d{1,2}\.\d{1,2}(?:\.\d{2,4})?)/giu;
+
+/**
+ * Дата выдачи/записи из фраз вроде «На готово чт 16.07» в теле письма.
+ * Используется, когда LLM/fast-path не вернули patientAppointmentAt.
+ */
+export function parseAppointmentDateFromOrderEmailText(
+  text: string,
+  referenceDate: Date = new Date(),
+): { iso: string | null; ambiguous: boolean } {
+  const trimmed = text.trim();
+  if (!trimmed) return { iso: null, ambiguous: false };
+
+  for (const m of trimmed.matchAll(APPOINTMENT_READY_LINE_RE)) {
+    const iso = parseRuDotDate(m[1], referenceDate);
+    if (iso) return { iso, ambiguous: false };
+  }
+
+  const readyLine = trimmed
+    .split(/\n/)
+    .map((line) => line.trim())
+    .find((line) => /на\s+готов(?:о|ность)?/iu.test(line));
+  if (readyLine) {
+    return parseFirstDateFromText(readyLine, referenceDate);
+  }
+
+  return { iso: null, ambiguous: false };
+}

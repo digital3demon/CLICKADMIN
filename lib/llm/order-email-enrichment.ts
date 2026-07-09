@@ -6,7 +6,7 @@ import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 import { emailEffectiveReceivedAt } from "@/lib/mail/order-source-work-received";
 import { normalizeClientOrderText } from "@/lib/order-email-client-text";
 import { deriveSourceDataFlagsFromAttachments, collectScanLikeAttachmentIds } from "@/lib/order-email-attachment-heuristics";
-import { parseOptionalIsoDate, parseFirstDateFromText } from "@/lib/order-email-date-parse";
+import { parseOptionalIsoDate, parseFirstDateFromText, parseAppointmentDateFromOrderEmailText } from "@/lib/order-email-date-parse";
 import { resolveClientBillingForOrder } from "@/lib/order-client-billing-for-order";
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 import { autoLabDueLocalFromLeadWorkingDays } from "@/lib/order-due-datetime";
@@ -330,6 +330,17 @@ export async function enrichOrderEmailPrediction(
     const parsed = parseFirstDateFromText(out.patientAppointmentAt);
     appointmentIso = parsed.iso;
     if (parsed.ambiguous) {
+      warnings.push("Несколько дат записи/доставки — выбрана первая");
+    }
+  }
+  if (!appointmentIso) {
+    const dateSource = [rawClientText, emailBodyForGuards]
+      .map((part) => part?.trim() ?? "")
+      .filter(Boolean)
+      .join("\n");
+    const fromOrderText = parseAppointmentDateFromOrderEmailText(dateSource);
+    appointmentIso = fromOrderText.iso;
+    if (fromOrderText.ambiguous) {
       warnings.push("Несколько дат записи/доставки — выбрана первая");
     }
   }

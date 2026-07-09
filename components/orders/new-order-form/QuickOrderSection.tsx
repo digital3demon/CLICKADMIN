@@ -229,6 +229,17 @@ export function QuickOrderSection({
                   </ul>
                 ) : null}
 
+                {tile.blockOnSave ? (
+                  <p className="text-[10px] font-medium text-red-700 dark:text-red-300">
+                    Стоп при сохранении
+                    {tile.blockReason.trim()
+                      ? `: ${tile.blockReason.trim().slice(0, 48)}${
+                          tile.blockReason.trim().length > 48 ? "…" : ""
+                        }`
+                      : " — укажите причину в настройках"}
+                  </p>
+                ) : null}
+
                 <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--card-border)]/60 pt-1.5">
                   <button
                     type="button"

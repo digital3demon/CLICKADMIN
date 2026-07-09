@@ -3,6 +3,7 @@ import {
   parseFirstDateFromText,
   parseRuDotDate,
   parseRuMonthNameDate,
+  parseAppointmentDateFromOrderEmailText,
 } from "./order-email-date-parse";
 
 describe("parseRuDotDate", () => {
@@ -31,5 +32,28 @@ describe("parseFirstDateFromText", () => {
     const r = parseFirstDateFromText("Доставка 12.06 или 15.06", new Date("2026-06-01"));
     expect(r.iso).toContain("2026-06-12");
     expect(r.ambiguous).toBe(true);
+  });
+});
+
+describe("parseAppointmentDateFromOrderEmailText", () => {
+  const ref = new Date("2026-07-09T12:00:00");
+
+  it("parses «На готово чт 16.07»", () => {
+    const r = parseAppointmentDateFromOrderEmailText(
+      "Сканы по ссылке\nНа готово чт 16.07.",
+      ref,
+    );
+    expect(r.iso).toContain("2026-07-16");
+    expect(r.ambiguous).toBe(false);
+  });
+
+  it("parses date on the same line without weekday", () => {
+    const r = parseAppointmentDateFromOrderEmailText("На готово 16.07", ref);
+    expect(r.iso).toContain("2026-07-16");
+  });
+
+  it("returns null when no readiness phrase", () => {
+    const r = parseAppointmentDateFromOrderEmailText("планирование работы", ref);
+    expect(r.iso).toBeNull();
   });
 });

@@ -19,6 +19,15 @@ import { endYmdKanbanDlinetm } from "@/lib/kanban-dline-end-ymd";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import type { ShipmentOrderRow } from "@/lib/fetch-shipments-orders";
 import { getClientsPrisma } from "@/lib/get-domain-prisma";
+import { fetchKanbanStageDlineTelegramItems } from "@/lib/telegram-bot-kanban-stage-dline";
+import { isTelegramBotCardStageCommand } from "@/lib/telegram-bot-menu-commands";
+import {
+  telegramRoleMayCardStageDline,
+  telegramRoleMayDline,
+  telegramRoleMayShip,
+  telegramRoleUsesLabOrderDline,
+  telegramRoleUsesPersonalCardStageDline,
+} from "@/lib/telegram-bot-role-matrix";
 
 export {
   isTelegramBotListCommand,
@@ -27,19 +36,6 @@ export {
 } from "@/lib/telegram-bot-menu-commands";
 
 const MAX_LINK_LINES = 120;
-
-const SHIP_COMMAND_ROLES = new Set<UserRole>([
-  UserRole.SENIOR_ADMINISTRATOR,
-  UserRole.ADMINISTRATOR,
-  UserRole.SENIOR_TECHNICIAN,
-  UserRole.MANAGER,
-  UserRole.OWNER,
-]);
-
-const DLINE_EXCLUDED_ROLES = new Set<UserRole>([
-  UserRole.ADMINISTRATOR,
-  UserRole.SENIOR_ADMINISTRATOR,
-]);
 
 function telegramEscapeHtmlText(s: string): string {
   return s
@@ -124,14 +120,6 @@ function formatHtmlLinkList(
   return `<b>${telegramEscapeHtmlText(header)}</b>\n${lines.join("\n")}${extra}`;
 }
 
-export function telegramRoleMayShip(role: UserRole): boolean {
-  return SHIP_COMMAND_ROLES.has(role);
-}
-
-export function telegramRoleMayDline(role: UserRole): boolean {
-  return !DLINE_EXCLUDED_ROLES.has(role);
-}
-
 /** Нижняя клавиатура в чате: только кнопки, разрешённые роли (остальное — команды вручную). */
 export function telegramReplyKeyboardMarkupForRole(
   role: UserRole,
@@ -144,12 +132,26 @@ export function telegramReplyKeyboardMarkupForRole(
     ]);
     rows.push([{ text: "Отгрузки до конца недели" }]);
   }
-  if (telegramRoleMayDline(role)) {
+  if (telegramRoleUsesLabOrderDline(role)) {
     rows.push([
       { text: "Срок на сегодня" },
       { text: "Срок на завтра" },
     ]);
     rows.push([{ text: "Срок до конца недели" }]);
+  }
+  if (telegramRoleUsesPersonalCardStageDline(role)) {
+    rows.push([
+      { text: "Мой срок на сегодня" },
+      { text: "Мой срок на завтра" },
+    ]);
+    rows.push([{ text: "Мой срок до конца недели" }]);
+  }
+  if (telegramRoleMayCardStageDline(role)) {
+    rows.push([
+      { text: "Срок карточек на сегодня" },
+      { text: "Срок карточек на завтра" },
+    ]);
+    rows.push([{ text: "Срок карточек до конца недели" }]);
   }
   if (rows.length === 0) return null;
   return {
@@ -163,9 +165,10 @@ export async function tryTelegramBotListCommand(opts: {
   command: string;
   tenantId: string;
   role: UserRole;
+  crmUserId?: string | null;
 }): Promise<{ text: string; parseMode: "HTML" } | null> {
   const cmd = opts.command.toLowerCase();
-  const { tenantId, role } = opts;
+  const { tenantId, role, crmUserId } = opts;
 
   const shipCmd =
     cmd === "/shiptd" || cmd === "/shiptm" || cmd === "/shipw";
@@ -173,8 +176,9 @@ export async function tryTelegramBotListCommand(opts: {
     cmd === "/dlinew" ||
     cmd === "/dlinetd" ||
     cmd === "/dlinetm";
+  const cardStageCmd = isTelegramBotCardStageCommand(cmd);
 
-  if (!shipCmd && !dlineCmd) return null;
+  if (!shipCmd && !dlineCmd && !cardStageCmd) return null;
 
   if (shipCmd && !telegramRoleMayShip(role)) {
     return {
@@ -185,7 +189,13 @@ export async function tryTelegramBotListCommand(opts: {
   if (dlineCmd && !telegramRoleMayDline(role)) {
     return {
       parseMode: "HTML",
-      text: "Эта команда не предназначена для роли администратора.",
+      text: "Команды сроков недоступны для вашей роли.",
+    };
+  }
+  if (cardStageCmd && !telegramRoleMayCardStageDline(role)) {
+    return {
+      parseMode: "HTML",
+      text: "Срок карточек канбана доступен только владельцу.",
     };
   }
 
@@ -232,7 +242,34 @@ export async function tryTelegramBotListCommand(opts: {
     };
   }
 
-  /* dline */
+  /* dline / card stage */
+  if (cardStageCmd) {
+    const stage = await fetchKanbanStageDlineTelegramItems(
+      tenantId,
+      cmd as "/cardtd" | "/cardtm" | "/cardw",
+    );
+    return {
+      parseMode: "HTML",
+      text: formatHtmlLinkList(stage.items, "Карточек не найдено", stage.header),
+    };
+  }
+
+  if (dlineCmd && telegramRoleUsesPersonalCardStageDline(role)) {
+    const stage = await fetchKanbanStageDlineTelegramItems(
+      tenantId,
+      cmd as "/dlinetd" | "/dlinetm" | "/dlinew",
+      { crmUserId: crmUserId ?? null },
+    );
+    const emptyRu = crmUserId
+      ? "Карточек на вас (ответственный или участник) с этапным сроком в этом окне нет"
+      : "Привяжите Telegram к пользователю CRM, чтобы видеть карточки на вас";
+    return {
+      parseMode: "HTML",
+      text: formatHtmlLinkList(stage.items, emptyRu, stage.header),
+    };
+  }
+
+  /* dline — лабораторный срок наряда (админы, владелец) */
   let start: Date;
   let endExclusive: Date;
   let header: string;

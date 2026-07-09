@@ -690,8 +690,10 @@ export function AiAdminClient({
                   ) : null}
                 </div>
                 <p className="text-sm text-[var(--app-text-secondary)]">
-                  SprutDock — OpenAI-совместимый шлюз. Бесплатная Nvidia Ultra может отвечать 1–2 минуты.
-                  Можно указать slug вручную, например{" "}
+                  SprutDock — OpenAI-совместимый шлюз. Разбор писем — text-модели (
+                  <span className="font-mono">POST /v1/chat/completions</span>
+                  ). Image-модели (dall-e, gpt-image, gemini-*-image-*) — другой эндпоинт, для CRM не подходят.
+                  Бесплатная Nvidia Ultra может отвечать 1–2 минуты. Можно указать slug вручную, например{" "}
                   <span className="font-mono">anthropic/claude-sonnet-4-6</span>.
                   Запасные модели отключены.
                 </p>

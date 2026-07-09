@@ -126,8 +126,36 @@ export function formatLlmApiError(status: number, errText: string): string {
 
   const message = parseSprutDockErrorMessage(errText);
   if (message) {
-    return `SprutDock API error (${status}): ${message}`;
+    return message;
   }
 
   return `SprutDock API error (${status}): ${errText}`;
+}
+
+/** Node fetch без деталей — типично DNS/SSL/файрвол на сервере CRM. */
+export function normalizeLlmNetworkError(err: unknown): string {
+  const msg =
+    err instanceof Error
+      ? err.message.trim()
+      : String(err ?? "").trim();
+  const lower = msg.toLowerCase();
+  if (!lower || lower === "fetch failed") {
+    return "Сеть до sprutdock.ru недоступна с сервера CRM (fetch failed). Проверьте исходящий HTTPS/DNS на хосте или нажмите «Заполнить без ИИ-расчёта».";
+  }
+  if (lower.includes("getaddrinfo") || lower.includes("enotfound")) {
+    return "Не удалось разрешить имя sprutdock.ru на сервере CRM. Проверьте DNS.";
+  }
+  return msg;
+}
+
+export function isTransientLlmNetworkError(err: unknown): boolean {
+  const lower = normalizeLlmNetworkError(err).toLowerCase();
+  return (
+    lower.includes("fetch failed") ||
+    lower.includes("недоступна") ||
+    lower.includes("dns") ||
+    lower.includes("econnreset") ||
+    lower.includes("econnrefused") ||
+    lower.includes("socket hang up")
+  );
 }

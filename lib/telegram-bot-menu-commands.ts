@@ -6,6 +6,12 @@ export const TELEGRAM_MENU_LABEL_TO_COMMAND: Record<string, string> = {
   "Срок на сегодня": "/dlinetd",
   "Срок на завтра": "/dlinetm",
   "Срок до конца недели": "/dlinew",
+  "Мой срок на сегодня": "/dlinetd",
+  "Мой срок на завтра": "/dlinetm",
+  "Мой срок до конца недели": "/dlinew",
+  "Срок карточек на сегодня": "/cardtd",
+  "Срок карточек на завтра": "/cardtm",
+  "Срок карточек до конца недели": "/cardw",
 };
 
 const LIST_COMMANDS = new Set([
@@ -15,6 +21,9 @@ const LIST_COMMANDS = new Set([
   "/dlinew",
   "/dlinetd",
   "/dlinetm",
+  "/cardtd",
+  "/cardtm",
+  "/cardw",
 ]);
 
 export function telegramMenuLabelToCommand(raw: string): string | null {
@@ -47,4 +56,9 @@ export function resolveTelegramBotListCommand(textRaw: string): string | null {
   if (menu) return menu;
   const cmd = listCommandFirstToken(textRaw);
   return isTelegramBotListCommand(cmd) ? cmd : null;
+}
+
+export function isTelegramBotCardStageCommand(cmd: string): boolean {
+  const c = cmd.trim().toLowerCase();
+  return c === "/cardtd" || c === "/cardtm" || c === "/cardw";
 }

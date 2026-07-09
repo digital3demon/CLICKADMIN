@@ -3,12 +3,13 @@ import { type AiSettings } from "./llm-config";
 import {
   extractChatCompletionText,
   formatLlmApiError,
+  isTransientLlmNetworkError,
+  normalizeLlmNetworkError,
   parseRateLimitWaitMs,
 } from "./llm-response";
 import { type ChatCompletionOptions, type ChatCompletionResult } from "./types";
+import { SPRUTDOCK_CHAT_COMPLETIONS_URL, sprutdockAuthHeaders } from "./sprutdock";
 import { logger } from "@/lib/server/logger";
-
-const SPRUTDOCK_CHAT_COMPLETIONS_URL = "https://sprutdock.ru/v1/chat/completions";
 const MAX_RATE_LIMIT_RETRIES = 4;
 
 function sleep(ms: number): Promise<void> {
@@ -31,7 +32,9 @@ export async function chatCompletion(
 
   for (const model of modelsToTry) {
     for (let rateLimitAttempt = 0; rateLimitAttempt <= maxRateLimitRetries; rateLimitAttempt++) {
-      try {
+      let retriedNetwork = false;
+      attempt: while (true) {
+        try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -52,10 +55,7 @@ export async function chatCompletion(
 
         const response = await fetch(SPRUTDOCK_CHAT_COMPLETIONS_URL, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${settings.apiKey}`,
-            "Content-Type": "application/json",
-          },
+          headers: sprutdockAuthHeaders(settings.apiKey),
           body: JSON.stringify(body),
           signal: controller.signal,
         });
@@ -71,7 +71,7 @@ export async function chatCompletion(
             const waitMs = parseRateLimitWaitMs(response, errText);
             logger.warn({ model, waitMs, attempt: rateLimitAttempt + 1 }, "SprutDock rate limit, retrying");
             await sleep(waitMs);
-            continue;
+            break attempt;
           }
 
           if (response.status === 429 || response.status >= 500) {
@@ -116,16 +116,30 @@ export async function chatCompletion(
             durationMs: Date.now() - startTime,
           };
         }
-        lastError = e.message;
-        logger.warn({ model, err: e, timeoutMs }, "SprutDock fetch failed");
+        lastError = normalizeLlmNetworkError(e);
+        logger.warn({ model, err: e, timeoutMs, retriedNetwork }, "SprutDock fetch failed");
+        if (!retriedNetwork && isTransientLlmNetworkError(e)) {
+          retriedNetwork = true;
+          await sleep(1200);
+          continue attempt;
+        }
         break;
+      }
+      break;
       }
     }
   }
 
+  const userError =
+    lastError.includes("sprutdock.ru") ||
+    lastError.startsWith("Таймаут SprutDock") ||
+    lastError.startsWith("Лимит SprutDock")
+      ? lastError
+      : `Не удалось получить ответ ИИ. ${lastError}`;
+
   return {
     ok: false,
-    error: `All models failed. Last error: ${lastError}`,
+    error: userError,
     durationMs: Date.now() - startTime,
   };
 }
