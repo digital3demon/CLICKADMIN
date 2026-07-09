@@ -6,6 +6,8 @@ import {
 } from "@/lib/finance-office-list-scope";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
+import { hydrateListPendingChatCorrectionsFromInbox } from "@/lib/order-chat-corrections-read";
+import { hydrateListPendingProstheticsFromInbox } from "@/lib/order-prosthetics-requests-read";
 import {
   formatCounterpartyRequisitesShortSummary,
 } from "@/lib/format-counterparty-requisites-summary";
@@ -365,7 +367,12 @@ export async function fetchFinanceOfficeOrders(
       ? withHighlight.filter((r) => r.listKaitenLabMentionHighlight)
       : withHighlight;
 
-  return filtered.sort((a, b) => {
+  const withCorrections = await hydrateListPendingProstheticsFromInbox(
+    db,
+    await hydrateListPendingChatCorrectionsFromInbox(db, filtered),
+  );
+
+  return withCorrections.sort((a, b) => {
     const pr = financePriority(a) - financePriority(b);
     if (pr !== 0) return pr;
     return (a.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER) -

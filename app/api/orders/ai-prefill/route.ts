@@ -23,6 +23,8 @@ export const maxDuration = 130;
 
 type Body = {
   emailId?: string;
+  /** Структурный разбор без LLM (кнопка «без ИИ-расчёта»). */
+  heuristicOnly?: boolean;
 };
 
 /** GET — какая модель будет использована (без вызова LLM). */
@@ -104,9 +106,11 @@ export async function POST(req: Request) {
         email.fromAddress,
       );
 
+      const heuristicOnly = body.heuristicOnly === true;
       const run = await runOrderEmailPrediction(db, tenantId, emailId, null, {
         preferOrderIdForSource,
-        forPrefill: true,
+        forPrefill: !heuristicOnly,
+        heuristicOnly,
       });
       if (!run) {
         return NextResponse.json({ error: "Не удалось разобрать письмо" }, { status: 422 });

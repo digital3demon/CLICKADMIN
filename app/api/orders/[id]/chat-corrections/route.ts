@@ -7,8 +7,8 @@ import { syncOrderChatCorrectionsFromKaitenLive } from "@/lib/order-chat-correct
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
-import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
 import { createOrderChatInboxItemsFromCrmComment } from "@/lib/order-chat-inbox-db";
+import { fetchMergedOrderChatCorrections } from "@/lib/order-chat-corrections-read";
 
 export const dynamic = "force-dynamic";
 
@@ -65,47 +65,10 @@ export async function GET(
     }
   }
 
-  const rows = await prisma.orderChatCorrection.findMany({
-    where: { orderId: order.id },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      text: true,
-      source: true,
-      authorLabel: true,
-      createdAt: true,
-      resolvedAt: true,
-      rejectedAt: true,
-    },
+  const merged = await fetchMergedOrderChatCorrections(prisma, order.id, {
+    tenantId,
   });
-
-  const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
-  const inboxRows = useInbox
-    ? await (prisma as any).orderChatInboxItem.findMany({
-        where: { orderId: order.id, type: "CORRECTION" },
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          text: true,
-          source: true,
-          authorLabel: true,
-          createdAt: true,
-          resolvedAt: true,
-          rejectedAt: true,
-        },
-      })
-    : [];
-
-  const sourceRows = useInbox ? inboxRows : rows;
-  const corrections = (sourceRows as Array<{
-    id: string;
-    text: string;
-    source: "KAITEN" | "DEMO_KANBAN";
-    authorLabel: string | null;
-    createdAt: Date;
-    resolvedAt: Date | null;
-    rejectedAt: Date | null;
-  }>).map((r) => ({
+  const corrections = merged.map((r) => ({
     id: r.id,
     text: r.text,
     source: r.source,

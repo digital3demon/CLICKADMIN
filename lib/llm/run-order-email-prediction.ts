@@ -36,8 +36,10 @@ export type RunOrderEmailPredictionResult = {
 export type RunOrderEmailPredictionOptions = {
   /** Для резолва врача по истории, без подмешивания писем чужого наряда. */
   preferOrderIdForSource?: string | null;
-  /** Черновик наряда до сохранения — эвристика вместо тяжёлого LLM, без historyContext. */
+  /** Черновик наряда до сохранения — полный LLM как в diff viewer. */
   forPrefill?: boolean;
+  /** Только эвристика/структурный разбор, без вызова LLM (кнопка «без ИИ-расчёта»). */
+  heuristicOnly?: boolean;
 };
 
 const MIN_BODY_CHARS_SKIP_PDF = 120;
@@ -232,43 +234,65 @@ export async function runOrderEmailPrediction(
 
   const clientOrderText =
     structured.clientOrderText ?? buildClientOrderTextFromBody(effectiveBody);
-  const useHeuristicPrefill =
-    !opts?.forPrefill &&
-    orderId == null &&
-    canUseHeuristicPrefill({
-      patientName,
-      doctorHint: structured.doctorHint,
-      clinicHint: structured.clinicHint,
-      clientOrderText,
-      hasResolvedDoctor: Boolean(preResolved?.doctorId),
-      hasResolvedClinic: Boolean(preResolved?.clinicId),
-    });
+  const heuristicGate = canUseHeuristicPrefill({
+    patientName,
+    doctorHint: structured.doctorHint,
+    clinicHint: structured.clinicHint,
+    clientOrderText,
+    hasResolvedDoctor: Boolean(preResolved?.doctorId),
+    hasResolvedClinic: Boolean(preResolved?.clinicId),
+  });
+  const useFastPath =
+    opts?.heuristicOnly === true ||
+    (!opts?.forPrefill && orderId == null && heuristicGate);
 
-  if (useHeuristicPrefill && clientOrderText) {
-    let clinicId = preResolved?.clinicId ?? null;
-    let doctorId = preResolved?.doctorId ?? null;
+  if (useFastPath) {
+    const workText = clientOrderText?.trim() || effectiveBody.trim();
+    if (workText) {
+      let clinicId = preResolved?.clinicId ?? null;
+      let doctorId = preResolved?.doctorId ?? null;
 
-    const catalog = await loadClinicDoctorCatalog(tenantId);
-    if (!doctorId && structured.doctorHint) {
-      doctorId = resolveDoctorId(structured.doctorHint, catalog.doctors);
+      const catalog = await loadClinicDoctorCatalog(tenantId);
+      if (!doctorId && structured.doctorHint) {
+        doctorId = resolveDoctorId(structured.doctorHint, catalog.doctors);
+      }
+      if (!clinicId && structured.clinicHint) {
+        clinicId = resolveClinicId(structured.clinicHint, catalog.clinics);
+      }
+
+      const warnings: string[] = [];
+      if (!doctorId) {
+        warnings.push("Врач не найден в справочнике — выберите вручную в форме");
+      }
+      if (opts?.heuristicOnly && !heuristicGate) {
+        warnings.push("Заполнено без ИИ — проверьте все поля вручную");
+      }
+
+      parsedAi = {
+        patientName: patientName ?? structured.patientName,
+        clinicId,
+        doctorId,
+        clinicHint: structured.clinicHint,
+        doctorHint: structured.doctorHint,
+        clientOrderText: clientOrderText ?? workText,
+        confidenceScore: doctorId ? 80 : opts?.heuristicOnly ? 50 : 65,
+        warnings,
+        compositionHints: [],
+        suggestedAttachmentIds: [],
+        urgent: false,
+      };
+      durationMs = Date.now() - fastPathStart;
     }
-    if (!clinicId && structured.clinicHint) {
-      clinicId = resolveClinicId(structured.clinicHint, catalog.clinics);
-    }
+  }
 
+  if (!parsedAi && opts?.heuristicOnly) {
     parsedAi = {
-      patientName: patientName ?? structured.patientName,
-      clinicId,
-      doctorId,
+      patientName,
       clinicHint: structured.clinicHint,
       doctorHint: structured.doctorHint,
-      clientOrderText,
-      confidenceScore: doctorId ? 80 : 65,
-      warnings: doctorId
-        ? ([] as string[])
-        : ([
-            "Врач не найден в справочнике — выберите вручную в форме",
-          ] as string[]),
+      clientOrderText: clientOrderText ?? effectiveBody.trim(),
+      confidenceScore: 35,
+      warnings: ["Заполнено без ИИ — проверьте все поля вручную"],
       compositionHints: [],
       suggestedAttachmentIds: [],
       urgent: false,
@@ -276,7 +300,7 @@ export async function runOrderEmailPrediction(
     durationMs = Date.now() - fastPathStart;
   }
 
-  if (!parsedAi) {
+  if (!parsedAi && !opts?.heuristicOnly) {
     if (!patientName && !opts?.forPrefill) {
       const extracted = await extractPatientNameOnly(tenantId, emailBlocks);
       patientName =

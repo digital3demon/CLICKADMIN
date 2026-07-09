@@ -369,7 +369,7 @@ export function defaultModuleAllowed(
     case "AI_ADMIN":
       return false;
     case "AI_MODE":
-      return role === "ADMINISTRATOR" || role === "SENIOR_ADMINISTRATOR";
+      return role === "SENIOR_ADMINISTRATOR";
     default:
       return true;
   }

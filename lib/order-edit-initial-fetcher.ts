@@ -17,6 +17,8 @@ import { fetchWorkspaceActivePriceListName } from "@/lib/order-price-list-from-c
 import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
+import { fetchMergedOrderChatCorrections } from "@/lib/order-chat-corrections-read";
+import { fetchMergedOrderProstheticsRequests } from "@/lib/order-prosthetics-requests-read";
 
 export type FetchOrderEditInitialResult = {
   initial: OrderEditInitial;
@@ -277,7 +279,11 @@ export async function fetchOrderEditInitial(
       id: child.id,
       orderNumber: child.orderNumber,
     })),
-    chatCorrections: order.chatCorrections.map((c) => ({
+    chatCorrections: (
+      await fetchMergedOrderChatCorrections(ordersPrisma, order.id, {
+        tenantId,
+      })
+    ).map((c) => ({
       id: c.id,
       text: c.text,
       source: c.source,
@@ -286,7 +292,11 @@ export async function fetchOrderEditInitial(
       resolvedAt: c.resolvedAt?.toISOString() ?? null,
       rejectedAt: c.rejectedAt?.toISOString() ?? null,
     })),
-    prostheticsRequests: order.prostheticsRequests.map((c) => ({
+    prostheticsRequests: (
+      await fetchMergedOrderProstheticsRequests(ordersPrisma, order.id, {
+        tenantId,
+      })
+    ).map((c) => ({
       id: c.id,
       text: c.text,
       source: c.source,

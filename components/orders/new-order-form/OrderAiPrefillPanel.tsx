@@ -67,7 +67,20 @@ type OrderAiPrefillPanelProps = {
   warnings: string[];
   missingFields: AiPrefillFieldKey[];
   errorMessage?: string | null;
+  onFillWithoutAi?: () => void;
 };
+
+function FillWithoutAiButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-900 shadow-sm transition-colors hover:border-violet-400 hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-100 dark:hover:bg-violet-900/50"
+    >
+      Заполнить без ИИ-расчёта
+    </button>
+  );
+}
 
 export function OrderAiPrefillPanel({
   status,
@@ -75,6 +88,7 @@ export function OrderAiPrefillPanel({
   warnings,
   missingFields,
   errorMessage,
+  onFillWithoutAi,
 }: OrderAiPrefillPanelProps) {
   if (status === "idle") return null;
 
@@ -118,19 +132,29 @@ export function OrderAiPrefillPanel({
       </div>
 
       {status === "loading" ? (
-        <div className="mt-3 flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50/90 px-3 py-3 text-sm text-violet-950 dark:border-violet-900/50 dark:bg-violet-950/25 dark:text-violet-100">
-          <Spinner size="sm" className="shrink-0 text-violet-600 dark:text-violet-300" />
-          <p>Разбираем письмо и заполняем поля наряда…</p>
+        <div className="mt-3 flex flex-col gap-3 rounded-lg border border-violet-200 bg-violet-50/90 px-3 py-3 text-sm text-violet-950 dark:border-violet-900/50 dark:bg-violet-950/25 dark:text-violet-100 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Spinner size="sm" className="shrink-0 text-violet-600 dark:text-violet-300" />
+            <p>Разбираем письмо и заполняем поля наряда…</p>
+          </div>
+          {onFillWithoutAi ? (
+            <FillWithoutAiButton onClick={onFillWithoutAi} />
+          ) : null}
         </div>
       ) : null}
 
       {status === "error" && errorMessage ? (
-        <p
-          className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100"
-          role="alert"
-        >
-          {errorMessage}
-        </p>
+        <div className="mt-3 space-y-3">
+          <p
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100"
+            role="alert"
+          >
+            {errorMessage}
+          </p>
+          {onFillWithoutAi ? (
+            <FillWithoutAiButton onClick={onFillWithoutAi} />
+          ) : null}
+        </div>
       ) : null}
 
       {status === "done" ? (

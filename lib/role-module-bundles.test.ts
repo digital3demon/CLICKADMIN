@@ -73,4 +73,10 @@ describe("defaultModuleAllowed bundles alignment", () => {
     expect(defaultModuleAllowed("MANAGER", "KANBAN_DELETE_CARD")).toBe(true);
     expect(defaultModuleAllowed("MANAGER", "ORDERS_NOTIFICATIONS")).toBe(true);
   });
+
+  it("AI_MODE: только старший админ по умолчанию, не обычный админ", () => {
+    expect(defaultModuleAllowed("ADMINISTRATOR", "AI_MODE")).toBe(false);
+    expect(defaultModuleAllowed("SENIOR_ADMINISTRATOR", "AI_MODE")).toBe(true);
+    expect(defaultModuleAllowed("ADMINISTRATOR", "AI_ADMIN")).toBe(false);
+  });
 });

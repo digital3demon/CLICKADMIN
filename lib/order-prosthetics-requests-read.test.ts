@@ -1,0 +1,61 @@
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/order-chat-inbox-dual-read.server", () => ({
+  isOrderChatInboxReadNewEnabledForTenant: () => true,
+}));
+
+import { fetchMergedOrderProstheticsRequests } from "./order-prosthetics-requests-read";
+
+describe("fetchMergedOrderProstheticsRequests", () => {
+  it("merges inbox and legacy without duplicate kaitenCommentId", async () => {
+    const legacyAt = new Date("2026-07-01T10:00:00Z");
+    const inboxAt = new Date("2026-07-01T10:00:01Z");
+
+    const db = {
+      orderProstheticsRequest: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "legacy-1",
+            text: "нужна коронка на 16",
+            source: "KAITEN",
+            authorLabel: "Врач",
+            createdAt: legacyAt,
+            resolvedAt: null,
+            rejectedAt: null,
+            kaitenCommentId: 99,
+          },
+          {
+            id: "legacy-only",
+            text: "старая заявка",
+            source: "KAITEN",
+            authorLabel: null,
+            createdAt: new Date("2026-06-01T10:00:00Z"),
+            resolvedAt: null,
+            rejectedAt: null,
+            kaitenCommentId: null,
+          },
+        ]),
+      },
+      orderChatInboxItem: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "inbox-1",
+            text: "??? нужна коронка на 16",
+            source: "KAITEN",
+            authorLabel: "Врач",
+            createdAt: inboxAt,
+            resolvedAt: null,
+            rejectedAt: null,
+            kaitenCommentId: 99,
+          },
+        ]),
+      },
+    };
+
+    const rows = await fetchMergedOrderProstheticsRequests(db as never, "order-1");
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.id)).toEqual(["legacy-only", "inbox-1"]);
+    expect(rows[1]?.text).toBe("нужна коронка на 16");
+  });
+});

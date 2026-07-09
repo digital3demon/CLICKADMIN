@@ -8,6 +8,8 @@ import {
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
+import { hydrateListPendingChatCorrectionsFromInbox } from "@/lib/order-chat-corrections-read";
+import { hydrateListPendingProstheticsFromInbox } from "@/lib/order-prosthetics-requests-read";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 
@@ -338,5 +340,11 @@ export async function fetchShipmentOrdersInDueRange(
         )
       : mapped;
 
-  return hydrateOrderKaitenLabMentionHighlight(db, opts?.userId, filtered);
+  return hydrateListPendingProstheticsFromInbox(
+    db,
+    await hydrateListPendingChatCorrectionsFromInbox(
+      db,
+      await hydrateOrderKaitenLabMentionHighlight(db, opts?.userId, filtered),
+    ),
+  );
 }

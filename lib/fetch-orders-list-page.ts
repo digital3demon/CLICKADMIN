@@ -12,6 +12,8 @@ import {
 } from "@/lib/orders-list-cursor";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
+import { hydrateListPendingChatCorrectionsFromInbox } from "@/lib/order-chat-corrections-read";
+import { hydrateListPendingProstheticsFromInbox } from "@/lib/order-prosthetics-requests-read";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 
 /** Поля списка заказов (страница «Заказы» и GET /api/orders). */
@@ -427,10 +429,16 @@ export async function fetchOrdersListPage(
     );
     return {
       ...attention,
-      orders: await hydrateKaitenLabMentionForOrdersList(
+      orders: await hydrateListPendingProstheticsFromInbox(
         db,
-        opts.ordersListForUserId ?? null,
-        await hydrateContractors(attention.orders),
+        await hydrateListPendingChatCorrectionsFromInbox(
+          db,
+          await hydrateKaitenLabMentionForOrdersList(
+            db,
+            opts.ordersListForUserId ?? null,
+            await hydrateContractors(attention.orders),
+          ),
+        ),
       ),
     };
   }
@@ -471,10 +479,16 @@ export async function fetchOrdersListPage(
   const orders = await hydrateContractors(page.map((o) => toOrderListPageRow(o)));
 
   return {
-    orders: await hydrateKaitenLabMentionForOrdersList(
+    orders: await hydrateListPendingProstheticsFromInbox(
       db,
-      opts.ordersListForUserId ?? null,
-      orders,
+      await hydrateListPendingChatCorrectionsFromInbox(
+        db,
+        await hydrateKaitenLabMentionForOrdersList(
+          db,
+          opts.ordersListForUserId ?? null,
+          orders,
+        ),
+      ),
     ),
     nextCursor,
   };

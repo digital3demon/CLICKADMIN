@@ -185,6 +185,7 @@ const CLIENT_ORDER_TEXTAREA_MAX_HEIGHT = 240;
 const COMMENTS_TEXTAREA_MAX_HEIGHT = 160;
 
 const AI_PREFILL_TIMEOUT_MS = 135_000;
+const HEURISTIC_PREFILL_TIMEOUT_MS = 30_000;
 
 function shortAiPrefillModelLabel(model: string): string {
   if (model === "structured-fast-path") return "без ИИ";
@@ -372,6 +373,7 @@ export function NewOrderForm({
   const [correctionReason, setCorrectionReason] = useState("");
   const [correctionPaid, setCorrectionPaid] = useState(false);
   const hydratedRef = useRef(false);
+  const aiPrefillAbortRef = useRef<AbortController | null>(null);
   const [aiPrefillStatus, setAiPrefillStatus] = useState<
     "idle" | "loading" | "done" | "error"
   >(() => (aiMode ? "loading" : "idle"));
@@ -742,45 +744,105 @@ export function NewOrderForm({
     );
   }, [initialSnapshot]);
 
-  useEffect(() => {
-    if (!aiMode || previewMode || initialSnapshot) return;
-    const primaryEmailId = primaryAiEmailId;
-    if (!primaryEmailId) {
-      setAiPrefillStatus("idle");
+  const applyAiPrefillDraft = useCallback(
+    (s: OrderDraftSnapshot) => {
+      if (s.clinicId) setClinicId(s.clinicId);
+      if (s.doctorId) setDoctorId(s.doctorId);
+      if (s.legalEntity) setLegalEntity(s.legalEntity);
+      if (s.payment) setPayment(canonicalOrderPayment(s.payment));
+      if (s.patientName) setPatientName(s.patientName);
+      if (typeof s.clientOrderText === "string" && s.clientOrderText.trim()) {
+        setClientOrderText(s.clientOrderText);
+      }
+      setHasScans(s.hasScans === true);
+      setHasCt(s.hasCt === true);
+      setHasMri(s.hasMri === true);
+      setHasPhoto(s.hasPhoto === true);
+      if (s.urgentSelection) setUrgentSelection(s.urgentSelection);
+
+      if (s.workDueLocal?.trim()) {
+        const wd = snapDatetimeLocalToLabDueGrid(s.workDueLocal, labDueHmSlots);
+        setWorkDueLocal(wd);
+        setLabDueAutoByPrice(false);
+        if (typeof s.labWholeDay === "boolean") {
+          setLabWholeDay(s.labWholeDay);
+        } else {
+          const hm = parseHmFromDueGridLocal(wd);
+          setLabWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
+        }
+      }
+
+      if (s.patientAppointmentLocal?.trim()) {
+        const pa = snapDatetimeLocalToDueGrid(s.patientAppointmentLocal);
+        setPatientAppointmentLocal(pa);
+        if (typeof s.appointmentWholeDay === "boolean") {
+          setAppointmentWholeDay(s.appointmentWholeDay);
+        } else {
+          const hm = parseHmFromDueGridLocal(pa);
+          setAppointmentWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
+        }
+      }
+
+      if (!workReceivedLockedFromMail && s.workReceivedLocal?.trim()) {
+        setWorkReceivedLocal(snapDatetimeLocalToDueGrid(s.workReceivedLocal));
+      }
+
+      if (s.detailLines?.length) {
+        setDetailLines(JSON.parse(JSON.stringify(s.detailLines)));
+      }
+      if (s.bridgeLines?.length) {
+        setBridgeLines(JSON.parse(JSON.stringify(s.bridgeLines)));
+      }
+
+      setAiUnfilledFields(computeAiMissingFields(s));
+    },
+    [labDueHmSlots, workReceivedLockedFromMail],
+  );
+
+  const runAiPrefill = useCallback(
+    async (heuristicOnly: boolean) => {
+      if (!aiMode || previewMode || initialSnapshot) return;
+      const emailId = primaryAiEmailId;
+      if (!emailId) {
+        setAiPrefillStatus("idle");
+        setAiPrefillError(null);
+        setAiConfidenceScore(null);
+        setAiWarnings([]);
+        setAiUnfilledFields([]);
+        return;
+      }
+
+      aiPrefillAbortRef.current?.abort();
+      const abort = new AbortController();
+      aiPrefillAbortRef.current = abort;
+
+      setAiPrefillStatus("loading");
       setAiPrefillError(null);
       setAiConfidenceScore(null);
       setAiWarnings([]);
       setAiUnfilledFields([]);
-      return;
-    }
+      if (heuristicOnly) {
+        setAiPrefillModelLabel("без ИИ");
+      } else {
+        setAiPrefillModelLabel(null);
+        void fetch("/api/orders/ai-prefill", { signal: abort.signal })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data: { model?: string } | null) => {
+            if (abort.signal.aborted || !data?.model) return;
+            setAiPrefillModelLabel(shortAiPrefillModelLabel(data.model));
+          })
+          .catch(() => {});
+      }
 
-    const abort = new AbortController();
-    let cancelled = false;
-    setAiPrefillStatus("loading");
-    setAiPrefillError(null);
-    setAiConfidenceScore(null);
-    setAiWarnings([]);
-    setAiUnfilledFields([]);
-    setAiPrefillModelLabel(null);
-
-    void fetch("/api/orders/ai-prefill", { signal: abort.signal })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { model?: string } | null) => {
-        if (cancelled || !data?.model) return;
-        setAiPrefillModelLabel(shortAiPrefillModelLabel(data.model));
-      })
-      .catch(() => {});
-
-    void (async () => {
       try {
         const res = await fetchAiPrefillWithTimeout(
           "/api/orders/ai-prefill",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ emailId: primaryAiEmailId }),
+            body: JSON.stringify({ emailId, heuristicOnly }),
           },
-          AI_PREFILL_TIMEOUT_MS,
+          heuristicOnly ? HEURISTIC_PREFILL_TIMEOUT_MS : AI_PREFILL_TIMEOUT_MS,
           abort.signal,
         );
         const data = (await res.json().catch(() => ({}))) as {
@@ -789,11 +851,8 @@ export function NewOrderForm({
           warnings?: string[];
           confidenceScore?: number | null;
           model?: string;
-          durationMs?: number;
-          fromCache?: boolean;
-          fastPath?: boolean;
         };
-        if (cancelled) return;
+        if (abort.signal.aborted) return;
         if (data.model) {
           setAiPrefillModelLabel(shortAiPrefillModelLabel(data.model));
         }
@@ -803,57 +862,8 @@ export function NewOrderForm({
           return;
         }
 
-        const s = data.draft;
-        if (s) {
-          if (s.clinicId) setClinicId(s.clinicId);
-          if (s.doctorId) setDoctorId(s.doctorId);
-          if (s.legalEntity) setLegalEntity(s.legalEntity);
-          if (s.payment) setPayment(canonicalOrderPayment(s.payment));
-          if (s.patientName) setPatientName(s.patientName);
-          if (typeof s.clientOrderText === "string" && s.clientOrderText.trim()) {
-            setClientOrderText(s.clientOrderText);
-          }
-          setHasScans(s.hasScans === true);
-          setHasCt(s.hasCt === true);
-          setHasMri(s.hasMri === true);
-          setHasPhoto(s.hasPhoto === true);
-          if (s.urgentSelection) setUrgentSelection(s.urgentSelection);
-
-          if (s.workDueLocal?.trim()) {
-            const wd = snapDatetimeLocalToLabDueGrid(s.workDueLocal, labDueHmSlots);
-            setWorkDueLocal(wd);
-            setLabDueAutoByPrice(false);
-            if (typeof s.labWholeDay === "boolean") {
-              setLabWholeDay(s.labWholeDay);
-            } else {
-              const hm = parseHmFromDueGridLocal(wd);
-              setLabWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
-            }
-          }
-
-          if (s.patientAppointmentLocal?.trim()) {
-            const pa = snapDatetimeLocalToDueGrid(s.patientAppointmentLocal);
-            setPatientAppointmentLocal(pa);
-            if (typeof s.appointmentWholeDay === "boolean") {
-              setAppointmentWholeDay(s.appointmentWholeDay);
-            } else {
-              const hm = parseHmFromDueGridLocal(pa);
-              setAppointmentWholeDay(!(hm != null && hm !== DUE_DAY_DEFAULT_HM));
-            }
-          }
-
-          if (!workReceivedLockedFromMail && s.workReceivedLocal?.trim()) {
-            setWorkReceivedLocal(snapDatetimeLocalToDueGrid(s.workReceivedLocal));
-          }
-
-          if (s.detailLines?.length) {
-            setDetailLines(JSON.parse(JSON.stringify(s.detailLines)));
-          }
-          if (s.bridgeLines?.length) {
-            setBridgeLines(JSON.parse(JSON.stringify(s.bridgeLines)));
-          }
-
-          setAiUnfilledFields(computeAiMissingFields(s));
+        if (data.draft) {
+          applyAiPrefillDraft(data.draft);
         }
 
         const warnings = Array.isArray(data.warnings)
@@ -868,22 +878,35 @@ export function NewOrderForm({
         );
         setAiPrefillStatus("done");
       } catch (e) {
-        if (!cancelled) {
-          setAiPrefillStatus("error");
-          setAiPrefillError(
-            e instanceof Error
-              ? e.message
-              : "Ошибка сети при разборе письма через ИИ",
-          );
-        }
+        if (abort.signal.aborted) return;
+        setAiPrefillStatus("error");
+        setAiPrefillError(
+          e instanceof Error
+            ? e.message
+            : "Ошибка сети при разборе письма через ИИ",
+        );
       }
-    })();
+    },
+    [
+      aiMode,
+      previewMode,
+      initialSnapshot,
+      primaryAiEmailId,
+      applyAiPrefillDraft,
+    ],
+  );
 
+  const fillWithoutAi = useCallback(() => {
+    void runAiPrefill(true);
+  }, [runAiPrefill]);
+
+  useEffect(() => {
+    if (!aiMode || previewMode || initialSnapshot) return;
+    void runAiPrefill(false);
     return () => {
-      cancelled = true;
-      abort.abort();
+      aiPrefillAbortRef.current?.abort();
     };
-  }, [aiMode, previewMode, initialSnapshot, primaryAiEmailId, labDueHmSlots, workReceivedLockedFromMail]);
+  }, [aiMode, previewMode, initialSnapshot, primaryAiEmailId, runAiPrefill]);
 
   useEffect(() => {
     if (!aiPrefillLoading) {
@@ -2239,6 +2262,7 @@ export function NewOrderForm({
             warnings={aiWarnings}
             missingFields={aiUnfilledFields}
             errorMessage={aiPrefillError}
+            onFillWithoutAi={fillWithoutAi}
           />
         </div>
       ) : null}
@@ -2273,6 +2297,13 @@ export function NewOrderForm({
                 Модель: {aiPrefillModelLabel}
               </p>
             ) : null}
+            <button
+              type="button"
+              onClick={fillWithoutAi}
+              className="rounded-lg border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-900 shadow-sm transition-colors hover:border-violet-400 hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-100 dark:hover:bg-violet-900/50"
+            >
+              Заполнить без ИИ-расчёта
+            </button>
           </div>
         ) : null}
         <div className={aiPrefillLoading ? "pointer-events-none select-none" : undefined}>
