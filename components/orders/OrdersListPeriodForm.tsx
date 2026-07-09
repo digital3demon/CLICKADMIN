@@ -15,6 +15,8 @@ type Props = {
   appliedFrom: string | null;
   appliedTo: string | null;
   className?: string;
+  /** Компактные подписи «с (вкл)» / «по (вкл)» в одной строке макета. */
+  dense?: boolean;
 };
 
 export function OrdersListPeriodForm({
@@ -22,6 +24,7 @@ export function OrdersListPeriodForm({
   appliedFrom,
   appliedTo,
   className = "",
+  dense = false,
 }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
@@ -85,20 +88,25 @@ export function OrdersListPeriodForm({
 
   const periodActive = Boolean(appliedFrom?.trim() || appliedTo?.trim());
 
-  const dateInp =
-    "h-9 w-[9.5rem] max-w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-1.5 py-1 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:w-[10rem]";
+  const dateInp = dense
+    ? "h-8 w-[6.75rem] min-w-0 max-w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-1 py-0.5 text-[11px] text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:h-9 sm:w-[7.5rem] sm:text-xs"
+    : "h-9 w-[9.5rem] max-w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-1.5 py-1 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:w-[10rem]";
+
+  const labelClass = dense
+    ? "whitespace-nowrap text-[9px] font-medium lowercase text-[var(--text-secondary)] sm:text-[10px]"
+    : "whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]";
 
   return (
     <div
-      className={`flex flex-wrap items-center gap-x-2.5 gap-y-2 ${className}`.trim()}
+      className={`flex items-center ${dense ? "min-w-0 flex-wrap gap-x-1 gap-y-1" : "flex-wrap gap-x-2.5 gap-y-2"} ${className}`.trim()}
     >
-      <div className="flex shrink-0 items-center gap-2">
+      <div className={`flex min-w-0 items-center ${dense ? "gap-0.5" : "gap-2"}`}>
         <label
           htmlFor="orders-period-from"
-          className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]"
-          title="Создан с (МСК)"
+          className={labelClass}
+          title="Создан с (МСК), включительно"
         >
-          С (МСК)
+          {dense ? "с (вкл)" : "С (МСК)"}
         </label>
         <input
           id="orders-period-from"
@@ -108,13 +116,13 @@ export function OrdersListPeriodForm({
           onChange={(e) => setFrom(e.target.value)}
         />
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className={`flex min-w-0 items-center ${dense ? "gap-0.5" : "gap-2"}`}>
         <label
           htmlFor="orders-period-to"
-          className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]"
-          title="Создан по (МСК)"
+          className={labelClass}
+          title="Создан по (МСК), включительно"
         >
-          По (МСК)
+          {dense ? "по (вкл)" : "По (МСК)"}
         </label>
         <input
           id="orders-period-to"
@@ -127,12 +135,16 @@ export function OrdersListPeriodForm({
       <button
         type="button"
         title="Показать за выбранный период (дата создания наряда, МСК)"
-        className="h-9 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-3 text-xs font-semibold text-white hover:opacity-95 sm:px-3.5 sm:text-sm"
+        className={
+          dense
+            ? "h-8 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-2 text-[11px] font-semibold text-white hover:opacity-95 sm:h-9 sm:px-2.5 sm:text-xs"
+            : "h-9 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-3 text-xs font-semibold text-white hover:opacity-95 sm:px-3.5 sm:text-sm"
+        }
         onClick={() => apply()}
       >
         Показать
       </button>
-      {periodActive ? (
+      {periodActive && !dense ? (
         <button
           type="button"
           title="Убрать фильтр по дате создания"

@@ -628,7 +628,7 @@ export default async function OrdersPage({
           </div>
         </Suspense>
         {showOrdersQuickFilterChipsRow ? (
-          <div className="w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+          <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
             <div className="flex flex-wrap items-center gap-2">
           {alwaysShowOrderAttentionChips || attentionCount > 0 ? (
             <Link

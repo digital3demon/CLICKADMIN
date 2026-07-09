@@ -8,6 +8,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const inputClass =
   "min-h-9 min-w-0 w-full flex-1 rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)] shadow-sm placeholder:text-[var(--text-placeholder)] focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:min-w-[12rem]";
 
+const inputClassDense =
+  "h-8 min-w-0 w-full flex-1 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-0.5 text-xs text-[var(--app-text)] shadow-sm placeholder:text-[var(--text-placeholder)] focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:h-9 sm:text-sm";
+
 type Props = {
   initialValue: string;
   pageSize: number;
@@ -15,6 +18,8 @@ type Props = {
   hideShipped?: boolean;
   onlyShipped?: boolean;
   className?: string;
+  /** Компактный инпут в одной строке с датами/фильтрами. */
+  dense?: boolean;
 };
 
 type SearchSuggestItem = {
@@ -29,6 +34,7 @@ export function OrdersListSearch({
   hideShipped,
   onlyShipped,
   className = "",
+  dense = false,
 }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
@@ -156,7 +162,7 @@ export function OrdersListSearch({
 
   return (
     <div
-      className={`flex min-w-0 flex-1 flex-wrap items-center gap-2 ${className}`.trim()}
+      className={`flex min-w-0 items-center gap-1 ${dense ? "flex-nowrap" : "flex-1 flex-wrap gap-2"} ${className}`.trim()}
     >
       <label className="sr-only" htmlFor="orders-list-search-q">
         Поиск по наряду, врачу, клинике, пациенту
@@ -166,7 +172,7 @@ export function OrdersListSearch({
           ref={inputRef}
           id="orders-list-search-q"
           type="search"
-          className={inputClass}
+          className={dense ? inputClassDense : inputClass}
           placeholder="Наряд, врач, клиника, пациент…"
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -205,7 +211,11 @@ export function OrdersListSearch({
       {value.trim() ? (
         <button
           type="button"
-          className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--card-bg)]"
+          className={
+            dense
+              ? "h-8 shrink-0 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-1.5 text-[10px] font-medium text-[var(--text-body)] hover:bg-[var(--card-bg)] sm:h-9 sm:px-2 sm:text-xs"
+              : "rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs font-medium text-[var(--text-body)] hover:bg-[var(--card-bg)]"
+          }
           onClick={onClear}
         >
           Сбросить

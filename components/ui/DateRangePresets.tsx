@@ -85,7 +85,9 @@ export function DateRangePresets({
             type="button"
             onClick={() => onSelect(range.from, range.to)}
             className={[
-              'h-6 px-2.5 rounded-md text-xs font-medium transition-colors',
+              compact
+                ? 'h-7 px-1.5 rounded-md text-[11px] font-medium transition-colors sm:px-2 sm:text-xs'
+                : 'h-6 px-2.5 rounded-md text-xs font-medium transition-colors',
               isActive
                 ? 'bg-[var(--sidebar-blue)] text-white'
                 : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]',

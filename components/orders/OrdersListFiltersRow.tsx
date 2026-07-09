@@ -17,6 +17,9 @@ type Props = {
   shipMode: "actual" | "period" | null;
 };
 
+/**
+ * Макет: два блока в ряд, одинаковая высота (как полоса пилюль ниже).
+ */
 export function OrdersListFiltersRow({
   pageSize,
   appliedFrom,
@@ -31,7 +34,7 @@ export function OrdersListFiltersRow({
   shipMode,
 }: Props) {
   return (
-    <div className="grid w-full min-w-0 grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(16rem,1fr)]">
+    <div className="grid w-full min-w-0 grid-cols-1 items-stretch gap-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
       <OrdersListFiltersBar
         pageSize={pageSize}
         appliedFrom={appliedFrom}
@@ -41,7 +44,7 @@ export function OrdersListFiltersRow({
         hideShipped={hideShipped}
         onlyShipped={onlyShipped}
         showSearch={showSearch}
-        className="min-w-0 h-full"
+        className="min-w-0"
       />
       <OrdersShipmentPanel
         pageSize={pageSize}

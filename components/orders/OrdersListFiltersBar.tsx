@@ -1,6 +1,5 @@
 "use client";
 
-import { useId, useState } from "react";
 import { DateRangePresets, FilterBadge } from "@/components/ui";
 import { useUrlFilters } from "@/lib/hooks/useUrlFilters";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
@@ -20,6 +19,10 @@ type Props = {
   className?: string;
 };
 
+/**
+ * Макет: одна плотная строка — поиск · даты · Показать · пресеты · Фильтры.
+ * Высота карточки как у полосы пилюль (компактный padding + h-9 контролы).
+ */
 export function OrdersListFiltersBar({
   pageSize,
   appliedFrom,
@@ -33,13 +36,11 @@ export function OrdersListFiltersBar({
 }: Props) {
   const { activeCount, resetFilters, setFilters } = useUrlFilters();
   const isHarmony = useUiDesign() === "harmony";
-  const filtersPanelId = useId();
-  const [filtersOpen, setFiltersOpen] = useState(true);
 
   const cardClass = [
     isHarmony
-      ? "no-print flex w-full min-w-0 flex-col gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 card-shadow"
-      : "no-print flex w-full min-w-0 flex-col gap-3 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
+      ? "no-print flex h-full min-h-[3.25rem] w-full min-w-0 items-center rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 card-shadow sm:px-3 sm:py-2"
+      : "no-print flex h-full min-h-[3.25rem] w-full min-w-0 items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-3 sm:py-2",
     className,
   ]
     .filter(Boolean)
@@ -47,43 +48,42 @@ export function OrdersListFiltersBar({
 
   return (
     <div className={cardClass}>
-      {showSearch ? (
-        <OrdersListSearch
-          initialValue={initialSearchQ}
-          pageSize={pageSize}
-          tag={tag}
-          hideShipped={hideShipped}
-          onlyShipped={onlyShipped}
-          className="min-w-0 w-full"
-        />
-      ) : null}
+      {/* Без горизонтального скролла: сначала сжимаются поиск/даты, потом wrap. */}
+      <div className="flex min-w-0 w-full flex-wrap items-center gap-x-1.5 gap-y-1.5">
+        {showSearch ? (
+          <OrdersListSearch
+            initialValue={initialSearchQ}
+            pageSize={pageSize}
+            tag={tag}
+            hideShipped={hideShipped}
+            onlyShipped={onlyShipped}
+            className="min-w-0 max-w-full basis-[7.5rem] grow shrink sm:basis-[9rem] sm:max-w-[12rem] lg:max-w-[14rem]"
+            dense
+          />
+        ) : null}
 
-      {/* Макет: даты + Показать + пресеты + Фильтры — одна строка */}
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <OrdersListPeriodForm
           pageSize={pageSize}
           appliedFrom={appliedFrom}
           appliedTo={appliedTo}
-          className="min-w-0"
+          className="min-w-0 shrink"
+          dense
         />
-        <div
-          id={filtersPanelId}
-          hidden={!filtersOpen}
-          className="min-w-0 shrink-0"
-        >
-          <DateRangePresets
-            currentFrom={appliedFrom ?? undefined}
-            currentTo={appliedTo ?? undefined}
-            onSelect={(from, to) => setFilters({ from, to })}
-            compact
-          />
-        </div>
+
+        <DateRangePresets
+          currentFrom={appliedFrom ?? undefined}
+          currentTo={appliedTo ?? undefined}
+          onSelect={(from, to) => setFilters({ from, to })}
+          compact
+        />
+
         <FilterBadge
           count={activeCount}
           onReset={resetFilters}
-          onToggle={() => setFiltersOpen((open) => !open)}
-          expanded={filtersOpen}
-          controlsId={filtersPanelId}
+          onToggle={() => {
+            if (activeCount > 0) resetFilters();
+          }}
+          expanded
         />
       </div>
     </div>

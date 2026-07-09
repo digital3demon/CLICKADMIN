@@ -18,6 +18,10 @@ type Props = {
   shipMode: "actual" | "period" | null;
 };
 
+/**
+ * Макет: одна плотная строка — Отгрузки · Актуальные · за период · даты · Показать · Печать.
+ * Высота как у полосы пилюль.
+ */
 export function OrdersShipmentPanel({
   pageSize,
   appliedShipFrom,
@@ -78,11 +82,11 @@ export function OrdersShipmentPanel({
   }, [router, commonHrefOpts, from, to]);
 
   const cardClass = isHarmony
-    ? "no-print flex min-w-0 flex-col gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 card-shadow"
-    : "no-print flex min-w-0 flex-col gap-3 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]";
+    ? "no-print flex h-full min-h-[3.25rem] min-w-0 items-center rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 card-shadow sm:px-3 sm:py-2"
+    : "no-print flex h-full min-h-[3.25rem] min-w-0 items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-3 sm:py-2";
 
   const dateInp =
-    "h-9 min-w-0 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:w-[10rem] sm:flex-none";
+    "h-8 w-[6.75rem] min-w-0 max-w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-1 py-0.5 text-[11px] text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:h-9 sm:w-[7.5rem] sm:text-xs";
 
   const actualActive = shipMode === "actual";
   const periodActive = shipMode === "period";
@@ -109,89 +113,84 @@ export function OrdersShipmentPanel({
     return ordersShipmentListPdfHref({ ship: "actual" });
   }, [shipMode, appliedShipFrom, appliedShipTo, from, to]);
 
-  const printBtnClass = isHarmony
-    ? "shrink-0 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] transition-colors hover:bg-[var(--surface-hover)] sm:text-sm"
-    : "shrink-0 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] shadow-sm transition-colors hover:bg-[var(--table-row-hover)] sm:text-sm";
+  const printLinkClass =
+    "shrink-0 whitespace-nowrap text-[11px] font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline sm:text-xs";
 
   return (
     <div className={cardClass}>
-      {/* Макет: заголовок слева, Печать списка справа */}
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-[var(--text-strong)]">
-          <span aria-hidden className="text-base">
+      {/* Без горизонтального скролла: даты уже узкие, при нехватке места — wrap. */}
+      <div className="flex min-w-0 w-full flex-wrap items-center gap-x-1.5 gap-y-1.5">
+        <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--text-strong)] sm:text-sm">
+          <span aria-hidden className="text-sm leading-none sm:text-base">
             📦
           </span>
-          <span>Отгрузки</span>
+          <span className="whitespace-nowrap">Отгрузки</span>
         </div>
+
+        <button
+          type="button"
+          onClick={applyActual}
+          className={[
+            "h-8 shrink-0 rounded-md px-2 text-[11px] font-bold uppercase tracking-wide transition-colors sm:h-9 sm:px-2.5 sm:text-xs",
+            actualActive
+              ? "bg-[var(--sidebar-blue)] text-white shadow-sm"
+              : "border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-strong)] hover:bg-[var(--surface-hover)]",
+          ].join(" ")}
+        >
+          Актуальные
+        </button>
+
+        <span className="shrink-0 whitespace-nowrap text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-[10px]">
+          за период
+        </span>
+
+        <label className="sr-only" htmlFor="orders-ship-from">
+          Дата с
+        </label>
+        <input
+          id="orders-ship-from"
+          type="date"
+          className={dateInp}
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          title="Дата записи с (необязательно)"
+        />
+        <label className="sr-only" htmlFor="orders-ship-to">
+          Дата по
+        </label>
+        <input
+          id="orders-ship-to"
+          type="date"
+          className={dateInp}
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          title="Дата записи по"
+        />
+        <button
+          type="button"
+          onClick={applyPeriod}
+          className={[
+            "h-8 shrink-0 rounded-md px-2 text-[11px] font-semibold text-white hover:opacity-95 sm:h-9 sm:px-2.5 sm:text-xs",
+            periodActive
+              ? "bg-[var(--sidebar-blue)] ring-2 ring-sky-400/60"
+              : "bg-[var(--sidebar-blue)]",
+          ].join(" ")}
+        >
+          Показать
+        </button>
+
         {printPdfHref ? (
           <a
             href={printPdfHref}
             target="_blank"
             rel="noopener noreferrer"
-            className={printBtnClass}
+            className={printLinkClass}
           >
             Печать списка
           </a>
         ) : (
-          <button type="button" disabled className={`${printBtnClass} opacity-50`}>
-            Печать списка
-          </button>
+          <span className={`${printLinkClass} opacity-50`}>Печать списка</span>
         )}
-      </div>
-
-      <button
-        type="button"
-        onClick={applyActual}
-        className={[
-          "w-full rounded-md px-4 py-2.5 text-sm font-bold uppercase tracking-wide transition-colors",
-          actualActive
-            ? "bg-[var(--sidebar-blue)] text-white shadow-sm"
-            : "border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-strong)] hover:bg-[var(--surface-hover)]",
-        ].join(" ")}
-      >
-        Актуальные
-      </button>
-
-      <div className="flex flex-col gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-          за период
-        </span>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <label className="sr-only" htmlFor="orders-ship-from">
-            Дата с
-          </label>
-          <input
-            id="orders-ship-from"
-            type="date"
-            className={dateInp}
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            title="Дата записи с (необязательно)"
-          />
-          <label className="sr-only" htmlFor="orders-ship-to">
-            Дата по
-          </label>
-          <input
-            id="orders-ship-to"
-            type="date"
-            className={dateInp}
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            title="Дата записи по"
-          />
-          <button
-            type="button"
-            onClick={applyPeriod}
-            className={[
-              "h-9 shrink-0 rounded-md px-4 text-sm font-semibold text-white hover:opacity-95",
-              periodActive
-                ? "bg-[var(--sidebar-blue)] ring-2 ring-sky-400/60"
-                : "bg-[var(--sidebar-blue)]",
-            ].join(" ")}
-          >
-            Показать
-          </button>
-        </div>
       </div>
     </div>
   );
