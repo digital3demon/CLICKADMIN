@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import type { ParsedListTag } from "@/lib/order-list-tag-filter";
 import {
-  financeOfficeAppointmentBeforeEndExclusive,
-  financeOfficeAppointmentInRange,
+  financeOfficeRecordDateBeforeEndExclusive,
+  financeOfficeRecordDateInRange,
   financeOfficeActualEndExclusive,
   financeOfficeProductionAndLaterWhere,
   type FinanceOfficeMode,
@@ -49,7 +49,7 @@ export function financeOfficeScopeWhere(
   if (!opts.skipDueDateWindow && mode) {
     if (mode === "actual") {
       parts.push(
-        financeOfficeAppointmentBeforeEndExclusive(
+        financeOfficeRecordDateBeforeEndExclusive(
           financeOfficeActualEndExclusive(),
         ),
       );
@@ -63,9 +63,9 @@ export function financeOfficeScopeWhere(
         const fromYmd = opts.fromYmd?.trim() || null;
         if (fromYmd) {
           const { start } = moscowDayBoundsUtc(fromYmd);
-          parts.push(financeOfficeAppointmentInRange(start, endExclusive));
+          parts.push(financeOfficeRecordDateInRange(start, endExclusive));
         } else {
-          parts.push(financeOfficeAppointmentBeforeEndExclusive(endExclusive));
+          parts.push(financeOfficeRecordDateBeforeEndExclusive(endExclusive));
         }
       }
     }

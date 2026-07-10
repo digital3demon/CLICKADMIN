@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   FINANCE_OFFICE_EXCLUDED_LAB_STATUSES,
   FINANCE_OFFICE_INCLUDED_LAB_STATUSES,
+  effectiveFinanceRecordDate,
   financeOfficeModeDateWhere,
+  financeOfficeProductionAndLaterWhere,
+  financeOfficeRecordDateBeforeEndExclusive,
+  orderMatchesFinanceOfficeProductionPlus,
   parseFinanceOfficeMode,
 } from "@/lib/finance-office-list-filter";
 
@@ -31,15 +35,16 @@ describe("finance-office-list-filter", () => {
     ).toBeNull();
   });
 
-  it("actual requires not calculated + appointment upper bound", () => {
+  it("actual requires not calculated + record-date upper bound", () => {
     const where = financeOfficeModeDateWhere({ mode: "actual" });
-    expect(JSON.stringify(where)).toContain("financeCalculated");
-    expect(JSON.stringify(where)).toContain("appointmentDate");
-    expect(JSON.stringify(where)).toContain("dueToAdminsAt");
-    expect(JSON.stringify(where)).not.toContain('"dueDate"');
+    const json = JSON.stringify(where);
+    expect(json).toContain("financeCalculated");
+    expect(json).toContain("appointmentDate");
+    expect(json).toContain("dueToAdminsAt");
+    expect(json).toContain("dueDate");
   });
 
-  it("period with only to is open-start by appointment", () => {
+  it("period with only to is open-start by record date", () => {
     const where = financeOfficeModeDateWhere({
       mode: "period",
       toYmd: "2026-07-10",
@@ -47,10 +52,10 @@ describe("finance-office-list-filter", () => {
     const json = JSON.stringify(where);
     expect(json).toContain("appointmentDate");
     expect(json).toContain("dueToAdminsAt");
-    expect(json).not.toContain('"dueDate"');
+    expect(json).toContain("dueDate");
   });
 
-  it("period with from+to is closed appointment range", () => {
+  it("period with from+to is closed record-date range", () => {
     const where = financeOfficeModeDateWhere({
       mode: "period",
       fromYmd: "2026-07-01",
@@ -60,6 +65,45 @@ describe("finance-office-list-filter", () => {
     expect(json).toContain("appointmentDate");
     expect(json).toContain("2026-06-30T21:00:00.000Z");
     expect(json).toContain("2026-07-10T21:00:00.000Z");
-    expect(json).not.toContain('"dueDate"');
+  });
+
+  it("effectiveFinanceRecordDate falls back to dueDate", () => {
+    const d = new Date("2026-07-05T10:00:00.000Z");
+    expect(
+      effectiveFinanceRecordDate({
+        appointmentDate: null,
+        dueToAdminsAt: null,
+        dueDate: d,
+      }),
+    ).toEqual(d);
+  });
+
+  it("record-date before-end includes dueDate branch", () => {
+    const end = new Date("2026-07-10T21:00:00.000Z");
+    const json = JSON.stringify(
+      financeOfficeRecordDateBeforeEndExclusive(end),
+    );
+    expect(json).toContain('"dueDate"');
+  });
+
+  it("production+ matches kaiten column when labWorkStatus lags", () => {
+    expect(
+      orderMatchesFinanceOfficeProductionPlus({
+        labWorkStatus: "TO_EXECUTION",
+        kaitenColumnTitle: "Производство",
+      }),
+    ).toBe(true);
+    expect(
+      orderMatchesFinanceOfficeProductionPlus({
+        labWorkStatus: "TO_EXECUTION",
+        kaitenColumnTitle: "К исполнению",
+      }),
+    ).toBe(false);
+  });
+
+  it("production where includes kaiten column titles", () => {
+    const json = JSON.stringify(financeOfficeProductionAndLaterWhere());
+    expect(json).toContain("kaitenColumnTitle");
+    expect(json).toContain("Производство");
   });
 });

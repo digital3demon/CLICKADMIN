@@ -4,6 +4,10 @@ import {
   financeOfficeListTagSkipsDueDateWindow,
   financeOfficeScopeWhere,
 } from "@/lib/finance-office-list-scope";
+import {
+  compareOrdersByEffectiveFinanceRecord,
+  orderMatchesFinanceOfficeProductionPlus,
+} from "@/lib/finance-office-list-filter";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import {
@@ -23,7 +27,6 @@ import {
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
-import { compareOrdersByEffectiveAppointment } from "@/lib/orders-shipment-list-filter";
 
 const financeOfficeOrderSelect = {
   id: true,
@@ -34,6 +37,7 @@ const financeOfficeOrderSelect = {
   dueDate: true,
   appointmentDate: true,
   dueToAdminsAt: true,
+  labWorkStatus: true,
   kaitenCardId: true,
   kaitenColumnTitle: true,
   demoKanbanColumn: true,
@@ -246,19 +250,31 @@ export async function fetchFinanceOfficeOrders(
     take: 500,
     select: financeOfficeOrderSelect,
   });
+  const stageFiltered = rows.filter((row) =>
+    orderMatchesFinanceOfficeProductionPlus({
+      labWorkStatus: row.labWorkStatus,
+      kaitenColumnTitle: row.kaitenColumnTitle,
+    }),
+  );
 
   const clientsPrisma = await getClientsPrisma();
   const pricingPrisma = await getPricingPrisma();
-  const doctorIds = Array.from(new Set(rows.map((x) => x.doctorId)));
-  const clinicIds = Array.from(new Set(rows.map((x) => x.clinicId).filter(Boolean))) as string[];
+  const doctorIds = Array.from(new Set(stageFiltered.map((x) => x.doctorId)));
+  const clinicIds = Array.from(
+    new Set(stageFiltered.map((x) => x.clinicId).filter(Boolean)),
+  ) as string[];
   const doctorIdsForPrivateRequisites = Array.from(
-    new Set(rows.filter((x) => !x.clinicId).map((x) => x.doctorId)),
+    new Set(stageFiltered.filter((x) => !x.clinicId).map((x) => x.doctorId)),
   );
   const constructionTypeIds = Array.from(
-    new Set(rows.flatMap((x) => x.constructions.map((c) => c.constructionTypeId)).filter(Boolean)),
+    new Set(
+      stageFiltered.flatMap((x) => x.constructions.map((c) => c.constructionTypeId)).filter(Boolean),
+    ),
   ) as string[];
   const priceListItemIds = Array.from(
-    new Set(rows.flatMap((x) => x.constructions.map((c) => c.priceListItemId)).filter(Boolean)),
+    new Set(
+      stageFiltered.flatMap((x) => x.constructions.map((c) => c.priceListItemId)).filter(Boolean),
+    ),
   ) as string[];
   const requisiteClinicSelect = {
     id: true,
@@ -364,7 +380,7 @@ export async function fetchFinanceOfficeOrders(
   const constructionTypeById = new Map(constructionTypes.map((x) => [x.id, x]));
   const priceItemById = new Map(priceItems.map((x) => [x.id, x]));
 
-  const mapped = rows.map((o): FinanceOfficeOrderRow => {
+  const mapped = stageFiltered.map((o): FinanceOfficeOrderRow => {
     const { chatCorrections, prostheticsRequests, constructions, ...rest } = o;
     const hydratedConstructions = constructions.map((c) => ({
       quantity: c.quantity,
@@ -457,6 +473,6 @@ export async function fetchFinanceOfficeOrders(
   return withCorrections.sort((a, b) => {
     const pr = financePriority(a) - financePriority(b);
     if (pr !== 0) return pr;
-    return compareOrdersByEffectiveAppointment(a, b);
+    return compareOrdersByEffectiveFinanceRecord(a, b);
   });
 }

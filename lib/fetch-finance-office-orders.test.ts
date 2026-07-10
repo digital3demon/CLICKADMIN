@@ -4,6 +4,7 @@ import {
   financeOfficeScopeWhere,
 } from "@/lib/finance-office-list-scope";
 import {
+  LIST_TAG_FINANCE_NOT_CALCULATED,
   LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PAYMENT_PARTIAL,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/order-list-tag-filter";
 
 describe("financeOfficeListTagSkipsDueDateWindow", () => {
-  it("пропускает окно dueDate для корректировок и протетики", () => {
+  it("пропускает окно даты для корректировок, протетики и непросчитано", () => {
     expect(
       financeOfficeListTagSkipsDueDateWindow(
         parseListTagParam(LIST_TAG_ORDER_ATTENTION),
@@ -21,6 +22,11 @@ describe("financeOfficeListTagSkipsDueDateWindow", () => {
     expect(
       financeOfficeListTagSkipsDueDateWindow(
         parseListTagParam(LIST_TAG_PROSTHETICS_PENDING),
+      ),
+    ).toBe(true);
+    expect(
+      financeOfficeListTagSkipsDueDateWindow(
+        parseListTagParam(LIST_TAG_FINANCE_NOT_CALCULATED),
       ),
     ).toBe(true);
   });
@@ -41,20 +47,31 @@ describe("financeOfficeListTagSkipsDueDateWindow", () => {
 });
 
 describe("financeOfficeScopeWhere", () => {
-  it("без start/end не добавляет dueDate", () => {
+  it("всегда включает tenant, архив и этап производство+", () => {
     const w = financeOfficeScopeWhere("t1", {});
-    expect(w).toEqual({ tenantId: "t1", archivedAt: null });
+    const json = JSON.stringify(w);
+    expect(json).toContain("tenantId");
+    expect(json).toContain("archivedAt");
+    expect(json).toContain("labWorkStatus");
+    expect(json).toContain("kaitenColumnTitle");
   });
 
-  it("с start/end добавляет dueDate", () => {
-    const start = new Date("2026-06-27T00:00:00.000Z");
-    const end = new Date("2026-06-28T12:00:00.000Z");
-    const w = financeOfficeScopeWhere("t1", { start, endExclusive: end });
-    expect(w).toEqual({
-      AND: [
-        { tenantId: "t1", archivedAt: null },
-        { dueDate: { gte: start, lt: end } },
-      ],
+  it("actual добавляет непросчитанные и верхнюю границу даты записи", () => {
+    const w = financeOfficeScopeWhere("t1", { mode: "actual" });
+    const json = JSON.stringify(w);
+    expect(json).toContain("financeCalculated");
+    expect(json).toContain("appointmentDate");
+    expect(json).toContain("dueDate");
+  });
+
+  it("period с to добавляет открытый период по дате записи", () => {
+    const w = financeOfficeScopeWhere("t1", {
+      mode: "period",
+      toYmd: "2026-07-10",
     });
+    const json = JSON.stringify(w);
+    expect(json).toContain("appointmentDate");
+    expect(json).toContain("dueDate");
+    expect(json).not.toContain("financeCalculated");
   });
 });
