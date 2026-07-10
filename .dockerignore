@@ -5,7 +5,6 @@
 node_modules
 dist
 backups
-data
 docs
 coverage
 *.md
@@ -22,3 +21,13 @@ commit-msg-check.txt
 pack-for-vps.ps1
 Запуск.bat
 agent-transcripts
+
+# data/ — тяжёлые runtime-каталоги; JSON для сборки (mail-rules, calendar) оставляем
+data/backup
+data/order-attachments
+data/user-avatars
+data/demo-user-avatars
+data/imports
+data/templates
+data/logs
+data/ai-dataset

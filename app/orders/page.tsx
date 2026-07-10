@@ -31,9 +31,11 @@ import { orderIdsWithPendingMergedCorrections } from "@/lib/order-chat-correctio
 import { orderIdsWithPendingMergedProsthetics } from "@/lib/order-prosthetics-requests-read";
 import {
   humanListTagLabel,
+  LIST_TAG_ADMIN_MEMO,
   LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
+  listTagWhere,
   parseListTagParam,
   relatedOrdersListTagQuickFilters,
   listTagParamsEqual,
@@ -458,6 +460,15 @@ export default async function OrdersPage({
     );
   }
 
+  let adminMemoCount = 0;
+  if (tenantId) {
+    adminMemoCount = await ordersPrisma.order.count({
+      where: {
+        AND: [statusChipCountWhere, listTagWhere({ kind: "adminMemo" })],
+      },
+    });
+  }
+
   let kaitenColumnAlternates: string[] = [];
   let urgentCoefficientsInDb: number[] = [];
   if (tenantId && activeFilter?.kind === "kaitenColumn") {
@@ -583,6 +594,10 @@ export default async function OrdersPage({
   }
 
   const alwaysShowOrderAttentionChips = session?.role === "FINANCIAL_MANAGER";
+  const showAdminMemoChip =
+    alwaysShowOrderAttentionChips ||
+    adminMemoCount > 0 ||
+    activeFilter?.kind === "adminMemo";
   const showCorrectionsChip =
     canSeeCorrectionsChip &&
     (alwaysShowOrderAttentionChips || attentionCount > 0);
@@ -593,6 +608,7 @@ export default async function OrdersPage({
     canSeeAdminChip &&
     (alwaysShowOrderAttentionChips || labMentionCount > 0);
   const showOrdersQuickFilterChipsRow =
+    showAdminMemoChip ||
     showCorrectionsChip ||
     showProstheticsChip ||
     showAdminChip ||
@@ -758,6 +774,28 @@ export default async function OrdersPage({
         {showOrdersQuickFilterChipsRow ? (
           <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
             <div className="flex flex-wrap items-center gap-2">
+          {showAdminMemoChip ? (
+            <Link
+              href={ordersListHref({
+                limit: pageSize,
+                ...listHrefCommon,
+                tag: LIST_TAG_ADMIN_MEMO,
+              })}
+              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+                activeFilter?.kind === "adminMemo"
+                  ? "border-amber-500/90 bg-amber-50 text-amber-950 ring-2 ring-amber-400/80 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-500/60"
+                  : "border-amber-200/80 bg-amber-50/80 text-amber-950 hover:bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-100 dark:hover:bg-amber-950/40"
+              }`}
+              title="Наряды с непустой пометкой смен (колонка «Пометки»)"
+            >
+              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+                Пометки
+              </span>
+              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+                {adminMemoCount}
+              </span>
+            </Link>
+          ) : null}
           {showCorrectionsChip ? (
             <Link
               href={ordersListHref({

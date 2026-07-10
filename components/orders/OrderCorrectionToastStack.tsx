@@ -7,11 +7,21 @@ import { OrderListKaitenChatModal } from "@/components/orders/OrderListKaitenCha
 import { canAccessOrderChat } from "@/lib/auth/permissions";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import { orderChatToastTitle } from "@/lib/order-chat-trigger-author";
+import {
+  ORDER_TOAST_COLLAPSED_KEY,
+  ORDER_TOAST_DISMISSED_KEY,
+  collectToastDismissKeys,
+  orderToastDismissKey,
+  parseDismissedIdList,
+  readCollapsedFromLocalStorage,
+  readDismissedFromLocalStorage,
+  shouldExpandToastStack,
+  writeCollapsedToLocalStorage,
+  writeDismissedToLocalStorage,
+  type OrderToastDismissKind,
+} from "@/lib/order-toast-dismiss-storage";
 import { orderPathById } from "@/lib/order-public-ref";
 import { isPublicStickerHubPath } from "@/lib/sticker-public-path";
-
-const STORAGE_KEY = "orderToastDismissedV1";
-const STORAGE_KEY_COLLAPSED = "orderToastStackCollapsedV1";
 
 type OrderToastRow = {
   id: string;
@@ -24,7 +34,7 @@ type OrderToastRow = {
   createdAt: string;
 };
 
-type ToastKind = "chat" | "correction" | "prosthetics" | "personal";
+type ToastKind = OrderToastDismissKind;
 
 const shells: Record<ToastKind, string> = {
   chat:
@@ -62,15 +72,14 @@ const linkTone: Record<ToastKind, string> = {
 };
 
 function writeStackCollapsed(collapsed: boolean) {
-  void writeClientState("user", STORAGE_KEY_COLLAPSED, collapsed);
+  writeCollapsedToLocalStorage(collapsed);
+  void writeClientState("user", ORDER_TOAST_COLLAPSED_KEY, collapsed);
 }
 
 function writeDismissedPrefixed(ids: Set<string>) {
-  void writeClientState("user", STORAGE_KEY, [...ids]);
-}
-
-function dismissKey(kind: ToastKind, id: string): string {
-  return `${kind}:${id}`;
+  const list = [...ids];
+  writeDismissedToLocalStorage(list);
+  void writeClientState("user", ORDER_TOAST_DISMISSED_KEY, list);
 }
 
 function toastRowKeys(
@@ -79,12 +88,14 @@ function toastRowKeys(
   proList: OrderToastRow[],
   personalList: OrderToastRow[],
 ): Set<string> {
-  const keys = new Set<string>();
-  for (const r of chatList) keys.add(dismissKey("chat", r.id));
-  for (const r of corrList) keys.add(dismissKey("correction", r.id));
-  for (const r of proList) keys.add(dismissKey("prosthetics", r.id));
-  for (const r of personalList) keys.add(dismissKey("personal", r.id));
-  return keys;
+  return new Set(
+    collectToastDismissKeys({
+      chat: chatList,
+      corrections: corrList,
+      prosthetics: proList,
+      personal: personalList,
+    }),
+  );
 }
 
 function snippet(text: string, max = 56): string {
@@ -204,36 +215,61 @@ export function OrderCorrectionToastStack() {
   const [personalMessages, setPersonalMessages] = useState<OrderToastRow[]>([]);
   const lastFpRef = useRef<string>("");
   const prevToastKeysRef = useRef<Set<string>>(new Set());
+  const dismissedRef = useRef<Set<string>>(new Set());
   const pollInFlightRef = useRef(false);
   const nextPollAllowedAtRef = useRef(0);
   const pollBackoffMsRef = useRef(0);
   /** Не чаще раза в 45 с — иначе RSC-пересборка списка заказов убивает отзывчивость. */
   const lastListRefreshAtRef = useRef(0);
   const LIST_REFRESH_MIN_MS = 45_000;
+  const pathnameRef = useRef(pathname);
+  const isKanbanRef = useRef(isKanban);
+  const isLoginRef = useRef(isLogin);
+  const isPublicStickerRef = useRef(isPublicSticker);
+  pathnameRef.current = pathname;
+  isKanbanRef.current = isKanban;
+  isLoginRef.current = isLogin;
+  isPublicStickerRef.current = isPublicSticker;
+  dismissedRef.current = dismissed;
 
   const mergeDismissed = useCallback((update: (prev: Set<string>) => Set<string>) => {
     setDismissed((prev) => {
       const next = update(prev);
+      dismissedRef.current = next;
       writeDismissedPrefixed(next);
       return next;
     });
   }, []);
 
   useEffect(() => {
+    const localDismissed = readDismissedFromLocalStorage();
+    const localCollapsed = readCollapsedFromLocalStorage();
+    if (localDismissed.length > 0) {
+      const s = new Set(localDismissed);
+      dismissedRef.current = s;
+      setDismissed(s);
+    }
+    if (localCollapsed) setStackCollapsed(true);
+
     let cancelled = false;
     void (async () => {
       const [dismissedRaw, collapsedRaw] = await Promise.all([
-        readClientState<unknown>("user", STORAGE_KEY),
-        readClientState<unknown>("user", STORAGE_KEY_COLLAPSED),
+        readClientState<unknown>("user", ORDER_TOAST_DISMISSED_KEY),
+        readClientState<unknown>("user", ORDER_TOAST_COLLAPSED_KEY),
       ]);
       if (cancelled) return;
-      if (Array.isArray(dismissedRaw)) {
-        setDismissed(
-          new Set(dismissedRaw.filter((x): x is string => typeof x === "string")),
-        );
+      const fromServer = parseDismissedIdList(dismissedRaw);
+      if (fromServer.length > 0 || localDismissed.length > 0) {
+        setDismissed((prev) => {
+          const next = new Set([...prev, ...fromServer, ...localDismissed]);
+          dismissedRef.current = next;
+          writeDismissedToLocalStorage([...next]);
+          return next;
+        });
       }
-      if (collapsedRaw === true) {
+      if (collapsedRaw === true || localCollapsed) {
         setStackCollapsed(true);
+        writeCollapsedToLocalStorage(true);
       }
     })();
     return () => {
@@ -252,10 +288,13 @@ export function OrderCorrectionToastStack() {
     let cancelled = false;
     const tick = async () => {
       if (cancelled || document.visibilityState !== "visible") return;
+      if (isLoginRef.current || isPublicStickerRef.current) return;
       const now = Date.now();
       if (pollInFlightRef.current) return;
       if (nextPollAllowedAtRef.current > now) return;
       pollInFlightRef.current = true;
+      const kanban = isKanbanRef.current;
+      const path = pathnameRef.current;
       try {
         const res = await fetch("/api/order-notifications/toasts", {
           credentials: "include",
@@ -282,45 +321,41 @@ export function OrderCorrectionToastStack() {
           return;
         }
 
-        const chatList = isKanban ? [] : Array.isArray(j.messages) ? j.messages : [];
-        const corrList = isKanban ? [] : Array.isArray(j.corrections) ? j.corrections : [];
-        const proList = isKanban ? [] : Array.isArray(j.requests) ? j.requests : [];
+        const chatList = kanban ? [] : Array.isArray(j.messages) ? j.messages : [];
+        const corrList = kanban ? [] : Array.isArray(j.corrections) ? j.corrections : [];
+        const proList = kanban ? [] : Array.isArray(j.requests) ? j.requests : [];
         const personalList = Array.isArray(j.personal) ? j.personal : [];
-        const labMentionCount = isKanban ? 0 : (j.labMentionCount ?? 0);
+        const labMentionCount = kanban ? 0 : (j.labMentionCount ?? 0);
 
         const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}|m:${personalList.map((x) => x.id).join(",")}|lmc:${labMentionCount}`;
         if (fp !== lastFpRef.current) {
           const hadPrevious = lastFpRef.current.length > 0;
           const nextKeys = toastRowKeys(chatList, corrList, proList, personalList);
-          let hasNewToast = false;
-          if (hadPrevious) {
-            for (const key of nextKeys) {
-              if (!prevToastKeysRef.current.has(key)) {
-                hasNewToast = true;
-                break;
-              }
-            }
-          }
+          const expand = hadPrevious
+            ? shouldExpandToastStack({
+                nextKeys,
+                prevKeys: prevToastKeysRef.current,
+                dismissed: dismissedRef.current,
+              })
+            : false;
           lastFpRef.current = fp;
           prevToastKeysRef.current = nextKeys;
           setChatMessages(chatList);
           setCorrections(corrList);
           setProstheticsRequests(proList);
           setPersonalMessages(personalList);
-          if (hasNewToast) {
+          if (expand) {
             setStackCollapsed(false);
             writeStackCollapsed(false);
           }
-          // Первый hydrate (hadPrevious=false) — только setState тостов, без RSC.
-          // Дальше — debounce, чтобы fingerprint-флап не дёргал весь список.
           if (
             hadPrevious &&
-            (pathname === "/orders" ||
-              pathname.startsWith("/orders/") ||
-              pathname === "/finance-office" ||
-              pathname.startsWith("/finance-office/") ||
-              pathname === "/shipments" ||
-              pathname.startsWith("/shipments/"))
+            (path === "/orders" ||
+              path.startsWith("/orders/") ||
+              path === "/finance-office" ||
+              path.startsWith("/finance-office/") ||
+              path === "/shipments" ||
+              path.startsWith("/shipments/"))
           ) {
             const nowMs = Date.now();
             if (nowMs - lastListRefreshAtRef.current >= LIST_REFRESH_MIN_MS) {
@@ -356,20 +391,20 @@ export function OrderCorrectionToastStack() {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [isLogin, isKanban, isPublicSticker, pathname, router]);
+  }, [isLogin, isPublicSticker, router]);
 
   const pending = useMemo(() => {
     const chat = chatMessages.filter(
-      (r) => !dismissed.has(dismissKey("chat", r.id)),
+      (r) => !dismissed.has(orderToastDismissKey("chat", r.id)),
     );
     const corr = corrections.filter(
-      (r) => !dismissed.has(dismissKey("correction", r.id)),
+      (r) => !dismissed.has(orderToastDismissKey("correction", r.id)),
     );
     const pro = prostheticsRequests.filter(
-      (r) => !dismissed.has(dismissKey("prosthetics", r.id)),
+      (r) => !dismissed.has(orderToastDismissKey("prosthetics", r.id)),
     );
     const personal = personalMessages.filter(
-      (r) => !dismissed.has(dismissKey("personal", r.id)),
+      (r) => !dismissed.has(orderToastDismissKey("personal", r.id)),
     );
     return { chat, corr, pro, personal };
   }, [chatMessages, corrections, prostheticsRequests, personalMessages, dismissed]);
@@ -390,10 +425,26 @@ export function OrderCorrectionToastStack() {
     };
   }, [pending]);
 
+  /** «Скрыть все» = dismiss всех текущих ключей (как X на каждой карточке), не только collapse. */
   const hideAll = useCallback(() => {
-    setStackCollapsed(true);
-    writeStackCollapsed(true);
-  }, []);
+    const keys = collectToastDismissKeys({
+      chat: chatMessages,
+      corrections,
+      prosthetics: prostheticsRequests,
+      personal: personalMessages,
+    });
+    mergeDismissed((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) next.add(k);
+      return next;
+    });
+  }, [
+    mergeDismissed,
+    chatMessages,
+    corrections,
+    prostheticsRequests,
+    personalMessages,
+  ]);
 
   const showAll = useCallback(() => {
     setStackCollapsed(false);
@@ -402,7 +453,9 @@ export function OrderCorrectionToastStack() {
 
   const dismissOne = useCallback(
     (kind: ToastKind, id: string) => {
-      mergeDismissed((prev) => new Set(prev).add(dismissKey(kind, id)));
+      mergeDismissed((prev) =>
+        new Set(prev).add(orderToastDismissKey(kind, id)),
+      );
     },
     [mergeDismissed],
   );

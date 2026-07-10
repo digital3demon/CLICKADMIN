@@ -33,6 +33,8 @@ export const LIST_TAG_INVOICE = "invoice";
 export const LIST_TAG_INVOICE_PRINTED = "invoice-printed";
 /** Жёлтый треугольник: непринятые корректировки «!!!» или расхождение суммы счёта с составом */
 export const LIST_TAG_ORDER_ATTENTION = "order-attention";
+/** Непустая пометка смен в колонке «Пометки» (`Order.listAdminMemo`) */
+export const LIST_TAG_ADMIN_MEMO = "admin-memo";
 /** В чате Kaiten есть @упоминание тега лаборатории (кэш в Order.kaitenChatHasLabMention). */
 export const LIST_TAG_KAITEN_LAB_MENTION = "kaiten-lab-mention";
 export const LIST_TAG_PAYMENT_EXPECTED = "payment-expected";
@@ -85,6 +87,7 @@ export type ParsedListTag =
   | { kind: "invoice" }
   | { kind: "invoicePrinted" }
   | { kind: "orderAttention" }
+  | { kind: "adminMemo" }
   | { kind: "kaitenLabMention" }
   | { kind: "paymentExpected" }
   | { kind: "paymentPartial" }
@@ -134,6 +137,7 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t === LIST_TAG_INVOICE) return { kind: "invoice" };
   if (t === LIST_TAG_INVOICE_PRINTED) return { kind: "invoicePrinted" };
   if (t === LIST_TAG_ORDER_ATTENTION) return { kind: "orderAttention" };
+  if (t === LIST_TAG_ADMIN_MEMO) return { kind: "adminMemo" };
   if (t === LIST_TAG_KAITEN_LAB_MENTION) return { kind: "kaitenLabMention" };
   if (t === LIST_TAG_PAYMENT_EXPECTED) return { kind: "paymentExpected" };
   if (t === LIST_TAG_PAYMENT_PARTIAL) return { kind: "paymentPartial" };
@@ -220,6 +224,13 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
       return { invoiceAttachmentId: { not: null } };
     case "invoicePrinted":
       return { invoicePrinted: true };
+    case "adminMemo":
+      return {
+        AND: [
+          { listAdminMemo: { not: null } },
+          { NOT: { listAdminMemo: "" } },
+        ],
+      };
     case "kaitenLabMention":
       return { kaitenChatHasLabMention: true };
     case "paymentExpected":
@@ -292,6 +303,8 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
       return "Счёт распечатан";
     case "orderAttention":
       return "Внимание: корректировки или расхождение сумм";
+    case "adminMemo":
+      return "Пометки";
     case "kaitenLabMention":
       return "ЧАТ: упоминание лаборатории (@…)";
     case "paymentExpected":

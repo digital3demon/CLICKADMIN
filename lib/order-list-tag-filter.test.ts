@@ -49,4 +49,8 @@ describe("parseListTagParam / urgent", () => {
     expect(parseListTagParam("edo")).toEqual({ kind: "edo" });
     expect(parseListTagParam("no-edo")).toEqual({ kind: "noEdo" });
   });
+
+  it("parses admin-memo (колонка Пометки)", () => {
+    expect(parseListTagParam("admin-memo")).toEqual({ kind: "adminMemo" });
+  });
 });
