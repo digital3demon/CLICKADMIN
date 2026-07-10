@@ -1,3 +1,4 @@
+import { isoToDatetimeLocal } from "@/lib/datetime-local";
 import {
   normalizeLabDueHmSlots,
   snapLocalTimeToLabHm,
@@ -120,25 +121,29 @@ export function formatDueDateTimeRuMskHalfHour(d: Date): string {
 }
 
 /**
- * Ближайший слот сетки 30 мин (08:00–23:30 локально) не раньше момента занесения наряда в CRM.
+ * Ближайший слот сетки 30 мин (08:00–23:30, Europe/Moscow) не раньше момента занесения наряда в CRM.
  * Используется как нижняя граница для «Срок лабораторный» и «Дата приёма пациента».
+ * Стена МСК — чтобы SSR (часто UTC) и браузер давали одну строку (hydration).
  */
 export function earliestDueGridLocalFromCreatedAt(createdIso: string): string {
-  const d = new Date(createdIso);
-  if (Number.isNaN(d.getTime())) {
-    const n = new Date();
-    return `${n.getFullYear()}-${pad2(n.getMonth() + 1)}-${pad2(n.getDate())}T08:00`;
+  let local = isoToDatetimeLocal(createdIso);
+  if (!local) {
+    local = isoToDatetimeLocal(new Date().toISOString());
   }
-  let y = d.getFullYear();
-  let mo = d.getMonth();
-  let da = d.getDate();
-  const total = d.getHours() * 60 + d.getMinutes();
+  if (!local) return "1970-01-01T08:00";
+  const [ymd, hm] = local.split("T");
+  const ymdParts = ymd.split("-").map((x) => Number.parseInt(x, 10));
+  const hmParts = (hm ?? "00:00").split(":").map((x) => Number.parseInt(x, 10));
+  let y = ymdParts[0] ?? 1970;
+  let mo = (ymdParts[1] ?? 1) - 1;
+  let da = ymdParts[2] ?? 1;
+  const total = (hmParts[0] ?? 0) * 60 + (hmParts[1] ?? 0);
   let ceiled = Math.ceil(total / 30) * 30;
   if (ceiled > MAX_TOTAL) {
-    const next = new Date(y, mo, da + 1);
-    y = next.getFullYear();
-    mo = next.getMonth();
-    da = next.getDate();
+    const next = new Date(Date.UTC(y, mo, da + 1));
+    y = next.getUTCFullYear();
+    mo = next.getUTCMonth();
+    da = next.getUTCDate();
     ceiled = MIN_TOTAL;
   } else if (ceiled < MIN_TOTAL) {
     ceiled = MIN_TOTAL;

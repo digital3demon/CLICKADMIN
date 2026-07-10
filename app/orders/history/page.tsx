@@ -26,7 +26,8 @@ export default async function OrdersHistoryPage({
   const tab = parseOrdersHistoryTab(sp.tab);
   const q = normalizeRevisionsHistorySearchQuery(sp.q);
   const session = await getSessionFromCookies();
-  const canMarkArrived = canAcceptOrderChatCorrections(session?.role);
+  const canMarkArrived =
+    session != null && canAcceptOrderChatCorrections(session.role);
 
   let changesItems = [] as Awaited<ReturnType<typeof loadRevisionsHistoryMerged>>;
   let correctionsItems = [] as Awaited<

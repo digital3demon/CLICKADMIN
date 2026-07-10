@@ -109,10 +109,10 @@ export function OrdersListHeaderActionCards({
           className={cardShell(isHarmony)}
           onClick={() => setProstheticsOpen(true)}
         >
-          <p className="text-sm font-bold uppercase tracking-wide text-[var(--sidebar-blue)]">
+          <span className="block text-sm font-bold uppercase tracking-wide text-[var(--sidebar-blue)]">
             Заказы протетики
-          </p>
-          <div className="mt-3 flex items-center gap-2">
+          </span>
+          <span className="mt-3 flex items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               В пути
             </span>
@@ -122,7 +122,7 @@ export function OrdersListHeaderActionCards({
             >
               {inTransitCount}
             </span>
-          </div>
+          </span>
         </button>
         ) : null}
 
@@ -131,9 +131,9 @@ export function OrdersListHeaderActionCards({
           className={cardShell(isHarmony)}
           onClick={() => setCorrectionsOpen(true)}
         >
-          <p className="text-sm font-bold uppercase tracking-wide text-orange-500 dark:text-orange-400">
+          <span className="block text-sm font-bold uppercase tracking-wide text-orange-500 dark:text-orange-400">
             История корректировок
-          </p>
+          </span>
         </button>
       </div>
 

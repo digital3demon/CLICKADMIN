@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { MouseEvent, ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { orderPathById } from "@/lib/order-public-ref";
@@ -22,6 +22,7 @@ function targetInsideInteractive(target: EventTarget | null) {
 /**
  * Строка списка нарядов: клик по пустой области ведёт в карточку наряда
  * (клики по ссылкам, кнопкам и полям — без перехода).
+ * tagsNode монтируется один раз: desktop td или mobile-карточка (matchMedia).
  */
 export function OrdersListTableRow({
   orderId,
@@ -67,6 +68,16 @@ export function OrdersListTableRow({
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
   const href = orderPathById(orderId);
+  /** SSR + первый paint: desktop (false). После mount — реальный viewport; один tagsNode. */
+  const [isNarrow, setIsNarrow] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   const go = (e: MouseEvent<HTMLElement>) => {
     if (e.button !== 0) return;
@@ -95,6 +106,11 @@ export function OrdersListTableRow({
         title={`${orderNumber} — открыть наряд (клик по строке)`}
       >
         {children}
+        {tagsNode ? (
+          <td className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5">
+            {!isNarrow ? tagsNode : null}
+          </td>
+        ) : null}
       </tr>
       <tr className="border-b border-[var(--card-border)] md:hidden print:hidden">
         <td colSpan={99} className="p-0">
@@ -185,7 +201,7 @@ export function OrdersListTableRow({
               </div>
             ) : null}
 
-            {tagsNode ? (
+            {tagsNode && isNarrow ? (
               <div className="mt-2 text-xs text-[var(--text-secondary)]">
                 {tagsNode}
               </div>

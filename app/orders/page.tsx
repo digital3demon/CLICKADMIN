@@ -217,7 +217,8 @@ export default async function OrdersPage({
   const tenantId = session
     ? await getTenantIdForSession(session)
     : null;
-  const canMarkProstheticsArrived = canAcceptOrderChatCorrections(session?.role);
+  const canMarkProstheticsArrived =
+    session != null && canAcceptOrderChatCorrections(session.role);
   let moduleAccess: Awaited<ReturnType<typeof getEffectiveModuleAccess>> | null =
     null;
   if (session?.role && tenantId) {
@@ -362,31 +363,89 @@ export default async function OrdersPage({
     statusChipCountParts.length === 1
       ? statusChipCountParts[0]
       : { AND: statusChipCountParts };
-  /** Счётчики чипов — merge inbox+legacy (как отметки в строке списка). */
+  /** Счётчики чипов — кандидаты из pending-строк (без findMany всех id тенанта). */
   const [attentionCount, prostheticsPendingCount] = tenantId
     ? await (async () => {
-        const scopedIds = (
-          await ordersPrisma.order.findMany({
-            where: statusChipCountWhere,
-            select: { id: true },
-          })
-        ).map((r) => r.id);
-        const [pendingCorrections, pendingProsthetics, notOrdered] =
-          await Promise.all([
-            orderIdsWithPendingMergedCorrections(ordersPrisma, scopedIds),
-            orderIdsWithPendingMergedProsthetics(ordersPrisma, scopedIds),
-            ordersPrisma.order.findMany({
-              where: {
-                AND: [statusChipCountWhere, { prostheticsOrdered: false }],
-              },
-              select: { id: true },
-            }),
-          ]);
-        const notOrderedSet = new Set(notOrdered.map((r) => r.id));
-        return [
-          pendingCorrections.size,
-          [...pendingProsthetics].filter((id) => notOrderedSet.has(id)).length,
-        ] as const;
+        const inbox = (ordersPrisma as {
+          orderChatInboxItem: {
+            findMany: (args: unknown) => Promise<Array<{ orderId: string }>>;
+          };
+        }).orderChatInboxItem;
+        const [
+          legacyCorrPending,
+          inboxCorrPending,
+          legacyProsPending,
+          inboxProsPending,
+        ] = await Promise.all([
+          ordersPrisma.orderChatCorrection.findMany({
+            where: {
+              resolvedAt: null,
+              rejectedAt: null,
+              order: statusChipCountWhere,
+            },
+            select: { orderId: true },
+            distinct: ["orderId"],
+          }),
+          inbox.findMany({
+            where: {
+              type: "CORRECTION",
+              resolvedAt: null,
+              rejectedAt: null,
+              order: statusChipCountWhere,
+            },
+            select: { orderId: true },
+            distinct: ["orderId"],
+          }),
+          ordersPrisma.orderProstheticsRequest.findMany({
+            where: {
+              resolvedAt: null,
+              rejectedAt: null,
+              order: statusChipCountWhere,
+            },
+            select: { orderId: true },
+            distinct: ["orderId"],
+          }),
+          inbox.findMany({
+            where: {
+              type: "PROSTHETICS",
+              resolvedAt: null,
+              rejectedAt: null,
+              order: statusChipCountWhere,
+            },
+            select: { orderId: true },
+            distinct: ["orderId"],
+          }),
+        ]);
+        const corrCandidateIds = [
+          ...new Set([
+            ...legacyCorrPending.map((r) => r.orderId),
+            ...inboxCorrPending.map((r) => r.orderId),
+          ]),
+        ];
+        const prosCandidateIds = [
+          ...new Set([
+            ...legacyProsPending.map((r) => r.orderId),
+            ...inboxProsPending.map((r) => r.orderId),
+          ]),
+        ];
+        const [pendingCorrections, pendingProsthetics] = await Promise.all([
+          orderIdsWithPendingMergedCorrections(ordersPrisma, corrCandidateIds),
+          orderIdsWithPendingMergedProsthetics(ordersPrisma, prosCandidateIds),
+        ]);
+        const pendingProsList = [...pendingProsthetics];
+        const prostheticsCount =
+          pendingProsList.length === 0
+            ? 0
+            : await ordersPrisma.order.count({
+                where: {
+                  AND: [
+                    statusChipCountWhere,
+                    { prostheticsOrdered: false },
+                    { id: { in: pendingProsList } },
+                  ],
+                },
+              });
+        return [pendingCorrections.size, prostheticsCount] as const;
       })()
     : ([0, 0] as const);
 
@@ -958,6 +1017,7 @@ export default async function OrdersPage({
                     omitKaitenColumnTag={opts?.omitKaitenColumnTag}
                   />
                 );
+                const tagsNode = renderTagsNode({ omitKaitenColumnTag: true });
                 return (
                 <OrdersListTableRow
                   key={o.id}
@@ -981,7 +1041,7 @@ export default async function OrdersPage({
                   kaitenCardId={o.kaitenCardId}
                   kaitenFilterHref={kaitenStatusFilterHref}
                   isLabOverdue={isLabOverdue}
-                  tagsNode={renderTagsNode({ omitKaitenColumnTag: true })}
+                  tagsNode={tagsNode}
                   mobileActionsNode={
                     <>
                       <Link
@@ -1189,9 +1249,6 @@ export default async function OrdersPage({
                     className="min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5"
                   >
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
-                  </td>
-                  <td className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5">
-                    {renderTagsNode({ omitKaitenColumnTag: true })}
                   </td>
                 </OrdersListTableRow>
               );

@@ -105,26 +105,28 @@ function formatDisplayRu(local: string): string {
     .replace(/\u00a0/g, " ");
 }
 
-/** Части для раздельного показа в таблице. */
+/** Части для раздельного показа в таблице (парсим стену `yyyy-mm-ddTHH:mm`, без TZ процесса). */
 function compactDatePartFromLocal(local: string): string {
-  const t = local.trim();
-  if (!t) return "";
-  const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return "";
-  const dd = pad2(d.getDate());
-  const mm = pad2(d.getMonth() + 1);
-  const y = d.getFullYear();
-  const cy = new Date().getFullYear();
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(local.trim());
+  if (!m) return "";
+  const y = Number.parseInt(m[1]!, 10);
+  const mm = m[2]!;
+  const dd = m[3]!;
+  const cy = Number.parseInt(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Moscow",
+      year: "numeric",
+    }).format(new Date()),
+    10,
+  );
   if (y === cy) return `${dd}.${mm}`;
   return `${dd}.${mm}.${String(y).slice(-2)}`;
 }
 
 function compactTimePartFromLocal(local: string): string {
-  const t = local.trim();
-  if (!t) return "";
-  const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const m = /T(\d{2}):(\d{2})/.exec(local.trim());
+  if (!m) return "";
+  return `${m[1]}:${m[2]}`;
 }
 
 type DueDatetimeComboPickerProps = {

@@ -100,9 +100,9 @@ function pollMs(): number {
   const n =
     raw != null && String(raw).trim()
       ? Number.parseInt(String(raw).trim(), 10)
-      : 2000;
-  if (!Number.isFinite(n)) return 2000;
-  return Math.min(Math.max(n, 1500), 30_000);
+      : 8000;
+  if (!Number.isFinite(n)) return 8000;
+  return Math.min(Math.max(n, 4000), 30_000);
 }
 
 function parseRetryAfterMs(value: string | null): number {
@@ -207,6 +207,9 @@ export function OrderCorrectionToastStack() {
   const pollInFlightRef = useRef(false);
   const nextPollAllowedAtRef = useRef(0);
   const pollBackoffMsRef = useRef(0);
+  /** Не чаще раза в 45 с — иначе RSC-пересборка списка заказов убивает отзывчивость. */
+  const lastListRefreshAtRef = useRef(0);
+  const LIST_REFRESH_MIN_MS = 45_000;
 
   const mergeDismissed = useCallback((update: (prev: Set<string>) => Set<string>) => {
     setDismissed((prev) => {
@@ -308,15 +311,22 @@ export function OrderCorrectionToastStack() {
             setStackCollapsed(false);
             writeStackCollapsed(false);
           }
+          // Первый hydrate (hadPrevious=false) — только setState тостов, без RSC.
+          // Дальше — debounce, чтобы fingerprint-флап не дёргал весь список.
           if (
-            pathname === "/orders" ||
-            pathname.startsWith("/orders/") ||
-            pathname === "/finance-office" ||
-            pathname.startsWith("/finance-office/") ||
-            pathname === "/shipments" ||
-            pathname.startsWith("/shipments/")
+            hadPrevious &&
+            (pathname === "/orders" ||
+              pathname.startsWith("/orders/") ||
+              pathname === "/finance-office" ||
+              pathname.startsWith("/finance-office/") ||
+              pathname === "/shipments" ||
+              pathname.startsWith("/shipments/"))
           ) {
-            router.refresh();
+            const nowMs = Date.now();
+            if (nowMs - lastListRefreshAtRef.current >= LIST_REFRESH_MIN_MS) {
+              lastListRefreshAtRef.current = nowMs;
+              router.refresh();
+            }
           }
         }
         pollBackoffMsRef.current = 0;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  earliestDueGridLocalFromCreatedAt,
   parseHmFromDueGridLocal,
   snapDatetimeLocalToLabDueGrid,
 } from "@/lib/order-due-datetime";
@@ -34,6 +35,19 @@ describe("snapDatetimeLocalToLabDueGrid", () => {
     );
     expect(snapDatetimeLocalToLabDueGrid("2026-05-04T22:00")).toBe(
       "2026-05-04T14:00",
+    );
+  });
+});
+
+describe("earliestDueGridLocalFromCreatedAt (Europe/Moscow)", () => {
+  it("ceil to half-hour in Moscow wall time", () => {
+    // 12:00 UTC = 15:00 MSK → already on grid
+    expect(earliestDueGridLocalFromCreatedAt("2026-07-10T12:00:00.000Z")).toBe(
+      "2026-07-10T15:00",
+    );
+    // 12:10 UTC = 15:10 MSK → ceil to 15:30
+    expect(earliestDueGridLocalFromCreatedAt("2026-07-10T12:10:00.000Z")).toBe(
+      "2026-07-10T15:30",
     );
   });
 });

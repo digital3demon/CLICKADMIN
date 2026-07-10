@@ -64,6 +64,15 @@ export function OrderListKaitenPoller({
   const inFlightRef = useRef(false);
   const fastInFlightRef = useRef(false);
   const fastSyncGenRef = useRef(0);
+  const lastListRefreshAtRef = useRef(0);
+  const LIST_REFRESH_MIN_MS = 8_000;
+
+  const refreshListDebounced = useCallback(() => {
+    const now = Date.now();
+    if (now - lastListRefreshAtRef.current < LIST_REFRESH_MIN_MS) return;
+    lastListRefreshAtRef.current = now;
+    router.refresh();
+  }, [router]);
 
   /**
    * GET /chat-corrections → syncOrderChatCorrectionsFromKaitenLive (корректировки + протетика).
@@ -196,20 +205,20 @@ export function OrderListKaitenPoller({
         mentionChanged ||
         lightCommentsImported
       ) {
-        router.refresh();
+        refreshListDebounced();
       }
     } catch {
       /* ignore */
     } finally {
       inFlightRef.current = false;
     }
-  }, [ids, router, onSyncExtras, fastLiveMax, searchActive]);
+  }, [ids, refreshListDebounced, onSyncExtras, fastLiveMax, searchActive]);
 
   const runFastLiveThenRefresh = useCallback(async () => {
     if (ids.length === 0 || ids.length > fastLiveMax) return;
     const ok = await pullKaitenChatFeedLiveForVisible();
-    if (ok) router.refresh();
-  }, [ids.length, fastLiveMax, pullKaitenChatFeedLiveForVisible, router]);
+    if (ok) refreshListDebounced();
+  }, [ids.length, fastLiveMax, pullKaitenChatFeedLiveForVisible, refreshListDebounced]);
 
   /** Смена списка (поиск): один live-проход, тяжёлый tick — с паузой, без наложения на PATCH карточки. */
   useEffect(() => {
@@ -219,7 +228,7 @@ export function OrderListKaitenPoller({
     void (async () => {
       const ok = await pullKaitenChatFeedLiveForVisible();
       if (cancelled) return;
-      if (ok) router.refresh();
+      if (ok) refreshListDebounced();
       if (!cancelled) {
         window.setTimeout(() => {
           if (!cancelled) void tick();
@@ -229,7 +238,7 @@ export function OrderListKaitenPoller({
     return () => {
       cancelled = true;
     };
-  }, [idsKey, pullKaitenChatFeedLiveForVisible, router, tick]);
+  }, [idsKey, pullKaitenChatFeedLiveForVisible, refreshListDebounced, tick]);
 
   useEffect(() => {
     if (ids.length === 0) return;
