@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
@@ -16,20 +17,7 @@ import {
   type ParsedListTag,
 } from "@/lib/order-list-tag-filter";
 
-export function FinanceOfficeQuickFilterChips({
-  attentionCount,
-  prostheticsPendingCount,
-  financeNotCalculatedCount,
-  financeCalculatedCount,
-  edoCount,
-  noEdoCount,
-  labMentionCount,
-  activeFilter = null,
-  tab,
-  periodFrom,
-  periodTo,
-  q = "",
-}: {
+type FinanceOfficeChipCounts = {
   attentionCount: number;
   prostheticsPendingCount: number;
   financeNotCalculatedCount: number;
@@ -37,12 +25,101 @@ export function FinanceOfficeQuickFilterChips({
   edoCount: number;
   noEdoCount: number;
   labMentionCount: number;
+};
+
+const EMPTY_COUNTS: FinanceOfficeChipCounts = {
+  attentionCount: 0,
+  prostheticsPendingCount: 0,
+  financeNotCalculatedCount: 0,
+  financeCalculatedCount: 0,
+  edoCount: 0,
+  noEdoCount: 0,
+  labMentionCount: 0,
+};
+
+export function FinanceOfficeQuickFilterChips({
+  activeFilter = null,
+  tab,
+  periodFrom,
+  periodTo,
+  q = "",
+}: {
   activeFilter?: ParsedListTag | null;
   tab: string;
   periodFrom: string | null;
   periodTo: string | null;
   q?: string;
 }) {
+  const [counts, setCounts] = useState<FinanceOfficeChipCounts | null>(null);
+  const [countsLoading, setCountsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCountsLoading(true);
+
+    const params = new URLSearchParams();
+    params.set("tab", tab);
+    if (periodFrom) params.set("from", periodFrom);
+    if (periodTo) params.set("to", periodTo);
+    const trimmedQ = q.trim();
+    if (trimmedQ) params.set("q", trimmedQ);
+
+    void fetch(`/api/finance-office/chip-counts?${params.toString()}`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(async (res) => {
+        const j = (await res.json().catch(() => ({}))) as Partial<
+          FinanceOfficeChipCounts
+        >;
+        if (cancelled) return;
+        if (!res.ok) {
+          setCounts(EMPTY_COUNTS);
+          return;
+        }
+        setCounts({
+          attentionCount:
+            typeof j.attentionCount === "number" ? j.attentionCount : 0,
+          prostheticsPendingCount:
+            typeof j.prostheticsPendingCount === "number"
+              ? j.prostheticsPendingCount
+              : 0,
+          financeNotCalculatedCount:
+            typeof j.financeNotCalculatedCount === "number"
+              ? j.financeNotCalculatedCount
+              : 0,
+          financeCalculatedCount:
+            typeof j.financeCalculatedCount === "number"
+              ? j.financeCalculatedCount
+              : 0,
+          edoCount: typeof j.edoCount === "number" ? j.edoCount : 0,
+          noEdoCount: typeof j.noEdoCount === "number" ? j.noEdoCount : 0,
+          labMentionCount:
+            typeof j.labMentionCount === "number" ? j.labMentionCount : 0,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setCounts(EMPTY_COUNTS);
+      })
+      .finally(() => {
+        if (!cancelled) setCountsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, periodFrom, periodTo, q]);
+
+  const {
+    attentionCount,
+    prostheticsPendingCount,
+    financeNotCalculatedCount,
+    financeCalculatedCount,
+    edoCount,
+    noEdoCount,
+    labMentionCount,
+  } = counts ?? EMPTY_COUNTS;
+
   const { user } = useSessionUser();
   const canCorrections = canSeeOrderNotificationKind(
     "corrections",
@@ -94,6 +171,14 @@ export function FinanceOfficeQuickFilterChips({
     showNoEdo ||
     showChat ||
     activeFilter != null;
+
+  if (!showRow && countsLoading) {
+    return (
+      <div className="w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+        <p className="text-xs text-[var(--text-muted)]">Загрузка фильтров…</p>
+      </div>
+    );
+  }
 
   if (!showRow) return null;
   return (

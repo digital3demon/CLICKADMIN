@@ -8,6 +8,7 @@ import {
   orderMatchesFinanceOfficeProductionPlus,
 } from "@/lib/finance-office-list-filter";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
+import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import {
   hydrateListPendingChatCorrectionsFromInbox,
@@ -148,33 +149,29 @@ async function countFinanceOfficeEdoChips(
   db: PrismaClient,
   scope: Prisma.OrderWhereInput,
 ): Promise<{ edoCount: number; noEdoCount: number }> {
-  const rows = await db.order.findMany({
-    where: scope,
-    select: {
-      clinicId: true,
-      doctorId: true,
-      labWorkStatus: true,
-      kaitenColumnTitle: true,
-    },
-  });
-  const stageFiltered = rows.filter((row) =>
-    orderMatchesFinanceOfficeProductionPlus({
-      labWorkStatus: row.labWorkStatus,
-      kaitenColumnTitle: row.kaitenColumnTitle,
+  const [clinicGroups, doctorGroups] = await Promise.all([
+    db.order.groupBy({
+      by: ["clinicId"],
+      where: { AND: [scope, { clinicId: { not: null } }] },
+      _count: { _all: true },
     }),
-  );
-  if (stageFiltered.length === 0) {
+    db.order.groupBy({
+      by: ["doctorId"],
+      where: { AND: [scope, { clinicId: null }] },
+      _count: { _all: true },
+    }),
+  ]);
+
+  if (clinicGroups.length === 0 && doctorGroups.length === 0) {
     return { edoCount: 0, noEdoCount: 0 };
   }
 
-  const clientsPrisma = await getClientsPrisma();
-  const clinicIds = Array.from(
-    new Set(stageFiltered.map((r) => r.clinicId).filter(Boolean)),
-  ) as string[];
-  const doctorIdsForPrivate = Array.from(
-    new Set(stageFiltered.filter((r) => !r.clinicId).map((r) => r.doctorId)),
-  );
+  const clinicIds = clinicGroups
+    .map((g) => g.clinicId)
+    .filter((id): id is string => id != null);
+  const doctorIds = doctorGroups.map((g) => g.doctorId);
 
+  const clientsPrisma = await getClientsPrisma();
   const [clinics, doctorsIp] = await Promise.all([
     clinicIds.length
       ? clientsPrisma.clinic.findMany({
@@ -182,9 +179,9 @@ async function countFinanceOfficeEdoChips(
           select: { id: true, worksWithEdo: true },
         })
       : Promise.resolve([]),
-    doctorIdsForPrivate.length
+    doctorIds.length
       ? clientsPrisma.doctor.findMany({
-          where: { id: { in: doctorIdsForPrivate } },
+          where: { id: { in: doctorIds } },
           select: {
             id: true,
             ipClinicAsSource: { select: { worksWithEdo: true, deletedAt: true } },
@@ -206,12 +203,16 @@ async function countFinanceOfficeEdoChips(
 
   let edoCount = 0;
   let noEdoCount = 0;
-  for (const row of stageFiltered) {
-    const worksWithEdo = row.clinicId
-      ? (clinicEdoById.get(row.clinicId) ?? false)
-      : (privateEdoByDoctorId.get(row.doctorId) ?? false);
-    if (worksWithEdo) edoCount += 1;
-    else noEdoCount += 1;
+  for (const g of clinicGroups) {
+    if (g.clinicId == null) continue;
+    const n = g._count._all;
+    if (clinicEdoById.get(g.clinicId)) edoCount += n;
+    else noEdoCount += n;
+  }
+  for (const g of doctorGroups) {
+    const n = g._count._all;
+    if (privateEdoByDoctorId.get(g.doctorId)) edoCount += n;
+    else noEdoCount += n;
   }
   return { edoCount, noEdoCount };
 }
@@ -236,25 +237,65 @@ export async function countFinanceOfficeQuickFilterChips(
   labMentionCount: number;
 }> {
   const scope = financeOfficeChipCountScopeWhere(tenantId, opts);
-  const labMentionScope = scope;
-  const scopedIds = (
-    await db.order.findMany({
-      where: scope,
-      select: { id: true },
-    })
-  ).map((r) => r.id);
+  const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
+  const inbox = (db as {
+    orderChatInboxItem: {
+      findMany: (args: unknown) => Promise<Array<{ orderId: string }>>;
+    };
+  }).orderChatInboxItem;
 
   const [
-    pendingCorrections,
-    pendingProsthetics,
+    legacyCorrPending,
+    inboxCorrPending,
+    legacyProsPending,
+    inboxProsPending,
     financeNotCalculatedCount,
     financeCalculatedCount,
     edoCounts,
     labMentionCount,
-    prostheticsOrderedFalseIds,
   ] = await Promise.all([
-    orderIdsWithPendingMergedCorrections(db, scopedIds),
-    orderIdsWithPendingMergedProsthetics(db, scopedIds),
+    db.orderChatCorrection.findMany({
+      where: {
+        resolvedAt: null,
+        rejectedAt: null,
+        order: scope,
+      },
+      select: { orderId: true },
+      distinct: ["orderId"],
+    }),
+    useInbox
+      ? inbox.findMany({
+          where: {
+            type: "CORRECTION",
+            resolvedAt: null,
+            rejectedAt: null,
+            order: scope,
+          },
+          select: { orderId: true },
+          distinct: ["orderId"],
+        })
+      : Promise.resolve([]),
+    db.orderProstheticsRequest.findMany({
+      where: {
+        resolvedAt: null,
+        rejectedAt: null,
+        order: scope,
+      },
+      select: { orderId: true },
+      distinct: ["orderId"],
+    }),
+    useInbox
+      ? inbox.findMany({
+          where: {
+            type: "PROSTHETICS",
+            resolvedAt: null,
+            rejectedAt: null,
+            order: scope,
+          },
+          select: { orderId: true },
+          distinct: ["orderId"],
+        })
+      : Promise.resolve([]),
     db.order.count({
       where: { AND: [scope, { financeCalculated: false }] },
     }),
@@ -264,19 +305,42 @@ export async function countFinanceOfficeQuickFilterChips(
     countFinanceOfficeEdoChips(db, scope),
     countOrdersWithPendingKaitenLabMentionForUser(
       db,
-      labMentionScope,
+      scope,
       opts.userId,
     ),
-    db.order.findMany({
-      where: { AND: [scope, { prostheticsOrdered: false }] },
-      select: { id: true },
-    }),
   ]);
 
-  const notOrderedSet = new Set(prostheticsOrderedFalseIds.map((r) => r.id));
-  const prostheticsPendingCount = [...pendingProsthetics].filter((id) =>
-    notOrderedSet.has(id),
-  ).length;
+  const corrCandidateIds = [
+    ...new Set([
+      ...legacyCorrPending.map((r) => r.orderId),
+      ...inboxCorrPending.map((r) => r.orderId),
+    ]),
+  ];
+  const prosCandidateIds = [
+    ...new Set([
+      ...legacyProsPending.map((r) => r.orderId),
+      ...inboxProsPending.map((r) => r.orderId),
+    ]),
+  ];
+
+  const [pendingCorrections, pendingProsthetics] = await Promise.all([
+    orderIdsWithPendingMergedCorrections(db, corrCandidateIds),
+    orderIdsWithPendingMergedProsthetics(db, prosCandidateIds),
+  ]);
+
+  const pendingProsList = [...pendingProsthetics];
+  const prostheticsPendingCount =
+    pendingProsList.length === 0
+      ? 0
+      : await db.order.count({
+          where: {
+            AND: [
+              scope,
+              { prostheticsOrdered: false },
+              { id: { in: pendingProsList } },
+            ],
+          },
+        });
 
   return {
     attentionCount: pendingCorrections.size,

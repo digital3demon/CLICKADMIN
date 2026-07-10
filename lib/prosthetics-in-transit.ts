@@ -7,4 +7,6 @@ export type ProstheticsInTransitRow = {
   resolvedAt: string;
   orderId: string;
   orderNumber: string;
+  patientName: string | null;
+  doctorName: string | null;
 };

@@ -214,22 +214,18 @@ export function OrdersProstheticsHistoryTable({
                     )}
                   </td>
                   <td className="px-2 py-2 sm:px-3 sm:py-2.5">
-                    {canToggle ? (
-                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-[var(--text-body)]">
-                        <input
-                          type="checkbox"
-                          className="size-4 rounded border-[var(--card-border)]"
-                          checked={Boolean(item.arrivedAt)}
-                          disabled={busyId === item.id}
-                          onChange={(e) =>
-                            void toggleArrived(item, e.target.checked)
-                          }
-                        />
-                        пришла
-                      </label>
+                    {canToggle && !item.arrivedAt ? (
+                      <button
+                        type="button"
+                        className="rounded-md border border-sky-300/80 bg-sky-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-sky-800 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-sky-800/70 dark:bg-sky-950/40 dark:text-sky-200 dark:hover:bg-sky-950/55"
+                        disabled={busyId === item.id}
+                        onClick={() => void toggleArrived(item, true)}
+                      >
+                        {busyId === item.id ? "…" : "Пришла"}
+                      </button>
                     ) : item.arrivedAt ? (
-                      <span className="text-xs text-sky-700 dark:text-sky-300">
-                        да
+                      <span className="text-xs font-medium text-sky-700 dark:text-sky-300">
+                        Пришла
                       </span>
                     ) : (
                       <span className="text-[var(--text-muted)]">—</span>

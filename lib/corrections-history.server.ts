@@ -23,6 +23,8 @@ const correctionSelect = {
     select: {
       id: true,
       orderNumber: true,
+      patientName: true,
+      doctor: { select: { fullName: true } },
     },
   },
 } as const;
@@ -48,7 +50,12 @@ function mapCorrection(
     resolvedByName: r.resolvedBy?.displayName ?? null,
     rejectedByName: r.rejectedBy?.displayName ?? null,
     arrivedByName: null,
-    order: r.order,
+    order: {
+      id: r.order.id,
+      orderNumber: r.order.orderNumber,
+      patientName: r.order.patientName,
+      doctorName: r.order.doctor?.fullName ?? null,
+    },
   };
 }
 
@@ -69,7 +76,12 @@ function mapProsthetics(
     resolvedByName: r.resolvedBy?.displayName ?? null,
     rejectedByName: r.rejectedBy?.displayName ?? null,
     arrivedByName: r.arrivedBy?.displayName ?? null,
-    order: r.order,
+    order: {
+      id: r.order.id,
+      orderNumber: r.order.orderNumber,
+      patientName: r.order.patientName,
+      doctorName: r.order.doctor?.fullName ?? null,
+    },
   };
 }
 

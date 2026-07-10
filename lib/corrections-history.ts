@@ -16,7 +16,12 @@ export type CorrectionHistoryRow = {
   resolvedByName: string | null;
   rejectedByName: string | null;
   arrivedByName: string | null;
-  order: { id: string; orderNumber: string };
+  order: {
+    id: string;
+    orderNumber: string;
+    patientName?: string | null;
+    doctorName?: string | null;
+  };
 };
 
 export const CORRECTION_SOURCE_LABEL: Record<CorrectionHistorySource, string> = {
@@ -91,6 +96,64 @@ export function formatCorrectionHistoryDecision(row: CorrectionHistoryRow): {
     };
   }
   return { status: "pending", label: "Ожидает", detail: null };
+}
+
+export type CorrectionHistoryJsonRow = {
+  id: string;
+  text: string;
+  source: CorrectionHistorySource;
+  createdAt: string;
+  resolvedAt: string | null;
+  rejectedAt: string | null;
+  resolvedByName: string | null;
+  rejectedByName: string | null;
+  orderId: string;
+  orderNumber: string;
+  patientName: string | null;
+  doctorName: string | null;
+};
+
+export function correctionHistoryRowToJson(
+  row: CorrectionHistoryRow,
+): CorrectionHistoryJsonRow {
+  return {
+    id: row.id,
+    text: row.text,
+    source: row.source,
+    createdAt: row.createdAt.toISOString(),
+    resolvedAt: row.resolvedAt?.toISOString() ?? null,
+    rejectedAt: row.rejectedAt?.toISOString() ?? null,
+    resolvedByName: row.resolvedByName,
+    rejectedByName: row.rejectedByName,
+    orderId: row.order.id,
+    orderNumber: row.order.orderNumber,
+    patientName: row.order.patientName ?? null,
+    doctorName: row.order.doctorName ?? null,
+  };
+}
+
+export function correctionHistoryRowFromJson(
+  row: CorrectionHistoryJsonRow,
+): CorrectionHistoryRow {
+  return {
+    id: row.id,
+    kind: "correction",
+    text: row.text,
+    source: row.source,
+    createdAt: new Date(row.createdAt),
+    resolvedAt: row.resolvedAt ? new Date(row.resolvedAt) : null,
+    rejectedAt: row.rejectedAt ? new Date(row.rejectedAt) : null,
+    arrivedAt: null,
+    resolvedByName: row.resolvedByName,
+    rejectedByName: row.rejectedByName,
+    arrivedByName: null,
+    order: {
+      id: row.orderId,
+      orderNumber: row.orderNumber,
+      patientName: row.patientName,
+      doctorName: row.doctorName,
+    },
+  };
 }
 
 export function mergeCorrectionHistoryRows(

@@ -51,7 +51,14 @@ export async function listProstheticsInTransit(
         createdAt: true,
         resolvedAt: true,
         kaitenCommentId: true,
-        order: { select: { id: true, orderNumber: true } },
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            patientName: true,
+            doctor: { select: { fullName: true } },
+          },
+        },
       },
     }),
     useInbox
@@ -73,7 +80,14 @@ export async function listProstheticsInTransit(
             createdAt: true,
             resolvedAt: true,
             kaitenCommentId: true,
-            order: { select: { id: true, orderNumber: true } },
+            order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            patientName: true,
+            doctor: { select: { fullName: true } },
+          },
+        },
           },
         }) as Promise<
           Array<{
@@ -84,7 +98,12 @@ export async function listProstheticsInTransit(
             createdAt: Date;
             resolvedAt: Date | null;
             kaitenCommentId: number | null;
-            order: { id: string; orderNumber: string };
+            order: {
+              id: string;
+              orderNumber: string;
+              patientName: string | null;
+              doctor: { fullName: string } | null;
+            };
           }>
         >)
       : Promise.resolve([]),
@@ -105,6 +124,8 @@ export async function listProstheticsInTransit(
       resolvedAt: row.resolvedAt.toISOString(),
       orderId: row.order.id,
       orderNumber: row.order.orderNumber,
+      patientName: row.order.patientName,
+      doctorName: row.order.doctor?.fullName ?? null,
     });
   }
 
@@ -122,6 +143,8 @@ export async function listProstheticsInTransit(
       resolvedAt: row.resolvedAt.toISOString(),
       orderId: row.order.id,
       orderNumber: row.order.orderNumber,
+      patientName: row.order.patientName,
+      doctorName: row.order.doctor?.fullName ?? null,
     });
   }
 

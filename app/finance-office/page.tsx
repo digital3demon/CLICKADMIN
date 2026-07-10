@@ -12,7 +12,6 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import {
   fetchFinanceOfficeOrders,
-  countFinanceOfficeQuickFilterChips,
 } from "@/lib/fetch-finance-office-orders";
 import {
   parseFinanceOfficeMode,
@@ -128,38 +127,17 @@ export default async function FinanceOfficePage({
   }
 
   const shouldFetch = mode === "actual" || (mode === "period" && Boolean(toRaw) && !error);
-  const ordersPrisma = shouldFetch ? await getOrdersPrisma() : null;
-  const [orders, chipCounts] =
-    ordersPrisma && shouldFetch && !error
-      ? await Promise.all([
-          fetchFinanceOfficeOrders(ordersPrisma, tenantId, {
-            listTag: rawTagInvalid ? null : rawTag,
-            search: q,
-            mode,
-            fromYmd: mode === "period" ? fromRaw : null,
-            toYmd: mode === "period" ? toRaw : null,
-            userId: session?.sub,
-          }),
-          countFinanceOfficeQuickFilterChips(ordersPrisma, tenantId, {
-            search: q,
-            userId: session?.sub,
-            mode,
-            fromYmd: mode === "period" ? fromRaw : null,
-            toYmd: mode === "period" ? toRaw : null,
-          }),
-        ])
-      : [
-          [] as Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>,
-          {
-            attentionCount: 0,
-            prostheticsPendingCount: 0,
-            financeNotCalculatedCount: 0,
-            financeCalculatedCount: 0,
-            edoCount: 0,
-            noEdoCount: 0,
-            labMentionCount: 0,
-          },
-        ];
+  const orders =
+    shouldFetch && !error
+      ? await fetchFinanceOfficeOrders(await getOrdersPrisma(), tenantId, {
+          listTag: rawTagInvalid ? null : rawTag,
+          search: q,
+          mode,
+          fromYmd: mode === "period" ? fromRaw : null,
+          toYmd: mode === "period" ? toRaw : null,
+          userId: session?.sub,
+        })
+      : ([] as Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>);
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;
   const listRangeSummary =
     tagLabel && rangeSummary
@@ -271,13 +249,6 @@ export default async function FinanceOfficePage({
         {financeOfficeHeader}
         {shouldFetch && !error ? (
           <FinanceOfficeQuickFilterChips
-            attentionCount={chipCounts.attentionCount}
-            prostheticsPendingCount={chipCounts.prostheticsPendingCount}
-            financeNotCalculatedCount={chipCounts.financeNotCalculatedCount}
-            financeCalculatedCount={chipCounts.financeCalculatedCount}
-            edoCount={chipCounts.edoCount}
-            noEdoCount={chipCounts.noEdoCount}
-            labMentionCount={chipCounts.labMentionCount}
             activeFilter={parsedTag}
             tab={mode}
             periodFrom={fromRaw}
