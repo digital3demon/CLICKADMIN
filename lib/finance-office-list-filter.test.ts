@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   FINANCE_OFFICE_EXCLUDED_LAB_STATUSES,
   FINANCE_OFFICE_INCLUDED_LAB_STATUSES,
-  effectiveFinanceRecordDate,
+  effectiveFinanceLabDueDate,
+  financeOfficeLabDueBeforeEndExclusive,
+  financeOfficeLabDueInRange,
   financeOfficeModeDateWhere,
   financeOfficeProductionAndLaterWhere,
-  financeOfficeRecordDateBeforeEndExclusive,
   orderMatchesFinanceOfficeProductionPlus,
   parseFinanceOfficeMode,
 } from "@/lib/finance-office-list-filter";
@@ -21,8 +22,10 @@ describe("finance-office-list-filter", () => {
     expect(FINANCE_OFFICE_INCLUDED_LAB_STATUSES).not.toContain("APPROVAL");
   });
 
-  it("maps legacy today/tomorrow to actual", () => {
+  it("maps legacy today/tomorrow to actual; default is actual", () => {
     expect(parseFinanceOfficeMode(undefined)).toBe("actual");
+    expect(parseFinanceOfficeMode(null)).toBe("actual");
+    expect(parseFinanceOfficeMode("")).toBe("actual");
     expect(parseFinanceOfficeMode("today")).toBe("actual");
     expect(parseFinanceOfficeMode("tomorrow")).toBe("actual");
     expect(parseFinanceOfficeMode("period")).toBe("period");
@@ -35,55 +38,55 @@ describe("finance-office-list-filter", () => {
     ).toBeNull();
   });
 
-  it("actual requires not calculated + record-date upper bound", () => {
+  it("actual requires not calculated + lab-due upper bound", () => {
     const where = financeOfficeModeDateWhere({ mode: "actual" });
     const json = JSON.stringify(where);
     expect(json).toContain("financeCalculated");
-    expect(json).toContain("appointmentDate");
-    expect(json).toContain("dueToAdminsAt");
     expect(json).toContain("dueDate");
+    expect(json).not.toContain("appointmentDate");
   });
 
-  it("period with only to is open-start by record date", () => {
+  it("period with only to is open-start by lab due", () => {
     const where = financeOfficeModeDateWhere({
       mode: "period",
       toYmd: "2026-07-10",
     });
     const json = JSON.stringify(where);
-    expect(json).toContain("appointmentDate");
-    expect(json).toContain("dueToAdminsAt");
     expect(json).toContain("dueDate");
+    expect(json).not.toContain("appointmentDate");
   });
 
-  it("period with from+to is closed record-date range", () => {
+  it("period with from+to is closed lab-due range", () => {
     const where = financeOfficeModeDateWhere({
       mode: "period",
       fromYmd: "2026-07-01",
       toYmd: "2026-07-10",
     });
     const json = JSON.stringify(where);
-    expect(json).toContain("appointmentDate");
+    expect(json).toContain("dueDate");
     expect(json).toContain("2026-06-30T21:00:00.000Z");
     expect(json).toContain("2026-07-10T21:00:00.000Z");
+    expect(json).not.toContain("appointmentDate");
   });
 
-  it("effectiveFinanceRecordDate falls back to dueDate", () => {
+  it("effectiveFinanceLabDueDate uses dueDate only", () => {
     const d = new Date("2026-07-05T10:00:00.000Z");
-    expect(
-      effectiveFinanceRecordDate({
-        appointmentDate: null,
-        dueToAdminsAt: null,
-        dueDate: d,
-      }),
-    ).toEqual(d);
+    expect(effectiveFinanceLabDueDate({ dueDate: d })).toEqual(d);
+    expect(effectiveFinanceLabDueDate({ dueDate: null })).toBeNull();
   });
 
-  it("record-date before-end includes dueDate branch", () => {
+  it("lab-due before-end includes null dueDate", () => {
     const end = new Date("2026-07-10T21:00:00.000Z");
-    const json = JSON.stringify(
-      financeOfficeRecordDateBeforeEndExclusive(end),
-    );
-    expect(json).toContain('"dueDate"');
+    const where = financeOfficeLabDueBeforeEndExclusive(end);
+    expect(JSON.stringify(where)).toContain('"dueDate":null');
+  });
+
+  it("lab-due in-range requires dueDate", () => {
+    const start = new Date("2026-07-01T21:00:00.000Z");
+    const end = new Date("2026-07-10T21:00:00.000Z");
+    const json = JSON.stringify(financeOfficeLabDueInRange(start, end));
+    expect(json).toContain('"not":null');
+    expect(json).toContain("dueDate");
   });
 
   it("production+ matches kaiten column when labWorkStatus lags", () => {

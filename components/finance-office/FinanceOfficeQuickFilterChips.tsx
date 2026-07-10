@@ -2,8 +2,11 @@ import Link from "next/link";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import {
   humanListTagLabel,
+  LIST_TAG_EDO,
+  LIST_TAG_FINANCE_CALCULATED,
   LIST_TAG_FINANCE_NOT_CALCULATED,
   LIST_TAG_KAITEN_LAB_MENTION,
+  LIST_TAG_NO_EDO,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
   type ParsedListTag,
@@ -13,6 +16,9 @@ export function FinanceOfficeQuickFilterChips({
   attentionCount,
   prostheticsPendingCount,
   financeNotCalculatedCount,
+  financeCalculatedCount,
+  edoCount,
+  noEdoCount,
   labMentionCount,
   activeFilter = null,
   tab,
@@ -23,6 +29,9 @@ export function FinanceOfficeQuickFilterChips({
   attentionCount: number;
   prostheticsPendingCount: number;
   financeNotCalculatedCount: number;
+  financeCalculatedCount: number;
+  edoCount: number;
+  noEdoCount: number;
   labMentionCount: number;
   activeFilter?: ParsedListTag | null;
   tab: string;
@@ -41,6 +50,9 @@ export function FinanceOfficeQuickFilterChips({
     attentionCount > 0 ||
     prostheticsPendingCount > 0 ||
     financeNotCalculatedCount > 0 ||
+    financeCalculatedCount > 0 ||
+    edoCount > 0 ||
+    noEdoCount > 0 ||
     labMentionCount > 0 ||
     activeFilter != null;
 
@@ -52,6 +64,10 @@ export function FinanceOfficeQuickFilterChips({
     prostheticsPendingCount > 0 || activeFilter?.kind === "prostheticsPending";
   const showNotCalculated =
     financeNotCalculatedCount > 0 || activeFilter?.kind === "financeNotCalculated";
+  const showCalculated =
+    financeCalculatedCount > 0 || activeFilter?.kind === "financeCalculated";
+  const showEdo = edoCount > 0 || activeFilter?.kind === "edo";
+  const showNoEdo = noEdoCount > 0 || activeFilter?.kind === "noEdo";
   const showChat =
     labMentionCount > 0 || activeFilter?.kind === "kaitenLabMention";
 
@@ -111,13 +127,76 @@ export function FinanceOfficeQuickFilterChips({
                 ? "border-orange-400/90 bg-orange-100 text-orange-950 ring-2 ring-orange-500/85 dark:border-orange-700 dark:bg-orange-950/45 dark:text-orange-100 dark:ring-orange-500/70"
                 : "border-orange-300/70 bg-orange-100/70 text-orange-950 hover:bg-orange-100 dark:border-orange-800/60 dark:bg-orange-950/35 dark:text-orange-100 dark:hover:bg-orange-950/50"
             }`}
-            title="Наряды без отметки «Просчитано» (по всем активным нарядам)"
+            title="Наряды без отметки «Просчитано» (в выбранном периоде)"
           >
             <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
               Не просчитано
             </span>
             <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
               {financeNotCalculatedCount}
+            </span>
+          </Link>
+        ) : null}
+        {showCalculated ? (
+          <Link
+            href={financeOfficeListHref({
+              ...listCtx,
+              tag: LIST_TAG_FINANCE_CALCULATED,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "financeCalculated"
+                ? "border-emerald-400/90 bg-emerald-100 text-emerald-950 ring-2 ring-emerald-500/85 dark:border-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-100 dark:ring-emerald-500/70"
+                : "border-emerald-300/70 bg-emerald-100/70 text-emerald-950 hover:bg-emerald-100 dark:border-emerald-800/60 dark:bg-emerald-950/35 dark:text-emerald-100 dark:hover:bg-emerald-950/50"
+            }`}
+            title="Наряды с отметкой «Просчитано» (в выбранном периоде)"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              Просчитано
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {financeCalculatedCount}
+            </span>
+          </Link>
+        ) : null}
+        {showEdo ? (
+          <Link
+            href={financeOfficeListHref({
+              ...listCtx,
+              tag: LIST_TAG_EDO,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "edo"
+                ? "border-teal-400/90 bg-teal-100 text-teal-950 ring-2 ring-teal-500/85 dark:border-teal-700 dark:bg-teal-950/45 dark:text-teal-100 dark:ring-teal-500/70"
+                : "border-teal-300/70 bg-teal-100/70 text-teal-950 hover:bg-teal-100 dark:border-teal-800/60 dark:bg-teal-950/35 dark:text-teal-100 dark:hover:bg-teal-950/50"
+            }`}
+            title="Клиника работает по ЭДО (в т.ч. ИП врача)"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              ЭДО
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {edoCount}
+            </span>
+          </Link>
+        ) : null}
+        {showNoEdo ? (
+          <Link
+            href={financeOfficeListHref({
+              ...listCtx,
+              tag: LIST_TAG_NO_EDO,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "noEdo"
+                ? "border-slate-400/90 bg-slate-100 text-slate-950 ring-2 ring-slate-500/85 dark:border-slate-600 dark:bg-slate-950/45 dark:text-slate-100 dark:ring-slate-500/70"
+                : "border-slate-300/70 bg-slate-100/70 text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/50"
+            }`}
+            title="Клиника без ЭДО или наряд без клиники"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              БЕЗ ЭДО
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {noEdoCount}
             </span>
           </Link>
         ) : null}

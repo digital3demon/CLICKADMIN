@@ -15,32 +15,57 @@ export function trimOrderChatAuthorLabel(
   return t.slice(0, 120);
 }
 
-/** Подпись источника в панелях корректировок и протетики: «Kaiten · Имя». */
+/** Подпись источника в панелях корректировок и протетики: «Kaiten — Имя — дата, время». */
+export function formatOrderChatSourceDateTime(
+  createdAt: string | Date | null | undefined,
+): string {
+  if (createdAt == null) return "";
+  const d = createdAt instanceof Date ? createdAt : new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function formatOrderChatSourceCaption(
   source: OrderChatCorrectionSource,
   authorLabel?: string | null,
+  createdAt?: string | Date | null,
 ): string {
   const base = source === "KAITEN" ? "Kaiten" : "Канбан";
   const who = trimOrderChatAuthorLabel(authorLabel);
-  return who ? `${base} · ${who}` : base;
+  const when = formatOrderChatSourceDateTime(createdAt);
+  const parts = [base];
+  if (who) parts.push(who);
+  if (when) parts.push(when);
+  return parts.join(" — ");
 }
 
-/** Заголовок глобального уведомления (тост) по типу заявки. */
+/** Заголовок глобального уведомления (тост): «Тип — автор — дата, время». */
+function orderChatToastKindLabel(
+  kind: "correction" | "prosthetics" | "chat" | "personal",
+): string {
+  if (kind === "correction") return "Корректировка";
+  if (kind === "prosthetics") return "Заказ протетики";
+  if (kind === "personal") return "Для вас";
+  return "Чат";
+}
+
 export function orderChatToastTitle(
   kind: "correction" | "prosthetics" | "chat" | "personal",
   authorLabel?: string | null,
+  createdAt?: string | Date | null,
 ): string {
+  const parts = [orderChatToastKindLabel(kind)];
   const who = trimOrderChatAuthorLabel(authorLabel);
-  if (kind === "correction") {
-    return who ? `Корректировка от ${who}` : "Корректировка";
-  }
-  if (kind === "prosthetics") {
-    return who ? `Заказ протетики от ${who}` : "Протетика";
-  }
-  if (kind === "personal") {
-    return who ? `Вас упомянули: ${who}` : "Персональное упоминание";
-  }
-  return who ? `Новое сообщение от ${who}` : "Новое сообщение в чате";
+  const when = formatOrderChatSourceDateTime(createdAt);
+  if (who) parts.push(who);
+  if (when) parts.push(when);
+  return parts.join(" — ");
 }
 
 export function mapParsedKaitenCommentsForTriggerSync(

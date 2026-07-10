@@ -146,6 +146,8 @@ type PatchBody = {
   doctorId?: string;
   patientName?: string | null;
   notes?: string | null;
+  /** Пометка смен в списках; не в Kaiten. До 100 символов. */
+  listAdminMemo?: string | null;
   clientOrderText?: string | null;
   status?: string;
   labWorkStatus?: string;
@@ -560,6 +562,12 @@ export async function PATCH(
   if (body.notes !== undefined) {
     const t = body.notes === null ? "" : String(body.notes).trim();
     scalarData.notes = t || null;
+  }
+
+  if (body.listAdminMemo !== undefined) {
+    const t =
+      body.listAdminMemo === null ? "" : String(body.listAdminMemo).trim();
+    scalarData.listAdminMemo = t ? t.slice(0, 100) : null;
   }
 
   if (body.clientOrderText !== undefined) {

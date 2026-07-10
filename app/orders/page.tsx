@@ -8,6 +8,7 @@ import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
+import { OrderListAdminMemoCell } from "@/components/orders/OrderListAdminMemoCell";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderStickerPrintLink } from "@/components/orders/OrderStickerPrintLink";
 import { OrdersListKaitenChatShell } from "@/components/orders/OrdersListKaitenChatShell";
@@ -101,18 +102,19 @@ function formatOrderCardDate(d: Date | null | undefined): string | undefined {
 function OrdersTableColGroup() {
   return (
     <colgroup>
-      <col className="max-md:hidden lg:w-[3%]" />
-      <col className="max-md:hidden lg:w-[7.2%]" />
-      <col className="lg:w-[6.4%]" />
-      <col className="lg:w-[12.1%]" />
-      <col className="lg:w-[11.9%]" />
-      <col className="lg:w-[8.6%]" />
-      <col className="lg:w-[8.2%]" />
-      <col className="lg:w-[7.6%]" />
-      <col className="lg:w-[7.8%]" />
-      <col className="lg:w-[7.8%]" />
-      <col className="lg:w-[5.2%]" />
-      <col className="lg:w-[15%]" />
+      <col className="max-md:hidden lg:w-[6%]" />
+      <col className="max-md:hidden lg:w-[2.8%]" />
+      <col className="max-md:hidden lg:w-[6.5%]" />
+      <col className="lg:w-[6%]" />
+      <col className="lg:w-[11.5%]" />
+      <col className="lg:w-[11%]" />
+      <col className="lg:w-[8%]" />
+      <col className="lg:w-[7.5%]" />
+      <col className="lg:w-[7%]" />
+      <col className="lg:w-[4.2%]" />
+      <col className="lg:w-[4.2%]" />
+      <col className="lg:w-[4.8%]" />
+      <col className="lg:w-[14.5%]" />
     </colgroup>
   );
 }
@@ -120,6 +122,12 @@ function OrdersTableColGroup() {
 function OrdersTableHeaderRow({ isDemo }: { isDemo: boolean }) {
   return (
     <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs">
+      <th
+        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
+        title="Пометки смен (не уходят в наряд и Kaiten)"
+      >
+        Пометки
+      </th>
       <th
         className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
         title="Чат карточки в Kaiten"
@@ -795,7 +803,7 @@ export default async function OrdersPage({
             {orders.length === 0 ? (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={13}
                   className="px-4 py-10 text-center text-sm text-[var(--text-muted)]"
                 >
                   {activeFilter
@@ -872,6 +880,9 @@ export default async function OrdersPage({
                     invoicePrinted={o.invoicePrinted}
                     hasInvoiceAttachment={o.invoiceAttachmentId != null}
                     invoiceAttachmentId={o.invoiceAttachmentId}
+                    invoicePaperDocs={o.invoicePaperDocs}
+                    invoiceSentToEdo={o.invoiceSentToEdo}
+                    invoiceEdoSigned={o.invoiceEdoSigned}
                     payment={o.payment}
                     paymentPartialRub={o.paymentPartialRub}
                     adminShippedOtpr={o.adminShippedOtpr}
@@ -970,6 +981,12 @@ export default async function OrdersPage({
                     </>
                   }
                 >
+                  <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-1 sm:py-1.5">
+                    <OrderListAdminMemoCell
+                      orderId={o.id}
+                      initialMemo={o.listAdminMemo ?? null}
+                    />
+                  </td>
                   <OrderListOrderChatCell
                     orderId={o.id}
                     orderNumber={o.orderNumber}
@@ -1082,7 +1099,7 @@ export default async function OrdersPage({
                   <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle text-center text-[11px] text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5 sm:text-xs">
                     {formatAdmission(o)}
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
+                  <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-0.5 py-1 align-middle text-[var(--text-secondary)] sm:px-1 sm:py-1.5">
                     <OrderListDueCell
                       orderId={o.id}
                       dueIso={o.dueDate?.toISOString() ?? null}
@@ -1090,7 +1107,7 @@ export default async function OrdersPage({
                       labHmSlots={labDueHmSlots}
                     />
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
+                  <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-0.5 py-1 align-middle text-[var(--text-secondary)] sm:px-1 sm:py-1.5">
                     <OrderListDueCell
                       variant="appointment"
                       orderId={o.id}

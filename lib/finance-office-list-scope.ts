@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import type { ParsedListTag } from "@/lib/order-list-tag-filter";
 import {
-  financeOfficeRecordDateBeforeEndExclusive,
-  financeOfficeRecordDateInRange,
+  financeOfficeLabDueBeforeEndExclusive,
+  financeOfficeLabDueInRange,
   financeOfficeActualEndExclusive,
   financeOfficeProductionAndLaterWhere,
   type FinanceOfficeMode,
@@ -27,11 +27,14 @@ export function financeOfficeScopeWhere(
     mode?: FinanceOfficeMode | null;
     fromYmd?: string | null;
     toYmd?: string | null;
-    /** Не применять окно даты записи (теги корр/протетика/непросчитано). */
+    /**
+     * Не применять окно лаб-срока.
+     * @deprecated теги больше не снимают окно периода — оставляем флаг для совместимости.
+     */
     skipDueDateWindow?: boolean;
     /**
      * Режим actual по умолчанию только непросчитанные.
-     * false — не добавлять financeCalculated:false (если тег сам задаёт просчёт).
+     * false — не добавлять financeCalculated:false (если тег сам задаёт просчёт / счётчики чипов).
      */
     actualNotCalculatedOnly?: boolean;
   } = {},
@@ -49,9 +52,7 @@ export function financeOfficeScopeWhere(
   if (!opts.skipDueDateWindow && mode) {
     if (mode === "actual") {
       parts.push(
-        financeOfficeRecordDateBeforeEndExclusive(
-          financeOfficeActualEndExclusive(),
-        ),
+        financeOfficeLabDueBeforeEndExclusive(financeOfficeActualEndExclusive()),
       );
       if (actualNotCalculatedOnly) {
         parts.push({ financeCalculated: false });
@@ -63,9 +64,9 @@ export function financeOfficeScopeWhere(
         const fromYmd = opts.fromYmd?.trim() || null;
         if (fromYmd) {
           const { start } = moscowDayBoundsUtc(fromYmd);
-          parts.push(financeOfficeRecordDateInRange(start, endExclusive));
+          parts.push(financeOfficeLabDueInRange(start, endExclusive));
         } else {
-          parts.push(financeOfficeRecordDateBeforeEndExclusive(endExclusive));
+          parts.push(financeOfficeLabDueBeforeEndExclusive(endExclusive));
         }
       }
     }
@@ -74,13 +75,12 @@ export function financeOfficeScopeWhere(
   return parts.length === 1 ? parts[0]! : { AND: parts };
 }
 
-/** Корректировки, протетика и непросчитанные — без окна даты записи. ЧАТ — в рамках вкладки. */
+/**
+ * Теги больше не снимают окно лаб-срока: счётчики и список всегда в рамках
+ * Актуального / За период.
+ */
 export function financeOfficeListTagSkipsDueDateWindow(
-  parsed: ParsedListTag | null | undefined,
+  _parsed: ParsedListTag | null | undefined,
 ): boolean {
-  return (
-    parsed?.kind === "orderAttention" ||
-    parsed?.kind === "prostheticsPending" ||
-    parsed?.kind === "financeNotCalculated"
-  );
+  return false;
 }

@@ -135,7 +135,7 @@ function ToastCard({
       <span
         className={`block text-[0.65rem] font-semibold tracking-wide ${titleTone[kind]}`}
       >
-        {orderChatToastTitle(kind, row.authorLabel)}
+        {orderChatToastTitle(kind, row.authorLabel, row.createdAt)}
       </span>
       <span className="mt-0.5 block text-[var(--text-body)]">
         по наряду{" "}

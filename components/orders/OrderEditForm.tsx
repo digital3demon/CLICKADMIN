@@ -896,6 +896,17 @@ export function OrderEditForm({
   }, [initial.id, initial.invoicePrinted]);
 
   useEffect(() => {
+    setInvoicePaperDocs(initial.invoicePaperDocs);
+    setInvoiceSentToEdo(initial.invoiceSentToEdo);
+    setInvoiceEdoSigned(initial.invoiceEdoSigned);
+  }, [
+    initial.id,
+    initial.invoicePaperDocs,
+    initial.invoiceSentToEdo,
+    initial.invoiceEdoSigned,
+  ]);
+
+  useEffect(() => {
     setExcludeFromReconciliation(initial.excludeFromReconciliation === true);
   }, [initial.id, initial.excludeFromReconciliation]);
 
@@ -1646,6 +1657,37 @@ export function OrderEditForm({
           return;
         }
         setInvoicePrinted(next);
+        router.refresh();
+      } catch {
+        setError("Сеть или сервер недоступны");
+      } finally {
+        setInvoiceSaving(false);
+      }
+    },
+    [initial.id, router],
+  );
+
+  const toggleInvoiceDocFlag = useCallback(
+    async (
+      field: "invoicePaperDocs" | "invoiceSentToEdo" | "invoiceEdoSigned",
+      next: boolean,
+    ) => {
+      setInvoiceSaving(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/orders/${initial.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [field]: next }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setError(data.error ?? "Не удалось сохранить отметку");
+          return;
+        }
+        if (field === "invoicePaperDocs") setInvoicePaperDocs(next);
+        else if (field === "invoiceSentToEdo") setInvoiceSentToEdo(next);
+        else setInvoiceEdoSigned(next);
         router.refresh();
       } catch {
         setError("Сеть или сервер недоступны");
@@ -3087,33 +3129,65 @@ export function OrderEditForm({
                   <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
                     ЭДО и бумаги
                   </h3>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-strong)]">
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 shrink-0 rounded border-[var(--input-border)]"
-                      checked={invoicePaperDocs}
-                      onChange={(e) => setInvoicePaperDocs(e.target.checked)}
-                    />
-                    Бумажные документы
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-strong)]">
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 shrink-0 rounded border-[var(--input-border)]"
-                      checked={invoiceSentToEdo}
-                      onChange={(e) => setInvoiceSentToEdo(e.target.checked)}
-                    />
-                    Отправлен в ЭДО
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-strong)]">
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 shrink-0 rounded border-[var(--input-border)]"
-                      checked={invoiceEdoSigned}
-                      onChange={(e) => setInvoiceEdoSigned(e.target.checked)}
-                    />
-                    Подпись в ЭДО
-                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={invoiceSaving || !canEditClients}
+                      aria-pressed={invoicePaperDocs}
+                      title="Бумажные документы распечатаны"
+                      onClick={() =>
+                        void toggleInvoiceDocFlag(
+                          "invoicePaperDocs",
+                          !invoicePaperDocs,
+                        )
+                      }
+                      className={
+                        invoicePaperDocs
+                          ? "rounded-md border border-stone-500 bg-stone-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-stone-800 disabled:opacity-50 sm:text-sm"
+                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                      }
+                    >
+                      бум доки
+                    </button>
+                    <button
+                      type="button"
+                      disabled={invoiceSaving || !canEditClients}
+                      aria-pressed={invoiceSentToEdo}
+                      title="Отправлен в ЭДО"
+                      onClick={() =>
+                        void toggleInvoiceDocFlag(
+                          "invoiceSentToEdo",
+                          !invoiceSentToEdo,
+                        )
+                      }
+                      className={
+                        invoiceSentToEdo
+                          ? "rounded-md border border-cyan-500 bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-cyan-700 disabled:opacity-50 sm:text-sm"
+                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                      }
+                    >
+                      отпр эдо
+                    </button>
+                    <button
+                      type="button"
+                      disabled={invoiceSaving || !canEditClients}
+                      aria-pressed={invoiceEdoSigned}
+                      title="Подпись в ЭДО"
+                      onClick={() =>
+                        void toggleInvoiceDocFlag(
+                          "invoiceEdoSigned",
+                          !invoiceEdoSigned,
+                        )
+                      }
+                      className={
+                        invoiceEdoSigned
+                          ? "rounded-md border border-indigo-500 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 sm:text-sm"
+                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                      }
+                    >
+                      пдпс эдо
+                    </button>
+                  </div>
                 </div>
                 <div className="min-w-0 flex-1 border-t border-[var(--card-border)] pt-4 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
                   <label

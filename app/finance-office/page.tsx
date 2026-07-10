@@ -13,7 +13,6 @@ import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import {
   fetchFinanceOfficeOrders,
   countFinanceOfficeQuickFilterChips,
-  financeOfficeListTagSkipsDueDateWindow,
 } from "@/lib/fetch-finance-office-orders";
 import {
   parseFinanceOfficeMode,
@@ -72,7 +71,11 @@ function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[
     urgentCoefficient: o.urgentCoefficient,
     invoiceAttachmentId: o.invoiceAttachmentId,
     invoicePrinted: o.invoicePrinted,
+    invoicePaperDocs: o.invoicePaperDocs,
+    invoiceSentToEdo: o.invoiceSentToEdo,
+    invoiceEdoSigned: o.invoiceEdoSigned,
     prostheticsOrdered: o.prostheticsOrdered,
+    listAdminMemo: o.listAdminMemo ?? null,
     listCustomTags: o.listCustomTags,
     listCompositionMismatch: o.listCompositionMismatch,
     listPendingChatCorrections: o.listPendingChatCorrections,
@@ -111,7 +114,7 @@ export default async function FinanceOfficePage({
   let rangeSummary: string | null = null;
 
   if (mode === "actual") {
-    rangeSummary = `Актуальное: непросчитанные с датой записи до завтра (${moscowTomorrowYmd()} МСК), этап «Производство» и далее`;
+    rangeSummary = `Актуальное: непросчитанные с лаб-сроком до завтра (${moscowTomorrowYmd()} МСК), этап «Производство» и далее`;
   } else if (!toRaw) {
     error = "Укажите дату «по» и нажмите «Показать».";
   } else if (fromRaw && fromRaw > toRaw) {
@@ -119,43 +122,48 @@ export default async function FinanceOfficePage({
   } else if (fromRaw && rangeDaySpan(fromRaw, toRaw) > MAX_RANGE_DAYS) {
     error = `Максимальный период — ${MAX_RANGE_DAYS} дней. Сузьте диапазон.`;
   } else if (fromRaw) {
-    rangeSummary = `Дата записи (МСК): с ${fromRaw} по ${toRaw}, этап «Производство» и далее`;
+    rangeSummary = `Лаб-срок (МСК): с ${fromRaw} по ${toRaw}, этап «Производство» и далее`;
   } else {
-    rangeSummary = `Дата записи (МСК): по ${toRaw} (включая прошлые), этап «Производство» и далее`;
+    rangeSummary = `Лаб-срок (МСК): по ${toRaw} (включая прошлые), этап «Производство» и далее`;
   }
 
   const shouldFetch = mode === "actual" || (mode === "period" && Boolean(toRaw) && !error);
   const ordersPrisma = shouldFetch ? await getOrdersPrisma() : null;
-  const orders = ordersPrisma
-    ? await fetchFinanceOfficeOrders(ordersPrisma, tenantId, {
-        listTag: rawTagInvalid ? null : rawTag,
-        search: q,
-        mode,
-        fromYmd: mode === "period" ? fromRaw : null,
-        toYmd: mode === "period" ? toRaw : null,
-        userId: session?.sub,
-      })
-    : [];
-  const chipCounts =
+  const [orders, chipCounts] =
     ordersPrisma && shouldFetch && !error
-      ? await countFinanceOfficeQuickFilterChips(ordersPrisma, tenantId, {
-          search: q,
-          userId: session?.sub,
-          mode,
-          fromYmd: mode === "period" ? fromRaw : null,
-          toYmd: mode === "period" ? toRaw : null,
-        })
-      : {
-          attentionCount: 0,
-          prostheticsPendingCount: 0,
-          financeNotCalculatedCount: 0,
-          labMentionCount: 0,
-        };
+      ? await Promise.all([
+          fetchFinanceOfficeOrders(ordersPrisma, tenantId, {
+            listTag: rawTagInvalid ? null : rawTag,
+            search: q,
+            mode,
+            fromYmd: mode === "period" ? fromRaw : null,
+            toYmd: mode === "period" ? toRaw : null,
+            userId: session?.sub,
+          }),
+          countFinanceOfficeQuickFilterChips(ordersPrisma, tenantId, {
+            search: q,
+            userId: session?.sub,
+            mode,
+            fromYmd: mode === "period" ? fromRaw : null,
+            toYmd: mode === "period" ? toRaw : null,
+          }),
+        ])
+      : [
+          [] as Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>,
+          {
+            attentionCount: 0,
+            prostheticsPendingCount: 0,
+            financeNotCalculatedCount: 0,
+            financeCalculatedCount: 0,
+            edoCount: 0,
+            noEdoCount: 0,
+            labMentionCount: 0,
+          },
+        ];
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;
-  const tagSkipsDueDate = financeOfficeListTagSkipsDueDateWindow(parsedTag);
   const listRangeSummary =
-    tagSkipsDueDate && tagLabel
-      ? `${tagLabel} — без ограничения по дате записи (производство+)`
+    tagLabel && rangeSummary
+      ? `${tagLabel} · ${rangeSummary}`
       : rangeSummary;
   const exportParams = new URLSearchParams();
   exportParams.set("tab", mode);
@@ -283,6 +291,9 @@ export default async function FinanceOfficePage({
             attentionCount={chipCounts.attentionCount}
             prostheticsPendingCount={chipCounts.prostheticsPendingCount}
             financeNotCalculatedCount={chipCounts.financeNotCalculatedCount}
+            financeCalculatedCount={chipCounts.financeCalculatedCount}
+            edoCount={chipCounts.edoCount}
+            noEdoCount={chipCounts.noEdoCount}
             labMentionCount={chipCounts.labMentionCount}
             activeFilter={parsedTag}
             tab={mode}

@@ -224,7 +224,7 @@ export function OrderProstheticsRequestsPanel({
   );
 
   const srcLabel = (c: OrderProstheticsRequestInitial) =>
-    formatOrderChatSourceCaption(c.source, c.authorLabel);
+    formatOrderChatSourceCaption(c.source, c.authorLabel, c.createdAt);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-2">
@@ -310,6 +310,9 @@ export function OrderProstheticsRequestsPanel({
                   className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)]/60 px-2 py-1 text-xs text-[var(--text-secondary)]"
                 >
                   <p className="whitespace-pre-wrap">{c.text}</p>
+                  <p className="mt-0.5 text-[0.6rem] text-[var(--text-muted)]">
+                    {srcLabel(c)}
+                  </p>
                   <p className="mt-0.5 text-[0.6rem] text-[var(--text-muted)]">
                     {c.resolvedAt
                       ? "Принято"

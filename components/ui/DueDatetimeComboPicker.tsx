@@ -573,13 +573,13 @@ export function DueDatetimeComboPicker({
             aria-haspopup="dialog"
             onClick={openToggle}
             className={[
-              "flex min-h-[2.35rem] min-w-0 flex-1 items-center justify-between gap-0.5 px-1 py-0.5 text-[11px] tabular-nums sm:min-h-[2.55rem] sm:px-1.5 sm:text-xs",
+              "flex min-h-[2.35rem] min-w-0 flex-1 items-center justify-center gap-0.5 px-0.5 py-0.5 text-center text-[10px] tabular-nums sm:min-h-[2.4rem] sm:px-1 sm:text-[11px]",
               triggerSurface,
               disabled ? "cursor-not-allowed" : "cursor-pointer",
               showPlaceholder ? "text-[var(--text-placeholder)]" : "text-[var(--app-text)]",
             ].join(" ")}
           >
-            <span className="flex min-w-0 flex-1 flex-col items-start justify-center gap-px leading-tight">
+            <span className="flex min-w-0 flex-1 flex-col items-center justify-center gap-px leading-tight">
               <span className="whitespace-nowrap">
                 {showPlaceholder ? "Дата" : datePart}
               </span>

@@ -96,6 +96,12 @@ type Props = {
   hasInvoiceAttachment: boolean;
   /** ID файла счёта; нужен для печати из быстрого действия. */
   invoiceAttachmentId?: string | null;
+  /** Бумажные документы распечатаны (`invoicePaperDocs`). */
+  invoicePaperDocs?: boolean;
+  /** Отправлен в ЭДО (`invoiceSentToEdo`). */
+  invoiceSentToEdo?: boolean;
+  /** Подпись в ЭДО (`invoiceEdoSigned`). */
+  invoiceEdoSigned?: boolean;
   payment: string | null;
   paymentPartialRub: number | null;
   adminShippedOtpr: boolean;
@@ -283,6 +289,8 @@ type MissingTagAction =
       subtitle?: string;
       kind: "patch";
       patch: Record<string, unknown>;
+      /** Не закрывать «+» после PATCH (несколько переключений подряд). */
+      keepAddOpen?: boolean;
     }
   | {
       id: string;
@@ -408,6 +416,9 @@ export function OrderListTagsCell({
   invoicePrinted = false,
   hasInvoiceAttachment,
   invoiceAttachmentId = null,
+  invoicePaperDocs = false,
+  invoiceSentToEdo = false,
+  invoiceEdoSigned = false,
   payment,
   paymentPartialRub,
   adminShippedOtpr,
@@ -544,7 +555,10 @@ export function OrderListTagsCell({
   }, [blockReasonDraft, closeAdd, kaitenBlocked, kaitenCardId, newLabel, orderId, router]);
 
   const applyQuickPatch = useCallback(
-    async (patch: Record<string, unknown>) => {
+    async (
+      patch: Record<string, unknown>,
+      opts?: { keepAddOpen?: boolean },
+    ) => {
       setErr(null);
       setBusy(true);
       try {
@@ -558,7 +572,7 @@ export function OrderListTagsCell({
           setErr(data.error ?? "Не удалось применить");
           return;
         }
-        closeAdd();
+        if (!opts?.keepAddOpen) closeAdd();
         router.refresh();
       } catch {
         setErr("Сеть или сервер недоступны");
@@ -725,6 +739,44 @@ export function OrderListTagsCell({
       });
     }
 
+    const docFlags: Array<{
+      id: string;
+      title: string;
+      field: "invoicePaperDocs" | "invoiceSentToEdo" | "invoiceEdoSigned";
+      on: boolean;
+    }> = [
+      {
+        id: "paper-docs",
+        title: "бум доки",
+        field: "invoicePaperDocs",
+        on: invoicePaperDocs,
+      },
+      {
+        id: "sent-edo",
+        title: "отпр эдо",
+        field: "invoiceSentToEdo",
+        on: invoiceSentToEdo,
+      },
+      {
+        id: "edo-signed",
+        title: "пдпс эдо",
+        field: "invoiceEdoSigned",
+        on: invoiceEdoSigned,
+      },
+    ];
+    for (const flag of docFlags) {
+      actions.push({
+        id: flag.on ? `unset-${flag.id}` : `set-${flag.id}`,
+        title: flag.on ? `Снять: ${flag.title}` : flag.title,
+        subtitle: flag.on
+          ? "Снять отметку у наряда"
+          : "Поставить отметку у наряда",
+        kind: "patch",
+        patch: { [flag.field]: !flag.on },
+        keepAddOpen: true,
+      });
+    }
+
     const paymentActions: MissingTagAction[] = [
       {
         id: "payment-not-paid",
@@ -762,6 +814,9 @@ export function OrderListTagsCell({
     currentPayment,
     invoiceAttachmentId,
     invoicePrinted,
+    invoicePaperDocs,
+    invoiceSentToEdo,
+    invoiceEdoSigned,
     isUrgent,
     kaitenBlocked,
     kaitenCardId,
@@ -824,7 +879,9 @@ export function OrderListTagsCell({
   const onMissingTagAction = useCallback(
     (action: MissingTagAction) => {
       if (action.kind === "patch") {
-        void applyQuickPatch(action.patch);
+        void applyQuickPatch(action.patch, {
+          keepAddOpen: action.keepAddOpen === true,
+        });
         return;
       }
       if (action.kind === "invoicePrint") {
@@ -1126,41 +1183,65 @@ export function OrderListTagsCell({
     items.push({
       key: "pay",
       slot: "large",
-      node: (
-        <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
-          {paymentFilterTag ? (
-            <Link
-              href={href(paymentFilterTag)}
-              className={`outline-none focus-visible:outline-none ${paymentStatusPillClass}`}
-              title={
-                shipmentsFilterContext
-                  ? "Показать в отгрузках наряды с этим статусом оплаты"
-                  : "Показать в списке заказы с этим статусом оплаты"
-              }
-            >
-              {paymentPill}
-            </Link>
-          ) : (
-            <span className={paymentStatusPillClass}>{paymentPill}</span>
-          )}
-          <button
-            type="button"
-            className={`${TAG_EDIT_BUTTON_CLASS} text-indigo-700 hover:bg-indigo-100 dark:text-indigo-200 dark:hover:bg-indigo-950/50`}
-            title="Изменить статус оплаты"
-            aria-label="Изменить статус оплаты"
-            onClick={() => {
-              setPaymentPartialDraft(
-                paymentPartialRub != null ? String(paymentPartialRub) : "",
-              );
-              setPaymentPartialPrompt(false);
-              setPaymentOpen(true);
-            }}
-          >
-            ✎
-          </button>
-        </span>
+      node: paymentFilterTag ? (
+        <Link
+          href={href(paymentFilterTag)}
+          className={`outline-none focus-visible:outline-none ${paymentStatusPillClass}`}
+          title={
+            shipmentsFilterContext
+              ? "Показать в отгрузках наряды с этим статусом оплаты"
+              : "Показать в списке заказы с этим статусом оплаты"
+          }
+        >
+          {paymentPill}
+        </Link>
+      ) : (
+        <span className={paymentStatusPillClass}>{paymentPill}</span>
       ),
     });
+
+    if (invoicePaperDocs) {
+      items.push({
+        key: "paper-docs",
+        slot: "small",
+        node: (
+          <span
+            className={`rounded-full border border-stone-300 bg-stone-50 font-semibold text-stone-900 shadow-sm dark:border-stone-600 dark:bg-stone-900/50 dark:text-stone-100 ${padTable}`}
+            title="Бумажные документы распечатаны"
+          >
+            бум доки
+          </span>
+        ),
+      });
+    }
+    if (invoiceSentToEdo) {
+      items.push({
+        key: "sent-edo",
+        slot: "small",
+        node: (
+          <span
+            className={`rounded-full border border-cyan-300 bg-cyan-50 font-semibold text-cyan-950 shadow-sm dark:border-cyan-800/60 dark:bg-cyan-950/40 dark:text-cyan-100 ${padTable}`}
+            title="Отправлен в ЭДО"
+          >
+            отпр эдо
+          </span>
+        ),
+      });
+    }
+    if (invoiceEdoSigned) {
+      items.push({
+        key: "edo-signed",
+        slot: "small",
+        node: (
+          <span
+            className={`rounded-full border border-indigo-300 bg-indigo-50 font-semibold text-indigo-950 shadow-sm dark:border-indigo-800/60 dark:bg-indigo-950/40 dark:text-indigo-100 ${padTable}`}
+            title="Подпись в ЭДО"
+          >
+            пдпс эдо
+          </span>
+        ),
+      });
+    }
 
     for (const t of customTags) {
       const inner = listTagCustomLabel(t.label);
@@ -1205,6 +1286,9 @@ export function OrderListTagsCell({
     financeOfficeFilterContext,
     hasInvoiceAttachment,
     invoicePrinted,
+    invoicePaperDocs,
+    invoiceSentToEdo,
+    invoiceEdoSigned,
     isUrgent,
     kaitenBlocked,
     kaitenBlockReason,
@@ -1507,6 +1591,10 @@ export function OrderListTagsCell({
                 ))}
               </div>
             ) : null}
+            <OrderPaymentModalAccountingUpload
+              orderId={orderId}
+              onSaved={() => router.refresh()}
+            />
             {err ? (
               <p className="mt-2 text-sm text-red-600 dark:text-red-400">{err}</p>
             ) : null}
@@ -1528,7 +1616,7 @@ export function OrderListTagsCell({
               </button>
             </div>
         </>
-      ))}
+      ), "w-full max-w-md")}
 
       {renderTagsOverlay(urgentOpen, "Срочность", closeUrgent, (
         <>
@@ -1635,11 +1723,6 @@ export function OrderListTagsCell({
                 </>
               )}
             </div>
-
-            <OrderPaymentModalAccountingUpload
-              orderId={orderId}
-              onSaved={() => router.refresh()}
-            />
 
             {paymentPartialPrompt ? (
               <div className="mt-3 rounded-md border border-[var(--card-border)] p-3">

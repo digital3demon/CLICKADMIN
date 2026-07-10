@@ -228,7 +228,7 @@ export function OrderChatCorrectionsPanel({
   );
 
   const srcLabel = (c: OrderChatCorrectionInitial) =>
-    formatOrderChatSourceCaption(c.source, c.authorLabel);
+    formatOrderChatSourceCaption(c.source, c.authorLabel, c.createdAt);
 
   return (
     <div className="flex min-h-0 flex-col gap-2">

@@ -129,7 +129,7 @@ export function OrderListDueCell({
         : "Срок лабораторный: настроенные слоты времени или «В теч. дня»";
 
   return (
-    <div className="min-w-0 leading-none">
+    <div className="mx-auto w-full max-w-[5.5rem] leading-none">
       <DueDatetimeComboPicker
         variant="compact"
         value={value}
@@ -153,7 +153,7 @@ export function OrderListDueCell({
         }}
       />
       {err ? (
-        <div className="mt-0.5 max-w-full truncate text-xs leading-tight text-red-600">
+        <div className="mt-0.5 max-w-full truncate text-center text-[10px] leading-tight text-red-600">
           {err}
         </div>
       ) : null}

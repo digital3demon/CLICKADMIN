@@ -5,6 +5,7 @@ import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
+import { OrderListAdminMemoCell } from "@/components/orders/OrderListAdminMemoCell";
 import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
@@ -42,7 +43,11 @@ export type FinanceOfficeOrderTableRow = {
   urgentCoefficient: number | null;
   invoiceAttachmentId: string | null;
   invoicePrinted: boolean;
+  invoicePaperDocs: boolean;
+  invoiceSentToEdo: boolean;
+  invoiceEdoSigned: boolean;
   prostheticsOrdered: boolean;
+  listAdminMemo: string | null;
   listCustomTags: Array<{ id: string; label: string }>;
   listCompositionMismatch: boolean;
   listPendingChatCorrections: boolean;
@@ -147,6 +152,12 @@ export function FinanceOfficeOrdersTable({
                   <span>Выбрать</span>
                 </div>
               </th>
+              <th
+                className="w-[7.5rem] px-1 py-2 text-center normal-case max-xl:hidden"
+                title="Пометки смен (не уходят в наряд и Kaiten)"
+              >
+                Пометки
+              </th>
               <th className="w-10 px-1 py-2 text-center normal-case max-xl:hidden">Чат</th>
               <th className="px-2 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
               <th className="px-2 py-2 text-center">Клиника</th>
@@ -199,6 +210,9 @@ export function FinanceOfficeOrdersTable({
                   invoicePrinted={o.invoicePrinted}
                   hasInvoiceAttachment={o.invoiceAttachmentId != null}
                   invoiceAttachmentId={o.invoiceAttachmentId}
+                  invoicePaperDocs={o.invoicePaperDocs}
+                  invoiceSentToEdo={o.invoiceSentToEdo}
+                  invoiceEdoSigned={o.invoiceEdoSigned}
                   payment={o.payment}
                   paymentPartialRub={o.paymentPartialRub}
                   adminShippedOtpr={o.adminShippedOtpr}
@@ -230,6 +244,12 @@ export function FinanceOfficeOrdersTable({
                         })
                       }
                       aria-label={`Выбрать наряд ${o.orderNumber}`}
+                    />
+                  </td>
+                  <td className="max-xl:hidden w-[7.5rem] px-1 py-1.5 align-middle">
+                    <OrderListAdminMemoCell
+                      orderId={o.id}
+                      initialMemo={o.listAdminMemo}
                     />
                   </td>
                   <OrderListOrderChatCell
@@ -329,6 +349,13 @@ export function FinanceOfficeOrdersTable({
 
                       <div className="mb-0.5 truncate text-xs font-normal text-[var(--text-secondary)]">
                         {clinicName}
+                      </div>
+
+                      <div className="mb-2 max-w-[12rem]">
+                        <OrderListAdminMemoCell
+                          orderId={o.id}
+                          initialMemo={o.listAdminMemo}
+                        />
                       </div>
 
                       <div className="mb-1.5 flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">

@@ -25,38 +25,44 @@ export const FINANCE_OFFICE_INCLUDED_LAB_STATUSES: LabWorkStatus[] =
 
 export type FinanceOfficeMode = "actual" | "period";
 
-/** Верхняя граница «Актуального»: окно завтра по дате записи (как отгрузки). */
+/**
+ * Верхняя граница «Актуального» по лаб-сроку (dueDate):
+ * как у отгрузок — до завтра 12:00 МСК дня после завтра.
+ */
 export function financeOfficeActualEndExclusive(): Date {
   return ordersShipmentActualEndExclusive();
 }
 
-/** Эффективная дата для ФинОтдела: запись → сдача админам → срок лаборатории. */
+/** Лаб-срок наряда (`Order.dueDate`). */
+export function effectiveFinanceLabDueDate(order: {
+  dueDate: Date | null;
+}): Date | null {
+  return order.dueDate ?? null;
+}
+
+/** @deprecated используйте effectiveFinanceLabDueDate */
 export function effectiveFinanceRecordDate(order: {
   appointmentDate: Date | null;
   dueToAdminsAt: Date | null;
   dueDate: Date | null;
 }): Date | null {
-  return order.appointmentDate ?? order.dueToAdminsAt ?? order.dueDate ?? null;
+  return effectiveFinanceLabDueDate(order);
 }
 
 export function compareOrdersByEffectiveFinanceRecord(
   a: {
-    appointmentDate: Date | null;
-    dueToAdminsAt: Date | null;
     dueDate: Date | null;
     orderNumber: string;
     id: string;
   },
   b: {
-    appointmentDate: Date | null;
-    dueToAdminsAt: Date | null;
     dueDate: Date | null;
     orderNumber: string;
     id: string;
   },
 ): number {
-  const ad = effectiveFinanceRecordDate(a);
-  const bd = effectiveFinanceRecordDate(b);
+  const ad = effectiveFinanceLabDueDate(a);
+  const bd = effectiveFinanceLabDueDate(b);
   if (!ad && !bd) {
     return a.orderNumber.localeCompare(b.orderNumber, "ru") || a.id.localeCompare(b.id);
   }
@@ -107,95 +113,60 @@ export function financeOfficeProductionAndLaterWhere(): Prisma.OrderWhereInput {
 }
 
 /**
- * Дата записи (appointment → dueToAdmins → dueDate) до endExclusive.
- * Без дат — наряд входит (как в отгрузках).
+ * Лаб-срок (dueDate) до endExclusive.
+ * Без срока — наряд входит (как «открытый хвост» в Актуальном).
  */
-export function financeOfficeRecordDateBeforeEndExclusive(
+export function financeOfficeLabDueBeforeEndExclusive(
   endExclusive: Date,
 ): Prisma.OrderWhereInput {
   return {
-    OR: [
-      {
-        AND: [
-          { appointmentDate: { not: null } },
-          { appointmentDate: { lt: endExclusive } },
-        ],
-      },
-      {
-        AND: [
-          { appointmentDate: null },
-          { dueToAdminsAt: { not: null } },
-          { dueToAdminsAt: { lt: endExclusive } },
-        ],
-      },
-      {
-        AND: [
-          { appointmentDate: null },
-          { dueToAdminsAt: null },
-          { dueDate: { not: null } },
-          { dueDate: { lt: endExclusive } },
-        ],
-      },
-      {
-        AND: [
-          { appointmentDate: null },
-          { dueToAdminsAt: null },
-          { dueDate: null },
-        ],
-      },
-    ],
+    OR: [{ dueDate: { lt: endExclusive } }, { dueDate: null }],
   };
 }
 
+/** Лаб-срок в [start, endExclusive); без срока — не входит. */
+export function financeOfficeLabDueInRange(
+  start: Date,
+  endExclusive: Date,
+): Prisma.OrderWhereInput {
+  return {
+    dueDate: { not: null, gte: start, lt: endExclusive },
+  };
+}
+
+/** @deprecated используйте financeOfficeLabDueBeforeEndExclusive */
+export function financeOfficeRecordDateBeforeEndExclusive(
+  endExclusive: Date,
+): Prisma.OrderWhereInput {
+  return financeOfficeLabDueBeforeEndExclusive(endExclusive);
+}
+
+/** @deprecated используйте financeOfficeLabDueInRange */
 export function financeOfficeRecordDateInRange(
   start: Date,
   endExclusive: Date,
 ): Prisma.OrderWhereInput {
-  return {
-    OR: [
-      {
-        AND: [
-          { appointmentDate: { not: null } },
-          { appointmentDate: { gte: start, lt: endExclusive } },
-        ],
-      },
-      {
-        AND: [
-          { appointmentDate: null },
-          { dueToAdminsAt: { not: null } },
-          { dueToAdminsAt: { gte: start, lt: endExclusive } },
-        ],
-      },
-      {
-        AND: [
-          { appointmentDate: null },
-          { dueToAdminsAt: null },
-          { dueDate: { not: null } },
-          { dueDate: { gte: start, lt: endExclusive } },
-        ],
-      },
-    ],
-  };
+  return financeOfficeLabDueInRange(start, endExclusive);
 }
 
-/** @deprecated используйте financeOfficeRecordDateBeforeEndExclusive */
+/** @deprecated */
 export function financeOfficeAppointmentBeforeEndExclusive(
   endExclusive: Date,
 ): Prisma.OrderWhereInput {
-  return financeOfficeRecordDateBeforeEndExclusive(endExclusive);
+  return financeOfficeLabDueBeforeEndExclusive(endExclusive);
 }
 
-/** @deprecated используйте financeOfficeRecordDateInRange */
+/** @deprecated */
 export function financeOfficeAppointmentInRange(
   start: Date,
   endExclusive: Date,
 ): Prisma.OrderWhereInput {
-  return financeOfficeRecordDateInRange(start, endExclusive);
+  return financeOfficeLabDueInRange(start, endExclusive);
 }
 
 /**
- * Актуальное: непросчитанные, дата записи до завтра (включая прошлые).
- * За период: from опционален; to обязателен (календарный день МСК).
+ * Актуальное: непросчитанные, лаб-срок до завтра (включая прошлые и без срока).
+ * За период: from опционален; to обязателен (календарный день МСК по dueDate).
  */
 export function financeOfficeModeDateWhere(input: {
   mode: FinanceOfficeMode;
@@ -206,9 +177,7 @@ export function financeOfficeModeDateWhere(input: {
     return {
       AND: [
         { financeCalculated: false },
-        financeOfficeRecordDateBeforeEndExclusive(
-          financeOfficeActualEndExclusive(),
-        ),
+        financeOfficeLabDueBeforeEndExclusive(financeOfficeActualEndExclusive()),
       ],
     };
   }
@@ -220,12 +189,12 @@ export function financeOfficeModeDateWhere(input: {
   const fromYmd = input.fromYmd?.trim() || null;
   if (fromYmd) {
     const { start } = moscowDayBoundsUtc(fromYmd);
-    return financeOfficeRecordDateInRange(start, endExclusive);
+    return financeOfficeLabDueInRange(start, endExclusive);
   }
-  return financeOfficeRecordDateBeforeEndExclusive(endExclusive);
+  return financeOfficeLabDueBeforeEndExclusive(endExclusive);
 }
 
-/** Старые ссылки today/tomorrow → actual. */
+/** Старые ссылки today/tomorrow → actual. Без tab → actual. */
 export function parseFinanceOfficeMode(
   raw: string | null | undefined,
 ): FinanceOfficeMode {
