@@ -18,12 +18,15 @@ export function FinanceOfficeModePanel({
   appliedTo,
   listTag = null,
   q = "",
+  listSummaryLine = null,
 }: {
   mode: FinanceOfficeMode;
   appliedFrom: string | null;
   appliedTo: string | null;
   listTag?: string | null;
   q?: string | null;
+  /** Текст выбранного режима и счётчик нарядов — в одной полосе с кнопками. */
+  listSummaryLine?: string | null;
 }) {
   const defaultTo = useMemo(() => moscowTodayYmd(), []);
   const [from, setFrom] = useState(() => appliedFrom ?? "");
@@ -113,6 +116,12 @@ export function FinanceOfficeModePanel({
             Показать
           </button>
         </form>
+
+        {listSummaryLine ? (
+          <p className="min-w-0 flex-1 text-[11px] font-medium leading-snug text-[var(--text-body)] sm:text-xs md:text-sm">
+            {listSummaryLine}
+          </p>
+        ) : null}
       </div>
     </div>
   );

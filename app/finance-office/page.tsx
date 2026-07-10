@@ -144,6 +144,10 @@ export default async function FinanceOfficePage({
     tagLabel && rangeSummary
       ? `${tagLabel} · ${rangeSummary}`
       : rangeSummary;
+  const listSummaryLine =
+    listRangeSummary && shouldFetch && !error
+      ? `${listRangeSummary} · нарядов: ${orders.length}`
+      : null;
   const exportParams = new URLSearchParams();
   exportParams.set("tab", mode);
   if (fromRaw) exportParams.set("from", fromRaw);
@@ -212,16 +216,10 @@ export default async function FinanceOfficePage({
             appliedTo={toRaw}
             listTag={rawTagInvalid ? null : rawTag}
             q={q}
+            listSummaryLine={listSummaryLine}
           />
-          <div className="space-y-2">
-            {listRangeSummary && shouldFetch && !error ? (
-              <p className="text-sm font-medium text-[var(--text-body)]">
-                {listRangeSummary} · нарядов: {orders.length}
-              </p>
-            ) : null}
-            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">
-              {searchControls}
-            </div>
+          <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">
+            {searchControls}
           </div>
         </div>
         <CorrectionsHistoryActionCard className="w-full xl:self-end" />
