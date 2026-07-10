@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
 import { OrderListKaitenChatModal } from "@/components/orders/OrderListKaitenChatModal";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
-import { canAccessOrderChat } from "@/lib/auth/permissions";
+import { canAccessOrderChat, canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 
 function ChatBubbleIcon({ className }: { className?: string }) {
   return (
@@ -45,6 +45,13 @@ export function OrderListOrderChatCell({
   const chatAllowed =
     user != null &&
     canAccessOrderChat(user.role, user.moduleAccess ?? undefined);
+  const showLabMention =
+    labMentionHighlight &&
+    canSeeOrderNotificationKind(
+      "admin",
+      user?.role,
+      user?.moduleAccess,
+    );
   const [open, setOpen] = useState(false);
   const adminMentionTag = useKanbanAdminMentionTag();
 
@@ -55,12 +62,12 @@ export function OrderListOrderChatCell({
       <button
         type="button"
         className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-[var(--table-row-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sidebar-blue)] sm:h-6 sm:w-6 ${
-          labMentionHighlight
+          showLabMention
             ? "animate-pulse text-amber-500 dark:text-amber-400"
             : "text-[var(--text-secondary)] hover:text-[var(--app-text)]"
         }`}
         title={
-          labMentionHighlight
+          showLabMention
             ? `В чате упомянули @${adminMentionTag}`
             : "Чат Канбан/Кайтен"
         }

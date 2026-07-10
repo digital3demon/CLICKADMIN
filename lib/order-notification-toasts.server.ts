@@ -182,7 +182,9 @@ export async function fetchOrderNotificationToasts(
   opts: {
     tenantId: string;
     userId: string | null | undefined;
-    generalNotificationsAllowed?: boolean;
+    adminNotificationsAllowed?: boolean;
+    correctionsNotificationsAllowed?: boolean;
+    prostheticsNotificationsAllowed?: boolean;
     personalOnlyPref?: boolean;
   },
 ): Promise<{
@@ -192,15 +194,20 @@ export async function fetchOrderNotificationToasts(
   personal: OrderNotificationToastRow[];
   labMentionCount: number;
 }> {
-  const showGeneral =
-    opts.generalNotificationsAllowed === true && opts.personalOnlyPref !== true;
+  const personalOnly = opts.personalOnlyPref === true;
+  const showAdmin =
+    !personalOnly && opts.adminNotificationsAllowed === true;
+  const showCorrections =
+    !personalOnly && opts.correctionsNotificationsAllowed === true;
+  const showProsthetics =
+    !personalOnly && opts.prostheticsNotificationsAllowed === true;
   const uid = opts.userId ?? "";
 
   const personalPromise = uid
     ? fetchPersonalMentionToastRows(db, opts.tenantId, uid)
     : Promise.resolve([] as OrderNotificationToastRow[]);
 
-  if (!showGeneral) {
+  if (!showAdmin && !showCorrections && !showProsthetics) {
     const personal = await personalPromise;
     return {
       messages: [],
@@ -211,18 +218,27 @@ export async function fetchOrderNotificationToasts(
     };
   }
 
+  const emptyRows = Promise.resolve([] as OrderNotificationToastRow[]);
   const [messages, corrections, requests, labMentionCount, personal] =
     await Promise.all([
-    fetchOrderChatToastRows(db, opts.userId, opts.tenantId),
-    fetchCorrectionToastRows(db, opts.tenantId),
-    fetchProstheticsToastRows(db, opts.tenantId),
-    countOrdersWithPendingKaitenLabMentionForUser(
-      db,
-      { archivedAt: null, tenantId: opts.tenantId },
-      opts.userId ?? undefined,
-    ),
-    personalPromise,
-  ]);
+      showAdmin
+        ? fetchOrderChatToastRows(db, opts.userId, opts.tenantId)
+        : emptyRows,
+      showCorrections
+        ? fetchCorrectionToastRows(db, opts.tenantId)
+        : emptyRows,
+      showProsthetics
+        ? fetchProstheticsToastRows(db, opts.tenantId)
+        : emptyRows,
+      showAdmin
+        ? countOrdersWithPendingKaitenLabMentionForUser(
+            db,
+            { archivedAt: null, tenantId: opts.tenantId },
+            opts.userId ?? undefined,
+          )
+        : Promise.resolve(0),
+      personalPromise,
+    ]);
 
   const readNewEnabled = isOrderChatInboxReadNewEnabledForTenant(opts.tenantId);
   const dualReadEnabled = isOrderChatInboxDualReadEnabled();
@@ -232,16 +248,25 @@ export async function fetchOrderNotificationToasts(
   let newRequests: OrderNotificationToastRow[] = [];
   let newLabMentionCount = 0;
   if (needInboxRead) {
-    [newMessages, newCorrections, newRequests, newLabMentionCount] = await Promise.all([
-      fetchInboxLabMentionToastRows(db, opts.userId, opts.tenantId),
-      fetchInboxTypeToastRows(db, opts.tenantId, "CORRECTION"),
-      fetchInboxTypeToastRows(db, opts.tenantId, "PROSTHETICS"),
-      countOrdersWithPendingInboxLabMentionForUser(
-        db,
-        { archivedAt: null, tenantId: opts.tenantId },
-        opts.userId ?? undefined,
-      ),
-    ]);
+    [newMessages, newCorrections, newRequests, newLabMentionCount] =
+      await Promise.all([
+        showAdmin
+          ? fetchInboxLabMentionToastRows(db, opts.userId, opts.tenantId)
+          : emptyRows,
+        showCorrections
+          ? fetchInboxTypeToastRows(db, opts.tenantId, "CORRECTION")
+          : emptyRows,
+        showProsthetics
+          ? fetchInboxTypeToastRows(db, opts.tenantId, "PROSTHETICS")
+          : emptyRows,
+        showAdmin
+          ? countOrdersWithPendingInboxLabMentionForUser(
+              db,
+              { archivedAt: null, tenantId: opts.tenantId },
+              opts.userId ?? undefined,
+            )
+          : Promise.resolve(0),
+      ]);
   }
 
   if (dualReadEnabled) {
@@ -252,7 +277,12 @@ export async function fetchOrderNotificationToasts(
         requests: rowIds(requests) === rowIds(newRequests) ? 0 : 1,
         labMentionCount: Math.abs(labMentionCount - newLabMentionCount),
       };
-      if (delta.messages || delta.corrections || delta.requests || delta.labMentionCount) {
+      if (
+        delta.messages ||
+        delta.corrections ||
+        delta.requests ||
+        delta.labMentionCount
+      ) {
         logger.warn(
           {
             channel: "chat-inbox-dual-read",

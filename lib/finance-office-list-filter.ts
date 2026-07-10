@@ -9,14 +9,15 @@ import { labWorkStatusFromColumnTitle } from "@/lib/order-status-display";
 import { ordersShipmentActualEndExclusive } from "@/lib/orders-shipment-list-filter";
 import { moscowDayBoundsUtc } from "@/lib/shipments-date-range";
 
-/** Этапы до «Производство» — в ФинОтделе не показываем. */
+/** Этапы вне воронки ФинОтдела: до «Производство» и финал «Сдана админам». */
 export const FINANCE_OFFICE_EXCLUDED_LAB_STATUSES = [
   "TO_SCAN",
   "TO_EXECUTION",
   "APPROVAL",
+  "TO_ADMINS",
 ] as const satisfies readonly LabWorkStatus[];
 
-/** «Производство» и все этапы правее. */
+/** «Производство» … «На проверку» (без «Сдана админам»). */
 export const FINANCE_OFFICE_INCLUDED_LAB_STATUSES: LabWorkStatus[] =
   LAB_WORK_STATUS_ORDER.filter(
     (s) =>

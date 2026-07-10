@@ -45,6 +45,15 @@ export async function getEffectiveModuleAccess(
     ) {
       v = fromDb.get("CLIENTS")!;
     }
+    if (
+      (m === "ORDERS_NOTIFICATIONS_ADMIN" ||
+        m === "ORDERS_NOTIFICATIONS_CORRECTIONS" ||
+        m === "ORDERS_NOTIFICATIONS_PROSTHETICS") &&
+      !fromDb.has(m) &&
+      fromDb.has("ORDERS_NOTIFICATIONS")
+    ) {
+      v = fromDb.get("ORDERS_NOTIFICATIONS")!;
+    }
     out[m] = v;
   }
   for (const m of CLICKMIG_OWNER_ONLY_MODULES) {

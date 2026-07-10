@@ -363,6 +363,8 @@ export function ShipmentsOrdersTable({
                     o.listCompositionMismatch ||
                     o.listPendingChatCorrections
                   }
+                  listPendingChatCorrections={o.listPendingChatCorrections}
+                  listCompositionMismatch={o.listCompositionMismatch}
                   kaitenCardId={o.kaitenCardId}
                   demoKanbanColumn={o.demoKanbanColumn}
                   demoCardTypeName={o.kaitenCardType?.name ?? null}

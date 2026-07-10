@@ -1,6 +1,6 @@
 import { normalizeRevisionsHistorySearchQuery } from "@/lib/revisions-history";
 
-export type OrdersHistoryTab = "changes" | "corrections";
+export type OrdersHistoryTab = "changes" | "corrections" | "prosthetics";
 
 export type CorrectionHistorySource = "KAITEN" | "DEMO_KANBAN";
 
@@ -12,8 +12,10 @@ export type CorrectionHistoryRow = {
   createdAt: Date;
   resolvedAt: Date | null;
   rejectedAt: Date | null;
+  arrivedAt: Date | null;
   resolvedByName: string | null;
   rejectedByName: string | null;
+  arrivedByName: string | null;
   order: { id: string; orderNumber: string };
 };
 
@@ -30,7 +32,9 @@ export const CORRECTION_HISTORY_KIND_LABEL = {
 export function parseOrdersHistoryTab(
   raw: string | null | undefined,
 ): OrdersHistoryTab {
-  return raw === "corrections" ? "corrections" : "changes";
+  if (raw === "corrections") return "corrections";
+  if (raw === "prosthetics") return "prosthetics";
+  return "changes";
 }
 
 export function ordersHistoryHref(opts?: {
@@ -39,6 +43,7 @@ export function ordersHistoryHref(opts?: {
 }): string {
   const p = new URLSearchParams();
   if (opts?.tab === "corrections") p.set("tab", "corrections");
+  if (opts?.tab === "prosthetics") p.set("tab", "prosthetics");
   const q = normalizeRevisionsHistorySearchQuery(opts?.q);
   if (q) p.set("q", q);
   const qs = p.toString();
@@ -55,9 +60,9 @@ export function formatRuDateTime(d: Date): string {
   });
 }
 
-/** Статус решения: ожидает / принята / отклонена с автором и датой. */
+/** Статус решения: ожидает / принята / отклонена / пришла. */
 export function formatCorrectionHistoryDecision(row: CorrectionHistoryRow): {
-  status: "pending" | "accepted" | "rejected";
+  status: "pending" | "accepted" | "rejected" | "arrived";
   label: string;
   detail: string | null;
 } {
@@ -69,11 +74,19 @@ export function formatCorrectionHistoryDecision(row: CorrectionHistoryRow): {
       detail: `${who}, ${formatRuDateTime(row.rejectedAt)}`,
     };
   }
+  if (row.kind === "prosthetics" && row.arrivedAt) {
+    const who = row.arrivedByName?.trim() || "—";
+    return {
+      status: "arrived",
+      label: "Пришла",
+      detail: `${who}, ${formatRuDateTime(row.arrivedAt)}`,
+    };
+  }
   if (row.resolvedAt) {
     const who = row.resolvedByName?.trim() || "—";
     return {
       status: "accepted",
-      label: "Принята",
+      label: row.kind === "prosthetics" ? "В пути" : "Принята",
       detail: `${who}, ${formatRuDateTime(row.resolvedAt)}`,
     };
   }

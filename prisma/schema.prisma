@@ -592,8 +592,14 @@ enum AppModule {
   KANBAN_MANAGE_BLOCK
   /// Канбан: удалять карточку
   KANBAN_DELETE_CARD
-  /// Общие тосты по нарядам (@админов, коррекции, протетика)
+  /// Общие тосты по нарядам (legacy: admin+корр+протетика; см. раздельные флаги ниже)
   ORDERS_NOTIFICATIONS
+  /// Тосты: admin-тег / @лаборатория
+  ORDERS_NOTIFICATIONS_ADMIN
+  /// Тосты: корректировки из чата
+  ORDERS_NOTIFICATIONS_CORRECTIONS
+  /// Тосты: заказ протетики
+  ORDERS_NOTIFICATIONS_PROSTHETICS
   /// История изменений по нарядам
   ORDER_HISTORY
   /// Финансовая аналитика
@@ -779,6 +785,7 @@ model User {
   orderChatCorrectionsRejected     OrderChatCorrection[]      @relation("OrderChatCorrectionRejectedBy")
   orderProstheticsRequestsResolved OrderProstheticsRequest[]  @relation("OrderProstheticsRequestResolvedBy")
   orderProstheticsRequestsRejected OrderProstheticsRequest[]  @relation("OrderProstheticsRequestRejectedBy")
+  orderProstheticsRequestsArrived  OrderProstheticsRequest[]  @relation("OrderProstheticsRequestArrivedBy")
   orderKaitenLabMentionAcks        OrderKaitenLabMentionAck[]
   testOrdersOwned                  Order[]                    @relation("TestOrderOwner")
   tenantsWithKaitenDisabled        Tenant[]                   @relation("TenantKaitenDisabledBy")
@@ -1555,10 +1562,15 @@ model OrderProstheticsRequest {
   rejectedAt       DateTime?
   rejectedByUserId String?
   rejectedBy       User?                     @relation("OrderProstheticsRequestRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: SetNull)
+  /// Физически пришла (после «в пути»)
+  arrivedAt        DateTime?
+  arrivedByUserId  String?
+  arrivedBy        User?                     @relation("OrderProstheticsRequestArrivedBy", fields: [arrivedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([orderId, kaitenCommentId])
   @@index([orderId, resolvedAt])
   @@index([orderId, rejectedAt])
+  @@index([arrivedAt])
 }
 
 /// Унифицированное событие из чата (корректировка / протетика / упоминание лаборатории).
@@ -1580,6 +1592,9 @@ model OrderChatInboxItem {
   resolvedByUserId String?
   rejectedAt       DateTime?
   rejectedByUserId String?
+  /// Для PROSTHETICS: физически пришла (после accept / «в пути»)
+  arrivedAt        DateTime?
+  arrivedByUserId  String?
   /// Для USER_MENTION — кому адресовано упоминание
   targetUserId     String?
 

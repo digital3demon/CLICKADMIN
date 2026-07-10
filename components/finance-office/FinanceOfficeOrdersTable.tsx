@@ -7,6 +7,8 @@ import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenCol
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
 import { OrderListAdminMemoCell } from "@/components/orders/OrderListAdminMemoCell";
 import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
+import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
@@ -83,6 +85,12 @@ export function FinanceOfficeOrdersTable({
   q?: string | null;
   toolbar?: ReactNode;
 }) {
+  const { user } = useSessionUser();
+  const canSeeAdminIndicators = canSeeOrderNotificationKind(
+    "admin",
+    user?.role,
+    user?.moduleAccess,
+  );
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const visibleIds = useMemo(() => orders.map((o) => o.id), [orders]);
   const allVisibleSelected =
@@ -137,7 +145,7 @@ export function FinanceOfficeOrdersTable({
       />
       <div className="relative">
       <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible shell-desktop:overflow-x-visible [-webkit-overflow-scrolling:touch]">
-        <table className="w-max min-w-full border-collapse text-left text-sm">
+        <table className="w-max min-w-full border-collapse text-center text-sm">
           <thead className="hidden shell-desktop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <th className="w-[7.5rem] px-2 py-2 text-center normal-case max-xl:sticky max-xl:left-0 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">
@@ -201,6 +209,8 @@ export function FinanceOfficeOrdersTable({
                   orderAttentionWarning={
                     o.listCompositionMismatch || o.listPendingChatCorrections
                   }
+                  listPendingChatCorrections={o.listPendingChatCorrections}
+                  listCompositionMismatch={o.listCompositionMismatch}
                   kaitenCardId={o.kaitenCardId}
                   demoKanbanColumn={o.demoKanbanColumn}
                   demoCardTypeName={o.kaitenCardType?.name ?? null}
@@ -246,7 +256,7 @@ export function FinanceOfficeOrdersTable({
                       aria-label={`Выбрать наряд ${o.orderNumber}`}
                     />
                   </td>
-                  <td className="max-xl:hidden w-[7.5rem] px-1 py-1.5 align-middle">
+                  <td className="max-xl:hidden w-[7.5rem] px-1 py-1.5 text-center align-middle">
                     <OrderListAdminMemoCell
                       orderId={o.id}
                       initialMemo={o.listAdminMemo}
@@ -257,9 +267,11 @@ export function FinanceOfficeOrdersTable({
                     orderNumber={o.orderNumber}
                     patientName={patientName || undefined}
                     doctorName={doctorName || undefined}
-                    labMentionHighlight={o.listKaitenLabMentionHighlight}
+                    labMentionHighlight={
+                      canSeeAdminIndicators && o.listKaitenLabMentionHighlight
+                    }
                   />
-                  <td className="whitespace-nowrap px-2 py-2 font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 max-xl:bg-[var(--card-bg)] max-xl:shadow-[1px_0_0_var(--card-border)]">
+                  <td className="whitespace-nowrap px-2 py-2 text-center font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 max-xl:bg-[var(--card-bg)] max-xl:shadow-[1px_0_0_var(--card-border)]">
                     <div className="flex min-h-[2.5rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
                       <Link
                         href={orderPathById(o.id)}
@@ -278,35 +290,49 @@ export function FinanceOfficeOrdersTable({
                       />
                     </div>
                   </td>
-                  <td className="max-w-[13rem] px-2 py-2">
+                  <td className="max-w-[13rem] px-2 py-2 text-center align-middle">
                     {o.clinic ? (
-                      <Link href={`/clients/${o.clinic.id}`} className="text-[var(--sidebar-blue)] hover:underline">
+                      <Link
+                        href={`/clients/${o.clinic.id}`}
+                        className="block hyphens-auto break-words text-center text-[var(--sidebar-blue)] hover:underline"
+                      >
                         {o.clinic.name}
                       </Link>
                     ) : (
-                      <span className="text-[var(--text-secondary)]">Частное лицо</span>
+                      <span className="block break-words text-center text-[var(--text-secondary)]">
+                        Частное лицо
+                      </span>
                     )}
                   </td>
-                  <td className="max-w-[10rem] px-2 py-2">
-                    <Link href={`/clients/doctors/${o.doctor.id}`} className="text-[var(--sidebar-blue)] hover:underline">
+                  <td className="max-w-[10rem] px-2 py-2 text-center align-middle">
+                    <Link
+                      href={`/clients/doctors/${o.doctor.id}`}
+                      className="block break-words text-center text-[var(--sidebar-blue)] hover:underline"
+                    >
                       {personNameSurnameInitials(o.doctor.fullName)}
                     </Link>
                   </td>
-                  <td className="max-w-[10rem] px-2 py-2">
-                    {o.patientName ? personNameSurnameInitials(o.patientName) : "—"}
+                  <td className="max-w-[10rem] px-2 py-2 text-center align-middle">
+                    <span className="block hyphens-auto break-words text-center">
+                      {o.patientName
+                        ? personNameSurnameInitials(o.patientName)
+                        : "—"}
+                    </span>
                   </td>
-                  <td className="whitespace-nowrap px-2 py-2 text-[var(--text-secondary)]">
-                    <OrderListDueCell
-                      orderId={o.id}
-                      dueIso={o.appointmentDate ?? o.dueToAdminsAt}
-                      createdAtIso={o.createdAt}
-                      variant="appointment"
-                    />
+                  <td className="whitespace-nowrap px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
+                    <div className="flex justify-center">
+                      <OrderListDueCell
+                        orderId={o.id}
+                        dueIso={o.appointmentDate ?? o.dueToAdminsAt}
+                        createdAtIso={o.createdAt}
+                        variant="appointment"
+                      />
+                    </div>
                   </td>
-                  <td className="w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
+                  <td className="w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
                     {o.counterpartyRequisitesText || "—"}
                   </td>
-                  <td className="w-[7rem] max-w-[7rem] break-words px-1.5 py-2 text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
+                  <td className="w-[7rem] max-w-[7rem] break-words px-1.5 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
                     {o.legalEntity || "—"}
                   </td>
                   <td
@@ -315,7 +341,7 @@ export function FinanceOfficeOrdersTable({
                   >
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
-                  <td className="w-[12rem] max-w-[12rem] align-top px-1.5 py-2">
+                  <td className="w-[12rem] max-w-[12rem] px-1.5 py-2 text-left align-top">
                     {renderTagsCell()}
                   </td>
                 </tr>
@@ -378,7 +404,9 @@ export function FinanceOfficeOrdersTable({
                           orderNumber={o.orderNumber}
                           patientName={patientName || undefined}
                           doctorName={doctorName || undefined}
-                          labMentionHighlight={o.listKaitenLabMentionHighlight}
+                          labMentionHighlight={
+                      canSeeAdminIndicators && o.listKaitenLabMentionHighlight
+                    }
                           embedded
                         />
                         <label className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2">

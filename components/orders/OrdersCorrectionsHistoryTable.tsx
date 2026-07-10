@@ -9,7 +9,12 @@ import {
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { orderPathById } from "@/lib/order-public-ref";
 
-function decisionClass(status: "pending" | "accepted" | "rejected"): string {
+function decisionClass(
+  status: "pending" | "accepted" | "rejected" | "arrived",
+): string {
+  if (status === "arrived") {
+    return "text-sky-800 dark:text-sky-200";
+  }
   if (status === "accepted") {
     return "text-emerald-800 dark:text-emerald-200";
   }

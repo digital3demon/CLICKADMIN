@@ -114,7 +114,7 @@ export default async function FinanceOfficePage({
   let rangeSummary: string | null = null;
 
   if (mode === "actual") {
-    rangeSummary = `Актуальное: непросчитанные с лаб-сроком до завтра (${moscowTomorrowYmd()} МСК), этап «Производство» и далее`;
+    rangeSummary = `Актуальное: непросчитанные с лаб-сроком до завтра (${moscowTomorrowYmd()} МСК), этапы от «Производство» до «На проверку»`;
   } else if (!toRaw) {
     error = "Укажите дату «по» и нажмите «Показать».";
   } else if (fromRaw && fromRaw > toRaw) {
@@ -122,9 +122,9 @@ export default async function FinanceOfficePage({
   } else if (fromRaw && rangeDaySpan(fromRaw, toRaw) > MAX_RANGE_DAYS) {
     error = `Максимальный период — ${MAX_RANGE_DAYS} дней. Сузьте диапазон.`;
   } else if (fromRaw) {
-    rangeSummary = `Лаб-срок (МСК): с ${fromRaw} по ${toRaw}, этап «Производство» и далее`;
+    rangeSummary = `Лаб-срок (МСК): с ${fromRaw} по ${toRaw}, этапы от «Производство» до «На проверку»`;
   } else {
-    rangeSummary = `Лаб-срок (МСК): по ${toRaw} (включая прошлые), этап «Производство» и далее`;
+    rangeSummary = `Лаб-срок (МСК): по ${toRaw} (включая прошлые), этапы от «Производство» до «На проверку»`;
   }
 
   const shouldFetch = mode === "actual" || (mode === "period" && Boolean(toRaw) && !error);
@@ -224,7 +224,7 @@ export default async function FinanceOfficePage({
             </h1>
             <p className="mt-2 hidden max-w-4xl text-sm leading-snug text-[var(--text-secondary)] md:block">
               Контроль просчёта, корректировок, заказа протетики и оплат.
-              Список — с этапа «Производство» и далее (без скана, «к исполнению» и согласования).
+              Список — от «Производство» до «На проверку» (без скана, «к исполнению», согласования и «сдана админам»).
             </p>
           </div>
           <FinanceOfficeModePanel
@@ -252,23 +252,6 @@ export default async function FinanceOfficePage({
           <p className="rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
             Параметр фильтра не распознан, показан общий список ФинОтдела.
           </p>
-        ) : tagLabel ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/25">
-            <span>
-              Фильтр: <strong>{tagLabel}</strong>
-            </span>
-            <Link
-              href={financeOfficeListHref({
-                tab: mode,
-                from: fromRaw,
-                to: toRaw,
-                q,
-              })}
-              className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
-            >
-              Показать все
-            </Link>
-          </div>
         ) : null}
         {error ? (
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">

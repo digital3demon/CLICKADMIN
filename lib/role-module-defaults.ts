@@ -52,6 +52,9 @@ export const ALL_APP_MODULES: AppModule[] = [
   "ORDERS_EDIT",
   "ORDERS_CHAT",
   "ORDERS_NOTIFICATIONS",
+  "ORDERS_NOTIFICATIONS_ADMIN",
+  "ORDERS_NOTIFICATIONS_CORRECTIONS",
+  "ORDERS_NOTIFICATIONS_PROSTHETICS",
   "KANBAN",
   "KANBAN_MOVE_COLUMNS",
   "KANBAN_CARD_CHAT",
@@ -114,7 +117,10 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   ORDERS_CREATE: "Создание заказа",
   ORDERS_EDIT: "Редактирование заказа",
   ORDERS_CHAT: "Заказы: чат в карточке наряда",
-  ORDERS_NOTIFICATIONS: "Уведомления: общие по нарядам",
+  ORDERS_NOTIFICATIONS: "Уведомления: общие по нарядам (устар.)",
+  ORDERS_NOTIFICATIONS_ADMIN: "Уведомления: admin-тег (@лаборатория)",
+  ORDERS_NOTIFICATIONS_CORRECTIONS: "Уведомления: корректировки",
+  ORDERS_NOTIFICATIONS_PROSTHETICS: "Уведомления: заказ протетики",
   KANBAN: "Канбан: доски и карточки",
   KANBAN_MOVE_COLUMNS: "Канбан: перемещать по колонкам (Kaiten)",
   KANBAN_CARD_CHAT: "Канбан: чат в карточке на доске",
@@ -239,7 +245,12 @@ export function defaultModuleAllowed(
     return true;
   }
 
-  if (module === "ORDERS_NOTIFICATIONS") {
+  if (
+    module === "ORDERS_NOTIFICATIONS" ||
+    module === "ORDERS_NOTIFICATIONS_ADMIN" ||
+    module === "ORDERS_NOTIFICATIONS_CORRECTIONS" ||
+    module === "ORDERS_NOTIFICATIONS_PROSTHETICS"
+  ) {
     return DEFAULT_ORDERS_NOTIFICATIONS_ROLES.includes(role);
   }
 

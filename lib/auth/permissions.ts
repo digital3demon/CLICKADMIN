@@ -115,6 +115,34 @@ export function canAccessOrderChat(
   return false;
 }
 
+/**
+ * Индикаторы/тосты по типу уведомлений нарядов.
+ * Без права — не показываем пилюли, иконки и чипы этого типа.
+ */
+export function canSeeOrderNotificationKind(
+  kind: "admin" | "corrections" | "prosthetics",
+  role: UserRole | null | undefined,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (role === "OWNER") return true;
+  const mod =
+    kind === "admin"
+      ? "ORDERS_NOTIFICATIONS_ADMIN"
+      : kind === "corrections"
+        ? "ORDERS_NOTIFICATIONS_CORRECTIONS"
+        : "ORDERS_NOTIFICATIONS_PROSTHETICS";
+  if (moduleAccess && typeof moduleAccess[mod] === "boolean") {
+    return moduleAccess[mod] === true;
+  }
+  if (
+    moduleAccess &&
+    typeof moduleAccess.ORDERS_NOTIFICATIONS === "boolean"
+  ) {
+    return moduleAccess.ORDERS_NOTIFICATIONS === true;
+  }
+  return false;
+}
+
 /** Снять подсветку @лаборатория для всей лаборатории — только админы и владелец. */
 export function canAckOrderChatLabMention(role: UserRole): boolean {
   return (

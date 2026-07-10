@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
+import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import {
   humanListTagLabel,
   LIST_TAG_KAITEN_LAB_MENTION,
@@ -25,26 +29,41 @@ export function ShipmentsQuickFilterChips({
   periodFrom: string | null;
   periodTo: string | null;
 }) {
+  const { user } = useSessionUser();
+  const canCorrections = canSeeOrderNotificationKind(
+    "corrections",
+    user?.role,
+    user?.moduleAccess,
+  );
+  const canProsthetics = canSeeOrderNotificationKind(
+    "prosthetics",
+    user?.role,
+    user?.moduleAccess,
+  );
+  const canAdmin = canSeeOrderNotificationKind(
+    "admin",
+    user?.role,
+    user?.moduleAccess,
+  );
+
   const listCtx = {
     tab,
     from: periodFrom,
     to: periodTo,
   };
 
-  const showRow =
-    attentionCount > 0 ||
-    prostheticsPendingCount > 0 ||
-    labMentionCount > 0 ||
-    activeFilter != null;
-
-  if (!showRow) return null;
-
   const showCorrections =
-    attentionCount > 0 || activeFilter?.kind === "orderAttention";
+    canCorrections &&
+    (attentionCount > 0 || activeFilter?.kind === "orderAttention");
   const showProsthetics =
-    prostheticsPendingCount > 0 || activeFilter?.kind === "prostheticsPending";
+    canProsthetics &&
+    (prostheticsPendingCount > 0 ||
+      activeFilter?.kind === "prostheticsPending");
   const showChat =
-    labMentionCount > 0 || activeFilter?.kind === "kaitenLabMention";
+    canAdmin &&
+    (labMentionCount > 0 || activeFilter?.kind === "kaitenLabMention");
+
+  if (!showCorrections && !showProsthetics && !showChat) return null;
 
   return (
     <div className="no-print w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
@@ -99,34 +118,18 @@ export function ShipmentsQuickFilterChips({
             })}
             className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
               activeFilter?.kind === "kaitenLabMention"
-                ? "border-violet-400/90 bg-violet-100 text-violet-950 ring-2 ring-violet-500/90 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100 dark:ring-violet-500/75"
+                ? "border-violet-400/90 bg-violet-100 text-violet-950 ring-2 ring-violet-500/85 dark:border-violet-700 dark:bg-violet-950/45 dark:text-violet-100 dark:ring-violet-500/70"
                 : "border-violet-300/70 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/35 dark:text-violet-100 dark:hover:bg-violet-950/50"
             }`}
-            title="Наряды с непрочитанным упоминанием лаборатории в чате Kaiten (@…)"
+            title={humanListTagLabel(LIST_TAG_KAITEN_LAB_MENTION)}
           >
             <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-              ЧАТ
+              Чат
             </span>
             <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
               {labMentionCount}
             </span>
           </Link>
-        ) : null}
-        {activeFilter ? (
-          <span className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-md border border-sky-200/80 bg-sky-50/80 px-2 py-1 text-sm dark:border-sky-900/50 dark:bg-sky-950/25">
-            <span className="min-w-0 truncate whitespace-nowrap text-[var(--text-body)]">
-              Фильтр по тегу:{" "}
-              <strong className="text-[var(--text-strong)]">
-                {humanListTagLabel(activeFilter)}
-              </strong>
-            </span>
-            <Link
-              href={shipmentsListHref(listCtx)}
-              className="shrink-0 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-0.5 text-xs font-medium text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
-            >
-              Сбросить
-            </Link>
-          </span>
         ) : null}
       </div>
     </div>

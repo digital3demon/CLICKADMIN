@@ -73,6 +73,7 @@ export async function GET(
     createdAt: r.createdAt.toISOString(),
     resolvedAt: r.resolvedAt?.toISOString() ?? null,
     rejectedAt: r.rejectedAt?.toISOString() ?? null,
+    arrivedAt: r.arrivedAt?.toISOString() ?? null,
   }));
 
   const headers: Record<string, string> = { "Cache-Control": "no-store" };

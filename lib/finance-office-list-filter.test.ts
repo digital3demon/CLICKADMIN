@@ -12,14 +12,17 @@ import {
 } from "@/lib/finance-office-list-filter";
 
 describe("finance-office-list-filter", () => {
-  it("excludes scan / to-execution / approval from included statuses", () => {
+  it("excludes early stages and TO_ADMINS from included statuses", () => {
     expect(FINANCE_OFFICE_EXCLUDED_LAB_STATUSES).toEqual([
       "TO_SCAN",
       "TO_EXECUTION",
       "APPROVAL",
+      "TO_ADMINS",
     ]);
     expect(FINANCE_OFFICE_INCLUDED_LAB_STATUSES[0]).toBe("PRODUCTION");
     expect(FINANCE_OFFICE_INCLUDED_LAB_STATUSES).not.toContain("APPROVAL");
+    expect(FINANCE_OFFICE_INCLUDED_LAB_STATUSES).not.toContain("TO_ADMINS");
+    expect(FINANCE_OFFICE_INCLUDED_LAB_STATUSES.at(-1)).toBe("TO_REVIEW");
   });
 
   it("maps legacy today/tomorrow to actual; default is actual", () => {
@@ -102,11 +105,24 @@ describe("finance-office-list-filter", () => {
         kaitenColumnTitle: "К исполнению",
       }),
     ).toBe(false);
+    expect(
+      orderMatchesFinanceOfficeProductionPlus({
+        labWorkStatus: "TO_ADMINS",
+        kaitenColumnTitle: "Сдана админам",
+      }),
+    ).toBe(false);
+    expect(
+      orderMatchesFinanceOfficeProductionPlus({
+        labWorkStatus: "TO_ADMINS",
+        kaitenColumnTitle: "Сборка",
+      }),
+    ).toBe(true);
   });
 
-  it("production where includes kaiten column titles", () => {
+  it("production where includes kaiten column titles but not сдана админам", () => {
     const json = JSON.stringify(financeOfficeProductionAndLaterWhere());
     expect(json).toContain("kaitenColumnTitle");
     expect(json).toContain("Производство");
+    expect(json).not.toContain("Сдана админам");
   });
 });

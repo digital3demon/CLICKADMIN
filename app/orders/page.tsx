@@ -14,6 +14,7 @@ import { OrderStickerPrintLink } from "@/components/orders/OrderStickerPrintLink
 import { OrdersListKaitenChatShell } from "@/components/orders/OrdersListKaitenChatShell";
 import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
 import { OrderPostingMonthBar } from "@/components/orders/OrderPostingMonthBar";
+import { OrdersListHeaderActionCards } from "@/components/orders/OrdersListHeaderActionCards";
 import { OrdersListShippedToolbar } from "@/components/orders/OrdersListShippedToolbar";
 import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePref";
 import { OrdersListFiltersRow } from "@/components/orders/OrdersListFiltersRow";
@@ -51,6 +52,9 @@ import {
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { canAcceptOrderChatCorrections, canSeeOrderNotificationKind } from "@/lib/auth/permissions";
+import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
+import { loadProstheticsInTransitForTenant } from "@/lib/prosthetics-in-transit.server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
@@ -213,6 +217,41 @@ export default async function OrdersPage({
   const tenantId = session
     ? await getTenantIdForSession(session)
     : null;
+  const canMarkProstheticsArrived = canAcceptOrderChatCorrections(session?.role);
+  let moduleAccess: Awaited<ReturnType<typeof getEffectiveModuleAccess>> | null =
+    null;
+  if (session?.role && tenantId) {
+    try {
+      moduleAccess = await getEffectiveModuleAccess(tenantId, session.role);
+    } catch {
+      moduleAccess = null;
+    }
+  }
+  const canSeeCorrectionsChip = canSeeOrderNotificationKind(
+    "corrections",
+    session?.role,
+    moduleAccess,
+  );
+  const canSeeProstheticsChip = canSeeOrderNotificationKind(
+    "prosthetics",
+    session?.role,
+    moduleAccess,
+  );
+  const canSeeAdminChip = canSeeOrderNotificationKind(
+    "admin",
+    session?.role,
+    moduleAccess,
+  );
+
+  let prostheticsInTransitCount = 0;
+  try {
+    if (canSeeProstheticsChip) {
+      const transit = await loadProstheticsInTransitForTenant(tenantId);
+      prostheticsInTransitCount = transit.count;
+    }
+  } catch (e) {
+    console.error("[orders] prosthetics in-transit count", e);
+  }
 
   let kaitenIntegrationActive = true;
   if (tenantId) {
@@ -485,11 +524,19 @@ export default async function OrdersPage({
   }
 
   const alwaysShowOrderAttentionChips = session?.role === "FINANCIAL_MANAGER";
+  const showCorrectionsChip =
+    canSeeCorrectionsChip &&
+    (alwaysShowOrderAttentionChips || attentionCount > 0);
+  const showProstheticsChip =
+    canSeeProstheticsChip &&
+    (alwaysShowOrderAttentionChips || prostheticsPendingCount > 0);
+  const showAdminChip =
+    canSeeAdminChip &&
+    (alwaysShowOrderAttentionChips || labMentionCount > 0);
   const showOrdersQuickFilterChipsRow =
-    alwaysShowOrderAttentionChips ||
-    attentionCount > 0 ||
-    prostheticsPendingCount > 0 ||
-    labMentionCount > 0 ||
+    showCorrectionsChip ||
+    showProstheticsChip ||
+    showAdminChip ||
     activeFilter != null;
 
   return (
@@ -507,7 +554,7 @@ export default async function OrdersPage({
         searchActive={Boolean(listSearchQ)}
       >
       <div className={`${ORDERS_LIST_STACK} space-y-4`}>
-      <div className="lg:hidden">
+      <div className="lg:hidden space-y-3">
         <OrderPostingMonthBar
           toolbarEnd={
             <OrdersListShippedToolbar
@@ -521,21 +568,33 @@ export default async function OrdersPage({
             />
           }
         />
+        <OrdersListHeaderActionCards
+          initialInTransitCount={prostheticsInTransitCount}
+          canMarkArrived={canMarkProstheticsArrived}
+          showProstheticsBlock={canSeeProstheticsChip}
+        />
       </div>
       <div className="no-print space-y-4">
-        <div className="hidden lg:block">
-          <OrderPostingMonthBar
-            toolbarEnd={
-              <OrdersListShippedToolbar
-                pageSize={pageSize}
-                rawTag={rawTag}
-                listSearchQ={listSearchQ}
-                fromUrl={fromUrl}
-                toUrl={toUrl}
-                onlyShippedActive={onlyShippedActive}
-                hideShippedActive={hideShippedActive}
-              />
-            }
+        <div className="hidden lg:flex lg:flex-row lg:items-stretch lg:gap-3">
+          <div className="min-w-0 flex-1">
+            <OrderPostingMonthBar
+              toolbarEnd={
+                <OrdersListShippedToolbar
+                  pageSize={pageSize}
+                  rawTag={rawTag}
+                  listSearchQ={listSearchQ}
+                  fromUrl={fromUrl}
+                  toUrl={toUrl}
+                  onlyShippedActive={onlyShippedActive}
+                  hideShippedActive={hideShippedActive}
+                />
+              }
+            />
+          </div>
+          <OrdersListHeaderActionCards
+            initialInTransitCount={prostheticsInTransitCount}
+            canMarkArrived={canMarkProstheticsArrived}
+            showProstheticsBlock={canSeeProstheticsChip}
           />
         </div>
         {periodError ? (
@@ -640,7 +699,7 @@ export default async function OrdersPage({
         {showOrdersQuickFilterChipsRow ? (
           <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
             <div className="flex flex-wrap items-center gap-2">
-          {alwaysShowOrderAttentionChips || attentionCount > 0 ? (
+          {showCorrectionsChip ? (
             <Link
               href={ordersListHref({
                 limit: pageSize,
@@ -662,7 +721,7 @@ export default async function OrdersPage({
               </span>
             </Link>
           ) : null}
-          {alwaysShowOrderAttentionChips || prostheticsPendingCount > 0 ? (
+          {showProstheticsChip ? (
             <Link
               href={ordersListHref({
                 limit: pageSize,
@@ -684,7 +743,7 @@ export default async function OrdersPage({
               </span>
             </Link>
           ) : null}
-          {alwaysShowOrderAttentionChips || labMentionCount > 0 ? (
+          {showAdminChip ? (
             <Link
               href={ordersListHref({
                 limit: pageSize,
@@ -867,6 +926,8 @@ export default async function OrdersPage({
                       o.listCompositionMismatch ||
                       o.listPendingChatCorrections
                     }
+                    listPendingChatCorrections={o.listPendingChatCorrections}
+                    listCompositionMismatch={o.listCompositionMismatch}
                     hideShipped={hideShippedActive}
                     onlyShipped={onlyShippedActive}
                     kaitenCardId={o.kaitenCardId}
@@ -940,7 +1001,9 @@ export default async function OrdersPage({
                               : undefined
                           }
                           doctorName={personNameSurnameInitials(o.doctor.fullName)}
-                          labMentionHighlight={o.listKaitenLabMentionHighlight}
+                          labMentionHighlight={
+                            canSeeAdminChip && o.listKaitenLabMentionHighlight
+                          }
                           embedded
                         />
                       </div>
@@ -996,7 +1059,9 @@ export default async function OrdersPage({
                         : undefined
                     }
                     doctorName={personNameSurnameInitials(o.doctor.fullName)}
-                    labMentionHighlight={o.listKaitenLabMentionHighlight}
+                    labMentionHighlight={
+                      canSeeAdminChip && o.listKaitenLabMentionHighlight
+                    }
                   />
                   <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-0.5 sm:py-1.5">
                     <div className="flex min-w-0 flex-nowrap items-center justify-center gap-0">

@@ -10,6 +10,7 @@ export type OrderProstheticsRequestReadRow = {
   createdAt: Date;
   resolvedAt: Date | null;
   rejectedAt: Date | null;
+  arrivedAt: Date | null;
 };
 
 const requestSelect = {
@@ -20,6 +21,7 @@ const requestSelect = {
   createdAt: true,
   resolvedAt: true,
   rejectedAt: true,
+  arrivedAt: true,
   kaitenCommentId: true,
 } as const;
 
@@ -68,6 +70,7 @@ export async function fetchMergedOrderProstheticsRequests(
     createdAt: Date;
     resolvedAt: Date | null;
     rejectedAt: Date | null;
+    arrivedAt: Date | null;
     kaitenCommentId: number | null;
   }>) {
     if (row.kaitenCommentId != null) inboxKaitenIds.add(row.kaitenCommentId);
@@ -79,6 +82,7 @@ export async function fetchMergedOrderProstheticsRequests(
       createdAt: row.createdAt,
       resolvedAt: row.resolvedAt,
       rejectedAt: row.rejectedAt,
+      arrivedAt: row.arrivedAt,
     });
   }
 
@@ -94,6 +98,7 @@ export async function fetchMergedOrderProstheticsRequests(
       createdAt: row.createdAt,
       resolvedAt: row.resolvedAt,
       rejectedAt: row.rejectedAt,
+      arrivedAt: row.arrivedAt,
     });
   }
 

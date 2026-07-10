@@ -95,7 +95,7 @@ export function OrderListAdminMemoCell({
           }
         }}
         className={[
-          "block w-full resize-none rounded-md border bg-transparent px-1 py-0.5 text-center text-[10px] leading-snug outline-none transition-[border-color,background-color,box-shadow] sm:text-[11px]",
+          "block w-full resize-none rounded-md border bg-transparent px-1 py-0.5 text-center text-[10px] font-semibold leading-snug outline-none transition-[border-color,background-color,box-shadow] sm:text-[11px]",
           "text-amber-700 caret-amber-600 placeholder:text-transparent dark:text-amber-300/90 dark:caret-amber-300",
           showActive
             ? "border-amber-300/70 bg-amber-50/40 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/50 dark:border-amber-700/50 dark:bg-amber-950/25"

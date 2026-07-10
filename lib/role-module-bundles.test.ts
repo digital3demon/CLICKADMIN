@@ -58,20 +58,49 @@ describe("defaultModuleAllowed bundles alignment", () => {
     expect(defaultModuleAllowed("USER", "KANBAN_ATTACH_FILES")).toBe(true);
     expect(defaultModuleAllowed("USER", "KANBAN_DELETE_CARD")).toBe(false);
     expect(defaultModuleAllowed("USER", "ORDERS")).toBe(false);
-    expect(defaultModuleAllowed("USER", "ORDERS_NOTIFICATIONS")).toBe(false);
+    expect(defaultModuleAllowed("USER", "ORDERS_NOTIFICATIONS_ADMIN")).toBe(false);
+    expect(defaultModuleAllowed("USER", "ORDERS_NOTIFICATIONS_CORRECTIONS")).toBe(
+      false,
+    );
+    expect(defaultModuleAllowed("USER", "ORDERS_NOTIFICATIONS_PROSTHETICS")).toBe(
+      false,
+    );
   });
 
-  it("SENIOR_TECHNICIAN: полный канбан, без заказов и общих тостов", () => {
+  it("SENIOR_TECHNICIAN: полный канбан, без заказов и тостов по нарядам", () => {
     expect(defaultModuleAllowed("SENIOR_TECHNICIAN", "KANBAN_DELETE_CARD")).toBe(true);
     expect(defaultModuleAllowed("SENIOR_TECHNICIAN", "ORDERS")).toBe(false);
-    expect(defaultModuleAllowed("SENIOR_TECHNICIAN", "ORDERS_NOTIFICATIONS")).toBe(false);
+    expect(defaultModuleAllowed("SENIOR_TECHNICIAN", "ORDERS_NOTIFICATIONS_ADMIN")).toBe(
+      false,
+    );
+    expect(
+      defaultModuleAllowed("SENIOR_TECHNICIAN", "ORDERS_NOTIFICATIONS_CORRECTIONS"),
+    ).toBe(false);
+    expect(
+      defaultModuleAllowed("SENIOR_TECHNICIAN", "ORDERS_NOTIFICATIONS_PROSTHETICS"),
+    ).toBe(false);
   });
 
-  it("MANAGER: заказы + канбан + общие уведомления", () => {
+  it("MANAGER: заказы + канбан + все типы уведомлений по нарядам", () => {
     expect(defaultModuleAllowed("MANAGER", "ORDERS")).toBe(true);
     expect(defaultModuleAllowed("MANAGER", "ORDERS_CREATE")).toBe(true);
     expect(defaultModuleAllowed("MANAGER", "KANBAN_DELETE_CARD")).toBe(true);
-    expect(defaultModuleAllowed("MANAGER", "ORDERS_NOTIFICATIONS")).toBe(true);
+    expect(defaultModuleAllowed("MANAGER", "ORDERS_NOTIFICATIONS_ADMIN")).toBe(true);
+    expect(defaultModuleAllowed("MANAGER", "ORDERS_NOTIFICATIONS_CORRECTIONS")).toBe(
+      true,
+    );
+    expect(defaultModuleAllowed("MANAGER", "ORDERS_NOTIFICATIONS_PROSTHETICS")).toBe(
+      true,
+    );
+  });
+
+  it("expandBundles: любой тип уведомлений поднимает legacy ORDERS_NOTIFICATIONS", () => {
+    const expanded = expandBundles(
+      accessMap([["ORDERS_NOTIFICATIONS_CORRECTIONS", true]]),
+    );
+    expect(expanded.ORDERS_NOTIFICATIONS_CORRECTIONS).toBe(true);
+    expect(expanded.ORDERS_NOTIFICATIONS).toBe(true);
+    expect(expanded.ORDERS_NOTIFICATIONS_ADMIN).toBeUndefined();
   });
 
   it("AI_MODE: только старший админ по умолчанию, не обычный админ", () => {

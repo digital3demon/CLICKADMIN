@@ -4,7 +4,9 @@ import type { AppModule } from "@prisma/client";
 export type BundleId =
   | "ORDERS"
   | "ORDERS_MANAGE"
-  | "ORDERS_NOTIFICATIONS"
+  | "ORDERS_NOTIFICATIONS_ADMIN"
+  | "ORDERS_NOTIFICATIONS_CORRECTIONS"
+  | "ORDERS_NOTIFICATIONS_PROSTHETICS"
   | "ORDER_HISTORY"
   | "ATTENTION"
   | "KANBAN"
@@ -36,13 +38,18 @@ export type BundleId =
   | "AI_MODE";
 
 /** Модули, не входящие ни в один пакет (legacy / совместимость). */
-const STANDALONE_ATOMIC_MODULES: AppModule[] = ["CLIENTS"];
+const STANDALONE_ATOMIC_MODULES: AppModule[] = [
+  "CLIENTS",
+  "ORDERS_NOTIFICATIONS",
+];
 
 /** Пакет → atomic-модули (без дублирования иерархии: каждый atomic в одном «листовом» пакете). */
 export const BUNDLE_TO_ATOMIC: Record<BundleId, readonly AppModule[]> = {
   ORDERS: ["ORDERS", "ORDERS_CHAT"],
   ORDERS_MANAGE: ["ORDERS_CREATE", "ORDERS_EDIT"],
-  ORDERS_NOTIFICATIONS: ["ORDERS_NOTIFICATIONS"],
+  ORDERS_NOTIFICATIONS_ADMIN: ["ORDERS_NOTIFICATIONS_ADMIN"],
+  ORDERS_NOTIFICATIONS_CORRECTIONS: ["ORDERS_NOTIFICATIONS_CORRECTIONS"],
+  ORDERS_NOTIFICATIONS_PROSTHETICS: ["ORDERS_NOTIFICATIONS_PROSTHETICS"],
   ORDER_HISTORY: ["ORDER_HISTORY"],
   ATTENTION: ["ATTENTION"],
   KANBAN: ["KANBAN"],
@@ -132,7 +139,9 @@ export const BUNDLE_MATRIX_GROUPS: BundleMatrixGroup[] = [
       "ORDERS",
       "ORDERS_MANAGE",
       "ORDER_HISTORY",
-      "ORDERS_NOTIFICATIONS",
+      "ORDERS_NOTIFICATIONS_ADMIN",
+      "ORDERS_NOTIFICATIONS_CORRECTIONS",
+      "ORDERS_NOTIFICATIONS_PROSTHETICS",
       "ATTENTION",
     ],
   },
@@ -201,7 +210,9 @@ for (const [bundle, atoms] of Object.entries(BUNDLE_TO_ATOMIC) as Array<
 export const BUNDLE_LABELS: Record<BundleId, string> = {
   ORDERS: "Заказы: просмотр (включая чат наряда)",
   ORDERS_MANAGE: "Заказы: ведение (создание + редактирование)",
-  ORDERS_NOTIFICATIONS: "Уведомления: общие (admin-тег, корр., протетика)",
+  ORDERS_NOTIFICATIONS_ADMIN: "Уведомления: admin-тег (@лаборатория)",
+  ORDERS_NOTIFICATIONS_CORRECTIONS: "Уведомления: корректировки",
+  ORDERS_NOTIFICATIONS_PROSTHETICS: "Уведомления: заказ протетики",
   ORDER_HISTORY: "История изменений",
   ATTENTION: "Внимание / напоминания",
   KANBAN: "Канбан: доски (вход)",
@@ -325,6 +336,14 @@ export function expandBundles(
   }
   if (inferBundleEnabledFromAtoms(out, "ORDERS")) {
     for (const m of BUNDLE_TO_ATOMIC.ORDERS) out[m] = true;
+  }
+  // Любой раздельный тип уведомлений → legacy-флаг для старых потребителей API.
+  if (
+    out.ORDERS_NOTIFICATIONS_ADMIN === true ||
+    out.ORDERS_NOTIFICATIONS_CORRECTIONS === true ||
+    out.ORDERS_NOTIFICATIONS_PROSTHETICS === true
+  ) {
+    out.ORDERS_NOTIFICATIONS = true;
   }
   return out;
 }

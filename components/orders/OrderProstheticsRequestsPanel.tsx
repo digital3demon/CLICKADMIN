@@ -12,11 +12,15 @@ export type OrderProstheticsRequestInitial = {
   createdAt: string;
   resolvedAt: string | null;
   rejectedAt: string | null;
+  arrivedAt: string | null;
 };
 
 function requestsFingerprint(list: OrderProstheticsRequestInitial[]): string {
   return [...list]
-    .map((c) => `${c.id}:${c.resolvedAt ?? ""}:${c.rejectedAt ?? ""}:${c.source}`)
+    .map(
+      (c) =>
+        `${c.id}:${c.resolvedAt ?? ""}:${c.rejectedAt ?? ""}:${c.arrivedAt ?? ""}:${c.source}`,
+    )
     .sort()
     .join("|");
 }
@@ -223,6 +227,36 @@ export function OrderProstheticsRequestsPanel({
     [orderId, router, pullListFromApi],
   );
 
+  const setArrived = useCallback(
+    async (requestId: string, arrived: boolean) => {
+      setErr(null);
+      setBusyId(requestId);
+      try {
+        const res = await fetch(
+          `/api/orders/${orderId}/prosthetics-requests/${requestId}/arrived`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ arrived }),
+          },
+        );
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setErr(j.error ?? "Не удалось обновить");
+          return;
+        }
+        await pullListFromApi();
+        router.refresh();
+      } catch {
+        setErr("Сеть недоступна");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [orderId, router, pullListFromApi],
+  );
+
   const srcLabel = (c: OrderProstheticsRequestInitial) =>
     formatOrderChatSourceCaption(c.source, c.authorLabel, c.createdAt);
 
@@ -314,12 +348,28 @@ export function OrderProstheticsRequestsPanel({
                     {srcLabel(c)}
                   </p>
                   <p className="mt-0.5 text-[0.6rem] text-[var(--text-muted)]">
-                    {c.resolvedAt
-                      ? "Принято"
-                      : c.rejectedAt
-                        ? "Отклонено"
-                        : ""}
+                    {c.rejectedAt
+                      ? "Отклонено"
+                      : c.arrivedAt
+                        ? "Пришла"
+                        : c.resolvedAt
+                          ? "В пути"
+                          : ""}
                   </p>
+                  {canAccept && c.resolvedAt && !c.rejectedAt ? (
+                    <label className="mt-1 inline-flex cursor-pointer items-center gap-1.5 text-[0.65rem] text-[var(--text-body)]">
+                      <input
+                        type="checkbox"
+                        className="size-3.5 rounded border-[var(--card-border)]"
+                        checked={Boolean(c.arrivedAt)}
+                        disabled={busyId === c.id}
+                        onChange={(e) =>
+                          void setArrived(c.id, e.target.checked)
+                        }
+                      />
+                      пришла
+                    </label>
+                  ) : null}
                 </li>
               ))}
             </ul>

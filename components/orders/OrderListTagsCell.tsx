@@ -11,6 +11,8 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
+import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import {
   customListTagLabelMeansKaitenBlock,
   type KaitenBlockFromListTagResult,
@@ -118,6 +120,10 @@ type Props = {
   periodTo?: string | null;
   /** Жёлтый треугольник «!»: непринятые корректировки «!!!» или расхождение счёта с составом. */
   orderAttentionWarning?: boolean;
+  /** Явно: открытые корректировки «!!!» (для RBAC уведомлений). */
+  listPendingChatCorrections?: boolean;
+  /** Явно: расхождение суммы счёта с составом. */
+  listCompositionMismatch?: boolean;
   /** Если задано — ссылки фильтра по пилюлям ведут на «Отгрузки», а не на «Заказы». */
   shipmentsFilterContext?: {
     tab: string;
@@ -431,6 +437,8 @@ export function OrderListTagsCell({
   periodFrom,
   periodTo,
   orderAttentionWarning = false,
+  listPendingChatCorrections,
+  listCompositionMismatch,
   shipmentsFilterContext = null,
   financeOfficeFilterContext = null,
   financeCalculated = null,
@@ -438,6 +446,26 @@ export function OrderListTagsCell({
   omitKaitenColumnTag = false,
 }: Props) {
   const router = useRouter();
+  const { user } = useSessionUser();
+  const canSeeCorrectionsIndicators = canSeeOrderNotificationKind(
+    "corrections",
+    user?.role,
+    user?.moduleAccess,
+  );
+  const canSeeProstheticsIndicators = canSeeOrderNotificationKind(
+    "prosthetics",
+    user?.role,
+    user?.moduleAccess,
+  );
+  const pendingCorrections = listPendingChatCorrections === true;
+  const compositionMismatch = listCompositionMismatch === true;
+  const showAttentionIcon =
+    compositionMismatch ||
+    (pendingCorrections && canSeeCorrectionsIndicators) ||
+    (listPendingChatCorrections == null &&
+      listCompositionMismatch == null &&
+      orderAttentionWarning &&
+      canSeeCorrectionsIndicators);
   const isHarmony = useUiDesign() === "harmony";
   const kaitenColTrimmed = kaitenColumnTitle?.trim() ?? "";
   const kaitenFilterKey =
@@ -1320,9 +1348,11 @@ export function OrderListTagsCell({
   ]);
 
   const stripProstheticsPending =
-    !prostheticsOrdered && listPendingProstheticsRequests;
+    canSeeProstheticsIndicators &&
+    !prostheticsOrdered &&
+    listPendingProstheticsRequests;
   const useLeadingIconStrip =
-    orderAttentionWarning || stripProstheticsPending;
+    showAttentionIcon || stripProstheticsPending;
   const prostheticsPendingHref = filterListHref(LIST_TAG_PROSTHETICS_PENDING);
   const inFinanceOffice = Boolean(financeOfficeFilterContext);
   const iconShellClass = inFinanceOffice
@@ -1352,7 +1382,7 @@ export function OrderListTagsCell({
 
   const leadingIconStrip = (
     <>
-      {orderAttentionWarning ? (
+      {showAttentionIcon ? (
         <Link
           href={orderAttentionFilterHref}
           className="shrink-0 self-start text-inherit no-underline outline-none focus-visible:outline-none"

@@ -304,6 +304,7 @@ export async function fetchOrderEditInitial(
       createdAt: c.createdAt.toISOString(),
       resolvedAt: c.resolvedAt?.toISOString() ?? null,
       rejectedAt: c.rejectedAt?.toISOString() ?? null,
+      arrivedAt: c.arrivedAt?.toISOString() ?? null,
     })),
   };
 

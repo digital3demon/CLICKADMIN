@@ -622,6 +622,7 @@ export type OrderEditInitial = {
     createdAt: string;
     resolvedAt: string | null;
     rejectedAt: string | null;
+    arrivedAt: string | null;
   }>;
 };
 

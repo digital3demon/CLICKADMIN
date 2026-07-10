@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
+import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import {
   humanListTagLabel,
@@ -39,6 +43,23 @@ export function FinanceOfficeQuickFilterChips({
   periodTo: string | null;
   q?: string;
 }) {
+  const { user } = useSessionUser();
+  const canCorrections = canSeeOrderNotificationKind(
+    "corrections",
+    user?.role,
+    user?.moduleAccess,
+  );
+  const canProsthetics = canSeeOrderNotificationKind(
+    "prosthetics",
+    user?.role,
+    user?.moduleAccess,
+  );
+  const canAdmin = canSeeOrderNotificationKind(
+    "admin",
+    user?.role,
+    user?.moduleAccess,
+  );
+
   const listCtx = {
     tab,
     from: periodFrom,
@@ -46,31 +67,35 @@ export function FinanceOfficeQuickFilterChips({
     q: q.trim() || undefined,
   };
 
-  const showRow =
-    attentionCount > 0 ||
-    prostheticsPendingCount > 0 ||
-    financeNotCalculatedCount > 0 ||
-    financeCalculatedCount > 0 ||
-    edoCount > 0 ||
-    noEdoCount > 0 ||
-    labMentionCount > 0 ||
-    activeFilter != null;
-
-  if (!showRow) return null;
-
   const showCorrections =
-    attentionCount > 0 || activeFilter?.kind === "orderAttention";
+    canCorrections &&
+    (attentionCount > 0 || activeFilter?.kind === "orderAttention");
   const showProsthetics =
-    prostheticsPendingCount > 0 || activeFilter?.kind === "prostheticsPending";
+    canProsthetics &&
+    (prostheticsPendingCount > 0 ||
+      activeFilter?.kind === "prostheticsPending");
   const showNotCalculated =
-    financeNotCalculatedCount > 0 || activeFilter?.kind === "financeNotCalculated";
+    financeNotCalculatedCount > 0 ||
+    activeFilter?.kind === "financeNotCalculated";
   const showCalculated =
     financeCalculatedCount > 0 || activeFilter?.kind === "financeCalculated";
   const showEdo = edoCount > 0 || activeFilter?.kind === "edo";
   const showNoEdo = noEdoCount > 0 || activeFilter?.kind === "noEdo";
   const showChat =
-    labMentionCount > 0 || activeFilter?.kind === "kaitenLabMention";
+    canAdmin &&
+    (labMentionCount > 0 || activeFilter?.kind === "kaitenLabMention");
 
+  const showRow =
+    showCorrections ||
+    showProsthetics ||
+    showNotCalculated ||
+    showCalculated ||
+    showEdo ||
+    showNoEdo ||
+    showChat ||
+    activeFilter != null;
+
+  if (!showRow) return null;
   return (
     <div className="w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
       <div className="flex flex-wrap items-center gap-2">

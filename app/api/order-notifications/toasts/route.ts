@@ -7,7 +7,7 @@ import { fetchOrderNotificationToasts } from "@/lib/order-notification-toasts.se
 
 export const dynamic = "force-dynamic";
 
-/** Единый опрос уведомлений: общие (ORDERS_NOTIFICATIONS) + персональные @ник. */
+/** Единый опрос уведомлений: раздельные типы + персональные @ник. */
 export async function GET() {
   const { session, access } = await getSessionWithModuleAccess();
   if (!session?.sub) {
@@ -28,7 +28,11 @@ export async function GET() {
   const payload = await fetchOrderNotificationToasts(ordersPrisma, {
     tenantId: tenantId ?? "",
     userId: session.sub,
-    generalNotificationsAllowed: access?.ORDERS_NOTIFICATIONS === true,
+    adminNotificationsAllowed: access?.ORDERS_NOTIFICATIONS_ADMIN === true,
+    correctionsNotificationsAllowed:
+      access?.ORDERS_NOTIFICATIONS_CORRECTIONS === true,
+    prostheticsNotificationsAllowed:
+      access?.ORDERS_NOTIFICATIONS_PROSTHETICS === true,
     personalOnlyPref: userRow?.orderToastsPersonalOnly === true,
   });
 
