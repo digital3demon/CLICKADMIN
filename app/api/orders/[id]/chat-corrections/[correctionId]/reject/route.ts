@@ -5,6 +5,10 @@ import { buildKaitenCommentTextWithCrmAuthor } from "@/lib/kaiten-comment-parse"
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { getKaitenRestAuth, kaitenCreateComment } from "@/lib/kaiten-rest";
+import {
+  closeOrderChatCorrectionPair,
+  reopenOrderChatCorrectionPair,
+} from "@/lib/order-chat-inbox-resolve-pair.server";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
@@ -32,34 +36,15 @@ export async function POST(
   }
 
   const prisma = await getOrdersPrisma();
-  
-  const inboxRow = await (prisma as any).orderChatInboxItem.findFirst({
-    where: {
-      id: correctionId.trim(),
-      orderId: orderId.trim(),
-      type: "CORRECTION",
-    },
-    select: { id: true, resolvedAt: true, rejectedAt: true },
-  });
-  
-  const legacyRow = await prisma.orderChatCorrection.findFirst({
-    where: {
-      id: correctionId.trim(),
-      orderId: orderId.trim(),
-    },
-    select: { id: true, resolvedAt: true, rejectedAt: true },
-  });
-
-  const row = inboxRow || legacyRow;
-
-  if (!row) {
-    return NextResponse.json({ error: "Запись не найдена" }, { status: 404 });
-  }
-  if (row.resolvedAt != null) {
-    return NextResponse.json({ error: "Уже принято" }, { status: 409 });
-  }
-  if (row.rejectedAt != null) {
-    return NextResponse.json({ error: "Уже отклонено" }, { status: 409 });
+  const closed = await closeOrderChatCorrectionPair(
+    prisma,
+    orderId,
+    correctionId,
+    "reject",
+    session.sub,
+  );
+  if (!closed.ok) {
+    return NextResponse.json({ error: closed.error }, { status: closed.status });
   }
 
   const order = await prisma.order.findFirst({
@@ -67,26 +52,8 @@ export async function POST(
     select: { id: true, kaitenCardId: true },
   });
   if (!order) {
+    await reopenOrderChatCorrectionPair(prisma, closed, "reject");
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
-  }
-
-  if (inboxRow) {
-    await (prisma as any).orderChatInboxItem.update({
-      where: { id: inboxRow.id },
-      data: {
-        rejectedAt: new Date(),
-        rejectedByUserId: session.sub,
-      },
-    });
-  }
-  if (legacyRow) {
-    await prisma.orderChatCorrection.update({
-      where: { id: legacyRow.id },
-      data: {
-        rejectedAt: new Date(),
-        rejectedByUserId: session.sub,
-      },
-    });
   }
 
   if (order.kaitenCardId != null) {
@@ -105,20 +72,9 @@ export async function POST(
         null,
         { burst: true },
       );
-          if (!res.ok) {
-            if (inboxRow) {
-              await (prisma as any).orderChatInboxItem.update({
-                where: { id: inboxRow.id },
-                data: { rejectedAt: null, rejectedByUserId: null },
-              });
-            }
-            if (legacyRow) {
-              await prisma.orderChatCorrection.update({
-                where: { id: legacyRow.id },
-                data: { rejectedAt: null, rejectedByUserId: null },
-              });
-            }
-            return NextResponse.json(
+      if (!res.ok) {
+        await reopenOrderChatCorrectionPair(prisma, closed, "reject");
+        return NextResponse.json(
           { error: res.error ?? "Не удалось отправить ответ в Kaiten" },
           { status: 502 },
         );

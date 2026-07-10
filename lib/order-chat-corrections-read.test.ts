@@ -58,4 +58,70 @@ describe("fetchMergedOrderChatCorrections", () => {
     expect(rows.map((r) => r.id)).toEqual(["legacy-only", "inbox-1"]);
     expect(rows[1]?.text).toBe("тотальная мод-ка 70к");
   });
+
+  it("pending merge ignores legacy twin when inbox already resolved", async () => {
+    const { orderIdsWithPendingMergedCorrections } = await import(
+      "./order-chat-corrections-read"
+    );
+    const db = {
+      orderChatCorrection: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            orderId: "o1",
+            kaitenCommentId: 42,
+            resolvedAt: null,
+            rejectedAt: null,
+          },
+        ]),
+      },
+      orderChatInboxItem: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            orderId: "o1",
+            kaitenCommentId: 42,
+            resolvedAt: new Date("2026-07-10T10:00:00Z"),
+            rejectedAt: null,
+          },
+        ]),
+      },
+    };
+
+    const pending = await orderIdsWithPendingMergedCorrections(db as never, [
+      "o1",
+    ]);
+    expect(pending.has("o1")).toBe(false);
+  });
+
+  it("pending merge keeps order when inbox twin still open", async () => {
+    const { orderIdsWithPendingMergedCorrections } = await import(
+      "./order-chat-corrections-read"
+    );
+    const db = {
+      orderChatCorrection: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            orderId: "o1",
+            kaitenCommentId: 42,
+            resolvedAt: null,
+            rejectedAt: null,
+          },
+        ]),
+      },
+      orderChatInboxItem: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            orderId: "o1",
+            kaitenCommentId: 42,
+            resolvedAt: null,
+            rejectedAt: null,
+          },
+        ]),
+      },
+    };
+
+    const pending = await orderIdsWithPendingMergedCorrections(db as never, [
+      "o1",
+    ]);
+    expect(pending.has("o1")).toBe(true);
+  });
 });

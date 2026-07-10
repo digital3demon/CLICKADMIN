@@ -6,8 +6,14 @@ import {
 } from "@/lib/finance-office-list-scope";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
-import { hydrateListPendingChatCorrectionsFromInbox } from "@/lib/order-chat-corrections-read";
-import { hydrateListPendingProstheticsFromInbox } from "@/lib/order-prosthetics-requests-read";
+import {
+  hydrateListPendingChatCorrectionsFromInbox,
+  orderIdsWithPendingMergedCorrections,
+} from "@/lib/order-chat-corrections-read";
+import {
+  hydrateListPendingProstheticsFromInbox,
+  orderIdsWithPendingMergedProsthetics,
+} from "@/lib/order-prosthetics-requests-read";
 import {
   formatCounterpartyRequisitesShortSummary,
 } from "@/lib/format-counterparty-requisites-summary";
@@ -109,19 +115,6 @@ export {
   financeOfficeScopeWhere,
 } from "@/lib/finance-office-list-scope";
 
-const pendingCorrectionsWhere = {
-  chatCorrections: {
-    some: { resolvedAt: null, rejectedAt: null },
-  },
-} satisfies Prisma.OrderWhereInput;
-
-const pendingProstheticsWhere = {
-  prostheticsOrdered: false,
-  prostheticsRequests: {
-    some: { resolvedAt: null, rejectedAt: null },
-  },
-} satisfies Prisma.OrderWhereInput;
-
 /** Счётчики чипов — без окна dueDate, с фильтром «производство+», только поиск. */
 export function financeOfficeChipCountScopeWhere(
   tenantId: string,
@@ -157,21 +150,43 @@ export async function countFinanceOfficeQuickFilterChips(
     toYmd: opts.toYmd,
     actualNotCalculatedOnly: false,
   });
-  const [attentionCount, prostheticsPendingCount, financeNotCalculatedCount, labMentionCount] =
-    await Promise.all([
-      db.order.count({ where: { AND: [scope, pendingCorrectionsWhere] } }),
-      db.order.count({ where: { AND: [scope, pendingProstheticsWhere] } }),
-      db.order.count({
-        where: { AND: [scope, { financeCalculated: false }] },
-      }),
-      countOrdersWithPendingKaitenLabMentionForUser(
-        db,
-        labMentionScope,
-        opts.userId,
-      ),
-    ]);
+  const scopedIds = (
+    await db.order.findMany({
+      where: scope,
+      select: { id: true },
+    })
+  ).map((r) => r.id);
+
+  const [
+    pendingCorrections,
+    pendingProsthetics,
+    financeNotCalculatedCount,
+    labMentionCount,
+    prostheticsOrderedFalseIds,
+  ] = await Promise.all([
+    orderIdsWithPendingMergedCorrections(db, scopedIds),
+    orderIdsWithPendingMergedProsthetics(db, scopedIds),
+    db.order.count({
+      where: { AND: [scope, { financeCalculated: false }] },
+    }),
+    countOrdersWithPendingKaitenLabMentionForUser(
+      db,
+      labMentionScope,
+      opts.userId,
+    ),
+    db.order.findMany({
+      where: { AND: [scope, { prostheticsOrdered: false }] },
+      select: { id: true },
+    }),
+  ]);
+
+  const notOrderedSet = new Set(prostheticsOrderedFalseIds.map((r) => r.id));
+  const prostheticsPendingCount = [...pendingProsthetics].filter((id) =>
+    notOrderedSet.has(id),
+  ).length;
+
   return {
-    attentionCount,
+    attentionCount: pendingCorrections.size,
     prostheticsPendingCount,
     financeNotCalculatedCount,
     labMentionCount,

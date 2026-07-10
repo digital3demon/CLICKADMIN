@@ -25,6 +25,8 @@ import { getSiteOrigin } from "@/lib/site-origin-server";
 import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
 import { fetchOrdersShipmentListPage } from "@/lib/fetch-orders-shipment-list-page";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
+import { orderIdsWithPendingMergedCorrections } from "@/lib/order-chat-corrections-read";
+import { orderIdsWithPendingMergedProsthetics } from "@/lib/order-prosthetics-requests-read";
 import {
   humanListTagLabel,
   LIST_TAG_KAITEN_LAB_MENTION,
@@ -313,33 +315,33 @@ export default async function OrdersPage({
     statusChipCountParts.length === 1
       ? statusChipCountParts[0]
       : { AND: statusChipCountParts };
-  /** Непринятые корректировки «!!!» (как колонка списка и формулировка счётчика). */
-  const pendingCorrectionsWhere = {
-    chatCorrections: {
-      some: { resolvedAt: null, rejectedAt: null },
-    },
-  } satisfies Prisma.OrderWhereInput;
-  /** Открытые заявки «???» по протетике без отметки «Протетика заказана». */
-  const pendingProstheticsWhere = {
-    prostheticsOrdered: false,
-    prostheticsRequests: {
-      some: { resolvedAt: null, rejectedAt: null },
-    },
-  } satisfies Prisma.OrderWhereInput;
+  /** Счётчики чипов — merge inbox+legacy (как отметки в строке списка). */
   const [attentionCount, prostheticsPendingCount] = tenantId
-    ? await Promise.all([
-        ordersPrisma.order.count({
-          where: {
-            AND: [statusChipCountWhere, pendingCorrectionsWhere],
-          },
-        }),
-        ordersPrisma.order.count({
-          where: {
-            AND: [statusChipCountWhere, pendingProstheticsWhere],
-          },
-        }),
-      ])
-    : [0, 0];
+    ? await (async () => {
+        const scopedIds = (
+          await ordersPrisma.order.findMany({
+            where: statusChipCountWhere,
+            select: { id: true },
+          })
+        ).map((r) => r.id);
+        const [pendingCorrections, pendingProsthetics, notOrdered] =
+          await Promise.all([
+            orderIdsWithPendingMergedCorrections(ordersPrisma, scopedIds),
+            orderIdsWithPendingMergedProsthetics(ordersPrisma, scopedIds),
+            ordersPrisma.order.findMany({
+              where: {
+                AND: [statusChipCountWhere, { prostheticsOrdered: false }],
+              },
+              select: { id: true },
+            }),
+          ]);
+        const notOrderedSet = new Set(notOrdered.map((r) => r.id));
+        return [
+          pendingCorrections.size,
+          [...pendingProsthetics].filter((id) => notOrderedSet.has(id)).length,
+        ] as const;
+      })()
+    : ([0, 0] as const);
 
   let labMentionCount = 0;
   if (tenantId) {

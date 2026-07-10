@@ -58,4 +58,37 @@ describe("fetchMergedOrderProstheticsRequests", () => {
     expect(rows.map((r) => r.id)).toEqual(["legacy-only", "inbox-1"]);
     expect(rows[1]?.text).toBe("нужна коронка на 16");
   });
+
+  it("pending merge ignores legacy twin when inbox already resolved", async () => {
+    const { orderIdsWithPendingMergedProsthetics } = await import(
+      "./order-prosthetics-requests-read"
+    );
+    const db = {
+      orderProstheticsRequest: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            orderId: "o1",
+            kaitenCommentId: 99,
+            resolvedAt: null,
+            rejectedAt: null,
+          },
+        ]),
+      },
+      orderChatInboxItem: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            orderId: "o1",
+            kaitenCommentId: 99,
+            resolvedAt: new Date("2026-07-10T10:00:00Z"),
+            rejectedAt: null,
+          },
+        ]),
+      },
+    };
+
+    const pending = await orderIdsWithPendingMergedProsthetics(db as never, [
+      "o1",
+    ]);
+    expect(pending.has("o1")).toBe(false);
+  });
 });

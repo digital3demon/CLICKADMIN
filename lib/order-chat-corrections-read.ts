@@ -101,42 +101,96 @@ export async function fetchMergedOrderChatCorrections(
   return sortCorrections(merged);
 }
 
-/** Наряды с незакрытыми корректировками в inbox (дополнение к legacy relation). */
-export async function orderIdsWithPendingInboxCorrections(
+/** Наряды с незакрытыми корректировками после merge inbox+legacy (без дублей по kaitenCommentId). */
+export async function orderIdsWithPendingMergedCorrections(
   db: PrismaClient,
   orderIds: string[],
 ): Promise<Set<string>> {
   const ids = [...new Set(orderIds.map((x) => x.trim()).filter(Boolean))];
   if (ids.length === 0) return new Set();
 
-  const rows = await (db as any).orderChatInboxItem.findMany({
-    where: {
-      orderId: { in: ids },
-      type: "CORRECTION",
-      resolvedAt: null,
-      rejectedAt: null,
-    },
-    select: { orderId: true },
-    distinct: ["orderId"],
-  });
+  const [legacyRows, inboxRows] = await Promise.all([
+    db.orderChatCorrection.findMany({
+      where: { orderId: { in: ids } },
+      select: {
+        orderId: true,
+        kaitenCommentId: true,
+        resolvedAt: true,
+        rejectedAt: true,
+      },
+    }),
+    (db as any).orderChatInboxItem.findMany({
+      where: { orderId: { in: ids }, type: "CORRECTION" },
+      select: {
+        orderId: true,
+        kaitenCommentId: true,
+        resolvedAt: true,
+        rejectedAt: true,
+      },
+    }) as Promise<
+      Array<{
+        orderId: string;
+        kaitenCommentId: number | null;
+        resolvedAt: Date | null;
+        rejectedAt: Date | null;
+      }>
+    >,
+  ]);
 
-  return new Set(
-    (rows as Array<{ orderId: string }>).map((r) => r.orderId),
-  );
+  type Soft = {
+    kaitenCommentId: number | null;
+    resolvedAt: Date | null;
+    rejectedAt: Date | null;
+  };
+  const byOrder = new Map<string, { inbox: Soft[]; legacy: Soft[] }>();
+  for (const id of ids) byOrder.set(id, { inbox: [], legacy: [] });
+  for (const row of inboxRows) {
+    byOrder.get(row.orderId)?.inbox.push(row);
+  }
+  for (const row of legacyRows) {
+    byOrder.get(row.orderId)?.legacy.push(row);
+  }
+
+  const pending = new Set<string>();
+  for (const [orderId, packs] of byOrder) {
+    const inboxKaitenIds = new Set<number>();
+    let hasPending = false;
+    for (const row of packs.inbox) {
+      if (row.kaitenCommentId != null) inboxKaitenIds.add(row.kaitenCommentId);
+      if (row.resolvedAt == null && row.rejectedAt == null) hasPending = true;
+    }
+    for (const row of packs.legacy) {
+      if (
+        row.kaitenCommentId != null &&
+        inboxKaitenIds.has(row.kaitenCommentId)
+      ) {
+        continue;
+      }
+      if (row.resolvedAt == null && row.rejectedAt == null) hasPending = true;
+    }
+    if (hasPending) pending.add(orderId);
+  }
+  return pending;
+}
+
+/** @deprecated используйте orderIdsWithPendingMergedCorrections */
+export async function orderIdsWithPendingInboxCorrections(
+  db: PrismaClient,
+  orderIds: string[],
+): Promise<Set<string>> {
+  return orderIdsWithPendingMergedCorrections(db, orderIds);
 }
 
 export async function hydrateListPendingChatCorrectionsFromInbox<
   T extends { id: string; listPendingChatCorrections: boolean },
 >(db: PrismaClient, rows: T[]): Promise<T[]> {
   if (rows.length === 0) return rows;
-  const inboxPending = await orderIdsWithPendingInboxCorrections(
+  const pendingIds = await orderIdsWithPendingMergedCorrections(
     db,
     rows.map((r) => r.id),
   );
-  if (inboxPending.size === 0) return rows;
-  return rows.map((row) =>
-    row.listPendingChatCorrections || inboxPending.has(row.id)
-      ? { ...row, listPendingChatCorrections: true }
-      : row,
-  );
+  return rows.map((row) => ({
+    ...row,
+    listPendingChatCorrections: pendingIds.has(row.id),
+  }));
 }
