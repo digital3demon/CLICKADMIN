@@ -121,7 +121,7 @@ export function ShipmentsQuickFilterChips({
                 ? "border-violet-400/90 bg-violet-100 text-violet-950 ring-2 ring-violet-500/85 dark:border-violet-700 dark:bg-violet-950/45 dark:text-violet-100 dark:ring-violet-500/70"
                 : "border-violet-300/70 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/35 dark:text-violet-100 dark:hover:bg-violet-950/50"
             }`}
-            title={humanListTagLabel(LIST_TAG_KAITEN_LAB_MENTION)}
+            title={humanListTagLabel({ kind: "kaitenLabMention" })}
           >
             <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
               Чат
