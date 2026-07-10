@@ -6,12 +6,8 @@ import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { fetchFinanceOfficeOrders, type FinanceOfficeOrderRow } from "@/lib/fetch-finance-office-orders";
 import { cleanLegalFullName } from "@/lib/format-counterparty-requisites-summary";
 import { isReconciliationPaymentStatus } from "@/lib/order-clinic-client-fields";
+import { parseFinanceOfficeMode } from "@/lib/finance-office-list-filter";
 import {
-  addCalendarDaysYmd,
-  moscowShipmentDayBoundsUtc,
-  moscowShipmentInclusiveRangeBoundsUtc,
-  moscowTodayYmd,
-  moscowTomorrowYmd,
   parseYmdOrNull,
 } from "@/lib/shipments-date-range";
 import { parseListTagParam } from "@/lib/order-list-tag-filter";
@@ -27,9 +23,8 @@ function rangeDaySpan(fromYmd: string, toYmd: string): number {
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / (24 * 60 * 60 * 1000));
 }
 
-function parseTab(raw: string | null): "today" | "tomorrow" | "period" {
-  if (raw === "tomorrow" || raw === "period" || raw === "today") return raw;
-  return "today";
+function parseTab(raw: string | null): "actual" | "period" {
+  return parseFinanceOfficeMode(raw);
 }
 
 function money(value: number): number {
@@ -119,49 +114,35 @@ export async function GET(req: Request) {
   }
 
   const sp = new URL(req.url).searchParams;
-  const tab = parseTab(sp.get("tab"));
+  const mode = parseTab(sp.get("tab"));
   const fromRaw = parseYmdOrNull(sp.get("from"));
   const toRaw = parseYmdOrNull(sp.get("to"));
   const rawTag = sp.get("tag")?.trim() || null;
   const parsedTag = rawTag ? parseListTagParam(rawTag) : null;
   const q = sp.get("q")?.trim() || "";
 
-  let start: Date | null = null;
-  let endExclusive: Date | null = null;
   let periodLabel = "";
-  if (tab === "today") {
-    const ymd = moscowTodayYmd();
-    const bounds = moscowShipmentDayBoundsUtc(ymd);
-    start = bounds.start;
-    endExclusive = bounds.endExclusive;
-    periodLabel = ymd;
-  } else if (tab === "tomorrow") {
-    const ymd = moscowTomorrowYmd();
-    const bounds = moscowShipmentDayBoundsUtc(ymd);
-    start = bounds.start;
-    endExclusive = bounds.endExclusive;
-    periodLabel = ymd;
+  if (mode === "actual") {
+    periodLabel = "actual";
   } else {
-    if (!fromRaw || !toRaw) {
-      return NextResponse.json({ error: "Для периода укажите from и to" }, { status: 400 });
+    if (!toRaw) {
+      return NextResponse.json({ error: "Для периода укажите to (from необязателен)" }, { status: 400 });
     }
-    if (fromRaw > toRaw) {
+    if (fromRaw && fromRaw > toRaw) {
       return NextResponse.json({ error: "Дата «с» не может быть позже даты «по»" }, { status: 400 });
     }
-    if (rangeDaySpan(fromRaw, toRaw) > MAX_RANGE_DAYS) {
+    if (fromRaw && rangeDaySpan(fromRaw, toRaw) > MAX_RANGE_DAYS) {
       return NextResponse.json({ error: `Максимальный период — ${MAX_RANGE_DAYS} дней` }, { status: 400 });
     }
-    const bounds = moscowShipmentInclusiveRangeBoundsUtc(fromRaw, toRaw);
-    start = bounds.start;
-    endExclusive = bounds.endExclusive;
-    periodLabel = `${fromRaw}_${toRaw}`;
+    periodLabel = fromRaw ? `${fromRaw}_${toRaw}` : `to_${toRaw}`;
   }
 
   const orders = (await fetchFinanceOfficeOrders(await getOrdersPrisma(), tenantId, {
     listTag: parsedTag ? rawTag : null,
     search: q,
-    start,
-    endExclusive,
+    mode,
+    fromYmd: mode === "period" ? fromRaw : null,
+    toYmd: mode === "period" ? toRaw : null,
   })).filter(
     (order) =>
       !isReconciliationPaymentStatus(order.payment) &&

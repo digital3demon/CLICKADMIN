@@ -4,7 +4,6 @@ import {
   useCallback,
   useEffect,
   useId,
-  useMemo,
   useState,
   type ClipboardEvent,
 } from "react";
@@ -28,6 +27,7 @@ import {
   orderListChatMessageShellClass,
   shouldShowKanbanChatSyncStatus,
 } from "@/lib/kanban/chat-message-display";
+import { formatOrderListChatModalTitle } from "@/lib/order-list-chat-modal-title";
 
 type CommentRow = {
   id: string | number;
@@ -134,11 +134,15 @@ function mergeChatCommentsForDisplay(
 export function OrderListKaitenChatModal({
   orderId,
   orderNumber,
+  patientName,
+  doctorName,
   open,
   onClose,
 }: {
   orderId: string;
   orderNumber: string;
+  patientName?: string | null;
+  doctorName?: string | null;
   open: boolean;
   onClose: () => void;
 }) {
@@ -158,8 +162,11 @@ export function OrderListKaitenChatModal({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadOk, setUploadOk] = useState<string | null>(null);
-  const [openImage, setOpenImage] = useState<{ name: string; url: string } | null>(
-    null,
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const chatTitle = formatOrderListChatModalTitle(
+    orderNumber,
+    patientName,
+    doctorName,
   );
 
   const load = useCallback(async () => {
@@ -240,6 +247,8 @@ export function OrderListKaitenChatModal({
   useEffect(() => {
     if (open) {
       setHasOpened(true);
+    } else {
+      setImageViewerOpen(false);
     }
   }, [open]);
 
@@ -265,11 +274,13 @@ export function OrderListKaitenChatModal({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (imageViewerOpen) return;
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, imageViewerOpen]);
 
   const sendComment = async (action: ChatAction = "comment") => {
     const t = newText.trim();
@@ -444,32 +455,6 @@ export function OrderListKaitenChatModal({
       setPosting(false);
     }
   };
-  const renderSidebarImages = (images: ChatImage[]) => {
-    if (images.length === 0) return null;
-    return (
-      <div className="grid grid-cols-2 gap-2">
-        {images.map((image) => (
-          <button
-            key={image.id}
-            type="button"
-            className="min-w-0 text-left"
-            title={image.name}
-            onClick={() => setOpenImage({ name: image.name, url: image.url })}
-          >
-            <img
-              src={image.url}
-              alt={image.name}
-              className="aspect-square w-full rounded border border-[var(--card-border)] object-cover hover:opacity-90"
-            />
-            <span className="mt-1 block truncate text-[10px] text-[var(--text-muted)]">
-              {image.name}
-            </span>
-          </button>
-        ))}
-      </div>
-    );
-  };
-
   return (
     <div
       className="fixed inset-0 z-[130] flex items-end justify-center bg-black/45 p-2 sm:items-center sm:p-4"
@@ -483,7 +468,7 @@ export function OrderListKaitenChatModal({
       <div className="flex max-h-[min(92vh,40rem)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--card-border)] px-3 py-2.5 sm:px-4">
           <h2 id={titleId} className="min-w-0 truncate text-sm font-semibold text-[var(--app-text)]">
-            Чат · наряд {orderNumber}
+            {chatTitle}
           </h2>
           <button
             type="button"
@@ -654,6 +639,10 @@ export function OrderListKaitenChatModal({
                 orderId={orderId}
                 orderNumber={orderNumber}
                 listenPaste={false}
+                showUploadZone={false}
+                allowDelete={false}
+                thumbSize="md"
+                onImageViewerOpenChange={setImageViewerOpen}
               />
             </div>
           </aside>
@@ -739,34 +728,6 @@ export function OrderListKaitenChatModal({
           </div>
         </div>
       </div>
-      {openImage ? (
-        <div
-          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/75 p-4"
-          role="dialog"
-          aria-modal="true"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setOpenImage(null);
-          }}
-        >
-          <div className="max-h-full max-w-5xl">
-            <div className="mb-2 flex items-center justify-between gap-3 text-white">
-              <p className="min-w-0 truncate text-sm font-medium">{openImage.name}</p>
-              <button
-                type="button"
-                className="rounded-md bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
-                onClick={() => setOpenImage(null)}
-              >
-                Закрыть
-              </button>
-            </div>
-            <img
-              src={openImage.url}
-              alt={openImage.name}
-              className="max-h-[82vh] max-w-full rounded-lg object-contain"
-            />
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

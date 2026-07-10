@@ -17,6 +17,7 @@ import {
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
+import { compareOrdersByEffectiveAppointment } from "@/lib/orders-shipment-list-filter";
 
 const financeOfficeOrderSelect = {
   id: true,
@@ -25,6 +26,8 @@ const financeOfficeOrderSelect = {
   createdAt: true,
   legalEntity: true,
   dueDate: true,
+  appointmentDate: true,
+  dueToAdminsAt: true,
   kaitenCardId: true,
   kaitenColumnTitle: true,
   demoKanbanColumn: true,
@@ -77,7 +80,15 @@ export type FinanceOfficeOrderRow = Omit<
   FinanceOfficeRaw,
   "constructions" | "chatCorrections" | "prostheticsRequests" | "clinicId" | "doctorId"
 > & {
-  clinic: { id: string; name: string; address: string | null; legalFullName: string | null } | null;
+  clinic: {
+    id: string;
+    name: string;
+    address: string | null;
+    legalFullName: string | null;
+    worksWithEdo: boolean;
+  } | null;
+  /** ЭДО клиники наряда или ИП-клиники врача; без клиники — false. */
+  clinicWorksWithEdo: boolean;
   counterpartyRequisitesText: string | null;
   doctor: { id: string; fullName: string };
   constructions: Array<{
@@ -111,12 +122,15 @@ const pendingProstheticsWhere = {
   },
 } satisfies Prisma.OrderWhereInput;
 
-/** Счётчики чипов — без окна dueDate (как createdAt у списка «Заказы»), только поиск. */
+/** Счётчики чипов — без окна dueDate, с фильтром «производство+», только поиск. */
 export function financeOfficeChipCountScopeWhere(
   tenantId: string,
   opts: { search?: string | null } = {},
 ): Prisma.OrderWhereInput {
-  return financeOfficeScopeWhere(tenantId, { search: opts.search });
+  return financeOfficeScopeWhere(tenantId, {
+    search: opts.search,
+    skipDueDateWindow: true,
+  });
 }
 
 export async function countFinanceOfficeQuickFilterChips(
@@ -125,32 +139,43 @@ export async function countFinanceOfficeQuickFilterChips(
   opts: {
     search?: string | null;
     userId?: string;
-    /** Окно dueDate вкладки — только для счётчика «ЧАТ». */
-    labMentionStart?: Date | null;
-    labMentionEndExclusive?: Date | null;
+    mode?: "actual" | "period" | null;
+    fromYmd?: string | null;
+    toYmd?: string | null;
   } = {},
 ): Promise<{
   attentionCount: number;
   prostheticsPendingCount: number;
+  financeNotCalculatedCount: number;
   labMentionCount: number;
 }> {
   const scope = financeOfficeChipCountScopeWhere(tenantId, opts);
   const labMentionScope = financeOfficeScopeWhere(tenantId, {
     search: opts.search,
-    start: opts.labMentionStart,
-    endExclusive: opts.labMentionEndExclusive,
+    mode: opts.mode ?? "actual",
+    fromYmd: opts.fromYmd,
+    toYmd: opts.toYmd,
+    actualNotCalculatedOnly: false,
   });
-  const [attentionCount, prostheticsPendingCount, labMentionCount] =
+  const [attentionCount, prostheticsPendingCount, financeNotCalculatedCount, labMentionCount] =
     await Promise.all([
       db.order.count({ where: { AND: [scope, pendingCorrectionsWhere] } }),
       db.order.count({ where: { AND: [scope, pendingProstheticsWhere] } }),
+      db.order.count({
+        where: { AND: [scope, { financeCalculated: false }] },
+      }),
       countOrdersWithPendingKaitenLabMentionForUser(
         db,
         labMentionScope,
         opts.userId,
       ),
     ]);
-  return { attentionCount, prostheticsPendingCount, labMentionCount };
+  return {
+    attentionCount,
+    prostheticsPendingCount,
+    financeNotCalculatedCount,
+    labMentionCount,
+  };
 }
 
 function financePriority(row: FinanceOfficeOrderRow): number {
@@ -166,26 +191,38 @@ export async function fetchFinanceOfficeOrders(
   opts: {
     listTag?: string | null;
     search?: string | null;
-    start?: Date | null;
-    endExclusive?: Date | null;
+    mode?: "actual" | "period";
+    fromYmd?: string | null;
+    toYmd?: string | null;
     userId?: string | null;
   } = {},
 ): Promise<FinanceOfficeOrderRow[]> {
   const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
   const skipDueDateWindow = financeOfficeListTagSkipsDueDateWindow(parsedTag);
+  const mode = opts.mode ?? "actual";
+  const tagOverridesCalculated =
+    parsedTag?.kind === "financeCalculated" ||
+    parsedTag?.kind === "financeNotCalculated";
   const parts: Prisma.OrderWhereInput[] = [
     financeOfficeScopeWhere(tenantId, {
       search: opts.search,
-      start: skipDueDateWindow ? null : opts.start,
-      endExclusive: skipDueDateWindow ? null : opts.endExclusive,
+      mode,
+      fromYmd: opts.fromYmd,
+      toYmd: opts.toYmd,
+      skipDueDateWindow,
+      actualNotCalculatedOnly: !tagOverridesCalculated,
     }),
   ];
   if (parsedTag) {
-    parts.push(
-      parsedTag.kind === "orderAttention"
-        ? orderAttentionListSupersetWhere()
-        : listTagWhere(parsedTag),
-    );
+    if (parsedTag.kind === "edo" || parsedTag.kind === "noEdo") {
+      // Точный отбор по clinicWorksWithEdo (в т.ч. ИП врача) — после гидрации клиник.
+    } else {
+      parts.push(
+        parsedTag.kind === "orderAttention"
+          ? orderAttentionListSupersetWhere()
+          : listTagWhere(parsedTag),
+      );
+    }
   }
 
   const rows = await db.order.findMany({
@@ -220,6 +257,7 @@ export async function fetchFinanceOfficeOrders(
     bik: true,
     settlementAccount: true,
     correspondentAccount: true,
+    worksWithEdo: true,
   } as const;
 
   const [doctors, clinics, doctorsIpRequisites, constructionTypes, priceItems] =
@@ -265,17 +303,35 @@ export async function fetchFinanceOfficeOrders(
       const ip = d.ipClinicAsSource;
       if (!ip || ip.deletedAt != null) return [d.id, null] as const;
       const { deletedAt: _del, ...req } = ip;
-      return [d.id, formatCounterpartyRequisitesShortSummary(req)] as const;
+      return [
+        d.id,
+        {
+          counterpartyRequisitesText: formatCounterpartyRequisitesShortSummary(req),
+          worksWithEdo: Boolean(req.worksWithEdo),
+        },
+      ] as const;
     }),
   );
   const clinicById = new Map(
     clinics.map((x) => {
-      const { legalFullName, inn, kpp, ogrn, bankName, bik, settlementAccount, correspondentAccount, ...pub } = x;
+      const {
+        legalFullName,
+        inn,
+        kpp,
+        ogrn,
+        bankName,
+        bik,
+        settlementAccount,
+        correspondentAccount,
+        worksWithEdo,
+        ...pub
+      } = x;
       return [
         x.id,
         {
           ...pub,
           legalFullName,
+          worksWithEdo: Boolean(worksWithEdo),
           counterpartyRequisitesText: formatCounterpartyRequisitesShortSummary({
             legalFullName,
             inn,
@@ -307,9 +363,14 @@ export async function fetchFinanceOfficeOrders(
         : null,
     }));
     const clinFull = o.clinicId ? clinicById.get(o.clinicId) : undefined;
+    const privateReq = !o.clinicId ? privateReqByDoctorId.get(o.doctorId) : undefined;
     const counterpartyRequisitesText =
       clinFull?.counterpartyRequisitesText ??
-      (!o.clinicId ? (privateReqByDoctorId.get(o.doctorId) ?? null) : null);
+      privateReq?.counterpartyRequisitesText ??
+      null;
+    const clinicWorksWithEdo = clinFull
+      ? clinFull.worksWithEdo
+      : (privateReq?.worksWithEdo ?? false);
     return {
       ...rest,
       clinic: clinFull
@@ -318,8 +379,10 @@ export async function fetchFinanceOfficeOrders(
             name: clinFull.name,
             address: clinFull.address,
             legalFullName: clinFull.legalFullName,
+            worksWithEdo: clinFull.worksWithEdo,
           }
         : null,
+      clinicWorksWithEdo,
       counterpartyRequisitesText,
       doctor: doctorById.get(o.doctorId) ?? { id: o.doctorId, fullName: "—" },
       constructions: hydratedConstructions,
@@ -343,7 +406,11 @@ export async function fetchFinanceOfficeOrders(
   const exact =
     parsedTag?.kind === "orderAttention"
       ? mapped.filter((r) => r.listCompositionMismatch || r.listPendingChatCorrections)
-      : mapped;
+      : parsedTag?.kind === "edo"
+        ? mapped.filter((r) => r.clinicWorksWithEdo)
+        : parsedTag?.kind === "noEdo"
+          ? mapped.filter((r) => !r.clinicWorksWithEdo)
+          : mapped;
 
   const withMention = await hydrateOrderKaitenLabMentionHighlight(
     db,
@@ -375,7 +442,6 @@ export async function fetchFinanceOfficeOrders(
   return withCorrections.sort((a, b) => {
     const pr = financePriority(a) - financePriority(b);
     if (pr !== 0) return pr;
-    return (a.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER) -
-      (b.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER);
+    return compareOrdersByEffectiveAppointment(a, b);
   });
 }

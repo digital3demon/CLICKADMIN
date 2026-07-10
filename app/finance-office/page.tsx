@@ -6,25 +6,24 @@ import {
 } from "@/components/finance-office/FinanceOfficeOrdersTable";
 import { FinanceOfficeBankImportPanel } from "@/components/finance-office/FinanceOfficeBankImportPanel";
 import { FinanceOfficeQuickFilterChips } from "@/components/finance-office/FinanceOfficeQuickFilterChips";
-import {
-  FinanceOfficeTabNav,
-  type FinanceOfficeTab,
-} from "@/components/finance-office/FinanceOfficeTabNav";
-import { FinanceOfficePeriodForm } from "@/components/finance-office/FinanceOfficePeriodForm";
+import { FinanceOfficeModePanel } from "@/components/finance-office/FinanceOfficeModePanel";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { fetchFinanceOfficeOrders, countFinanceOfficeQuickFilterChips, financeOfficeListTagSkipsDueDateWindow } from "@/lib/fetch-finance-office-orders";
+import {
+  fetchFinanceOfficeOrders,
+  countFinanceOfficeQuickFilterChips,
+  financeOfficeListTagSkipsDueDateWindow,
+} from "@/lib/fetch-finance-office-orders";
+import {
+  parseFinanceOfficeMode,
+} from "@/lib/finance-office-list-filter";
 import {
   humanListTagLabel,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import {
-  addCalendarDaysYmd,
-  moscowShipmentDayBoundsUtc,
-  moscowShipmentInclusiveRangeBoundsUtc,
-  moscowTodayYmd,
   moscowTomorrowYmd,
   parseYmdOrNull,
 } from "@/lib/shipments-date-range";
@@ -38,11 +37,6 @@ const FINANCE_OFFICE_FRAME_ROOT =
   "!px-2 !pb-6 !pt-4 sm:!px-3 sm:!pb-7 sm:!pt-5 md:!px-4 md:!pb-8 md:!pt-6 lg:!px-4 lg:!pb-9 lg:!pt-7";
 
 const MAX_RANGE_DAYS = 366;
-
-function parseTab(raw: string | undefined): FinanceOfficeTab {
-  if (raw === "tomorrow" || raw === "period" || raw === "today") return raw;
-  return "today";
-}
 
 function rangeDaySpan(fromYmd: string, toYmd: string): number {
   const [y1, m1, d1] = fromYmd.split("-").map(Number);
@@ -58,6 +52,8 @@ function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[
     createdAt: o.createdAt.toISOString(),
     legalEntity: o.legalEntity,
     dueDate: o.dueDate?.toISOString() ?? null,
+    appointmentDate: o.appointmentDate?.toISOString() ?? null,
+    dueToAdminsAt: o.dueToAdminsAt?.toISOString() ?? null,
     kaitenCardId: o.kaitenCardId,
     kaitenColumnTitle: o.kaitenColumnTitle,
     demoKanbanColumn: o.demoKanbanColumn,
@@ -69,6 +65,7 @@ function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[
     paymentPartialRub: o.paymentPartialRub,
     adminShippedOtpr: o.adminShippedOtpr,
     financeCalculated: o.financeCalculated,
+    clinicWorksWithEdo: o.clinicWorksWithEdo,
     kaitenBlocked: o.kaitenBlocked,
     kaitenBlockReason: o.kaitenBlockReason,
     isUrgent: o.isUrgent,
@@ -107,49 +104,35 @@ export default async function FinanceOfficePage({
   const parsedTag = rawTag ? parseListTagParam(rawTag) : null;
   const rawTagInvalid = Boolean(rawTag && !parsedTag);
   const q = sp.q?.trim() || "";
-  const tab = parseTab(sp.tab);
-  const todayYmd = moscowTodayYmd();
-  const defaultFrom = addCalendarDaysYmd(todayYmd, -7);
-  const defaultTo = todayYmd;
+  const mode = parseFinanceOfficeMode(sp.tab);
   const fromRaw = parseYmdOrNull(sp.from ?? null);
   const toRaw = parseYmdOrNull(sp.to ?? null);
   let error: string | null = null;
-  let start: Date | null = null;
-  let endExclusive: Date | null = null;
   let rangeSummary: string | null = null;
 
-  if (tab === "today") {
-    const bounds = moscowShipmentDayBoundsUtc(todayYmd);
-    start = bounds.start;
-    endExclusive = bounds.endExclusive;
-    rangeSummary = `Срок лаборатории (МСК), окно ${todayYmd} 00:00 — ${addCalendarDaysYmd(todayYmd, 1)} 12:00`;
-  } else if (tab === "tomorrow") {
-    const ymd = moscowTomorrowYmd();
-    const bounds = moscowShipmentDayBoundsUtc(ymd);
-    start = bounds.start;
-    endExclusive = bounds.endExclusive;
-    rangeSummary = `Срок лаборатории (МСК), окно ${ymd} 00:00 — ${addCalendarDaysYmd(ymd, 1)} 12:00`;
-  } else if (fromRaw && toRaw) {
-    if (fromRaw > toRaw) {
-      error = "Дата «с» не может быть позже даты «по».";
-    } else if (rangeDaySpan(fromRaw, toRaw) > MAX_RANGE_DAYS) {
-      error = `Максимальный период — ${MAX_RANGE_DAYS} дней. Сузьте диапазон.`;
-    } else {
-      const bounds = moscowShipmentInclusiveRangeBoundsUtc(fromRaw, toRaw);
-      start = bounds.start;
-      endExclusive = bounds.endExclusive;
-      rangeSummary = `Срок лаборатории (МСК), окна от ${fromRaw} до ${addCalendarDaysYmd(toRaw, 1)} 12:00`;
-    }
+  if (mode === "actual") {
+    rangeSummary = `Актуальное: непросчитанные с датой записи до завтра (${moscowTomorrowYmd()} МСК), этап «Производство» и далее`;
+  } else if (!toRaw) {
+    error = "Укажите дату «по» и нажмите «Показать».";
+  } else if (fromRaw && fromRaw > toRaw) {
+    error = "Дата «с» не может быть позже даты «по».";
+  } else if (fromRaw && rangeDaySpan(fromRaw, toRaw) > MAX_RANGE_DAYS) {
+    error = `Максимальный период — ${MAX_RANGE_DAYS} дней. Сузьте диапазон.`;
+  } else if (fromRaw) {
+    rangeSummary = `Дата записи (МСК): с ${fromRaw} по ${toRaw}, этап «Производство» и далее`;
+  } else {
+    rangeSummary = `Дата записи (МСК): по ${toRaw} (включая прошлые), этап «Производство» и далее`;
   }
 
-  const shouldFetch = tab !== "period" || Boolean(start && endExclusive && !error);
+  const shouldFetch = mode === "actual" || (mode === "period" && Boolean(toRaw) && !error);
   const ordersPrisma = shouldFetch ? await getOrdersPrisma() : null;
   const orders = ordersPrisma
     ? await fetchFinanceOfficeOrders(ordersPrisma, tenantId, {
         listTag: rawTagInvalid ? null : rawTag,
         search: q,
-        start,
-        endExclusive,
+        mode,
+        fromYmd: mode === "period" ? fromRaw : null,
+        toYmd: mode === "period" ? toRaw : null,
         userId: session?.sub,
       })
     : [];
@@ -158,18 +141,24 @@ export default async function FinanceOfficePage({
       ? await countFinanceOfficeQuickFilterChips(ordersPrisma, tenantId, {
           search: q,
           userId: session?.sub,
-          labMentionStart: start,
-          labMentionEndExclusive: endExclusive,
+          mode,
+          fromYmd: mode === "period" ? fromRaw : null,
+          toYmd: mode === "period" ? toRaw : null,
         })
-      : { attentionCount: 0, prostheticsPendingCount: 0, labMentionCount: 0 };
+      : {
+          attentionCount: 0,
+          prostheticsPendingCount: 0,
+          financeNotCalculatedCount: 0,
+          labMentionCount: 0,
+        };
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;
   const tagSkipsDueDate = financeOfficeListTagSkipsDueDateWindow(parsedTag);
   const listRangeSummary =
     tagSkipsDueDate && tagLabel
-      ? `${tagLabel} — без ограничения по сроку лаборатории`
+      ? `${tagLabel} — без ограничения по дате записи (производство+)`
       : rangeSummary;
   const exportParams = new URLSearchParams();
-  exportParams.set("tab", tab);
+  exportParams.set("tab", mode);
   if (fromRaw) exportParams.set("from", fromRaw);
   if (toRaw) exportParams.set("to", toRaw);
   if (rawTag && !rawTagInvalid) exportParams.set("tag", rawTag);
@@ -178,7 +167,7 @@ export default async function FinanceOfficePage({
   const searchControls = (
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
       <form action="/finance-office" className="flex min-w-0 flex-1 flex-col gap-2 sm:min-w-[260px] sm:flex-row">
-        <input type="hidden" name="tab" value={tab} />
+        <input type="hidden" name="tab" value={mode} />
         {fromRaw ? <input type="hidden" name="from" value={fromRaw} /> : null}
         {toRaw ? <input type="hidden" name="to" value={toRaw} /> : null}
         {rawTag && !rawTagInvalid ? <input type="hidden" name="tag" value={rawTag} /> : null}
@@ -205,7 +194,7 @@ export default async function FinanceOfficePage({
         {(rawTag || q) ? (
           <Link
             href={financeOfficeListHref({
-              tab,
+              tab: mode,
               from: fromRaw,
               to: toRaw,
             })}
@@ -227,33 +216,18 @@ export default async function FinanceOfficePage({
             </h1>
             <p className="mt-2 hidden max-w-4xl text-sm leading-snug text-[var(--text-secondary)] md:block">
               Контроль просчёта, корректировок, заказа протетики и оплат.
-              Банковская выгрузка сначала показывается построчно для проверки,
-              затем применяется по кнопке «Сохранить».
+              Список — с этапа «Производство» и далее (без скана, «к исполнению» и согласования).
             </p>
           </div>
-          <FinanceOfficeTabNav
-            active={tab}
-            periodFrom={fromRaw}
-            periodTo={toRaw}
+          <FinanceOfficeModePanel
+            mode={mode}
+            appliedFrom={fromRaw}
+            appliedTo={toRaw}
             listTag={rawTagInvalid ? null : rawTag}
             q={q}
           />
           <div className="space-y-2">
-            {tab === "period" ? (
-              <FinanceOfficePeriodForm
-                appliedFrom={fromRaw}
-                appliedTo={toRaw}
-                defaultFrom={defaultFrom}
-                defaultTo={defaultTo}
-                preserveListTag={rawTagInvalid ? null : rawTag}
-                q={q}
-                receptionSummary={
-                  shouldFetch && listRangeSummary
-                    ? `${listRangeSummary} · нарядов: ${orders.length}`
-                    : null
-                }
-              />
-            ) : listRangeSummary ? (
+            {listRangeSummary && shouldFetch && !error ? (
               <p className="text-sm font-medium text-[var(--text-body)]">
                 {listRangeSummary} · нарядов: {orders.length}
               </p>
@@ -277,7 +251,7 @@ export default async function FinanceOfficePage({
             </span>
             <Link
               href={financeOfficeListHref({
-                tab,
+                tab: mode,
                 from: fromRaw,
                 to: toRaw,
                 q,
@@ -291,10 +265,6 @@ export default async function FinanceOfficePage({
         {error ? (
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
             {error}
-          </p>
-        ) : tab === "period" && !shouldFetch ? (
-          <p className="text-sm text-[var(--text-secondary)]">
-            Укажите даты и нажмите «Показать», чтобы загрузить список ФинОтдела.
           </p>
         ) : null}
       </div>
@@ -312,18 +282,19 @@ export default async function FinanceOfficePage({
           <FinanceOfficeQuickFilterChips
             attentionCount={chipCounts.attentionCount}
             prostheticsPendingCount={chipCounts.prostheticsPendingCount}
+            financeNotCalculatedCount={chipCounts.financeNotCalculatedCount}
             labMentionCount={chipCounts.labMentionCount}
             activeFilter={parsedTag}
-            tab={tab}
+            tab={mode}
             periodFrom={fromRaw}
             periodTo={toRaw}
             q={q}
           />
         ) : null}
         <FinanceOfficeOrdersTable
-          orders={error || (tab === "period" && !shouldFetch) ? [] : orders.map(serializeOrder)}
+          orders={error || !shouldFetch ? [] : orders.map(serializeOrder)}
           activeTag={tagLabel}
-          tab={tab}
+          tab={mode}
           periodFrom={fromRaw}
           periodTo={toRaw}
           q={q}

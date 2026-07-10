@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, UserRole } from "@prisma/client";
 import type { OrderChatToastRow } from "@/lib/order-chat-toasts.server";
+import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 
 const LAB_MENTION_ACK_ROLES: UserRole[] = [
   "ADMINISTRATOR",
@@ -129,20 +130,37 @@ export async function fetchInboxLabMentionToastRows(
       text: true,
       authorLabel: true,
       createdAt: true,
-      order: { select: { orderNumber: true } },
+      order: {
+        select: {
+          orderNumber: true,
+          patientName: true,
+          doctor: { select: { fullName: true } },
+        },
+      },
     },
   });
   if (!rows.length) return [];
   const latestByOrder = new Map<
     string,
-    { createdAt: Date; text: string; authorLabel: string | null; orderNumber: string }
+    {
+      createdAt: Date;
+      text: string;
+      authorLabel: string | null;
+      orderNumber: string;
+      patientName: string | null;
+      doctorName: string | null;
+    }
   >();
   for (const row of rows as Array<{
     orderId: string;
     text: string;
     authorLabel: string | null;
     createdAt: Date;
-    order: { orderNumber: string };
+    order: {
+      orderNumber: string;
+      patientName: string | null;
+      doctor: { fullName: string };
+    };
   }>) {
     if (!latestByOrder.has(row.orderId)) {
       latestByOrder.set(row.orderId, {
@@ -150,6 +168,10 @@ export async function fetchInboxLabMentionToastRows(
         text: row.text,
         authorLabel: row.authorLabel ?? null,
         orderNumber: row.order.orderNumber,
+        patientName: row.order.patientName
+          ? personNameSurnameInitials(row.order.patientName)
+          : null,
+        doctorName: personNameSurnameInitials(row.order.doctor.fullName) || null,
       });
     }
   }
@@ -163,6 +185,8 @@ export async function fetchInboxLabMentionToastRows(
       authorLabel: row.authorLabel,
       orderId,
       orderNumber: row.orderNumber,
+      patientName: row.patientName,
+      doctorName: row.doctorName,
       createdAt: row.createdAt.toISOString(),
     });
   }

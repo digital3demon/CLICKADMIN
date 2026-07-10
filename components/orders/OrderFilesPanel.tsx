@@ -58,18 +58,22 @@ function OrderAttachmentThumbButton({
   href,
   fileName,
   onOpen,
+  size = "sm",
 }: {
   href: string;
   fileName: string;
   onOpen: () => void;
+  size?: "sm" | "md";
 }) {
   const [broken, setBroken] = useState(false);
+  const thumbClass =
+    size === "md" ? "h-14 w-14 sm:h-16 sm:w-16" : "h-11 w-11 sm:h-12 sm:w-12";
   if (broken) {
     return (
       <button
         type="button"
         onClick={onOpen}
-        className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--card-border)] bg-[var(--surface-muted)] text-[0.65rem] leading-tight text-[var(--text-muted)] sm:h-12 sm:w-12"
+        className={`mt-0.5 flex ${thumbClass} shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--card-border)] bg-[var(--surface-muted)] text-[0.65rem] leading-tight text-[var(--text-muted)]`}
         title={`Просмотр: ${fileName}`}
         aria-label={`Просмотр: ${fileName}`}
       >
@@ -90,7 +94,7 @@ function OrderAttachmentThumbButton({
         src={href}
         alt=""
         loading="lazy"
-        className="h-11 w-11 object-cover sm:h-12 sm:w-12"
+        className={`${thumbClass} object-cover`}
         onError={() => setBroken(true)}
       />
     </button>
@@ -113,10 +117,11 @@ function OrderAttachmentsImageViewerOverlay({
   const count = state.images.length;
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-3 sm:p-5"
+      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-3 sm:p-5"
       role="dialog"
       aria-modal="true"
       aria-label="Просмотр изображения"
+      data-order-image-viewer
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -191,6 +196,10 @@ export function OrderFilesPanel({
   orderId,
   orderNumber,
   listenPaste,
+  showUploadZone = true,
+  allowDelete = true,
+  thumbSize = "sm",
+  onImageViewerOpenChange,
   pendingFiles,
   pendingLoadingFiles = [],
   onPendingChange,
@@ -201,6 +210,12 @@ export function OrderFilesPanel({
   orderNumber?: string | null;
   /** Вешать обработчик вставки на window (только если в буфере есть файлы) */
   listenPaste: boolean;
+  /** Показывать зону drag-and-drop / Ctrl+V (в чате — выкл., загрузка внизу) */
+  showUploadZone?: boolean;
+  /** Кнопка «Удалить» у вложений */
+  allowDelete?: boolean;
+  thumbSize?: "sm" | "md";
+  onImageViewerOpenChange?: (open: boolean) => void;
   pendingFiles?: File[];
   pendingLoadingFiles?: PendingLoadingFile[];
   onPendingChange?: (files: File[]) => void;
@@ -521,6 +536,10 @@ export function OrderFilesPanel({
   );
 
   useEffect(() => {
+    onImageViewerOpenChange?.(imageViewer != null);
+  }, [imageViewer, onImageViewerOpenChange]);
+
+  useEffect(() => {
     if (!imageViewer) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -559,6 +578,7 @@ export function OrderFilesPanel({
 
   return (
     <div ref={panelRootRef} className="space-y-4">
+      {showUploadZone ? (
       <div
         tabIndex={0}
         role="group"
@@ -598,6 +618,7 @@ export function OrderFilesPanel({
           Перетащите файлы в рамку или сфокусируйте её (Tab) и вставьте из буфера
         </p>
       </div>
+      ) : null}
 
       {loadError ? (
         <p className="text-sm text-red-600">{loadError}</p>
@@ -679,6 +700,7 @@ export function OrderFilesPanel({
                     <OrderAttachmentThumbButton
                       href={href}
                       fileName={a.fileName}
+                      size={thumbSize}
                       onOpen={() => openImageViewer(a.id)}
                     />
                   ) : null}
@@ -719,6 +741,7 @@ export function OrderFilesPanel({
                       </button>
                     ) : null}
                   </div>
+                  {allowDelete ? (
                   <button
                     type="button"
                     disabled={busy || kaitenPushId != null}
@@ -727,6 +750,7 @@ export function OrderFilesPanel({
                   >
                     Удалить
                   </button>
+                  ) : null}
                 </li>
               );
             })}

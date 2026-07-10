@@ -921,6 +921,12 @@ export default async function OrdersPage({
                         <OrderListOrderChatCell
                           orderId={o.id}
                           orderNumber={o.orderNumber}
+                          patientName={
+                            o.patientName
+                              ? personNameSurnameInitials(o.patientName)
+                              : undefined
+                          }
+                          doctorName={personNameSurnameInitials(o.doctor.fullName)}
                           labMentionHighlight={o.listKaitenLabMentionHighlight}
                           embedded
                         />
@@ -965,6 +971,12 @@ export default async function OrdersPage({
                   <OrderListOrderChatCell
                     orderId={o.id}
                     orderNumber={o.orderNumber}
+                    patientName={
+                      o.patientName
+                        ? personNameSurnameInitials(o.patientName)
+                        : undefined
+                    }
+                    doctorName={personNameSurnameInitials(o.doctor.fullName)}
                     labMentionHighlight={o.listKaitenLabMentionHighlight}
                   />
                   <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-0.5 sm:py-1.5">

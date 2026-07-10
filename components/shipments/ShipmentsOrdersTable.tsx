@@ -394,6 +394,8 @@ export function ShipmentsOrdersTable({
                   <OrderListOrderChatCell
                     orderId={o.id}
                     orderNumber={o.orderNumber}
+                    patientName={patientName || undefined}
+                    doctorName={doctorName || undefined}
                     labMentionHighlight={o.listKaitenLabMentionHighlight}
                   />
                   <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:py-1.5 print:hidden">
@@ -605,6 +607,8 @@ export function ShipmentsOrdersTable({
                           <OrderListOrderChatCell
                             orderId={o.id}
                             orderNumber={o.orderNumber}
+                            patientName={patientName || undefined}
+                            doctorName={doctorName || undefined}
                             labMentionHighlight={o.listKaitenLabMentionHighlight}
                             embedded
                           />

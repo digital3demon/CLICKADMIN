@@ -91,6 +91,21 @@ function appointmentInRange(
   };
 }
 
+/** Дата записи до endExclusive (appointmentDate ?? dueToAdminsAt; без даты — входит). */
+export function ordersShipmentAppointmentBeforeEndExclusive(
+  endExclusive: Date,
+): Prisma.OrderWhereInput {
+  return appointmentBeforeEndExclusive(endExclusive);
+}
+
+/** Дата записи в [start, endExclusive). */
+export function ordersShipmentAppointmentInRange(
+  start: Date,
+  endExclusive: Date,
+): Prisma.OrderWhereInput {
+  return appointmentInRange(start, endExclusive);
+}
+
 /** Проверка попадания наряда в верхнюю границу «актуальных» (для тестов и валидации). */
 export function orderMatchesShipmentActualAppointment(
   order: {

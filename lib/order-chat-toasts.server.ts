@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { kaitenLabMentionPendingForUser } from "@/lib/order-kaiten-lab-mention-pending";
+import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 
 export type OrderChatToastRow = {
   id: string;
@@ -7,6 +8,8 @@ export type OrderChatToastRow = {
   authorLabel: string | null;
   orderId: string;
   orderNumber: string;
+  patientName: string | null;
+  doctorName: string | null;
   createdAt: string;
 };
 
@@ -18,6 +21,8 @@ const LAB_MENTION_ACK_ROLES = [
 type ChatToastCandidate = {
   id: string;
   orderNumber: string;
+  patientName: string | null;
+  doctor: { fullName: string };
   kaitenLabMentionSignalAt: Date | null;
   kaitenLabMentionToastAuthor?: string | null;
   kaitenLabMentionToastText?: string | null;
@@ -52,6 +57,8 @@ async function fetchChatToastCandidates(
       select: {
         id: true,
         orderNumber: true,
+        patientName: true,
+        doctor: { select: { fullName: true } },
         kaitenLabMentionSignalAt: true,
         kaitenLabMentionToastAuthor: true,
         kaitenLabMentionToastText: true,
@@ -66,6 +73,8 @@ async function fetchChatToastCandidates(
       select: {
         id: true,
         orderNumber: true,
+        patientName: true,
+        doctor: { select: { fullName: true } },
         kaitenLabMentionSignalAt: true,
       },
     });
@@ -130,6 +139,10 @@ export async function fetchOrderChatToastRows(
       authorLabel: c.kaitenLabMentionToastAuthor?.trim() || null,
       orderId: c.id,
       orderNumber: c.orderNumber,
+      patientName: c.patientName
+        ? personNameSurnameInitials(c.patientName)
+        : null,
+      doctorName: personNameSurnameInitials(c.doctor.fullName) || null,
       createdAt: signalAt.toISOString(),
     });
   }

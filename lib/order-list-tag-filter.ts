@@ -42,6 +42,10 @@ export const LIST_TAG_PAYMENT_RECON = "payment-reconciliation";
 export const LIST_TAG_PAYMENT_RECON_PAID = "payment-reconciliation-paid";
 export const LIST_TAG_FINANCE_CALCULATED = "finance-calculated";
 export const LIST_TAG_FINANCE_NOT_CALCULATED = "finance-not-calculated";
+/** Клиника работает по ЭДО (`Clinic.worksWithEdo`) */
+export const LIST_TAG_EDO = "edo";
+/** Клиника без ЭДО или наряд без клиники */
+export const LIST_TAG_NO_EDO = "no-edo";
 
 /** @deprecated Фильтр по статусу заказа CRM отключён в UI; ключ оставлен для старых ссылок. */
 export function listTagOrderStatus(status: OrderStatus): string {
@@ -89,6 +93,8 @@ export type ParsedListTag =
   | { kind: "paymentReconciliationPaid" }
   | { kind: "financeCalculated" }
   | { kind: "financeNotCalculated" }
+  | { kind: "edo" }
+  | { kind: "noEdo" }
   | { kind: "custom"; label: string };
 
 const KAITEN_COLUMN_TAG_MAX_LEN = 500;
@@ -136,6 +142,8 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t === LIST_TAG_PAYMENT_RECON_PAID) return { kind: "paymentReconciliationPaid" };
   if (t === LIST_TAG_FINANCE_CALCULATED) return { kind: "financeCalculated" };
   if (t === LIST_TAG_FINANCE_NOT_CALCULATED) return { kind: "financeNotCalculated" };
+  if (t === LIST_TAG_EDO) return { kind: "edo" };
+  if (t === LIST_TAG_NO_EDO) return { kind: "noEdo" };
 
   if (t.startsWith("k:")) {
     try {
@@ -233,6 +241,15 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
       return { financeCalculated: true };
     case "financeNotCalculated":
       return { financeCalculated: false };
+    case "edo":
+      return { clinic: { worksWithEdo: true, deletedAt: null } };
+    case "noEdo":
+      return {
+        OR: [
+          { clinicId: null },
+          { clinic: { worksWithEdo: false } },
+        ],
+      };
     case "custom":
       return {
         listCustomTags: { some: { label: parsed.label } },
@@ -291,6 +308,10 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
       return "Просчитано";
     case "financeNotCalculated":
       return "Не просчитано";
+    case "edo":
+      return "ЭДО";
+    case "noEdo":
+      return "БЕЗ ЭДО";
     case "custom":
       return parsed.label;
   }
@@ -402,6 +423,34 @@ export function relatedOrdersListTagQuickFilters(
         {
           label: humanListTagLabel({ kind: "invoice" }),
           tag: LIST_TAG_INVOICE,
+        },
+      ];
+    case "financeCalculated":
+      return [
+        {
+          label: humanListTagLabel({ kind: "financeNotCalculated" }),
+          tag: LIST_TAG_FINANCE_NOT_CALCULATED,
+        },
+      ];
+    case "financeNotCalculated":
+      return [
+        {
+          label: humanListTagLabel({ kind: "financeCalculated" }),
+          tag: LIST_TAG_FINANCE_CALCULATED,
+        },
+      ];
+    case "edo":
+      return [
+        {
+          label: humanListTagLabel({ kind: "noEdo" }),
+          tag: LIST_TAG_NO_EDO,
+        },
+      ];
+    case "noEdo":
+      return [
+        {
+          label: humanListTagLabel({ kind: "edo" }),
+          tag: LIST_TAG_EDO,
         },
       ];
     default:

@@ -22,6 +22,8 @@ export type FinanceOfficeOrderTableRow = {
   createdAt: string;
   legalEntity: string | null;
   dueDate: string | null;
+  appointmentDate: string | null;
+  dueToAdminsAt: string | null;
   kaitenCardId: number | null;
   kaitenColumnTitle: string | null;
   demoKanbanColumn: string | null;
@@ -33,6 +35,7 @@ export type FinanceOfficeOrderTableRow = {
   paymentPartialRub: number | null;
   adminShippedOtpr: boolean;
   financeCalculated: boolean;
+  clinicWorksWithEdo: boolean;
   kaitenBlocked: boolean;
   kaitenBlockReason: string | null;
   isUrgent: boolean;
@@ -149,7 +152,7 @@ export function FinanceOfficeOrdersTable({
               <th className="px-2 py-2 text-center">Клиника</th>
               <th className="px-2 py-2 text-center">Врач</th>
               <th className="px-2 py-2 text-center">Пациент</th>
-              <th className="px-2 py-2 text-center">Лаборатория</th>
+              <th className="px-2 py-2 text-center">Запись</th>
               <th className="w-[11rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Реквизиты</th>
               <th className="w-[7rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Наше юрлицо</th>
               <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
@@ -164,7 +167,9 @@ export function FinanceOfficeOrdersTable({
               const patientName = o.patientName
                 ? personNameSurnameInitials(o.patientName)
                 : "";
-              const labDate = formatFinanceCardDate(o.dueDate);
+              const labDate = formatFinanceCardDate(
+                o.appointmentDate ?? o.dueToAdminsAt,
+              );
               const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
               const kaitenStatusFilterHref = kaitenColTrimmed
                 ? financeOfficeListHref({
@@ -178,7 +183,7 @@ export function FinanceOfficeOrdersTable({
               const rowClass = workSent
                 ? ORDER_SHIPPED_ROW_CLASS
                 : "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
-              const renderTagsCell = (opts?: { omitKaitenColumnTag?: boolean }) => (
+              const renderTagsCell = () => (
                 <OrderListTagsCell
                   orderId={o.id}
                   pageSize={500}
@@ -204,7 +209,8 @@ export function FinanceOfficeOrdersTable({
                   customTags={o.listCustomTags}
                   financeOfficeFilterContext={{ tab, periodFrom, periodTo, q }}
                   financeCalculated={o.financeCalculated}
-                  omitKaitenColumnTag={opts?.omitKaitenColumnTag}
+                  clinicWorksWithEdo={o.clinicWorksWithEdo}
+                  omitKaitenColumnTag
                 />
               );
               return (
@@ -229,12 +235,28 @@ export function FinanceOfficeOrdersTable({
                   <OrderListOrderChatCell
                     orderId={o.id}
                     orderNumber={o.orderNumber}
+                    patientName={patientName || undefined}
+                    doctorName={doctorName || undefined}
                     labMentionHighlight={o.listKaitenLabMentionHighlight}
                   />
                   <td className="whitespace-nowrap px-2 py-2 font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 max-xl:bg-[var(--card-bg)] max-xl:shadow-[1px_0_0_var(--card-border)]">
-                    <Link href={orderPathById(o.id)} className="text-[var(--sidebar-blue)] hover:underline">
-                      {o.orderNumber}
-                    </Link>
+                    <div className="flex min-h-[2.5rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
+                      <Link
+                        href={orderPathById(o.id)}
+                        className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
+                        title={`${o.orderNumber} — открыть наряд`}
+                      >
+                        {o.orderNumber}
+                      </Link>
+                      <OrderListKaitenColumnTag
+                        kaitenCardId={o.kaitenCardId}
+                        demoKanbanColumn={o.demoKanbanColumn}
+                        demoCardTypeName={o.kaitenCardType?.name ?? null}
+                        kaitenColumnTitle={o.kaitenColumnTitle}
+                        filterHref={kaitenStatusFilterHref}
+                        placement="underOrderNumber"
+                      />
+                    </div>
                   </td>
                   <td className="max-w-[13rem] px-2 py-2">
                     {o.clinic ? (
@@ -256,8 +278,9 @@ export function FinanceOfficeOrdersTable({
                   <td className="whitespace-nowrap px-2 py-2 text-[var(--text-secondary)]">
                     <OrderListDueCell
                       orderId={o.id}
-                      dueIso={o.dueDate}
+                      dueIso={o.appointmentDate ?? o.dueToAdminsAt}
                       createdAtIso={o.createdAt}
+                      variant="appointment"
                     />
                   </td>
                   <td className="w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
@@ -326,6 +349,8 @@ export function FinanceOfficeOrdersTable({
                         <OrderListOrderChatCell
                           orderId={o.id}
                           orderNumber={o.orderNumber}
+                          patientName={patientName || undefined}
+                          doctorName={doctorName || undefined}
                           labMentionHighlight={o.listKaitenLabMentionHighlight}
                           embedded
                         />
@@ -358,7 +383,7 @@ export function FinanceOfficeOrdersTable({
                       </div>
 
                       <div className="mt-2 text-xs text-[var(--text-secondary)] [&_.order-list-tags-pack]:items-center">
-                        {renderTagsCell({ omitKaitenColumnTag: true })}
+                        {renderTagsCell()}
                       </div>
                     </div>
                   </td>

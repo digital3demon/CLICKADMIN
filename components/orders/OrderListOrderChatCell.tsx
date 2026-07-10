@@ -27,11 +27,15 @@ function ChatBubbleIcon({ className }: { className?: string }) {
 export function OrderListOrderChatCell({
   orderId,
   orderNumber,
+  patientName,
+  doctorName,
   labMentionHighlight,
   embedded = false,
 }: {
   orderId: string;
   orderNumber: string;
+  patientName?: string | null;
+  doctorName?: string | null;
   /** Показывать подсветку «упомянули лабораторию» (БД + ваш ack). */
   labMentionHighlight: boolean;
   /** Встроенный режим — без обёртки `<td>` (объединённая колонка таблицы). */
@@ -68,6 +72,8 @@ export function OrderListOrderChatCell({
       <OrderListKaitenChatModal
         orderId={orderId}
         orderNumber={orderNumber}
+        patientName={patientName}
+        doctorName={doctorName}
         open={open}
         onClose={() => setOpen(false)}
       />

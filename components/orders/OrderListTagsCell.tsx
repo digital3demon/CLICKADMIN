@@ -20,11 +20,13 @@ import {
   type KaitenUnblockFromListTagResult,
 } from "@/lib/custom-list-tag-kaiten-unblock-label";
 import {
+  LIST_TAG_EDO,
   LIST_TAG_FINANCE_CALCULATED,
   LIST_TAG_FINANCE_NOT_CALCULATED,
   LIST_TAG_INVOICE,
   LIST_TAG_INVOICE_PRINTED,
   LIST_TAG_KAITEN_BLOCKED,
+  LIST_TAG_NO_EDO,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PAYMENT_EXPECTED,
   LIST_TAG_PAYMENT_PAID,
@@ -124,6 +126,8 @@ type Props = {
     q?: string | null;
   } | null;
   financeCalculated?: boolean | null;
+  /** ЭДО клиники (или ИП врача); только в ФинОтделе. */
+  clinicWorksWithEdo?: boolean | null;
   /** На mobile пилюля колонки Kaiten уже под № наряда — не дублировать в облаке тегов. */
   omitKaitenColumnTag?: boolean;
 };
@@ -419,6 +423,7 @@ export function OrderListTagsCell({
   shipmentsFilterContext = null,
   financeOfficeFilterContext = null,
   financeCalculated = null,
+  clinicWorksWithEdo = null,
   omitKaitenColumnTag = false,
 }: Props) {
   const router = useRouter();
@@ -989,6 +994,31 @@ export function OrderListTagsCell({
       });
     }
 
+    if (financeOfficeFilterContext && clinicWorksWithEdo != null) {
+      const edoTag = clinicWorksWithEdo ? LIST_TAG_EDO : LIST_TAG_NO_EDO;
+      items.push({
+        key: "clinic-edo",
+        slot: "small",
+        node: (
+          <Link
+            href={href(edoTag)}
+            title={
+              clinicWorksWithEdo
+                ? "Клиника работает по ЭДО — показать такие наряды"
+                : "Клиника без ЭДО — показать такие наряды"
+            }
+            className={`rounded-full border font-semibold shadow-sm outline-none focus-visible:outline-none ${
+              clinicWorksWithEdo
+                ? "border-teal-300 bg-teal-50 text-teal-950 dark:border-teal-800/60 dark:bg-teal-950/40 dark:text-teal-100"
+                : "border-slate-300 bg-slate-50 text-slate-800 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-100"
+            } ${padTable}`}
+          >
+            {clinicWorksWithEdo ? "ЭДО" : "БЕЗ ЭДО"}
+          </Link>
+        ),
+      });
+    }
+
     if (isUrgent) {
       items.push({
         key: "urgent",
@@ -1171,6 +1201,7 @@ export function OrderListTagsCell({
     busy,
     customTags,
     financeCalculated,
+    clinicWorksWithEdo,
     financeOfficeFilterContext,
     hasInvoiceAttachment,
     invoicePrinted,

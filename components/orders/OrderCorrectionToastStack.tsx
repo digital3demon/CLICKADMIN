@@ -19,6 +19,8 @@ type OrderToastRow = {
   authorLabel?: string | null;
   orderId: string;
   orderNumber: string;
+  patientName?: string | null;
+  doctorName?: string | null;
   createdAt: string;
 };
 
@@ -186,6 +188,8 @@ export function OrderCorrectionToastStack() {
   const [chatTarget, setChatTarget] = useState<{
     orderId: string;
     orderNumber: string;
+    patientName?: string | null;
+    doctorName?: string | null;
   } | null>(null);
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
   const isKanban = pathname === "/kanban" || pathname.startsWith("/kanban/");
@@ -394,7 +398,12 @@ export function OrderCorrectionToastStack() {
   );
 
   const openChatFromToast = useCallback((row: OrderToastRow) => {
-    setChatTarget({ orderId: row.orderId, orderNumber: row.orderNumber });
+    setChatTarget({
+      orderId: row.orderId,
+      orderNumber: row.orderNumber,
+      patientName: row.patientName,
+      doctorName: row.doctorName,
+    });
   }, []);
 
   const openOrderFromToast = useCallback(
@@ -408,6 +417,8 @@ export function OrderCorrectionToastStack() {
     <OrderListKaitenChatModal
       orderId={chatTarget.orderId}
       orderNumber={chatTarget.orderNumber}
+      patientName={chatTarget.patientName}
+      doctorName={chatTarget.doctorName}
       open
       onClose={() => setChatTarget(null)}
     />

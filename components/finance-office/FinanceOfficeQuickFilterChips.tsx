@@ -2,6 +2,7 @@ import Link from "next/link";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import {
   humanListTagLabel,
+  LIST_TAG_FINANCE_NOT_CALCULATED,
   LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
@@ -11,6 +12,7 @@ import {
 export function FinanceOfficeQuickFilterChips({
   attentionCount,
   prostheticsPendingCount,
+  financeNotCalculatedCount,
   labMentionCount,
   activeFilter = null,
   tab,
@@ -20,6 +22,7 @@ export function FinanceOfficeQuickFilterChips({
 }: {
   attentionCount: number;
   prostheticsPendingCount: number;
+  financeNotCalculatedCount: number;
   labMentionCount: number;
   activeFilter?: ParsedListTag | null;
   tab: string;
@@ -37,6 +40,7 @@ export function FinanceOfficeQuickFilterChips({
   const showRow =
     attentionCount > 0 ||
     prostheticsPendingCount > 0 ||
+    financeNotCalculatedCount > 0 ||
     labMentionCount > 0 ||
     activeFilter != null;
 
@@ -46,6 +50,8 @@ export function FinanceOfficeQuickFilterChips({
     attentionCount > 0 || activeFilter?.kind === "orderAttention";
   const showProsthetics =
     prostheticsPendingCount > 0 || activeFilter?.kind === "prostheticsPending";
+  const showNotCalculated =
+    financeNotCalculatedCount > 0 || activeFilter?.kind === "financeNotCalculated";
   const showChat =
     labMentionCount > 0 || activeFilter?.kind === "kaitenLabMention";
 
@@ -91,6 +97,27 @@ export function FinanceOfficeQuickFilterChips({
             </span>
             <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
               {prostheticsPendingCount}
+            </span>
+          </Link>
+        ) : null}
+        {showNotCalculated ? (
+          <Link
+            href={financeOfficeListHref({
+              ...listCtx,
+              tag: LIST_TAG_FINANCE_NOT_CALCULATED,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "financeNotCalculated"
+                ? "border-orange-400/90 bg-orange-100 text-orange-950 ring-2 ring-orange-500/85 dark:border-orange-700 dark:bg-orange-950/45 dark:text-orange-100 dark:ring-orange-500/70"
+                : "border-orange-300/70 bg-orange-100/70 text-orange-950 hover:bg-orange-100 dark:border-orange-800/60 dark:bg-orange-950/35 dark:text-orange-100 dark:hover:bg-orange-950/50"
+            }`}
+            title="Наряды без отметки «Просчитано» (по всем активным нарядам)"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              Не просчитано
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {financeNotCalculatedCount}
             </span>
           </Link>
         ) : null}

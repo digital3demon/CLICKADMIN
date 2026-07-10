@@ -41,4 +41,12 @@ describe("parseListTagParam / urgent", () => {
   it("listTagUrgentCoefficient falls back for invalid", () => {
     expect(listTagUrgentCoefficient(Number.NaN)).toBe("urgent");
   });
+
+  it("parses finance and EDO tags", () => {
+    expect(parseListTagParam("finance-not-calculated")).toEqual({
+      kind: "financeNotCalculated",
+    });
+    expect(parseListTagParam("edo")).toEqual({ kind: "edo" });
+    expect(parseListTagParam("no-edo")).toEqual({ kind: "noEdo" });
+  });
 });
