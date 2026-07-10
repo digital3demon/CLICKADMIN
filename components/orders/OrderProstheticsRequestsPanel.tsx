@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { PROSTHETICS_ARRIVED_STATUS_LABEL } from "@/lib/corrections-history";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatOrderChatSourceCaption } from "@/lib/order-chat-trigger-author";
 
@@ -347,11 +348,17 @@ export function OrderProstheticsRequestsPanel({
                   <p className="mt-0.5 text-[0.6rem] text-[var(--text-muted)]">
                     {srcLabel(c)}
                   </p>
-                  <p className="mt-0.5 text-[0.6rem] text-[var(--text-muted)]">
+                  <p
+                    className={`mt-0.5 text-[0.6rem] ${
+                      c.arrivedAt
+                        ? "font-semibold text-emerald-700 dark:text-emerald-300"
+                        : "text-[var(--text-muted)]"
+                    }`}
+                  >
                     {c.rejectedAt
                       ? "Отклонено"
                       : c.arrivedAt
-                        ? "Пришла"
+                        ? PROSTHETICS_ARRIVED_STATUS_LABEL
                         : c.resolvedAt
                           ? "В пути"
                           : ""}

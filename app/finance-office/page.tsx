@@ -7,6 +7,7 @@ import {
 import { FinanceOfficeBankImportPanel } from "@/components/finance-office/FinanceOfficeBankImportPanel";
 import { FinanceOfficeQuickFilterChips } from "@/components/finance-office/FinanceOfficeQuickFilterChips";
 import { FinanceOfficeModePanel } from "@/components/finance-office/FinanceOfficeModePanel";
+import { CorrectionsHistoryActionCard } from "@/components/orders/CorrectionsHistoryActionCard";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
@@ -152,7 +153,7 @@ export default async function FinanceOfficePage({
   const exportHref = `/api/finance-office/export?${exportParams.toString()}`;
   const searchControls = (
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-      <form action="/finance-office" className="flex min-w-0 flex-1 flex-col gap-2 sm:min-w-[260px] sm:flex-row">
+      <form action="/finance-office" className="flex min-w-0 max-w-xl flex-1 flex-col gap-2 sm:min-w-[220px] sm:flex-row">
         <input type="hidden" name="tab" value={mode} />
         {fromRaw ? <input type="hidden" name="from" value={fromRaw} /> : null}
         {toRaw ? <input type="hidden" name="to" value={toRaw} /> : null}
@@ -161,7 +162,7 @@ export default async function FinanceOfficePage({
           name="q"
           defaultValue={q}
           placeholder="Поиск по номеру наряда или пациенту"
-          className="min-w-0 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
+          className="min-w-0 w-full max-w-md flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
         />
         <button
           type="submit"
@@ -194,7 +195,7 @@ export default async function FinanceOfficePage({
   );
   const financeOfficeHeader = (
     <section>
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] xl:items-end">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(11rem,13rem)_minmax(18rem,24rem)] xl:items-end">
         <div className="min-w-0 space-y-3">
           <div>
             <h1 className={`${fontDisplay.className} text-xl font-semibold tracking-tight text-[var(--app-text)] lg:text-2xl`}>
@@ -223,6 +224,7 @@ export default async function FinanceOfficePage({
             </div>
           </div>
         </div>
+        <CorrectionsHistoryActionCard className="w-full xl:self-end" />
         <FinanceOfficeBankImportPanel className="w-full xl:self-end" />
       </div>
       <div className="mt-3 space-y-2">

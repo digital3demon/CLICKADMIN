@@ -104,7 +104,7 @@ export function FinanceOfficeBankImportPanel({ className = "" }: { className?: s
     <section
       className={[
         "rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm",
-        rows.length > 0 ? "xl:col-span-2 xl:self-stretch" : "",
+        rows.length > 0 ? "xl:col-span-2 xl:col-start-2 xl:self-stretch" : "",
         className,
       ]
         .filter(Boolean)

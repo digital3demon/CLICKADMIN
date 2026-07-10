@@ -1,31 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CORRECTION_SOURCE_LABEL,
   formatCorrectionHistoryDecision,
   formatRuDateTime,
+  PROSTHETICS_ARRIVED_STATUS_LABEL,
   type CorrectionHistoryRow,
 } from "@/lib/corrections-history";
-import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
-import { orderPathById } from "@/lib/order-public-ref";
-
-function decisionClass(
-  status: "pending" | "accepted" | "rejected" | "arrived",
-): string {
-  if (status === "arrived") {
-    return "text-sky-800 dark:text-sky-200";
-  }
-  if (status === "accepted") {
-    return "text-emerald-800 dark:text-emerald-200";
-  }
-  if (status === "rejected") {
-    return "text-rose-800 dark:text-rose-200";
-  }
-  return "text-amber-800 dark:text-amber-200";
-}
+import { CorrectionHistoryOrderCell } from "@/components/orders/CorrectionHistoryOrderCell";
+import { CorrectionHistoryStatusCell } from "@/components/orders/CorrectionHistoryStatusCell";
 
 type ClientRow = Omit<
   CorrectionHistoryRow,
@@ -143,7 +128,7 @@ export function OrdersProstheticsHistoryTable({
       <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm [-webkit-overflow-scrolling:touch]">
         <table className="w-full min-w-[58rem] table-fixed border-collapse text-left text-sm sm:min-w-[64rem]">
           <colgroup>
-            <col style={{ width: "9rem" }} />
+            <col style={{ width: "12rem" }} />
             <col style={{ width: "8rem" }} />
             <col style={{ width: "10.25rem" }} />
             <col style={{ width: "8rem" }} />
@@ -153,7 +138,7 @@ export function OrdersProstheticsHistoryTable({
           </colgroup>
           <thead>
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-              <th className="px-2 py-2.5 sm:px-3 sm:py-3">Наряд</th>
+              <th className="px-2 py-2.5 sm:px-3 sm:py-3">Заказ</th>
               <th className="px-2 py-2.5 sm:px-3 sm:py-3">Откуда</th>
               <th className="px-2 py-2.5 sm:px-3 sm:py-3">Когда</th>
               <th className="px-2 py-2.5 sm:px-3 sm:py-3">Статус</th>
@@ -166,8 +151,6 @@ export function OrdersProstheticsHistoryTable({
             {rows.map((item) => {
               const historyRow = asHistoryRow(item);
               const decision = formatCorrectionHistoryDecision(historyRow);
-              const orderHref = orderPathById(item.order.id);
-              const kanbanHref = kanbanOrderDeepLinkPath(item.order.id);
               const canToggle =
                 canMarkArrived &&
                 Boolean(item.resolvedAt) &&
@@ -178,20 +161,7 @@ export function OrdersProstheticsHistoryTable({
                   className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--table-row-hover)]"
                 >
                   <td className="px-2 py-2 sm:px-3 sm:py-2.5">
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <Link
-                        href={orderHref}
-                        className="truncate font-mono font-medium text-[var(--sidebar-blue)] hover:underline"
-                      >
-                        {item.order.orderNumber}
-                      </Link>
-                      <Link
-                        href={kanbanHref}
-                        className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--sidebar-blue)] hover:underline"
-                      >
-                        Канбан
-                      </Link>
-                    </div>
+                    <CorrectionHistoryOrderCell order={item.order} />
                   </td>
                   <td className="px-2 py-2 text-[var(--text-strong)] sm:px-3 sm:py-2.5">
                     {CORRECTION_SOURCE_LABEL[item.source]}
@@ -199,10 +169,8 @@ export function OrdersProstheticsHistoryTable({
                   <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-2 font-mono text-xs tabular-nums text-[var(--text-strong)] sm:px-3 sm:py-2.5 sm:text-sm">
                     {formatRuDateTime(new Date(item.createdAt))}
                   </td>
-                  <td
-                    className={`overflow-hidden text-ellipsis whitespace-nowrap px-2 py-2 font-medium sm:px-3 sm:py-2.5 ${decisionClass(decision.status)}`}
-                  >
-                    {decision.label}
+                  <td className="px-2 py-2 align-top sm:px-3 sm:py-2.5">
+                    <CorrectionHistoryStatusCell row={historyRow} />
                   </td>
                   <td className="px-2 py-2 text-[var(--text-secondary)] sm:px-3 sm:py-2.5">
                     {decision.detail ? (
@@ -223,9 +191,19 @@ export function OrdersProstheticsHistoryTable({
                       >
                         {busyId === item.id ? "…" : "Пришла"}
                       </button>
+                    ) : canToggle && item.arrivedAt ? (
+                      <button
+                        type="button"
+                        className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)] shadow-sm hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={busyId === item.id}
+                        title="Снять отметку «пришла»"
+                        onClick={() => void toggleArrived(item, false)}
+                      >
+                        {busyId === item.id ? "…" : "Снять"}
+                      </button>
                     ) : item.arrivedAt ? (
-                      <span className="text-xs font-medium text-sky-700 dark:text-sky-300">
-                        Пришла
+                      <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                        {PROSTHETICS_ARRIVED_STATUS_LABEL}
                       </span>
                     ) : (
                       <span className="text-[var(--text-muted)]">—</span>

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCorrectionHistoryStatusTimeline,
   formatCorrectionHistoryDecision,
   mergeCorrectionHistoryRows,
   ordersHistoryHref,
   parseOrdersHistoryTab,
+  PROSTHETICS_ARRIVED_STATUS_LABEL,
 } from "./corrections-history";
 
 describe("parseOrdersHistoryTab", () => {
@@ -104,7 +106,57 @@ describe("formatCorrectionHistoryDecision", () => {
     };
     const d = formatCorrectionHistoryDecision(arrived);
     expect(d.status).toBe("arrived");
-    expect(d.label).toBe("Пришла");
+    expect(d.label).toBe(PROSTHETICS_ARRIVED_STATUS_LABEL);
     expect(d.detail).toContain("Склад");
+  });
+});
+
+describe("buildCorrectionHistoryStatusTimeline", () => {
+  const base = {
+    id: "1",
+    kind: "prosthetics" as const,
+    text: "??? тест",
+    source: "KAITEN" as const,
+    createdAt: new Date("2026-07-10T10:33:00Z"),
+    resolvedAt: null,
+    rejectedAt: null,
+    arrivedAt: null,
+    resolvedByName: null,
+    rejectedByName: null,
+    arrivedByName: null,
+    order: { id: "o", orderNumber: "2607-157" },
+  };
+
+  it("ожидает — только создание", () => {
+    const events = buildCorrectionHistoryStatusTimeline(base);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.label).toBe("Ожидает");
+  });
+
+  it("протетика: ожидает → в пути → пришла", () => {
+    const events = buildCorrectionHistoryStatusTimeline({
+      ...base,
+      resolvedAt: new Date("2026-07-10T09:27:00Z"),
+      resolvedByName: "Оля",
+      arrivedAt: new Date("2026-07-10T16:08:00Z"),
+      arrivedByName: "Всеволод С.",
+    });
+    expect(events.map((e) => e.label)).toEqual([
+      "Ожидает",
+      "В пути",
+      PROSTHETICS_ARRIVED_STATUS_LABEL,
+    ]);
+    expect(events[1]?.who).toBe("Оля");
+    expect(events[2]?.who).toBe("Всеволод С.");
+  });
+
+  it("отклонена — без в пути", () => {
+    const events = buildCorrectionHistoryStatusTimeline({
+      ...base,
+      kind: "correction",
+      rejectedAt: new Date("2026-07-11T08:00:00Z"),
+      rejectedByName: "Админ",
+    });
+    expect(events.map((e) => e.label)).toEqual(["Ожидает", "Отклонена"]);
   });
 });

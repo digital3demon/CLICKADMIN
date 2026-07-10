@@ -34,6 +34,9 @@ export const CORRECTION_HISTORY_KIND_LABEL = {
   prosthetics: "Заказ протетики",
 } as const;
 
+/** Финальный статус протетики в UI (в Kaiten — «протетика пришла»). */
+export const PROSTHETICS_ARRIVED_STATUS_LABEL = "Готово";
+
 export function parseOrdersHistoryTab(
   raw: string | null | undefined,
 ): OrdersHistoryTab {
@@ -83,7 +86,7 @@ export function formatCorrectionHistoryDecision(row: CorrectionHistoryRow): {
     const who = row.arrivedByName?.trim() || "—";
     return {
       status: "arrived",
-      label: "Пришла",
+      label: PROSTHETICS_ARRIVED_STATUS_LABEL,
       detail: `${who}, ${formatRuDateTime(row.arrivedAt)}`,
     };
   }
@@ -96,6 +99,65 @@ export function formatCorrectionHistoryDecision(row: CorrectionHistoryRow): {
     };
   }
   return { status: "pending", label: "Ожидает", detail: null };
+}
+
+export type CorrectionHistoryStatusEvent = {
+  status: "pending" | "accepted" | "rejected" | "arrived";
+  label: string;
+  at: Date;
+  who: string | null;
+};
+
+/** Хронология статусов заявки (создание → решения) для раскрывающегося списка. */
+export function buildCorrectionHistoryStatusTimeline(
+  row: CorrectionHistoryRow,
+): CorrectionHistoryStatusEvent[] {
+  const events: CorrectionHistoryStatusEvent[] = [
+    {
+      status: "pending",
+      label: "Ожидает",
+      at: row.createdAt,
+      who: null,
+    },
+  ];
+
+  if (row.rejectedAt) {
+    events.push({
+      status: "rejected",
+      label: "Отклонена",
+      at: row.rejectedAt,
+      who: row.rejectedByName,
+    });
+    return events;
+  }
+
+  if (row.resolvedAt) {
+    events.push({
+      status: "accepted",
+      label: row.kind === "prosthetics" ? "В пути" : "Принята",
+      at: row.resolvedAt,
+      who: row.resolvedByName,
+    });
+  }
+
+  if (row.kind === "prosthetics" && row.arrivedAt) {
+    events.push({
+      status: "arrived",
+      label: PROSTHETICS_ARRIVED_STATUS_LABEL,
+      at: row.arrivedAt,
+      who: row.arrivedByName,
+    });
+  }
+
+  return events;
+}
+
+export function formatCorrectionHistoryStatusEventDetail(
+  event: CorrectionHistoryStatusEvent,
+): string {
+  const when = formatRuDateTime(event.at);
+  const who = event.who?.trim();
+  return who ? `${who}, ${when}` : when;
 }
 
 export type CorrectionHistoryJsonRow = {

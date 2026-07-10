@@ -5,26 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
-  correctionHistoryRowFromJson,
-  formatCorrectionHistoryDecision,
   ordersHistoryHref,
-  type CorrectionHistoryJsonRow,
 } from "@/lib/corrections-history";
 import type { ProstheticsInTransitRow } from "@/lib/prosthetics-in-transit";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
-
-function correctionStatusClass(
-  status: "pending" | "accepted" | "rejected" | "arrived",
-): string {
-  if (status === "accepted") {
-    return "text-emerald-800 dark:text-emerald-200";
-  }
-  if (status === "rejected") {
-    return "text-rose-800 dark:text-rose-200";
-  }
-  return "text-amber-800 dark:text-amber-200";
-}
+import { CorrectionsHistoryActionCard } from "@/components/orders/CorrectionsHistoryActionCard";
 
 function cardShell(isHarmony: boolean): string {
   return isHarmony
@@ -46,16 +32,11 @@ export function OrdersListHeaderActionCards({
   const router = useRouter();
   const [inTransitCount, setInTransitCount] = useState(initialInTransitCount);
   const [prostheticsOpen, setProstheticsOpen] = useState(false);
-  const [correctionsOpen, setCorrectionsOpen] = useState(false);
   const [items, setItems] = useState<ProstheticsInTransitRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [correctionItems, setCorrectionItems] = useState<
-    CorrectionHistoryJsonRow[]
-  >([]);
-  const [correctionsLoading, setCorrectionsLoading] = useState(false);
-  const [correctionsErr, setCorrectionsErr] = useState<string | null>(null);
+  const [confirmArrivedId, setConfirmArrivedId] = useState<string | null>(null);
 
   useEffect(() => {
     setInTransitCount(initialInTransitCount);
@@ -88,39 +69,12 @@ export function OrdersListHeaderActionCards({
   }, []);
 
   useEffect(() => {
-    if (!prostheticsOpen) return;
+    if (!prostheticsOpen) {
+      setConfirmArrivedId(null);
+      return;
+    }
     void loadInTransit();
   }, [prostheticsOpen, loadInTransit]);
-
-  const loadCorrectionsHistory = useCallback(async () => {
-    setCorrectionsLoading(true);
-    setCorrectionsErr(null);
-    try {
-      const res = await fetch("/api/order-chat-corrections/history", {
-        credentials: "include",
-        cache: "no-store",
-      });
-      const j = (await res.json().catch(() => ({}))) as {
-        count?: number;
-        items?: CorrectionHistoryJsonRow[];
-        error?: string;
-      };
-      if (!res.ok) {
-        setCorrectionsErr(j.error ?? "Не удалось загрузить");
-        return;
-      }
-      setCorrectionItems(Array.isArray(j.items) ? j.items : []);
-    } catch {
-      setCorrectionsErr("Сеть недоступна");
-    } finally {
-      setCorrectionsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!correctionsOpen) return;
-    void loadCorrectionsHistory();
-  }, [correctionsOpen, loadCorrectionsHistory]);
 
   const markArrived = useCallback(
     async (row: ProstheticsInTransitRow) => {
@@ -139,13 +93,16 @@ export function OrdersListHeaderActionCards({
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) {
           setErr(j.error ?? "Не удалось отметить");
+          setConfirmArrivedId(null);
           return;
         }
+        setConfirmArrivedId(null);
         setItems((prev) => prev.filter((x) => x.id !== row.id));
         setInTransitCount((n) => Math.max(0, n - 1));
         router.refresh();
       } catch {
         setErr("Сеть недоступна");
+        setConfirmArrivedId(null);
       } finally {
         setBusyId(null);
       }
@@ -179,15 +136,7 @@ export function OrdersListHeaderActionCards({
         </button>
         ) : null}
 
-        <button
-          type="button"
-          className={cardShell(isHarmony)}
-          onClick={() => setCorrectionsOpen(true)}
-        >
-          <span className="text-sm font-bold uppercase tracking-wide text-orange-500 dark:text-orange-400">
-            История корректировок
-          </span>
-        </button>
+        <CorrectionsHistoryActionCard className="flex-1" />
       </div>
 
       {showProstheticsBlock && prostheticsOpen ? (
@@ -272,11 +221,31 @@ export function OrdersListHeaderActionCards({
                         {canMarkArrived ? (
                           <button
                             type="button"
-                            className="shrink-0 rounded-md border border-sky-300/80 bg-sky-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-sky-800 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-sky-800/70 dark:bg-sky-950/40 dark:text-sky-200 dark:hover:bg-sky-950/55"
+                            className={
+                              confirmArrivedId === row.id
+                                ? "shrink-0 rounded-md border border-emerald-400/90 bg-emerald-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-950 shadow-sm hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700/80 dark:bg-emerald-950/50 dark:text-emerald-100 dark:hover:bg-emerald-950/70"
+                                : "shrink-0 rounded-md border border-sky-300/80 bg-sky-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-sky-800 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-sky-800/70 dark:bg-sky-950/40 dark:text-sky-200 dark:hover:bg-sky-950/55"
+                            }
                             disabled={busyId === row.id}
-                            onClick={() => void markArrived(row)}
+                            title={
+                              confirmArrivedId === row.id
+                                ? "Подтвердить: протетика пришла"
+                                : "Отметить приход протетики"
+                            }
+                            onClick={() => {
+                              if (confirmArrivedId === row.id) {
+                                void markArrived(row);
+                                return;
+                              }
+                              setConfirmArrivedId(row.id);
+                              setErr(null);
+                            }}
                           >
-                            {busyId === row.id ? "…" : "Пришла"}
+                            {busyId === row.id
+                              ? "…"
+                              : confirmArrivedId === row.id
+                                ? "Проверил"
+                                : "Пришла"}
                           </button>
                         ) : null}
                       </div>
@@ -293,113 +262,6 @@ export function OrdersListHeaderActionCards({
                 onClick={() => setProstheticsOpen(false)}
               >
                 Вся история протетики →
-              </Link>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {correctionsOpen ? (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="История корректировок"
-          onClick={() => setCorrectionsOpen(false)}
-        >
-          <div
-            className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
-              <h2 className="text-base font-semibold text-orange-500 dark:text-orange-400">
-                История корректировок
-              </h2>
-              <button
-                type="button"
-                className="rounded-md px-2 py-1 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]"
-                onClick={() => setCorrectionsOpen(false)}
-              >
-                Закрыть
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              {correctionsErr ? (
-                <p className="mb-2 text-sm text-red-600" role="alert">
-                  {correctionsErr}
-                </p>
-              ) : null}
-              {correctionsLoading ? (
-                <p className="text-sm text-[var(--text-muted)]">Загрузка…</p>
-              ) : correctionItems.length === 0 ? (
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Журнал корректировок пуст.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {correctionItems.map((row) => {
-                    const decision = formatCorrectionHistoryDecision(
-                      correctionHistoryRowFromJson(row),
-                    );
-                    const doctorName = row.doctorName
-                      ? personNameSurnameInitials(row.doctorName)
-                      : null;
-                    const patientName = row.patientName
-                      ? personNameSurnameInitials(row.patientName)
-                      : null;
-
-                    return (
-                      <li
-                        key={row.id}
-                        className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]/50 px-3 py-2"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-                              <Link
-                                href={orderPathById(row.orderId)}
-                                className="font-mono text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
-                                onClick={() => setCorrectionsOpen(false)}
-                              >
-                                {row.orderNumber}
-                              </Link>
-                              {doctorName ? (
-                                <span className="text-sm font-semibold text-[var(--app-text)]">
-                                  {doctorName}
-                                </span>
-                              ) : null}
-                              {doctorName && patientName ? (
-                                <span className="text-[var(--text-muted)]">·</span>
-                              ) : null}
-                              {patientName ? (
-                                <span className="text-sm font-semibold text-[var(--app-text)]">
-                                  {patientName}
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--text-body)]">
-                              {row.text}
-                            </p>
-                          </div>
-                          <span
-                            className={`shrink-0 text-xs font-semibold uppercase tracking-wide ${correctionStatusClass(decision.status)}`}
-                          >
-                            {decision.label}
-                          </span>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-            <div className="border-t border-[var(--card-border)] px-4 py-2 text-right">
-              <Link
-                href={ordersHistoryHref({ tab: "corrections" })}
-                className="text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
-                onClick={() => setCorrectionsOpen(false)}
-              >
-                Вся история корректировок →
               </Link>
             </div>
           </div>

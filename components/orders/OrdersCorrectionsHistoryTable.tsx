@@ -1,28 +1,12 @@
-import Link from "next/link";
 import {
-  CORRECTION_HISTORY_KIND_LABEL,
   CORRECTION_SOURCE_LABEL,
   formatCorrectionHistoryDecision,
   formatRuDateTime,
   type CorrectionHistoryRow,
 } from "@/lib/corrections-history";
-import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { orderPathById } from "@/lib/order-public-ref";
-
-function decisionClass(
-  status: "pending" | "accepted" | "rejected" | "arrived",
-): string {
-  if (status === "arrived") {
-    return "text-sky-800 dark:text-sky-200";
-  }
-  if (status === "accepted") {
-    return "text-emerald-800 dark:text-emerald-200";
-  }
-  if (status === "rejected") {
-    return "text-rose-800 dark:text-rose-200";
-  }
-  return "text-amber-800 dark:text-amber-200";
-}
+import { CorrectionHistoryOrderCell } from "@/components/orders/CorrectionHistoryOrderCell";
+import { CorrectionHistoryStatusCell } from "@/components/orders/CorrectionHistoryStatusCell";
 
 export function OrdersCorrectionsHistoryTable({
   items,
@@ -39,10 +23,9 @@ export function OrdersCorrectionsHistoryTable({
 
   return (
     <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm [-webkit-overflow-scrolling:touch]">
-      <table className="w-full min-w-[58rem] table-fixed border-collapse text-left text-sm sm:min-w-[64rem]">
+      <table className="w-full min-w-[50rem] table-fixed border-collapse text-left text-sm sm:min-w-[56rem]">
         <colgroup>
-          <col style={{ width: "8.5rem" }} />
-          <col style={{ width: "9rem" }} />
+          <col style={{ width: "12rem" }} />
           <col style={{ width: "8rem" }} />
           <col style={{ width: "10.25rem" }} />
           <col style={{ width: "8rem" }} />
@@ -51,8 +34,7 @@ export function OrdersCorrectionsHistoryTable({
         </colgroup>
         <thead>
           <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-            <th className="px-2 py-2.5 sm:px-3 sm:py-3">Тип</th>
-            <th className="px-2 py-2.5 sm:px-3 sm:py-3">Наряд</th>
+            <th className="px-2 py-2.5 sm:px-3 sm:py-3">Заказ</th>
             <th className="px-2 py-2.5 sm:px-3 sm:py-3">Откуда</th>
             <th className="px-2 py-2.5 sm:px-3 sm:py-3">Когда</th>
             <th className="px-2 py-2.5 sm:px-3 sm:py-3">Решение</th>
@@ -63,33 +45,13 @@ export function OrdersCorrectionsHistoryTable({
         <tbody>
           {items.map((item) => {
             const decision = formatCorrectionHistoryDecision(item);
-            const orderHref = orderPathById(item.order.id);
-            const kanbanHref = kanbanOrderDeepLinkPath(item.order.id);
             return (
               <tr
                 key={`${item.kind}-${item.id}`}
                 className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--table-row-hover)]"
               >
-                <td className="px-2 py-2 text-[var(--text-body)] sm:px-3 sm:py-2.5">
-                  {CORRECTION_HISTORY_KIND_LABEL[item.kind]}
-                </td>
                 <td className="px-2 py-2 sm:px-3 sm:py-2.5">
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <Link
-                      href={orderHref}
-                      className="truncate font-mono font-medium text-[var(--sidebar-blue)] hover:underline"
-                      title={`Наряд ${item.order.orderNumber}`}
-                    >
-                      {item.order.orderNumber}
-                    </Link>
-                    <Link
-                      href={kanbanHref}
-                      className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--sidebar-blue)] hover:underline"
-                      title="Открыть карточку в канбане"
-                    >
-                      Канбан
-                    </Link>
-                  </div>
+                  <CorrectionHistoryOrderCell order={item.order} />
                 </td>
                 <td
                   className="px-2 py-2 text-[var(--text-strong)] sm:px-3 sm:py-2.5"
@@ -103,10 +65,8 @@ export function OrdersCorrectionsHistoryTable({
                 >
                   {formatRuDateTime(item.createdAt)}
                 </td>
-                <td
-                  className={`overflow-hidden text-ellipsis whitespace-nowrap px-2 py-2 font-medium sm:px-3 sm:py-2.5 ${decisionClass(decision.status)}`}
-                >
-                  {decision.label}
+                <td className="px-2 py-2 sm:px-3 sm:py-2.5">
+                  <CorrectionHistoryStatusCell row={item} />
                 </td>
                 <td
                   className="px-2 py-2 text-[var(--text-secondary)] sm:px-3 sm:py-2.5"
