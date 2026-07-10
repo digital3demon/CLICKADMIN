@@ -1,0 +1,24 @@
+# Build context for Timeweb / Docker — keep image lean, avoid host junk.
+.git
+.cursor
+.next
+node_modules
+dist
+backups
+data
+docs
+coverage
+*.md
+!README.md
+.env
+.env.*
+!.env.example
+!.env.standalone.example
+*.db
+*.db-*
+.tmp_*
+check-*.js
+commit-msg-check.txt
+pack-for-vps.ps1
+Запуск.bat
+agent-transcripts
