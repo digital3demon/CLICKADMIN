@@ -786,6 +786,7 @@ model User {
   orderProstheticsRequestsResolved OrderProstheticsRequest[]  @relation("OrderProstheticsRequestResolvedBy")
   orderProstheticsRequestsRejected OrderProstheticsRequest[]  @relation("OrderProstheticsRequestRejectedBy")
   orderProstheticsRequestsArrived  OrderProstheticsRequest[]  @relation("OrderProstheticsRequestArrivedBy")
+  orderListAdminMemoEvents         OrderListAdminMemoEvent[]
   orderKaitenLabMentionAcks        OrderKaitenLabMentionAck[]
   testOrdersOwned                  Order[]                    @relation("TestOrderOwner")
   tenantsWithKaitenDisabled        Tenant[]                   @relation("TenantKaitenDisabledBy")
@@ -1320,6 +1321,7 @@ model Order {
   notes                              String?
   /// Пометка смен в списках (Заказы / ФинОтдел); не в карточку наряда и не в Kaiten/канбан. До 100 символов.
   listAdminMemo                      String?
+  listAdminMemoEvents                OrderListAdminMemoEvent[]
   /// Текст заказа от клиента (копируют из переписки); в описание карточки Kaiten вместе с комментарием от админов
   clientOrderText                    String?
   /// Отмечена срочность (в т.ч. без коэффициента)
@@ -1541,6 +1543,27 @@ model OrderChatCorrection {
   @@unique([orderId, kaitenCommentId])
   @@index([orderId, resolvedAt])
   @@index([orderId, rejectedAt])
+  @@index([orderId, createdAt])
+}
+
+enum OrderListAdminMemoAction {
+  SET
+  CLEAR
+}
+
+/// Журнал пометок смен в списках (кто писал / кто очищал).
+model OrderListAdminMemoEvent {
+  id          String                   @id @default(cuid())
+  orderId     String
+  order       Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  action      OrderListAdminMemoAction
+  /// Текст при SET; при CLEAR — null
+  text        String?
+  userId      String?
+  user        User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  authorLabel String?
+  createdAt   DateTime                 @default(now())
+
   @@index([orderId, createdAt])
 }
 

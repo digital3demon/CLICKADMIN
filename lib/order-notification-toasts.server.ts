@@ -7,6 +7,7 @@ import {
   isOrderChatInboxDualReadEnabled,
   isOrderChatInboxReadNewEnabledForTenant,
 } from "@/lib/order-chat-inbox-dual-read.server";
+import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { logger } from "@/lib/server/logger";
 
 export type OrderNotificationToastRow = {
@@ -15,8 +16,22 @@ export type OrderNotificationToastRow = {
   authorLabel: string | null;
   orderId: string;
   orderNumber: string;
+  patientName: string | null;
+  doctorName: string | null;
   createdAt: string;
 };
+
+function orderToastNames(order: {
+  patientName: string | null;
+  doctor: { fullName: string };
+}): { patientName: string | null; doctorName: string | null } {
+  return {
+    patientName: order.patientName
+      ? personNameSurnameInitials(order.patientName)
+      : null,
+    doctorName: personNameSurnameInitials(order.doctor.fullName) || null,
+  };
+}
 
 async function fetchCorrectionToastRows(
   db: PrismaClient,
@@ -39,7 +54,14 @@ async function fetchCorrectionToastRows(
       text: true,
       authorLabel: true,
       createdAt: true,
-      order: { select: { id: true, orderNumber: true } },
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+          patientName: true,
+          doctor: { select: { fullName: true } },
+        },
+      },
     },
   });
   return rows.map((r) => ({
@@ -48,6 +70,7 @@ async function fetchCorrectionToastRows(
     authorLabel: r.authorLabel,
     orderId: r.order.id,
     orderNumber: r.order.orderNumber,
+    ...orderToastNames(r.order),
     createdAt: r.createdAt.toISOString(),
   }));
 }
@@ -73,7 +96,14 @@ async function fetchProstheticsToastRows(
       text: true,
       authorLabel: true,
       createdAt: true,
-      order: { select: { id: true, orderNumber: true } },
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+          patientName: true,
+          doctor: { select: { fullName: true } },
+        },
+      },
     },
   });
   return rows.map((r) => ({
@@ -82,6 +112,7 @@ async function fetchProstheticsToastRows(
     authorLabel: r.authorLabel,
     orderId: r.order.id,
     orderNumber: r.order.orderNumber,
+    ...orderToastNames(r.order),
     createdAt: r.createdAt.toISOString(),
   }));
 }
@@ -109,7 +140,14 @@ async function fetchInboxTypeToastRows(
       text: true,
       authorLabel: true,
       createdAt: true,
-      order: { select: { id: true, orderNumber: true } },
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+          patientName: true,
+          doctor: { select: { fullName: true } },
+        },
+      },
     },
   });
   return (rows as Array<{
@@ -117,13 +155,19 @@ async function fetchInboxTypeToastRows(
     text: string;
     authorLabel: string | null;
     createdAt: Date;
-    order: { id: string; orderNumber: string };
+    order: {
+      id: string;
+      orderNumber: string;
+      patientName: string | null;
+      doctor: { fullName: string };
+    };
   }>).map((r) => ({
     id: r.id,
     text: r.text,
     authorLabel: r.authorLabel,
     orderId: r.order.id,
     orderNumber: r.order.orderNumber,
+    ...orderToastNames(r.order),
     createdAt: r.createdAt.toISOString(),
   }));
 }
@@ -158,7 +202,14 @@ export async function fetchPersonalMentionToastRows(
       text: true,
       authorLabel: true,
       createdAt: true,
-      order: { select: { id: true, orderNumber: true } },
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+          patientName: true,
+          doctor: { select: { fullName: true } },
+        },
+      },
     },
   });
   return (rows as Array<{
@@ -166,13 +217,19 @@ export async function fetchPersonalMentionToastRows(
     text: string;
     authorLabel: string | null;
     createdAt: Date;
-    order: { id: string; orderNumber: string };
+    order: {
+      id: string;
+      orderNumber: string;
+      patientName: string | null;
+      doctor: { fullName: string };
+    };
   }>).map((r) => ({
     id: r.id,
     text: r.text,
     authorLabel: r.authorLabel,
     orderId: r.order.id,
     orderNumber: r.order.orderNumber,
+    ...orderToastNames(r.order),
     createdAt: r.createdAt.toISOString(),
   }));
 }

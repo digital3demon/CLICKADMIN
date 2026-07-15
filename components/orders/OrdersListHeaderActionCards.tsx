@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
+  formatRuDateTime,
   ordersHistoryHref,
 } from "@/lib/corrections-history";
 import type { ProstheticsInTransitRow } from "@/lib/prosthetics-in-transit";
@@ -184,6 +185,9 @@ export function OrdersListHeaderActionCards({
                     const patientName = row.patientName
                       ? personNameSurnameInitials(row.patientName)
                       : null;
+                    const whenLabel = row.resolvedAt
+                      ? formatRuDateTime(new Date(row.resolvedAt))
+                      : null;
 
                     return (
                     <li
@@ -200,18 +204,26 @@ export function OrdersListHeaderActionCards({
                             >
                               {row.orderNumber}
                             </Link>
+                            {patientName ? (
+                              <span className="text-sm font-semibold text-[var(--app-text)]">
+                                {patientName}
+                              </span>
+                            ) : null}
+                            {patientName && doctorName ? (
+                              <span className="text-[var(--text-muted)]">·</span>
+                            ) : null}
                             {doctorName ? (
                               <span className="text-sm font-semibold text-[var(--app-text)]">
                                 {doctorName}
                               </span>
                             ) : null}
-                            {doctorName && patientName ? (
-                              <span className="text-[var(--text-muted)]">·</span>
-                            ) : null}
-                            {patientName ? (
-                              <span className="text-sm font-semibold text-[var(--app-text)]">
-                                {patientName}
-                              </span>
+                            {whenLabel ? (
+                              <>
+                                <span className="text-[var(--text-muted)]">·</span>
+                                <span className="text-xs font-mono tabular-nums text-[var(--text-muted)]">
+                                  {whenLabel}
+                                </span>
+                              </>
                             ) : null}
                           </div>
                           <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--text-body)]">

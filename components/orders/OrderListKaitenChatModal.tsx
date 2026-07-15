@@ -66,6 +66,11 @@ type KanbanChatPayload = {
   hasCard?: boolean;
   cardImages?: ChatImage[];
   comments?: KanbanChatCommentPayload[];
+  orderHeader?: {
+    orderNumber: string;
+    patientName: string | null;
+    doctorName: string | null;
+  } | null;
 };
 
 function isNoKaitenCardError(errorText: string | null | undefined): boolean {
@@ -163,10 +168,37 @@ export function OrderListKaitenChatModal({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadOk, setUploadOk] = useState<string | null>(null);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [titlePatient, setTitlePatient] = useState<string | null>(null);
+  const [titleDoctor, setTitleDoctor] = useState<string | null>(null);
+  const [titleOrderNumber, setTitleOrderNumber] = useState(orderNumber);
+
+  useEffect(() => {
+    if (!open) return;
+    setTitlePatient(patientName?.trim() || null);
+    setTitleDoctor(doctorName?.trim() || null);
+    setTitleOrderNumber(orderNumber);
+  }, [open, orderNumber, patientName, doctorName]);
+
   const chatTitle = formatOrderListChatModalTitle(
-    orderNumber,
-    patientName,
-    doctorName,
+    titleOrderNumber,
+    titlePatient,
+    titleDoctor,
+  );
+
+  const applyOrderHeader = useCallback(
+    (header: KanbanChatPayload["orderHeader"]) => {
+      if (!header) return;
+      if (header.orderNumber?.trim()) {
+        setTitleOrderNumber(header.orderNumber.trim());
+      }
+      if (header.patientName?.trim()) {
+        setTitlePatient(header.patientName.trim());
+      }
+      if (header.doctorName?.trim()) {
+        setTitleDoctor(header.doctorName.trim());
+      }
+    },
+    [],
   );
 
   const load = useCallback(async () => {
@@ -180,6 +212,7 @@ export function OrderListKaitenChatModal({
         cache: "no-store",
       });
       const chatData = (await chatRes.json().catch(() => ({}))) as KanbanChatPayload;
+      applyOrderHeader(chatData.orderHeader);
       const kanbanComments =
         chatRes.ok && chatData.hasCard === true
           ? normalizeKanbanChatComments(chatData.comments)
@@ -235,7 +268,7 @@ export function OrderListKaitenChatModal({
     } finally {
       setLoading(false);
     }
-  }, [orderId]);
+  }, [orderId, applyOrderHeader]);
 
   useEffect(() => {
     if (!open) return;
@@ -467,7 +500,10 @@ export function OrderListKaitenChatModal({
     >
       <div className="flex max-h-[min(92vh,40rem)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--card-border)] px-3 py-2.5 sm:px-4">
-          <h2 id={titleId} className="min-w-0 truncate text-sm font-semibold text-[var(--app-text)]">
+          <h2
+            id={titleId}
+            className="min-w-0 flex-1 text-sm font-semibold leading-snug text-[var(--app-text)]"
+          >
             {chatTitle}
           </h2>
           <button

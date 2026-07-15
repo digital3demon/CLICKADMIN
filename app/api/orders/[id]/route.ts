@@ -21,7 +21,7 @@ import {
 } from "@/lib/get-domain-prisma";
 import { ensureDoctorClinicLink } from "@/lib/ensure-doctor-clinic-link";
 import { ensureDoctorClinicLinkAfterOrderSave } from "@/lib/ensure-doctor-clinic-link-from-order";
-import { buildConstructionCreatesFromInput } from "@/lib/order-construction-input";
+import { applyOrderListAdminMemo } from "@/lib/order-list-admin-memo.server";
 import { isLabWorkStatus } from "@/lib/lab-work-status";
 import { parseUrgentSelection } from "@/lib/order-urgency";
 import { isOrderStatus } from "@/lib/order-status-labels";
@@ -529,6 +529,7 @@ export async function PATCH(
   }
 
   const scalarData: Prisma.OrderUncheckedUpdateInput = {};
+  let listAdminMemoPatch: string | null | undefined = undefined;
 
   if (body.orderNumber !== undefined) {
     const norm = normalizeManualOrderNumber(body.orderNumber);
@@ -565,9 +566,7 @@ export async function PATCH(
   }
 
   if (body.listAdminMemo !== undefined) {
-    const t =
-      body.listAdminMemo === null ? "" : String(body.listAdminMemo).trim();
-    scalarData.listAdminMemo = t ? t.slice(0, 100) : null;
+    listAdminMemoPatch = body.listAdminMemo;
   }
 
   if (body.clientOrderText !== undefined) {
@@ -1141,10 +1140,55 @@ export async function PATCH(
   }
 
   const hasScalar = Object.keys(scalarData).length > 0;
-  if (!hasScalar && constructionsUpdate === undefined) {
+  const hasMemoPatch = listAdminMemoPatch !== undefined;
+  if (!hasScalar && constructionsUpdate === undefined && !hasMemoPatch) {
     return NextResponse.json(
       { error: "Нет полей для обновления" },
       { status: 400 },
+    );
+  }
+
+  if (hasMemoPatch && session?.sub) {
+    try {
+      await applyOrderListAdminMemo(ordersPrisma, {
+        orderId,
+        tenantId,
+        userId: session.sub,
+        text: listAdminMemoPatch,
+      });
+    } catch (e) {
+      const code = e instanceof Error ? e.message : "";
+      if (code === "ORDER_NOT_FOUND") {
+        return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+      }
+      console.error("[PATCH order] listAdminMemo", orderId, e);
+      return NextResponse.json({ error: "Не удалось сохранить пометку" }, { status: 500 });
+    }
+  }
+
+  if (!hasScalar && constructionsUpdate === undefined) {
+    const order = await ordersPrisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: {
+        ...orderInclude,
+        attachments: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            fileName: true,
+            mimeType: true,
+            size: true,
+            createdAt: true,
+            uploadedToKaitenAt: true,
+          },
+        },
+      },
+    });
+    if (!order) {
+      return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+    }
+    return NextResponse.json(
+      await hydrateOrderResponse(order, clientsPrisma, pricingPrisma),
     );
   }
 

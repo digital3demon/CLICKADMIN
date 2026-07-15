@@ -13,7 +13,6 @@ import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { brandDisplayFont } from "@/lib/brand-font";
 import { useNewOrderPanel } from "@/components/orders/new-order-panel-context";
 import { SidebarDrafts } from "./SidebarDrafts";
-import { SidebarMessengers } from "./SidebarMessengers";
 import { SidebarPayments } from "./SidebarPayments";
 import { SidebarNav } from "./SidebarNav";
 import { CommandPalette } from "@/components/ui/CommandPalette";
@@ -194,7 +193,6 @@ export function Sidebar() {
 
         {isEffectiveKanbanOnly ? null : (
           <>
-            <SidebarMessengers />
             {sessionUser &&
             canAccessSidebarPayments(
               sessionUser.role,

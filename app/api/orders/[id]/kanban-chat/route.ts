@@ -34,6 +34,7 @@ import {
 import { textIncludesAdminLabMention } from "@/lib/kaiten-comment-parse";
 import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
 import { isKanbanChatLocalOnlyRequest } from "@/lib/kanban/kanban-chat-local-query";
+import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
@@ -54,6 +55,26 @@ type CardLocation = {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+async function loadOrderChatHeader(orderId: string, tenantId: string) {
+  const ordersPrisma = await getOrdersPrisma();
+  const row = await ordersPrisma.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: {
+      orderNumber: true,
+      patientName: true,
+      doctor: { select: { fullName: true } },
+    },
+  });
+  if (!row) return null;
+  return {
+    orderNumber: row.orderNumber,
+    patientName: row.patientName
+      ? personNameSurnameInitials(row.patientName)
+      : null,
+    doctorName: personNameSurnameInitials(row.doctor.fullName) || null,
+  };
 }
 
 function newCommentId(): string {
@@ -305,6 +326,7 @@ export async function GET(
     return NextResponse.json({ error: "Не указан id" }, { status: 400 });
   }
   const localOnly = isKanbanChatLocalOnlyRequest(new URL(req.url));
+  const orderHeader = await loadOrderChatHeader(orderId, tenantId);
   const statePayload = await loadTenantKanbanState(tenantId);
   const state = statePayload.state;
   if (!state) {
@@ -315,6 +337,7 @@ export async function GET(
         hasCard: false,
         comments: [],
         cardImages: [],
+        orderHeader,
       });
     }
     const fallbackComments = await loadKaitenCommentsFallbackForOrder(tenantId, orderId);
@@ -324,6 +347,7 @@ export async function GET(
       hasCard: false,
       comments: fallbackComments ?? [],
       cardImages: [],
+      orderHeader,
     });
   }
   const loc = findCardByLinkedOrderId(state, orderId);
@@ -335,6 +359,7 @@ export async function GET(
         hasCard: false,
         comments: [],
         cardImages: [],
+        orderHeader,
       });
     }
     const fallbackComments = await loadKaitenCommentsFallbackForOrder(tenantId, orderId);
@@ -344,6 +369,7 @@ export async function GET(
       hasCard: false,
       comments: fallbackComments ?? [],
       cardImages: [],
+      orderHeader,
     });
   }
   const card = state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
@@ -410,6 +436,7 @@ export async function GET(
     boardId: state.boards[loc.boardIndex]!.id,
     cardId: card.id,
     linkedKaiten,
+    orderHeader,
   });
 }
 
