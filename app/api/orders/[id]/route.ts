@@ -21,6 +21,7 @@ import {
 } from "@/lib/get-domain-prisma";
 import { ensureDoctorClinicLink } from "@/lib/ensure-doctor-clinic-link";
 import { ensureDoctorClinicLinkAfterOrderSave } from "@/lib/ensure-doctor-clinic-link-from-order";
+import { buildConstructionCreatesFromInput } from "@/lib/order-construction-input";
 import { applyOrderListAdminMemo } from "@/lib/order-list-admin-memo.server";
 import { isLabWorkStatus } from "@/lib/lab-work-status";
 import { parseUrgentSelection } from "@/lib/order-urgency";

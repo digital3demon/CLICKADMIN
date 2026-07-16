@@ -53,6 +53,8 @@ const trackerByOrderId = new Map<
   string,
   { trackerId: string; uploaded: number; total: number; orderNumber: string }
 >();
+/** Контекст загрузки (канбан/чат) — до завершения очереди по orderId. */
+const uploadContextByOrderId = new Map<string, "kanban">();
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -227,11 +229,13 @@ async function processOrderQueue(orderId: string): Promise<void> {
     await txDeleteByOrder(orderId);
     canceledOrderIds.delete(orderId);
     trackerByOrderId.delete(orderId);
+    uploadContextByOrderId.delete(orderId);
     return;
   }
   const rows = (await txGetByOrder(orderId)).sort((a, b) => a.createdAt - b.createdAt);
   if (rows.length === 0) {
     trackerByOrderId.delete(orderId);
+    uploadContextByOrderId.delete(orderId);
     return;
   }
 
@@ -255,6 +259,7 @@ async function processOrderQueue(orderId: string): Promise<void> {
         });
         const fallback = await postOrderAttachmentWithRetries(orderId, file, {
           maxAttempts: 1,
+          uploadContext: uploadContextByOrderId.get(orderId),
           signal: abortController.signal,
         });
         if (fallback.ok) {
@@ -287,6 +292,7 @@ async function processOrderQueue(orderId: string): Promise<void> {
       lastModified: row.lastModified || Date.now(),
     });
     const res = await postOrderAttachmentWithRetries(orderId, file, {
+      uploadContext: uploadContextByOrderId.get(orderId),
       signal: abortController.signal,
     });
     if (res.ok) {
@@ -323,18 +329,25 @@ async function processOrderQueue(orderId: string): Promise<void> {
     canceledOrderIds.delete(orderId);
     completeBackgroundOrderUpload(tracker.trackerId, { success: false });
     trackerByOrderId.delete(orderId);
+    uploadContextByOrderId.delete(orderId);
     return;
   }
 
   if (fails.length === 0) {
     completeBackgroundOrderUpload(tracker.trackerId, { success: true });
     trackerByOrderId.delete(orderId);
+    uploadContextByOrderId.delete(orderId);
     void requestOrderKaitenAttachmentSync(orderId);
     return;
   }
 
+  const firstError = fails.find((f) => f.error?.trim())?.error?.trim();
   const failMsg =
-    fails.length === 1 ? "Загрузка не удалась" : `Загрузка не удалась (${fails.length} файлов)`;
+    fails.length === 1
+      ? firstError || "Загрузка не удалась"
+      : firstError
+        ? `Загрузка не удалась (${fails.length} файлов): ${firstError}`
+        : `Загрузка не удалась (${fails.length} файлов)`;
   failBackgroundOrderUpload(tracker.trackerId, {
     error: failMsg,
     total: fails.length,
@@ -367,8 +380,13 @@ export async function enqueueOrderAttachmentFiles(params: {
   orderId: string;
   orderNumber: string | null | undefined;
   files: File[];
+  /** Загрузка из канбана/чата — проверка KANBAN_ATTACH_FILES вместо ORDERS_EDIT. */
+  uploadContext?: "kanban";
 }): Promise<number> {
   await pruneExpiredQueuedUploads();
+  if (params.uploadContext === "kanban") {
+    uploadContextByOrderId.set(params.orderId, "kanban");
+  }
   const existing = await txGetByOrder(params.orderId);
   const existingFp = new Set(existing.map((row) => uploadFingerprint(row)));
   const rows: QueuedUploadRow[] = [];

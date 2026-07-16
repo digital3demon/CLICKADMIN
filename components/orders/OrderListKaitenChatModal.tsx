@@ -413,6 +413,7 @@ export function OrderListKaitenChatModal({
           orderId,
           orderNumber,
           files: arr,
+          uploadContext: "kanban",
         });
         if (enqueued > 0) {
           setUploadOk(
@@ -678,6 +679,7 @@ export function OrderListKaitenChatModal({
                 showUploadZone={false}
                 allowDelete={false}
                 thumbSize="md"
+                uploadContext="kanban"
                 onImageViewerOpenChange={setImageViewerOpen}
               />
             </div>

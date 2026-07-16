@@ -199,6 +199,7 @@ export function OrderFilesPanel({
   showUploadZone = true,
   allowDelete = true,
   thumbSize = "sm",
+  uploadContext,
   onImageViewerOpenChange,
   pendingFiles,
   pendingLoadingFiles = [],
@@ -215,6 +216,8 @@ export function OrderFilesPanel({
   /** Кнопка «Удалить» у вложений */
   allowDelete?: boolean;
   thumbSize?: "sm" | "md";
+  /** Контекст POST вложений: kanban — из чата/канбана. */
+  uploadContext?: "kanban";
   onImageViewerOpenChange?: (open: boolean) => void;
   pendingFiles?: File[];
   pendingLoadingFiles?: PendingLoadingFile[];
@@ -377,6 +380,7 @@ export function OrderFilesPanel({
           orderId,
           orderNumber: orderNumber ?? orderId,
           files: prepared,
+          uploadContext,
         });
         await refreshQueueList();
         if (enqueued > 0) {
@@ -394,7 +398,7 @@ export function OrderFilesPanel({
         setBusy(false);
       }
     },
-    [orderId, orderNumber, refreshQueueList],
+    [orderId, orderNumber, refreshQueueList, uploadContext],
   );
 
   const onPickFiles = useCallback(

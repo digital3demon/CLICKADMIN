@@ -23,6 +23,7 @@ import {
   isOrderAttachmentS3Enabled,
   newOrderAttachmentId,
   readOrderAttachmentBytes,
+  writeOrderAttachmentToDisk,
   writeOrderAttachmentToS3,
 } from "@/lib/order-attachment-storage";
 import {
@@ -228,9 +229,13 @@ export async function GET(_req: Request, ctx: Ctx) {
     });
     return NextResponse.json(visible);
   } catch (e) {
-    console.error(e);
+    console.error("[attachments GET]", e);
+    const details = errorMessage(e);
     return NextResponse.json(
-      { error: "Не удалось загрузить список файлов" },
+      {
+        error: "Не удалось загрузить список файлов",
+        details: details.slice(0, 500),
+      },
       { status: 500 },
     );
   }
@@ -387,9 +392,23 @@ export async function POST(req: Request, ctx: Ctx) {
         );
         dataForDb = Buffer.alloc(0);
       } catch (e) {
-        console.error("[attachments POST] S3 write fallback to DB", e);
-        storageWarning =
-          "S3 временно недоступен, файл сохранён в базе CRM";
+        console.error("[attachments POST] S3 write failed, trying disk", e);
+        try {
+          diskRelPath = await writeOrderAttachmentToDisk(
+            orderId,
+            attachmentId,
+            fileBuf,
+          );
+          dataForDb = Buffer.alloc(0);
+          storageWarning =
+            "S3 временно недоступен, файл сохранён на диск CRM";
+        } catch (diskErr) {
+          console.error("[attachments POST] disk write fallback to DB", diskErr);
+          diskRelPath = null;
+          dataForDb = fileBuf;
+          storageWarning =
+            "S3 и диск недоступны, файл сохранён в базе CRM";
+        }
       }
     }
 
