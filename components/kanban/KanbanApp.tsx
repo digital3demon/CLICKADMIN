@@ -353,7 +353,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         setAppState((prev) => {
           if (!prev) return prev;
           const base = normalizeDemoKanbanAppState(prev);
-          const merged = mergeKaitenLinkedOrdersIntoAppState(base, rows, { demo: true });
+          const merged = mergeKaitenLinkedOrdersIntoAppState(base, rows, {
+            demo: true,
+            mode: "upsertOnly",
+          });
           return normalizeDemoKanbanAppState(merged);
         });
         return;
@@ -389,6 +392,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         if (!prev) return prev;
         let next = mergeKaitenLinkedOrdersIntoAppState(prev, linkedRows, {
           demo: false,
+          mode: "upsertOnly",
         });
         next = applyStandaloneRowsFromServer(next, standaloneRows);
         return next;

@@ -114,6 +114,163 @@ type KaitenSnapshot = {
   spaces: SpaceOpt[];
 };
 
+type BoardPresence = {
+  kanban: {
+    hasCard: boolean;
+    boardId: string | null;
+    cardId: string | null;
+    columnTitle: string | null;
+    url: string | null;
+  };
+  kaiten: {
+    hasCard: boolean;
+    kaitenCardId: number | null;
+    url: string | null;
+  };
+  ensured: boolean;
+};
+
+function BoardPresenceStatusBar({
+  orderId,
+  kaitenCardId,
+  kaitenCardUrl,
+  kanbanCardUrlFallback,
+}: {
+  orderId: string;
+  kaitenCardId: number | null;
+  kaitenCardUrl: string | null;
+  kanbanCardUrlFallback: string | null;
+}) {
+  const [presence, setPresence] = useState<BoardPresence | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setErr(null);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/board-presence`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = (await res.json().catch(() => ({}))) as BoardPresence & {
+        error?: string;
+      };
+      if (!res.ok) {
+        setErr(data.error ?? "Не удалось проверить карточки");
+        return;
+      }
+      setPresence(data);
+    } catch {
+      setErr("Сеть недоступна");
+    }
+  }, [orderId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh, kaitenCardId]);
+
+  const createKanban = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/board-presence`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json().catch(() => ({}))) as BoardPresence & {
+        error?: string;
+        ok?: boolean;
+      };
+      if (!res.ok) {
+        setErr(data.error ?? "Не удалось создать карточку в канбане");
+        return;
+      }
+      setPresence(data);
+    } catch {
+      setErr("Сеть недоступна");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const kanbanHas = presence?.kanban.hasCard === true;
+  const kaitenHas =
+    presence?.kaiten.hasCard === true ||
+    (kaitenCardId != null && Number.isFinite(kaitenCardId));
+  const kanbanUrl =
+    presence?.kanban.url ?? kanbanCardUrlFallback ?? null;
+  const kaitenUrl = presence?.kaiten.url ?? kaitenCardUrl ?? null;
+
+  return (
+    <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="font-semibold text-[var(--text-strong)]">Канбан CRM:</span>
+          <span
+            className={
+              kanbanHas
+                ? "font-medium text-emerald-700 dark:text-emerald-300"
+                : "font-medium text-amber-800 dark:text-amber-200"
+            }
+          >
+            {presence == null && !err ? "…" : kanbanHas ? "есть" : "нет"}
+          </span>
+          {kanbanHas && kanbanUrl ? (
+            <a
+              href={kanbanUrl}
+              className="font-medium text-[var(--sidebar-blue)] underline hover:no-underline"
+            >
+              Открыть в канбане →
+            </a>
+          ) : null}
+          {!kanbanHas && presence != null ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void createKanban()}
+              className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
+            >
+              {busy ? "…" : "Создать в канбане"}
+            </button>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="font-semibold text-[var(--text-strong)]">Kaiten:</span>
+          <span
+            className={
+              kaitenHas
+                ? "font-medium text-emerald-700 dark:text-emerald-300"
+                : "font-medium text-[var(--text-muted)]"
+            }
+          >
+            {presence == null && !err ? "…" : kaitenHas ? "есть" : "нет"}
+          </span>
+          {kaitenHas && kaitenUrl ? (
+            <a
+              href={kaitenUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-medium text-[var(--text-secondary)] underline hover:no-underline"
+            >
+              Открыть в Kaiten →
+            </a>
+          ) : null}
+        </div>
+      </div>
+      {presence?.kanban.columnTitle ? (
+        <p className="mt-1 text-xs text-[var(--text-muted)]">
+          Колонка канбана: {presence.kanban.columnTitle}
+        </p>
+      ) : null}
+      {err ? (
+        <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+          {err}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function OrderKaitenTab({
   orderId,
   kaitenCardId,
@@ -868,21 +1025,16 @@ export function OrderKaitenTab({
 
     return (
       <div className="space-y-6">
+        <BoardPresenceStatusBar
+          orderId={orderId}
+          kaitenCardId={kaitenCardId}
+          kaitenCardUrl={kaitenCardUrl}
+          kanbanCardUrlFallback={kanbanCardUrl}
+        />
         <p className="text-xs text-[var(--text-muted)]">
-          Карточка в Kaiten пока не привязана. Работа продолжается через карточку в
-          канбане CRM. Правый блок ниже работает как центр настройки шапки/доски
-          для Kanban/Kaiten, а создание/привязка Kaiten вынесены отдельно под ним.
+          Карточка в Kaiten пока не привязана. Сначала работает канбан CRM (шапка,
+          колонка, чат корректировок). Создание и привязка Kaiten — ниже, вторично.
         </p>
-        {kanbanCardUrl ? (
-          <a
-            href={kanbanCardUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block text-sm font-medium text-[var(--sidebar-blue)] underline hover:no-underline"
-          >
-            Открыть карточку в канбане CRM →
-          </a>
-        ) : null}
         {kaitenSyncError ? (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-950 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-100">
             <p className="font-medium">Записанная ошибка синхронизации</p>
@@ -1256,10 +1408,15 @@ export function OrderKaitenTab({
 
   return (
     <div className="space-y-6">
+      <BoardPresenceStatusBar
+        orderId={orderId}
+        kaitenCardId={kaitenCardId}
+        kaitenCardUrl={kaitenCardUrl}
+        kanbanCardUrlFallback={kanbanCardUrl}
+      />
       <p className="text-xs text-[var(--text-muted)]">
-        Данные подтягиваются из Kaiten и сохраняются туда же. Изменения в CRM и в
-        Kaiten сходятся при нажатии «Сохранить в Kaiten» и после отправки
-        сообщений.{" "}
+        Приоритет — карточка в канбане CRM. Данные Kaiten подтягиваются и
+        сохраняются при «Сохранить в Kaiten» и отправке сообщений.{" "}
         <button
           type="button"
           className="font-medium text-[var(--sidebar-blue)] hover:underline"
@@ -1268,17 +1425,6 @@ export function OrderKaitenTab({
           Обновить из Kaiten
         </button>
       </p>
-
-      {kaitenCardUrl ? (
-        <a
-          href={kaitenCardUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block text-sm font-medium text-[var(--sidebar-blue)] underline hover:no-underline"
-        >
-          Открыть карточку в Kaiten →
-        </a>
-      ) : null}
 
       <div className={KAITEN_TAB_GRID_CLASS}>
       <div className={`order-2 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>

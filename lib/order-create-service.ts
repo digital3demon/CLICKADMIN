@@ -299,10 +299,11 @@ export async function createOrderFromBody(
   }
 
   const kaitenDecideLater = isTestOrder ? true : Boolean(body.kaitenDecideLater);
+  /** Канбан first: «решу позже» всегда создаёт CRM-карточку; Kaiten не планируется. */
   const createKanbanWithoutKaiten = isTestOrder
     ? true
-    : kaitenDecideLater && Boolean(body.createKanbanWithoutKaiten);
-  /** Тип/пространство для Kaiten-синка или только для CRM-канбана при «канбан без Kaiten». */
+    : Boolean(kaitenDecideLater);
+  /** Тип/пространство для Kaiten-синка или для CRM-канбана. */
   const needKaitenPlacementFields =
     !isTestOrder && (!kaitenDecideLater || createKanbanWithoutKaiten);
   let kaitenCardTypeId: string | null = null;
@@ -317,7 +318,7 @@ export async function createOrderFromBody(
     if (!kc || !kt) {
       return fail(
         400,
-        "Укажите тип карточки Кайтен и пространство или отметьте «Решу позже»",
+        "Укажите тип карточки и пространство для канбана CRM (карточка создаётся всегда; Kaiten можно отложить)",
       );
     }
     if (!KAITEN_TRACK.has(kt)) return fail(400, "Некорректное пространство Кайтен");

@@ -22,6 +22,7 @@ import {
   runPostCreateOrderPipeline,
   syncKaitenAfterOrderCreate,
 } from "@/lib/order-post-create-pipeline";
+import { ensureCrmKanbanLinkedCardForOrder } from "@/lib/kanban/ensure-linked-order-card.server";
 import { ensureDoctorClinicLinkAfterOrderSave } from "@/lib/ensure-doctor-clinic-link-from-order";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
@@ -133,6 +134,18 @@ export async function POST(req: Request) {
       const pendingBlockReason = normalizeKaitenBlockReasonInput(
         body.kaitenBlockReason ?? "",
       );
+
+      /** Канбан first: CRM-карточка до любого фона Kaiten. */
+      if (!sendAutoReply) {
+        try {
+          await ensureCrmKanbanLinkedCardForOrder(orderId, tenantId);
+        } catch (e) {
+          logger.error(
+            { err: e, orderId, msg: "crm_kanban_ensure_after_create" },
+            "POST /api/orders",
+          );
+        }
+      }
 
       let kaitenSyncError: string | null = null;
       let autoReply = undefined as

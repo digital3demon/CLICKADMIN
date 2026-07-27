@@ -328,24 +328,26 @@ export function OrderListAdminMemoCell({
                   {err}
                 </p>
               ) : null}
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
-                  disabled={saving || (!memoText && !draft.trim())}
-                  onClick={() => void onClear()}
-                >
-                  Очистить
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md bg-[var(--sidebar-blue)] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
-                  disabled={saving}
-                  onClick={() => void onSave()}
-                >
-                  {saving ? "…" : "Сохранить"}
-                </button>
-                <div className="relative ml-auto">
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
+                    disabled={saving || (!memoText && !draft.trim())}
+                    onClick={() => void onClear()}
+                  >
+                    Очистить
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md bg-[var(--sidebar-blue)] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                    disabled={saving}
+                    onClick={() => void onSave()}
+                  >
+                    {saving ? "…" : "Сохранить"}
+                  </button>
+                </div>
+                <div className="relative shrink-0">
                   <button
                     type="button"
                     className="rounded-md border border-[var(--card-border)] px-2.5 py-1 text-xs font-semibold text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"

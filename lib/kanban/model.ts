@@ -2059,6 +2059,12 @@ function linkedOrderKanbanActivityCreateText(
 export type MergeKaitenLinkedOrdersOptions = {
   /** В демо: тип карточки по первой позиции прайса; дорожка = доска «Работы». */
   demo?: boolean;
+  /**
+   * `replaceEligible` (default) — убрать linked-карточки, которых нет в `rows`
+   * (осторожно с частичной выборкой).
+   * `upsertOnly` — только добавить/обновить строки из `rows`, чужие linked не трогать.
+   */
+  mode?: "replaceEligible" | "upsertOnly";
 };
 
 /** Карточки нарядов вверху колонки, по `kaitenCardSortOrder` как в Kaiten; прочие карточки — ниже. */
@@ -2251,16 +2257,19 @@ export function mergeKaitenLinkedOrdersIntoAppState(
   const visibleRows = rows.filter((r) => !hidden.has(r.id));
   const orderIds = new Set(visibleRows.map((r) => r.id));
   const demo = Boolean(opts?.demo);
+  const upsertOnly = opts?.mode === "upsertOnly";
 
   if (demo) {
     const activeBoard =
       next.boards.find((b) => b.id === next.activeBoardId) ??
       getKanbanLayoutTemplateBoard(next);
     if (!activeBoard || !activeBoard.columns.length) return next;
-    for (const col of activeBoard.columns) {
-      col.cards = col.cards.filter(
-        (c) => !c.linkedOrderId || orderIds.has(c.linkedOrderId),
-      );
+    if (!upsertOnly) {
+      for (const col of activeBoard.columns) {
+        col.cards = col.cards.filter(
+          (c) => !c.linkedOrderId || orderIds.has(c.linkedOrderId),
+        );
+      }
     }
     normalizeBoardCardTypes(activeBoard);
     for (const row of visibleRows) {
@@ -2347,11 +2356,13 @@ export function mergeKaitenLinkedOrdersIntoAppState(
   }
 
   ensureMirroredKanbanBoardsForKaiten(next);
-  for (const b of next.boards) {
-    for (const col of b.columns) {
-      col.cards = col.cards.filter(
-        (c) => !c.linkedOrderId || orderIds.has(c.linkedOrderId),
-      );
+  if (!upsertOnly) {
+    for (const b of next.boards) {
+      for (const col of b.columns) {
+        col.cards = col.cards.filter(
+          (c) => !c.linkedOrderId || orderIds.has(c.linkedOrderId),
+        );
+      }
     }
   }
 

@@ -16,6 +16,7 @@ import {
 import type { CreateOrderBody } from "@/lib/order-create-service";
 import { shouldScheduleKaitenSyncAfterOrderCreate } from "@/lib/order-create-service";
 import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
+import { ensureCrmKanbanLinkedCardForOrder } from "@/lib/kanban/ensure-linked-order-card.server";
 import { logger } from "@/lib/server/logger";
 import { runShadowPredictionInBackground } from "@/lib/llm/shadow-prediction";
 import { runSelfCorrectionForOrderInBackground } from "@/lib/llm/self-correction";
@@ -54,6 +55,20 @@ export async function syncKaitenAfterOrderCreate(
     }
     if (syncResult.ok) {
       invalidateKaitenSnapshotCache(orderId);
+      try {
+        const tenantRow2 = await prisma.order.findUnique({
+          where: { id: orderId },
+          select: { tenantId: true },
+        });
+        if (tenantRow2?.tenantId) {
+          await ensureCrmKanbanLinkedCardForOrder(orderId, tenantRow2.tenantId);
+        }
+      } catch (e) {
+        logger.error(
+          { err: e, msg: "crm_kanban_ensure_after_kaiten", orderId },
+          "order-post-create-pipeline",
+        );
+      }
       try {
         const push = await pushKaitenCardTitleForOrderIfLinked(orderId);
         if (!push.ok) {
@@ -124,6 +139,15 @@ export async function runPostCreateOrderPipeline(
   const { orderId, body, prisma, tenantId, actorUserId, actorRole } = params;
   const sendAutoReply = body.sendAutoReply === true;
   const needsKaiten = shouldScheduleKaitenSyncAfterOrderCreate(body);
+
+  try {
+    await ensureCrmKanbanLinkedCardForOrder(orderId, tenantId);
+  } catch (e) {
+    logger.error(
+      { err: e, msg: "crm_kanban_ensure_after_create", orderId },
+      "order-post-create-pipeline",
+    );
+  }
 
   let kaitenSyncError: string | null = null;
   if (needsKaiten) {

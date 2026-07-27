@@ -1461,15 +1461,13 @@ export function NewOrderForm({
                 : {};
             })(),
             ...(kaiten.kaitenDecideLater
-              ? kaiten.createKanbanWithoutKaiten === true
-                ? {
-                    kaitenDecideLater: true,
-                    createKanbanWithoutKaiten: true,
-                    kaitenCardTypeId: kaiten.kaitenCardTypeId,
-                    kaitenTrackLane: kaiten.kaitenTrackLane,
-                    kaitenCardTitleLabel: kaiten.kaitenCardTitleLabel,
-                  }
-                : { kaitenDecideLater: true }
+              ? {
+                  kaitenDecideLater: true,
+                  createKanbanWithoutKaiten: true,
+                  kaitenCardTypeId: kaiten.kaitenCardTypeId,
+                  kaitenTrackLane: kaiten.kaitenTrackLane,
+                  kaitenCardTitleLabel: kaiten.kaitenCardTitleLabel,
+                }
               : {
                   kaitenDecideLater: false,
                   kaitenCardTypeId: kaiten.kaitenCardTypeId,

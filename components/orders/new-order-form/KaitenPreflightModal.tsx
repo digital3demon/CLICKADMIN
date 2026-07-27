@@ -11,7 +11,6 @@ import {
   KANBAN_BOARD_ORTHOPEDICS_ID,
 } from "@/lib/kanban/model";
 export type KaitenSavePayload =
-  | { kaitenDecideLater: true; createKanbanWithoutKaiten?: false }
   | {
       kaitenDecideLater: true;
       createKanbanWithoutKaiten: true;
@@ -257,8 +256,6 @@ export function KaitenPreflightModal({
   replyActionsEnabled = false,
 }: KaitenPreflightModalProps) {
   const [decideLater, setDecideLater] = useState(false);
-  /** При «Решу позже»: только карточка CRM-канбана; нужны тип и пространство для доски. */
-  const [kanbanOnly, setKanbanOnly] = useState(false);
   const [cardTypes, setCardTypes] = useState<UiCardType[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -285,7 +282,6 @@ export function KaitenPreflightModal({
   useEffect(() => {
     if (!open) return;
     setDecideLater(false);
-    setKanbanOnly(false);
     setSpace("ORTHOPEDICS");
     setLaneAllowlist(null);
     setDistributionLaneAllowlist(null);
@@ -408,7 +404,8 @@ export function KaitenPreflightModal({
     }
   }, [laneOptionsForSelectedSpace, boardLaneName]);
 
-  const kaitenFieldsRequired = !decideLater || kanbanOnly;
+  /** Тип и пространство нужны всегда: карточка CRM-канбана создаётся первой. */
+  const kaitenFieldsRequired = true;
 
   const canSubmit = useMemo(() => {
     if (!kaitenFieldsRequired) return true;
@@ -428,11 +425,7 @@ export function KaitenPreflightModal({
   const submit = useCallback(
     (printPdf: boolean) => {
       if (!canSubmit) return;
-      if (decideLater && !kanbanOnly) {
-        onConfirm({ kaitenDecideLater: true }, { printPdf });
-        return;
-      }
-      if (decideLater && kanbanOnly) {
+      if (decideLater) {
         onConfirm(
           {
             kaitenDecideLater: true,
@@ -455,7 +448,7 @@ export function KaitenPreflightModal({
         { printPdf },
       );
     },
-    [canSubmit, decideLater, kanbanOnly, onConfirm, cardTypeId, space, workLabel],
+    [canSubmit, decideLater, onConfirm, cardTypeId, space, workLabel],
   );
 
   const saveLabel = replyActionsEnabled ? "Сохранить заказ и ответить" : "Сохранить заказ";
@@ -489,14 +482,12 @@ export function KaitenPreflightModal({
                 id="kaiten-preflight-title"
                 className="text-xl font-semibold text-[var(--app-text)]"
               >
-                Кайтен
+                Канбан и Kaiten
               </h2>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                Укажите вид работы и тип карточки для Kaiten. Дату записи задайте
-                в форме наряда. Срок лаборатории продублирован ниже на всякий
-                случай — в шапке карточки и на печати используется он; в поле
-                срока карточки Kaiten он не передаётся. Типы карточек — в
-                конфигурации «Кайтен».
+                Сначала создаётся карточка в канбане CRM. Укажите вид работы и
+                тип карточки. «Решу позже» откладывает только Kaiten — канбан
+                всё равно появится. Дату записи задайте в форме наряда.
               </p>
               {loadError ? (
                 <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -699,31 +690,17 @@ export function KaitenPreflightModal({
               className="mt-0.5 h-4 w-4 rounded border-[var(--input-border)] text-[var(--sidebar-blue)]"
               checked={decideLater}
               onChange={(e) => {
-                const v = e.target.checked;
-                setDecideLater(v);
-                if (!v) setKanbanOnly(false);
+                setDecideLater(e.target.checked);
               }}
             />
-            <span className="text-sm font-medium text-[var(--text-strong)]">
-              Решу позже
+            <span className="min-w-0 text-sm font-medium text-[var(--text-strong)]">
+              Решу позже (только Kaiten)
+              <span className="mt-0.5 block text-xs font-normal text-[var(--text-muted)]">
+                Карточка в канбане CRM создаётся сразу; в Kaiten — когда решите
+                создать или привязать.
+              </span>
             </span>
           </label>
-          {decideLater ? (
-            <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 rounded border-[var(--input-border)] text-[var(--sidebar-blue)]"
-                checked={kanbanOnly}
-                onChange={(e) => setKanbanOnly(e.target.checked)}
-              />
-              <span className="min-w-0 text-sm font-medium text-[var(--text-strong)]">
-                Создать только в канбан
-                <span className="mt-0.5 block text-xs font-normal text-[var(--text-muted)]">
-                  Карточку Kaiten не создаём; для доски CRM укажите тип и пространство ниже.
-                </span>
-              </span>
-            </label>
-          ) : null}
           {replyAside ? (
             <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5">
               <input
