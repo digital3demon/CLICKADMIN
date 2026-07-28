@@ -33,6 +33,18 @@ describe("cleanMailTextBody", () => {
       ),
     ).toBe("К письму приложены файлы на Яндекс Диске:\nголубева КПКТ.zip (82542801)");
   });
+
+  it("не вырезает поле «картинка» из текста заказа (кириллица до и после)", () => {
+    const body = [
+      "работа Марко-Роса с опорой на 53,63",
+      "картинка 37,33",
+      "цвет 13,разноцветные блёстки",
+      "металл 8",
+    ].join("\n");
+    expect(cleanMailTextBody(body)).toBe(body);
+    expect(cleanMailTextBody("до картинка после")).toBe("до картинка после");
+    expect(cleanMailTextBody("Картинка: 12")).toBe("Картинка: 12");
+  });
 });
 
 describe("mailHtmlToText", () => {

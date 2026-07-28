@@ -54,8 +54,10 @@ export function cleanMailTextBody(text: string | null | undefined): string {
     .split(/\r?\n/)
     .map((line) => {
       let next = line.replace(BRACKET_IMAGE_RE, " ");
-      // JS \b не считает кириллицу word-символами, поэтому границы задаём через \p{L}.
-      next = next.replace(/(?<!\p{L})(?:логотип|logo|image|изображение|картинка)(?!\p{L})/giu, " ");
+      // Только шаблонные подписи к inline-картинкам писем (Яндекс и т.п.).
+      // Не трогаем «картинка» / «изображение» — в заказах лаборатории это поля состава
+      // («картинка 37,33»), а не alt-текст вложения. Границы через \p{L}: JS \b для кириллицы ненадёжен.
+      next = next.replace(/(?<!\p{L})(?:логотип|logo|image)(?!\p{L})/giu, " ");
       return next.replace(/\s+/g, " ").trim();
     })
     .filter(Boolean)
