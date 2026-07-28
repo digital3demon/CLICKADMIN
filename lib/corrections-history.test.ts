@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCorrectionHistoryStatusTimeline,
+  formatCorrectionHistoryAuthorDetail,
   formatCorrectionHistoryDecision,
   mergeCorrectionHistoryRows,
   ordersHistoryHref,
@@ -38,6 +39,7 @@ describe("mergeCorrectionHistoryRows", () => {
       kind: "correction" as const,
       text: "x",
       source: "KAITEN" as const,
+      authorLabel: null,
       createdAt: new Date("2026-05-01T10:00:00Z"),
       resolvedAt: null,
       rejectedAt: null,
@@ -64,6 +66,7 @@ describe("formatCorrectionHistoryDecision", () => {
     kind: "correction" as const,
     text: "текст",
     source: "KAITEN" as const,
+    authorLabel: null,
     createdAt: new Date("2026-05-01T10:00:00Z"),
     resolvedAt: null,
     rejectedAt: null,
@@ -111,12 +114,33 @@ describe("formatCorrectionHistoryDecision", () => {
   });
 });
 
+describe("formatCorrectionHistoryAuthorDetail", () => {
+  it("с именем автора — «Имя, дата»", () => {
+    const line = formatCorrectionHistoryAuthorDetail({
+      authorLabel: "Ахмадиджей",
+      createdAt: new Date("2026-07-24T14:36:00Z"),
+    });
+    expect(line).toContain("Ахмадиджей");
+    expect(line).toContain(",");
+  });
+
+  it("без автора — только дата", () => {
+    const line = formatCorrectionHistoryAuthorDetail({
+      authorLabel: null,
+      createdAt: new Date("2026-07-24T14:36:00Z"),
+    });
+    expect(line).toMatch(/24\.07\.2026/);
+    expect(line).not.toMatch(/Ахмадиджей/);
+  });
+});
+
 describe("buildCorrectionHistoryStatusTimeline", () => {
   const base = {
     id: "1",
     kind: "prosthetics" as const,
     text: "??? тест",
     source: "KAITEN" as const,
+    authorLabel: "Доктор И.",
     createdAt: new Date("2026-07-10T10:33:00Z"),
     resolvedAt: null,
     rejectedAt: null,

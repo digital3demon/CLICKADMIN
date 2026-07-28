@@ -9,6 +9,8 @@ export type CorrectionHistoryRow = {
   kind: "correction" | "prosthetics";
   text: string;
   source: CorrectionHistorySource;
+  /** Автор сообщения в Kaiten/канбане (имя из комментария). */
+  authorLabel: string | null;
   createdAt: Date;
   resolvedAt: Date | null;
   rejectedAt: Date | null;
@@ -101,6 +103,16 @@ export function formatCorrectionHistoryDecision(row: CorrectionHistoryRow): {
   return { status: "pending", label: "Ожидает", detail: null };
 }
 
+/** Подпись автора заявки: «Имя, дата время» (как в «Кем и когда» для решения). */
+export function formatCorrectionHistoryAuthorDetail(row: {
+  authorLabel: string | null;
+  createdAt: Date;
+}): string {
+  const who = row.authorLabel?.trim();
+  const when = formatRuDateTime(row.createdAt);
+  return who ? `${who}, ${when}` : when;
+}
+
 export type CorrectionHistoryStatusEvent = {
   status: "pending" | "accepted" | "rejected" | "arrived";
   label: string;
@@ -164,6 +176,7 @@ export type CorrectionHistoryJsonRow = {
   id: string;
   text: string;
   source: CorrectionHistorySource;
+  authorLabel: string | null;
   createdAt: string;
   resolvedAt: string | null;
   rejectedAt: string | null;
@@ -182,6 +195,7 @@ export function correctionHistoryRowToJson(
     id: row.id,
     text: row.text,
     source: row.source,
+    authorLabel: row.authorLabel,
     createdAt: row.createdAt.toISOString(),
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
     rejectedAt: row.rejectedAt?.toISOString() ?? null,
@@ -202,6 +216,7 @@ export function correctionHistoryRowFromJson(
     kind: "correction",
     text: row.text,
     source: row.source,
+    authorLabel: row.authorLabel?.trim() || null,
     createdAt: new Date(row.createdAt),
     resolvedAt: row.resolvedAt ? new Date(row.resolvedAt) : null,
     rejectedAt: row.rejectedAt ? new Date(row.rejectedAt) : null,

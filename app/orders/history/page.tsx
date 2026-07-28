@@ -7,6 +7,7 @@ import { OrdersHistoryTable } from "@/components/orders/OrdersHistoryTable";
 import { OrdersProstheticsHistoryTable } from "@/components/orders/OrdersProstheticsHistoryTable";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { parseOrdersHistoryTab } from "@/lib/corrections-history";
 import {
   loadCorrectionsHistoryOnly,
@@ -26,6 +27,7 @@ export default async function OrdersHistoryPage({
   const tab = parseOrdersHistoryTab(sp.tab);
   const q = normalizeRevisionsHistorySearchQuery(sp.q);
   const session = await getSessionFromCookies();
+  const tenantId = session ? await getTenantIdForSession(session) : null;
   const canMarkArrived =
     session != null && canAcceptOrderChatCorrections(session.role);
 
@@ -41,9 +43,9 @@ export default async function OrdersHistoryPage({
     if (tab === "changes") {
       changesItems = await loadRevisionsHistoryMerged({ q });
     } else if (tab === "corrections") {
-      correctionsItems = await loadCorrectionsHistoryOnly({ q });
+      correctionsItems = await loadCorrectionsHistoryOnly({ q, tenantId });
     } else {
-      prostheticsItems = await loadProstheticsHistoryOnly({ q });
+      prostheticsItems = await loadProstheticsHistoryOnly({ q, tenantId });
     }
   } catch (e) {
     console.error("[orders/history]", e);

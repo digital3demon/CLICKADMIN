@@ -4,8 +4,8 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CORRECTION_SOURCE_LABEL,
+  formatCorrectionHistoryAuthorDetail,
   formatCorrectionHistoryDecision,
-  formatRuDateTime,
   PROSTHETICS_ARRIVED_STATUS_LABEL,
   type CorrectionHistoryRow,
 } from "@/lib/corrections-history";
@@ -140,7 +140,7 @@ export function OrdersProstheticsHistoryTable({
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <th className="px-2 py-2.5 sm:px-3 sm:py-3">Заказ</th>
               <th className="px-2 py-2.5 sm:px-3 sm:py-3">Откуда</th>
-              <th className="px-2 py-2.5 sm:px-3 sm:py-3">Когда</th>
+              <th className="px-2 py-2.5 sm:px-3 sm:py-3">От кого и когда</th>
               <th className="px-2 py-2.5 sm:px-3 sm:py-3">Статус</th>
               <th className="px-2 py-2.5 sm:px-3 sm:py-3">Кем и когда</th>
               <th className="px-2 py-2.5 sm:px-3 sm:py-3">Пришла</th>
@@ -166,8 +166,10 @@ export function OrdersProstheticsHistoryTable({
                   <td className="px-2 py-2 text-[var(--text-strong)] sm:px-3 sm:py-2.5">
                     {CORRECTION_SOURCE_LABEL[item.source]}
                   </td>
-                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-2 font-mono text-xs tabular-nums text-[var(--text-strong)] sm:px-3 sm:py-2.5 sm:text-sm">
-                    {formatRuDateTime(new Date(item.createdAt))}
+                  <td className="px-2 py-2 text-[var(--text-secondary)] sm:px-3 sm:py-2.5">
+                    <span className="block whitespace-normal break-words">
+                      {formatCorrectionHistoryAuthorDetail(historyRow)}
+                    </span>
                   </td>
                   <td className="px-2 py-2 align-top sm:px-3 sm:py-2.5">
                     <CorrectionHistoryStatusCell row={historyRow} />

@@ -14,6 +14,7 @@ const correctionSelect = {
   id: true,
   text: true,
   source: true,
+  authorLabel: true,
   createdAt: true,
   resolvedAt: true,
   rejectedAt: true,
@@ -43,6 +44,7 @@ function mapCorrection(
     kind: "correction",
     text: r.text,
     source: r.source,
+    authorLabel: r.authorLabel?.trim() || null,
     createdAt: r.createdAt,
     resolvedAt: r.resolvedAt,
     rejectedAt: r.rejectedAt,
@@ -69,6 +71,7 @@ function mapProsthetics(
     kind: "prosthetics",
     text: r.text,
     source: r.source,
+    authorLabel: r.authorLabel?.trim() || null,
     createdAt: r.createdAt,
     resolvedAt: r.resolvedAt,
     rejectedAt: r.rejectedAt,
@@ -88,6 +91,7 @@ function mapProsthetics(
 function buildCorrectionSearchWhere(q: string): Prisma.OrderChatCorrectionWhereInput {
   const or: Prisma.OrderChatCorrectionWhereInput[] = [
     { text: { contains: q, mode: "insensitive" } },
+    { authorLabel: { contains: q, mode: "insensitive" } },
     { order: { orderNumber: { contains: q, mode: "insensitive" } } },
     { order: { patientName: { contains: q, mode: "insensitive" } } },
     { resolvedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
@@ -108,6 +112,7 @@ function buildProstheticsSearchWhere(
 ): Prisma.OrderProstheticsRequestWhereInput {
   const or: Prisma.OrderProstheticsRequestWhereInput[] = [
     { text: { contains: q, mode: "insensitive" } },
+    { authorLabel: { contains: q, mode: "insensitive" } },
     { order: { orderNumber: { contains: q, mode: "insensitive" } } },
     { order: { patientName: { contains: q, mode: "insensitive" } } },
     { resolvedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
@@ -132,19 +137,24 @@ function buildProstheticsSearchWhere(
   return { OR: or };
 }
 
-const orderScope = { archivedAt: null } satisfies Prisma.OrderWhereInput;
+const orderScope = (tenantId?: string | null) =>
+  ({
+    archivedAt: null,
+    ...(tenantId?.trim() ? { tenantId: tenantId.trim() } : {}),
+  }) satisfies Prisma.OrderWhereInput;
 
 /** Только корректировки «!!!». */
 export async function loadCorrectionsHistoryOnly(opts?: {
   q?: string | null;
   limit?: number;
+  tenantId?: string | null;
 }): Promise<CorrectionHistoryRow[]> {
   const q = normalizeRevisionsHistorySearchQuery(opts?.q);
   const take = opts?.limit ?? (q ? TAKE_SEARCH : TAKE_DEFAULT);
   const prisma = await getOrdersPrisma();
   const rows = await prisma.orderChatCorrection.findMany({
     where: {
-      order: orderScope,
+      order: orderScope(opts?.tenantId),
       ...(q ? buildCorrectionSearchWhere(q) : {}),
     },
     orderBy: { createdAt: "desc" },
@@ -158,13 +168,14 @@ export async function loadCorrectionsHistoryOnly(opts?: {
 export async function loadProstheticsHistoryOnly(opts?: {
   q?: string | null;
   limit?: number;
+  tenantId?: string | null;
 }): Promise<CorrectionHistoryRow[]> {
   const q = normalizeRevisionsHistorySearchQuery(opts?.q);
   const take = opts?.limit ?? (q ? TAKE_SEARCH : TAKE_DEFAULT);
   const prisma = await getOrdersPrisma();
   const rows = await prisma.orderProstheticsRequest.findMany({
     where: {
-      order: orderScope,
+      order: orderScope(opts?.tenantId),
       ...(q ? buildProstheticsSearchWhere(q) : {}),
     },
     orderBy: { createdAt: "desc" },
