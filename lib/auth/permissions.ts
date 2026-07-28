@@ -1,4 +1,5 @@
 import type { AppModule, UserRole } from "@prisma/client";
+import { defaultModuleAllowed } from "@/lib/role-module-defaults";
 import { parseUserRole } from "@/lib/user-role-labels";
 
 /**
@@ -140,7 +141,8 @@ export function canSeeOrderNotificationKind(
   ) {
     return moduleAccess.ORDERS_NOTIFICATIONS === true;
   }
-  return false;
+  if (!role) return false;
+  return defaultModuleAllowed(role, mod);
 }
 
 /** Снять подсветку @лаборатория для всей лаборатории — только админы и владелец. */

@@ -455,7 +455,7 @@ export default async function OrdersPage({
   if (tenantId) {
     labMentionCount = await countOrdersWithPendingKaitenLabMentionForUser(
       ordersPrisma,
-      baseCountWhere,
+      statusChipCountWhere,
       session?.sub,
     );
   }
@@ -606,7 +606,9 @@ export default async function OrdersPage({
     (alwaysShowOrderAttentionChips || prostheticsPendingCount > 0);
   const showAdminChip =
     canSeeAdminChip &&
-    (alwaysShowOrderAttentionChips || labMentionCount > 0);
+    (alwaysShowOrderAttentionChips ||
+      labMentionCount > 0 ||
+      activeFilter?.kind === "kaitenLabMention");
   const showOrdersQuickFilterChipsRow =
     showAdminMemoChip ||
     showCorrectionsChip ||
