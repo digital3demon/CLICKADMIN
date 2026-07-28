@@ -39,6 +39,43 @@ describe("order-chat-inbox-db", () => {
     });
     expect(changed).toBe(true);
     expect(updateMany).toHaveBeenCalledOnce();
+    expect(updateMany.mock.calls[0]?.[0]?.where?.OR).toEqual([
+      { crmDraftId: "cm_abc12345" },
+      { crmDraftId: { startsWith: "cm_abc12345@u:" } },
+    ]);
+  });
+
+  it("при sync из Kaiten без DRAFT обновляет pending USER_MENTION, а не плодит k:", async () => {
+    const findFirst = vi.fn().mockResolvedValue({ id: "inbox-1" });
+    const update = vi.fn().mockResolvedValue({});
+    const upsert = vi.fn().mockResolvedValue({});
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: "u-demon",
+        mentionHandle: "digitaldemon",
+        email: null,
+        displayName: null,
+        role: "OWNER",
+      },
+    ]);
+    const db = {
+      orderChatInboxItem: { findFirst, update, upsert, updateMany },
+      user: { findMany },
+    } as any;
+    await syncOrderChatInboxFromKaitenComments(db, {
+      tenantId: "t1",
+      orderId: "o1",
+      comments: [{ id: 99, text: "@digitaldemon тест", authorName: "Всеволод" }],
+    });
+    expect(findFirst).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "inbox-1" },
+        data: expect.objectContaining({ kaitenCommentId: 99 }),
+      }),
+    );
+    expect(upsert).not.toHaveBeenCalled();
   });
 
   it("marks pending draft rows as failed when sync fails", async () => {
@@ -77,6 +114,7 @@ describe("order-chat-inbox-db", () => {
 
   it("создаёт USER_MENTION для обычного @ник без !!!/???/@lab", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const findFirst = vi.fn().mockResolvedValue(null);
     const upsert = vi.fn().mockResolvedValue({});
     const findMany = vi.fn().mockResolvedValue([
       {
@@ -88,7 +126,7 @@ describe("order-chat-inbox-db", () => {
       },
     ]);
     const db = {
-      orderChatInboxItem: { updateMany, upsert },
+      orderChatInboxItem: { findFirst, updateMany, upsert },
       user: { findMany },
     } as any;
     const changed = await syncOrderChatInboxFromKaitenComments(db, {

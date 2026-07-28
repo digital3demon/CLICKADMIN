@@ -19,7 +19,9 @@ function resolveNotifySiteOrigin(primary: string | null | undefined): string | n
   const fromRequest = primary?.trim();
   if (fromRequest) return fromRequest.replace(/\/+$/, "");
   const fromEnv =
-    process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.APP_URL?.trim();
+    process.env.CRM_PUBLIC_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.APP_URL?.trim();
   return fromEnv ? fromEnv.replace(/\/+$/, "") : null;
 }
 

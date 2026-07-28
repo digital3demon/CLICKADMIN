@@ -34,6 +34,19 @@ function userMentionDraftKey(
   return `${baseDraft}@u:${targetUserId}`;
 }
 
+/** Строки inbox, привязанные к CRM draft (в т.ч. USER_MENTION с суффиксом @u:). */
+function orderChatInboxRowsForCrmDraftWhere(
+  orderId: string,
+  draft: string,
+  extra?: Record<string, unknown>,
+) {
+  return {
+    orderId,
+    ...extra,
+    OR: [{ crmDraftId: draft }, { crmDraftId: { startsWith: `${draft}@u:` } }],
+  };
+}
+
 async function createUserMentionInboxItems(
   db: PrismaClient,
   input: {
@@ -72,16 +85,47 @@ async function createUserMentionInboxItems(
   });
   if (mentionedIds.length === 0) return false;
 
-  const baseDraft =
-    String(input.crmDraftId || "").trim() ||
-    (input.kaitenCommentId != null
-      ? `k:${Math.trunc(input.kaitenCommentId)}`
-      : "");
-  if (!baseDraft) return false;
-
   const authorLabel = trimOrderChatAuthorLabel(input.authorLabel);
   let changed = false;
   for (const targetUserId of mentionedIds) {
+    const crmDraftFromInput = String(input.crmDraftId || "").trim();
+    const kaitenId =
+      input.kaitenCommentId != null && Number.isFinite(input.kaitenCommentId)
+        ? Math.trunc(input.kaitenCommentId)
+        : null;
+
+    if (!crmDraftFromInput && kaitenId != null && kaitenId > 0) {
+      const pending = await (db as any).orderChatInboxItem.findFirst({
+        where: {
+          orderId,
+          type: "USER_MENTION",
+          targetUserId,
+          kaitenCommentId: null,
+          crmDraftId: { endsWith: `@u:${targetUserId}` },
+          NOT: { crmDraftId: { startsWith: "k:" } },
+        },
+        select: { id: true },
+      });
+      if (pending?.id) {
+        await (db as any).orderChatInboxItem.update({
+          where: { id: pending.id },
+          data: {
+            text: input.text,
+            authorLabel,
+            syncState: input.syncState,
+            source: input.source,
+            kaitenCommentId: kaitenId,
+          },
+        });
+        changed = true;
+        continue;
+      }
+    }
+
+    const baseDraft =
+      crmDraftFromInput || (kaitenId != null && kaitenId > 0 ? `k:${kaitenId}` : "");
+    if (!baseDraft) continue;
+
     const draftKey = userMentionDraftKey(baseDraft, targetUserId);
     await (db as any).orderChatInboxItem.upsert({
       where: {
@@ -188,11 +232,9 @@ export async function bindOrderChatInboxItemsByCrmDraft(
     return false;
   }
   const upd = await (db as any).orderChatInboxItem.updateMany({
-    where: {
-      orderId,
-      crmDraftId: draft,
+    where: orderChatInboxRowsForCrmDraftWhere(orderId, draft, {
       kaitenCommentId: null,
-    },
+    }),
     data: {
       kaitenCommentId,
       syncState: "SYNCED_EXTERNAL",
@@ -209,12 +251,10 @@ export async function markOrderChatInboxDraftSyncFailed(
   const draft = String(input.crmDraftId || "").trim();
   if (!orderId || !draft) return false;
   const upd = await (db as any).orderChatInboxItem.updateMany({
-    where: {
-      orderId,
-      crmDraftId: draft,
+    where: orderChatInboxRowsForCrmDraftWhere(orderId, draft, {
       syncState: "PENDING_EXTERNAL",
       kaitenCommentId: null,
-    },
+    }),
     data: { syncState: "FAILED_EXTERNAL" },
   });
   return upd.count > 0;

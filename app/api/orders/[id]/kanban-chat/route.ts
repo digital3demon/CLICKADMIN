@@ -665,17 +665,21 @@ export async function POST(
 
     const board = next.boards[loc.boardIndex]!;
     const siteOrigin = await getSiteOrigin();
-    void notifyTelegramForKanbanChatMentions({
-      sessionDemo: Boolean(session.demo),
-      actorUserId: session.sub,
-      tenantId,
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      kaitenCardId: order.kaitenCardId,
-      text: messageText,
-      siteOrigin,
-      productionMentionTag: normalizeProductionSettings(board).productionMentionTag,
-    }).catch((e) => console.error("[kanban-chat POST] mention tg", orderId, e));
+    try {
+      await notifyTelegramForKanbanChatMentions({
+        sessionDemo: Boolean(session.demo),
+        actorUserId: session.sub,
+        tenantId,
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        kaitenCardId: order.kaitenCardId,
+        text: messageText,
+        siteOrigin,
+        productionMentionTag: normalizeProductionSettings(board).productionMentionTag,
+      });
+    } catch (e) {
+      console.error("[kanban-chat POST] mention tg", orderId, e);
+    }
 
     return NextResponse.json({ ok: true, comment: row });
   }
