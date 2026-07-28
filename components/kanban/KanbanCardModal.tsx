@@ -667,10 +667,8 @@ export function KanbanCardModal({
             fc.card.comments = withImagePlaceholders(nextComments, fc.card);
             pushActivity(fc.card, "Комментарий", actor, b, act);
           });
-          fireMentionTelegram();
           return true;
         }
-        fireMentionTelegram();
         return true;
       } catch {
         toast("Сеть недоступна", true);
@@ -714,7 +712,6 @@ export function KanbanCardModal({
             fc.card.comments = withImagePlaceholders(nextComments, fc.card);
             pushActivity(fc.card, "Комментарий", actor, b, act);
           });
-          fireMentionTelegram();
           return true;
         }
       } catch {

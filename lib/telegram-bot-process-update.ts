@@ -105,6 +105,18 @@ async function reply(
       });
     }
   }
+  if (!r.ok && opts?.replyMarkup) {
+    r = await telegramSendMessage(botToken, chatId, text, {
+      parseMode: opts.parseMode,
+    });
+  }
+  if (!r.ok && opts?.parseMode === "HTML") {
+    const plain = text
+      .replace(/<a href="[^"]*">([^<]*)<\/a>/gi, "$1")
+      .replace(/<\/?b>/gi, "")
+      .replace(/<[^>]+>/g, "");
+    r = await telegramSendMessage(botToken, chatId, plain);
+  }
   if (!r.ok) {
     console.error("[telegram-bot] sendMessage failed", { chatId, error: r.error });
     return false;

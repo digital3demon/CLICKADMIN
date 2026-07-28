@@ -1,7 +1,7 @@
 import "server-only";
 
+import type { PrismaClient } from "@prisma/client";
 import { UserRole } from "@prisma/client";
-import { fetchShipmentOrdersInDueRange } from "@/lib/fetch-shipments-orders";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
@@ -17,10 +17,10 @@ import {
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
 import { endYmdKanbanDlinetm } from "@/lib/kanban-dline-end-ymd";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
-import type { ShipmentOrderRow } from "@/lib/fetch-shipments-orders";
 import { getClientsPrisma } from "@/lib/get-domain-prisma";
 import { fetchKanbanStageDlineTelegramItems } from "@/lib/telegram-bot-kanban-stage-dline";
 import { isTelegramBotCardStageCommand } from "@/lib/telegram-bot-menu-commands";
+import { formatTelegramHtmlLinkList } from "@/lib/telegram-html-message";
 import {
   telegramRoleMayCardStageDline,
   telegramRoleMayDline,
@@ -34,36 +34,6 @@ export {
   resolveTelegramBotListCommand,
   telegramMenuLabelToCommand,
 } from "@/lib/telegram-bot-menu-commands";
-
-const MAX_LINK_LINES = 120;
-
-function telegramEscapeHtmlText(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function telegramEscapeHtmlAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-}
-
-/** Одна строка, как в списке Kaiten/канбана (две строки шапки склеиваются пробелом). */
-function telegramOrderCardTitleOneLineFromShipmentRow(o: ShipmentOrderRow): string {
-  return buildKaitenCardTitle({
-    orderNumber: o.orderNumber,
-    patientName: o.patientName,
-    doctor: o.doctor,
-    dueDate: o.dueDate,
-    kaitenLabDueHasTime: o.kaitenAdminDueHasTime !== false,
-    kaitenCardTitleLabel: o.kaitenCardTitleLabel,
-    kaitenCardType: o.kaitenCardType,
-    isUrgent: o.isUrgent,
-    urgentCoefficient: o.urgentCoefficient,
-  })
-    .replace(/\n/g, " ")
-    .trim();
-}
 
 function telegramOrderCardTitleOneLineFromParts(p: {
   orderNumber: string;
@@ -100,24 +70,78 @@ function orderCardHref(kaitenCardId: number | null, orderId: string): string {
   return `${base}${kanbanOrderDeepLinkPath(orderId)}`;
 }
 
-function formatHtmlLinkList(
-  items: { url: string; label: string }[],
-  emptyRu: string,
-  header: string,
-): string {
-  if (items.length === 0) {
-    return `<b>${telegramEscapeHtmlText(header)}</b>\n${telegramEscapeHtmlText(emptyRu)}`;
-  }
-  const slice = items.slice(0, MAX_LINK_LINES);
-  const extra =
-    items.length > MAX_LINK_LINES
-      ? `\n… ещё ${items.length - MAX_LINK_LINES}`
-      : "";
-  const lines = slice.map(
-    (x) =>
-      `<a href="${telegramEscapeHtmlAttr(x.url)}">${telegramEscapeHtmlText(x.label)}</a>`,
-  );
-  return `<b>${telegramEscapeHtmlText(header)}</b>\n${lines.join("\n")}${extra}`;
+const orderTelegramTitleSelect = {
+  id: true,
+  orderNumber: true,
+  patientName: true,
+  dueDate: true,
+  kaitenAdminDueHasTime: true,
+  kaitenCardTitleLabel: true,
+  doctorId: true,
+  kaitenCardTypeId: true,
+  kaitenCardId: true,
+  isUrgent: true,
+  urgentCoefficient: true,
+} as const;
+
+/** Лёгкий запрос для бота — только поля заголовка карточки, без гидрации отгрузок. */
+async function fetchOrderTelegramLinkItems(
+  ordersDb: PrismaClient,
+  tenantId: string,
+  start: Date,
+  endExclusive: Date,
+): Promise<{ url: string; label: string }[]> {
+  const dueRows = await ordersDb.order.findMany({
+    where: {
+      tenantId,
+      archivedAt: null,
+      dueDate: { not: null, gte: start, lt: endExclusive },
+    },
+    orderBy: [{ dueDate: "asc" }, { orderNumber: "asc" }],
+    select: orderTelegramTitleSelect,
+  });
+  if (dueRows.length === 0) return [];
+
+  const clientsPrisma = await getClientsPrisma();
+  const doctorIds = Array.from(new Set(dueRows.map((x) => x.doctorId)));
+  const cardTypeIds = Array.from(
+    new Set(dueRows.map((x) => x.kaitenCardTypeId).filter(Boolean)),
+  ) as string[];
+  const [doctors, cardTypes] = await Promise.all([
+    clientsPrisma.doctor.findMany({
+      where: { id: { in: doctorIds } },
+      select: { id: true, fullName: true },
+    }),
+    cardTypeIds.length
+      ? clientsPrisma.kaitenCardType.findMany({
+          where: { id: { in: cardTypeIds } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const doctorById = new Map(doctors.map((d) => [d.id, d]));
+  const cardTypeById = new Map(cardTypes.map((t) => [t.id, t]));
+
+  return dueRows.map((row) => {
+    const doctor = doctorById.get(row.doctorId);
+    const kt = row.kaitenCardTypeId
+      ? cardTypeById.get(row.kaitenCardTypeId)
+      : undefined;
+    return {
+      url: orderCardHref(row.kaitenCardId, row.id),
+      label: telegramOrderCardTitleOneLineFromParts({
+        orderNumber: row.orderNumber,
+        patientName: row.patientName,
+        dueDate: row.dueDate,
+        kaitenAdminDueHasTime: row.kaitenAdminDueHasTime,
+        kaitenCardTitleLabel: row.kaitenCardTitleLabel,
+        doctor: { fullName: doctor?.fullName ?? "—" },
+        kaitenCardType: kt ? { name: kt.name } : null,
+        isUrgent: row.isUrgent,
+        urgentCoefficient: row.urgentCoefficient,
+      }),
+    };
+  });
 }
 
 /** Нижняя клавиатура в чате: только кнопки, разрешённые роли (остальное — команды вручную). */
@@ -226,19 +250,15 @@ export async function tryTelegramBotListCommand(opts: {
       header = `Отгрузки до конца рабочей недели (${todayYmd} … ${fri}, окна срока лаборатории как на странице «Отгрузки»)`;
     }
 
-    const rows = await fetchShipmentOrdersInDueRange(
+    const items = await fetchOrderTelegramLinkItems(
       ordersDb,
       tenantId,
       start,
       endExclusive,
     );
-    const items = rows.map((o) => ({
-      url: orderCardHref(o.kaitenCardId, o.id),
-      label: telegramOrderCardTitleOneLineFromShipmentRow(o),
-    }));
     return {
       parseMode: "HTML",
-      text: formatHtmlLinkList(items, "Отгрузок нет", header),
+      text: formatTelegramHtmlLinkList(items, "Отгрузок нет", header),
     };
   }
 
@@ -250,7 +270,7 @@ export async function tryTelegramBotListCommand(opts: {
     );
     return {
       parseMode: "HTML",
-      text: formatHtmlLinkList(stage.items, "Карточек не найдено", stage.header),
+      text: formatTelegramHtmlLinkList(stage.items, "Карточек не найдено", stage.header),
     };
   }
 
@@ -265,7 +285,7 @@ export async function tryTelegramBotListCommand(opts: {
       : "Привяжите Telegram к пользователю CRM, чтобы видеть карточки на вас";
     return {
       parseMode: "HTML",
-      text: formatHtmlLinkList(stage.items, emptyRu, stage.header),
+      text: formatTelegramHtmlLinkList(stage.items, emptyRu, stage.header),
     };
   }
 
@@ -291,71 +311,15 @@ export async function tryTelegramBotListCommand(opts: {
     header = `Срок лабораторный до конца рабочей недели (${todayYmd}…${fri}, МСК)`;
   }
 
-  const dueRows = await ordersDb.order.findMany({
-    where: {
-      tenantId,
-      archivedAt: null,
-      dueDate: { not: null, gte: start, lt: endExclusive },
-    },
-    orderBy: [{ dueDate: "asc" }, { orderNumber: "asc" }],
-    select: {
-      id: true,
-      orderNumber: true,
-      patientName: true,
-      dueDate: true,
-      kaitenAdminDueHasTime: true,
-      kaitenCardTitleLabel: true,
-      doctorId: true,
-      kaitenCardTypeId: true,
-      kaitenCardId: true,
-      isUrgent: true,
-      urgentCoefficient: true,
-    },
-  });
-
-  const clientsPrisma = await getClientsPrisma();
-  const doctorIds = Array.from(new Set(dueRows.map((x) => x.doctorId)));
-  const cardTypeIds = Array.from(
-    new Set(dueRows.map((x) => x.kaitenCardTypeId).filter(Boolean)),
-  ) as string[];
-  const [doctors, cardTypes] = await Promise.all([
-    clientsPrisma.doctor.findMany({
-      where: { id: { in: doctorIds } },
-      select: { id: true, fullName: true },
-    }),
-    cardTypeIds.length
-      ? clientsPrisma.kaitenCardType.findMany({
-          where: { id: { in: cardTypeIds } },
-          select: { id: true, name: true },
-        })
-      : Promise.resolve([]),
-  ]);
-  const doctorById = new Map(doctors.map((d) => [d.id, d]));
-  const cardTypeById = new Map(cardTypes.map((t) => [t.id, t]));
-
-  const items = dueRows.map((row) => {
-    const doctor = doctorById.get(row.doctorId);
-    const kt = row.kaitenCardTypeId
-      ? cardTypeById.get(row.kaitenCardTypeId)
-      : undefined;
-    return {
-      url: orderCardHref(row.kaitenCardId, row.id),
-      label: telegramOrderCardTitleOneLineFromParts({
-        orderNumber: row.orderNumber,
-        patientName: row.patientName,
-        dueDate: row.dueDate,
-        kaitenAdminDueHasTime: row.kaitenAdminDueHasTime,
-        kaitenCardTitleLabel: row.kaitenCardTitleLabel,
-        doctor: { fullName: doctor?.fullName ?? "—" },
-        kaitenCardType: kt ? { name: kt.name } : null,
-        isUrgent: row.isUrgent,
-        urgentCoefficient: row.urgentCoefficient,
-      }),
-    };
-  });
+  const items = await fetchOrderTelegramLinkItems(
+    ordersDb,
+    tenantId,
+    start,
+    endExclusive,
+  );
 
   return {
     parseMode: "HTML",
-    text: formatHtmlLinkList(items, "Работ не найдено", header),
+    text: formatTelegramHtmlLinkList(items, "Работ не найдено", header),
   };
 }

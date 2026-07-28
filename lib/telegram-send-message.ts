@@ -2,6 +2,11 @@
  * Отправка сообщения в Telegram (Bot API). Сервер-only.
  */
 
+import {
+  TELEGRAM_MESSAGE_MAX_LEN,
+  truncateTelegramHtmlMessage,
+} from "@/lib/telegram-html-message";
+
 export type TelegramSendResult =
   | { ok: true; sentMessageId?: string }
   | { ok: false; error: string };
@@ -19,6 +24,8 @@ async function sendMessageRequest(
   botToken: string,
   body: Record<string, unknown>,
 ): Promise<TelegramSendResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
   try {
     const res = await fetch(
       `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`,
@@ -26,6 +33,7 @@ async function sendMessageRequest(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       },
     );
     const j = (await res.json().catch(() => ({}))) as {
@@ -46,7 +54,12 @@ async function sendMessageRequest(
         mid != null && Number.isFinite(mid) ? String(Math.trunc(mid)) : undefined,
     };
   } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      return { ok: false, error: "Таймаут запроса к Telegram API" };
+    }
     return { ok: false, error: normalizeTelegramNetworkError(e) };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -64,9 +77,13 @@ export async function telegramSendMessage(
 ): Promise<TelegramSendResult> {
   const t = text.trim();
   if (!t) return { ok: false, error: "Пустой текст" };
+  const bodyText =
+    opts?.parseMode === "HTML"
+      ? truncateTelegramHtmlMessage(t, TELEGRAM_MESSAGE_MAX_LEN)
+      : t.slice(0, TELEGRAM_MESSAGE_MAX_LEN);
   const body: Record<string, unknown> = {
     chat_id: chatId,
-    text: t.slice(0, 4096),
+    text: bodyText,
     disable_web_page_preview: true,
   };
   if (

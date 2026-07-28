@@ -34,7 +34,10 @@ import {
 import { textIncludesAdminLabMention } from "@/lib/kaiten-comment-parse";
 import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
 import { isKanbanChatLocalOnlyRequest } from "@/lib/kanban/kanban-chat-local-query";
+import { normalizeProductionSettings } from "@/lib/kanban/production";
+import { notifyTelegramForKanbanChatMentions } from "@/lib/kanban-chat-mention-telegram.server";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
+import { getSiteOrigin } from "@/lib/site-origin-server";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
@@ -483,6 +486,7 @@ export async function POST(
     where: { id: orderId, tenantId },
     select: {
       id: true,
+      orderNumber: true,
       kaitenCardId: true,
       tenant: { select: { kanbanAdminMentionTag: true } },
     },
@@ -658,6 +662,20 @@ export async function POST(
         continue;
       }
     }
+
+    const board = next.boards[loc.boardIndex]!;
+    const siteOrigin = await getSiteOrigin();
+    void notifyTelegramForKanbanChatMentions({
+      sessionDemo: Boolean(session.demo),
+      actorUserId: session.sub,
+      tenantId,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      kaitenCardId: order.kaitenCardId,
+      text: messageText,
+      siteOrigin,
+      productionMentionTag: normalizeProductionSettings(board).productionMentionTag,
+    }).catch((e) => console.error("[kanban-chat POST] mention tg", orderId, e));
 
     return NextResponse.json({ ok: true, comment: row });
   }
