@@ -4,10 +4,7 @@ import { processTelegramBotUpdate } from "@/lib/telegram-bot-process-update";
 import { getTelegramBotUserIdStr } from "@/lib/telegram-bot-identity";
 import { tryTelegramBotAddedChatIdAnnounce } from "@/lib/telegram-bot-my-chat-member";
 import { tryTelegramDoctorGroupsAndMessenger } from "@/lib/telegram-doctor-groups-and-messenger";
-import {
-  fetchTelegramBotMe,
-  fetchTelegramWebhookInfo,
-} from "@/lib/telegram-webhook-info";
+import { buildTelegramConnectivityDiagnostic } from "@/lib/telegram-connectivity-diagnostic.server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,71 +14,38 @@ function botToken(): string | null {
 }
 
 /**
- * Проверка конфигурации (без секретов). Откройте в браузере после деплоя.
+ * Краткая проверка без логина (для браузера после деплоя).
+ * Полный отчёт с вердиктом — Конфигурация → Telegram (`/api/telegram/diagnostic`, OWNER).
  */
 export async function GET() {
-  if (isSingleUserPortable()) {
-    return NextResponse.json(
-      {
-        ok: false,
-        reason:
-          "NEXT_PUBLIC_CRM_SINGLE_USER=1 — вебхук отключён. Для бота отключите однопользовательский режим.",
-      },
-      { status: 503 },
-    );
-  }
-  const hasToken = Boolean(botToken());
-  const secretSet = Boolean(process.env.TELEGRAM_WEBHOOK_SECRET?.trim());
-  const token = botToken();
-  const [webhookInfo, botMe] = token
-    ? await Promise.all([
-        fetchTelegramWebhookInfo(token),
-        fetchTelegramBotMe(token),
-      ])
-    : [null, null];
-
-  const webhookUrlOk =
-    webhookInfo?.ok === true &&
-    webhookInfo.url.includes("/api/telegram/webhook");
-
-  const telegramOutboundFailed =
-    (webhookInfo?.ok === false && webhookInfo.error === "fetch failed") ||
-    (botMe?.ok === false && botMe.error === "fetch failed");
-
+  const report = await buildTelegramConnectivityDiagnostic();
   return NextResponse.json({
     ok: true,
-    hasBotToken: hasToken,
-    webhookSecretEnvSet: secretSet,
+    hasBotToken: report.env.hasBotToken,
+    webhookSecretEnvSet: report.env.webhookSecretEnvSet,
     postPath: "/api/telegram/webhook",
+    verdict: report.verdict,
+    network: report.network,
     telegram: {
-      botMe: botMe?.ok === true ? { username: botMe.username, id: botMe.id } : null,
-      botMeError: botMe?.ok === false ? botMe.error : null,
-      webhookUrl: webhookInfo?.ok === true ? webhookInfo.url : null,
-      webhookUrlOk,
-      pendingUpdateCount:
-        webhookInfo?.ok === true ? webhookInfo.pendingUpdateCount : null,
-      lastErrorMessage:
-        webhookInfo?.ok === true ? webhookInfo.lastErrorMessage : null,
-      lastErrorDate:
-        webhookInfo?.ok === true ? webhookInfo.lastErrorDate : null,
-      webhookInfoError: webhookInfo?.ok === false ? webhookInfo.error : null,
+      botMe: report.botApi.getMe.ok
+        ? {
+            username: report.botApi.getMe.username,
+            id: report.botApi.getMe.id,
+          }
+        : null,
+      botMeError: report.botApi.getMe.ok ? null : report.botApi.getMe.error,
+      webhookUrl: report.webhook.getWebhookInfo.url,
+      webhookUrlOk: report.webhook.getWebhookInfo.urlLooksLikeCrm,
+      pendingUpdateCount: report.webhook.getWebhookInfo.pendingUpdateCount,
+      lastErrorMessage: report.webhook.getWebhookInfo.lastErrorMessage,
+      lastErrorDate: report.webhook.getWebhookInfo.lastErrorDate,
+      webhookInfoError: report.webhook.getWebhookInfo.ok
+        ? null
+        : report.webhook.getWebhookInfo.error,
     },
-    notes: [
-      "URL в CRM не вводится: его указываете только в setWebhook у Telegram (https://ваш-домен/api/telegram/webhook).",
-      secretSet
-        ? "TELEGRAM_WEBHOOK_SECRET задан: в setWebhook обязателен тот же secret_token. Без него Telegram шлёт запрос без заголовка — CRM отвечает 403, бот «молчит»."
-        : "TELEGRAM_WEBHOOK_SECRET не задан — заголовок X-Telegram-Bot-Api-Secret-Token не проверяется.",
-      webhookInfo?.ok === true && webhookInfo.lastErrorMessage
-        ? `Telegram не доставляет вебхук: ${webhookInfo.lastErrorMessage}`
-        : null,
-      webhookInfo?.ok === true && !webhookUrlOk
-        ? "В Telegram зарегистрирован другой URL вебхука — обновите setWebhook."
-        : null,
-      telegramOutboundFailed
-        ? "Сервер не достучался до api.telegram.org (fetch failed). Ответы бота и getWebhookInfo будут с задержкой или ретраями — проверьте исходящий HTTPS/DNS с хоста CRM."
-        : null,
-      "После правок .env перезапустите процесс Node (pm2/docker/systemd).",
-    ].filter(Boolean),
+    notes: report.notes,
+    uiHint:
+      "Удобный разбор: Конфигурация → Telegram (владелец). JSON для поддержки: кнопка «Скопировать отчёт».",
   });
 }
 

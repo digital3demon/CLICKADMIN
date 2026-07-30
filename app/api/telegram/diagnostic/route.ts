@@ -1,38 +1,25 @@
 import { NextResponse } from "next/server";
-import { isSingleUserPortable } from "@/lib/auth/single-user";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { buildTelegramConnectivityDiagnostic } from "@/lib/telegram-connectivity-diagnostic.server";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Проверка настроек бота (без секретов). GET — открывается в браузере.
- * Основной вебхук остаётся POST-only для Telegram; диагностика вынесена сюда,
- * чтобы на старых сборках без GET на `/api/telegram/webhook` всё равно была ссылка.
+ * Диагностика Telegram Bot API с хоста CRM (без секретов).
+ * Только OWNER — для экрана Конфигурация → Telegram.
  */
 export async function GET() {
-  if (isSingleUserPortable()) {
-    return NextResponse.json(
-      {
-        ok: false,
-        reason:
-          "NEXT_PUBLIC_CRM_SINGLE_USER=1 — вебхук отключён. Для бота отключите однопользовательский режим.",
-      },
-      { status: 503 },
-    );
+  const session = await getSessionFromCookies();
+  if (!session) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const hasToken = Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim());
-  const secretSet = Boolean(process.env.TELEGRAM_WEBHOOK_SECRET?.trim());
+  if (session.role !== "OWNER") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const report = await buildTelegramConnectivityDiagnostic();
   return NextResponse.json(
-    {
-      ok: true,
-      hasBotToken: hasToken,
-      webhookSecretEnvSet: secretSet,
-      telegramPostsTo: "/api/telegram/webhook",
-      notes: [
-        "Telegram шлёт только POST на /api/telegram/webhook. Эта страница — только проверка env.",
-        "Если в .env задан TELEGRAM_WEBHOOK_SECRET — в setWebhook нужен тот же secret_token.",
-        "После правок .env перезапустите Node. Если GET /api/telegram/webhook даёт 405 — обновите сборку (там тоже есть диагностический GET).",
-      ],
-    },
+    { ok: true, report },
     {
       headers: {
         "Content-Type": "application/json; charset=utf-8",

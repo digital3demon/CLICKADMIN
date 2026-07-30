@@ -548,16 +548,15 @@ export function ProfileSettingsForm({
                   <span className="font-mono">CRM_PUBLIC_BASE_URL</span> и webhook на{" "}
                   <span className="font-mono">/api/telegram/webhook</span> с секретом{" "}
                   <span className="font-mono">TELEGRAM_WEBHOOK_SECRET</span> (тот же, что в{" "}
-                  <span className="font-mono">setWebhook</span>). Проверка без секретов:{" "}
-                  <a
-                    href="/api/telegram/diagnostic"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-[var(--sidebar-blue)] hover:underline"
+                  <span className="font-mono">setWebhook</span>). Диагностика с сервера
+                  (владелец):{" "}
+                  <Link
+                    href="/directory/telegram"
+                    className="text-[var(--sidebar-blue)] hover:underline"
                   >
-                    /api/telegram/diagnostic
-                  </a>{" "}
-                  (в браузере откроется JSON; сам вебхук для Telegram — только POST).
+                    Конфигурация → Telegram
+                  </Link>
+                  .
                 </p>
               </div>
             </div>
