@@ -71,15 +71,16 @@ describe("CRM draft marker in Kaiten comments", () => {
     expect(parsed?.text).toBe("!!! проверка @ClickLab");
   });
 
-  it("игнорирует невалидный draft id и не ломает парсинг кириллицы", () => {
+  it("извлекает DRAFT, если Kaiten разорвал маркеры на две строки", () => {
     const parsed = parseKaitenListComment({
-      id: 11,
-      text: "[CRM · Петров][DRAFT:плохо]\n@ClickLab тест кириллица",
-      created: "2026-07-04T00:00:00.000Z",
+      id: 12,
+      text: "[CRM · Всеволод С]\n[DRAFT:cm-1785443244178-9kio3n]\n@digitaldemon ntnc tg",
+      created: "2026-07-30T20:28:00.000Z",
     });
     expect(parsed).not.toBeNull();
     expect(parsed?.isCrm).toBe(true);
-    expect(parsed?.crmDraftId ?? null).toBeNull();
-    expect(textIncludesAdminLabMention(parsed?.text || "", "clicklab")).toBe(true);
+    expect(parsed?.authorName).toBe("Всеволод С");
+    expect(parsed?.crmDraftId).toBe("cm-1785443244178-9kio3n");
+    expect(parsed?.text).toBe("@digitaldemon ntnc tg");
   });
 });

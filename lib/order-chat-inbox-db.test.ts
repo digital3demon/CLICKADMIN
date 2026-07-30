@@ -46,7 +46,10 @@ describe("order-chat-inbox-db", () => {
   });
 
   it("при sync из Kaiten без DRAFT обновляет pending USER_MENTION, а не плодит k:", async () => {
-    const findFirst = vi.fn().mockResolvedValue({ id: "inbox-1" });
+    const findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(null) // by kaitenCommentId
+      .mockResolvedValueOnce({ id: "inbox-1" }); // pending CRM draft
     const update = vi.fn().mockResolvedValue({});
     const upsert = vi.fn().mockResolvedValue({});
     const updateMany = vi.fn().mockResolvedValue({ count: 0 });
@@ -68,7 +71,6 @@ describe("order-chat-inbox-db", () => {
       orderId: "o1",
       comments: [{ id: 99, text: "@digitaldemon тест", authorName: "Всеволод" }],
     });
-    expect(findFirst).toHaveBeenCalledOnce();
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "inbox-1" },
@@ -112,9 +114,11 @@ describe("order-chat-inbox-db", () => {
     expect(upsert).toHaveBeenCalledTimes(2); // prosthetics + lab mention
   });
 
-  it("создаёт USER_MENTION для обычного @ник без !!!/???/@lab", async () => {
-    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
-    const findFirst = vi.fn().mockResolvedValue(null);
+  it("при sync с kaitenCommentId обновляет уже связанную строку, не создаёт k:", async () => {
+    const findFirst = vi
+      .fn()
+      .mockResolvedValueOnce({ id: "inbox-bound" }); // by kaitenCommentId
+    const update = vi.fn().mockResolvedValue({});
     const upsert = vi.fn().mockResolvedValue({});
     const findMany = vi.fn().mockResolvedValue([
       {
@@ -126,22 +130,25 @@ describe("order-chat-inbox-db", () => {
       },
     ]);
     const db = {
-      orderChatInboxItem: { findFirst, updateMany, upsert },
+      orderChatInboxItem: { findFirst, update, upsert, updateMany: vi.fn() },
       user: { findMany },
     } as any;
-    const changed = await syncOrderChatInboxFromKaitenComments(db, {
+    await syncOrderChatInboxFromKaitenComments(db, {
       tenantId: "t1",
       orderId: "o1",
-      comments: [{ id: 99, text: "@digitaldemon тест", authorName: "Всеволод" }],
+      comments: [
+        {
+          id: 99,
+          text: "@digitaldemon ntnc tg",
+          authorName: "Всеволод",
+          crmDraftId: "cm-1785443244178-9kio3n",
+        },
+      ],
     });
-    expect(changed).toBe(true);
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
-          type: "USER_MENTION",
-          targetUserId: "u-demon",
-        }),
-      }),
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "inbox-bound" } }),
     );
+    expect(upsert).not.toHaveBeenCalled();
   });
 });
+

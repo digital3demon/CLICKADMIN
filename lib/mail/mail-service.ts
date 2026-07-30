@@ -28,6 +28,7 @@ import {
   testImapConnection,
 } from "@/lib/mail/imap-client";
 import { emailFolderListWhere } from "@/lib/mail/mail-folder-query";
+import { mailSearchWhere } from "@/lib/mail/mail-search-query";
 import {
   deleteMailAttachmentBytes,
   newMailAttachmentId,
@@ -1048,6 +1049,18 @@ export async function listEmails(
         select: { id: true, type: true, accountId: true },
       })
     : null;
+  const searchWhere = mailSearchWhere(input.q);
+  const andClauses: Prisma.EmailWhereInput[] = [];
+  if (cursor) {
+    andClauses.push({
+      OR: [
+        { receivedAt: { lt: new Date(cursor.r) } },
+        { receivedAt: new Date(cursor.r), id: { lt: cursor.i } },
+      ],
+    });
+  }
+  if (searchWhere) andClauses.push(searchWhere);
+
   const rows = await db.email.findMany({
     where: {
       accountId: input.accountId,
@@ -1069,28 +1082,7 @@ export async function listEmails(
       ...(input.filter === "attachments" ? { hasAttachments: true } : {}),
       ...(input.filter === "flagged" ? { isFlagged: true } : {}),
       ...(input.filter === "unflagged" ? { isFlagged: false } : {}),
-      ...(cursor
-        ? {
-            AND: [
-              {
-                OR: [
-                  { receivedAt: { lt: new Date(cursor.r) } },
-                  { receivedAt: new Date(cursor.r), id: { lt: cursor.i } },
-                ],
-              },
-            ],
-          }
-        : {}),
-      ...(input.q
-        ? {
-            OR: [
-              { subject: { contains: input.q, mode: "insensitive" } },
-              { preview: { contains: input.q, mode: "insensitive" } },
-              { fromName: { contains: input.q, mode: "insensitive" } },
-              { fromAddress: { contains: input.q, mode: "insensitive" } },
-            ],
-          }
-        : {}),
+      ...(andClauses.length ? { AND: andClauses } : {}),
     },
     orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
     take: take + 1,

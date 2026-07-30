@@ -4,7 +4,10 @@ import {
 } from "@/lib/kanban-admin-mention";
 
 const CRM_COMMENT_AUTHOR_PREFIX_RE =
-  /^\[CRM · (.+?)\](?:\[DRAFT:([A-Za-z0-9_-]{6,120})\])?\s*\n/;
+  /^\[CRM · ([^\]]+)\]\s*(?:\[DRAFT:([A-Za-z0-9_-]{6,120})\])?\s*(?:\r?\n)?/;
+/** Если Kaiten/клиент разорвал маркеры на строки — [DRAFT] может остаться первой строкой тела. */
+const CRM_DRAFT_ONLY_LINE_RE =
+  /^\[DRAFT:([A-Za-z0-9_-]{6,120})\]\s*(?:\r?\n)?/;
 
 /** id комментария в ответах Kaiten REST часто приходит строкой (JSON). */
 export function kaitenJsonIntId(v: unknown): number | null {
@@ -295,6 +298,11 @@ export function parseKaitenListComment(o: unknown): {
     if (crm) authorName = crm;
     crmDraftId = sanitizeCrmDraftId(m[2]);
     text = text.slice(m[0].length);
+  }
+  const draftOnly = text.match(CRM_DRAFT_ONLY_LINE_RE);
+  if (draftOnly) {
+    if (!crmDraftId) crmDraftId = sanitizeCrmDraftId(draftOnly[1]);
+    text = text.slice(draftOnly[0].length);
   }
 
   const created =

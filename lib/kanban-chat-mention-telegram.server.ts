@@ -11,18 +11,21 @@ import {
 import { buildKanbanMentionInCommentTelegramHtmlLine } from "@/lib/kanban-mention-telegram-html";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { normalizeProductionMentionTag } from "@/lib/kanban-production-mention-tag";
+import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { getPrisma } from "@/lib/get-prisma";
 import { notifyKanbanTelegramTargetUsers } from "@/lib/telegram-kanban-notify";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 
-function resolveNotifySiteOrigin(primary: string | null | undefined): string | null {
+function resolveNotifySiteOrigin(primary: string | null | undefined): string {
   const fromRequest = primary?.trim();
   if (fromRequest) return fromRequest.replace(/\/+$/, "");
   const fromEnv =
     process.env.CRM_PUBLIC_BASE_URL?.trim() ||
     process.env.NEXT_PUBLIC_APP_URL?.trim() ||
     process.env.APP_URL?.trim();
-  return fromEnv ? fromEnv.replace(/\/+$/, "") : null;
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+  // Всегда есть база для ссылок — иначе раньше молча не слали TG.
+  return crmPublicBaseUrl().replace(/\/+$/, "");
 }
 
 /** Telegram @упоминания после комментария в CRM-канбане (чат наряда / модалка карточки). */
@@ -37,8 +40,9 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
   siteOrigin: string | null;
   productionMentionTag?: string | null;
 }): Promise<void> {
+  if (opts.sessionDemo) return;
+
   const origin = resolveNotifySiteOrigin(opts.siteOrigin);
-  if (opts.sessionDemo || !origin) return;
 
   const prisma = await getPrisma();
   const users = await prisma.user.findMany({
@@ -49,6 +53,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
       email: true,
       displayName: true,
       role: true,
+      telegramId: true,
     },
   });
 
@@ -78,7 +83,24 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
     productionUserIds,
   }).filter((id) => id !== opts.actorUserId);
 
-  if (!mentionedAll.length) return;
+  if (!mentionedAll.length) {
+    console.warn("[kanban-chat-mention-tg] skip: no mentioned users", {
+      orderId: opts.orderId,
+      textSnippet: opts.text.slice(0, 80),
+    });
+    return;
+  }
+
+  const withTelegram = mentionedAll.filter((id) => {
+    const u = users.find((x) => x.id === id);
+    return Boolean(u?.telegramId?.trim());
+  });
+  if (!withTelegram.length) {
+    console.warn("[kanban-chat-mention-tg] skip: mentioned users have no telegramId", {
+      orderId: opts.orderId,
+      mentioned: mentionedAll,
+    });
+  }
 
   const actor = await prisma.user.findUnique({
     where: { id: opts.actorUserId },

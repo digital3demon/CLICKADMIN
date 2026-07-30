@@ -94,7 +94,36 @@ async function createUserMentionInboxItems(
         ? Math.trunc(input.kaitenCommentId)
         : null;
 
-    if (!crmDraftFromInput && kaitenId != null && kaitenId > 0) {
+    // Уже есть строка с этим kaitenCommentId — только обновить, не плодить k:/cm- дубли.
+    if (kaitenId != null && kaitenId > 0) {
+      const byKaiten = await (db as any).orderChatInboxItem.findFirst({
+        where: {
+          orderId,
+          type: "USER_MENTION",
+          targetUserId,
+          kaitenCommentId: kaitenId,
+        },
+        select: { id: true },
+      });
+      if (byKaiten?.id) {
+        await (db as any).orderChatInboxItem.update({
+          where: { id: byKaiten.id },
+          data: {
+            text: input.text,
+            authorLabel,
+            syncState: input.syncState,
+            source: input.source,
+            ...(crmDraftFromInput
+              ? { crmDraftId: userMentionDraftKey(crmDraftFromInput, targetUserId) }
+              : {}),
+          },
+        });
+        changed = true;
+        continue;
+      }
+    }
+
+    if (crmDraftFromInput || (kaitenId != null && kaitenId > 0)) {
       const pending = await (db as any).orderChatInboxItem.findFirst({
         where: {
           orderId,
@@ -114,7 +143,10 @@ async function createUserMentionInboxItems(
             authorLabel,
             syncState: input.syncState,
             source: input.source,
-            kaitenCommentId: kaitenId,
+            ...(kaitenId != null && kaitenId > 0 ? { kaitenCommentId: kaitenId } : {}),
+            ...(crmDraftFromInput
+              ? { crmDraftId: userMentionDraftKey(crmDraftFromInput, targetUserId) }
+              : {}),
           },
         });
         changed = true;
