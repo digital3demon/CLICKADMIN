@@ -1,4 +1,4 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { processTelegramBotUpdate } from "@/lib/telegram-bot-process-update";
 import { getTelegramBotUserIdStr } from "@/lib/telegram-bot-identity";
@@ -8,9 +8,25 @@ import { buildTelegramConnectivityDiagnostic } from "@/lib/telegram-connectivity
 
 export const dynamic = "force-dynamic";
 
+/** Telegram ждёт ответ вебхука; держим запас до ~60с лимита. */
+const WEBHOOK_HANDLE_TIMEOUT_MS = 25_000;
+
 function botToken(): string | null {
   const t = process.env.TELEGRAM_BOT_TOKEN?.trim();
   return t || null;
+}
+
+async function handleTelegramUpdate(
+  body: Record<string, unknown>,
+  token: string,
+): Promise<{ handledGroup: boolean }> {
+  await getTelegramBotUserIdStr(token);
+  await tryTelegramBotAddedChatIdAnnounce(body, token);
+  const handledGroup = await tryTelegramDoctorGroupsAndMessenger(body, token);
+  if (!handledGroup) {
+    await processTelegramBotUpdate(body, token);
+  }
+  return { handledGroup };
 }
 
 /**
@@ -85,42 +101,53 @@ export async function POST(req: Request) {
   const updateId = body.update_id;
   const debug = process.env.TELEGRAM_WEBHOOK_DEBUG === "1";
 
-  after(async () => {
-    const startedAt = Date.now();
-    let handledGroup = false;
-    try {
-      await getTelegramBotUserIdStr(token);
-      await tryTelegramBotAddedChatIdAnnounce(body, token);
-      handledGroup = await tryTelegramDoctorGroupsAndMessenger(body, token);
-      if (!handledGroup) {
-        await processTelegramBotUpdate(body, token);
-      }
-    } catch (e) {
-      console.error("[telegram webhook]", e);
-    }
+  /**
+   * Обрабатываем в том же запросе (не next/server `after`).
+   * На Timeweb Apps `after` часто не успевает до «заморозки» процесса:
+   * Telegram уже получил 200, а ответ бота уходит минутами/десятками минут позже
+   * или теряется, пока исходящий канал к api.telegram.org снова оживёт.
+   */
+  const startedAt = Date.now();
+  let handledGroup = false;
+  try {
+    const result = await Promise.race([
+      handleTelegramUpdate(body, token),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(
+            new Error(
+              `telegram webhook handle timeout ${WEBHOOK_HANDLE_TIMEOUT_MS}ms`,
+            ),
+          );
+        }, WEBHOOK_HANDLE_TIMEOUT_MS);
+      }),
+    ]);
+    handledGroup = result.handledGroup;
+  } catch (e) {
+    console.error("[telegram webhook]", e);
+  }
 
-    const ms = Date.now() - startedAt;
-    if (debug || ms >= 3000) {
-      const msg = body.message ?? body.edited_message ?? body.business_message;
-      const chat =
-        msg && typeof msg === "object"
-          ? (msg as { chat?: { type?: string } }).chat
-          : null;
-      const text =
-        msg &&
-        typeof msg === "object" &&
-        typeof (msg as { text?: unknown }).text === "string"
-          ? String((msg as { text: string }).text).slice(0, 80)
-          : "";
-      console.info("[telegram webhook] processed", {
-        updateId,
-        ms,
-        chatType: chat?.type,
-        handledGroup,
-        text,
-      });
-    }
-  });
+  const ms = Date.now() - startedAt;
+  if (debug || ms >= 3000) {
+    const msg = body.message ?? body.edited_message ?? body.business_message;
+    const chat =
+      msg && typeof msg === "object"
+        ? (msg as { chat?: { type?: string } }).chat
+        : null;
+    const text =
+      msg &&
+      typeof msg === "object" &&
+      typeof (msg as { text?: unknown }).text === "string"
+        ? String((msg as { text: string }).text).slice(0, 80)
+        : "";
+    console.info("[telegram webhook] processed", {
+      updateId,
+      ms,
+      chatType: chat?.type,
+      handledGroup,
+      text,
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

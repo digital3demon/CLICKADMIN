@@ -399,6 +399,9 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
     outboundBlocked
       ? "Типично для хостингов в РФ: входящий webhook ещё работает, исходящий api.telegram.org — нет."
       : null,
+    whOk && (whPending ?? 0) > 0
+      ? `В очереди Telegram pending_update_count=${whPending}: ответы могут прийти с большой задержкой, когда вебхук снова доставится.`
+      : null,
     "После смены env в панели Timeweb — перезапуск приложения обязателен.",
   ].filter(Boolean) as string[];
 
