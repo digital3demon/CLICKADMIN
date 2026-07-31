@@ -93,6 +93,7 @@ import {
   IconLink,
   IconMail,
   IconPlus,
+  IconReply,
   IconSend,
   IconUnlock,
   IconX,
@@ -275,6 +276,7 @@ export function KanbanCardModal({
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
   const [descExpanded, setDescExpanded] = useState(false);
+  const [placementFieldsOpen, setPlacementFieldsOpen] = useState(false);
   const [fileViewer, setFileViewer] = useState<
     | null
     | { mode: "image"; images: CardFile[]; index: number }
@@ -332,6 +334,7 @@ export function KanbanCardModal({
     setManualRoutePendingFiles([]);
     setManualRouteRows([]);
     setDescExpanded(false);
+    setPlacementFieldsOpen(false);
   }, [cardId]);
 
   useEffect(() => {
@@ -574,9 +577,11 @@ export function KanbanCardModal({
   const sendComment = async (
     text: string,
     requestedAction: ChatAction = "comment",
+    parentId: string | null = null,
   ): Promise<boolean> => {
     const trimmed = text.trim();
     if (!trimmed) return false;
+    const replyParentId = String(parentId || "").trim() || null;
 
     const actor = chatActorUserId || board.users[0]?.id || "";
     const mentionedIds = parseMentionUserIdsFromText(trimmed, crmList, {
@@ -645,7 +650,11 @@ export function KanbanCardModal({
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: trimmed, action: requestedAction }),
+          body: JSON.stringify({
+            text: trimmed,
+            action: requestedAction,
+            ...(replyParentId ? { parentId: replyParentId } : {}),
+          }),
         });
         const postData = (await postRes.json().catch(() => ({}))) as { error?: string };
         if (!postRes.ok) {
@@ -690,7 +699,11 @@ export function KanbanCardModal({
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: trimmed, action }),
+          body: JSON.stringify({
+            text: trimmed,
+            action,
+            ...(replyParentId ? { parentId: replyParentId } : {}),
+          }),
         });
         const postData = (await postRes.json().catch(() => ({}))) as { error?: string };
         if (!postRes.ok) {
@@ -732,6 +745,7 @@ export function KanbanCardModal({
         userId: localActor,
         text: trimmed,
         createdAt: new Date().toISOString(),
+        parentId: replyParentId,
       });
       pushActivity(c, "Комментарий", localActor, b, act);
     });
@@ -1388,60 +1402,57 @@ export function KanbanCardModal({
               <IconArrowRight />
             </button>
             <div className="mx-1 h-6 w-px bg-[var(--kaiten-modal-border)]" aria-hidden />
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[0.65rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
-                Отв.
-              </span>
-              {(card.assignees || []).map((uid) => (
-                <span key={uid}>
-                  <KanbanPersonAvatar
-                    userId={uid}
-                    homeBoard={board}
-                    variant="assignee"
-                    size="md"
-                    titleSuffix=""
-                  />
+            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span className="text-[0.65rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+                  Отв.
                 </span>
-              ))}
-              <button
-                type="button"
-                disabled={!canManageAssignees}
-                title="Добавить ответственного"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
-                onClick={() => setPickerMode("assign")}
-              >
-                <IconPlus />
-              </button>
-            </div>
-            {card.kaitenMembersSyncWarning ? (
-              <p className="mt-1 max-w-md text-[0.65rem] leading-snug text-amber-700 dark:text-amber-300">
-                {card.kaitenMembersSyncWarning}
-              </p>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-1.5 pl-1">
-              <span className="text-[0.65rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
-                Участн.
-              </span>
-              {(card.participants || []).map((uid) => (
-                <span key={uid}>
-                  <KanbanPersonAvatar
-                    userId={uid}
-                    homeBoard={board}
-                    variant="participant"
-                    size="md"
-                    titleSuffix=""
-                  />
+                {(card.assignees || []).map((uid) => (
+                  <span key={uid}>
+                    <KanbanPersonAvatar
+                      userId={uid}
+                      homeBoard={board}
+                      variant="assignee"
+                      size="md"
+                      titleSuffix=""
+                    />
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  disabled={!canManageAssignees}
+                  title="Добавить ответственного"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
+                  onClick={() => setPickerMode("assign")}
+                >
+                  <IconPlus className="h-2.5 w-2.5" />
+                </button>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span className="text-[0.65rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+                  Участн.
                 </span>
-              ))}
-              <button
-                type="button"
-                disabled={!canManageParticipants}
-                title="Добавить участника"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
-                onClick={() => setPickerMode("part")}
-              >
-                <IconPlus />
-              </button>
+                {(card.participants || []).map((uid) => (
+                  <span key={uid}>
+                    <KanbanPersonAvatar
+                      userId={uid}
+                      homeBoard={board}
+                      variant="participant"
+                      size="md"
+                      titleSuffix=""
+                    />
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  disabled={!canManageParticipants}
+                  title="Добавить участника"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
+                  onClick={() => setPickerMode("part")}
+                >
+                  <IconPlus className="h-2.5 w-2.5" />
+                </button>
+              </div>
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
               {showOrderMailButton && card?.linkedOrderId ? (
@@ -1469,11 +1480,48 @@ export function KanbanCardModal({
               </button>
             </div>
           </div>
+          {card.kaitenMembersSyncWarning ? (
+            <p className="border-b border-[var(--kaiten-modal-border)] px-3 py-1.5 text-[0.65rem] leading-snug text-amber-700 dark:text-amber-300">
+              {card.kaitenMembersSyncWarning}
+            </p>
+          ) : null}
 
           <div className="flex flex-col sm:flex-row sm:items-start">
             <div className="flex min-w-0 flex-1 flex-col">
               <div className="px-3 pb-3 pt-2.5">
-              <div className="mb-3 grid gap-3 sm:grid-cols-3">
+              <div className="mb-3">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2.5 py-1.5 text-left hover:bg-[var(--kaiten-modal-input)]"
+                  onClick={() => setPlacementFieldsOpen((v) => !v)}
+                  aria-expanded={placementFieldsOpen}
+                >
+                  <span className="min-w-0 truncate text-[0.65rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+                    Расположение · столбец · тип
+                    {!placementFieldsOpen ? (
+                      <span className="ml-1.5 normal-case tracking-normal text-[var(--kaiten-modal-text)]">
+                        {(
+                          (trackLaneOptions ?? [...trackLanes()]).find(
+                            (l) => l.id === card.trackLane,
+                          )?.name || "—"
+                        ).slice(0, 18)}
+                        {" · "}
+                        {String(currentColumnTitle || "—").slice(0, 16)}
+                        {" · "}
+                        {(
+                          (board.cardTypes || kaitenCardTypes()).find(
+                            (t) => t.id === card.cardTypeId,
+                          )?.name || "—"
+                        ).slice(0, 14)}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 text-[0.65rem] font-semibold text-[var(--kaiten-modal-text)]">
+                    {placementFieldsOpen ? "Свернуть" : "Развернуть"}
+                  </span>
+                </button>
+                {placementFieldsOpen ? (
+              <div className="mt-2 grid gap-3 sm:grid-cols-3">
                 <div>
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                     {trackLaneFieldLabel ?? "Расположение"}
@@ -1613,6 +1661,8 @@ export function KanbanCardModal({
                   </select>
                 </div>
               </div>
+                ) : null}
+              </div>
 
               <div className="mb-3">
                 <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-amber-800/90 dark:text-amber-300/90">
@@ -1692,7 +1742,7 @@ export function KanbanCardModal({
               </div>
 
               <div className="mb-3">
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                   <div className="text-[0.625rem] font-medium uppercase tracking-wide text-sky-800/90 dark:text-sky-300/90">
                     Описание и детали заказа
                   </div>
@@ -1956,13 +2006,6 @@ export function KanbanCardModal({
                   onApply={onApply}
                   activityActorLabel={act}
                   canEdit={canManageKanbanChecklist}
-                  kaitenLinked={
-                    Boolean(
-                      card.linkedOrderId &&
-                        card.kaitenCardId != null &&
-                        Number.isFinite(card.kaitenCardId),
-                    )
-                  }
                 />
               </div>
 
@@ -2532,7 +2575,11 @@ function ChatPanel({
   /** Нормализованный токен (напр. clickpr) для подстановки @ в текст. */
   productionMentionTag: string;
   productionUserIds: readonly string[];
-  onSend: (t: string, action?: ChatAction) => boolean | Promise<boolean>;
+  onSend: (
+    t: string,
+    action?: ChatAction,
+    parentId?: string | null,
+  ) => boolean | Promise<boolean>;
   onFilesDropped: (files: File[]) => void | Promise<void>;
   onOpenAttachment: (f: CardFile) => void;
 }) {
@@ -2542,6 +2589,7 @@ function ChatPanel({
   const [caretPos, setCaretPos] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [replyTo, setReplyTo] = useState<CardComment | null>(null);
   const chatAuthorName = (userId: string, authorLabel?: string) => {
     const lab = (authorLabel ?? "").trim();
     if (lab) return lab;
@@ -2551,6 +2599,11 @@ function ChatPanel({
       "Неизвестно"
     );
   };
+  const commentsById = useMemo(() => {
+    const m = new Map<string, CardComment>();
+    for (const c of card.comments || []) m.set(c.id, c);
+    return m;
+  }, [card.comments]);
   const chatBlocks = useMemo(
     () => buildChatRenderBlocks(card.comments || [], card),
     [card.comments, card.files, card.id],
@@ -2640,13 +2693,18 @@ function ChatPanel({
   const submitMessage = async (action: ChatAction = "comment") => {
     const v = inp.trim();
     if (!v) return;
-    const ok = await Promise.resolve(onSend(v, action));
+    const ok = await Promise.resolve(onSend(v, action, replyTo?.id ?? null));
     if (ok) {
       setInp("");
       setCaretPos(0);
       setMentionIndex(0);
+      setReplyTo(null);
     }
   };
+
+  useEffect(() => {
+    setReplyTo(null);
+  }, [card.id]);
   const applyMention = useCallback(
     (opt: ChatMentionOption) => {
       if (!mentionDraft) return;
@@ -2703,8 +2761,22 @@ function ChatPanel({
                 key={block.key}
                 className="mb-2 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)]"
               >
-                <div className="mb-0.5 text-[0.7rem] text-[var(--kaiten-modal-muted)]">
-                  {author0} · {relativeTimeRu(cm0.createdAt)}
+                <div className="mb-0.5 flex items-start justify-between gap-2 text-[0.7rem] text-[var(--kaiten-modal-muted)]">
+                  <span>
+                    {author0} · {relativeTimeRu(cm0.createdAt)}
+                  </span>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
+                    title="Ответить"
+                    aria-label="Ответить на комментарий"
+                    onClick={() => {
+                      setReplyTo(cm0);
+                      requestAnimationFrame(() => inputRef.current?.focus());
+                    }}
+                  >
+                    <IconReply className="h-3.5 w-3.5" />
+                  </button>
                 </div>
                 <div className="mt-1 grid grid-cols-3 gap-1">
                   {block.comments.map((cm) => {
@@ -2754,12 +2826,46 @@ function ChatPanel({
           const author = chatAuthorName(cm.userId, cm.authorLabel);
           const imgFile = resolveChatImageFile(card, cm);
           const display = formatKanbanChatMessageDisplay(cm.text);
+          const parent = cm.parentId ? commentsById.get(cm.parentId) : null;
+          const parentAuthor = parent
+            ? chatAuthorName(parent.userId, parent.authorLabel)
+            : null;
+          const parentSnippet = parent
+            ? formatKanbanChatMessageDisplay(parent.text).body.trim().slice(0, 80)
+            : "";
 
           return (
-            <div key={cm.id} className={kanbanChatMessageShellClass(display.kind)}>
-              <div className="mb-0.5 text-[0.7rem] text-[var(--kaiten-modal-muted)]">
-                {author} · {relativeTimeRu(cm.createdAt)}
+            <div
+              key={cm.id}
+              className={`${kanbanChatMessageShellClass(display.kind)}${
+                cm.parentId
+                  ? " ml-3 border-l-2 border-[var(--kaiten-accent)]/40 pl-2"
+                  : ""
+              }`}
+            >
+              <div className="mb-0.5 flex items-start justify-between gap-2">
+                <div className="min-w-0 text-[0.7rem] text-[var(--kaiten-modal-muted)]">
+                  {author} · {relativeTimeRu(cm.createdAt)}
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
+                  title="Ответить"
+                  aria-label="Ответить на комментарий"
+                  onClick={() => {
+                    setReplyTo(cm);
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                >
+                  <IconReply className="h-3.5 w-3.5" />
+                </button>
               </div>
+              {parentAuthor ? (
+                <p className="mb-1 text-[0.65rem] leading-snug text-[var(--kaiten-modal-muted)]">
+                  в ответ {parentAuthor}
+                  {parentSnippet ? `: «${parentSnippet}»` : ""}
+                </p>
+              ) : null}
               {display.label ? (
                 <p className={kanbanChatMessageLabelClass(display.kind)}>{display.label}</p>
               ) : null}
@@ -2785,6 +2891,28 @@ function ChatPanel({
         })}
       </div>
       <div className="relative flex flex-col gap-2 border-t border-[var(--kaiten-modal-border)] p-2">
+        {replyTo ? (
+          <div className="flex items-start gap-2 rounded-md border border-[var(--kaiten-accent)]/35 bg-[var(--kaiten-accent)]/10 px-2 py-1.5 text-[0.7rem] text-[var(--kaiten-modal-text)]">
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-[var(--kaiten-accent)]">
+                Ответ{" "}
+                {chatAuthorName(replyTo.userId, replyTo.authorLabel)}
+              </div>
+              <div className="mt-0.5 line-clamp-2 text-[var(--kaiten-modal-muted)]">
+                {formatKanbanChatMessageDisplay(replyTo.text).body.trim() || "…"}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 rounded p-1 text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
+              aria-label="Отменить ответ"
+              title="Отменить ответ"
+              onClick={() => setReplyTo(null)}
+            >
+              <IconX className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : null}
         {mentionFiltered.length > 0 ? (
           <div className="absolute bottom-[calc(100%+4px)] left-2 right-2 z-20 max-h-56 overflow-y-auto rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-1 shadow-xl">
             {mentionFiltered.map((opt, idx) => (
@@ -3022,14 +3150,12 @@ function ChecklistEditor({
   onApply,
   activityActorLabel,
   canEdit,
-  kaitenLinked,
 }: {
   card: KanbanCard;
   cardId: string;
   onApply: (fn: (b: KanbanBoard) => void) => void;
   activityActorLabel?: string;
   canEdit: boolean;
-  kaitenLinked?: boolean;
 }) {
   const isProductionChecklist = Boolean(card.parentCardId);
   const cl = isProductionChecklist
@@ -3184,13 +3310,6 @@ function ChecklistEditor({
           {done} из {total}
         </span>
       </div>
-      {kaitenLinked ? (
-        <p className="mt-2 text-[0.65rem] leading-snug text-[var(--kaiten-modal-muted)]">
-          Чеклист здесь — только в CRM-канбане; нативный чеклист Kaiten в API не
-          синхронизируется. Чат, заголовок, описание и файлы (как вложения наряда)
-          уходят в Kaiten.
-        </p>
-      ) : null}
       {!canEdit ? (
         <p className="mt-2 text-[0.65rem] leading-snug text-[var(--kaiten-modal-muted)]">
           Редактирование чеклиста отключено: нет права «Канбан: чек-листы» (настройки

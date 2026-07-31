@@ -44,67 +44,69 @@ export async function countOrdersWithPendingKaitenLabMentionForUser(
     where: { AND: [baseWhere, { kaitenChatHasLabMention: true }] },
     select: { id: true, kaitenLabMentionSignalAt: true },
   });
-  if (candidates.length === 0) return 0;
-  const ids = candidates.map((c) => c.id);
-  const globalAcks = await db.orderKaitenLabMentionAck.findMany({
-    where: {
-      orderId: { in: ids },
-      user: { role: { in: LAB_MENTION_ACK_ROLES } },
-    },
-    select: { orderId: true, ackAt: true },
-  });
-  const ackByOrder = new Map<string, Date>();
-  for (const a of globalAcks) {
-    const prev = ackByOrder.get(a.orderId);
-    if (!prev || a.ackAt.getTime() > prev.getTime()) {
-      ackByOrder.set(a.orderId, a.ackAt);
-    }
-  }
-  const uid = String(userId || "").trim();
-  if (uid) {
-    const userRow = await db.user.findUnique({
-      where: { id: uid },
-      select: { role: true },
+  let n = 0;
+  if (candidates.length > 0) {
+    const ids = candidates.map((c) => c.id);
+    const globalAcks = await db.orderKaitenLabMentionAck.findMany({
+      where: {
+        orderId: { in: ids },
+        user: { role: { in: LAB_MENTION_ACK_ROLES } },
+      },
+      select: { orderId: true, ackAt: true },
     });
-    const canOwnAck =
-      userRow?.role === "OWNER" ||
-      userRow?.role === "ADMINISTRATOR" ||
-      userRow?.role === "SENIOR_ADMINISTRATOR";
-    if (canOwnAck) {
-      const ownAcks = await db.orderKaitenLabMentionAck.findMany({
-        where: {
-          orderId: { in: ids },
-          userId: uid,
-        },
-        select: { orderId: true, ackAt: true },
+    const ackByOrder = new Map<string, Date>();
+    for (const a of globalAcks) {
+      const prev = ackByOrder.get(a.orderId);
+      if (!prev || a.ackAt.getTime() > prev.getTime()) {
+        ackByOrder.set(a.orderId, a.ackAt);
+      }
+    }
+    const uid = String(userId || "").trim();
+    if (uid) {
+      const userRow = await db.user.findUnique({
+        where: { id: uid },
+        select: { role: true },
       });
-      for (const a of ownAcks) {
-        const prev = ackByOrder.get(a.orderId);
-        if (!prev || a.ackAt.getTime() > prev.getTime()) {
-          ackByOrder.set(a.orderId, a.ackAt);
+      const canOwnAck =
+        userRow?.role === "OWNER" ||
+        userRow?.role === "ADMINISTRATOR" ||
+        userRow?.role === "SENIOR_ADMINISTRATOR";
+      if (canOwnAck) {
+        const ownAcks = await db.orderKaitenLabMentionAck.findMany({
+          where: {
+            orderId: { in: ids },
+            userId: uid,
+          },
+          select: { orderId: true, ackAt: true },
+        });
+        for (const a of ownAcks) {
+          const prev = ackByOrder.get(a.orderId);
+          if (!prev || a.ackAt.getTime() > prev.getTime()) {
+            ackByOrder.set(a.orderId, a.ackAt);
+          }
         }
       }
     }
-  }
-  let n = 0;
-  for (const c of candidates) {
-    if (
-      kaitenLabMentionPendingForUser({
-        kaitenChatHasLabMention: true,
-        kaitenLabMentionSignalAt: c.kaitenLabMentionSignalAt,
-        ackAt: ackByOrder.get(c.id) ?? null,
-      })
-    ) {
-      n += 1;
+    for (const c of candidates) {
+      if (
+        kaitenLabMentionPendingForUser({
+          kaitenChatHasLabMention: true,
+          kaitenLabMentionSignalAt: c.kaitenLabMentionSignalAt,
+          ackAt: ackByOrder.get(c.id) ?? null,
+        })
+      ) {
+        n += 1;
+      }
     }
   }
   const inboxN = await inboxCountPromise;
   const tenantId = tenantIdFromWhere(baseWhere);
-  if (
+  const readNew =
     isOrderChatInboxReadNewEnabled() ||
-    isOrderChatInboxReadNewEnabledForTenant(tenantId)
-  ) {
-    return inboxN;
+    isOrderChatInboxReadNewEnabledForTenant(tenantId);
+  // Read-new: max — неполный inbox не гасит legacy и наоборот.
+  if (readNew) {
+    return Math.max(n, inboxN);
   }
   if (isOrderChatInboxDualReadEnabled()) {
     try {

@@ -146,6 +146,7 @@ const MAIL_LIST_CACHE_PREFIX = "dental-crm:mail-list-cache:";
 const MAIL_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAIL_LIST_INITIAL_SYNC_DELAY_MS = 12_000;
 const MAIL_LIST_WIDTH_STORAGE_KEY = "dental-crm:mail-list-width";
+const MAIL_SIDEBAR_COLLAPSED_STORAGE_KEY = "dental-crm:mail-sidebar-collapsed";
 const MAIL_LIST_DEFAULT_WIDTH = 600;
 const MAIL_LIST_MIN_WIDTH = 420;
 const MAIL_LIST_MAX_WIDTH = 920;
@@ -237,6 +238,25 @@ function readMailListWidth(): number {
 function writeMailListWidth(width: number): void {
   try {
     window.localStorage.setItem(MAIL_LIST_WIDTH_STORAGE_KEY, String(clampMailListWidth(width)));
+  } catch {
+    /* localStorage can be unavailable in private contexts. */
+  }
+}
+
+function readMailSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(MAIL_SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeMailSidebarCollapsed(collapsed: boolean): void {
+  try {
+    window.localStorage.setItem(
+      MAIL_SIDEBAR_COLLAPSED_STORAGE_KEY,
+      collapsed ? "1" : "0",
+    );
   } catch {
     /* localStorage can be unavailable in private contexts. */
   }
@@ -539,6 +559,7 @@ export function MailLayout() {
 
   useEffect(() => {
     setMailListWidth(readMailListWidth());
+    setSidebarCollapsed(readMailSidebarCollapsed());
   }, []);
 
   useEffect(() => {
@@ -1032,7 +1053,10 @@ export function MailLayout() {
               labels={activeAccount?.labels ?? []}
               unreadCount={activeAccountUnreadCount}
               collapsed={sidebarCollapsed}
-              onCollapsedChange={setSidebarCollapsed}
+              onCollapsedChange={(collapsed) => {
+                setSidebarCollapsed(collapsed);
+                writeMailSidebarCollapsed(collapsed);
+              }}
               onFolderChange={(id) => {
                 setActiveFolderId(id);
                 setActiveLabelId("");

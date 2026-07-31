@@ -134,6 +134,7 @@ model Tenant {
   clickMigApplications              ClickMigApplication[]
   clickMigOrders                    ClickMigOrder[]
   clickMigFiles                     ClickMigFile[]
+  labTasks                          LabTask[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -786,6 +787,8 @@ model User {
   orderProstheticsRequestsResolved OrderProstheticsRequest[]  @relation("OrderProstheticsRequestResolvedBy")
   orderProstheticsRequestsRejected OrderProstheticsRequest[]  @relation("OrderProstheticsRequestRejectedBy")
   orderProstheticsRequestsArrived  OrderProstheticsRequest[]  @relation("OrderProstheticsRequestArrivedBy")
+  labTasksCreated                  LabTask[]                  @relation("LabTaskAuthor")
+  labTasksResolved                 LabTask[]                  @relation("LabTaskResolvedBy")
   orderListAdminMemoEvents         OrderListAdminMemoEvent[]
   orderKaitenLabMentionAcks        OrderKaitenLabMentionAck[]
   testOrdersOwned                  Order[]                    @relation("TestOrderOwner")
@@ -1594,6 +1597,38 @@ model OrderProstheticsRequest {
   @@index([orderId, resolvedAt])
   @@index([orderId, rejectedAt])
   @@index([arrivedAt])
+}
+
+/// Общая задача лаборатории (список заказов → «Задачи»).
+model LabTask {
+  id               String              @id @default(cuid())
+  tenantId         String
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  text             String              @default("")
+  authorUserId     String?
+  author           User?               @relation("LabTaskAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorLabel      String
+  createdAt        DateTime            @default(now())
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  resolvedBy       User?               @relation("LabTaskResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  attachments      LabTaskAttachment[]
+
+  @@index([tenantId, resolvedAt, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+model LabTaskAttachment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      LabTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
 }
 
 /// Унифицированное событие из чата (корректировка / протетика / упоминание лаборатории).

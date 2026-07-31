@@ -144,6 +144,19 @@ export function Sidebar() {
           )}
         </Link>
 
+        {sessionUser?.displayName ? (
+          <p
+            className={
+              isHarmony
+                ? "relative z-10 mt-2 truncate text-sm font-medium text-[var(--sidebar-text-strong)]"
+                : "relative z-10 mt-2 truncate text-center text-sm font-medium leading-snug text-[var(--sidebar-text-strong)] shell-short:mt-1 shell-short:text-xs"
+            }
+            title={sessionUser.displayName}
+          >
+            {sessionUser.displayName}
+          </p>
+        ) : null}
+
         {isEffectiveKanbanOnly ? null : (
           <button
             type="button"
@@ -157,7 +170,7 @@ export function Sidebar() {
                 ? "Новый заказ"
                 : "Уже 5 окон нового заказа (включая свёрнутые полоски внизу экрана). Закройте лишние или разверните и очистите черновик."
             }
-            className={`${isHarmony ? "pressable" : "pressable-tap"} ${isHarmony ? "mt-0" : "mt-5"} flex w-full items-center justify-between text-white shell-short:mt-2 ${
+            className={`${isHarmony ? "pressable" : "pressable-tap"} ${isHarmony ? "mt-3" : "mt-5"} flex w-full items-center justify-between text-white shell-short:mt-2 ${
               isHarmony
                 ? "rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-wider card-shadow"
                 : "rounded-md px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wide shell-short:px-2 shell-short:py-2 shell-short:text-[9px] shell-short:tracking-[0.06em]"

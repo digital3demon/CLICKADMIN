@@ -183,24 +183,27 @@ export function KanbanCardTimerBlock({
   };
 
   return (
-    <div className="relative mb-3 rounded-lg border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)]/40 px-3 py-2.5">
-      <div className="mb-1 flex items-center justify-between gap-2">
+    <div className="relative mb-3 rounded-lg border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)]/40 px-3 py-2.5 max-md:mb-2 max-md:px-2 max-md:py-1.5">
+      <div className="mb-1 flex items-center justify-between gap-2 max-md:mb-0.5">
         <span className="text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
           Таймер
         </span>
         {canManage ? (
           <button
             type="button"
-            className="rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)]"
+            className="inline-flex h-[1.1rem] min-w-[1.1rem] items-center justify-center rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-1.5 text-[0.68rem] font-semibold uppercase leading-none tracking-wide text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] max-md:h-[0.95rem] max-md:min-w-[0.95rem] max-md:px-0.5 max-md:text-[0.7rem]"
             onClick={() => (settingsOpen ? setSettingsOpen(false) : openSettings())}
+            aria-label="Добавить таймер"
+            title="Добавить таймер"
           >
-            + Таймер
+            <span className="md:hidden">+</span>
+            <span className="hidden md:inline">+ Таймер</span>
           </button>
         ) : null}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 max-md:gap-2">
         <span
-          className="min-w-[5.5rem] font-mono text-[0.95rem] font-semibold tabular-nums text-[var(--kaiten-modal-text)]"
+          className="min-w-[5.5rem] font-mono text-[0.95rem] font-semibold tabular-nums text-[var(--kaiten-modal-text)] max-md:min-w-[4.25rem] max-md:text-[0.8rem]"
           title={
             started
               ? card.timerFrozenAt
@@ -212,7 +215,7 @@ export function KanbanCardTimerBlock({
           {started ? label : "—"}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/35 ring-1 ring-[var(--kaiten-modal-border)]">
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/35 ring-1 ring-[var(--kaiten-modal-border)] max-md:h-1.5">
             <div
               className="h-full min-w-[2px] rounded-full transition-[width,background-color] duration-300 ease-linear"
               style={{

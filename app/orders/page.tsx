@@ -31,18 +31,16 @@ import { orderIdsWithPendingMergedCorrections } from "@/lib/order-chat-correctio
 import { orderIdsWithPendingMergedProsthetics } from "@/lib/order-prosthetics-requests-read";
 import {
   humanListTagLabel,
-  LIST_TAG_ADMIN_MEMO,
   LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
-  listTagWhere,
   parseListTagParam,
   relatedOrdersListTagQuickFilters,
   listTagParamsEqual,
   listTagKaitenColumnTitle,
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
-import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
+import { ordersListDueDatePeriod } from "@/lib/orders-list-period";
 import {
   normalizeOrdersSearchQuery,
   ordersListHref,
@@ -57,6 +55,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { canAcceptOrderChatCorrections, canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import { loadProstheticsInTransitForTenant } from "@/lib/prosthetics-in-transit.server";
+import { countPendingLabTasks } from "@/lib/lab-tasks.server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
@@ -87,13 +86,19 @@ const ORDERS_TABLE_CLASS =
 function formatAdmission(o: {
   workReceivedAt: Date | null;
   createdAt: Date;
-}): string {
+}): { short: string; full: string } {
   const d = o.workReceivedAt ?? o.createdAt;
-  return d.toLocaleDateString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return {
+    short: d.toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+    }),
+    full: d.toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }),
+  };
 }
 
 function formatOrderCardDate(d: Date | null | undefined): string | undefined {
@@ -108,7 +113,6 @@ function formatOrderCardDate(d: Date | null | undefined): string | undefined {
 function OrdersTableColGroup() {
   return (
     <colgroup>
-      <col className="max-md:hidden lg:w-[6%]" />
       <col className="max-md:hidden lg:w-[2.8%]" />
       <col className="max-md:hidden lg:w-[6.5%]" />
       <col className="lg:w-[6%]" />
@@ -119,6 +123,7 @@ function OrdersTableColGroup() {
       <col className="lg:w-[7%]" />
       <col className="lg:w-[4.2%]" />
       <col className="lg:w-[4.2%]" />
+      <col className="max-md:hidden lg:w-[6%]" />
       <col className="lg:w-[4.8%]" />
       <col className="lg:w-[14.5%]" />
     </colgroup>
@@ -128,12 +133,6 @@ function OrdersTableColGroup() {
 function OrdersTableHeaderRow({ isDemo }: { isDemo: boolean }) {
   return (
     <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs">
-      <th
-        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
-        title="Пометки смен (не уходят в наряд и Kaiten)"
-      >
-        Пометки
-      </th>
       <th
         className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
         title="Чат карточки в Kaiten"
@@ -181,6 +180,12 @@ function OrdersTableHeaderRow({ isDemo }: { isDemo: boolean }) {
       </th>
       <th className={ORDERS_TABLE_TH} title="Запись: дата и время приёма пациента">
         Запись
+      </th>
+      <th
+        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
+        title="Пометки смен (не уходят в наряд и Kaiten)"
+      >
+        Пометки
       </th>
       <th className={ORDERS_TABLE_TH} title="Отправка работы">
         Отправка
@@ -247,6 +252,7 @@ export default async function OrdersPage({
   );
 
   let prostheticsInTransitCount = 0;
+  let labTasksPendingCount = 0;
   try {
     if (canSeeProstheticsChip) {
       const transit = await loadProstheticsInTransitForTenant(tenantId);
@@ -254,6 +260,13 @@ export default async function OrdersPage({
     }
   } catch (e) {
     console.error("[orders] prosthetics in-transit count", e);
+  }
+  try {
+    if (tenantId) {
+      labTasksPendingCount = await countPendingLabTasks(tenantId);
+    }
+  } catch (e) {
+    console.error("[orders] lab tasks pending count", e);
   }
 
   let kaitenIntegrationActive = true;
@@ -307,10 +320,10 @@ export default async function OrdersPage({
   const shipFromUrl = sp.shipFrom?.trim() || null;
   const shipToUrl = sp.shipTo?.trim() || null;
   const shipmentModeLabel = ordersShipmentModeLabel(shipParsed);
-  const periodParsed = ordersListCreatedAtPeriod(fromUrl, toUrl);
+  const periodParsed = ordersListDueDatePeriod(fromUrl, toUrl);
   const periodError =
     periodParsed.mode === "error" ? periodParsed.message : null;
-  const createdAtRange =
+  const dueDateRange =
     !shipmentModeActive && periodParsed.mode === "range"
       ? {
           start: periodParsed.start,
@@ -348,18 +361,18 @@ export default async function OrdersPage({
   if (listSearchQ) {
     baseCountParts.push(await ordersSearchWhere(listSearchQ, tenantId));
   }
-  if (createdAtRange) {
+  if (dueDateRange) {
     baseCountParts.push({
-      createdAt: {
-        gte: createdAtRange.start,
-        lt: createdAtRange.endExclusive,
+      dueDate: {
+        gte: dueDateRange.start,
+        lt: dueDateRange.endExclusive,
       },
     });
   }
   const baseCountWhere =
     baseCountParts.length === 1 ? baseCountParts[0] : { AND: baseCountParts };
   const statusChipCountParts = baseCountParts.filter(
-    (part) => !("createdAt" in part),
+    (part) => !("dueDate" in part) && !("createdAt" in part),
   );
   const statusChipCountWhere =
     statusChipCountParts.length === 1
@@ -460,15 +473,6 @@ export default async function OrdersPage({
     );
   }
 
-  let adminMemoCount = 0;
-  if (tenantId) {
-    adminMemoCount = await ordersPrisma.order.count({
-      where: {
-        AND: [statusChipCountWhere, listTagWhere({ kind: "adminMemo" })],
-      },
-    });
-  }
-
   let kaitenColumnAlternates: string[] = [];
   let urgentCoefficientsInDb: number[] = [];
   if (tenantId && activeFilter?.kind === "kaitenColumn") {
@@ -548,7 +552,7 @@ export default async function OrdersPage({
           hideShipped: hideShippedActive,
           onlyShipped: onlyShippedActive,
           search: listSearchQ || undefined,
-          createdAtRange: createdAtRange ?? undefined,
+          dueDateRange: dueDateRange ?? undefined,
           ordersListForUserId: session?.sub ?? null,
           viewerRole: session?.role ?? null,
           viewerUserId: session?.sub ?? null,
@@ -594,10 +598,6 @@ export default async function OrdersPage({
   }
 
   const alwaysShowOrderAttentionChips = session?.role === "FINANCIAL_MANAGER";
-  const showAdminMemoChip =
-    alwaysShowOrderAttentionChips ||
-    adminMemoCount > 0 ||
-    activeFilter?.kind === "adminMemo";
   const showCorrectionsChip =
     canSeeCorrectionsChip &&
     (alwaysShowOrderAttentionChips || attentionCount > 0);
@@ -610,7 +610,6 @@ export default async function OrdersPage({
       labMentionCount > 0 ||
       activeFilter?.kind === "kaitenLabMention");
   const showOrdersQuickFilterChipsRow =
-    showAdminMemoChip ||
     showCorrectionsChip ||
     showProstheticsChip ||
     showAdminChip ||
@@ -647,7 +646,9 @@ export default async function OrdersPage({
         />
         <OrdersListHeaderActionCards
           initialInTransitCount={prostheticsInTransitCount}
+          initialTasksPendingCount={labTasksPendingCount}
           canMarkArrived={canMarkProstheticsArrived}
+          canResolveTasks={canMarkProstheticsArrived}
           showProstheticsBlock={canSeeProstheticsChip}
         />
       </div>
@@ -670,7 +671,9 @@ export default async function OrdersPage({
           </div>
           <OrdersListHeaderActionCards
             initialInTransitCount={prostheticsInTransitCount}
+            initialTasksPendingCount={labTasksPendingCount}
             canMarkArrived={canMarkProstheticsArrived}
+            canResolveTasks={canMarkProstheticsArrived}
             showProstheticsBlock={canSeeProstheticsChip}
           />
         </div>
@@ -682,7 +685,7 @@ export default async function OrdersPage({
         {periodLabelActive ? (
           <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/25 sm:px-4 sm:py-2.5 sm:text-base">
             <span className="text-[var(--text-body)]">
-              Период (дата создания наряда, МСК):{" "}
+              Период (лабораторный срок, МСК):{" "}
               <strong className="font-mono text-[var(--text-strong)]">
                 {periodLabelActive}
               </strong>
@@ -703,7 +706,7 @@ export default async function OrdersPage({
         {shipmentModeActive && shipmentModeLabel ? (
           <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/25 sm:px-4 sm:py-2.5 sm:text-base">
             <span className="text-[var(--text-body)]">
-              Отгрузки:{" "}
+              Запись:{" "}
               <strong className="font-mono text-[var(--text-strong)]">
                 {shipmentModeLabel}
               </strong>
@@ -719,18 +722,18 @@ export default async function OrdersPage({
               })}
               className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
             >
-              Сбросить отгрузки
+              Сбросить запись
             </Link>
           </div>
         ) : null}
         {shipmentModeActive ? (
           <p className="text-sm text-[var(--text-secondary)]">
-            Режим отгрузок: фильтр по дате создания наряда (слева) не действует.
+            Режим записи: фильтр по лабораторному сроку (слева) не действует.
           </p>
         ) : null}
         {shipParsed.periodError ? (
           <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-            {shipParsed.periodError} Режим отгрузок не применён.
+            {shipParsed.periodError} Режим записи не применён.
           </div>
         ) : null}
         {shipmentListTruncated ? (
@@ -776,28 +779,6 @@ export default async function OrdersPage({
         {showOrdersQuickFilterChipsRow ? (
           <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
             <div className="flex flex-wrap items-center gap-2">
-          {showAdminMemoChip ? (
-            <Link
-              href={ordersListHref({
-                limit: pageSize,
-                ...listHrefCommon,
-                tag: LIST_TAG_ADMIN_MEMO,
-              })}
-              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-                activeFilter?.kind === "adminMemo"
-                  ? "border-amber-500/90 bg-amber-50 text-amber-950 ring-2 ring-amber-400/80 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-500/60"
-                  : "border-amber-200/80 bg-amber-50/80 text-amber-950 hover:bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-100 dark:hover:bg-amber-950/40"
-              }`}
-              title="Наряды с непустой пометкой смен (колонка «Пометки»)"
-            >
-              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-                Пометки
-              </span>
-              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-                {adminMemoCount}
-              </span>
-            </Link>
-          ) : null}
           {showCorrectionsChip ? (
             <Link
               href={ordersListHref({
@@ -857,7 +838,7 @@ export default async function OrdersPage({
               title="Наряды с непрочитанным упоминанием лаборатории в чате Kaiten (@…)"
             >
               <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-                ЧАТ
+                Упоминания
               </span>
               <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
                 {labMentionCount}
@@ -969,9 +950,9 @@ export default async function OrdersPage({
                     : listSearchQ
                       ? "Ничего не найдено по этому запросу. Измените текст поиска или сбросьте фильтр."
                       : shipmentModeActive
-                        ? "Нет неотгруженных нарядов в выбранном режиме отгрузок на этой странице."
+                        ? "Нет неотгруженных нарядов в выбранном режиме записи на этой странице."
                         : periodLabelActive
-                        ? "Нет нарядов с датой создания в выбранном периоде (МСК) на этой странице. Измените диапазон, сбросьте период или перейдите к следующей странице."
+                        ? "Нет нарядов с лабораторным сроком в выбранном периоде (МСК) на этой странице. Измените диапазон, сбросьте период или перейдите к следующей странице."
                         : onlyShippedActive
                           ? "Нет отгруженных нарядов на этой странице. Снимите фильтр «только отгруженные» или перейдите к следующей странице."
                           : hideShippedActive
@@ -990,6 +971,7 @@ export default async function OrdersPage({
                   : null;
                 const kaitenUrl = kaitenWebUrl ?? kanbanWebUrl;
                 const workSent = o.adminShippedOtpr;
+                const admission = formatAdmission(o);
                 const blocked = o.kaitenBlocked === true;
                 const labDateFormatted = formatOrderCardDate(o.dueDate);
                 const appointmentDateFormatted = formatOrderCardDate(
@@ -1144,12 +1126,6 @@ export default async function OrdersPage({
                     </>
                   }
                 >
-                  <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-1 sm:py-1.5">
-                    <OrderListAdminMemoCell
-                      orderId={o.id}
-                      initialMemo={o.listAdminMemo ?? null}
-                    />
-                  </td>
                   <OrderListOrderChatCell
                     orderId={o.id}
                     orderNumber={o.orderNumber}
@@ -1261,8 +1237,11 @@ export default async function OrdersPage({
                         : "—"}
                     </span>
                   </td>
-                  <td className="min-w-0 whitespace-nowrap px-1 py-1 align-middle text-center text-[11px] text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5 sm:text-xs">
-                    {formatAdmission(o)}
+                  <td
+                    className="min-w-0 whitespace-nowrap px-1 py-1 align-middle text-center text-[11px] font-light text-[var(--text-muted)] sm:px-1.5 sm:py-1.5 sm:text-xs"
+                    title={admission.full}
+                  >
+                    {admission.short}
                   </td>
                   <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-0.5 py-1 align-middle text-[var(--text-secondary)] sm:px-1 sm:py-1.5">
                     <OrderListDueCell
@@ -1282,6 +1261,13 @@ export default async function OrdersPage({
                         null
                       }
                       createdAtIso={o.createdAt.toISOString()}
+                      appointmentHasTime={o.dueToAdminsHasTime !== false}
+                    />
+                  </td>
+                  <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-1 sm:py-1.5">
+                    <OrderListAdminMemoCell
+                      orderId={o.id}
+                      initialMemo={o.listAdminMemo ?? null}
                     />
                   </td>
                   <td

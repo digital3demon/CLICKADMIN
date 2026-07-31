@@ -1206,15 +1206,74 @@ function normalizeBoardTitleForSystemLookup(title: string | null | undefined): s
  * Снимок для client-state.
  * Tenant: только доски/карточки (персональный UI — в user kanbanBoardUiV1).
  * Demo: полный state в user-scope, поиск по-прежнему не персистим.
+ * Тяжёлые тексты (описание/чат/activity) ужимаем — иначе PUT ~МБ → 500 и лавина ошибок.
  */
 export function kanbanStateForPersistence(
   state: KanbanAppState,
   isDemo = false,
 ): KanbanAppState {
-  if (isDemo) {
-    return { ...state, search: "" };
+  const base = isDemo
+    ? { ...state, search: "" }
+    : stripPersonalKanbanUiForTenant(state);
+  return slimKanbanStateForClientState(base);
+}
+
+const PERSIST_DESC_MAX = 400;
+const PERSIST_COMMENT_MAX = 280;
+const PERSIST_COMMENTS_KEEP = 40;
+const PERSIST_ACTIVITY_KEEP = 15;
+
+/** Ужимает карточки перед записью в TenantClientState / UserClientState. */
+export function slimKanbanStateForClientState(
+  state: KanbanAppState,
+): KanbanAppState {
+  const next = structuredClone(state);
+
+  const slimCard = (card: KanbanCard) => {
+    if (
+      typeof card.description === "string" &&
+      card.description.length > PERSIST_DESC_MAX
+    ) {
+      card.description = card.description.slice(0, PERSIST_DESC_MAX) + "…";
+    }
+    // data:URL (скриншоты/файлы из чата) — главный раздуватель JSON (~МБ → 500 на PUT).
+    // URL вида /api/orders/.../attachments/... оставляем.
+    if (Array.isArray(card.files) && card.files.length > 0) {
+      card.files = card.files.map((f) => {
+        const d = f.dataUrl || "";
+        if (d.startsWith("data:")) {
+          return { ...f, dataUrl: "" };
+        }
+        return f;
+      });
+    }
+    if (Array.isArray(card.comments) && card.comments.length > 0) {
+      const kept = card.comments.slice(-PERSIST_COMMENTS_KEEP);
+      card.comments = kept.map((cm) => {
+        const text =
+          typeof cm.text === "string" && cm.text.length > PERSIST_COMMENT_MAX
+            ? cm.text.slice(0, PERSIST_COMMENT_MAX) + "…"
+            : cm.text;
+        return { ...cm, text };
+      });
+    }
+    if (Array.isArray(card.activity) && card.activity.length > PERSIST_ACTIVITY_KEEP) {
+      card.activity = card.activity.slice(-PERSIST_ACTIVITY_KEEP);
+    }
+  };
+
+  for (const board of next.boards) {
+    for (const col of board.columns || []) {
+      for (const card of col.cards || []) slimCard(card);
+    }
+    for (const row of board.archivedCards || []) {
+      if (row?.card) slimCard(row.card);
+    }
+    for (const row of board.stoppedCards || []) {
+      if (row?.card) slimCard(row.card);
+    }
   }
-  return stripPersonalKanbanUiForTenant(state);
+  return next;
 }
 
 export function mergeKanbanStatePreservingLocalBoards(

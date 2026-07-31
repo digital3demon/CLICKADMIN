@@ -199,6 +199,48 @@ html.dark .kanban-root {
   }
 }
 
+/* Наведение на кнопку СТОП (мышь и touch): вибрация + красный. */
+@keyframes kanban-card-drag-over-stop {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  20% {
+    transform: translate3d(-3px, 1px, 0) rotate(-1.2deg);
+  }
+  40% {
+    transform: translate3d(3px, -1px, 0) rotate(1.2deg);
+  }
+  60% {
+    transform: translate3d(-2px, -2px, 0) rotate(-0.8deg);
+  }
+  80% {
+    transform: translate3d(2px, 2px, 0) rotate(0.8deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+}
+
+.kanban-card-drag-over-stop {
+  animation: kanban-card-drag-over-stop 0.1s linear infinite;
+  border-color: #ef4444 !important;
+  background: color-mix(in srgb, #ef4444 22%, var(--kanban-card-bg)) !important;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, #ef4444 55%, transparent),
+    0 10px 28px color-mix(in srgb, #ef4444 35%, transparent) !important;
+  cursor: grabbing !important;
+}
+
+.kanban-stop-drop-hot {
+  border-color: #ef4444 !important;
+  background: color-mix(in srgb, #ef4444 88%, #7f1d1d) !important;
+  color: #fff !important;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, #ef4444 50%, transparent),
+    0 8px 20px color-mix(in srgb, #ef4444 40%, transparent) !important;
+  transform: scale(1.06);
+}
+
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;

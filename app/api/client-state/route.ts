@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
+import {
+  CLIENT_STATE_MAX_JSON_BYTES,
+} from "@/lib/client-state-limits";
 import { getPrisma } from "@/lib/get-prisma";
 
 export const dynamic = "force-dynamic";
@@ -77,9 +80,27 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
 
+  let rawText: string;
+  try {
+    rawText = await req.text();
+  } catch {
+    return NextResponse.json({ error: "Не удалось прочитать тело" }, { status: 400 });
+  }
+
+  if (new TextEncoder().encode(rawText).length > CLIENT_STATE_MAX_JSON_BYTES) {
+    return NextResponse.json(
+      {
+        error: "Слишком большой client-state",
+        maxBytes: CLIENT_STATE_MAX_JSON_BYTES,
+        bytes: new TextEncoder().encode(rawText).length,
+      },
+      { status: 413 },
+    );
+  }
+
   let body: PutBody;
   try {
-    body = (await req.json()) as PutBody;
+    body = JSON.parse(rawText) as PutBody;
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
@@ -95,42 +116,50 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Нет контекста организации" }, { status: 403 });
   }
 
-  const prisma = await getPrisma();
-  if (body.value === null) {
-    if (scope === "user") {
-      await prisma.userClientState.deleteMany({
-        where: { userId: session.sub, key },
-      });
-    } else {
-      await prisma.tenantClientState.deleteMany({
-        where: { tenantId, key },
-      });
+  try {
+    const prisma = await getPrisma();
+    if (body.value === null) {
+      if (scope === "user") {
+        await prisma.userClientState.deleteMany({
+          where: { userId: session.sub, key },
+        });
+      } else {
+        await prisma.tenantClientState.deleteMany({
+          where: { tenantId, key },
+        });
+      }
+      return NextResponse.json({ ok: true, deleted: true });
     }
-    return NextResponse.json({ ok: true, deleted: true });
-  }
 
-  if (scope === "user") {
-    await prisma.userClientState.upsert({
-      where: { userId_key: { userId: session.sub, key } },
+    if (scope === "user") {
+      await prisma.userClientState.upsert({
+        where: { userId_key: { userId: session.sub, key } },
+        create: {
+          userId: session.sub,
+          tenantId,
+          key,
+          value: body.value as never,
+        },
+        update: { value: body.value as never, tenantId },
+      });
+      return NextResponse.json({ ok: true, scope, key });
+    }
+
+    await prisma.tenantClientState.upsert({
+      where: { tenantId_key: { tenantId, key } },
       create: {
-        userId: session.sub,
         tenantId,
         key,
         value: body.value as never,
       },
-      update: { value: body.value as never, tenantId },
+      update: { value: body.value as never },
     });
     return NextResponse.json({ ok: true, scope, key });
+  } catch (e) {
+    console.error("[client-state] PUT failed", { scope, key, err: e });
+    return NextResponse.json(
+      { error: "Не удалось сохранить client-state" },
+      { status: 500 },
+    );
   }
-
-  await prisma.tenantClientState.upsert({
-    where: { tenantId_key: { tenantId, key } },
-    create: {
-      tenantId,
-      key,
-      value: body.value as never,
-    },
-    update: { value: body.value as never },
-  });
-  return NextResponse.json({ ok: true, scope, key });
 }

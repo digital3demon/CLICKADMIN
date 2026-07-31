@@ -366,10 +366,12 @@ export function OrderKaitenTab({
   const [createKaitenCardTypeId, setCreateKaitenCardTypeId] = useState(
     () => kaitenCardTypeId ?? "",
   );
+  const [cardTypeDirty, setCardTypeDirty] = useState(false);
   const [noCardBoardError, setNoCardBoardError] = useState<string | null>(null);
 
   useEffect(() => {
     setCreateKaitenCardTypeId(kaitenCardTypeId ?? "");
+    setCardTypeDirty(false);
   }, [kaitenCardTypeId, orderId]);
 
   useEffect(() => {
@@ -498,7 +500,6 @@ export function OrderKaitenTab({
   }, [trackLane, spaceDirty]);
 
   useEffect(() => {
-    if (kaitenCardId != null) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -519,7 +520,7 @@ export function OrderKaitenTab({
     return () => {
       cancelled = true;
     };
-  }, [kaitenCardId, orderId]);
+  }, [orderId]);
 
   useEffect(() => {
     if (kaitenCardId != null) {
@@ -637,6 +638,14 @@ export function OrderKaitenTab({
       if (laneId !== "") {
         body.laneId = laneId;
       }
+      if (cardTypeDirty) {
+        const typeId = String(createKaitenCardTypeId).trim();
+        if (!typeId) {
+          setSaveError("Выберите тип карточки — без этого сохранить нельзя.");
+          return;
+        }
+        body.kaitenCardTypeId = typeId;
+      }
       if (Object.keys(body).length === 0) {
         router.refresh();
         return;
@@ -654,6 +663,9 @@ export function OrderKaitenTab({
       if (!res.ok) {
         setSaveError(data.error ?? "Ошибка сохранения");
         return;
+      }
+      if (cardTypeDirty) {
+        setCardTypeDirty(false);
       }
       if (data.card && typeof data.card === "object") {
         const c = data.card;
@@ -1118,7 +1130,10 @@ export function OrderKaitenTab({
                 <select
                   className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm"
                   value={String(createKaitenCardTypeId)}
-                  onChange={(e) => setCreateKaitenCardTypeId(e.target.value)}
+                  onChange={(e) => {
+                    setCreateKaitenCardTypeId(e.target.value);
+                    setCardTypeDirty(true);
+                  }}
                 >
                   <option value="">— выберите тип —</option>
                   {kaitenTypeOptions.map((t) => (
@@ -1503,6 +1518,24 @@ export function OrderKaitenTab({
               placeholder="Например: коронки 14–16"
               maxLength={120}
             />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
+            Тип карточки
+            <select
+              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
+              value={String(createKaitenCardTypeId)}
+              onChange={(e) => {
+                setCreateKaitenCardTypeId(e.target.value);
+                setCardTypeDirty(true);
+              }}
+            >
+              <option value="">— выберите тип —</option>
+              {kaitenTypeOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
             Заголовок карточки

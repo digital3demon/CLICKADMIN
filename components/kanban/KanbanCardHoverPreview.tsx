@@ -7,10 +7,29 @@ import {
   kanbanCardHoverPreviewBody,
   kanbanCardHoverPreviewFooterLines,
 } from "@/lib/kanban/kanban-card-hover-preview";
-import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 
 const PREVIEW_WIDTH = 288;
 const PREVIEW_EST_HEIGHT = 220;
+
+/** Desktop-only: на touch/coarse pointer hover-preview ломает клик по карточке. */
+function useFinePointerHover(): boolean {
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setOk(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return ok;
+}
 
 export function KanbanCardHoverPreviewPopover({
   card,
@@ -60,18 +79,24 @@ export function KanbanCardHoverPreviewPopover({
 }
 
 export function useKanbanCardHoverPreview(enabled = true) {
+  const finePointer = useFinePointerHover();
+  const active = enabled && finePointer;
   const [hover, setHover] = useState<{
     card: KanbanCard;
     x: number;
     y: number;
   } | null>(null);
 
+  useEffect(() => {
+    if (!active) setHover(null);
+  }, [active]);
+
   const onPreviewMove = useCallback(
     (card: KanbanCard, event: ReactMouseEvent) => {
-      if (!enabled) return;
+      if (!active) return;
       setHover({ card, x: event.clientX, y: event.clientY });
     },
-    [enabled],
+    [active],
   );
 
   const onPreviewLeave = useCallback(() => {
@@ -87,7 +112,7 @@ export function useKanbanCardHoverPreview(enabled = true) {
   }, [hover]);
 
   const previewNode =
-    enabled && hover && position ? (
+    active && hover && position ? (
       <KanbanCardHoverPreviewPopover
         card={hover.card}
         left={position.left}

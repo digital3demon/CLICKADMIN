@@ -5,6 +5,7 @@ import { OrdersHistorySearch } from "@/components/orders/OrdersHistorySearch";
 import { OrdersHistoryTabNav } from "@/components/orders/OrdersHistoryTabNav";
 import { OrdersHistoryTable } from "@/components/orders/OrdersHistoryTable";
 import { OrdersProstheticsHistoryTable } from "@/components/orders/OrdersProstheticsHistoryTable";
+import { OrdersTasksHistoryTable } from "@/components/orders/OrdersTasksHistoryTable";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
@@ -13,6 +14,8 @@ import {
   loadCorrectionsHistoryOnly,
   loadProstheticsHistoryOnly,
 } from "@/lib/corrections-history.server";
+import { loadLabTasks } from "@/lib/lab-tasks.server";
+import type { LabTaskJson } from "@/lib/lab-tasks";
 import { normalizeRevisionsHistorySearchQuery } from "@/lib/revisions-history";
 import { loadRevisionsHistoryMerged } from "@/lib/revisions-history.server";
 
@@ -38,14 +41,22 @@ export default async function OrdersHistoryPage({
   let prostheticsItems = [] as Awaited<
     ReturnType<typeof loadProstheticsHistoryOnly>
   >;
+  let tasksItems = [] as LabTaskJson[];
 
   try {
     if (tab === "changes") {
       changesItems = await loadRevisionsHistoryMerged({ q });
     } else if (tab === "corrections") {
       correctionsItems = await loadCorrectionsHistoryOnly({ q, tenantId });
-    } else {
+    } else if (tab === "prosthetics") {
       prostheticsItems = await loadProstheticsHistoryOnly({ q, tenantId });
+    } else if (tab === "tasks" && tenantId) {
+      tasksItems = await loadLabTasks({
+        tenantId,
+        status: "all",
+        limit: 150,
+        q,
+      });
     }
   } catch (e) {
     console.error("[orders/history]", e);
@@ -56,7 +67,9 @@ export default async function OrdersHistoryPage({
       ? correctionsItems.length
       : tab === "prosthetics"
         ? prostheticsItems.length
-        : changesItems.length;
+        : tab === "tasks"
+          ? tasksItems.length
+          : changesItems.length;
   const limitReached = itemCount >= 150;
 
   const emptyMessage =
@@ -64,7 +77,9 @@ export default async function OrdersHistoryPage({
       ? "Журнал корректировок пуст."
       : tab === "prosthetics"
         ? "Журнал заказов протетики пуст."
-        : "Журнал пуст. После сохранения нарядов и карточек клиентов здесь появятся записи.";
+        : tab === "tasks"
+          ? "Журнал задач пуст."
+          : "Журнал пуст. После сохранения нарядов и карточек клиентов здесь появятся записи.";
 
   return (
     <ModuleFrame title="История изменений">
@@ -83,6 +98,8 @@ export default async function OrdersHistoryPage({
               <OrdersCorrectionsHistoryTable items={[]} />
             ) : tab === "prosthetics" ? (
               <OrdersProstheticsHistoryTable items={[]} />
+            ) : tab === "tasks" ? (
+              <OrdersTasksHistoryTable items={[]} />
             ) : (
               <OrdersHistoryTable items={[]} />
             )
@@ -106,6 +123,8 @@ export default async function OrdersHistoryPage({
                 items={prostheticsItems}
                 canMarkArrived={canMarkArrived}
               />
+            ) : tab === "tasks" ? (
+              <OrdersTasksHistoryTable items={tasksItems} />
             ) : (
               <OrdersHistoryTable items={changesItems} />
             )}

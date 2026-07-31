@@ -15,9 +15,10 @@ describe("parseOrdersHistoryTab", () => {
     expect(parseOrdersHistoryTab("")).toBe("changes");
   });
 
-  it("corrections и prosthetics", () => {
+  it("corrections и prosthetics и tasks", () => {
     expect(parseOrdersHistoryTab("corrections")).toBe("corrections");
     expect(parseOrdersHistoryTab("prosthetics")).toBe("prosthetics");
+    expect(parseOrdersHistoryTab("tasks")).toBe("tasks");
   });
 });
 
@@ -29,6 +30,9 @@ describe("ordersHistoryHref", () => {
     expect(
       ordersHistoryHref({ tab: "prosthetics", q: "2606-285" }),
     ).toBe("/orders/history?tab=prosthetics&q=2606-285");
+    expect(
+      ordersHistoryHref({ tab: "tasks", q: "срочно" }),
+    ).toBe("/orders/history?tab=tasks&q=%D1%81%D1%80%D0%BE%D1%87%D0%BD%D0%BE");
   });
 });
 

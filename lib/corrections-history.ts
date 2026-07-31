@@ -1,6 +1,6 @@
 import { normalizeRevisionsHistorySearchQuery } from "@/lib/revisions-history";
 
-export type OrdersHistoryTab = "changes" | "corrections" | "prosthetics";
+export type OrdersHistoryTab = "changes" | "corrections" | "prosthetics" | "tasks";
 
 export type CorrectionHistorySource = "KAITEN" | "DEMO_KANBAN";
 
@@ -44,6 +44,7 @@ export function parseOrdersHistoryTab(
 ): OrdersHistoryTab {
   if (raw === "corrections") return "corrections";
   if (raw === "prosthetics") return "prosthetics";
+  if (raw === "tasks") return "tasks";
   return "changes";
 }
 
@@ -54,6 +55,7 @@ export function ordersHistoryHref(opts?: {
   const p = new URLSearchParams();
   if (opts?.tab === "corrections") p.set("tab", "corrections");
   if (opts?.tab === "prosthetics") p.set("tab", "prosthetics");
+  if (opts?.tab === "tasks") p.set("tab", "tasks");
   const q = normalizeRevisionsHistorySearchQuery(opts?.q);
   if (q) p.set("q", q);
   const qs = p.toString();

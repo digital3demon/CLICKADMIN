@@ -7,23 +7,38 @@ const LAB_MENTION_ACK_ROLES: UserRole[] = [
   "SENIOR_ADMINISTRATOR",
 ];
 
-function dualReadEnabled(): boolean {
-  const raw = String(process.env.ORDER_CHAT_INBOX_DUAL_READ ?? "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes";
+function envFlagOn(name: string): boolean {
+  const raw = String(process.env[name] ?? "")
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
 export function isOrderChatInboxDualReadEnabled(): boolean {
-  return dualReadEnabled();
+  return envFlagOn("ORDER_CHAT_INBOX_DUAL_READ");
 }
 
+/** По умолчанию false: иначе при неполном inbox пилюля упоминаний пропадает. */
 export function isOrderChatInboxReadNewEnabled(): boolean {
-  return true;
+  return envFlagOn("ORDER_CHAT_INBOX_READ_NEW");
 }
 
+/** Canary: глобальный READ_NEW или tenant в ORDER_CHAT_INBOX_READ_NEW_TENANTS. */
 export function isOrderChatInboxReadNewEnabledForTenant(
   tenantId: string | null | undefined,
 ): boolean {
-  return true;
+  if (isOrderChatInboxReadNewEnabled()) return true;
+  const tid = String(tenantId ?? "").trim();
+  if (!tid) return false;
+  const raw = String(process.env.ORDER_CHAT_INBOX_READ_NEW_TENANTS ?? "").trim();
+  if (!raw) return false;
+  const set = new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  return set.has(tid);
 }
 
 type AckMap = Map<string, Date>;

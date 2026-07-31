@@ -138,6 +138,31 @@ function rectsIntersect(a: DOMRect | { left: number; right: number; top: number;
   return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
 }
 
+function isPointerOverStopDropTarget(
+  point: { x: number; y: number } | null,
+  dragRect: DOMRect | { left: number; right: number; top: number; bottom: number } | null,
+): boolean {
+  const stopButton = document.getElementById("kanban-stop-drop-target");
+  const stopRect = stopButton?.getBoundingClientRect();
+  if (!stopRect) return false;
+  const pointInside =
+    point != null &&
+    point.x >= stopRect.left &&
+    point.x <= stopRect.right &&
+    point.y >= stopRect.top &&
+    point.y <= stopRect.bottom;
+  if (pointInside) return true;
+  if (dragRect && rectsIntersect(dragRect, stopRect)) return true;
+  return false;
+}
+
+function setStopDropTargetHot(hot: boolean): void {
+  const el = document.getElementById("kanban-stop-drop-target");
+  if (!el) return;
+  el.classList.toggle("kanban-stop-drop-hot", hot);
+  el.setAttribute("aria-dropeffect", hot ? "move" : "none");
+}
+
 /** Элементы со скроллом выше по дереву — absolute-меню внутри колонки обрезается без портала. */
 function scrollContainerAncestors(start: HTMLElement | null): HTMLElement[] {
   const acc: HTMLElement[] = [];
@@ -163,6 +188,7 @@ function KanbanCardView({
   onDeleteCard,
   dragListeners,
   dragVibrate = false,
+  dragOverStop = false,
   allowMoveToOtherBoard = true,
   hoverPreviewEnabled = true,
   onPreviewMove,
@@ -182,6 +208,8 @@ function KanbanCardView({
   dragListeners?: DraggableSyntheticListeners;
   /** Touch: анимация «вибрации» на время перетаскивания (DragOverlay). */
   dragVibrate?: boolean;
+  /** Наведение на кнопку СТОП: вибрация + красный tint. */
+  dragOverStop?: boolean;
   allowMoveToOtherBoard?: boolean;
   hoverPreviewEnabled?: boolean;
   onPreviewMove?: (card: KanbanCard, event: React.MouseEvent) => void;
@@ -270,7 +298,17 @@ function KanbanCardView({
   }
 
   const urgent = !!card.urgent;
-  const typeRing = kanbanTypeRingStyle(accent);
+  const typeRing = dragOverStop
+    ? {
+        background:
+          "linear-gradient(135deg, #ef4444 0%, #b91c1c 50%, #7f1d1d 100%)",
+      }
+    : kanbanTypeRingStyle(accent);
+  const dragArticleClass = dragOverStop
+    ? "kanban-card-drag-over-stop transition-none"
+    : dragVibrate
+      ? "kanban-card-drag-vibrate transition-none"
+      : "transition-[box-shadow,transform,border-color]";
 
   return (
     <div data-card-id={card.id} className="block w-full min-w-0 shrink-0 touch-pan-x touch-pan-y">
@@ -279,11 +317,7 @@ function KanbanCardView({
         style={typeRing}
       >
         <article
-          className={`relative overflow-visible border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.1] rounded-[7px] max-md:rounded-[6px] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] hover:shadow-[var(--kanban-shadow-elevated)] ${
-            dragVibrate
-              ? "kanban-card-drag-vibrate transition-none"
-              : "transition-[box-shadow,transform,border-color]"
-          }`}
+          className={`relative overflow-visible border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.1] rounded-[7px] max-md:rounded-[6px] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] hover:shadow-[var(--kanban-shadow-elevated)] ${dragArticleClass}`}
           {...(dragListeners ?? {})}
           onMouseMove={(event) => {
             if (hoverPreviewEnabled && onPreviewMove) onPreviewMove(card, event);
@@ -844,6 +878,8 @@ export function BoardCanvas({
     startY: number;
   } | null>(null);
   const [activeDragCardId, setActiveDragCardId] = useState<string | null>(null);
+  const [dragOverStop, setDragOverStop] = useState(false);
+  const dragOverStopRef = useRef(false);
   const { onPreviewMove, onPreviewLeave, previewNode } = useKanbanCardHoverPreview(true);
   /** Горизонтальная полоса колонок: wheel без passive — только горизонтальный жест / Shift+колесо. */
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
@@ -1134,56 +1170,97 @@ export function BoardCanvas({
       ? activeDragCardHomeBoard.title
       : undefined;
 
+  const clearStopDropHot = useCallback(() => {
+    dragOverStopRef.current = false;
+    setDragOverStop(false);
+    setStopDropTargetHot(false);
+  }, []);
+
+  const setKanbanCardDraggingFlag = useCallback((on: boolean) => {
+    if (on) {
+      document.documentElement.dataset.kanbanCardDragging = "1";
+      window.dispatchEvent(new Event("kanban-card-drag-start"));
+    } else {
+      delete document.documentElement.dataset.kanbanCardDragging;
+      window.dispatchEvent(new Event("kanban-card-drag-end"));
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      delete document.documentElement.dataset.kanbanCardDragging;
+      setStopDropTargetHot(false);
+    };
+  }, []);
+
   const onDragStart = useCallback(
     (event: DragStartEvent) => {
       const aid = String(event.active.id);
       if (columnIds.includes(aid)) {
         setActiveDragCardId(null);
+        setKanbanCardDraggingFlag(false);
+        clearStopDropHot();
         return;
       }
       onPreviewLeave();
       setActiveDragCardId(aid);
+      setKanbanCardDraggingFlag(true);
+      clearStopDropHot();
     },
-    [columnIds, onPreviewLeave],
+    [columnIds, onPreviewLeave, clearStopDropHot, setKanbanCardDraggingFlag],
   );
 
-  const onDragMove = useCallback((event: DragMoveEvent) => {
-    const rect = event.active.rect.current.translated;
-    if (!rect) return;
-    dragPointRef.current = {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    };
-  }, []);
+  const onDragMove = useCallback(
+    (event: DragMoveEvent) => {
+      const rect = event.active.rect.current.translated;
+      if (!rect) return;
+      const point = {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      };
+      dragPointRef.current = point;
+      if (!onRequestStopCard || dndLocked) {
+        clearStopDropHot();
+        return;
+      }
+      const over = isPointerOverStopDropTarget(point, rect);
+      dragOverStopRef.current = over;
+      setDragOverStop(over);
+      setStopDropTargetHot(over);
+    },
+    [onRequestStopCard, dndLocked, clearStopDropHot],
+  );
 
-  const onDragCancel = useCallback((_event: DragCancelEvent) => {
-    setActiveDragCardId(null);
-    dragPointRef.current = null;
-  }, []);
+  const onDragCancel = useCallback(
+    (_event: DragCancelEvent) => {
+      setActiveDragCardId(null);
+      dragPointRef.current = null;
+      setKanbanCardDraggingFlag(false);
+      clearStopDropHot();
+    },
+    [clearStopDropHot, setKanbanCardDraggingFlag],
+  );
 
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveDragCardId(null);
+      setKanbanCardDraggingFlag(false);
       const { active, over } = event;
       const aid = String(active.id);
       const point = dragPointRef.current;
       dragPointRef.current = null;
+      const wasOverStop = dragOverStopRef.current;
+      clearStopDropHot();
       if (
         onRequestStopCard &&
         !columnIds.includes(aid) &&
         !dndLocked
       ) {
-        const stopButton = document.getElementById("kanban-stop-drop-target");
-        const stopRect = stopButton?.getBoundingClientRect();
         const dragRect = active.rect.current.translated;
-        const pointInside =
-          point &&
-          stopRect &&
-          point.x >= stopRect.left &&
-          point.x <= stopRect.right &&
-          point.y >= stopRect.top &&
-          point.y <= stopRect.bottom;
-        if (stopRect && (pointInside || (dragRect && rectsIntersect(dragRect, stopRect)))) {
+        if (
+          wasOverStop ||
+          isPointerOverStopDropTarget(point, dragRect ?? null)
+        ) {
           onRequestStopCard(aid);
           return;
         }
@@ -1363,6 +1440,9 @@ export function BoardCanvas({
       aggregateLayoutLocked,
       onAggregateCardDrag,
       onRequestStopCard,
+      clearStopDropHot,
+      setKanbanCardDraggingFlag,
+      onCardColumnChanged,
     ],
   );
 
@@ -1564,6 +1644,7 @@ export function BoardCanvas({
               homeBoard={activeDragCardHomeBoard}
               foreignBoardLabel={activeDragForeignBoardLabel}
               dragVibrate
+              dragOverStop={dragOverStop}
               onOpen={() => {}}
               onCopyLink={() => {}}
               onMoveCard={() => {}}

@@ -1,6 +1,72 @@
+/**
+ * Клиент PUT/GET /api/client-state.
+ *
+ * Инварианты против шторма запросов:
+ * - один in-flight PUT на ключ (поздние значения coalesce в очередь);
+ * - после 400/413/500 — длинный cooldown без сети;
+ * - одинаковый payload не пишем повторно;
+ * - warn в консоль не чаще раза в минуту на ключ.
+ */
+import {
+  CLIENT_STATE_MAX_JSON_BYTES,
+  clientStatePayloadTooLarge,
+  jsonUtf8ByteLength,
+} from "@/lib/client-state-limits";
+
 export type ClientStateScope = "user" | "tenant";
 
 type GetResponse = { found: boolean; value: unknown };
+
+type WriteSlot = {
+  skipUntil: number;
+  inFlight: boolean;
+  queued: unknown | undefined;
+  hasQueued: boolean;
+  lastOkFingerprint: string;
+  lastWarnAt: number;
+};
+
+const slots = new Map<string, WriteSlot>();
+
+const COOLDOWN_HARD_MS = 5 * 60_000;
+const COOLDOWN_NETWORK_MS = 60_000;
+const WARN_EVERY_MS = 60_000;
+
+function skipKey(scope: string, key: string): string {
+  return `${scope}:${key}`;
+}
+
+function getSlot(sk: string): WriteSlot {
+  let s = slots.get(sk);
+  if (!s) {
+    s = {
+      skipUntil: 0,
+      inFlight: false,
+      queued: undefined,
+      hasQueued: false,
+      lastOkFingerprint: "",
+      lastWarnAt: 0,
+    };
+    slots.set(sk, s);
+  }
+  return s;
+}
+
+function fingerprintPayload(scope: string, key: string, value: unknown): string {
+  const bytes = jsonUtf8ByteLength({ scope, key, value });
+  // Длина + края JSON — достаточно, чтобы не слать тот же канбан каждые 8с.
+  const raw = JSON.stringify({ scope, key, value });
+  const head = raw.slice(0, 64);
+  const tail = raw.slice(-64);
+  return `${bytes}:${head}:${tail}`;
+}
+
+function warnOnce(slot: WriteSlot, message: string): void {
+  const now = Date.now();
+  if (now - slot.lastWarnAt < WARN_EVERY_MS) return;
+  slot.lastWarnAt = now;
+  console.warn(message);
+}
 
 export async function readClientState<T>(
   scope: ClientStateScope,
@@ -20,11 +86,36 @@ export async function readClientState<T>(
   }
 }
 
-export async function writeClientState(
+async function flushWrite(
   scope: ClientStateScope,
   key: string,
   value: unknown,
 ): Promise<boolean> {
+  const sk = skipKey(scope, key);
+  const slot = getSlot(sk);
+
+  if (Date.now() < slot.skipUntil) return false;
+
+  const fp = fingerprintPayload(scope, key, value);
+  if (fp === slot.lastOkFingerprint) return true;
+
+  const sized = clientStatePayloadTooLarge(scope, key, value);
+  if (sized.tooLarge) {
+    slot.skipUntil = Date.now() + COOLDOWN_HARD_MS;
+    warnOnce(
+      slot,
+      `[client-state] skip PUT ${scope}/${key}: ${sized.bytes} bytes > ${CLIENT_STATE_MAX_JSON_BYTES} (cooldown ${COOLDOWN_HARD_MS / 1000}s)`,
+    );
+    return false;
+  }
+
+  if (slot.inFlight) {
+    slot.queued = value;
+    slot.hasQueued = true;
+    return false;
+  }
+
+  slot.inFlight = true;
   try {
     const res = await fetch("/api/client-state", {
       method: "PUT",
@@ -32,15 +123,60 @@ export async function writeClientState(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scope, key, value }),
     });
-    return res.ok;
-  } catch {
+    if (res.ok) {
+      slot.lastOkFingerprint = fp;
+      slot.skipUntil = 0;
+      return true;
+    }
+    if (res.status === 413 || res.status === 400 || res.status === 500) {
+      slot.skipUntil = Date.now() + COOLDOWN_HARD_MS;
+      // Сбрасываем очередь — иначе после cooldown снова упрёмся в тот же oversized.
+      slot.hasQueued = false;
+      slot.queued = undefined;
+      warnOnce(
+        slot,
+        `[client-state] PUT ${scope}/${key} → HTTP ${res.status} (cooldown ${COOLDOWN_HARD_MS / 1000}s, no retry spam)`,
+      );
+      return false;
+    }
+    slot.skipUntil = Date.now() + COOLDOWN_NETWORK_MS;
     return false;
+  } catch {
+    slot.skipUntil = Date.now() + COOLDOWN_NETWORK_MS;
+    return false;
+  } finally {
+    slot.inFlight = false;
+    if (slot.hasQueued && Date.now() >= slot.skipUntil) {
+      const next = slot.queued;
+      slot.hasQueued = false;
+      slot.queued = undefined;
+      void flushWrite(scope, key, next);
+    }
   }
+}
+
+export async function writeClientState(
+  scope: ClientStateScope,
+  key: string,
+  value: unknown,
+): Promise<boolean> {
+  return flushWrite(scope, key, value);
 }
 
 export async function deleteClientState(
   scope: ClientStateScope,
   key: string,
 ): Promise<boolean> {
+  const sk = skipKey(scope, key);
+  const slot = getSlot(sk);
+  slot.lastOkFingerprint = "";
+  slot.skipUntil = 0;
+  slot.hasQueued = false;
+  slot.queued = undefined;
   return writeClientState(scope, key, null);
+}
+
+/** Для тестов: сброс слотов. */
+export function __resetClientStateClientForTests(): void {
+  slots.clear();
 }

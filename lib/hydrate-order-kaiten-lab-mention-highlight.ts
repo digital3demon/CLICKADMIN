@@ -104,9 +104,11 @@ export async function hydrateOrderKaitenLabMentionHighlight<
         userId,
         rows.map((r) => r.id),
       );
+      // OR с legacy: неполный inbox не гасит уже известные упоминания.
       return hydrated.map((row) => ({
         ...row,
-        listKaitenLabMentionHighlight: inboxMap.get(row.id) ?? false,
+        listKaitenLabMentionHighlight:
+          row.listKaitenLabMentionHighlight || (inboxMap.get(row.id) ?? false),
       }));
     } catch (err) {
       logger.warn(

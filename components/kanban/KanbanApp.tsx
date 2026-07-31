@@ -73,6 +73,7 @@ import {
   type AggregateCardDragArgs,
 } from "@/lib/kanban/aggregate-card-drag";
 import { kanbanLinkedOrdersPullIntervalMs } from "@/lib/kanban-linked-pull-ms";
+import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
 import { kanbanCardIdFromSearchParams } from "@/lib/kanban-order-card-url";
 import { canUserManageKanbanBlockForCard } from "@/lib/kanban-block-permissions";
@@ -96,7 +97,8 @@ import {
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { KanbanMembersBackfillButton } from "./KanbanMembersBackfillButton";
 import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
 import { TOAST_AUTO_HIDE_MS } from "@/components/ui/toast-store";
@@ -152,6 +154,83 @@ function kaitenLaneForKanbanBoardId(boardId: string): KaitenTrackLane | undefine
   if (boardId === KANBAN_BOARD_ORTHOPEDICS_ID) return "ORTHOPEDICS";
   if (boardId === KANBAN_BOARD_ORTHODONTICS_ID) return "ORTHODONTICS";
   return undefined;
+}
+
+const STOP_HOVER_PREVIEW_OFFSET = 14;
+const STOP_HOVER_PREVIEW_WIDTH = 288;
+const STOP_HOVER_PREVIEW_MAX = 8;
+
+/** Сколько нарядов за один проход тянем колонку/sort из Kaiten → БД (как в OrderListKaitenPoller). */
+const KAITEN_BOARD_TITLES_SYNC_WINDOW = 10;
+
+function parseKaitenRetryAfterMs(value: string | null): number {
+  const raw = String(value || "").trim();
+  if (!raw) return 90_000;
+  const asSeconds = Number.parseInt(raw, 10);
+  if (Number.isFinite(asSeconds) && asSeconds > 0) {
+    return Math.min(asSeconds * 1000, 120_000);
+  }
+  const dateMs = Date.parse(raw);
+  if (Number.isFinite(dateMs)) {
+    return Math.max(0, Math.min(dateMs - Date.now(), 120_000));
+  }
+  return 90_000;
+}
+
+/**
+ * Id нарядов с карточками Kaiten на досках: сначала активная доска (дорожка),
+ * чтобы позиция на экране обновлялась раньше остальных.
+ */
+function collectLinkedOrderIdsPreferActiveBoard(state: KanbanAppState): string[] {
+  const activeId = state.activeBoardId;
+  const active: string[] = [];
+  const other: string[] = [];
+  const seen = new Set<string>();
+  const push = (bucket: string[], oid: string) => {
+    if (seen.has(oid)) return;
+    seen.add(oid);
+    bucket.push(oid);
+  };
+  for (const b of state.boards ?? []) {
+    const bucket = b.id === activeId ? active : other;
+    for (const col of b.columns ?? []) {
+      for (const c of col.cards ?? []) {
+        const oid = String(c.linkedOrderId || "").trim();
+        if (!oid) continue;
+        if (c.kaitenCardId == null || !Number.isFinite(Number(c.kaitenCardId))) {
+          continue;
+        }
+        push(bucket, oid);
+      }
+    }
+  }
+  return [...active, ...other];
+}
+
+function isKanbanCardDragInProgress(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.documentElement.dataset.kanbanCardDragging === "1";
+}
+
+function clampStopHoverPreviewPosition(x: number, y: number) {
+  if (typeof window === "undefined") {
+    return { left: x + STOP_HOVER_PREVIEW_OFFSET, top: y + STOP_HOVER_PREVIEW_OFFSET };
+  }
+  const margin = 8;
+  const estHeight = 220;
+  return {
+    left: Math.max(
+      margin,
+      Math.min(
+        x + STOP_HOVER_PREVIEW_OFFSET,
+        window.innerWidth - STOP_HOVER_PREVIEW_WIDTH - margin,
+      ),
+    ),
+    top: Math.max(
+      margin,
+      Math.min(y + STOP_HOVER_PREVIEW_OFFSET, window.innerHeight - estHeight - margin),
+    ),
+  };
 }
 
 function KanbanStopView({
@@ -215,7 +294,7 @@ function StoppedKanbanCard({
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!menuOpen) return;
-    const close = (e: MouseEvent) => {
+    const close = (e: globalThis.MouseEvent) => {
       if (menuRef.current?.contains(e.target as Node)) return;
       setMenuOpen(false);
     };
@@ -298,6 +377,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const [moveTargetBoardId, setMoveTargetBoardId] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [stopOpen, setStopOpen] = useState(false);
+  const [stopHoverPreview, setStopHoverPreview] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [activityActorLabel, setActivityActorLabel] = useState<string | undefined>(undefined);
   const [kanbanSessionUserId, setKanbanSessionUserId] = useState<string | null>(null);
   const [kanbanSessionRole, setKanbanSessionRole] = useState<UserRole | null>(null);
@@ -325,6 +408,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const standalonePushInFlightRef = useRef(false);
   const mirrorSyncInFlightRef = useRef(false);
   const mirrorSyncQueuedRef = useRef(false);
+  const titlesSyncOffsetRef = useRef(0);
+  const titlesSyncBackoffRef = useRef(0);
+  const titlesSyncLastAtRef = useRef(0);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const kanbanUiSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
@@ -376,6 +462,54 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           /* сеть — продолжаем GET */
         }
       }
+
+      /**
+       * Канбан раньше только читал Order.kaitenColumnTitle/sort из БД, а live-pull
+       * колонок из Kaiten шёл лишь со списка заказов → доска отставала.
+       * Перед merge подтягиваем пачку позиций с активной дорожки.
+       */
+      const curForTitles = appStateRef.current;
+      const titlesMinGapMs = Math.max(8_000, kaitenClientPollIntervalMs() - 2_000);
+      if (
+        curForTitles &&
+        !isKanbanCardDragInProgress() &&
+        Date.now() >= titlesSyncBackoffRef.current &&
+        Date.now() - titlesSyncLastAtRef.current >= titlesMinGapMs
+      ) {
+        const ids = collectLinkedOrderIdsPreferActiveBoard(curForTitles);
+        if (ids.length > 0) {
+          let batch: string[];
+          if (ids.length <= KAITEN_BOARD_TITLES_SYNC_WINDOW) {
+            batch = ids;
+          } else {
+            const start = titlesSyncOffsetRef.current % ids.length;
+            const picked = new Set<string>();
+            for (let i = 0; i < KAITEN_BOARD_TITLES_SYNC_WINDOW; i += 1) {
+              picked.add(ids[(start + i) % ids.length]!);
+            }
+            batch = [...picked];
+            titlesSyncOffsetRef.current =
+              (start + KAITEN_BOARD_TITLES_SYNC_WINDOW) % ids.length;
+          }
+          try {
+            const tsRes = await fetch("/api/orders/kaiten-titles-sync", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ orderIds: batch, includeComments: false }),
+            });
+            titlesSyncLastAtRef.current = Date.now();
+            if (tsRes.status === 429) {
+              titlesSyncBackoffRef.current =
+                Date.now() +
+                parseKaitenRetryAfterMs(tsRes.headers.get("Retry-After"));
+            }
+          } catch {
+            /* offline — всё равно тянем БД-снимок */
+          }
+        }
+      }
+
       const [rLinked, rStandalone] = await Promise.all([
         fetch("/api/kanban/linked-orders", { credentials: "include" }),
         fetch("/api/kanban/standalone-cards", { credentials: "include" }),
@@ -560,7 +694,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     kanbanStateSaveTimerRef.current = setTimeout(() => {
       kanbanStateSaveTimerRef.current = null;
       void writeClientState(scope, key, payload);
-    }, 550);
+    }, 2000);
     return () => {
       if (kanbanStateSaveTimerRef.current) {
         clearTimeout(kanbanStateSaveTimerRef.current);
@@ -828,6 +962,37 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       String(b.stoppedAt).localeCompare(String(a.stoppedAt)),
     );
   }, [board]);
+
+  const onStopHoverMove = useCallback(
+    (event: MouseEvent) => {
+      if (stopOpen || isKanbanCardDragInProgress()) {
+        setStopHoverPreview(null);
+        return;
+      }
+      setStopHoverPreview({ x: event.clientX, y: event.clientY });
+    },
+    [stopOpen],
+  );
+
+  useEffect(() => {
+    if (stopOpen) setStopHoverPreview(null);
+  }, [stopOpen]);
+
+  useEffect(() => {
+    const hide = () => setStopHoverPreview(null);
+    window.addEventListener("kanban-card-drag-start", hide);
+    return () => window.removeEventListener("kanban-card-drag-start", hide);
+  }, []);
+
+  const stopHoverPreviewPos = stopHoverPreview
+    ? clampStopHoverPreviewPosition(stopHoverPreview.x, stopHoverPreview.y)
+    : null;
+  const showStopHoverPreview = Boolean(stopHoverPreviewPos) && !stopOpen;
+  const stopHoverPreviewItems = stoppedCards.slice(0, STOP_HOVER_PREVIEW_MAX);
+  const stopHoverPreviewExtra = Math.max(
+    0,
+    stoppedCards.length - stopHoverPreviewItems.length,
+  );
 
   const applyModalBoard = useCallback(
     (fn: (b: KanbanBoard) => void) => {
@@ -2043,16 +2208,69 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             <button
               id="kanban-stop-drop-target"
               type="button"
-              className={`rounded-md border px-3 py-1.5 text-[0.95rem] font-extrabold tracking-wide shadow-sm hover:brightness-[0.98] dark:hover:brightness-110 ${
+              className={`rounded-md border px-3 py-1.5 text-[0.95rem] font-extrabold tracking-wide shadow-sm transition-[transform,box-shadow,background-color,border-color,color] duration-100 hover:brightness-[0.98] dark:hover:brightness-110 ${
                 stopOpen
                   ? "border-white/70 bg-white text-black ring-2 ring-white/70"
                   : "border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)]"
               }`}
-              title="Перетащите карточку сюда или нажмите, чтобы открыть СТОП"
-              onClick={() => setStopOpen((v) => !v)}
+              title={
+                stopOpen || stoppedCards.length > 0
+                  ? undefined
+                  : "Перетащите карточку сюда или нажмите, чтобы открыть СТОП"
+              }
+              onClick={() => {
+                setStopHoverPreview(null);
+                setStopOpen((v) => !v);
+              }}
+              onMouseMove={onStopHoverMove}
+              onMouseLeave={() => setStopHoverPreview(null)}
             >
               СТОП {stoppedCards.length}
             </button>
+            {showStopHoverPreview && stopHoverPreviewPos && typeof document !== "undefined"
+              ? createPortal(
+                  <div
+                    className="pointer-events-none fixed z-[200] w-72 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 text-xs leading-5 text-[var(--text-body)] shadow-xl"
+                    style={{
+                      left: stopHoverPreviewPos.left,
+                      top: stopHoverPreviewPos.top,
+                      width: STOP_HOVER_PREVIEW_WIDTH,
+                    }}
+                    role="tooltip"
+                  >
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                      СТОП · {stoppedCards.length}
+                    </p>
+                    {stopHoverPreviewItems.length === 0 ? (
+                      <p className="text-[var(--text-muted)]">
+                        Пусто. Перетащите карточку сюда или откройте список.
+                      </p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {stopHoverPreviewItems.map((row) => (
+                          <li
+                            key={row.id}
+                            className="line-clamp-2 break-words font-medium text-[var(--text-body)]"
+                          >
+                            {(row.card.title || "").trim() || "Без названия"}
+                            {row.sourceColumnTitle ? (
+                              <span className="mt-0.5 block text-[11px] font-normal text-[var(--text-muted)]">
+                                Было: {row.sourceColumnTitle}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {stopHoverPreviewExtra > 0 ? (
+                      <p className="mt-2 border-t border-[var(--card-border)] pt-2 text-[11px] font-semibold text-[var(--text-muted)]">
+                        ещё {stopHoverPreviewExtra}
+                      </p>
+                    ) : null}
+                  </div>,
+                  document.body,
+                )
+              : null}
             <button
               type="button"
               className="rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 py-1.5 text-[0.75rem] font-medium text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110"

@@ -13,6 +13,7 @@ import type { ProstheticsInTransitRow } from "@/lib/prosthetics-in-transit";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { CorrectionsHistoryActionCard } from "@/components/orders/CorrectionsHistoryActionCard";
+import { LabTasksActionCard } from "@/components/orders/LabTasksActionCard";
 
 function cardShell(isHarmony: boolean): string {
   return isHarmony
@@ -22,11 +23,15 @@ function cardShell(isHarmony: boolean): string {
 
 export function OrdersListHeaderActionCards({
   initialInTransitCount,
+  initialTasksPendingCount = 0,
   canMarkArrived = false,
+  canResolveTasks = false,
   showProstheticsBlock = true,
 }: {
   initialInTransitCount: number;
+  initialTasksPendingCount?: number;
   canMarkArrived?: boolean;
+  canResolveTasks?: boolean;
   /** Скрыть блок «Заказы протетики», если у роли нет права на эти уведомления. */
   showProstheticsBlock?: boolean;
 }) {
@@ -114,7 +119,7 @@ export function OrdersListHeaderActionCards({
 
   return (
     <>
-      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row lg:w-auto lg:max-w-[28rem] xl:max-w-[32rem]">
+      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row lg:w-auto lg:max-w-[42rem] xl:max-w-[48rem]">
         {showProstheticsBlock ? (
         <button
           type="button"
@@ -139,6 +144,11 @@ export function OrdersListHeaderActionCards({
         ) : null}
 
         <CorrectionsHistoryActionCard className="flex-1" />
+        <LabTasksActionCard
+          className="flex-1"
+          initialPendingCount={initialTasksPendingCount}
+          canResolve={canResolveTasks}
+        />
       </div>
 
       {showProstheticsBlock && prostheticsOpen ? (

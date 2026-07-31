@@ -215,11 +215,9 @@ function ModalCloseIcon(props: { className?: string }) {
   );
 }
 
-/** При сбросе невалидного выбора — не ставим «Тест», если доступна ортопедия/ортодонтия. */
-function defaultTrackLane(lanes: KaitenTrackLane[]): KaitenTrackLane {
-  if (lanes.includes("ORTHOPEDICS")) return "ORTHOPEDICS";
-  if (lanes.includes("ORTHODONTICS")) return "ORTHODONTICS";
-  return lanes[0]!;
+/** При сбросе невалидного выбора — не ставим пространство автоматически. */
+function isTrackLane(value: string): value is KaitenTrackLane {
+  return value === "ORTHOPEDICS" || value === "ORTHODONTICS" || value === "TEST";
 }
 
 function distributionLanesFromTenantKanbanState(raw: unknown): KaitenTrackLane[] | null {
@@ -258,9 +256,10 @@ export function KaitenPreflightModal({
   const [decideLater, setDecideLater] = useState(false);
   const [cardTypes, setCardTypes] = useState<UiCardType[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectionHint, setSelectionHint] = useState<string | null>(null);
 
   const [cardTypeId, setCardTypeId] = useState("");
-  const [space, setSpace] = useState<KaitenTrackLane>("ORTHOPEDICS");
+  const [space, setSpace] = useState<KaitenTrackLane | "">("");
   /** null — ещё не загрузили с сервера; [] — в .env нет ни одной доски */
   const [laneAllowlist, setLaneAllowlist] = useState<KaitenTrackLane[] | null>(
     null,
@@ -282,7 +281,9 @@ export function KaitenPreflightModal({
   useEffect(() => {
     if (!open) return;
     setDecideLater(false);
-    setSpace("ORTHOPEDICS");
+    setCardTypeId("");
+    setSpace("");
+    setSelectionHint(null);
     setLaneAllowlist(null);
     setDistributionLaneAllowlist(null);
     setDefaultSpaceByCardType({});
@@ -310,7 +311,6 @@ export function KaitenPreflightModal({
         }
         if (cancelled) return;
         setCardTypes(data.cardTypes ?? []);
-        const firstType = data.cardTypes?.[0]?.id ?? "";
         setLaneAllowlist(
           Array.isArray(data.trackLanes) ? data.trackLanes : [],
         );
@@ -326,19 +326,6 @@ export function KaitenPreflightModal({
           const colors = cardTypeColorsFromTenantKanbanState(tenantKanbanState);
           setCardTypeColorById(colors.byId);
           setCardTypeColorByName(colors.byName);
-          const allowedFromEnv = Array.isArray(data.trackLanes) ? data.trackLanes : [];
-          const allowedByDistribution = distribution ?? allowedFromEnv;
-          const allowedFinal = allowedFromEnv.filter((lane) =>
-            allowedByDistribution.includes(lane),
-          );
-          const firstTypeName = normalizeCardTypeName(data.cardTypes?.[0]?.name);
-          const preferredSpace =
-            (firstType ? defaults[firstType] : undefined) ??
-            (firstTypeName ? defaults[`name:${firstTypeName}`] : undefined);
-          setCardTypeId(firstType);
-          if (preferredSpace && allowedFinal.includes(preferredSpace)) {
-            setSpace(preferredSpace);
-          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -362,56 +349,59 @@ export function KaitenPreflightModal({
     return base;
   }, [laneAllowlist, distributionLaneAllowlist]);
 
-  const preferredSpaceForSelectedType = useMemo(() => {
-    const selectedType = cardTypes.find((t) => t.id === cardTypeId);
-    const selectedTypeName = normalizeCardTypeName(selectedType?.name);
-    return (
-      (cardTypeId ? defaultSpaceByCardType[cardTypeId] : undefined) ??
-      (selectedTypeName
-        ? defaultSpaceByCardType[`name:${selectedTypeName}`]
-        : undefined)
-    );
-  }, [cardTypeId, cardTypes, defaultSpaceByCardType]);
-
   useEffect(() => {
     if (spaceOptions.length === 0) return;
     const available = spaceOptions.map((o) => o.value);
-    if (
-      preferredSpaceForSelectedType &&
-      available.includes(preferredSpaceForSelectedType)
-    ) {
-      setSpace(preferredSpaceForSelectedType);
-    }
-  }, [cardTypeId, preferredSpaceForSelectedType, spaceOptions]);
-
-  useEffect(() => {
-    if (spaceOptions.length === 0) return;
-    const available = spaceOptions.map((o) => o.value);
-    if (!available.includes(space)) {
-      setSpace(defaultTrackLane(available));
+    if (space && !available.includes(space)) {
+      setSpace("");
     }
   }, [spaceOptions, space]);
 
-  const laneOptionsForSelectedSpace = boardLaneOptionsBySpace[space] ?? [];
+  const laneOptionsForSelectedSpace =
+    space && isTrackLane(space) ? (boardLaneOptionsBySpace[space] ?? []) : [];
 
   useEffect(() => {
     if (laneOptionsForSelectedSpace.length <= 1) {
       setBoardLaneName("");
       return;
     }
-    if (!laneOptionsForSelectedSpace.includes(boardLaneName)) {
-      setBoardLaneName(laneOptionsForSelectedSpace[0] ?? "");
+    if (boardLaneName && !laneOptionsForSelectedSpace.includes(boardLaneName)) {
+      setBoardLaneName("");
     }
   }, [laneOptionsForSelectedSpace, boardLaneName]);
 
   /** Тип и пространство нужны всегда: карточка CRM-канбана создаётся первой. */
   const kaitenFieldsRequired = true;
 
+  const missingSelectionMessage = useMemo(() => {
+    if (loadError) return null;
+    if (laneAllowlist === null) return null;
+    const missing: string[] = [];
+    if (!cardTypeId) missing.push("тип карточки");
+    if (!space) missing.push("пространство");
+    if (laneOptionsForSelectedSpace.length > 1 && !boardLaneName) {
+      missing.push("дорожку");
+    }
+    if (missing.length === 0) return null;
+    if (missing.length === 1) {
+      return `Выберите ${missing[0]} — без этого сохранить нельзя.`;
+    }
+    return `Выберите ${missing.join(" и ")} — без этого сохранить нельзя.`;
+  }, [
+    loadError,
+    laneAllowlist,
+    cardTypeId,
+    space,
+    laneOptionsForSelectedSpace.length,
+    boardLaneName,
+  ]);
+
   const canSubmit = useMemo(() => {
     if (!kaitenFieldsRequired) return true;
     if (loadError || cardTypes.length === 0 || !cardTypeId) return false;
     if (spaceOptions.length === 0) return false;
-    if (!space) return false;
+    if (!space || !isTrackLane(space)) return false;
+    if (laneOptionsForSelectedSpace.length > 1 && !boardLaneName) return false;
     return true;
   }, [
     kaitenFieldsRequired,
@@ -420,11 +410,20 @@ export function KaitenPreflightModal({
     cardTypeId,
     spaceOptions.length,
     space,
+    laneOptionsForSelectedSpace.length,
+    boardLaneName,
   ]);
 
   const submit = useCallback(
     (printPdf: boolean) => {
-      if (!canSubmit) return;
+      if (!canSubmit || !isTrackLane(space) || !cardTypeId) {
+        setSelectionHint(
+          missingSelectionMessage ??
+            "Выберите тип карточки и пространство — без этого сохранить нельзя.",
+        );
+        return;
+      }
+      setSelectionHint(null);
       if (decideLater) {
         onConfirm(
           {
@@ -448,7 +447,15 @@ export function KaitenPreflightModal({
         { printPdf },
       );
     },
-    [canSubmit, decideLater, onConfirm, cardTypeId, space, workLabel],
+    [
+      canSubmit,
+      decideLater,
+      onConfirm,
+      cardTypeId,
+      space,
+      workLabel,
+      missingSelectionMessage,
+    ],
   );
 
   const saveLabel = replyActionsEnabled ? "Сохранить заказ и ответить" : "Сохранить заказ";
@@ -501,6 +508,15 @@ export function KaitenPreflightModal({
                   aria-live="polite"
                 >
                   {saveError}
+                </p>
+              ) : null}
+              {selectionHint ? (
+                <p
+                  className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-100"
+                  role="alert"
+                  aria-live="polite"
+                >
+                  {selectionHint}
                 </p>
               ) : null}
             </div>
@@ -590,6 +606,7 @@ export function KaitenPreflightModal({
                     })()}
                     onClick={() => {
                       setCardTypeId(o.id);
+                      setSelectionHint(null);
                       const preferred = defaultSpaceByCardType[o.id];
                       if (!preferred) return;
                       if (!spaceOptions.some((x) => x.value === preferred)) return;
@@ -643,7 +660,10 @@ export function KaitenPreflightModal({
                         name="kaiten-space"
                         value={o.value}
                         checked={space === o.value}
-                        onChange={() => setSpace(o.value)}
+                        onChange={() => {
+                          setSpace(o.value);
+                          setSelectionHint(null);
+                        }}
                         className="text-[var(--sidebar-blue)]"
                       />
                       <span className="text-sm text-[var(--text-strong)]">{o.label}</span>
@@ -669,7 +689,10 @@ export function KaitenPreflightModal({
                             name="kaiten-board-lane"
                             value={laneName}
                             checked={boardLaneName === laneName}
-                            onChange={() => setBoardLaneName(laneName)}
+                            onChange={() => {
+                              setBoardLaneName(laneName);
+                              setSelectionHint(null);
+                            }}
                             className="text-[var(--sidebar-blue)]"
                           />
                           <span className="text-sm text-[var(--text-strong)]">{laneName}</span>
@@ -728,7 +751,7 @@ export function KaitenPreflightModal({
             <button
               type="button"
               className="rounded-md border-2 border-[var(--sidebar-blue)] bg-[var(--card-bg)] px-4 py-2 text-sm font-semibold text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
-              disabled={saving || !canSubmit}
+              disabled={saving || !!loadError || cardTypes.length === 0}
               onClick={() => submit(true)}
             >
               {saving ? "Сохранение…" : printLabel}
@@ -736,7 +759,7 @@ export function KaitenPreflightModal({
             <button
               type="button"
               className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--sidebar-blue-hover)] disabled:opacity-50"
-              disabled={saving || !canSubmit}
+              disabled={saving || !!loadError || cardTypes.length === 0}
               onClick={() => submit(false)}
             >
               {saving ? "Сохранение…" : saveLabel}
