@@ -40,7 +40,7 @@ import {
   listTagKaitenColumnTitle,
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
-import { ordersListDueDatePeriod } from "@/lib/orders-list-period";
+import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
 import {
   normalizeOrdersSearchQuery,
   ordersListHref,
@@ -320,7 +320,7 @@ export default async function OrdersPage({
   const shipFromUrl = sp.shipFrom?.trim() || null;
   const shipToUrl = sp.shipTo?.trim() || null;
   const shipmentModeLabel = ordersShipmentModeLabel(shipParsed);
-  const periodParsed = ordersListDueDatePeriod(fromUrl, toUrl);
+  const periodParsed = ordersListCreatedAtPeriod(fromUrl, toUrl);
   const periodError =
     periodParsed.mode === "error" ? periodParsed.message : null;
   const dueDateRange =
