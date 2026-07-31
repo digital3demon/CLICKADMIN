@@ -39,6 +39,8 @@ export type OrderDraftSnapshot = {
   labWholeDay?: boolean;
   /** v16+ — «в течение дня» для записи */
   appointmentWholeDay?: boolean;
+  /** v17+ — «времени приёма нет» (в БД 08:00, в UI без времени) */
+  appointmentNoReception?: boolean;
   /** v11+ — когда работа поступила; пусто = момент занесения */
   workReceivedLocal: string;
   quickOrder: QuickOrderState;

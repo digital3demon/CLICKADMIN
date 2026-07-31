@@ -11,6 +11,12 @@ import {
 import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { ordersShipmentModeLabel } from "@/lib/orders-shipment-list-query";
 import {
+  appointmentCompactTimeLabel,
+  appointmentTimeModeFromLocal,
+} from "@/lib/appointment-time-mode";
+import { isoToDatetimeLocal } from "@/lib/datetime-local";
+import { snapDatetimeLocalToDueGrid } from "@/lib/order-due-datetime";
+import {
   formatMoscowDateDayMonth,
   formatMoscowDateTime,
   formatMoscowTime,
@@ -26,6 +32,7 @@ const shipmentPdfSelect = {
   patientName: true,
   appointmentDate: true,
   dueToAdminsAt: true,
+  dueToAdminsHasTime: true,
   labWorkStatus: true,
   kaitenColumnTitle: true,
   demoKanbanColumn: true,
@@ -78,14 +85,21 @@ function formatClinicLine(
 function formatAppointmentParts(order: {
   appointmentDate: Date | null;
   dueToAdminsAt: Date | null;
+  dueToAdminsHasTime?: boolean | null;
 }): { appointmentDateLabel: string; appointmentTimeLabel: string } {
   const d = effectiveAppointmentDate(order);
   if (!d) {
     return { appointmentDateLabel: "—", appointmentTimeLabel: "" };
   }
+  const local = snapDatetimeLocalToDueGrid(isoToDatetimeLocal(d.toISOString()));
+  const mode = appointmentTimeModeFromLocal(
+    order.dueToAdminsHasTime !== false,
+    local,
+  );
+  const clock = formatMoscowTime(d);
   return {
     appointmentDateLabel: formatMoscowDateDayMonth(d),
-    appointmentTimeLabel: formatMoscowTime(d),
+    appointmentTimeLabel: appointmentCompactTimeLabel(mode, clock),
   };
 }
 
@@ -198,7 +212,7 @@ export async function loadOrdersShipmentListPdf(
   });
 
   return {
-    title: `Отгрузки: ${modeLabel ?? opts.shipmentMode}`,
+    title: `Запись: ${modeLabel ?? opts.shipmentMode}`,
     printedAtLabel: formatMoscowDateTime(new Date()),
     rows,
     truncated,

@@ -7,6 +7,7 @@ import {
   effectiveAppointmentDate,
   orderMatchesShipmentActualAppointment,
   orderMatchesShipmentPeriodAppointment,
+  ordersShipmentActualAppointmentRange,
   ordersShipmentActualEndExclusive,
   ordersShipmentListWhere,
 } from "./orders-shipment-list-filter";
@@ -67,11 +68,25 @@ describe("compareOrdersByEffectiveAppointment", () => {
   });
 });
 
-describe("ordersShipmentActualEndExclusive", () => {
+describe("ordersShipmentActualEndExclusive (финотдел / лаб)", () => {
   it("matches tomorrow shipment window end", () => {
     expect(ordersShipmentActualEndExclusive()).toEqual(
       moscowShipmentDayBoundsUtc(moscowTomorrowYmd()).endExclusive,
     );
+  });
+});
+
+describe("ordersShipmentActualAppointmentRange", () => {
+  it("Monday → Mon…Wed", () => {
+    const w = ordersShipmentActualAppointmentRange("2026-07-27");
+    expect(w.startYmd).toBe("2026-07-27");
+    expect(w.endYmd).toBe("2026-07-29");
+  });
+
+  it("Friday → Fri…Tue (includes weekend)", () => {
+    const w = ordersShipmentActualAppointmentRange("2026-07-31");
+    expect(w.startYmd).toBe("2026-07-31");
+    expect(w.endYmd).toBe("2026-08-04");
   });
 });
 
@@ -97,29 +112,43 @@ describe("ordersShipmentListWhere", () => {
 });
 
 describe("orderMatchesShipmentActualAppointment", () => {
-  const endExclusive = ordersShipmentActualEndExclusive();
+  const { start, endExclusive } =
+    ordersShipmentActualAppointmentRange("2026-07-27");
 
-  it("includes past and today appointments", () => {
-    const past = new Date(endExclusive.getTime() - 86_400_000);
+  it("includes appointments inside Mon–Wed window", () => {
     expect(
       orderMatchesShipmentActualAppointment(
-        { appointmentDate: past, dueToAdminsAt: null },
+        {
+          appointmentDate: new Date("2026-07-28T10:00:00+03:00"),
+          dueToAdminsAt: null,
+        },
+        start,
         endExclusive,
       ),
     ).toBe(true);
   });
 
-  it("excludes appointments at or after window end", () => {
+  it("excludes appointments before today", () => {
     expect(
       orderMatchesShipmentActualAppointment(
-        { appointmentDate: endExclusive, dueToAdminsAt: null },
+        {
+          appointmentDate: new Date("2026-07-26T10:00:00+03:00"),
+          dueToAdminsAt: null,
+        },
+        start,
         endExclusive,
       ),
     ).toBe(false);
-    const after = new Date(endExclusive.getTime() + 60_000);
+  });
+
+  it("excludes appointments after window end", () => {
     expect(
       orderMatchesShipmentActualAppointment(
-        { appointmentDate: after, dueToAdminsAt: null },
+        {
+          appointmentDate: new Date("2026-07-30T10:00:00+03:00"),
+          dueToAdminsAt: null,
+        },
+        start,
         endExclusive,
       ),
     ).toBe(false);
@@ -129,16 +158,7 @@ describe("orderMatchesShipmentActualAppointment", () => {
     expect(
       orderMatchesShipmentActualAppointment(
         { appointmentDate: null, dueToAdminsAt: null },
-        endExclusive,
-      ),
-    ).toBe(true);
-  });
-
-  it("uses dueToAdminsAt when appointmentDate is null", () => {
-    const due = new Date(endExclusive.getTime() - 3_600_000);
-    expect(
-      orderMatchesShipmentActualAppointment(
-        { appointmentDate: null, dueToAdminsAt: due },
+        start,
         endExclusive,
       ),
     ).toBe(true);

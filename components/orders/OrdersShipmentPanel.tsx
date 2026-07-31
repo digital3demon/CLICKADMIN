@@ -19,7 +19,7 @@ type Props = {
 };
 
 /**
- * Макет: одна плотная строка — Отгрузки · Актуальные · за период · даты · Показать · Печать.
+ * Макет: одна плотная строка — Запись · Актуальное · за период · даты · Показать · Печать.
  * Высота как у полосы пилюль.
  */
 export function OrdersShipmentPanel({
@@ -121,10 +121,7 @@ export function OrdersShipmentPanel({
       {/* Без горизонтального скролла: даты уже узкие, при нехватке места — wrap. */}
       <div className="flex min-w-0 w-full flex-wrap items-center gap-x-1.5 gap-y-1.5">
         <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--text-strong)] sm:text-sm">
-          <span aria-hidden className="text-sm leading-none sm:text-base">
-            📦
-          </span>
-          <span className="whitespace-nowrap">Отгрузки</span>
+          <span className="whitespace-nowrap">Запись</span>
         </div>
 
         <button
@@ -136,8 +133,9 @@ export function OrdersShipmentPanel({
               ? "bg-[var(--sidebar-blue)] text-white shadow-sm"
               : "border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-strong)] hover:bg-[var(--surface-hover)]",
           ].join(" ")}
+          title="Сегодня и ещё 2 рабочих дня по дате записи (МСК); выходные между ними входят"
         >
-          Актуальные
+          Актуальное
         </button>
 
         <span className="shrink-0 whitespace-nowrap text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-[10px]">

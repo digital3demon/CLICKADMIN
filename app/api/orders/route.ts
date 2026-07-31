@@ -8,7 +8,7 @@ import { applyKaitenBlockForOrderIfUnblocked } from "@/lib/apply-kaiten-block-fr
 import { normalizeKaitenBlockReasonInput } from "@/lib/kaiten-card-block";
 import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
 import { clampOrdersPageSize } from "@/lib/orders-list-cursor";
-import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
+import { ordersListDueDatePeriod } from "@/lib/orders-list-period";
 import { normalizeOrdersSearchQuery } from "@/lib/orders-list-query";
 import { withApiTiming } from "@/lib/server/api-timing";
 import { logger } from "@/lib/server/logger";
@@ -52,8 +52,8 @@ export async function GET(req: Request) {
       const search = normalizeOrdersSearchQuery(url.searchParams.get("q"));
       const fromSp = url.searchParams.get("from");
       const toSp = url.searchParams.get("to");
-      const period = ordersListCreatedAtPeriod(fromSp, toSp);
-      const createdAtRange =
+      const period = ordersListDueDatePeriod(fromSp, toSp);
+      const dueDateRange =
         period.mode === "range"
           ? { start: period.start, endExclusive: period.endExclusive }
           : undefined;
@@ -65,7 +65,7 @@ export async function GET(req: Request) {
         hideShipped: hideShipped || undefined,
         onlyShipped: onlyShipped || undefined,
         search: search || undefined,
-        createdAtRange,
+        dueDateRange,
         ordersListForUserId: s.sub,
         viewerRole: s.role,
         viewerUserId: s.sub,

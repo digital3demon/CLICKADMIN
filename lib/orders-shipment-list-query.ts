@@ -1,4 +1,8 @@
-import { parseYmdOrNull } from "@/lib/shipments-date-range";
+import {
+  moscowActualAppointmentWindowYmd,
+  moscowTodayYmd,
+  parseYmdOrNull,
+} from "@/lib/shipments-date-range";
 
 export type OrdersShipmentMode = "actual" | "period";
 
@@ -38,7 +42,7 @@ export function parseOrdersShipmentParams(input: {
       mode,
       shipFrom: null,
       shipTo: null,
-      periodError: "Укажите дату «по» для периода отгрузок.",
+      periodError: "Укажите дату «по» для периода записи.",
     };
   }
 
@@ -48,7 +52,7 @@ export function parseOrdersShipmentParams(input: {
       mode,
       shipFrom: null,
       shipTo,
-      periodError: "Некорректная дата «с» в периоде отгрузок.",
+      periodError: "Некорректная дата «с» в периоде записи.",
     };
   }
 
@@ -68,7 +72,10 @@ export function ordersShipmentModeLabel(
   parsed: ParsedOrdersShipmentParams,
 ): string | null {
   if (!parsed.mode) return null;
-  if (parsed.mode === "actual") return "актуальные";
+  if (parsed.mode === "actual") {
+    const { startYmd, endYmd } = moscowActualAppointmentWindowYmd(moscowTodayYmd());
+    return `актуальное ${formatRuYmd(startYmd)}–${formatRuYmd(endYmd)}`;
+  }
   if (parsed.shipFrom && parsed.shipTo) {
     return `запись ${formatRuYmd(parsed.shipFrom)}–${formatRuYmd(parsed.shipTo)}`;
   }

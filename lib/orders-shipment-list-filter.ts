@@ -1,6 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import {
   moscowDayBoundsUtc,
+  moscowInclusiveRangeBoundsUtc,
+  moscowActualAppointmentWindowYmd,
+  moscowTodayYmd,
   moscowShipmentDayBoundsUtc,
   moscowTomorrowYmd,
 } from "@/lib/shipments-date-range";
@@ -40,9 +43,21 @@ export function compareOrdersByEffectiveAppointment(
   return a.orderNumber.localeCompare(b.orderNumber, "ru") || a.id.localeCompare(b.id);
 }
 
-/** Верхняя граница «актуальных»: завтра до 12:00 дня после завтра (МСК). */
+/**
+ * Верхняя граница «Актуального» ФинОтдела / лаб-срока: завтра до 12:00 дня после завтра (МСК).
+ * Не путать с окном даты записи на списке заказов (`ordersShipmentActualAppointmentRange`).
+ */
 export function ordersShipmentActualEndExclusive(): Date {
   return moscowShipmentDayBoundsUtc(moscowTomorrowYmd()).endExclusive;
+}
+
+/** Окно «Актуальное» по дате записи: сегодня … сегодня+2 рабочих дня (МСК). */
+export function ordersShipmentActualAppointmentRange(
+  todayYmd: string = moscowTodayYmd(),
+): { startYmd: string; endYmd: string; start: Date; endExclusive: Date } {
+  const { startYmd, endYmd } = moscowActualAppointmentWindowYmd(todayYmd);
+  const { start, endExclusive } = moscowInclusiveRangeBoundsUtc(startYmd, endYmd);
+  return { startYmd, endYmd, start, endExclusive };
 }
 
 function appointmentBeforeEndExclusive(endExclusive: Date): Prisma.OrderWhereInput {
@@ -91,6 +106,21 @@ function appointmentInRange(
   };
 }
 
+/** Актуальное по записи: в окне сегодня…+2 раб. дня ИЛИ без даты записи. */
+function appointmentInActualWindowOrEmpty(
+  start: Date,
+  endExclusive: Date,
+): Prisma.OrderWhereInput {
+  return {
+    OR: [
+      appointmentInRange(start, endExclusive),
+      {
+        AND: [{ appointmentDate: null }, { dueToAdminsAt: null }],
+      },
+    ],
+  };
+}
+
 /** Дата записи до endExclusive (appointmentDate ?? dueToAdminsAt; без даты — входит). */
 export function ordersShipmentAppointmentBeforeEndExclusive(
   endExclusive: Date,
@@ -106,17 +136,19 @@ export function ordersShipmentAppointmentInRange(
   return appointmentInRange(start, endExclusive);
 }
 
-/** Проверка попадания наряда в верхнюю границу «актуальных» (для тестов и валидации). */
+/** Проверка попадания наряда в окно «Актуальное» по дате записи. */
 export function orderMatchesShipmentActualAppointment(
   order: {
     appointmentDate: Date | null;
     dueToAdminsAt: Date | null;
   },
+  start: Date,
   endExclusive: Date,
 ): boolean {
   const eff = effectiveAppointmentDate(order);
   if (!eff) return true;
-  return eff.getTime() < endExclusive.getTime();
+  const t = eff.getTime();
+  return t >= start.getTime() && t < endExclusive.getTime();
 }
 
 /** Проверка попадания наряда в период записи [start, endExclusive). */
@@ -134,7 +166,7 @@ export function orderMatchesShipmentPeriodAppointment(
   return eff.getTime() < endExclusive.getTime();
 }
 
-/** WHERE для режима отгрузок (только неотгруженные). */
+/** WHERE для режима записи на списке заказов (только неотгруженные). */
 export function ordersShipmentListWhere(input: {
   mode: OrdersShipmentMode;
   shipFrom: string | null;
@@ -143,8 +175,9 @@ export function ordersShipmentListWhere(input: {
   const base: Prisma.OrderWhereInput = { adminShippedOtpr: false };
 
   if (input.mode === "actual") {
+    const { start, endExclusive } = ordersShipmentActualAppointmentRange();
     return {
-      AND: [base, appointmentBeforeEndExclusive(ordersShipmentActualEndExclusive())],
+      AND: [base, appointmentInActualWindowOrEmpty(start, endExclusive)],
     };
   }
 

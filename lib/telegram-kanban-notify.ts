@@ -198,7 +198,10 @@ export async function notifyKanbanTelegramTargetUsers(
 ): Promise<void> {
   if (opts.skip) return;
   const token = botToken();
-  if (!token) return;
+  if (!token) {
+    console.warn("[telegram-kanban-notify] skip: TELEGRAM_BOT_TOKEN empty", opts.event);
+    return;
+  }
 
   const hasAny =
     opts.lines.some(Boolean) || (opts.linesAdmin?.some(Boolean) ?? false);
@@ -207,7 +210,13 @@ export async function notifyKanbanTelegramTargetUsers(
   const want = new Set(opts.targetUserIds.filter(Boolean));
   if (opts.actorUserId) want.delete(opts.actorUserId);
   const ids = [...want];
-  if (!ids.length) return;
+  if (!ids.length) {
+    console.warn("[telegram-kanban-notify] skip: no targets after excluding actor", {
+      event: opts.event,
+      actorUserId: opts.actorUserId,
+    });
+    return;
+  }
 
   const prefKeys: KanbanTelegramPrefKey[] = [
     opts.event,
@@ -228,10 +237,20 @@ export async function notifyKanbanTelegramTargetUsers(
     },
   });
 
+  if (!users.length) {
+    console.warn("[telegram-kanban-notify] skip: targets have no telegramId", {
+      event: opts.event,
+      targetUserIds: ids,
+    });
+  }
+
   for (const u of users) {
     if (!u.telegramId?.trim()) continue;
     const merged = mergeKanbanTelegramPrefs(u.telegramKanbanNotifyPrefs);
-    if (!hasAnyKanbanPrefEnabled(merged, prefKeys)) continue;
+    if (!hasAnyKanbanPrefEnabled(merged, prefKeys)) {
+      console.warn("[telegram-kanban-notify] skip: prefs off", u.id, prefKeys);
+      continue;
+    }
     const mergedLines = linesHtmlForKanbanTelegramRecipient(
       u.role,
       opts.lines,
@@ -239,9 +258,19 @@ export async function notifyKanbanTelegramTargetUsers(
     );
     const text = mergedLines.join("\n").trim();
     if (!text) continue;
-    const r = await telegramSendMessage(token, u.telegramId.trim(), text, {
+    let r = await telegramSendMessage(token, u.telegramId.trim(), text, {
       parseMode: opts.parseMode,
     });
+    if (!r.ok && opts.parseMode === "HTML") {
+      const err = r.error.toLowerCase();
+      if (err.includes("parse") || err.includes("entity") || err.includes("html")) {
+        const plain = text
+          .replace(/<a href="[^"]*">([^<]*)<\/a>/gi, "$1")
+          .replace(/<\/?b>/gi, "")
+          .replace(/<[^>]+>/g, "");
+        r = await telegramSendMessage(token, u.telegramId.trim(), plain);
+      }
+    }
     if (!r.ok) {
       console.warn(
         "[telegram-kanban-notify] target send failed",

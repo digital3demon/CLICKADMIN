@@ -106,7 +106,7 @@ export function moscowShipmentInclusiveRangeBoundsUtc(
 }
 
 /** Пн–Вс в Москве для календарной даты ymd (полдень МСК для стабильности). */
-function moscowWeekdayMon1Sun7(ymd: string): number {
+export function moscowWeekdayMon1Sun7(ymd: string): number {
   const wd = new Intl.DateTimeFormat("en-US", {
     timeZone: "Europe/Moscow",
     weekday: "short",
@@ -121,6 +121,41 @@ function moscowWeekdayMon1Sun7(ymd: string): number {
     Sun: 7,
   };
   return map[wd] ?? 1;
+}
+
+/** Рабочий день МСК: пн–пт. */
+export function isMoscowWorkingDayYmd(ymd: string): boolean {
+  return moscowWeekdayMon1Sun7(ymd) <= 5;
+}
+
+/**
+ * Дата через `n` рабочих дней после `fromYmd` (пн–пт).
+ * Пример: пн + 2 → ср; пт + 2 → вт следующей недели.
+ */
+export function addMoscowWorkingDaysYmd(fromYmd: string, n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return fromYmd;
+  let ymd = fromYmd;
+  let added = 0;
+  while (added < n) {
+    ymd = addCalendarDaysYmd(ymd, 1);
+    if (isMoscowWorkingDayYmd(ymd)) added += 1;
+  }
+  return ymd;
+}
+
+/**
+ * Окно «Актуальное» для даты записи: с fromYmd по fromYmd+2 рабочих дня включительно
+ * (выходные между ними входят в календарный диапазон).
+ * Пн → пн–ср; пт → пт–вт (включая сб–вс).
+ */
+export function moscowActualAppointmentWindowYmd(fromYmd: string): {
+  startYmd: string;
+  endYmd: string;
+} {
+  return {
+    startYmd: fromYmd,
+    endYmd: addMoscowWorkingDaysYmd(fromYmd, 2),
+  };
 }
 
 /**

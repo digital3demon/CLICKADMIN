@@ -104,7 +104,7 @@ export function OrdersListPeriodForm({
         <label
           htmlFor="orders-period-from"
           className={labelClass}
-          title="Создан с (МСК), включительно"
+          title="Лабораторный срок с (МСК), включительно"
         >
           {dense ? "с (вкл)" : "С (МСК)"}
         </label>
@@ -120,7 +120,7 @@ export function OrdersListPeriodForm({
         <label
           htmlFor="orders-period-to"
           className={labelClass}
-          title="Создан по (МСК), включительно"
+          title="Лабораторный срок по (МСК), включительно"
         >
           {dense ? "по (вкл)" : "По (МСК)"}
         </label>
@@ -134,7 +134,7 @@ export function OrdersListPeriodForm({
       </div>
       <button
         type="button"
-        title="Показать за выбранный период (дата создания наряда, МСК)"
+        title="Показать за выбранный период (лабораторный срок, МСК)"
         className={
           dense
             ? "h-8 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-2 text-[11px] font-semibold text-white hover:opacity-95 sm:h-9 sm:px-2.5 sm:text-xs"

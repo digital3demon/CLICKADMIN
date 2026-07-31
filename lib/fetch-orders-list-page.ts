@@ -46,6 +46,7 @@ export const ordersListPageSelect = {
   appointmentDate: true,
   workReceivedAt: true,
   dueToAdminsAt: true,
+  dueToAdminsHasTime: true,
   createdAt: true,
   dueDate: true,
   listAdminMemo: true,
@@ -355,6 +356,8 @@ export async function fetchOrdersListPage(
     search?: string | null | undefined;
     /** Фильтр по дате создания наряда (МСК), границы [start, endExclusive). */
     createdAtRange?: { start: Date; endExclusive: Date } | null | undefined;
+    /** Период по лабораторному сроку (dueDate / колонка «ЛАБ»), МСК. */
+    dueDateRange?: { start: Date; endExclusive: Date } | null | undefined;
     /** Для подсветки «Упоминания»: учитываем OrderKaitenLabMentionAck текущего пользователя. */
     ordersListForUserId?: string | null;
     viewerRole?: UserRole | null;
@@ -414,7 +417,15 @@ export async function fetchOrdersListPage(
   if (searchTrim) {
     parts.push(await ordersSearchWhere(searchTrim, opts.tenantId));
   }
-  if (opts.createdAtRange) {
+  if (opts.dueDateRange) {
+    parts.push({
+      dueDate: {
+        gte: opts.dueDateRange.start,
+        lt: opts.dueDateRange.endExclusive,
+      },
+    });
+  } else if (opts.createdAtRange) {
+    // Совместимость со старыми вызовами API.
     parts.push({
       createdAt: {
         gte: opts.createdAtRange.start,

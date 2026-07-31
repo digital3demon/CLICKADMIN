@@ -167,6 +167,11 @@ type DueDatetimeComboPickerProps = {
   timeGrid?: DueDatetimeTimeGrid;
   /** Для `timeGrid="labDue"`: список HH:mm из конфигурации (иначе — значения по умолчанию). */
   labHmSlots?: readonly string[] | null;
+  /**
+   * Компактный режим: подмена второй строки (время).
+   * `undefined` — обычные часы; иначе показанная строка ("" — скрыть время).
+   */
+  compactTimeLabel?: string | null;
 };
 
 export function DueDatetimeComboPicker({
@@ -186,6 +191,7 @@ export function DueDatetimeComboPicker({
   calendarFooter,
   timeGrid = "halfHour",
   labHmSlots,
+  compactTimeLabel,
 }: DueDatetimeComboPickerProps) {
   const genId = useId();
   const triggerId = id ?? genId;
@@ -392,9 +398,21 @@ export function DueDatetimeComboPicker({
   const labelInside = Boolean(label) && labelPlacement === "inside";
   const showPlaceholder = !snappedValue;
   const datePart = snappedValue ? compactDatePartFromLocal(snappedValue) : "";
-  const timePart = snappedValue ? compactTimePartFromLocal(snappedValue) : "";
-  const display = snappedValue ? formatDisplayRu(snappedValue) : "—";
-  const fullDisplayForTitle = snappedValue ? formatDisplayRu(snappedValue) : "";
+  const clockTimePart = snappedValue ? compactTimePartFromLocal(snappedValue) : "";
+  const timePart =
+    compactTimeLabel !== undefined ? (compactTimeLabel ?? "") : clockTimePart;
+  const showTimeRow =
+    showPlaceholder || compactTimeLabel === undefined || timePart.length > 0;
+  const display = snappedValue
+    ? compactTimeLabel !== undefined
+      ? [datePart, timePart].filter(Boolean).join(" ")
+      : formatDisplayRu(snappedValue)
+    : "—";
+  const fullDisplayForTitle = snappedValue
+    ? compactTimeLabel !== undefined
+      ? [datePart, timePart || (compactTimeLabel === "" ? "без времени" : "")].filter(Boolean).join(" ")
+      : formatDisplayRu(snappedValue)
+    : "";
   const combinedTitle = [
     title,
     fullDisplayForTitle && compact ? fullDisplayForTitle : "",
@@ -585,9 +603,11 @@ export function DueDatetimeComboPicker({
               <span className="whitespace-nowrap">
                 {showPlaceholder ? "Дата" : datePart}
               </span>
-              <span className="whitespace-nowrap text-[var(--text-secondary)]">
-                {showPlaceholder ? "Время" : timePart}
-              </span>
+              {showTimeRow ? (
+                <span className="whitespace-nowrap text-[var(--text-secondary)]">
+                  {showPlaceholder ? "Время" : timePart}
+                </span>
+              ) : null}
             </span>
             <span className="shrink-0 text-[var(--text-muted)]" aria-hidden>
               {open ? "▴" : "▾"}

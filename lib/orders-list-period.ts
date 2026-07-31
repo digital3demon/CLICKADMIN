@@ -16,10 +16,11 @@ function rangeDaySpanInclusive(fromYmd: string, toYmd: string): number {
 }
 
 /**
- * Период для списка заказов: дата создания наряда (createdAt) по календарю МСК.
+ * Период для списка заказов: лабораторный срок (`dueDate`, колонка «ЛАБ») по календарю МСК.
  * Параметры URL `from` и `to` в формате YYYY-MM-DD; достаточно одного — второй совпадает с ним.
+ * Наряды без dueDate в период не попадают.
  */
-export function ordersListCreatedAtPeriod(
+export function ordersListDueDatePeriod(
   fromRaw: string | null | undefined,
   toRaw: string | null | undefined,
 ):
@@ -68,6 +69,9 @@ export function ordersListCreatedAtPeriod(
   const { start, endExclusive } = moscowInclusiveRangeBoundsUtc(a, b);
   return { mode: "range", start, endExclusive, fromYmd: a, toYmd: b };
 }
+
+/** @deprecated Используйте `ordersListDueDatePeriod` — период по ЛАБ, не по createdAt. */
+export const ordersListCreatedAtPeriod = ordersListDueDatePeriod;
 
 export function ordersListPeriodDefaultDraft(): { from: string; to: string } {
   const to = moscowTodayYmd();

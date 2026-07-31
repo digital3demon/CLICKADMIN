@@ -30,6 +30,14 @@ import {
   snapDatetimeLocalToDueGrid,
   snapDatetimeLocalToLabDueGrid,
 } from "@/lib/order-due-datetime";
+import {
+  appointmentCompactTimeLabel,
+  appointmentHasTimeFlag,
+  appointmentHmForMode,
+  appointmentTimeModeFromLocal,
+  replaceAppointmentLocalHm,
+  type AppointmentTimeMode,
+} from "@/lib/appointment-time-mode";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 import {
   clinicComboboxSearchPrefixes,
@@ -834,8 +842,12 @@ export function OrderEditForm({
   const [labWholeDay, setLabWholeDay] = useState(
     () => initial.kaitenAdminDueHasTime === false,
   );
-  const [appointmentWholeDay, setAppointmentWholeDay] = useState(
-    () => initial.dueToAdminsHasTime === false,
+  const [appointmentMode, setAppointmentMode] = useState<AppointmentTimeMode>(
+    () =>
+      appointmentTimeModeFromLocal(
+        initial.dueToAdminsHasTime !== false,
+        snapDatetimeLocalToDueGrid(isoToDatetimeLocal(initial.dueToAdminsAt)),
+      ),
   );
 
   useEffect(() => {
@@ -857,7 +869,12 @@ export function OrderEditForm({
     );
     setDueAdminsLocal(rawAdm ? clampDueLocalToMin(rawAdm, minHalf) : "");
     setLabWholeDay(initial.kaitenAdminDueHasTime === false);
-    setAppointmentWholeDay(initial.dueToAdminsHasTime === false);
+    setAppointmentMode(
+      appointmentTimeModeFromLocal(
+        initial.dueToAdminsHasTime !== false,
+        rawAdm,
+      ),
+    );
     setLabDueAutoByPrice(!Boolean(initial.dueDate));
   }, [
     initial.id,
@@ -1899,13 +1916,18 @@ export function OrderEditForm({
           dueToAdminsAt: dueAdminsLocal.trim()
             ? localDateTimeToIso(
                 clampDueLocalToMin(
-                  snapDatetimeLocalToDueGrid(dueAdminsLocal),
+                  (() => {
+                    let s = snapDatetimeLocalToDueGrid(dueAdminsLocal);
+                    const hm = appointmentHmForMode(appointmentMode);
+                    if (s && hm) s = replaceAppointmentLocalHm(s, hm);
+                    return s;
+                  })(),
                   dueDateMinLocal,
                 ),
               )
             : null,
           kaitenAdminDueHasTime: !labWholeDay,
-          dueToAdminsHasTime: !appointmentWholeDay,
+          dueToAdminsHasTime: appointmentHasTimeFlag(appointmentMode),
           invoiceIssued,
           invoiceNumber: invoiceNumber.trim() || null,
           invoicePaperDocs,
@@ -1994,7 +2016,7 @@ export function OrderEditForm({
     dueLabMinLocal,
     initial.labDueHmSlots,
     labWholeDay,
-    appointmentWholeDay,
+    appointmentMode,
     invoiceIssued,
     invoiceNumber,
     invoicePaperDocs,
@@ -2478,34 +2500,100 @@ export function OrderEditForm({
             labelPlacement="inside"
             value={dueAdminsLocal}
             minLocal={dueDateMinLocal}
-            title="Дата записи пациента (8:00–23:30, шаг 30 мин)"
+            title="Дата записи пациента (8:00–23:30); «В теч. дня» → ВТЧД; «времени приёма нет» → без времени, фильтр как 08:00"
             className="w-full max-w-full"
+            compactTimeLabel={
+              dueAdminsLocal.trim()
+                ? appointmentCompactTimeLabel(
+                    appointmentMode,
+                    parseHmFromDueGridLocal(dueAdminsLocal) ?? "",
+                  )
+                : undefined
+            }
             onChange={(raw) => {
               const s =
                 raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
-              setDueAdminsLocal(s);
               if (!s.trim()) {
-                setAppointmentWholeDay(true);
+                setDueAdminsLocal("");
+                setAppointmentMode("wholeDay");
                 return;
               }
-              const hm = parseHmFromDueGridLocal(s);
-              if (hm && hm !== DUE_DAY_DEFAULT_HM)
-                setAppointmentWholeDay(false);
+              const newHm = parseHmFromDueGridLocal(s);
+              const forced = appointmentHmForMode(appointmentMode);
+              if (
+                appointmentMode !== "timed" &&
+                forced &&
+                newHm &&
+                newHm !== forced
+              ) {
+                setAppointmentMode("timed");
+                setDueAdminsLocal(s);
+                return;
+              }
+              if (forced) {
+                setDueAdminsLocal(replaceAppointmentLocalHm(s, forced));
+                return;
+              }
+              setAppointmentMode("timed");
+              setDueAdminsLocal(s);
             }}
             calendarFooter={
-              <label
-                htmlFor="oe-appt-whole-day"
-                className="flex cursor-pointer items-center gap-2 text-xs text-[var(--text-secondary)]"
-              >
-                <input
-                  id="oe-appt-whole-day"
-                  type="checkbox"
-                  className="rounded border-[var(--card-border)]"
-                  checked={appointmentWholeDay}
-                  onChange={(e) => setAppointmentWholeDay(e.target.checked)}
-                />
-                В теч. дня
-              </label>
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="oe-appt-whole-day"
+                  className="flex cursor-pointer items-center gap-2 text-xs text-[var(--text-secondary)]"
+                >
+                  <input
+                    id="oe-appt-whole-day"
+                    type="checkbox"
+                    className="rounded border-[var(--card-border)]"
+                    checked={appointmentMode === "wholeDay"}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setAppointmentMode("wholeDay");
+                        if (dueAdminsLocal.trim()) {
+                          setDueAdminsLocal(
+                            replaceAppointmentLocalHm(
+                              dueAdminsLocal,
+                              appointmentHmForMode("wholeDay")!,
+                            ),
+                          );
+                        }
+                      } else {
+                        setAppointmentMode("timed");
+                      }
+                    }}
+                  />
+                  В теч. дня
+                </label>
+                <label
+                  htmlFor="oe-appt-no-reception"
+                  className="flex cursor-pointer items-center gap-2 text-xs text-[var(--text-secondary)]"
+                >
+                  <input
+                    id="oe-appt-no-reception"
+                    type="checkbox"
+                    className="rounded border-[var(--card-border)]"
+                    checked={appointmentMode === "noReception"}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setAppointmentMode("noReception");
+                        if (dueAdminsLocal.trim()) {
+                          setDueAdminsLocal(
+                            replaceAppointmentLocalHm(
+                              dueAdminsLocal,
+                              appointmentHmForMode("noReception")!,
+                            ),
+                          );
+                        }
+                      } else {
+                        setAppointmentMode("timed");
+                      }
+                    }}
+                  />
+                  Времени приёма нет
+                </label>
+              </div>
             }
           />
         </div>

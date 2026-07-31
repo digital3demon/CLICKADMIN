@@ -160,11 +160,14 @@ export async function POST(req: Request) {
 
   try {
     if (targetUserIds.length > 0) {
+      const isMentionNotify =
+        event === "tg_mentioned_in_comment" || event === "tg_production_mentioned";
       await notifyKanbanTelegramTargetUsers(prisma, {
         event,
         alternatePrefKeys:
           alternatePrefKeys.length > 0 ? alternatePrefKeys : undefined,
-        actorUserId,
+        // Личный @себя = напоминание; для mention не исключаем автора из targets.
+        actorUserId: isMentionNotify ? null : actorUserId,
         targetUserIds,
         lines: effectiveLines,
         parseMode,

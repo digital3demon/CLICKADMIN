@@ -81,7 +81,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
     adminUserIds,
     productionMentionTag: prodTag ?? undefined,
     productionUserIds,
-  }).filter((id) => id !== opts.actorUserId);
+  });
 
   if (!mentionedAll.length) {
     console.warn("[kanban-chat-mention-tg] skip: no mentioned users", {
@@ -135,6 +135,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
   if (prodTargets.length > 0) {
     await notifyKanbanTelegramTargetUsers(prisma, {
       event: "tg_production_mentioned",
+      // Групповой @production — автору не дублируем; личный @себя — ниже.
       actorUserId: opts.actorUserId,
       targetUserIds: prodTargets,
       lines: [line],
@@ -147,7 +148,8 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
     await notifyKanbanTelegramTargetUsers(prisma, {
       event: "tg_mentioned_in_comment",
       alternatePrefKeys: ["tg_comment_added"],
-      actorUserId: opts.actorUserId,
+      // Самоупоминание (@свой_тег) = напоминание себе в CRM-боте.
+      actorUserId: null,
       targetUserIds: mentionForGeneral,
       lines: [line],
       parseMode: "HTML",
