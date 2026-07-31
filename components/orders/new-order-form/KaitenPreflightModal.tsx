@@ -101,14 +101,54 @@ function defaultSpaceByCardTypeFromTenantKanbanState(
       out[typeId] = typeLane as KaitenTrackLane;
       if (typeName) out[`name:${typeName}`] = typeLane as KaitenTrackLane;
     }
+    // Типы без defaultTrackLane → пространство доски, на которой тип лежит.
+    // Ключ по имени обязателен: в префлайте id приходят из KaitenCardType (cuid),
+    // а в kanbanAppStateV3 — другие id типов CRM-доски.
     for (const t of board.cardTypes) {
       if (!t || typeof t !== "object" || Array.isArray(t)) continue;
       const typeId = String((t as { id?: unknown }).id ?? "").trim();
-      if (!typeId || out[typeId]) continue;
-      out[typeId] = lane;
+      const typeName = normalizeCardTypeName((t as { name?: unknown }).name);
+      if (typeId && !out[typeId]) out[typeId] = lane;
+      if (typeName && !out[`name:${typeName}`]) out[`name:${typeName}`] = lane;
     }
   }
   return out;
+}
+
+/**
+ * Пространство при выборе типа: карта из канбана (id/имя) → эвристика по имени → единственная опция.
+ * Id KaitenCardType и id типа на доске CRM часто разные — имя — главный ключ.
+ */
+export function resolvePreferredSpaceForCardType(opts: {
+  typeId: string;
+  typeName: string;
+  defaultSpaceByCardType: Record<string, KaitenTrackLane>;
+  availableSpaces: readonly KaitenTrackLane[];
+}): KaitenTrackLane | null {
+  const available = new Set(opts.availableSpaces);
+  const pick = (lane: KaitenTrackLane | null | undefined): KaitenTrackLane | null =>
+    lane && available.has(lane) ? lane : null;
+
+  const byId = pick(opts.defaultSpaceByCardType[opts.typeId]);
+  if (byId) return byId;
+
+  const nameKey = `name:${normalizeCardTypeName(opts.typeName)}`;
+  const byName = pick(opts.defaultSpaceByCardType[nameKey]);
+  if (byName) return byName;
+
+  const n = normalizeCardTypeName(opts.typeName);
+  const looksOrthodontics =
+    n.includes("ортоаппарат") ||
+    n.includes("ортодонт") ||
+    n.includes("миосплинт");
+  if (looksOrthodontics) {
+    const od = pick("ORTHODONTICS");
+    if (od) return od;
+  }
+  const op = pick("ORTHOPEDICS");
+  if (op) return op;
+  if (opts.availableSpaces.length === 1) return opts.availableSpaces[0] ?? null;
+  return null;
 }
 
 function boardLaneOptionsBySpaceFromTenantKanbanState(
@@ -607,10 +647,13 @@ export function KaitenPreflightModal({
                     onClick={() => {
                       setCardTypeId(o.id);
                       setSelectionHint(null);
-                      const preferred = defaultSpaceByCardType[o.id];
-                      if (!preferred) return;
-                      if (!spaceOptions.some((x) => x.value === preferred)) return;
-                      setSpace(preferred);
+                      const preferred = resolvePreferredSpaceForCardType({
+                        typeId: o.id,
+                        typeName: o.name,
+                        defaultSpaceByCardType,
+                        availableSpaces: spaceOptions.map((x) => x.value),
+                      });
+                      if (preferred) setSpace(preferred);
                     }}
                   >
                     <span className="min-w-0 text-sm font-medium text-[var(--text-strong)]">
