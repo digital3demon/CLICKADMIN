@@ -108,15 +108,14 @@ export function KanbanPersonAvatar({
     nameArc || nameCaption ? shortArcLabelFromDisplayName(displayName) : "";
   const arcLabel = nameArc ? shortLabel : "";
 
-  const compactRing = size === "card" || size === "list" || size === "listSm" || size === "sm";
+  const compactRing =
+    size === "card" || size === "list" || size === "listSm" || size === "sm";
   const ring =
     variant === "assignee"
-      ? compactRing
+      ? compactRing || size === "picker"
         ? "ring-1 ring-amber-400 ring-offset-1 ring-offset-[var(--kanban-card-bg)]"
-        : size === "picker"
-          ? "ring-1 ring-amber-400 ring-offset-1 ring-offset-[var(--kanban-card-bg)]"
-          : "ring-2 ring-amber-400 ring-offset-2 ring-offset-[var(--kaiten-modal-bg)]"
-      : compactRing || size === "picker" || size === "listSm"
+        : "ring-2 ring-amber-400 ring-offset-2 ring-offset-[var(--kaiten-modal-bg)]"
+      : compactRing || size === "picker"
         ? "border border-dashed border-[var(--kanban-text-muted)]"
         : "border-2 border-dashed border-[var(--kaiten-modal-muted)]";
 
