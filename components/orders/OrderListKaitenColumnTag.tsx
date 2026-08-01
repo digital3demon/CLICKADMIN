@@ -28,11 +28,17 @@ function kanbanColumnLabelForNoKaitenPill(
   return typeName ? `${ru} · ${typeName}` : ru;
 }
 
+const STOP_PILL_CLASSIC =
+  "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-red-500/90 bg-red-600 text-center font-bold uppercase tracking-wide text-white shadow-sm dark:border-red-400/70 dark:bg-red-700";
+
 type Props = {
   kaitenCardId: number | null;
   demoKanbanColumn?: string | null;
   demoCardTypeName?: string | null;
   kaitenColumnTitle: string | null;
+  /** Карточка в СТОП / заблокирована в Kaiten — вместо колонки красная пилюля «СТОП». */
+  kaitenBlocked?: boolean;
+  kaitenBlockReason?: string | null;
   /** Ссылка фильтра по колонке Kaiten; без неё — только пилюля. */
   filterHref?: string | null;
   /** Компактная пилюля под номером наряда (отгрузки). */
@@ -44,10 +50,56 @@ export function OrderListKaitenColumnTag({
   demoKanbanColumn,
   demoCardTypeName,
   kaitenColumnTitle,
+  kaitenBlocked = false,
+  kaitenBlockReason = null,
   filterHref = null,
   placement = "tags",
 }: Props) {
   const isHarmony = useUiDesign() === "harmony";
+  const underOrder = placement === "underOrderNumber";
+  const padClass = underOrder
+    ? "px-1.5 py-px text-[9px] leading-tight sm:text-[10px]"
+    : "order-list-tag-pill";
+
+  const wrapClass = underOrder
+    ? "flex w-full min-w-0 justify-center"
+    : "inline-flex min-w-0 max-w-full items-center truncate text-left";
+
+  if (kaitenBlocked) {
+    const reason = String(kaitenBlockReason || "").trim();
+    const stopTitle = reason
+      ? `СТОП: ${reason}`
+      : "СТОП — карточка остановлена";
+    const stopPill = (
+      <span
+        className={
+          isHarmony
+            ? `${resolveListPillClass(true, "", "red")} ${padClass} font-bold uppercase tracking-wide`
+            : `${STOP_PILL_CLASSIC} ${padClass}`
+        }
+        title={stopTitle}
+      >
+        <span className="truncate">СТОП</span>
+      </span>
+    );
+    if (filterHref) {
+      return (
+        <Link
+          href={filterHref}
+          title="Показать наряды в СТОП"
+          className={`${wrapClass} text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none`}
+        >
+          {stopPill}
+        </Link>
+      );
+    }
+    return (
+      <span title={stopTitle} className={wrapClass}>
+        {stopPill}
+      </span>
+    );
+  }
+
   const kaitenLabel = kaitenStatusDisplay({
     kaitenColumnTitle,
     kaitenCardId,
@@ -68,10 +120,6 @@ export function OrderListKaitenColumnTag({
     kaitenColumnTitle: kaitenColTrimmed || null,
     demoKanbanColumn,
   });
-  const underOrder = placement === "underOrderNumber";
-  const padClass = underOrder
-    ? "px-1.5 py-px text-[9px] leading-tight sm:text-[10px]"
-    : "order-list-tag-pill";
   const kaitenStatusPillClass = (classicRounded: string) => {
     const tone = noKaitenKanbanStatus ? "gray" : kaitenHarmonyTone;
     return isHarmony
@@ -104,10 +152,6 @@ export function OrderListKaitenColumnTag({
         <span className="truncate">{kaitenLabel}</span>
       </span>
     );
-
-  const wrapClass = underOrder
-    ? "flex w-full min-w-0 justify-center"
-    : "inline-flex min-w-0 max-w-full items-center truncate text-left";
 
   if (filterHref) {
     return (

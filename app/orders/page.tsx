@@ -38,6 +38,7 @@ import {
   relatedOrdersListTagQuickFilters,
   listTagParamsEqual,
   listTagKaitenColumnTitle,
+  LIST_TAG_KAITEN_BLOCKED,
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
 import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
@@ -982,13 +983,19 @@ export default async function OrdersPage({
                   o.dueDate.getTime() < Date.now() &&
                   !workSent;
                 const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
-                const kaitenStatusFilterHref = kaitenColTrimmed
+                const kaitenStatusFilterHref = blocked
                   ? ordersListHref({
                       limit: pageSize,
                       ...listHrefCommon,
-                      tag: listTagKaitenColumnTitle(kaitenColTrimmed),
+                      tag: LIST_TAG_KAITEN_BLOCKED,
                     })
-                  : null;
+                  : kaitenColTrimmed
+                    ? ordersListHref({
+                        limit: pageSize,
+                        ...listHrefCommon,
+                        tag: listTagKaitenColumnTitle(kaitenColTrimmed),
+                      })
+                    : null;
                 const rowClass = blocked
                   ? "border-b-2 border-red-800/45 bg-gradient-to-r from-red-950/40 via-red-950/25 to-red-900/15 text-[var(--app-text)] dark:border-red-900/60 dark:from-red-950/50 dark:via-red-950/35 dark:to-red-950/20 [&>td:not(:first-child):not(:last-child)]:text-red-950/95 dark:[&>td:not(:first-child):not(:last-child)]:text-red-50/90"
                   : workSent
@@ -1061,6 +1068,8 @@ export default async function OrdersPage({
                   demoKanbanColumn={o.demoKanbanColumn}
                   demoCardTypeName={o.kaitenCardType?.name ?? null}
                   kaitenCardId={o.kaitenCardId}
+                  kaitenBlocked={blocked}
+                  kaitenBlockReason={o.kaitenBlockReason}
                   kaitenFilterHref={kaitenStatusFilterHref}
                   isLabOverdue={isLabOverdue}
                   tagsNode={tagsNode}
@@ -1186,6 +1195,8 @@ export default async function OrdersPage({
                         demoKanbanColumn={o.demoKanbanColumn}
                         demoCardTypeName={o.kaitenCardType?.name ?? null}
                         kaitenColumnTitle={o.kaitenColumnTitle}
+                        kaitenBlocked={blocked}
+                        kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
                         placement="underOrderNumber"
                       />

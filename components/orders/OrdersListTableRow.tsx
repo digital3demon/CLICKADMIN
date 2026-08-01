@@ -39,6 +39,8 @@ export function OrdersListTableRow({
   demoKanbanColumn,
   demoCardTypeName,
   kaitenCardId = null,
+  kaitenBlocked = false,
+  kaitenBlockReason = null,
   kaitenFilterHref = null,
   harmonyRowState = "default",
   isLabOverdue = false,
@@ -59,6 +61,8 @@ export function OrdersListTableRow({
   demoKanbanColumn?: string | null;
   demoCardTypeName?: string | null;
   kaitenCardId?: number | null;
+  kaitenBlocked?: boolean;
+  kaitenBlockReason?: string | null;
   kaitenFilterHref?: string | null;
   harmonyRowState?: "blocked" | "shipped" | "default";
   isLabOverdue?: boolean;
@@ -103,7 +107,6 @@ export function OrdersListTableRow({
           if (targetInsideInteractive(e.target)) return;
           go(e);
         }}
-        title={`${orderNumber} — открыть наряд (клик по строке)`}
       >
         {children}
         {tagsNode ? (
@@ -129,6 +132,8 @@ export function OrdersListTableRow({
                   demoKanbanColumn={demoKanbanColumn}
                   demoCardTypeName={demoCardTypeName}
                   kaitenColumnTitle={kaitenColumnTitle ?? null}
+                  kaitenBlocked={kaitenBlocked}
+                  kaitenBlockReason={kaitenBlockReason}
                   filterHref={kaitenFilterHref}
                   placement="underOrderNumber"
                 />

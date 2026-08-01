@@ -18,7 +18,7 @@ import { clampOrdersPageSize } from "@/lib/orders-list-cursor";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { orderPathById } from "@/lib/order-public-ref";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
-import { listTagKaitenColumnTitle } from "@/lib/order-list-tag-filter";
+import { listTagKaitenColumnTitle, LIST_TAG_KAITEN_BLOCKED } from "@/lib/order-list-tag-filter";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
 import { shipmentsListHref } from "@/lib/shipments-list-query";
 
@@ -316,14 +316,22 @@ export function ShipmentsOrdersTable({
                 ? `${ORDER_SHIPPED_ROW_CLASS} print:border-zinc-400 print:bg-transparent`
                 : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
               const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
-              const kaitenStatusFilterHref = kaitenColTrimmed
+              const blocked = o.kaitenBlocked === true;
+              const kaitenStatusFilterHref = blocked
                 ? shipmentsListHref({
                     tab: shipmentsTagFilterContext?.tab ?? "today",
-                    tag: listTagKaitenColumnTitle(kaitenColTrimmed),
+                    tag: LIST_TAG_KAITEN_BLOCKED,
                     from: shipmentsTagFilterContext?.periodFrom ?? undefined,
                     to: shipmentsTagFilterContext?.periodTo ?? undefined,
                   })
-                : null;
+                : kaitenColTrimmed
+                  ? shipmentsListHref({
+                      tab: shipmentsTagFilterContext?.tab ?? "today",
+                      tag: listTagKaitenColumnTitle(kaitenColTrimmed),
+                      from: shipmentsTagFilterContext?.periodFrom ?? undefined,
+                      to: shipmentsTagFilterContext?.periodTo ?? undefined,
+                    })
+                  : null;
               const renderPrintActions = () => (
                 <>
                   <OrderNarjadPrintTrigger
@@ -422,6 +430,8 @@ export function ShipmentsOrdersTable({
                         demoKanbanColumn={o.demoKanbanColumn}
                         demoCardTypeName={o.kaitenCardType?.name ?? null}
                         kaitenColumnTitle={o.kaitenColumnTitle}
+                        kaitenBlocked={blocked}
+                        kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
                         placement="underOrderNumber"
                       />
@@ -549,6 +559,8 @@ export function ShipmentsOrdersTable({
                             demoKanbanColumn={o.demoKanbanColumn}
                             demoCardTypeName={o.kaitenCardType?.name ?? null}
                             kaitenColumnTitle={o.kaitenColumnTitle}
+                            kaitenBlocked={blocked}
+                            kaitenBlockReason={o.kaitenBlockReason}
                             filterHref={kaitenStatusFilterHref}
                             placement="underOrderNumber"
                           />

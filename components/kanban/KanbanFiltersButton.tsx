@@ -160,17 +160,19 @@ export function KanbanFiltersButton({
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        className={`inline-flex items-center gap-2 rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-3 py-2 text-[0.875rem] text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 ${
+        className={`relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-[0.875rem] ${
           open ? "ring-1 ring-[var(--kanban-accent)]/40" : ""
         }`}
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label={active > 0 ? `Фильтры (${active})` : "Фильтры"}
+        title="Фильтры"
         onClick={() => setOpen((v) => !v)}
       >
-        <IconFilter />
-        Фильтры
+        <IconFilter className="h-4 w-4" />
+        <span className="hidden sm:inline">Фильтры</span>
         {active > 0 ? (
-          <span className="min-w-[1.25rem] rounded-full bg-[var(--kanban-accent)] px-1.5 py-0.5 text-center text-[0.65rem] font-bold leading-none text-white">
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--kanban-accent)] px-1 text-center text-[0.55rem] font-bold leading-none text-white sm:static sm:min-w-[1.25rem] sm:px-1.5 sm:py-0.5 sm:text-[0.65rem]">
             {active}
           </span>
         ) : null}

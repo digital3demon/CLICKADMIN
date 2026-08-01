@@ -112,7 +112,7 @@ export function Sidebar() {
           href="/"
           className={
             isHarmony
-              ? "relative z-10 mb-8 flex items-center gap-3 outline-offset-2 transition-opacity hover:opacity-80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+              ? "relative z-10 mb-8 flex min-w-0 items-center gap-3 outline-offset-2 transition-opacity hover:opacity-80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
               : "relative z-10 mx-auto block w-full min-w-0 max-w-full text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
           }
           title={`На стартовый экран · ${APP_DISPLAY_NAME}`}
@@ -128,34 +128,41 @@ export function Sidebar() {
                   height={20}
                 />
               </span>
-              <span
-                className={`${fontDisplay.className} text-[17px] font-semibold tracking-tight text-[var(--sidebar-text-strong)]`}
-              >
-                {APP_DISPLAY_NAME}
+              <span className="flex min-w-0 items-baseline gap-1.5">
+                <span
+                  className={`${fontDisplay.className} shrink-0 text-[17px] font-semibold tracking-tight text-[var(--sidebar-text-strong)]`}
+                >
+                  Клик
+                </span>
+                {sessionUser?.displayName ? (
+                  <span
+                    className={`${fontDisplay.className} min-w-0 truncate text-[17px] font-bold tracking-tight text-[var(--sidebar-text-strong)]`}
+                    title={sessionUser.displayName}
+                  >
+                    {sessionUser.displayName}
+                  </span>
+                ) : null}
               </span>
             </>
           ) : (
             <span
-              className={`relative z-20 block w-full min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[1.35rem] font-light leading-snug tracking-[0.04em] text-[var(--sidebar-text-strong)] shell-short:text-[1.05rem] shell-short:leading-tight shell-short:tracking-[0.02em] [@media(min-width:1024px)_and_(min-height:560px)]:text-[clamp(0.62rem,calc(((100vw/7)-2.75rem)/9),1.12rem)] [@media(min-width:1024px)_and_(min-height:560px)]:leading-tight [@media(min-width:1024px)_and_(min-height:560px)]:tracking-[0.05em] ${brandDisplayFont.className}`}
+              className={`relative z-20 flex w-full min-w-0 max-w-full items-baseline justify-center gap-1.5 overflow-hidden text-[1.35rem] leading-snug tracking-[0.04em] text-[var(--sidebar-text-strong)] shell-short:text-[1.05rem] shell-short:leading-tight shell-short:tracking-[0.02em] [@media(min-width:1024px)_and_(min-height:560px)]:text-[clamp(0.62rem,calc(((100vw/7)-2.75rem)/9),1.12rem)] [@media(min-width:1024px)_and_(min-height:560px)]:leading-tight [@media(min-width:1024px)_and_(min-height:560px)]:tracking-[0.05em] ${brandDisplayFont.className}`}
               style={{ textShadow: "var(--sidebar-title-shadow)" }}
+              title={
+                sessionUser?.displayName
+                  ? `Клик · ${sessionUser.displayName}`
+                  : APP_DISPLAY_NAME
+              }
             >
-              {APP_DISPLAY_NAME}
+              <span className="shrink-0 font-semibold">Клик</span>
+              {sessionUser?.displayName ? (
+                <span className="min-w-0 truncate font-bold">
+                  {sessionUser.displayName}
+                </span>
+              ) : null}
             </span>
           )}
         </Link>
-
-        {sessionUser?.displayName ? (
-          <p
-            className={
-              isHarmony
-                ? "relative z-10 mt-2 truncate text-sm font-medium text-[var(--sidebar-text-strong)]"
-                : "relative z-10 mt-2 truncate text-center text-sm font-medium leading-snug text-[var(--sidebar-text-strong)] shell-short:mt-1 shell-short:text-xs"
-            }
-            title={sessionUser.displayName}
-          >
-            {sessionUser.displayName}
-          </p>
-        ) : null}
 
         {isEffectiveKanbanOnly ? null : (
           <button

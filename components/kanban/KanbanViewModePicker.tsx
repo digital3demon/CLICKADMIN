@@ -50,23 +50,22 @@ export function KanbanViewModePicker({
     <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
-        className="inline-flex min-h-[2.75rem] items-center justify-center gap-1.5 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-3 py-2 text-[0.8125rem] font-semibold text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:text-[0.875rem]"
+        className="inline-flex min-h-[2.25rem] items-center justify-center gap-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-1.5 py-1 text-[0.68rem] font-semibold text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:min-h-[2.75rem] sm:gap-1.5 sm:px-3 sm:py-2 sm:text-[0.8125rem] md:text-[0.875rem]"
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={`Режим: ${viewModeLabel(viewMode)}`}
         onClick={() => setOpen((v) => !v)}
       >
-        <span>Вид</span>
-        <span className="text-[var(--kanban-text-muted)]">·</span>
-        <span className="max-w-[5.5rem] truncate font-medium text-[var(--kanban-text)] sm:max-w-none">
+        <span className="max-w-[4.5rem] truncate font-medium text-[var(--kanban-text)] sm:max-w-[6rem]">
           {viewModeLabel(viewMode)}
         </span>
         <svg
-          width="14"
-          height="14"
+          width="12"
+          height="12"
           viewBox="0 0 24 24"
           fill="none"
           aria-hidden
-          className={`shrink-0 text-[var(--kanban-text-muted)] transition-transform ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-[var(--kanban-text-muted)] transition-transform sm:h-3.5 sm:w-3.5 ${open ? "rotate-180" : ""}`}
         >
           <path
             d="M6 9l6 6 6-6"

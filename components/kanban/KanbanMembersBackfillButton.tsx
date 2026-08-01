@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { IconRefresh } from "./kanban-icons";
 
 type BackfillBatchResponse = {
   total?: number;
@@ -22,7 +23,10 @@ type KanbanMembersBackfillButtonProps = {
   showToast: (msg: string, err?: boolean) => void;
 };
 
-/** TEMP: одноразовая подтяжка assignees/participants из Kaiten по старым карточкам. */
+/**
+ * Подтягивает с Kaiten на карточки канбана: колонку/порядок, участников/ответственных,
+ * срочность (asap), срок этапа (due_date). Наряд CRM не меняет.
+ */
 export function KanbanMembersBackfillButton({
   disabled,
   onRunningChange,
@@ -131,13 +135,18 @@ export function KanbanMembersBackfillButton({
         );
 
         if (batch.rateLimited) {
-          setStatus((prev) => `${prev} · лимит Kaiten, пауза 8 с`);
-          await new Promise((r) => setTimeout(r, 8000));
-          continue;
-        }
-
-        if (!finished) {
-          await new Promise((r) => setTimeout(r, 400));
+          setStatus(
+            formatProgressLine({
+              processed: Math.min(processed, totalCount),
+              changed: changedSum,
+              skipped: skippedSum,
+              noCard: noCardSum,
+              unmapped: unmappedSum,
+              totalCount,
+              prefix: "Лимит Kaiten, пауза",
+            }),
+          );
+          await new Promise((r) => setTimeout(r, 2500));
         }
       }
 
@@ -179,40 +188,42 @@ export function KanbanMembersBackfillButton({
   }, [disabled, formatProgressLine, onComplete, onRunningChange, running, showToast]);
 
   const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  const tip =
+    "Обновить с Kaiten: колонку и порядок, сроки этапа, срочность, участников/ответственных (наряды CRM не меняет)";
 
   return (
-    <div className="flex min-w-0 max-w-full flex-col gap-1.5 sm:max-w-[min(100%,28rem)]">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="contents">
+      <button
+        type="button"
+        disabled={disabled || running}
+        title={tip}
+        aria-label={running ? "Обновление…" : "Обновить"}
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)] hover:brightness-[0.98] disabled:cursor-wait disabled:opacity-60 dark:hover:brightness-110 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[0.75rem] sm:font-medium"
+        onClick={() => void runBackfill()}
+      >
+        <IconRefresh className={`h-4 w-4 ${running ? "animate-spin" : ""}`} />
+        <span className="hidden sm:inline">{running ? "Обновление…" : "Обновить"}</span>
+      </button>
+      {running ? (
         <button
           type="button"
-          disabled={disabled || running}
-          title="Временно: подтянуть ответственных и участников из Kaiten по всем старым карточкам"
-          className="rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2.5 py-1.5 text-[0.75rem] font-medium text-[var(--kanban-text)] hover:brightness-[0.98] disabled:cursor-wait disabled:opacity-60 dark:hover:brightness-110"
-          onClick={() => void runBackfill()}
+          className="hidden rounded-md border border-[var(--kanban-border)] px-2 py-1.5 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] sm:inline-flex"
+          onClick={() => {
+            abortRef.current = true;
+          }}
         >
-          {running ? "Обновление…" : "Обновить участников"}
+          Стоп
         </button>
-        {running ? (
-          <button
-            type="button"
-            className="rounded-md border border-[var(--kanban-border)] px-2 py-1.5 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-            onClick={() => {
-              abortRef.current = true;
-            }}
-          >
-            Стоп
-          </button>
-        ) : null}
-      </div>
+      ) : null}
       {running || status ? (
-        <div className="min-w-0">
+        <div className="basis-full min-w-0 sm:max-w-[min(100%,28rem)]">
           <div
             className="h-1.5 overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/[0.08]"
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={pct}
-            aria-label="Прогресс обновления участников"
+            aria-label="Прогресс обновления с Kaiten"
           >
             <div
               className="h-full rounded-full bg-[var(--kanban-accent)] transition-[width] duration-300"

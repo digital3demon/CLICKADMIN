@@ -1,3 +1,11 @@
+/** Короткое имя для дуги над аватаром (читаемо на телефоне). */
+export function shortArcLabelFromDisplayName(name: string, maxChars = 9): string {
+  const first = name.replace(/\s+/g, " ").trim().split(" ")[0] ?? "";
+  if (!first) return "";
+  if (first.length <= maxChars) return first;
+  return `${first.slice(0, Math.max(1, maxChars - 1))}…`;
+}
+
 /** Инициалы для кружка (ФИО или email). */
 export function initialsFromDisplayName(name: string): string {
   const p = name.replace(/\s+/g, " ").trim();

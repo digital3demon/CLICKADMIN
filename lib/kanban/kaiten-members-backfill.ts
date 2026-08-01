@@ -14,10 +14,18 @@ import {
   parseKanbanAppState,
 } from "@/lib/kanban/chat-sync";
 import {
+  kaitenGetCard,
+  kaitenListBoardColumns,
   kaitenListCardMembers,
   type KaitenAuth,
 } from "@/lib/kaiten-rest";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
+import { applyKaitenHeadFieldsToKanbanCard } from "@/lib/kanban/kaiten-head-to-kanban-card";
+import {
+  applyKaitenPositionToKanbanState,
+  sortOrderFromKaitenCard,
+} from "@/lib/kanban/kaiten-position-to-kanban";
+import { kaitenColumnTitleFromBoard } from "@/lib/kaiten-column-title";
 
 export const KANBAN_MEMBERS_BACKFILL_BATCH_SIZE = 6;
 
@@ -129,6 +137,10 @@ export async function runKanbanMembersBackfillBatch(
   let rateLimited = false;
   let lastOrderId: string | null = afterOrderId;
   let processed = 0;
+  const columnsByBoardId = new Map<
+    number,
+    Array<{ id: number; title: string; name?: string }>
+  >();
 
   for (const order of orders) {
     if (order.kaitenCardId == null || !Number.isFinite(order.kaitenCardId)) {
@@ -152,6 +164,15 @@ export async function runKanbanMembersBackfillBatch(
       continue;
     }
 
+    const head = await kaitenGetCard(auth, order.kaitenCardId, { burst: false });
+    if (!head.ok) {
+      if (isKaitenRateLimitedStatus(head.status)) {
+        rateLimited = true;
+        break;
+      }
+      // Участников всё равно применим; сроки/положение пропустим в этой итерации.
+    }
+
     const loc = findCardByLinkedOrderId(state, order.id);
     if (!loc) {
       noCard += 1;
@@ -168,14 +189,50 @@ export async function runKanbanMembersBackfillBatch(
     }
     const card =
       state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
-    const didChange = applyInboundMembersToKanbanCard(card, {
+    const membersChanged = applyInboundMembersToKanbanCard(card, {
       assignees: mapped.assignees,
       participants: mapped.participants,
       fingerprint,
       unmappedLabels: mapped.unmappedLabels,
       forceApply: true,
     });
-    if (didChange) changed += 1;
+    const headChanged =
+      head.ok && head.card
+        ? applyKaitenHeadFieldsToKanbanCard(card, head.card)
+        : false;
+
+    let positionChanged = false;
+    if (head.ok && head.card) {
+      const boardIdRaw = head.card.board_id;
+      const boardId = typeof boardIdRaw === "number" ? boardIdRaw : null;
+      if (boardId != null) {
+        let cols = columnsByBoardId.get(boardId);
+        if (!cols) {
+          const colRes = await kaitenListBoardColumns(auth, boardId, {
+            burst: false,
+          });
+          if (!colRes.ok) {
+            if (isKaitenRateLimitedStatus(colRes.status)) {
+              rateLimited = true;
+              break;
+            }
+          } else {
+            cols = colRes.columns;
+            columnsByBoardId.set(boardId, cols);
+          }
+        }
+        if (cols) {
+          const columnTitle = kaitenColumnTitleFromBoard(head.card, cols);
+          const sortOrder = sortOrderFromKaitenCard(head.card);
+          positionChanged = applyKaitenPositionToKanbanState(state, order.id, {
+            columnTitle,
+            sortOrder,
+          });
+        }
+      }
+    }
+
+    if (membersChanged || headChanged || positionChanged) changed += 1;
     else skipped += 1;
     processed += 1;
     lastOrderId = order.id;

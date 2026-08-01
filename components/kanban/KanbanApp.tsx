@@ -95,7 +95,6 @@ import {
   normalizeKanbanBoardUiState,
 } from "@/lib/kanban/user-board-ui-state";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
@@ -105,6 +104,7 @@ import { TOAST_AUTO_HIDE_MS } from "@/components/ui/toast-store";
 import { BoardCanvas } from "./BoardCanvas";
 import { KanbanFiltersButton } from "./KanbanFiltersButton";
 import { KanbanViewModePicker } from "./KanbanViewModePicker";
+import { IconArchiveBox } from "./kanban-icons";
 
 const KanbanCalendar = dynamic(
   () => import("./KanbanCalendar").then((m) => m.KanbanCalendar),
@@ -2065,11 +2065,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   return (
     <KanbanCrmUsersProvider>
     <div className="flex h-[calc(100dvh)] min-h-0 w-full flex-col overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text)]">
-      <header className="flex max-w-full flex-col gap-3 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-3 py-2.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:px-4 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-x-3 md:gap-y-2">
-        <div className="flex min-w-0 max-w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2 md:flex-1">
-          <label className="flex min-w-0 max-w-full max-md:ms-[max(3.25rem,calc(env(safe-area-inset-left,0px)+2.75rem+0.25rem))] md:ms-0 sm:items-center">
+      <header className="flex max-w-full flex-col gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:gap-2 sm:px-4 sm:py-2.5">
+        <div className="flex min-w-0 max-w-full items-center gap-1.5 sm:gap-2">
+          <label className="min-w-0 max-w-[min(42%,11rem)] flex-none max-md:ms-[max(2.75rem,calc(env(safe-area-inset-left,0px)+2.35rem+0.2rem))] sm:max-w-[14rem] md:ms-0 md:max-w-[16rem]">
             <select
-              className="min-h-[2.75rem] w-full min-w-0 max-w-full rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2.5 py-2 text-[0.875rem] font-semibold text-[var(--kanban-text)] max-md:max-w-[min(100%,18rem)] sm:min-w-[10rem] sm:max-w-[min(100vw-10rem,32rem)] sm:shrink sm:grow"
+              className="min-h-[2.25rem] w-full min-w-0 max-w-full truncate rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-1.5 py-1 text-[0.72rem] font-semibold leading-tight text-[var(--kanban-text)] sm:min-h-[2.75rem] sm:px-2.5 sm:py-2 sm:text-[0.875rem]"
               value={
                 isKanbanAggregateBoardId(appState.activeBoardId)
                   ? (visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
@@ -2094,22 +2094,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               ))}
             </select>
           </label>
-          <Link
-            href="/directory/kanban-boards#kanban-automations"
-            className="min-w-0 shrink-0 text-[0.8125rem] leading-snug text-[var(--kanban-text-muted)] underline-offset-2 hover:text-[var(--kanban-text)] hover:underline"
-          >
-            Настройки, правила и резервная копия
-          </Link>
-        </div>
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto md:shrink-0">
           <div
-            className="flex flex-wrap items-center gap-2"
+            className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-1.5"
             role="group"
-            aria-label="Виртуальные доски"
+            aria-label="Виртуальные доски и вид"
           >
             <button
               type="button"
-              className={`rounded-full border px-3 py-1.5 text-[0.62rem] font-bold uppercase tracking-wide transition-colors sm:px-3.5 sm:py-2 sm:text-[0.68rem] ${
+              className={`rounded-full border px-1.5 py-1 text-[0.55rem] font-bold uppercase tracking-wide transition-colors sm:px-3 sm:py-1.5 sm:text-[0.62rem] md:px-3.5 md:py-2 md:text-[0.68rem] ${
                 appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID
                   ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
                   : "border-white/30 text-[var(--kanban-text-muted)] hover:border-white/45 hover:text-[var(--kanban-text)]"
@@ -2137,11 +2129,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             </button>
             <button
               type="button"
-              className={`rounded-full border px-3 py-1.5 text-[0.62rem] font-bold uppercase tracking-wide transition-colors sm:px-3.5 sm:py-2 sm:text-[0.68rem] ${
+              className={`rounded-full border px-1.5 py-1 text-[0.55rem] font-bold uppercase tracking-wide transition-colors sm:px-3 sm:py-1.5 sm:text-[0.62rem] md:px-3.5 md:py-2 md:text-[0.68rem] ${
                 appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID
                   ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
                   : "border-white/30 text-[var(--kanban-text-muted)] hover:border-white/45 hover:text-[var(--kanban-text)]"
               }`}
+              title="Ответственный"
               onClick={() => {
                 if (!visibleBoards.length) return;
                 const fallbackId =
@@ -2161,18 +2154,19 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 }
               }}
             >
-              Ответственный
+              <span className="sm:hidden">отвст</span>
+              <span className="hidden sm:inline">Ответственный</span>
             </button>
+            <KanbanViewModePicker
+              viewMode={appState.viewMode}
+              onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
+            />
           </div>
-          <KanbanViewModePicker
-            viewMode={appState.viewMode}
-            onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
-          />
         </div>
       </header>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="relative z-20 flex max-w-full flex-wrap items-center gap-2.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-3 py-2.5 sm:px-4">
+          <div className="relative z-20 flex max-w-full flex-wrap items-center gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 sm:gap-2.5 sm:px-4 sm:py-2.5">
             <input
               type="search"
               placeholder="Поиск…"
@@ -2182,7 +2176,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   s.search = e.target.value;
                 })
               }
-              className="min-h-[2.75rem] min-w-0 w-full max-w-full flex-[1_1_12rem] rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] px-3 py-2 text-base text-[var(--kanban-text)] placeholder:text-[var(--kanban-text-muted)] dark:bg-[#262626] sm:max-w-[320px] sm:text-[0.875rem]"
+              className="min-h-[2.25rem] min-w-0 flex-1 basis-[6.5rem] rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] px-2 py-1.5 text-[0.8125rem] text-[var(--kanban-text)] placeholder:text-[var(--kanban-text-muted)] dark:bg-[#262626] sm:min-h-[2.75rem] sm:max-w-[320px] sm:flex-[1_1_12rem] sm:basis-auto sm:px-3 sm:py-2 sm:text-base md:text-[0.875rem]"
             />
             <KanbanFiltersButton
               board={board}
@@ -2208,7 +2202,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             <button
               id="kanban-stop-drop-target"
               type="button"
-              className={`rounded-md border px-3 py-1.5 text-[0.95rem] font-extrabold tracking-wide shadow-sm transition-[transform,box-shadow,background-color,border-color,color] duration-100 hover:brightness-[0.98] dark:hover:brightness-110 ${
+              className={`inline-flex h-9 shrink-0 items-center justify-center rounded-md border px-1.5 text-[0.68rem] font-extrabold tracking-wide shadow-sm transition-[transform,box-shadow,background-color,border-color,color] duration-100 hover:brightness-[0.98] dark:hover:brightness-110 sm:h-auto sm:px-3 sm:py-1.5 sm:text-[0.95rem] ${
                 stopOpen
                   ? "border-white/70 bg-white text-black ring-2 ring-white/70"
                   : "border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)]"
@@ -2273,10 +2267,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               : null}
             <button
               type="button"
-              className="rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 py-1.5 text-[0.75rem] font-medium text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-1.5 text-[0.65rem] font-medium text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:h-auto sm:px-2 sm:py-1.5 sm:text-[0.75rem]"
+              title={`Архив (${archivedCards.length})`}
+              aria-label={`Архив (${archivedCards.length})`}
               onClick={() => setArchiveOpen(true)}
             >
-              Архив ({archivedCards.length})
+              <IconArchiveBox className="h-4 w-4 sm:hidden" />
+              <span className="hidden sm:inline">Архив ({archivedCards.length})</span>
+              <span className="tabular-nums sm:hidden">{archivedCards.length}</span>
             </button>
             {(appState.hiddenLinkedOrderIds?.length ?? 0) > 0 ? (
               <button

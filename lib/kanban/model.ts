@@ -1218,10 +1218,13 @@ export function kanbanStateForPersistence(
   return slimKanbanStateForClientState(base);
 }
 
-const PERSIST_DESC_MAX = 400;
-const PERSIST_COMMENT_MAX = 280;
-const PERSIST_COMMENTS_KEEP = 40;
-const PERSIST_ACTIVITY_KEEP = 15;
+const PERSIST_DESC_MAX = 200;
+const PERSIST_COMMENT_MAX = 120;
+/** Чат живёт в наряде/Kaiten — в tenant-снимке держим минимум, иначе PUT > лимита. */
+const PERSIST_COMMENTS_KEEP = 5;
+const PERSIST_ACTIVITY_KEEP = 5;
+/** В архиве/СТОП тяжёлые поля не нужны для зеркала доски. */
+const PERSIST_ARCHIVE_DESC_MAX = 80;
 
 /** Ужимает карточки перед записью в TenantClientState / UserClientState. */
 export function slimKanbanStateForClientState(
@@ -1229,23 +1232,33 @@ export function slimKanbanStateForClientState(
 ): KanbanAppState {
   const next = structuredClone(state);
 
-  const slimCard = (card: KanbanCard) => {
+  const slimCard = (card: KanbanCard, archiveLike = false) => {
+    const descMax = archiveLike ? PERSIST_ARCHIVE_DESC_MAX : PERSIST_DESC_MAX;
     if (
       typeof card.description === "string" &&
-      card.description.length > PERSIST_DESC_MAX
+      card.description.length > descMax
     ) {
-      card.description = card.description.slice(0, PERSIST_DESC_MAX) + "…";
+      card.description = card.description.slice(0, descMax) + "…";
     }
     // data:URL (скриншоты/файлы из чата) — главный раздуватель JSON (~МБ → 500 на PUT).
     // URL вида /api/orders/.../attachments/... оставляем.
     if (Array.isArray(card.files) && card.files.length > 0) {
-      card.files = card.files.map((f) => {
-        const d = f.dataUrl || "";
-        if (d.startsWith("data:")) {
-          return { ...f, dataUrl: "" };
-        }
-        return f;
-      });
+      if (archiveLike) {
+        card.files = [];
+      } else {
+        card.files = card.files.map((f) => {
+          const d = f.dataUrl || "";
+          if (d.startsWith("data:")) {
+            return { ...f, dataUrl: "" };
+          }
+          return f;
+        });
+      }
+    }
+    if (archiveLike) {
+      card.comments = [];
+      card.activity = [];
+      return;
     }
     if (Array.isArray(card.comments) && card.comments.length > 0) {
       const kept = card.comments.slice(-PERSIST_COMMENTS_KEEP);
@@ -1264,13 +1277,13 @@ export function slimKanbanStateForClientState(
 
   for (const board of next.boards) {
     for (const col of board.columns || []) {
-      for (const card of col.cards || []) slimCard(card);
+      for (const card of col.cards || []) slimCard(card, false);
     }
     for (const row of board.archivedCards || []) {
-      if (row?.card) slimCard(row.card);
+      if (row?.card) slimCard(row.card, true);
     }
     for (const row of board.stoppedCards || []) {
-      if (row?.card) slimCard(row.card);
+      if (row?.card) slimCard(row.card, true);
     }
   }
   return next;

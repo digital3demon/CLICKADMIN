@@ -16,7 +16,7 @@ import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
-import { listTagKaitenColumnTitle } from "@/lib/order-list-tag-filter";
+import { listTagKaitenColumnTitle, LIST_TAG_KAITEN_BLOCKED } from "@/lib/order-list-tag-filter";
 
 export type FinanceOfficeOrderTableRow = {
   id: string;
@@ -190,15 +190,24 @@ export function FinanceOfficeOrdersTable({
                 o.appointmentDate ?? o.dueToAdminsAt,
               );
               const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
-              const kaitenStatusFilterHref = kaitenColTrimmed
+              const blocked = o.kaitenBlocked === true;
+              const kaitenStatusFilterHref = blocked
                 ? financeOfficeListHref({
                     tab,
-                    tag: listTagKaitenColumnTitle(kaitenColTrimmed),
+                    tag: LIST_TAG_KAITEN_BLOCKED,
                     from: periodFrom ?? undefined,
                     to: periodTo ?? undefined,
                     q: (q ?? "").trim() || undefined,
                   })
-                : null;
+                : kaitenColTrimmed
+                  ? financeOfficeListHref({
+                      tab,
+                      tag: listTagKaitenColumnTitle(kaitenColTrimmed),
+                      from: periodFrom ?? undefined,
+                      to: periodTo ?? undefined,
+                      q: (q ?? "").trim() || undefined,
+                    })
+                  : null;
               const rowClass = workSent
                 ? ORDER_SHIPPED_ROW_CLASS
                 : "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
@@ -285,6 +294,8 @@ export function FinanceOfficeOrdersTable({
                         demoKanbanColumn={o.demoKanbanColumn}
                         demoCardTypeName={o.kaitenCardType?.name ?? null}
                         kaitenColumnTitle={o.kaitenColumnTitle}
+                        kaitenBlocked={blocked}
+                        kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
                         placement="underOrderNumber"
                       />
@@ -362,6 +373,8 @@ export function FinanceOfficeOrdersTable({
                             demoKanbanColumn={o.demoKanbanColumn}
                             demoCardTypeName={o.kaitenCardType?.name ?? null}
                             kaitenColumnTitle={o.kaitenColumnTitle}
+                            kaitenBlocked={blocked}
+                            kaitenBlockReason={o.kaitenBlockReason}
                             filterHref={kaitenStatusFilterHref}
                             placement="underOrderNumber"
                           />

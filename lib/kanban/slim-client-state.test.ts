@@ -12,7 +12,7 @@ describe("slimKanbanStateForClientState", () => {
     const base = structuredClone(defaultAppState()) as KanbanAppState;
     const ortho = base.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;
     const col0 = ortho.columns[0]!;
-    const bigData = `data:image/png;base64,${"A".repeat(500_000)}`;
+    const bigData = `data:image/png;base64,${"A".repeat(700_000)}`;
     col0.cards = [
       {
         id: "c1",
@@ -79,12 +79,88 @@ describe("slimKanbanStateForClientState", () => {
 
     expect(card.files[0]!.dataUrl).toBe("");
     expect(card.files[1]!.dataUrl).toBe("/api/orders/ord1/attachments/att1");
-    expect(card.description.length).toBeLessThanOrEqual(401);
-    expect(card.comments).toHaveLength(40);
-    expect(card.comments.every((c) => c.text.length <= 281)).toBe(true);
-    expect(card.activity).toHaveLength(15);
+    expect(card.description.length).toBeLessThanOrEqual(201);
+    expect(card.comments).toHaveLength(5);
+    expect(card.comments.every((c) => c.text.length <= 121)).toBe(true);
+    expect(card.activity).toHaveLength(5);
 
     const after = clientStatePayloadTooLarge("tenant", "kanbanAppStateV3", slim);
     expect(after.tooLarge).toBe(false);
+  });
+
+  it("strips chat/files from archived and stopped cards", () => {
+    const base = structuredClone(defaultAppState()) as KanbanAppState;
+    const ortho = base.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;
+    const heavy = {
+      id: "archived1",
+      title: "old",
+      description: "d".repeat(500),
+      cardTypeId: "",
+      assignees: [] as string[],
+      participants: [] as string[],
+      dueDate: "",
+      urgent: false,
+      checklist: [],
+      files: [
+        {
+          id: "f1",
+          name: "x.png",
+          mime: "image/png",
+          size: 1,
+          dataUrl: "/api/orders/o/attachments/a",
+          addedAt: "2026-01-01T00:00:00.000Z",
+          addedByUserId: "u1",
+        },
+      ],
+      comments: [
+        {
+          id: "cm1",
+          userId: "u1",
+          text: "hello",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      activity: [
+        {
+          id: "a1",
+          type: "move",
+          text: "moved",
+          userId: "u1",
+          at: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      blocked: false,
+      blockReason: "",
+      blockedByUserId: "",
+      blockedAt: "",
+      createdByUserId: "u1",
+      lastMovedAt: null,
+      trackLane: "",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    ortho.archivedCards = [
+      { card: structuredClone(heavy), archivedAt: "2026-01-02T00:00:00.000Z" },
+    ];
+    ortho.stoppedCards = [
+      {
+        card: structuredClone({ ...heavy, id: "stopped1", blocked: true }),
+        stoppedAt: "2026-01-02T00:00:00.000Z",
+        fromColumnId: ortho.columns[0]!.id,
+      },
+    ];
+
+    const slim = slimKanbanStateForClientState(base);
+    const arch = slim.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!
+      .archivedCards[0]!.card;
+    const stop = slim.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!
+      .stoppedCards[0]!.card;
+
+    expect(arch.comments).toEqual([]);
+    expect(arch.activity).toEqual([]);
+    expect(arch.files).toEqual([]);
+    expect(arch.description.length).toBeLessThanOrEqual(81);
+    expect(stop.comments).toEqual([]);
+    expect(stop.files).toEqual([]);
   });
 });

@@ -65,9 +65,9 @@ function ListMemberAddButton({
   onClick: () => void;
   size?: "xs" | "sm";
 }) {
-  // «+» меньше аватара: xs → 14px, sm → 18px
-  const dim = size === "xs" ? "h-3.5 w-3.5" : "h-[18px] w-[18px]";
-  const icon = size === "xs" ? "h-2 w-2" : "h-2.5 w-2.5";
+  // Меньше аватара list (28px) / md (36px), но не микроскопический
+  const dim = size === "xs" ? "h-5 w-5" : "h-[18px] w-[18px]";
+  const icon = size === "xs" ? "h-2.5 w-2.5" : "h-2.5 w-2.5";
   return (
     <button
       type="button"
@@ -101,12 +101,20 @@ function ListMembersCell({
   onAdd: () => void;
   size?: "xs" | "sm";
 }) {
-  // Аватар крупнее кнопки «+»: xs→sm (24px), sm→md (36px)
-  const avatarSize = size === "xs" ? "sm" : "md";
+  const isMobileList = size === "xs";
+  const avatarSize = isMobileList ? "list" : "md";
   return (
-    <div className="flex min-w-0 flex-wrap items-center justify-end gap-0.5 sm:justify-start">
+    <div
+      className={`flex min-w-0 flex-wrap justify-end gap-0.5 sm:justify-start ${
+        isMobileList ? "items-end" : "items-center"
+      }`}
+    >
       {userIds.length > 0 ? (
-        <div className={`-space-x-1.5 flex pl-0.5 ${size === "xs" ? "justify-end" : ""}`}>
+        <div
+          className={`flex pl-0.5 ${
+            isMobileList ? "justify-end gap-1" : "-space-x-1.5"
+          }`}
+        >
           {userIds.slice(0, 5).map((uid) => (
             <span key={uid} className="first:ml-0">
               <KanbanPersonAvatar
@@ -114,6 +122,7 @@ function ListMembersCell({
                 homeBoard={homeBoard}
                 variant={variant}
                 size={avatarSize}
+                nameArc={isMobileList}
                 titleSuffix=""
               />
             </span>
@@ -238,7 +247,7 @@ function ListStageDueCell({
     <div
       className={
         compact
-          ? "flex min-w-0 flex-row flex-wrap items-center gap-1"
+          ? "flex shrink-0 flex-row items-center gap-0.5"
           : "flex min-w-0 flex-col gap-1"
       }
       onPointerDown={(e) => e.stopPropagation()}
@@ -252,7 +261,7 @@ function ListStageDueCell({
         title={canEditDueDate ? "Срок этапа (канбан)" : "Нет прав менять срок"}
         className={`${
           compact
-            ? "h-6 w-[6.1rem] px-0.5 py-0 text-[0.6rem]"
+            ? "h-6 w-[5.5rem] min-w-0 px-0.5 py-0 text-[0.58rem]"
             : "w-[6.85rem] px-1 py-0.5 text-[0.65rem]"
         } max-w-full shrink-0 rounded border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] leading-tight text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-50 ${
           dueUrgentRed ? "font-semibold text-red-500 dark:text-red-400" : ""
@@ -268,7 +277,7 @@ function ListStageDueCell({
         }
         className={`shrink-0 rounded border font-bold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
           compact
-            ? "h-6 px-1.5 py-0 text-[0.5rem] leading-none"
+            ? "h-6 px-1 py-0 text-[0.5rem] leading-none"
             : "w-fit max-w-full px-1.5 py-0.5 text-[0.58rem]"
         } ${
           urgent
@@ -277,7 +286,7 @@ function ListStageDueCell({
         }`}
         onClick={() => onUrgentChange?.(!urgent)}
       >
-        {compact ? (urgent ? "Сроч." : "Ср.") : "Срочно"}
+        Срочно
       </button>
     </div>
   );
@@ -612,8 +621,11 @@ export function KanbanListView({
                         ) : null}
                         {/* Mobile: 2 компактных ряда вместо высокой колонки полей */}
                         <div className="mt-1 space-y-1 sm:hidden">
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            <span className="min-w-0 flex-1 truncate text-[0.65rem] text-[var(--kanban-text)]">
+                          <div className="flex min-w-0 items-center gap-1">
+                            <span
+                              className="min-w-0 max-w-[9.5rem] shrink truncate text-[0.65rem] leading-tight text-[var(--kanban-text)]"
+                              title={columnTitle}
+                            >
                               {columnTitle}
                             </span>
                             {cl.length > 0 ? (

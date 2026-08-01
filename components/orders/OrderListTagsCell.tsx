@@ -1046,7 +1046,15 @@ export function OrderListTagsCell({
             demoKanbanColumn={demoKanbanColumn}
             demoCardTypeName={demoCardTypeName}
             kaitenColumnTitle={kaitenColumnTitle}
-            filterHref={kaitenFilterKey ? href(kaitenFilterKey) : null}
+            kaitenBlocked={kaitenBlocked}
+            kaitenBlockReason={kaitenBlockReason}
+            filterHref={
+              kaitenBlocked
+                ? href(LIST_TAG_KAITEN_BLOCKED)
+                : kaitenFilterKey
+                  ? href(kaitenFilterKey)
+                  : null
+            }
           />
         ),
       });
