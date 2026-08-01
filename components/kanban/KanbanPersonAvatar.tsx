@@ -182,10 +182,10 @@ export function KanbanPersonAvatar({
     return (
       <span
         title={title}
-        className="inline-flex max-w-[3.4rem] flex-col items-center gap-0.5"
+        className="inline-flex max-w-[4.2rem] flex-col items-center gap-0.5"
       >
         {face}
-        <span className="w-full truncate text-center text-[0.55rem] font-medium leading-none text-[var(--kanban-text-muted)]">
+        <span className="w-full truncate text-center text-[0.68rem] font-semibold leading-tight text-[var(--kanban-text)] sm:text-[0.75rem]">
           {shortLabel || "—"}
         </span>
       </span>
