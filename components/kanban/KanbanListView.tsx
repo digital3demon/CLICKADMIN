@@ -27,8 +27,9 @@ import { useKanbanCardHoverPreview } from "./KanbanCardHoverPreview";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 
+/** Колонка названия ≤ ~60 символов (ch), дальше перенос; остальные — max-content. */
 const LIST_GRID =
-  "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:grid-cols-[minmax(0,1fr)_max-content_max-content_max-content_max-content_max-content] sm:items-start sm:justify-items-start sm:gap-x-2 sm:gap-y-0";
+  "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:grid-cols-[minmax(0,60ch)_max-content_max-content_max-content_max-content_max-content] sm:items-start sm:justify-items-start sm:gap-x-2 sm:gap-y-0";
 
 function IconChevronRight(props: { className?: string }) {
   return (
@@ -65,8 +66,9 @@ function ListMemberAddButton({
   onClick: () => void;
   size?: "xs" | "sm";
 }) {
-  const dim = size === "xs" ? "h-5 w-5" : "h-6 w-6";
-  const icon = size === "xs" ? "h-2.5 w-2.5" : "h-3 w-3";
+  // xs = mobile: плюс заметно меньше аватара
+  const dim = size === "xs" ? "h-3.5 w-3.5" : "h-6 w-6";
+  const icon = size === "xs" ? "h-2 w-2" : "h-3 w-3";
   return (
     <button
       type="button"
@@ -101,14 +103,15 @@ function ListMembersCell({
   size?: "xs" | "sm";
 }) {
   const isMobileList = size === "xs";
-  const avatarSize = isMobileList ? "xs" : "sm";
+  // Mobile: аватар крупнее плюса (listSm 28px)
+  const avatarSize = isMobileList ? "listSm" : "sm";
   const maxVisible = isMobileList ? 2 : 5;
   const visible = userIds.slice(0, maxVisible);
   const overflow = userIds.length - visible.length;
   return (
-    <div className="flex min-w-0 flex-nowrap items-center justify-start gap-0.5">
+    <div className="flex min-w-0 flex-nowrap items-center justify-start gap-1">
       {visible.length > 0 ? (
-        <div className="flex min-w-0 items-center gap-0.5">
+        <div className="flex min-w-0 items-center gap-1">
           {visible.map((uid) => (
             <span key={uid} className="first:ml-0">
               <KanbanPersonAvatar
@@ -125,7 +128,7 @@ function ListMembersCell({
           {overflow > 0 ? (
             <span
               className={`inline-flex shrink-0 items-center justify-center rounded-full bg-black/[0.08] px-1 text-[0.5rem] font-semibold text-[var(--kanban-text-muted)] dark:bg-white/[0.1] ${
-                isMobileList ? "h-5 min-w-5" : "h-6 min-w-6"
+                isMobileList ? "h-7 min-w-7" : "h-6 min-w-6"
               }`}
               title={`Ещё ${overflow}`}
             >
@@ -318,7 +321,7 @@ function ListUrgentPillButton({
           ? "Снять метку «Срочно» для следующего отдела (только канбан)"
           : "Срочно для следующего отдела (только канбан, наряд не меняется)"
       }
-      className={`shrink-0 rounded-full border px-1.5 py-px text-[0.42rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`inline-flex h-4 shrink-0 items-center whitespace-nowrap rounded-full border px-1.5 text-[0.4rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
         urgent
           ? "border-orange-600 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
           : "border-[var(--kanban-text-muted)] bg-transparent text-[var(--kanban-text)]"
@@ -451,6 +454,15 @@ export function KanbanListView({
       }),
     [board, appState, sort, cardHomeBoardId],
   );
+
+  /** Ширина колонки «положение» — по самому длинному названию в текущем списке. */
+  const longestColumnTitleCh = useMemo(() => {
+    let n = 4;
+    for (const r of rows) {
+      n = Math.max(n, Array.from(r.columnTitle).length);
+    }
+    return Math.min(Math.max(n, 4), 28);
+  }, [rows]);
 
   const mobileSelectValue = sortToSelectValue(sort);
 
@@ -613,25 +625,24 @@ export function KanbanListView({
                   }}
                 >
                   <div className={`${LIST_GRID} cursor-pointer sm:px-0 sm:py-0.5`}>
-                    {/* Mobile: тип (слово на боку) | контент; Срочно сверху, + внизу */}
+                    {/* Mobile: тип (слово на боку) | контент; Срочно сверху */}
                     <div className="flex min-w-0 sm:contents">
                       <div
-                        className="flex w-[1.15rem] shrink-0 flex-col items-center gap-0.5 border-r border-black/[0.08] bg-black/[0.04] py-1 dark:border-white/[0.08] dark:bg-white/[0.04] sm:hidden"
+                        className="flex w-[1.45rem] shrink-0 flex-col items-center gap-1 border-r border-black/[0.08] bg-black/[0.04] py-1 dark:border-white/[0.08] dark:bg-white/[0.04] sm:hidden"
                         title={ct?.name ?? "Тип"}
                         aria-label={ct?.name ?? "Тип"}
                       >
                         <span
-                          className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[0.45rem] font-bold text-white"
+                          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[0.52rem] font-bold text-white"
                           style={{ background: accent }}
                         >
                           {initials}
                         </span>
                         <span
-                          className="max-h-[5.5rem] overflow-hidden text-[0.42rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]"
+                          className="max-h-[6.5rem] overflow-hidden text-[0.58rem] font-extrabold uppercase leading-none tracking-wide text-[var(--kanban-text)]"
                           style={{
                             writingMode: "vertical-rl",
                             textOrientation: "sideways",
-                            // Safari: без префикса буквы остаются «столбиком» прямо
                             WebkitTextOrientation: "sideways",
                             transform: "rotate(180deg)",
                           }}
@@ -640,7 +651,7 @@ export function KanbanListView({
                         </span>
                       </div>
                       <div className="min-w-0 flex-1 px-1 py-1 sm:contents">
-                        <div className="flex min-w-0 items-stretch gap-1 sm:items-start sm:gap-1.5 sm:px-2 sm:py-1.5">
+                        <div className="flex min-w-0 items-start gap-1 sm:items-start sm:gap-1.5 sm:px-2 sm:py-1.5">
                           <span
                             className="mt-0.5 hidden h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.58rem] font-bold text-white sm:mt-0.5 sm:flex"
                             style={{ background: accent }}
@@ -648,12 +659,15 @@ export function KanbanListView({
                           >
                             {initials}
                           </span>
-                          <div className="min-w-0 flex-1 overflow-hidden">
+                          <div className="min-w-0 flex-1 overflow-hidden sm:max-w-[60ch] sm:flex-none">
                             <div className="hidden text-[0.55rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)] sm:block">
                               {ct?.name ?? "—"}
                             </div>
-                            <div className="flex min-w-0 items-start gap-1 text-[0.78rem] font-semibold leading-snug text-[var(--kanban-text)] sm:mt-0.5 sm:gap-1.5 sm:text-[0.8rem]">
-                              <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] line-clamp-2">
+                            <div className="flex min-w-0 max-w-[60ch] items-start gap-1 text-[0.78rem] font-semibold leading-snug text-[var(--kanban-text)] sm:mt-0.5 sm:gap-1.5 sm:text-[0.8rem]">
+                              <span
+                                className="min-w-0 max-w-[60ch] whitespace-normal break-words [overflow-wrap:anywhere]"
+                                title={card.title}
+                              >
                                 {card.title}
                               </span>
                               {blocked ? (
@@ -689,7 +703,7 @@ export function KanbanListView({
                                 {done}/{cl.length}
                               </div>
                             ) : null}
-                            {/* Mobile: дата (+ таймер) → колонка внизу */}
+                            {/* Mobile: дата → колонка (по ширине текста) + отв./участн. */}
                             <div className="mt-1 flex min-w-0 flex-col gap-1 overflow-hidden sm:hidden">
                               <div className="flex min-w-0 items-center gap-1">
                                 <ListStageDueCell
@@ -723,34 +737,85 @@ export function KanbanListView({
                                   </span>
                                 ) : null}
                               </div>
-                              <div className="flex min-w-0 items-center gap-0.5">
-                                <span
-                                  className="min-w-0 flex-1 truncate text-[0.72rem] font-semibold leading-tight text-[var(--kanban-text)]"
-                                  title={columnTitle}
+                              <div className="flex min-w-0 items-end justify-between gap-3">
+                                <div
+                                  className="inline-flex max-w-[min(100%,28ch)] shrink-0 items-center gap-0.5"
+                                  style={{ width: `${longestColumnTitleCh}ch` }}
                                 >
-                                  {columnTitle}
-                                </span>
-                                {onAdvanceCardColumn ? (
-                                  <button
-                                    type="button"
-                                    className="shrink-0 rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:opacity-30"
-                                    title="Следующая колонка"
-                                    aria-label="Переместить в следующую колонку"
-                                    disabled={!canAdvance}
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onAdvanceCardColumn(card.id);
-                                    }}
+                                  <span
+                                    className="min-w-0 truncate text-[0.72rem] font-semibold leading-tight text-[var(--kanban-text)]"
+                                    title={columnTitle}
                                   >
-                                    <IconChevronRight className="h-3.5 w-3.5" />
-                                  </button>
-                                ) : null}
+                                    {columnTitle}
+                                  </span>
+                                  {onAdvanceCardColumn ? (
+                                    <button
+                                      type="button"
+                                      className="shrink-0 rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:opacity-30"
+                                      title="Следующая колонка"
+                                      aria-label="Переместить в следующую колонку"
+                                      disabled={!canAdvance}
+                                      onPointerDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onAdvanceCardColumn(card.id);
+                                      }}
+                                    >
+                                      <IconChevronRight className="h-3.5 w-3.5" />
+                                    </button>
+                                  ) : null}
+                                </div>
+                                <div className="flex shrink-0 items-end gap-3">
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <span className="text-[0.38rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
+                                      отв.
+                                    </span>
+                                    <ListMembersCell
+                                      userIds={assignees}
+                                      variant="assignee"
+                                      homeBoard={rowBoard}
+                                      canManage={Boolean(
+                                        onUpdateCardMembers && canManageAssignees,
+                                      )}
+                                      onAdd={() =>
+                                        openMemberPicker(
+                                          card.id,
+                                          homeBoardId,
+                                          "assign",
+                                          assignees,
+                                        )
+                                      }
+                                      size="xs"
+                                    />
+                                  </div>
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <span className="text-[0.38rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
+                                      участн.
+                                    </span>
+                                    <ListMembersCell
+                                      userIds={participants}
+                                      variant="participant"
+                                      homeBoard={rowBoard}
+                                      canManage={Boolean(
+                                        onUpdateCardMembers && canManageParticipants,
+                                      )}
+                                      onAdd={() =>
+                                        openMemberPicker(
+                                          card.id,
+                                          homeBoardId,
+                                          "part",
+                                          participants,
+                                        )
+                                      }
+                                      size="xs"
+                                    />
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
-                          {/* Mobile: Срочно сверху справа; отв./участн. внизу справа */}
-                          <div className="flex w-[4.5rem] shrink-0 flex-col items-end justify-between gap-2 self-stretch sm:hidden">
+                          {/* Mobile: только «Срочно» справа от названия */}
+                          <div className="shrink-0 self-start sm:hidden">
                             <ListUrgentPillButton
                               urgent={urgent}
                               onUrgentChange={
@@ -759,58 +824,15 @@ export function KanbanListView({
                                   : undefined
                               }
                             />
-                            <div className="flex w-full items-end justify-end gap-2">
-                              <div className="flex min-w-0 flex-col items-center gap-0.5">
-                                <span className="text-[0.38rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
-                                  отв.
-                                </span>
-                                <ListMembersCell
-                                  userIds={assignees}
-                                  variant="assignee"
-                                  homeBoard={rowBoard}
-                                  canManage={Boolean(
-                                    onUpdateCardMembers && canManageAssignees,
-                                  )}
-                                  onAdd={() =>
-                                    openMemberPicker(
-                                      card.id,
-                                      homeBoardId,
-                                      "assign",
-                                      assignees,
-                                    )
-                                  }
-                                  size="xs"
-                                />
-                              </div>
-                              <div className="flex min-w-0 flex-col items-center gap-0.5">
-                                <span className="text-[0.38rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
-                                  участн.
-                                </span>
-                                <ListMembersCell
-                                  userIds={participants}
-                                  variant="participant"
-                                  homeBoard={rowBoard}
-                                  canManage={Boolean(
-                                    onUpdateCardMembers && canManageParticipants,
-                                  )}
-                                  onAdd={() =>
-                                    openMemberPicker(
-                                      card.id,
-                                      homeBoardId,
-                                      "part",
-                                      participants,
-                                    )
-                                  }
-                                  size="xs"
-                                />
-                              </div>
-                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="hidden min-h-[2rem] sm:flex sm:max-w-[10rem] sm:items-start sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
-                      <span className="min-w-0 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]">
+                    <div
+                      className="hidden min-h-[2rem] sm:flex sm:items-start sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5"
+                      style={{ width: `${longestColumnTitleCh + 2}ch` }}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]">
                         {columnTitle}
                       </span>
                       {onAdvanceCardColumn ? (
