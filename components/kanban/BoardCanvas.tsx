@@ -58,10 +58,8 @@ import {
 import { createPortal } from "react-dom";
 import {
   IconBrick,
-  IconClock,
   IconDots,
   IconGrip,
-  IconListCheck,
   IconPen,
   IconPlus,
   IconTrash,
@@ -272,32 +270,40 @@ function KanbanCardView({
   const blocked = isCardBlocked(card);
   const accent = getCardTypeAccent(homeBoard, card.cardTypeId);
   const ct = (homeBoard.cardTypes || []).find((t) => t.id === card.cardTypeId);
-  const cl = card.parentCardId
-    ? card.productionChecklist || []
-    : card.checklist || [];
-  const done = cl.filter((i) => i.completed).length;
-  const pct = cl.length ? Math.round((done / cl.length) * 100) : 0;
   const assignees = card.assignees || [];
   /** Участники — отдельная роль от ответственных; один пользователь может быть в обоих списках. */
   const participants = card.participants || [];
   const stageDue = getKanbanStageDue(card);
+  const urgent = !!card.urgent;
 
-  let dueClass =
-    "rounded border px-1 py-0.5 text-[0.62rem] font-semibold leading-none max-md:px-1 max-md:py-[1px] max-md:text-[0.55rem]";
+  const primaryMemberId = assignees[0] || participants[0] || null;
+  const stackMemberIds: string[] = [];
+  for (const id of [...assignees, ...participants]) {
+    if (!id || id === primaryMemberId) continue;
+    if (stackMemberIds.includes(id)) continue;
+    stackMemberIds.push(id);
+  }
+  const stackVisible = stackMemberIds.slice(0, 4);
+  const stackOverflow = stackMemberIds.length - stackVisible.length;
+
+  let duePillClass =
+    "inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[0.58rem] font-medium tabular-nums leading-none sm:text-[0.62rem]";
   if (stageDue) {
     const cat = dueCategory(stageDue);
     if (cat === "overdue")
-      dueClass +=
-        " border-[color-mix(in_srgb,var(--kanban-overdue)_25%,transparent)] bg-[color-mix(in_srgb,var(--kanban-overdue)_8%,transparent)] text-[var(--kanban-overdue)]";
+      duePillClass +=
+        " border-[color-mix(in_srgb,var(--kanban-overdue)_35%,transparent)] bg-[color-mix(in_srgb,var(--kanban-overdue)_12%,transparent)] text-[var(--kanban-overdue)]";
     else if (cat === "today")
-      dueClass +=
-        " border-[color-mix(in_srgb,var(--kanban-today)_25%,transparent)] bg-[color-mix(in_srgb,var(--kanban-today)_10%,transparent)] text-[var(--kanban-today)]";
+      duePillClass +=
+        " border-[color-mix(in_srgb,var(--kanban-today)_35%,transparent)] bg-[color-mix(in_srgb,var(--kanban-today)_12%,transparent)] text-[var(--kanban-today)]";
     else
-      dueClass +=
-        " border-[color-mix(in_srgb,var(--kanban-future)_20%,transparent)] bg-[color-mix(in_srgb,var(--kanban-future)_8%,transparent)] text-[var(--kanban-future)]";
+      duePillClass +=
+        " border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] text-[var(--kanban-text)]";
+  } else {
+    duePillClass +=
+      " border-[var(--kanban-border)] bg-black/[0.04] text-[var(--kanban-text-muted)] dark:bg-white/[0.04]";
   }
 
-  const urgent = !!card.urgent;
   const typeRing = dragOverStop
     ? {
         background:
@@ -311,13 +317,16 @@ function KanbanCardView({
       : "transition-[box-shadow,transform,border-color]";
 
   return (
-    <div data-card-id={card.id} className="block w-full min-w-0 shrink-0 touch-pan-x touch-pan-y">
+    <div
+      data-card-id={card.id}
+      className="block h-[7.75rem] w-full min-w-0 shrink-0 touch-pan-x touch-pan-y sm:h-[8.5rem]"
+    >
       <div
-        className="relative rounded-[9px] p-[2px] max-md:rounded-[7px] max-md:p-[1.5px]"
+        className="relative h-full rounded-[9px] p-[2px] max-md:rounded-[7px] max-md:p-[1.5px]"
         style={typeRing}
       >
         <article
-          className={`relative overflow-visible border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.1] rounded-[7px] max-md:rounded-[6px] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] hover:shadow-[var(--kanban-shadow-elevated)] ${dragArticleClass}`}
+          className={`relative flex h-full flex-col overflow-hidden border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.1] rounded-[7px] max-md:rounded-[6px] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] ${dragArticleClass}`}
           {...(dragListeners ?? {})}
           onMouseMove={(event) => {
             if (hoverPreviewEnabled && onPreviewMove) onPreviewMove(card, event);
@@ -328,129 +337,101 @@ function KanbanCardView({
             onOpen();
           }}
         >
-          <div className="overflow-hidden rounded-[7px] max-md:rounded-[6px]">
-            {blocked && (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[7px] max-md:rounded-[6px]">
+            {blocked ? (
               <div
-                className="flex items-start gap-1 border-b-2 border-[#7f1d1d] bg-gradient-to-b from-[#dc2626] to-[#b91c1c] py-1.5 pl-2 pr-7 text-[0.62rem] font-bold uppercase leading-snug tracking-wide text-white max-md:gap-1 max-md:py-1 max-md:pl-1.5 max-md:pr-6 max-md:text-[0.58rem] dark:from-[#c02626] dark:to-[#991b1b]"
+                className="flex shrink-0 items-center gap-1 border-b border-[#7f1d1d] bg-gradient-to-b from-[#dc2626] to-[#b91c1c] px-1.5 py-0.5 text-[0.55rem] font-bold uppercase leading-none tracking-wide text-white dark:from-[#c02626] dark:to-[#991b1b]"
                 aria-label={(card.blockReason || "").trim() || "Карточка остановлена"}
               >
-                <IconBrick className="h-3.5 w-3.5 shrink-0 text-white max-md:h-3 max-md:w-3" />
-                <span className="line-clamp-4 min-w-0 break-words">
+                <IconBrick className="h-3 w-3 shrink-0 text-white" />
+                <span className="min-w-0 truncate">
                   {(card.blockReason || "").trim() || "Карточка остановлена"}
                 </span>
               </div>
-            )}
-            {ct && (
-              <div
-                className="border-b border-black/[0.08] pb-0.5 pl-2 pr-8 pt-0.5 text-[0.62rem] font-bold uppercase tracking-wide dark:border-white/[0.1] max-md:px-1.5 max-md:pb-0.5 max-md:pr-7 max-md:pt-0.5 max-md:text-[0.58rem]"
-                style={{
-                  color: `color-mix(in srgb, ${accent} 72%, var(--kanban-text))`,
-                  background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 14%, var(--kanban-card-bg)) 0%, color-mix(in srgb, ${accent} 6%, var(--kanban-card-bg)) 100%)`,
-                }}
-              >
-                {ct.name}
-              </div>
-            )}
+            ) : null}
+            <div
+              className="flex shrink-0 items-center gap-1 border-b border-black/[0.08] py-0.5 pl-1.5 pr-7 dark:border-white/[0.1] sm:pl-2 sm:pr-8"
+              style={{
+                color: `color-mix(in srgb, ${accent} 78%, var(--kanban-text))`,
+                background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 28%, var(--kanban-card-bg)) 0%, color-mix(in srgb, ${accent} 14%, var(--kanban-card-bg)) 100%)`,
+              }}
+            >
+              <span className="min-w-0 truncate text-[0.58rem] font-bold uppercase tracking-wide sm:text-[0.62rem]">
+                {ct?.name ?? "—"}
+              </span>
+              {urgent ? (
+                <span
+                  className="inline-flex shrink-0 items-center rounded-full border border-orange-300/50 bg-gradient-to-b from-orange-500 to-red-600 px-1.5 py-0.5 text-[0.5rem] font-extrabold uppercase leading-none tracking-wide text-white shadow-sm"
+                  title="Срочно"
+                >
+                  Срочно
+                </span>
+              ) : null}
+            </div>
             {foreignBoardLabel ? (
               <div
-                className="border-b border-black/[0.08] px-2 py-0.5 text-[0.52rem] font-medium leading-tight text-[var(--kanban-text-muted)] dark:border-white/[0.08] max-md:px-1.5 max-md:py-0.5 max-md:text-[0.5rem]"
+                className="shrink-0 truncate border-b border-black/[0.08] px-1.5 py-0.5 text-[0.5rem] font-medium leading-none text-[var(--kanban-text-muted)] dark:border-white/[0.08] sm:px-2"
                 title={`Карточка с доски «${foreignBoardLabel}»`}
               >
                 <span className="opacity-80">Доска:</span>{" "}
                 <span className="text-[var(--kanban-text)]">{foreignBoardLabel}</span>
               </div>
             ) : null}
-            <div className="pl-2 pr-8 pb-2 pt-0.5 max-md:pl-1.5 max-md:pr-7 max-md:pb-1.5 max-md:pt-0">
-              <div className="text-[0.8125rem] font-semibold leading-tight text-[var(--kanban-text)] max-md:text-[11px] max-md:leading-tight">
-                {card.title}
+            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-1 px-1.5 pb-0.5 pt-1 sm:gap-1.5 sm:px-2 sm:pt-1.5">
+              <div className="min-w-0 text-[0.72rem] font-semibold leading-snug text-[var(--kanban-text)] sm:text-[0.8rem]">
+                <span className="line-clamp-3 break-words">{card.title}</span>
               </div>
-              <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 max-md:mt-1 max-md:gap-1">
-                <div className="flex flex-wrap items-center gap-1 text-[0.68rem] text-[var(--kanban-text-muted)] max-md:gap-1 max-md:text-[0.62rem]">
-                  {stageDue && (
-                    <span className={dueClass}>
-                      <span className="inline-flex items-center gap-1 max-md:gap-0.5">
-                        <IconClock className="h-3.5 w-3.5 max-md:h-3 max-md:w-3" />
-                        {formatDate(stageDue)}
-                      </span>
-                    </span>
-                  )}
-                  {urgent && (
-                    <span
-                      className="inline-flex shrink-0 items-center rounded-full border border-orange-400/40 bg-gradient-to-b from-orange-500 to-red-600 px-1.5 py-0.5 text-[0.55rem] font-bold uppercase leading-none tracking-wide text-white shadow-sm max-md:px-1 max-md:py-[1px] max-md:text-[0.5rem]"
-                      title="Срочно"
-                    >
-                      Срочно
-                    </span>
-                  )}
-                  {cl.length > 0 && (
-                    <div className="flex items-center gap-1 max-md:gap-0.5">
-                      <IconListCheck className="max-md:h-3 max-md:w-3" />
-                      <span>
-                        {done}/{cl.length}
-                      </span>
-                      <div className="h-1.5 w-10 overflow-hidden rounded-full bg-[var(--kanban-border)] max-md:h-1 max-md:w-9">
-                        <div
-                          className="h-full rounded-full bg-[var(--kanban-accent)] opacity-85"
-                          style={{ width: `${pct}%` }}
+              <div className="flex shrink-0 items-start gap-0.5 self-start">
+                {primaryMemberId ? (
+                  <KanbanPersonAvatar
+                    userId={primaryMemberId}
+                    homeBoard={homeBoard}
+                    variant={
+                      assignees.includes(primaryMemberId) ? "assignee" : "participant"
+                    }
+                    size="listSm"
+                    nameArc
+                    titleSuffix=""
+                  />
+                ) : null}
+                {stackVisible.length > 0 || stackOverflow > 0 ? (
+                  <div
+                    className="-space-y-1.5 flex flex-col items-center"
+                    title="Участники и ответственные"
+                  >
+                    {stackVisible.map((uid) => (
+                      <span key={uid} className="relative">
+                        <KanbanPersonAvatar
+                          userId={uid}
+                          homeBoard={homeBoard}
+                          variant={
+                            assignees.includes(uid) ? "assignee" : "participant"
+                          }
+                          size="xs"
+                          titleSuffix=""
                         />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                      </span>
+                    ))}
+                    {stackOverflow > 0 ? (
+                      <span className="relative z-[1] inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-black/40 text-[0.45rem] font-bold text-white">
+                        +{stackOverflow}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-              {(assignees.length > 0 || participants.length > 0) && (
-                <div className="mt-1 flex flex-wrap items-center justify-end gap-1 max-md:mt-1">
-                  {assignees.length > 0 && (
-                    <div className="-space-x-1.5 flex" title="Ответственные">
-                      {assignees.slice(0, 5).map((uid) => (
-                        <span key={uid} className="first:ml-0">
-                          <KanbanPersonAvatar
-                            userId={uid}
-                            homeBoard={homeBoard}
-                            variant="assignee"
-                            size="card"
-                            titleSuffix=""
-                          />
-                        </span>
-                      ))}
-                      {assignees.length > 5 && (
-                        <span className="ml-0.5 text-[0.6rem] text-[var(--kanban-text-muted)]">
-                          +{assignees.length - 5}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {participants.length > 0 && (
-                    <div className="flex border-l border-[var(--kanban-border)] pl-1" title="Участники">
-                      <div className="-space-x-1.5 flex">
-                        {participants.slice(0, 4).map((uid) => (
-                          <span key={uid} className="first:ml-0 opacity-90">
-                            <KanbanPersonAvatar
-                              userId={uid}
-                              homeBoard={homeBoard}
-                              variant="participant"
-                              size="card"
-                              titleSuffix=""
-                            />
-                          </span>
-                        ))}
-                        {participants.length > 4 && (
-                          <span className="ml-0.5 text-[0.6rem] text-[var(--kanban-text-muted)]">
-                            +{participants.length - 4}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+            </div>
+            <div className="mt-auto flex shrink-0 items-center gap-1 px-1.5 pb-1.5 pt-0.5 sm:px-2 sm:pb-2">
+              <span className={duePillClass} title={stageDue ? "Срок этапа" : "Срок не задан"}>
+                {stageDue ? formatDate(stageDue) : "дд.мм.гггг"}
+              </span>
+              <KanbanTimerIcon
+                card={card}
+                className="ml-auto shrink-0"
+                sizeClassName="h-4 w-4 sm:h-[1.125rem] sm:w-[1.125rem]"
+              />
             </div>
           </div>
-          <KanbanTimerIcon
-            card={card}
-            className="pointer-events-none absolute bottom-1.5 right-1.5 z-10 max-md:bottom-1.5 max-md:right-1.5"
-            sizeClassName="h-5 w-5 max-md:h-[1.125rem] max-md:w-[1.125rem]"
-          />
           <div
             className="card-more-menu absolute right-0.5 top-0.5 z-10 max-md:right-0 max-md:top-0"
             ref={menuRef}
@@ -458,7 +439,7 @@ function KanbanCardView({
           >
             <button
               type="button"
-              className="rounded-md p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/10 dark:hover:bg-white/10 max-md:p-0.5"
+              className="rounded-md p-0.5 text-current opacity-80 hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/15 max-md:p-0.5"
               title="Действия"
               aria-label="Меню карточки"
               onClick={(e) => {
@@ -600,7 +581,12 @@ function SortableKanbanCard({
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} className="w-full min-w-0">
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      className="h-[7.75rem] w-full min-w-0 shrink-0 sm:h-[8.5rem]"
+    >
       <KanbanCardView
         card={card}
         homeBoard={homeBoard}

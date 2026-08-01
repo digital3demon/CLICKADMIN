@@ -30,7 +30,7 @@ const slots = new Map<string, WriteSlot>();
 
 const COOLDOWN_HARD_MS = 5 * 60_000;
 const COOLDOWN_NETWORK_MS = 60_000;
-const WARN_EVERY_MS = 60_000;
+const WARN_EVERY_MS = 5 * 60_000;
 
 function skipKey(scope: string, key: string): string {
   return `${scope}:${key}`;
@@ -102,9 +102,10 @@ async function flushWrite(
   const sized = clientStatePayloadTooLarge(scope, key, value);
   if (sized.tooLarge) {
     slot.skipUntil = Date.now() + COOLDOWN_HARD_MS;
+    // Один warn на cooldown: без точных байт в тексте — иначе каждый PUT логирует снова.
     warnOnce(
       slot,
-      `[client-state] skip PUT ${scope}/${key}: ${sized.bytes} bytes > ${CLIENT_STATE_MAX_JSON_BYTES} (cooldown ${COOLDOWN_HARD_MS / 1000}s)`,
+      `[client-state] skip PUT ${scope}/${key}: payload > ${CLIENT_STATE_MAX_JSON_BYTES} bytes (cooldown ${COOLDOWN_HARD_MS / 1000}s)`,
     );
     return false;
   }

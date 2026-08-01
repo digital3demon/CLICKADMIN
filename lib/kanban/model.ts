@@ -21,6 +21,7 @@ import {
 } from "@/lib/kanban/kaiten-linked-order";
 import { applyKanbanLegacyStageDueClearMigration, getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
+import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
 
 export const STORAGE_KEY = "kanban-app-state-v3";
 export const STORAGE_KEY_LEGACY = "kanban-app-state-v2";
@@ -1212,72 +1213,135 @@ export function kanbanStateForPersistence(
   state: KanbanAppState,
   isDemo = false,
 ): KanbanAppState {
-  const base = isDemo
-    ? { ...state, search: "" }
-    : stripPersonalKanbanUiForTenant(state);
-  return slimKanbanStateForClientState(base);
+  return kanbanStateForPersistenceUnderLimit(state, isDemo);
 }
 
-const PERSIST_DESC_MAX = 200;
-const PERSIST_COMMENT_MAX = 120;
-/** Чат живёт в наряде/Kaiten — в tenant-снимке держим минимум, иначе PUT > лимита. */
-const PERSIST_COMMENTS_KEEP = 5;
-const PERSIST_ACTIVITY_KEEP = 5;
-/** В архиве/СТОП тяжёлые поля не нужны для зеркала доски. */
-const PERSIST_ARCHIVE_DESC_MAX = 80;
+const PERSIST_DESC_MAX = 120;
+/** Чат зеркалится в наряде/Kaiten — в tenant JSON не тащим. */
+const PERSIST_COMMENTS_KEEP = 0;
+const PERSIST_ACTIVITY_KEEP = 2;
+const PERSIST_FILES_KEEP = 6;
+const PERSIST_ARCHIVE_DESC_MAX = 40;
+const PERSIST_ARCHIVE_ROWS_KEEP = 30;
+const PERSIST_STOPPED_ROWS_KEEP = 30;
+/** Цель: JSON {scope,key,value} < CLIENT_STATE_MAX (600KB). */
+const PERSIST_TARGET_JSON_BYTES = 560_000;
+
+function slimProductionSnapshots(
+  card: KanbanCard,
+  dropEntirely: boolean,
+): void {
+  if (!Array.isArray(card.productionChecklistSnapshots)) return;
+  if (dropEntirely) {
+    card.productionChecklistSnapshots = [];
+    return;
+  }
+  card.productionChecklistSnapshots = card.productionChecklistSnapshots
+    .slice(-3)
+    .map((row) => ({
+      ...row,
+      checklist: (row.checklist || []).slice(0, 40).map((item) => ({
+        ...item,
+        text:
+          typeof item.text === "string" && item.text.length > 80
+            ? `${item.text.slice(0, 80)}…`
+            : item.text,
+        reworkEvents: undefined,
+      })),
+    }));
+}
+
+function slimCardFiles(card: KanbanCard, archiveLike: boolean, keep: number): void {
+  if (!Array.isArray(card.files) || card.files.length === 0) return;
+  if (archiveLike || keep <= 0) {
+    card.files = [];
+    return;
+  }
+  card.files = card.files.slice(-keep).map((f) => {
+    const d = f.dataUrl || "";
+    if (d.startsWith("data:")) {
+      return { ...f, dataUrl: "" };
+    }
+    return f;
+  });
+}
 
 /** Ужимает карточки перед записью в TenantClientState / UserClientState. */
 export function slimKanbanStateForClientState(
   state: KanbanAppState,
+  level: 0 | 1 | 2 = 0,
 ): KanbanAppState {
   const next = structuredClone(state);
 
+  const commentsKeep = level >= 1 ? 0 : PERSIST_COMMENTS_KEEP;
+  const activityKeep = level >= 1 ? 0 : PERSIST_ACTIVITY_KEEP;
+  const filesKeep = level >= 2 ? 0 : level >= 1 ? 2 : PERSIST_FILES_KEEP;
+  const descMax =
+    level >= 2 ? 60 : level >= 1 ? 80 : PERSIST_DESC_MAX;
+  const archiveKeep =
+    level >= 2 ? 10 : level >= 1 ? 20 : PERSIST_ARCHIVE_ROWS_KEEP;
+  const stoppedKeep =
+    level >= 2 ? 10 : level >= 1 ? 20 : PERSIST_STOPPED_ROWS_KEEP;
+  const dropSnapshots = level >= 1;
+
   const slimCard = (card: KanbanCard, archiveLike = false) => {
-    const descMax = archiveLike ? PERSIST_ARCHIVE_DESC_MAX : PERSIST_DESC_MAX;
+    const dMax = archiveLike ? PERSIST_ARCHIVE_DESC_MAX : descMax;
     if (
       typeof card.description === "string" &&
-      card.description.length > descMax
+      card.description.length > dMax
     ) {
-      card.description = card.description.slice(0, descMax) + "…";
+      card.description = card.description.slice(0, dMax) + "…";
     }
     // data:URL (скриншоты/файлы из чата) — главный раздуватель JSON (~МБ → 500 на PUT).
-    // URL вида /api/orders/.../attachments/... оставляем.
-    if (Array.isArray(card.files) && card.files.length > 0) {
-      if (archiveLike) {
-        card.files = [];
-      } else {
-        card.files = card.files.map((f) => {
-          const d = f.dataUrl || "";
-          if (d.startsWith("data:")) {
-            return { ...f, dataUrl: "" };
-          }
-          return f;
-        });
-      }
+    slimCardFiles(card, archiveLike, archiveLike ? 0 : filesKeep);
+    slimProductionSnapshots(card, archiveLike || dropSnapshots);
+    if (Array.isArray(card.productionChecklist) && card.productionChecklist.length > 0) {
+      card.productionChecklist = card.productionChecklist.slice(0, level >= 2 ? 20 : 60).map(
+        (item) => ({
+          ...item,
+          reworkEvents: undefined,
+          text:
+            typeof item.text === "string" && item.text.length > 100
+              ? `${item.text.slice(0, 100)}…`
+              : item.text,
+        }),
+      );
     }
     if (archiveLike) {
       card.comments = [];
       card.activity = [];
       return;
     }
-    if (Array.isArray(card.comments) && card.comments.length > 0) {
-      const kept = card.comments.slice(-PERSIST_COMMENTS_KEEP);
-      card.comments = kept.map((cm) => {
+    if (commentsKeep <= 0) {
+      card.comments = [];
+    } else if (Array.isArray(card.comments) && card.comments.length > 0) {
+      card.comments = card.comments.slice(-commentsKeep).map((cm) => {
         const text =
-          typeof cm.text === "string" && cm.text.length > PERSIST_COMMENT_MAX
-            ? cm.text.slice(0, PERSIST_COMMENT_MAX) + "…"
+          typeof cm.text === "string" && cm.text.length > 80
+            ? cm.text.slice(0, 80) + "…"
             : cm.text;
         return { ...cm, text };
       });
     }
-    if (Array.isArray(card.activity) && card.activity.length > PERSIST_ACTIVITY_KEEP) {
-      card.activity = card.activity.slice(-PERSIST_ACTIVITY_KEEP);
+    if (activityKeep <= 0) {
+      card.activity = [];
+    } else if (Array.isArray(card.activity) && card.activity.length > activityKeep) {
+      card.activity = card.activity.slice(-activityKeep);
+    }
+    if (typeof card.kaitenMembersSyncWarning === "string" && level >= 1) {
+      card.kaitenMembersSyncWarning = null;
     }
   };
 
   for (const board of next.boards) {
     for (const col of board.columns || []) {
       for (const card of col.cards || []) slimCard(card, false);
+    }
+    if (Array.isArray(board.archivedCards) && board.archivedCards.length > archiveKeep) {
+      board.archivedCards = board.archivedCards.slice(-archiveKeep);
+    }
+    if (Array.isArray(board.stoppedCards) && board.stoppedCards.length > stoppedKeep) {
+      board.stoppedCards = board.stoppedCards.slice(-stoppedKeep);
     }
     for (const row of board.archivedCards || []) {
       if (row?.card) slimCard(row.card, true);
@@ -1287,6 +1351,34 @@ export function slimKanbanStateForClientState(
     }
   }
   return next;
+}
+
+/**
+ * Slim + при необходимости более жёсткие уровни, пока payload не влезет в лимит PUT.
+ */
+export function kanbanStateForPersistenceUnderLimit(
+  state: KanbanAppState,
+  isDemo = false,
+  maxBytes = PERSIST_TARGET_JSON_BYTES,
+): KanbanAppState {
+  const base = isDemo
+    ? { ...state, search: "" }
+    : stripPersonalKanbanUiForTenant(state);
+
+  let best = slimKanbanStateForClientState(base, 0);
+  for (const level of [0, 1, 2] as const) {
+    const candidate =
+      level === 0 ? best : slimKanbanStateForClientState(base, level);
+    best = candidate;
+    const sized = clientStatePayloadTooLarge(
+      isDemo ? "user" : "tenant",
+      isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3",
+      candidate,
+      maxBytes,
+    );
+    if (!sized.tooLarge) return candidate;
+  }
+  return best;
 }
 
 export function mergeKanbanStatePreservingLocalBoards(

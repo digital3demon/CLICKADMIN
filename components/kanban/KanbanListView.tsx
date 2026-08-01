@@ -28,7 +28,7 @@ import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 const LIST_GRID =
-  "grid grid-cols-1 gap-y-1 gap-x-2 sm:grid-cols-[minmax(0,1.85fr)_minmax(6.5rem,1.05fr)_minmax(6.5rem,6.85rem)_minmax(4.25rem,4.75rem)_minmax(5.25rem,0.72fr)_minmax(5.25rem,0.72fr)] sm:items-center sm:gap-y-0";
+  "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:w-max sm:max-w-full sm:grid-cols-[minmax(12rem,28rem)_max-content_max-content_max-content_max-content_max-content] sm:items-center sm:justify-items-start sm:gap-x-2 sm:gap-y-0";
 
 function IconChevronRight(props: { className?: string }) {
   return (
@@ -65,9 +65,10 @@ function ListMemberAddButton({
   onClick: () => void;
   size?: "xs" | "sm";
 }) {
-  // Desktop sm: +50% к прежним 18px → 27px; mobile xs = как аватар list
-  const dim = size === "xs" ? "h-6 w-6" : "h-[27px] w-[27px]";
-  const icon = size === "xs" ? "h-3 w-3" : "h-[15px] w-[15px]";
+  // Одинаковый размер на mobile и desktop: как у аватара listSm (28px)
+  void size;
+  const dim = "h-7 w-7";
+  const icon = "h-3.5 w-3.5";
   return (
     <button
       type="button"
@@ -102,7 +103,8 @@ function ListMembersCell({
   size?: "xs" | "sm";
 }) {
   const isMobileList = size === "xs";
-  const avatarSize = isMobileList ? "list" : "listSm";
+  // Mobile = те же размеры, что desktop (listSm / + h-7)
+  const avatarSize = "listSm";
   const maxVisible = isMobileList ? 3 : 5;
   const visible = userIds.slice(0, maxVisible);
   const overflow = userIds.length - visible.length;
@@ -111,15 +113,11 @@ function ListMembersCell({
       className={`flex min-w-0 flex-nowrap gap-0.5 ${
         isMobileList
           ? "items-center justify-start"
-          : "items-start justify-end sm:justify-start"
+          : "items-center justify-end sm:justify-start"
       }`}
     >
       {visible.length > 0 ? (
-        <div
-          className={`flex min-w-0 ${
-            isMobileList ? "items-center gap-0.5" : "items-start gap-1"
-          }`}
-        >
+        <div className="flex min-w-0 items-center gap-1">
           {visible.map((uid) => (
             <span key={uid} className="first:ml-0">
               <KanbanPersonAvatar
@@ -127,17 +125,15 @@ function ListMembersCell({
                 homeBoard={homeBoard}
                 variant={variant}
                 size={avatarSize}
-                nameArc={false}
-                nameCaption={!isMobileList}
+                nameArc={!isMobileList}
+                nameCaption={isMobileList}
                 titleSuffix=""
               />
             </span>
           ))}
           {overflow > 0 ? (
             <span
-              className={`inline-flex shrink-0 items-center justify-center rounded-full bg-black/[0.08] px-1 text-[0.55rem] font-semibold text-[var(--kanban-text-muted)] dark:bg-white/[0.1] ${
-                isMobileList ? "h-5 min-w-5" : "mt-1 h-7 min-w-7"
-              }`}
+              className="inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full bg-black/[0.08] px-1 text-[0.55rem] font-semibold text-[var(--kanban-text-muted)] dark:bg-white/[0.1]"
               title={`Ещё ${overflow}`}
             >
               +{overflow}
@@ -146,15 +142,13 @@ function ListMembersCell({
         </div>
       ) : null}
       {canManage ? (
-        <span className={isMobileList ? undefined : "pt-0.5"}>
-          <ListMemberAddButton
-            title={
-              variant === "assignee" ? "Добавить ответственного" : "Добавить участника"
-            }
-            onClick={onAdd}
-            size={size}
-          />
-        </span>
+        <ListMemberAddButton
+          title={
+            variant === "assignee" ? "Добавить ответственного" : "Добавить участника"
+          }
+          onClick={onAdd}
+          size={size}
+        />
       ) : userIds.length === 0 ? (
         <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">—</span>
       ) : null}
@@ -282,7 +276,7 @@ function ListStageDueCell({
         title={canEditDueDate ? "Срок этапа (канбан)" : "Нет прав менять срок"}
         className={`${
           compact
-            ? "h-7 w-[6.75rem] min-w-0 px-1 py-0 text-[0.72rem] font-semibold"
+            ? "h-6 w-[6.5rem] min-w-0 px-1 py-0 text-[0.65rem] font-semibold"
             : "w-[6.85rem] px-1 py-0.5 text-[0.65rem]"
         } max-w-full shrink-0 rounded border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] leading-tight text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-50 ${
           dueUrgentRed ? "font-semibold text-red-500 dark:text-red-400" : ""
@@ -331,7 +325,7 @@ function ListUrgentPillButton({
           ? "Снять метку «Срочно» для следующего отдела (только канбан)"
           : "Срочно для следующего отдела (только канбан, наряд не меняется)"
       }
-      className={`shrink-0 rounded border px-1.5 py-[3px] text-[0.55rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`shrink-0 rounded-full border px-2 py-0.5 text-[0.5rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
         urgent
           ? "border-orange-600 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
           : "border-[var(--kanban-text-muted)] bg-transparent text-[var(--kanban-text)]"
@@ -611,7 +605,7 @@ export function KanbanListView({
             return (
               <div key={card.id} className="relative">
                 <article
-                  className="relative overflow-hidden rounded-md border-y border-r border-black/[0.1] border-l-[3px] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1]"
+                  className="relative overflow-hidden rounded-md border-y border-r border-black/[0.1] border-l-[3px] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1] sm:w-max sm:max-w-full"
                   style={{ borderLeftColor: accent }}
                   role="button"
                   tabIndex={0}
@@ -626,10 +620,10 @@ export function KanbanListView({
                   }}
                 >
                   <div className={`${LIST_GRID} cursor-pointer sm:px-0 sm:py-0`}>
-                    {/* Mobile: вертикальный тип | контент (по макету) */}
+                    {/* Mobile: тип буквами столбиком | контент */}
                     <div className="flex min-w-0 sm:contents">
                       <div
-                        className="flex w-[1.15rem] shrink-0 flex-col items-center justify-center gap-0.5 border-r border-black/[0.08] bg-black/[0.04] py-1 dark:border-white/[0.08] dark:bg-white/[0.04] sm:hidden"
+                        className="flex w-[1.35rem] shrink-0 flex-col items-center gap-0.5 border-r border-black/[0.08] bg-black/[0.04] px-px py-0.5 dark:border-white/[0.08] dark:bg-white/[0.04] sm:hidden"
                         title={ct?.name ?? "Тип"}
                         aria-label={ct?.name ?? "Тип"}
                       >
@@ -640,13 +634,16 @@ export function KanbanListView({
                           {initials}
                         </span>
                         <span
-                          className="max-h-[4.5rem] max-w-[0.95rem] overflow-hidden text-center text-[0.42rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]"
-                          style={{
-                            writingMode: "vertical-rl",
-                            transform: "rotate(180deg)",
-                          }}
+                          className="flex flex-col items-center text-[0.55rem] font-extrabold uppercase leading-[1.05] tracking-wide text-[var(--kanban-text-muted)]"
+                          aria-hidden
                         >
-                          {ct?.name ?? "—"}
+                          {Array.from((ct?.name ?? "—").toLocaleUpperCase("ru-RU")).map(
+                            (ch, i) => (
+                              <span key={`${ch}-${i}`} className="block">
+                                {ch === " " ? "·" : ch}
+                              </span>
+                            ),
+                          )}
                         </span>
                       </div>
                       <div className="min-w-0 flex-1 px-1 py-0.5 sm:contents">
@@ -662,13 +659,13 @@ export function KanbanListView({
                             <div className="hidden text-[0.55rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)] sm:block">
                               {ct?.name ?? "—"}
                             </div>
-                            <div className="flex min-w-0 items-center gap-1 text-[0.68rem] font-semibold leading-tight text-[var(--kanban-text)] sm:mt-0.5 sm:items-start sm:gap-1.5 sm:text-[0.8rem] sm:leading-snug">
-                              <span className="min-w-0 flex-1 truncate sm:line-clamp-none sm:whitespace-normal">
+                            <div className="flex min-w-0 items-start gap-1 text-[0.78rem] font-semibold leading-snug text-[var(--kanban-text)] sm:mt-0.5 sm:gap-1.5 sm:text-[0.8rem]">
+                              <span className="min-w-0 flex-1 whitespace-normal break-words sm:truncate sm:whitespace-nowrap">
                                 {card.title}
                               </span>
                               {blocked ? (
                                 <span
-                                  className="shrink-0"
+                                  className="mt-0.5 shrink-0"
                                   aria-label={(card.blockReason || "").trim() || "Остановлена"}
                                 >
                                   <IconBrick className="h-3.5 w-3.5 text-red-600 sm:h-4 sm:w-4 dark:text-red-500" />
@@ -676,19 +673,9 @@ export function KanbanListView({
                               ) : null}
                               <KanbanTimerIcon
                                 card={card}
-                                className="shrink-0"
+                                className="mt-0.5 shrink-0"
                                 sizeClassName="h-3.5 w-3.5 sm:h-4 sm:w-4"
                               />
-                              <span className="sm:hidden">
-                                <ListUrgentPillButton
-                                  urgent={urgent}
-                                  onUrgentChange={
-                                    onToggleUrgent
-                                      ? (next) => onToggleUrgent(card.id, homeBoardId, next)
-                                      : undefined
-                                  }
-                                />
-                              </span>
                             </div>
                             {(appState.search.trim() ||
                               isKanbanAggregateBoardId(appState.activeBoardId)) &&
@@ -709,11 +696,11 @@ export function KanbanListView({
                                 {done}/{cl.length}
                               </div>
                             ) : null}
-                            {/* Mobile: колонка+› | дата | отв./участн. */}
-                            <div className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(5.75rem,1.15fr)] items-center gap-x-1 sm:hidden">
+                            {/* Mobile: колонка и дата столбиком */}
+                            <div className="mt-0.5 flex min-w-0 flex-col gap-0.5 sm:hidden">
                               <div className="flex min-w-0 items-center gap-0.5">
                                 <span
-                                  className="min-w-0 truncate text-[0.8rem] font-semibold leading-tight text-[var(--kanban-text)]"
+                                  className="min-w-0 truncate text-[0.72rem] font-semibold leading-tight text-[var(--kanban-text)]"
                                   title={columnTitle}
                                 >
                                   {columnTitle}
@@ -737,7 +724,7 @@ export function KanbanListView({
                                       onAdvanceCardColumn(card.id);
                                     }}
                                   >
-                                    <IconChevronRight className="h-4 w-4" />
+                                    <IconChevronRight className="h-3.5 w-3.5" />
                                   </button>
                                 ) : null}
                               </div>
@@ -758,59 +745,70 @@ export function KanbanListView({
                                     : undefined
                                 }
                               />
-                              <div className="flex min-w-0 flex-col items-stretch gap-0.5">
-                                <div className="flex min-w-0 items-center gap-0.5">
-                                  <span className="w-7 shrink-0 text-[0.42rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
-                                    отв.
-                                  </span>
-                                  <ListMembersCell
-                                    userIds={assignees}
-                                    variant="assignee"
-                                    homeBoard={rowBoard}
-                                    canManage={Boolean(
-                                      onUpdateCardMembers && canManageAssignees,
-                                    )}
-                                    onAdd={() =>
-                                      openMemberPicker(
-                                        card.id,
-                                        homeBoardId,
-                                        "assign",
-                                        assignees,
-                                      )
-                                    }
-                                    size="xs"
-                                  />
-                                </div>
-                                <div className="flex min-w-0 items-center gap-0.5">
-                                  <span className="w-7 shrink-0 text-[0.42rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
-                                    участн.
-                                  </span>
-                                  <ListMembersCell
-                                    userIds={participants}
-                                    variant="participant"
-                                    homeBoard={rowBoard}
-                                    canManage={Boolean(
-                                      onUpdateCardMembers && canManageParticipants,
-                                    )}
-                                    onAdd={() =>
-                                      openMemberPicker(
-                                        card.id,
-                                        homeBoardId,
-                                        "part",
-                                        participants,
-                                      )
-                                    }
-                                    size="xs"
-                                  />
-                                </div>
+                            </div>
+                          </div>
+                          {/* Mobile: Срочно сверху, отв./участн. (+) сразу под ней */}
+                          <div className="flex w-[5.5rem] shrink-0 flex-col items-end gap-0.5 sm:hidden">
+                            <ListUrgentPillButton
+                              urgent={urgent}
+                              onUrgentChange={
+                                onToggleUrgent
+                                  ? (next) => onToggleUrgent(card.id, homeBoardId, next)
+                                  : undefined
+                              }
+                            />
+                            <div className="flex w-full flex-col items-end gap-0.5">
+                              <div className="flex min-w-0 items-start justify-end gap-0.5">
+                                <span className="mt-1 shrink-0 text-[0.42rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
+                                  отв.
+                                </span>
+                                <ListMembersCell
+                                  userIds={assignees}
+                                  variant="assignee"
+                                  homeBoard={rowBoard}
+                                  canManage={Boolean(
+                                    onUpdateCardMembers && canManageAssignees,
+                                  )}
+                                  onAdd={() =>
+                                    openMemberPicker(
+                                      card.id,
+                                      homeBoardId,
+                                      "assign",
+                                      assignees,
+                                    )
+                                  }
+                                  size="xs"
+                                />
+                              </div>
+                              <div className="flex min-w-0 items-start justify-end gap-0.5">
+                                <span className="mt-1 shrink-0 text-[0.42rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
+                                  участн.
+                                </span>
+                                <ListMembersCell
+                                  userIds={participants}
+                                  variant="participant"
+                                  homeBoard={rowBoard}
+                                  canManage={Boolean(
+                                    onUpdateCardMembers && canManageParticipants,
+                                  )}
+                                  onAdd={() =>
+                                    openMemberPicker(
+                                      card.id,
+                                      homeBoardId,
+                                      "part",
+                                      participants,
+                                    )
+                                  }
+                                  size="xs"
+                                />
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="hidden min-h-[1.75rem] sm:flex sm:items-center sm:justify-between sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
-                      <span className="min-w-0 flex-1 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]">
+                    <div className="hidden min-h-[1.75rem] sm:flex sm:max-w-[10rem] sm:items-center sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
+                      <span className="min-w-0 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]">
                         {columnTitle}
                       </span>
                       {onAdvanceCardColumn ? (

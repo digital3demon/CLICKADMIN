@@ -79,13 +79,80 @@ describe("slimKanbanStateForClientState", () => {
 
     expect(card.files[0]!.dataUrl).toBe("");
     expect(card.files[1]!.dataUrl).toBe("/api/orders/ord1/attachments/att1");
-    expect(card.description.length).toBeLessThanOrEqual(201);
-    expect(card.comments).toHaveLength(5);
-    expect(card.comments.every((c) => c.text.length <= 121)).toBe(true);
-    expect(card.activity).toHaveLength(5);
+    expect(card.description.length).toBeLessThanOrEqual(121);
+    expect(card.comments).toHaveLength(0);
+    expect(card.activity).toHaveLength(2);
 
     const after = clientStatePayloadTooLarge("tenant", "kanbanAppStateV3", slim);
     expect(after.tooLarge).toBe(false);
+  });
+
+  it("level 2 drops files and snapshots to fit limit", () => {
+    const base = structuredClone(defaultAppState()) as KanbanAppState;
+    const ortho = base.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;
+    // Много карточек с длинными описаниями — level 0 может ещё влезать, level 2 точно чистит.
+    ortho.columns[0]!.cards = Array.from({ length: 40 }, (_, i) => ({
+      id: `c${i}`,
+      title: `t${i}`,
+      description: "x".repeat(400),
+      cardTypeId: "",
+      assignees: [],
+      participants: [],
+      dueDate: "",
+      urgent: false,
+      checklist: [],
+      files: Array.from({ length: 12 }, (_, j) => ({
+        id: `f${i}-${j}`,
+        name: `f${j}.png`,
+        mime: "image/png",
+        size: 10,
+        dataUrl: `/api/orders/o/attachments/a${j}`,
+        addedAt: "2026-01-01T00:00:00.000Z",
+        addedByUserId: "u1",
+      })),
+      comments: [],
+      activity: [],
+      blocked: false,
+      blockReason: "",
+      blockedByUserId: "",
+      blockedAt: "",
+      createdByUserId: "u1",
+      lastMovedAt: null,
+      trackLane: "",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      productionChecklistSnapshots: [
+        {
+          childCardId: "ch",
+          childTitle: "child",
+          columnTitle: "col",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          checklist: Array.from({ length: 20 }, (_, k) => ({
+            id: `pc${k}`,
+            text: "stl".repeat(30),
+            completed: false,
+            sourceFileId: "sf",
+            sourceFileName: "a.stl",
+            fromArchive: false,
+            reworkEvents: ["a", "b", "c"],
+          })),
+        },
+      ],
+    }));
+
+    const slim0 = slimKanbanStateForClientState(base, 0);
+    const card0 = slim0.boards
+      .find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!
+      .columns[0]!.cards[0]!;
+    expect(card0.files.length).toBeLessThanOrEqual(6);
+    expect(card0.comments).toHaveLength(0);
+
+    const slim2 = slimKanbanStateForClientState(base, 2);
+    const card2 = slim2.boards
+      .find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!
+      .columns[0]!.cards[0]!;
+    expect(card2.files).toEqual([]);
+    expect(card2.productionChecklistSnapshots).toEqual([]);
   });
 
   it("strips chat/files from archived and stopped cards", () => {
@@ -159,7 +226,7 @@ describe("slimKanbanStateForClientState", () => {
     expect(arch.comments).toEqual([]);
     expect(arch.activity).toEqual([]);
     expect(arch.files).toEqual([]);
-    expect(arch.description.length).toBeLessThanOrEqual(81);
+    expect(arch.description.length).toBeLessThanOrEqual(41);
     expect(stop.comments).toEqual([]);
     expect(stop.files).toEqual([]);
   });

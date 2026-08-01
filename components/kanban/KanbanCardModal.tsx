@@ -1312,13 +1312,44 @@ export function KanbanCardModal({
                   }
                 }}
               />
-              <div className="mt-3 text-base leading-relaxed text-emerald-700/95 dark:text-emerald-400/95 sm:mt-4 sm:text-lg">
-                <span className="font-semibold">Создал(а):</span> {creatorLabel}
-                <span className="text-[var(--kaiten-modal-muted)]"> · </span>
+              <div className="mt-1.5 text-[0.7rem] leading-snug text-[var(--kaiten-modal-muted)] sm:mt-2 sm:text-[0.75rem]">
+                <span>создана</span>
+                {creatorLabel && creatorLabel !== "—" ? (
+                  <>
+                    <span> · </span>
+                    <span>{creatorLabel}</span>
+                  </>
+                ) : null}
+                <span> · </span>
                 <span>{createdWhen || "—"}</span>
               </div>
+              {card.continuesFromOrderId && card.continuesFromOrderNumber ? (
+                <p className="mt-1 text-[0.7rem] leading-snug text-[var(--kaiten-modal-muted)] sm:text-[0.75rem]">
+                  <span>Продолжение работы </span>
+                  <Link
+                    href={kanbanOrderDeepLinkPath(card.continuesFromOrderId)}
+                    className="font-medium text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
+                  >
+                    {card.continuesFromOrderNumber}
+                  </Link>
+                </p>
+              ) : null}
+              {(card.continuationFollowups ?? []).map((child) => (
+                <p
+                  key={child.orderId}
+                  className="mt-1 text-[0.7rem] leading-snug text-[var(--kaiten-modal-muted)] sm:text-[0.75rem]"
+                >
+                  <span>У этой работы есть продолжение </span>
+                  <Link
+                    href={kanbanOrderDeepLinkPath(child.orderId)}
+                    className="font-medium text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
+                  >
+                    {child.orderNumber}
+                  </Link>
+                </p>
+              ))}
               {card.lastMovedAt && (
-                <div className="mt-2 text-sm text-[var(--kaiten-modal-muted)] sm:text-base">
+                <div className="mt-1 text-[0.7rem] text-[var(--kaiten-modal-muted)] sm:text-[0.75rem]">
                   Перемещена · {relativeTimeRu(card.lastMovedAt)}
                 </div>
               )}
@@ -1333,7 +1364,7 @@ export function KanbanCardModal({
             </button>
           </div>
 
-          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 border-b border-[var(--kaiten-modal-border)] px-3 py-2.5">
+          <div className="flex w-full min-w-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-[var(--kaiten-modal-border)] px-2 py-1.5 sm:gap-1.5 sm:px-3 sm:py-2">
             <button
               type="button"
               title={
@@ -1344,7 +1375,7 @@ export function KanbanCardModal({
                   : KANBAN_BLOCK_PERM_HINT
               }
               disabled={!canManageKanbanBlock}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:cursor-not-allowed disabled:opacity-40"
               onClick={() => {
                 if (!canManageKanbanBlock) {
                   toast(KANBAN_BLOCK_PERM_HINT, true);
@@ -1381,102 +1412,119 @@ export function KanbanCardModal({
                 } else openBlockPopup();
               }}
             >
-              {blocked ? <IconUnlock className="h-4 w-4" /> : <IconBrick className="h-4 w-4" />}
+              {blocked ? <IconUnlock className="h-3.5 w-3.5" /> : <IconBrick className="h-3.5 w-3.5" />}
             </button>
             <button
               type="button"
               title={movePrevTitle}
               disabled={!canMoveColumns}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40"
               onClick={() => onMovePrevStage(cardId)}
             >
-              <IconArrowLeft />
+              <IconArrowLeft className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               title={moveNextTitle}
               disabled={!canMoveColumns}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40"
               onClick={() => onMoveNextStage(cardId)}
             >
-              <IconArrowRight />
+              <IconArrowRight className="h-3.5 w-3.5" />
             </button>
-            <div className="mx-1 h-6 w-px bg-[var(--kaiten-modal-border)]" aria-hidden />
-            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-              <div className="flex shrink-0 items-center gap-1.5">
-                <span className="text-[0.65rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+            <div className="mx-0.5 h-5 w-px shrink-0 bg-[var(--kaiten-modal-border)]" aria-hidden />
+            <div className="flex min-w-0 shrink items-center gap-1.5 overflow-x-auto">
+              <button
+                type="button"
+                disabled={!canManageAssignees}
+                title={
+                  canManageAssignees
+                    ? "Ответственные — нажмите, чтобы изменить"
+                    : "Нет прав менять ответственных"
+                }
+                className="flex shrink-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-0.5 text-left hover:bg-[var(--kaiten-modal-control)] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setPickerMode("assign")}
+              >
+                <span className="text-[0.5rem] font-medium uppercase leading-none tracking-wide text-[var(--kaiten-modal-muted)]">
                   Отв.
                 </span>
-                {(card.assignees || []).map((uid) => (
-                  <span key={uid}>
-                    <KanbanPersonAvatar
-                      userId={uid}
-                      homeBoard={board}
-                      variant="assignee"
-                      size="md"
-                      titleSuffix=""
-                    />
+                <div className="flex items-start gap-0.5">
+                  {(card.assignees || []).map((uid) => (
+                    <span key={uid} className="pointer-events-none">
+                      <KanbanPersonAvatar
+                        userId={uid}
+                        homeBoard={board}
+                        variant="assignee"
+                        size="sm"
+                        nameCaption
+                        titleSuffix=""
+                      />
+                    </span>
+                  ))}
+                  <span
+                    className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
+                    aria-hidden
+                  >
+                    <IconPlus className="h-2.5 w-2.5" />
                   </span>
-                ))}
-                <button
-                  type="button"
-                  disabled={!canManageAssignees}
-                  title="Добавить ответственного"
-                  className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
-                  onClick={() => setPickerMode("assign")}
-                >
-                  <IconPlus className="h-2.5 w-2.5" />
-                </button>
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <span className="text-[0.65rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+                </div>
+              </button>
+              <button
+                type="button"
+                disabled={!canManageParticipants}
+                title={
+                  canManageParticipants
+                    ? "Участники — нажмите, чтобы изменить"
+                    : "Нет прав менять участников"
+                }
+                className="flex shrink-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-0.5 text-left hover:bg-[var(--kaiten-modal-control)] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setPickerMode("part")}
+              >
+                <span className="text-[0.5rem] font-medium uppercase leading-none tracking-wide text-[var(--kaiten-modal-muted)]">
                   Участн.
                 </span>
-                {(card.participants || []).map((uid) => (
-                  <span key={uid}>
-                    <KanbanPersonAvatar
-                      userId={uid}
-                      homeBoard={board}
-                      variant="participant"
-                      size="md"
-                      titleSuffix=""
-                    />
+                <div className="flex items-start gap-0.5">
+                  {(card.participants || []).map((uid) => (
+                    <span key={uid} className="pointer-events-none">
+                      <KanbanPersonAvatar
+                        userId={uid}
+                        homeBoard={board}
+                        variant="participant"
+                        size="sm"
+                        nameCaption
+                        titleSuffix=""
+                      />
+                    </span>
+                  ))}
+                  <span
+                    className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
+                    aria-hidden
+                  >
+                    <IconPlus className="h-2.5 w-2.5" />
                   </span>
-                ))}
-                <button
-                  type="button"
-                  disabled={!canManageParticipants}
-                  title="Добавить участника"
-                  className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] disabled:opacity-40"
-                  onClick={() => setPickerMode("part")}
-                >
-                  <IconPlus className="h-2.5 w-2.5" />
-                </button>
-              </div>
+                </div>
+              </button>
             </div>
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <div className="ml-auto flex shrink-0 items-center gap-1">
               {showOrderMailButton && card?.linkedOrderId ? (
                 <button
                   type="button"
                   title={`Письма наряда (${card.sourceEmailCount})`}
                   aria-label="Письма наряда"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)]"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)]"
                   onClick={() => setOrderMailOpen(true)}
                 >
-                  <IconMail className="h-4 w-4 shrink-0" />
+                  <IconMail className="h-3.5 w-3.5 shrink-0" />
                 </button>
               ) : null}
               <button
                 type="button"
                 title="Скопировать ссылку на карточку"
                 aria-label="Поделиться — копировать ссылку"
-                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2.5 text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)]"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)]"
                 onClick={() => onCopyCardLink(cardId)}
               >
-                <IconLink className="h-4 w-4 shrink-0" />
-                <span className="hidden text-[0.65rem] font-semibold uppercase tracking-wide sm:inline">
-                  Поделиться
-                </span>
+                <IconLink className="h-3.5 w-3.5 shrink-0" />
               </button>
             </div>
           </div>
@@ -1497,7 +1545,7 @@ export function KanbanCardModal({
                   aria-expanded={placementFieldsOpen}
                 >
                   <span className="min-w-0 truncate text-[0.65rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
-                    Расположение · столбец · тип
+                    Положение на доске
                     {!placementFieldsOpen ? (
                       <span className="ml-1.5 normal-case tracking-normal text-[var(--kaiten-modal-text)]">
                         {(
@@ -1765,33 +1813,6 @@ export function KanbanCardModal({
                     </button>
                   )}
                 </div>
-                {card.continuesFromOrderId && card.continuesFromOrderNumber ? (
-                  <p className="mb-2 text-sm text-[var(--kaiten-modal-text)]">
-                    <span className="font-medium">Продолжение работы </span>
-                    <Link
-                      href={kanbanOrderDeepLinkPath(card.continuesFromOrderId)}
-                      className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
-                    >
-                      {card.continuesFromOrderNumber}
-                    </Link>
-                  </p>
-                ) : null}
-                {(card.continuationFollowups ?? []).map((child) => (
-                  <p
-                    key={child.orderId}
-                    className="mb-2 text-sm text-[var(--kaiten-modal-text)]"
-                  >
-                    <span className="font-medium">
-                      У этой работы есть продолжение{" "}
-                    </span>
-                    <Link
-                      href={kanbanOrderDeepLinkPath(child.orderId)}
-                      className="font-semibold text-[var(--sidebar-blue)] underline-offset-2 hover:underline"
-                    >
-                      {child.orderNumber}
-                    </Link>
-                  </p>
-                ))}
                 <div className="grid min-h-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] sm:items-start">
                   <div className="min-w-0">
                     {descExpanded ? (
@@ -1993,7 +2014,7 @@ export function KanbanCardModal({
                   </span>
                   <button
                     type="button"
-                    className="text-[0.75rem] text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
+                    className="inline-flex items-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40"
                     disabled={!canManageKanbanChecklist}
                     onClick={addCheckItem}
                   >
@@ -2122,14 +2143,14 @@ export function KanbanCardModal({
             </div>
 
             <div className="flex w-full shrink-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:border-l sm:border-t-0">
-              <div className="flex overflow-hidden rounded-md border border-[var(--kaiten-modal-border)]">
+              <div className="flex flex-wrap gap-1.5 p-1.5">
                 {canUsePayrollDone ? (
                   <button
                     type="button"
-                    className={`flex-1 px-2 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide ${
+                    className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide ${
                       rightTab === "done"
-                        ? "bg-[var(--kaiten-modal-control)] text-[var(--kaiten-accent)] shadow-[inset_0_-2px_0_0_var(--kaiten-accent)]"
-                        : "bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-muted)]"
+                        ? "bg-[var(--kaiten-accent)]/15 text-[var(--kaiten-accent)] ring-1 ring-[var(--kaiten-accent)]/50"
+                        : "bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] ring-1 ring-[var(--kaiten-modal-border)] hover:text-[var(--kaiten-modal-text)]"
                     }`}
                     onClick={() => setRightTab("done")}
                   >
@@ -2138,10 +2159,10 @@ export function KanbanCardModal({
                 ) : null}
                 <button
                   type="button"
-                  className={`flex-1 px-2 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide ${
+                  className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide ${
                     rightTab === "chat"
-                      ? "bg-[var(--kaiten-modal-control)] text-[var(--kaiten-accent)] shadow-[inset_0_-2px_0_0_var(--kaiten-accent)]"
-                      : "bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-muted)]"
+                      ? "bg-[var(--kaiten-accent)]/15 text-[var(--kaiten-accent)] ring-1 ring-[var(--kaiten-accent)]/50"
+                      : "bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] ring-1 ring-[var(--kaiten-modal-border)] hover:text-[var(--kaiten-modal-text)]"
                   }`}
                   onClick={() => setRightTab("chat")}
                 >
@@ -2149,10 +2170,10 @@ export function KanbanCardModal({
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 px-2 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide ${
+                  className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide ${
                     rightTab === "act"
-                      ? "bg-[var(--kaiten-modal-control)] text-[var(--kaiten-accent)] shadow-[inset_0_-2px_0_0_var(--kaiten-accent)]"
-                      : "bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-muted)]"
+                      ? "bg-[var(--kaiten-accent)]/15 text-[var(--kaiten-accent)] ring-1 ring-[var(--kaiten-accent)]/50"
+                      : "bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] ring-1 ring-[var(--kaiten-modal-border)] hover:text-[var(--kaiten-modal-text)]"
                   }`}
                   onClick={() => setRightTab("act")}
                 >

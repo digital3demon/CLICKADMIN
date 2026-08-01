@@ -48,17 +48,27 @@ function polarOnCircle(
   return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
 }
 
-function AvatarNameArc({ label, pathId }: { label: string; pathId: string }) {
+function AvatarNameArc({
+  label,
+  pathId,
+  compact = true,
+}: {
+  label: string;
+  pathId: string;
+  /** list / listSm: дуга у обода с ~10:00 */
+  compact?: boolean;
+}) {
   if (!label) return null;
   // Центр совпадает с аватаром; дуга у обода, старт ~10:00 → ~1:30 (завал против часовой).
   const cx = 20;
   const cy = 20;
-  const r = 14.4;
+  const r = compact ? 14.4 : 15.6;
   const start = polarOnCircle(cx, cy, r, 128);
   const end = polarOnCircle(cx, cy, r, 38);
+  const box = compact ? "h-8 w-8" : "h-10 w-10";
   return (
     <svg
-      className="pointer-events-none absolute left-1/2 top-1/2 z-[1] h-8 w-8 -translate-x-1/2 -translate-y-1/2 overflow-visible text-[var(--kanban-text)]"
+      className={`pointer-events-none absolute left-1/2 top-1/2 z-[1] ${box} -translate-x-1/2 -translate-y-1/2 overflow-visible text-[var(--kanban-text)]`}
       viewBox="0 0 40 40"
       aria-hidden
     >
@@ -71,7 +81,7 @@ function AvatarNameArc({ label, pathId }: { label: string; pathId: string }) {
       </defs>
       <text
         fill="currentColor"
-        fontSize="6.5"
+        fontSize={compact ? "6.5" : "7.2"}
         fontWeight="600"
         letterSpacing="0.02em"
       >
@@ -190,12 +200,15 @@ export function KanbanPersonAvatar({
     );
   }
 
+  const arcCompact = size === "list" || size === "sm" || size === "card";
   return (
     <span
       title={title}
-      className="relative inline-flex h-6 w-7 shrink-0 items-center justify-center overflow-visible"
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-visible ${
+        arcCompact ? "h-6 w-7" : "h-8 w-9"
+      }`}
     >
-      <AvatarNameArc label={arcLabel} pathId={pathId} />
+      <AvatarNameArc label={arcLabel} pathId={pathId} compact={arcCompact} />
       <span className="relative z-0">{face}</span>
     </span>
   );

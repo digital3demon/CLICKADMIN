@@ -3,6 +3,7 @@
 import type { KanbanBoard } from "@/lib/kanban/types";
 import type { KanbanMemberPickerMode } from "@/lib/kanban/kanban-card-members-client";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 import {
   KanbanPersonAvatar,
@@ -44,14 +45,17 @@ export function KanbanMemberPickerDialog({
   onSave,
 }: KanbanMemberPickerDialogProps) {
   const { list: crmList } = useKanbanCrmUsers();
-  const [pickerIds, setPickerIds] = useState<string[]>([]);
+  const [pickerIds, setPickerIds] = useState<string[]>(() => [...initialUserIds]);
   const [pickerQuery, setPickerQuery] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setPickerIds([...initialUserIds]);
     setPickerQuery("");
-  }, [open, mode, initialUserIds]);
+    // Только при открытии / смене режима — иначе новый массив initialUserIds
+    // с каждого рендера родителя сбрасывает снятие галочек.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on open/mode only
+  }, [open, mode]);
 
   const pickerMerged = useMemo(
     () =>
@@ -82,9 +86,9 @@ export function KanbanMemberPickerDialog({
 
   if (!open) return null;
 
-  return (
+  const dialog = (
     <div
-      className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-[280] flex items-center justify-center bg-black/50 p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -176,4 +180,7 @@ export function KanbanMemberPickerDialog({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return dialog;
+  return createPortal(dialog, document.body);
 }
