@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CORRECTION_SOURCE_LABEL,
@@ -68,6 +68,11 @@ export function OrdersProstheticsHistoryTable({
   const [rows, setRows] = useState(() => items.map(toClientRow));
   const [busyId, setBusyId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // items приходят с сервера после смены q — без синка useState держит старый список
+  useEffect(() => {
+    setRows(items.map(toClientRow));
+  }, [items]);
 
   const toggleArrived = useCallback(
     async (row: ClientRow, next: boolean) => {

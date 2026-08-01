@@ -81,9 +81,9 @@ function AvatarNameArc({
       </defs>
       <text
         fill="currentColor"
-        fontSize={compact ? "6.5" : "7.2"}
-        fontWeight="600"
-        letterSpacing="0.02em"
+        fontSize={compact ? "9.5" : "10.5"}
+        fontWeight="700"
+        letterSpacing="0.01em"
       >
         <textPath href={`#${pathId}`} startOffset="0%" textAnchor="start">
           {label}
@@ -179,13 +179,22 @@ export function KanbanPersonAvatar({
   }
 
   if (nameCaption) {
+    const dense = size === "sm" || size === "card" || size === "xs";
     return (
       <span
         title={title}
-        className="inline-flex max-w-[4.2rem] flex-col items-center gap-0.5"
+        className={`inline-flex flex-col items-center gap-0.5 ${
+          dense ? "max-w-[3.1rem]" : "max-w-[4.2rem]"
+        }`}
       >
         {face}
-        <span className="w-full truncate text-center text-[0.68rem] font-semibold leading-tight text-[var(--kanban-text)] sm:text-[0.75rem]">
+        <span
+          className={`w-full truncate text-center font-semibold leading-tight text-[var(--kanban-text)] ${
+            dense
+              ? "text-[0.62rem]"
+              : "text-[0.68rem] sm:text-[0.75rem]"
+          }`}
+        >
           {shortLabel || "—"}
         </span>
       </span>

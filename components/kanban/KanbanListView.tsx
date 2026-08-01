@@ -59,30 +59,28 @@ function ListMemberAddButton({
   title,
   disabled,
   onClick,
-  size = "sm",
 }: {
   title: string;
   disabled?: boolean;
   onClick: () => void;
+  /** @deprecated размер круга фиксирован — всегда меньше аватара */
   size?: "xs" | "sm";
 }) {
-  // Плюс всегда заметно меньше аватара listSm (28px)
-  const dim = size === "xs" ? "h-3 w-3" : "h-4 w-4";
-  const icon = size === "xs" ? "h-1.5 w-1.5" : "h-2.5 w-2.5";
+  // Диаметр круга ~14px (аватар listSm = 28px). Классы полностью в литерале — Tailwind JIT.
   return (
     <button
       type="button"
       disabled={disabled}
       title={title}
       aria-label={title}
-      className={`inline-flex ${dim} shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--kanban-text-muted)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40`}
+      className="inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--kanban-text-muted)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
     >
-      <IconPlus className={icon} />
+      <IconPlus className="h-[8px] w-[8px]" />
     </button>
   );
 }
@@ -140,7 +138,6 @@ function ListMembersCell({
               variant === "assignee" ? "Добавить ответственного" : "Добавить участника"
             }
             onClick={onAdd}
-            size={size}
           />
         </span>
       ) : userIds.length === 0 ? (

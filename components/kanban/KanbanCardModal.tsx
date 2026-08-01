@@ -1467,10 +1467,10 @@ export function KanbanCardModal({
                     </span>
                   ))}
                   <span
-                    className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] sm:mt-1 sm:h-6 sm:w-6"
+                    className="mt-1 inline-flex h-[14px] w-[14px] items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
                     aria-hidden
                   >
-                    <IconPlus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                    <IconPlus className="h-[8px] w-[8px]" />
                   </span>
                 </div>
               </button>
@@ -1502,10 +1502,10 @@ export function KanbanCardModal({
                     </span>
                   ))}
                   <span
-                    className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)] sm:mt-1 sm:h-6 sm:w-6"
+                    className="mt-1 inline-flex h-[14px] w-[14px] items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
                     aria-hidden
                   >
-                    <IconPlus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                    <IconPlus className="h-[8px] w-[8px]" />
                   </span>
                 </div>
               </button>
@@ -2013,17 +2013,19 @@ export function KanbanCardModal({
               </div>
 
               <div className="mb-3">
-                <div className="mb-1 flex items-center gap-2">
+                <div className="mb-1 flex items-center gap-1.5">
                   <span className="text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                     {card.parentCardId ? "Производственный чеклист" : "Чеклист"}
                   </span>
                   <button
                     type="button"
-                    className="inline-flex items-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:px-2.5 sm:py-1 sm:text-[0.75rem]"
+                    className="inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] disabled:opacity-40"
                     disabled={!canManageKanbanChecklist}
                     onClick={addCheckItem}
+                    aria-label="Добавить пункт"
+                    title="Добавить пункт"
                   >
-                    + Пункт
+                    <span className="text-[0.65rem] font-semibold leading-none">+</span>
                   </button>
                 </div>
                 <ChecklistEditor

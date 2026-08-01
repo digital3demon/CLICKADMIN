@@ -78,10 +78,12 @@ export function OrdersHistorySearch({ initialValue }: { initialValue: string }) 
           className={inputClass}
           placeholder={
             activeTab === "corrections"
-              ? "Наряд, текст, Kaiten, канбан, пользователь…"
+              ? "Наряд, врач, пациент, текст, Kaiten, канбан…"
               : activeTab === "prosthetics"
-                ? "Наряд, текст, в пути, пришла, пользователь…"
-                : "Наряд, врач, клиника, пользователь, описание…"
+                ? "Наряд, врач, пациент, текст, в пути, пришла…"
+                : activeTab === "tasks"
+                  ? "Текст задачи, автор…"
+                  : "Наряд, врач, клиника, пользователь, описание…"
           }
           value={value}
           onChange={(e) => setValue(e.target.value)}

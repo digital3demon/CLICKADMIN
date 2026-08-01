@@ -191,12 +191,12 @@ export function KanbanCardTimerBlock({
         {canManage ? (
           <button
             type="button"
-            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] max-md:h-4 max-md:w-4 sm:h-6 sm:w-6"
+            className="inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)]"
             onClick={() => (settingsOpen ? setSettingsOpen(false) : openSettings())}
             aria-label="Добавить таймер"
             title="Добавить таймер"
           >
-            <span className="text-[0.75rem] font-semibold leading-none max-md:text-[0.65rem] sm:text-[0.85rem]">+</span>
+            <span className="text-[0.65rem] font-semibold leading-none">+</span>
           </button>
         ) : null}
       </div>

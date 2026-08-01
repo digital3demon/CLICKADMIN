@@ -113,8 +113,9 @@ type BoardCanvasProps = {
 const CARD_MENU_WIDTH = 220;
 const CARD_MENU_GAP = 4;
 const CARD_MENU_EST_HEIGHT = 150;
+/** Одна ширина колонок на mobile и desktop — иначе на 140px карточки мнутся не как на десктопе. */
 const BOARD_COLUMN_WIDTH_CLASS =
-  "w-[140px] min-[420px]:w-[156px] sm:w-[176px] lg:w-[192px] xl:w-[208px]";
+  "w-[176px] sm:w-[184px] lg:w-[196px] xl:w-[208px]";
 
 /** На touch-экранах: удержание перед перетаскиванием карточки, чтобы работал горизонтальный скролл. */
 const KANBAN_TOUCH_DRAG_DELAY_MS = 420;
@@ -283,7 +284,7 @@ function KanbanCardView({
     if (stackMemberIds.includes(id)) continue;
     stackMemberIds.push(id);
   }
-  const stackVisible = stackMemberIds.slice(0, 3);
+  const stackVisible = stackMemberIds.slice(0, 2);
   const stackOverflow = stackMemberIds.length - stackVisible.length;
 
   /** Один канон на mobile и desktop — без sm:/max-md: развилок лица карточки. */
@@ -318,8 +319,8 @@ function KanbanCardView({
       : "transition-[box-shadow,transform,border-color]";
 
   const blockReasonText = (card.blockReason || "").trim() || "Карточка остановлена";
-  /** При STOP — выше, чтобы причина влезала в 2–3 строки мелким шрифтом. */
-  const cardHeightClass = blocked ? "h-[10rem]" : "h-[8.5rem]";
+  /** При STOP — выше, чтобы причина влезала; иначе место под подписи аватаров. */
+  const cardHeightClass = blocked ? "h-[11.5rem]" : "h-[10rem]";
 
   return (
     <div
@@ -383,9 +384,11 @@ function KanbanCardView({
                 <span className="text-[var(--kanban-text)]">{foreignBoardLabel}</span>
               </div>
             ) : null}
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-1.5 px-2 pb-0.5 pt-1.5">
+            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-1 px-2 pb-0.5 pt-1.5">
               <div className="min-w-0 text-[0.8rem] font-semibold leading-snug text-[var(--kanban-text)]">
-                <span className="line-clamp-3 break-words">{card.title}</span>
+                <span className="line-clamp-3 break-words [overflow-wrap:break-word] [word-break:normal]">
+                  {card.title}
+                </span>
               </div>
               <div className="flex shrink-0 items-start gap-1 self-start">
                 {primaryMemberId ? (
@@ -396,7 +399,7 @@ function KanbanCardView({
                       assignees.includes(primaryMemberId) ? "assignee" : "participant"
                     }
                     size="sm"
-                    nameArc
+                    nameCaption
                     titleSuffix=""
                   />
                 ) : null}
@@ -414,7 +417,7 @@ function KanbanCardView({
                           assignees.includes(uid) ? "assignee" : "participant"
                         }
                         size="sm"
-                        nameArc
+                        nameCaption
                         titleSuffix=""
                       />
                     ))}
@@ -587,7 +590,7 @@ function SortableKanbanCard({
   };
 
   const blocked = isCardBlocked(card);
-  const wrapperHeightClass = blocked ? "h-[10rem]" : "h-[8.5rem]";
+  const wrapperHeightClass = blocked ? "h-[11.5rem]" : "h-[10rem]";
 
   return (
     <div

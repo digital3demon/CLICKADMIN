@@ -94,6 +94,7 @@ function buildCorrectionSearchWhere(q: string): Prisma.OrderChatCorrectionWhereI
     { authorLabel: { contains: q, mode: "insensitive" } },
     { order: { orderNumber: { contains: q, mode: "insensitive" } } },
     { order: { patientName: { contains: q, mode: "insensitive" } } },
+    { order: { doctor: { is: { fullName: { contains: q, mode: "insensitive" } } } } },
     { resolvedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
     { rejectedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
   ];
@@ -115,6 +116,7 @@ function buildProstheticsSearchWhere(
     { authorLabel: { contains: q, mode: "insensitive" } },
     { order: { orderNumber: { contains: q, mode: "insensitive" } } },
     { order: { patientName: { contains: q, mode: "insensitive" } } },
+    { order: { doctor: { is: { fullName: { contains: q, mode: "insensitive" } } } } },
     { resolvedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
     { rejectedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
     { arrivedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
