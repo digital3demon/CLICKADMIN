@@ -20,6 +20,11 @@ export function kaitenApiCommentNumericId(
   return kaitenJsonIntId(j.id);
 }
 
+/**
+ * Пишет корректировку «!!!».
+ * KAITEN + kaitenCommentId: сначала привязывает pending DEMO_KANBAN-близнеца
+ * (тот же текст, без kid), иначе upsert по orderId+kid — без дубля Канбан/Kaiten.
+ */
 export async function createOrderChatCorrectionIfNeeded(
   db: PrismaClient,
   orderId: string,
@@ -34,18 +39,63 @@ export async function createOrderChatCorrectionIfNeeded(
   const kid = opts?.kaitenCommentId ?? null;
   const authorLabel = trimOrderChatAuthorLabel(opts?.authorLabel);
   if (source === "KAITEN" && kid != null) {
-    await db.orderChatCorrection.upsert({
+    const existingByKid = await db.orderChatCorrection.findUnique({
       where: {
         orderId_kaitenCommentId: { orderId, kaitenCommentId: kid },
       },
-      create: {
+      select: { id: true },
+    });
+    if (existingByKid) {
+      if (authorLabel) {
+        await db.orderChatCorrection.update({
+          where: { id: existingByKid.id },
+          data: { authorLabel },
+        });
+      }
+      await db.orderChatCorrection.deleteMany({
+        where: {
+          orderId,
+          text,
+          kaitenCommentId: null,
+          resolvedAt: null,
+          rejectedAt: null,
+          id: { not: existingByKid.id },
+        },
+      });
+      return;
+    }
+
+    const twin = await db.orderChatCorrection.findFirst({
+      where: {
         orderId,
-        source,
+        text,
+        kaitenCommentId: null,
+        resolvedAt: null,
+        rejectedAt: null,
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    if (twin) {
+      await db.orderChatCorrection.update({
+        where: { id: twin.id },
+        data: {
+          kaitenCommentId: kid,
+          source: "KAITEN",
+          ...(authorLabel ? { authorLabel } : {}),
+        },
+      });
+      return;
+    }
+
+    await db.orderChatCorrection.create({
+      data: {
+        orderId,
+        source: "KAITEN",
         text,
         kaitenCommentId: kid,
         authorLabel,
       },
-      update: authorLabel ? { authorLabel } : {},
     });
     return;
   }

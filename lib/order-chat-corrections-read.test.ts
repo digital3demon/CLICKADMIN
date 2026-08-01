@@ -4,9 +4,78 @@ vi.mock("@/lib/order-chat-inbox-dual-read.server", () => ({
   isOrderChatInboxReadNewEnabledForTenant: () => true,
 }));
 
-import { fetchMergedOrderChatCorrections } from "./order-chat-corrections-read";
+import {
+  collapsePendingCorrectionTextTwins,
+  fetchMergedOrderChatCorrections,
+} from "./order-chat-corrections-read";
+
+describe("collapsePendingCorrectionTextTwins", () => {
+  it("keeps KAITEN over DEMO_KANBAN for same pending text", () => {
+    const at = new Date("2026-08-01T16:24:00Z");
+    const rows = collapsePendingCorrectionTextTwins([
+      {
+        id: "crm",
+        text: "13 ед и вариатор мой прайс",
+        source: "DEMO_KANBAN",
+        authorLabel: "Всеволод С",
+        createdAt: at,
+        resolvedAt: null,
+        rejectedAt: null,
+      },
+      {
+        id: "kai",
+        text: "13 ед и вариатор мой прайс",
+        source: "KAITEN",
+        authorLabel: "Всеволод С",
+        createdAt: at,
+        resolvedAt: null,
+        rejectedAt: null,
+      },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe("kai");
+    expect(rows[0]?.source).toBe("KAITEN");
+  });
+});
 
 describe("fetchMergedOrderChatCorrections", () => {
+  it("collapses DEMO_KANBAN + KAITEN legacy twins with same text", async () => {
+    const at = new Date("2026-08-01T16:24:00Z");
+    const db = {
+      orderChatCorrection: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "crm",
+            text: "13 ед и вариатор мой прайс",
+            source: "DEMO_KANBAN",
+            authorLabel: "Всеволод С",
+            createdAt: at,
+            resolvedAt: null,
+            rejectedAt: null,
+            kaitenCommentId: null,
+          },
+          {
+            id: "kai",
+            text: "13 ед и вариатор мой прайс",
+            source: "KAITEN",
+            authorLabel: "Всеволод С",
+            createdAt: at,
+            resolvedAt: null,
+            rejectedAt: null,
+            kaitenCommentId: 55,
+          },
+        ]),
+      },
+      orderChatInboxItem: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    };
+
+    const rows = await fetchMergedOrderChatCorrections(db as never, "order-1");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe("kai");
+  });
+
   it("merges inbox and legacy without duplicate kaitenCommentId", async () => {
     const legacyAt = new Date("2026-07-01T10:00:00Z");
     const inboxAt = new Date("2026-07-01T10:00:01Z");
@@ -123,5 +192,52 @@ describe("fetchMergedOrderChatCorrections", () => {
       "o1",
     ]);
     expect(pending.has("o1")).toBe(true);
+  });
+});
+
+describe("countOrdersWithPendingMergedCorrections", () => {
+  it("counts distinct orders after merge", async () => {
+    const { countOrdersWithPendingMergedCorrections } = await import(
+      "./order-chat-corrections-read"
+    );
+    const db = {
+      orderChatCorrection: {
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([
+            { orderId: "o1" },
+            { orderId: "o2" },
+          ])
+          .mockResolvedValueOnce([
+            {
+              orderId: "o1",
+              kaitenCommentId: null,
+              resolvedAt: null,
+              rejectedAt: null,
+            },
+            {
+              orderId: "o1",
+              kaitenCommentId: 1,
+              resolvedAt: null,
+              rejectedAt: null,
+            },
+            {
+              orderId: "o2",
+              kaitenCommentId: 2,
+              resolvedAt: null,
+              rejectedAt: null,
+            },
+          ]),
+      },
+      orderChatInboxItem: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    };
+
+    const n = await countOrdersWithPendingMergedCorrections(
+      db as never,
+      "tenant-1",
+    );
+    expect(n).toBe(2);
   });
 });

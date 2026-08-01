@@ -14,6 +14,7 @@ import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import {
   fetchFinanceOfficeOrders,
 } from "@/lib/fetch-finance-office-orders";
+import { countOrdersWithPendingMergedCorrections } from "@/lib/order-chat-corrections-read";
 import {
   parseFinanceOfficeMode,
 } from "@/lib/finance-office-list-filter";
@@ -128,9 +129,10 @@ export default async function FinanceOfficePage({
   }
 
   const shouldFetch = mode === "actual" || (mode === "period" && Boolean(toRaw) && !error);
-  const orders =
+  const ordersPrisma = await getOrdersPrisma();
+  const [orders, correctionsPendingCount] = await Promise.all([
     shouldFetch && !error
-      ? await fetchFinanceOfficeOrders(await getOrdersPrisma(), tenantId, {
+      ? fetchFinanceOfficeOrders(ordersPrisma, tenantId, {
           listTag: rawTagInvalid ? null : rawTag,
           search: q,
           mode,
@@ -138,7 +140,11 @@ export default async function FinanceOfficePage({
           toYmd: mode === "period" ? toRaw : null,
           userId: session?.sub,
         })
-      : ([] as Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>);
+      : Promise.resolve(
+          [] as Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>,
+        ),
+    countOrdersWithPendingMergedCorrections(ordersPrisma, tenantId),
+  ]);
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;
   const listRangeSummary =
     tagLabel && rangeSummary
@@ -222,7 +228,10 @@ export default async function FinanceOfficePage({
             {searchControls}
           </div>
         </div>
-        <CorrectionsHistoryActionCard className="w-full xl:self-end" />
+        <CorrectionsHistoryActionCard
+          className="w-full xl:self-end"
+          initialPendingCount={correctionsPendingCount}
+        />
         <FinanceOfficeBankImportPanel className="w-full xl:self-end" />
       </div>
       <div className="mt-3 space-y-2">

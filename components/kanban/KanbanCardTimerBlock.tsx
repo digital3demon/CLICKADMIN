@@ -184,47 +184,47 @@ export function KanbanCardTimerBlock({
 
   return (
     <div className="relative mb-3 rounded-lg border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)]/40 px-3 py-2.5 max-md:mb-2 max-md:px-2 max-md:py-1.5">
-      <div className="mb-1 flex items-center justify-between gap-2 max-md:mb-0.5">
+      <div className="mb-1 flex items-center gap-1.5 max-md:mb-0.5 sm:gap-2">
         <span className="text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
           Таймер
         </span>
         {canManage ? (
           <button
             type="button"
-            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] max-md:h-4 max-md:w-4"
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] max-md:h-4 max-md:w-4 sm:h-6 sm:w-6"
             onClick={() => (settingsOpen ? setSettingsOpen(false) : openSettings())}
             aria-label="Добавить таймер"
             title="Добавить таймер"
           >
-            <span className="text-[0.75rem] font-semibold leading-none max-md:text-[0.65rem]">+</span>
+            <span className="text-[0.75rem] font-semibold leading-none max-md:text-[0.65rem] sm:text-[0.85rem]">+</span>
           </button>
         ) : null}
       </div>
-      <div className="flex items-center gap-3 max-md:gap-2">
-        <span
-          className="min-w-[5.5rem] font-mono text-[0.95rem] font-semibold tabular-nums text-[var(--kaiten-modal-text)] max-md:min-w-[4.25rem] max-md:text-[0.8rem]"
-          title={
-            started
-              ? card.timerFrozenAt
+      {started ? (
+        <div className="flex items-center gap-3 max-md:gap-2">
+          <span
+            className="min-w-[5.5rem] font-mono text-[0.95rem] font-semibold tabular-nums text-[var(--kaiten-modal-text)] max-md:min-w-[4.25rem] max-md:text-[0.8rem]"
+            title={
+              card.timerFrozenAt
                 ? "Заморозка: остаток и цвет зафиксированы на момент «Оставить таймер»"
                 : "Осталось до конца интервала"
-              : "Таймер не запущен"
-          }
-        >
-          {started ? label : "—"}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/35 ring-1 ring-[var(--kaiten-modal-border)] max-md:h-1.5">
-            <div
-              className="h-full min-w-[2px] rounded-full transition-[width,background-color] duration-300 ease-linear"
-              style={{
-                width: `${started ? Math.max(0.5, Math.round(ratio * 1000) / 10) : 0}%`,
-                backgroundColor: started ? fillColor : "transparent",
-              }}
-            />
+            }
+          >
+            {label}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/35 ring-1 ring-[var(--kaiten-modal-border)] max-md:h-1.5">
+              <div
+                className="h-full min-w-[2px] rounded-full transition-[width,background-color] duration-300 ease-linear"
+                style={{
+                  width: `${Math.max(0.5, Math.round(ratio * 1000) / 10)}%`,
+                  backgroundColor: fillColor,
+                }}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
       {!canManage ? (
         <p className="mt-1.5 text-[0.65rem] leading-snug text-[var(--kaiten-modal-muted)]">
           Таймер виден всем; назначать и менять интервал могут роли с правом «Канбан: назначать таймеры» в настройках доступа.

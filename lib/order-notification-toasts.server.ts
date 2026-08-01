@@ -48,10 +48,11 @@ async function fetchCorrectionToastRows(
       },
     },
     orderBy: { createdAt: "desc" },
-    take: 32,
+    take: 64,
     select: {
       id: true,
       text: true,
+      source: true,
       authorLabel: true,
       createdAt: true,
       order: {
@@ -64,15 +65,30 @@ async function fetchCorrectionToastRows(
       },
     },
   });
-  return rows.map((r) => ({
-    id: r.id,
-    text: r.text,
-    authorLabel: r.authorLabel,
-    orderId: r.order.id,
-    orderNumber: r.order.orderNumber,
-    ...orderToastNames(r.order),
-    createdAt: r.createdAt.toISOString(),
-  }));
+  const byKey = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) {
+    const key = `${r.order.id}\0${r.text.trim().toLowerCase()}`;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, r);
+      continue;
+    }
+    if (prev.source !== "KAITEN" && r.source === "KAITEN") {
+      byKey.set(key, r);
+    }
+  }
+  return [...byKey.values()]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 32)
+    .map((r) => ({
+      id: r.id,
+      text: r.text,
+      authorLabel: r.authorLabel,
+      orderId: r.order.id,
+      orderNumber: r.order.orderNumber,
+      ...orderToastNames(r.order),
+      createdAt: r.createdAt.toISOString(),
+    }));
 }
 
 async function fetchProstheticsToastRows(

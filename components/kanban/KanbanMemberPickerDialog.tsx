@@ -88,13 +88,14 @@ export function KanbanMemberPickerDialog({
 
   const dialog = (
     <div
-      className="fixed inset-0 z-[280] flex items-center justify-center bg-black/50 p-4"
+      className="kanban-root fixed inset-0 z-[280] flex items-center justify-center bg-black/60 p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className="w-full max-w-3xl rounded-lg border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-4 text-[var(--kaiten-modal-text)] shadow-xl"
+        style={{ backgroundColor: "var(--kaiten-modal-bg)" }}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h3 className="m-0 text-sm font-semibold">
@@ -138,9 +139,9 @@ export function KanbanMemberPickerDialog({
                         className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-left text-[0.8125rem] transition-colors ${
                           selected
                             ? mode === "assign"
-                              ? "border-amber-400/80 bg-amber-400/10"
-                              : "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)]/10"
-                            : "border-[var(--kaiten-modal-border)] hover:border-[var(--kaiten-modal-muted)]"
+                              ? "border-amber-400/80 bg-[color-mix(in_srgb,rgb(251_191_36)_16%,var(--kaiten-modal-bg))]"
+                              : "border-[var(--sidebar-blue)] bg-[color-mix(in_srgb,var(--sidebar-blue)_16%,var(--kaiten-modal-bg))]"
+                            : "border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] hover:border-[var(--kaiten-modal-muted)]"
                         }`}
                       >
                         <KanbanPersonAvatar

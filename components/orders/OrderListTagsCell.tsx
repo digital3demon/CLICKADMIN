@@ -37,7 +37,6 @@ import {
   LIST_TAG_PAYMENT_RECON_PAID,
   LIST_TAG_PROSTHETICS,
   LIST_TAG_PROSTHETICS_PENDING,
-  LIST_TAG_URGENT,
   LIST_TAG_URGENT_NO_COEF,
   listTagCustomLabel,
   listTagKaitenColumnTitle,
@@ -180,9 +179,6 @@ function tagCloudCellClass(slot: TagSlotSize): string {
   }
   return "flex min-w-0 max-w-full grow-0 shrink-0 basis-auto items-center [&>*]:max-w-full";
 }
-const TAG_EDIT_BUTTON_CLASS =
-  "order-list-tag-edit rounded leading-none hover:opacity-90";
-
 function useOverlayDismiss(open: boolean, close: () => void) {
   useEffect(() => {
     if (!open) return;
@@ -1000,38 +996,26 @@ export function OrderListTagsCell({
         key: "blocked",
         slot: blockedSlot,
         node: (
-          <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
-            <Link
-              href={href(LIST_TAG_KAITEN_BLOCKED)}
-              title="Показать наряды, заблокированные в Kaiten"
-              className={
-                isHarmony
-                  ? `harmony-blocked-tag inline-flex w-full min-w-0 max-w-full flex-col items-stretch gap-y-1 text-left font-semibold outline-none focus-visible:outline-none ${padTable}`
-                  : `inline-flex w-full min-w-0 max-w-full flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`
-              }
-            >
-              <span className="leading-tight">Заблокировано</span>
-              {kaitenBlockReason?.trim() ? (
-                <span className="w-full min-w-0 whitespace-pre-wrap break-words text-left text-[10px] font-normal leading-snug text-red-900/95 dark:text-red-100/90 sm:text-[11px]">
-                  {kaitenBlockReason.trim()}
-                </span>
-              ) : (
-                <span className="text-left text-[10px] font-normal leading-snug text-red-800/85 dark:text-red-200/80 sm:text-[11px]">
-                  Причина не в CRM — вкладка «Кайтен» или Kaiten
-                </span>
-              )}
-            </Link>
-            <button
-              type="button"
-              disabled={busy}
-              className={`${TAG_EDIT_BUTTON_CLASS} text-red-700 hover:bg-red-100 disabled:opacity-40 dark:text-red-200 dark:hover:bg-red-950/50`}
-              title="Снять блокировку в Kaiten"
-              aria-label="Снять блокировку в Kaiten"
-              onClick={() => void submitAdd(QUICK_TAG_KAITEN_UNBLOCK_LABEL)}
-            >
-              ✎
-            </button>
-          </span>
+          <Link
+            href={href(LIST_TAG_KAITEN_BLOCKED)}
+            title="Показать наряды, заблокированные в Kaiten"
+            className={
+              isHarmony
+                ? `harmony-blocked-tag inline-flex w-full min-w-0 max-w-full flex-col items-stretch gap-y-1 text-left font-semibold outline-none focus-visible:outline-none ${padTable}`
+                : `inline-flex w-full min-w-0 max-w-full flex-col items-stretch gap-y-1 rounded-xl border border-red-300 bg-red-50 text-left font-semibold text-red-950 shadow-sm outline-none focus-visible:outline-none dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100 ${padTable}`
+            }
+          >
+            <span className="leading-tight">Заблокировано</span>
+            {kaitenBlockReason?.trim() ? (
+              <span className="w-full min-w-0 whitespace-pre-wrap break-words text-left text-[10px] font-normal leading-snug text-red-900/95 dark:text-red-100/90 sm:text-[11px]">
+                {kaitenBlockReason.trim()}
+              </span>
+            ) : (
+              <span className="text-left text-[10px] font-normal leading-snug text-red-800/85 dark:text-red-200/80 sm:text-[11px]">
+                Причина не в CRM — вкладка «Кайтен» или Kaiten
+              </span>
+            )}
+          </Link>
         ),
       });
     }
@@ -1117,29 +1101,17 @@ export function OrderListTagsCell({
         key: "urgent",
         slot: "small",
         node: (
-          <span className="inline-flex items-center gap-0.5">
-            <Link
-              href={href(
-                urgentCoefficient != null
-                  ? listTagUrgentCoefficient(urgentCoefficient)
-                  : LIST_TAG_URGENT_NO_COEF,
-              )}
-              title="Показать срочные наряды"
-              className={`inline-flex items-center rounded-full border border-rose-200 bg-rose-50 font-semibold leading-tight text-rose-950 shadow-sm outline-none focus-visible:outline-none dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-100 ${padTable} sm:leading-tight md:leading-tight`}
-            >
-              {urgentCoefficient != null ? `×${urgentCoefficient}` : "Срочно"}
-            </Link>
-            <button
-              type="button"
-              disabled={busy}
-              className={`${TAG_EDIT_BUTTON_CLASS} text-rose-700 hover:bg-rose-100 disabled:opacity-40 dark:text-rose-200 dark:hover:bg-rose-950/50`}
-              title="Изменить срочность"
-              aria-label="Изменить срочность"
-              onClick={() => setUrgentOpen(true)}
-            >
-              ✎
-            </button>
-          </span>
+          <Link
+            href={href(
+              urgentCoefficient != null
+                ? listTagUrgentCoefficient(urgentCoefficient)
+                : LIST_TAG_URGENT_NO_COEF,
+            )}
+            title="Показать срочные наряды"
+            className={`inline-flex items-center rounded-full border border-rose-200 bg-rose-50 font-semibold leading-tight text-rose-950 shadow-sm outline-none focus-visible:outline-none dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-100 ${padTable} sm:leading-tight md:leading-tight`}
+          >
+            {urgentCoefficient != null ? `×${urgentCoefficient}` : "Срочно"}
+          </Link>
         ),
       });
     }
@@ -1149,25 +1121,13 @@ export function OrderListTagsCell({
         key: "prost",
         slot: "large",
         node: (
-          <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
-            <Link
-              href={href(LIST_TAG_PROSTHETICS)}
-              title="Показать наряды с отметкой «Протетика заказана»"
-              className={`rounded-full border border-emerald-200 bg-emerald-50 font-semibold text-emerald-900 shadow-sm outline-none focus-visible:outline-none dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100 ${padTable}`}
-            >
-              Протетика заказана
-            </Link>
-            <button
-              type="button"
-              disabled={busy}
-              className={`${TAG_EDIT_BUTTON_CLASS} text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 dark:text-emerald-200 dark:hover:bg-emerald-950/50`}
-              title="Снять отметку «Протетика заказана»"
-              aria-label="Снять отметку протетика заказана"
-              onClick={() => void applyQuickPatch({ prostheticsOrdered: false })}
-            >
-              ✎
-            </button>
-          </span>
+          <Link
+            href={href(LIST_TAG_PROSTHETICS)}
+            title="Показать наряды с отметкой «Протетика заказана»"
+            className={`rounded-full border border-emerald-200 bg-emerald-50 font-semibold text-emerald-900 shadow-sm outline-none focus-visible:outline-none dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100 ${padTable}`}
+          >
+            Протетика заказана
+          </Link>
         ),
       });
     }
@@ -1193,25 +1153,13 @@ export function OrderListTagsCell({
         key: "invpr",
         slot: "large",
         node: (
-          <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
-            <Link
-              href={href(LIST_TAG_INVOICE_PRINTED)}
-              title="Показать наряды с отметкой «Счёт распечатан»"
-              className={`rounded-full border border-violet-300 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-100 ${padTable}`}
-            >
-              Счёт распечатан
-            </Link>
-            <button
-              type="button"
-              disabled={busy}
-              className={`${TAG_EDIT_BUTTON_CLASS} text-violet-700 hover:bg-violet-100 disabled:opacity-40 dark:text-violet-200 dark:hover:bg-violet-950/50`}
-              title="Снять отметку «Счёт распечатан»"
-              aria-label="Снять отметку счет распечатан"
-              onClick={() => void applyQuickPatch({ invoicePrinted: false })}
-            >
-              ✎
-            </button>
-          </span>
+          <Link
+            href={href(LIST_TAG_INVOICE_PRINTED)}
+            title="Показать наряды с отметкой «Счёт распечатан»"
+            className={`rounded-full border border-violet-300 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-100 ${padTable}`}
+          >
+            Счёт распечатан
+          </Link>
         ),
       });
     }
@@ -1347,9 +1295,7 @@ export function OrderListTagsCell({
     paymentPillToneClass,
     paymentPartialRub,
     prostheticsOrdered,
-    applyQuickPatch,
     removeTag,
-    submitAdd,
     urgentCoefficient,
     omitKaitenColumnTag,
     filterListHref,
@@ -1452,25 +1398,30 @@ export function OrderListTagsCell({
   );
 
   const tagRows = buildTagRows(tagCloudItems);
+  const lastRowIdx = tagRows.length - 1;
 
-  const tagCloudPack = (
-    <div className="flex min-w-0 max-w-full flex-col gap-y-1.5">
-      {tagRows.map((row, rowIdx) => (
-        <div key={`row-${rowIdx}`} className={TAG_CLOUD_PACK_CLASS}>
-          {row.map((it) => (
-            <div key={it.key} className={tagCloudCellClass(it.slot)}>
-              {it.node}
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-
+  // «+» в последней строке облака — иначе при huge «Заблокировано» (w-full)
+  // кнопка уезжала под весь блок, а не вставала справа от «НЕ ОПЛАЧЕНО».
   const tagsWithAddButton = (
-    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1 gap-y-1.5">
-      {tagCloudPack}
-      <div className="shrink-0">{addTagButton}</div>
+    <div className="flex min-w-0 max-w-full flex-col gap-y-1.5">
+      {tagRows.length === 0 ? (
+        <div className={TAG_CLOUD_PACK_CLASS}>
+          <div className="shrink-0">{addTagButton}</div>
+        </div>
+      ) : (
+        tagRows.map((row, rowIdx) => (
+          <div key={`row-${rowIdx}`} className={TAG_CLOUD_PACK_CLASS}>
+            {row.map((it) => (
+              <div key={it.key} className={tagCloudCellClass(it.slot)}>
+                {it.node}
+              </div>
+            ))}
+            {rowIdx === lastRowIdx ? (
+              <div className="shrink-0">{addTagButton}</div>
+            ) : null}
+          </div>
+        ))
+      )}
     </div>
   );
 
@@ -1487,10 +1438,6 @@ export function OrderListTagsCell({
           line-height: 1.05;
           padding: 0.22em 0.72em;
         }
-        .order-list-tag-edit {
-          font-size: 0.86em;
-          padding: 0.08em 0.25em;
-        }
         @container (max-width: 11.5rem) {
           .order-list-tags-pack {
             gap: 0.25rem;
@@ -1499,10 +1446,6 @@ export function OrderListTagsCell({
             font-size: 0.78em;
             padding: 0.16em 0.58em;
             letter-spacing: 0.01em;
-          }
-          .order-list-tag-edit {
-            font-size: 0.76em;
-            padding-inline: 0.15em;
           }
         }
         @container (max-width: 9rem) {
@@ -1513,9 +1456,6 @@ export function OrderListTagsCell({
             font-size: 0.7em;
             padding: 0.12em 0.48em;
             letter-spacing: 0;
-          }
-          .order-list-tag-edit {
-            font-size: 0.68em;
           }
         }
       `}</style>

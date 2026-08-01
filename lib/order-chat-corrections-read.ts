@@ -31,6 +31,56 @@ function sortCorrections(rows: OrderChatCorrectionReadRow[]): OrderChatCorrectio
   return [...rows].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
+function isPendingCorrection(row: {
+  resolvedAt: Date | null;
+  rejectedAt: Date | null;
+}): boolean {
+  return row.resolvedAt == null && row.rejectedAt == null;
+}
+
+/** При дубле Канбан+Kaiten по тексту оставляем KAITEN, иначе более новую. */
+export function preferPendingCorrectionTwin(
+  a: OrderChatCorrectionReadRow,
+  b: OrderChatCorrectionReadRow,
+): OrderChatCorrectionReadRow {
+  if (a.source !== b.source) {
+    if (a.source === "KAITEN") return a;
+    if (b.source === "KAITEN") return b;
+  }
+  return a.createdAt.getTime() >= b.createdAt.getTime() ? a : b;
+}
+
+/**
+ * Схлопывает pending-пары с одинаковым текстом (CRM DEMO_KANBAN + Kaiten twin).
+ * Закрытые строки не трогаем.
+ */
+export function collapsePendingCorrectionTextTwins(
+  rows: OrderChatCorrectionReadRow[],
+): OrderChatCorrectionReadRow[] {
+  const closed: OrderChatCorrectionReadRow[] = [];
+  const pendingByText = new Map<string, OrderChatCorrectionReadRow>();
+
+  for (const row of rows) {
+    if (!isPendingCorrection(row)) {
+      closed.push(row);
+      continue;
+    }
+    const key = displayText(row.text).toLowerCase();
+    if (!key) {
+      closed.push(row);
+      continue;
+    }
+    const prev = pendingByText.get(key);
+    if (!prev) {
+      pendingByText.set(key, row);
+      continue;
+    }
+    pendingByText.set(key, preferPendingCorrectionTwin(prev, row));
+  }
+
+  return sortCorrections([...closed, ...pendingByText.values()]);
+}
+
 /**
  * Единое чтение корректировок: inbox (новое) + legacy, без дублей по kaitenCommentId.
  * Иначе опрос GET /chat-corrections затирал legacy-записи пустым inbox.
@@ -89,7 +139,7 @@ export async function fetchMergedOrderChatCorrections(
     }
     merged.push({
       id: row.id,
-      text: row.text,
+      text: displayText(row.text),
       source: row.source,
       authorLabel: row.authorLabel,
       createdAt: row.createdAt,
@@ -98,7 +148,7 @@ export async function fetchMergedOrderChatCorrections(
     });
   }
 
-  return sortCorrections(merged);
+  return collapsePendingCorrectionTextTwins(merged);
 }
 
 /** Наряды с незакрытыми корректировками после merge inbox+legacy (без дублей по kaitenCommentId). */
@@ -193,4 +243,44 @@ export async function hydrateListPendingChatCorrectionsFromInbox<
     ...row,
     listPendingChatCorrections: pendingIds.has(row.id),
   }));
+}
+
+/** Число нарядов тенанта с ≥1 непринятой корректировкой (после merge). */
+export async function countOrdersWithPendingMergedCorrections(
+  db: PrismaClient,
+  tenantId: string,
+): Promise<number> {
+  const tid = tenantId.trim();
+  if (!tid) return 0;
+
+  const [legacyRows, inboxRows] = await Promise.all([
+    db.orderChatCorrection.findMany({
+      where: {
+        resolvedAt: null,
+        rejectedAt: null,
+        order: { tenantId: tid, archivedAt: null },
+      },
+      select: { orderId: true },
+      distinct: ["orderId"],
+    }),
+    (db as any).orderChatInboxItem.findMany({
+      where: {
+        type: "CORRECTION",
+        resolvedAt: null,
+        rejectedAt: null,
+        order: { tenantId: tid, archivedAt: null },
+      },
+      select: { orderId: true },
+      distinct: ["orderId"],
+    }) as Promise<Array<{ orderId: string }>>,
+  ]);
+
+  const candidateIds = [
+    ...new Set([
+      ...legacyRows.map((r) => r.orderId),
+      ...inboxRows.map((r) => r.orderId),
+    ]),
+  ];
+  if (candidateIds.length === 0) return 0;
+  return (await orderIdsWithPendingMergedCorrections(db, candidateIds)).size;
 }

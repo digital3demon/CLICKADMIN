@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { correctionHistoryRowToJson } from "@/lib/corrections-history";
 import { loadCorrectionsHistoryOnly } from "@/lib/corrections-history.server";
+import { countOrdersWithPendingMergedCorrections } from "@/lib/order-chat-corrections-read";
+import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 export const dynamic = "force-dynamic";
@@ -25,11 +27,16 @@ export async function GET() {
       );
     }
 
-    const items = await loadCorrectionsHistoryOnly({ limit: 80, tenantId });
+    const prisma = await getOrdersPrisma();
+    const [items, pendingCount] = await Promise.all([
+      loadCorrectionsHistoryOnly({ limit: 80, tenantId }),
+      countOrdersWithPendingMergedCorrections(prisma, tenantId),
+    ]);
 
     return NextResponse.json(
       {
         count: items.length,
+        pendingCount,
         items: items.map(correctionHistoryRowToJson),
       },
       { headers: { "Cache-Control": "no-store" } },

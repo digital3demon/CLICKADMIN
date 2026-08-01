@@ -23,12 +23,14 @@ function cardShell(isHarmony: boolean): string {
 
 export function OrdersListHeaderActionCards({
   initialInTransitCount,
+  initialCorrectionsPendingCount = 0,
   initialTasksPendingCount = 0,
   canMarkArrived = false,
   canResolveTasks = false,
   showProstheticsBlock = true,
 }: {
   initialInTransitCount: number;
+  initialCorrectionsPendingCount?: number;
   initialTasksPendingCount?: number;
   canMarkArrived?: boolean;
   canResolveTasks?: boolean;
@@ -143,7 +145,10 @@ export function OrdersListHeaderActionCards({
         </button>
         ) : null}
 
-        <CorrectionsHistoryActionCard className="flex-1" />
+        <CorrectionsHistoryActionCard
+          className="flex-1"
+          initialPendingCount={initialCorrectionsPendingCount}
+        />
         <LabTasksActionCard
           className="flex-1"
           initialPendingCount={initialTasksPendingCount}

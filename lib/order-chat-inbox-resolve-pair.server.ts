@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { stripOrderChatCorrectionPrefix } from "@/lib/order-chat-correction";
 
 type CloseAction = "accept" | "reject";
 
@@ -49,21 +50,23 @@ export async function closeOrderChatCorrectionPair(
     where: { id: cid, orderId: oid, type: "CORRECTION" },
     select: {
       id: true,
+      text: true,
       resolvedAt: true,
       rejectedAt: true,
       kaitenCommentId: true,
     },
-  })) as PairRow | null;
+  })) as (PairRow & { text: string }) | null;
 
   const legacyRow = (await db.orderChatCorrection.findFirst({
     where: { id: cid, orderId: oid },
     select: {
       id: true,
+      text: true,
       resolvedAt: true,
       rejectedAt: true,
       kaitenCommentId: true,
     },
-  })) as PairRow | null;
+  })) as (PairRow & { text: string }) | null;
 
   const primary = inboxRow ?? legacyRow;
   if (!primary) {
@@ -86,6 +89,7 @@ export async function closeOrderChatCorrectionPair(
 
   const kaitenCommentId =
     inboxRow?.kaitenCommentId ?? legacyRow?.kaitenCommentId ?? null;
+  const primaryText = String(primary.text || "").trim();
   const data = closeData(action, userId);
 
   const inboxIds = new Set<string>();
@@ -117,6 +121,35 @@ export async function closeOrderChatCorrectionPair(
       select: { id: true },
     });
     for (const t of twinLegacy) legacyIds.add(t.id);
+  }
+
+  // CRM DEMO_KANBAN без kid + Kaiten с kid — один текст, разные id.
+  if (primaryText) {
+    const stripped =
+      stripOrderChatCorrectionPrefix(primaryText)?.trim() || primaryText;
+    const textVariants = [...new Set([primaryText, stripped, `!!! ${stripped}`])];
+    const textTwinLegacy = await db.orderChatCorrection.findMany({
+      where: {
+        orderId: oid,
+        text: { in: textVariants },
+        resolvedAt: null,
+        rejectedAt: null,
+      },
+      select: { id: true },
+    });
+    for (const t of textTwinLegacy) legacyIds.add(t.id);
+
+    const textTwinInbox = (await (db as any).orderChatInboxItem.findMany({
+      where: {
+        orderId: oid,
+        type: "CORRECTION",
+        text: { in: textVariants },
+        resolvedAt: null,
+        rejectedAt: null,
+      },
+      select: { id: true },
+    })) as Array<{ id: string }>;
+    for (const t of textTwinInbox) inboxIds.add(t.id);
   }
 
   for (const id of inboxIds) {

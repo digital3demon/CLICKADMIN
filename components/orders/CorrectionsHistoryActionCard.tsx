@@ -33,14 +33,21 @@ function cardShell(isHarmony: boolean): string {
 
 export function CorrectionsHistoryActionCard({
   className = "",
+  initialPendingCount = 0,
 }: {
   className?: string;
+  initialPendingCount?: number;
 }) {
   const isHarmony = useUiDesign() === "harmony";
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<CorrectionHistoryJsonRow[]>([]);
+  const [pendingCount, setPendingCount] = useState(initialPendingCount);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingCount(initialPendingCount);
+  }, [initialPendingCount]);
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -55,6 +62,7 @@ export function CorrectionsHistoryActionCard({
       });
       const j = (await res.json().catch(() => ({}))) as {
         items?: CorrectionHistoryJsonRow[];
+        pendingCount?: number;
         error?: string;
       };
       if (!res.ok) {
@@ -62,6 +70,9 @@ export function CorrectionsHistoryActionCard({
         return;
       }
       setItems(Array.isArray(j.items) ? j.items : []);
+      if (typeof j.pendingCount === "number") {
+        setPendingCount(j.pendingCount);
+      }
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         setErr("Превышено время ожидания. Попробуйте ещё раз.");
@@ -87,7 +98,18 @@ export function CorrectionsHistoryActionCard({
         onClick={() => setOpen(true)}
       >
         <span className="text-sm font-bold uppercase tracking-wide text-orange-500 dark:text-orange-400">
-          История корректировок
+          Корректировки
+        </span>
+        <span className="flex items-center justify-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+            Непринятые
+          </span>
+          <span
+            className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
+            aria-label={`Непринятые: ${pendingCount}`}
+          >
+            {pendingCount}
+          </span>
         </span>
       </button>
 
@@ -96,7 +118,7 @@ export function CorrectionsHistoryActionCard({
           className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="История корректировок"
+          aria-label="Корректировки"
           onClick={() => setOpen(false)}
         >
           <div
@@ -105,7 +127,7 @@ export function CorrectionsHistoryActionCard({
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
               <h2 className="text-base font-semibold text-orange-500 dark:text-orange-400">
-                История корректировок
+                Корректировки
               </h2>
               <button
                 type="button"
