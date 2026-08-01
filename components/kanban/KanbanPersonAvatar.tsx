@@ -13,10 +13,12 @@ import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 
 const sizeClass = {
   xs: "h-[18px] w-[18px] text-[0.5rem]",
-  /** Список mobile: аватар читаемый, не огромный */
-  list: "h-7 w-7 text-[0.72rem]",
+  /** Список mobile: компактный круг (ниже строка) */
+  list: "h-6 w-6 text-[0.62rem]",
   sm: "h-6 w-6 text-[0.55rem]",
   card: "h-[22px] w-[22px] text-[0.58rem] max-md:h-[18px] max-md:w-[18px] max-md:text-[0.5rem]",
+  /** Список desktop: чуть меньше md, под кружком подпись */
+  listSm: "h-7 w-7 text-[0.6rem]",
   md: "h-9 w-9 text-[0.65rem]",
   picker: "h-7 w-7 text-[0.6rem]",
 } as const;
@@ -32,26 +34,48 @@ type KanbanPersonAvatarProps = {
   titleSuffix?: string;
   /** Имя полукругом над кружком (mobile list). */
   nameArc?: boolean;
+  /** Короткое имя под кружком (desktop list). */
+  nameCaption?: boolean;
 };
+
+function polarOnCircle(
+  cx: number,
+  cy: number,
+  r: number,
+  degFrom3oclockCcw: number,
+): { x: number; y: number } {
+  const rad = (degFrom3oclockCcw * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
+}
 
 function AvatarNameArc({ label, pathId }: { label: string; pathId: string }) {
   if (!label) return null;
+  // Центр совпадает с аватаром; дуга у обода, старт ~10:00 → ~1:30 (завал против часовой).
+  const cx = 20;
+  const cy = 20;
+  const r = 14.4;
+  const start = polarOnCircle(cx, cy, r, 128);
+  const end = polarOnCircle(cx, cy, r, 38);
   return (
     <svg
-      className="pointer-events-none absolute left-1/2 top-0 h-[12px] w-[48px] -translate-x-1/2 overflow-visible text-[var(--kanban-text)]"
-      viewBox="0 0 48 12"
+      className="pointer-events-none absolute left-1/2 top-1/2 z-[1] h-8 w-8 -translate-x-1/2 -translate-y-1/2 overflow-visible text-[var(--kanban-text)]"
+      viewBox="0 0 40 40"
       aria-hidden
     >
       <defs>
-        <path id={pathId} d="M 2 11.2 A 22.5 22.5 0 0 1 46 11.2" fill="none" />
+        <path
+          id={pathId}
+          d={`M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 0 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`}
+          fill="none"
+        />
       </defs>
       <text
         fill="currentColor"
-        fontSize="8.25"
+        fontSize="6.5"
         fontWeight="600"
-        letterSpacing="0.015em"
+        letterSpacing="0.02em"
       >
-        <textPath href={`#${pathId}`} startOffset="50%" textAnchor="middle">
+        <textPath href={`#${pathId}`} startOffset="0%" textAnchor="start">
           {label}
         </textPath>
       </text>
@@ -67,6 +91,7 @@ export function KanbanPersonAvatar({
   className = "",
   titleSuffix,
   nameArc = false,
+  nameCaption = false,
 }: KanbanPersonAvatarProps) {
   const reactId = useId();
   const pathId = `kanban-name-arc-${reactId.replace(/:/g, "")}`;
@@ -79,16 +104,19 @@ export function KanbanPersonAvatar({
   const initials =
     legacy?.initials ??
     initialsFromDisplayName(crm?.displayName ?? crm?.email ?? displayName);
-  const arcLabel = nameArc ? shortArcLabelFromDisplayName(displayName) : "";
+  const shortLabel =
+    nameArc || nameCaption ? shortArcLabelFromDisplayName(displayName) : "";
+  const arcLabel = nameArc ? shortLabel : "";
 
+  const compactRing = size === "card" || size === "list" || size === "listSm" || size === "sm";
   const ring =
     variant === "assignee"
-      ? size === "card" || size === "list"
+      ? compactRing
         ? "ring-1 ring-amber-400 ring-offset-1 ring-offset-[var(--kanban-card-bg)]"
-        : size === "sm"
-          ? "ring-1 ring-amber-500/80 ring-offset-1 ring-offset-[var(--kanban-card-bg)]"
+        : size === "picker"
+          ? "ring-1 ring-amber-400 ring-offset-1 ring-offset-[var(--kanban-card-bg)]"
           : "ring-2 ring-amber-400 ring-offset-2 ring-offset-[var(--kaiten-modal-bg)]"
-      : size === "card" || size === "list"
+      : compactRing || size === "picker" || size === "listSm"
         ? "border border-dashed border-[var(--kanban-text-muted)]"
         : "border-2 border-dashed border-[var(--kaiten-modal-muted)]";
 
@@ -141,6 +169,20 @@ export function KanbanPersonAvatar({
     face = <span className={`${base} bg-zinc-600`}>?</span>;
   }
 
+  if (nameCaption) {
+    return (
+      <span
+        title={title}
+        className="inline-flex max-w-[3.4rem] flex-col items-center gap-0.5"
+      >
+        {face}
+        <span className="w-full truncate text-center text-[0.55rem] font-medium leading-none text-[var(--kanban-text-muted)]">
+          {shortLabel || "—"}
+        </span>
+      </span>
+    );
+  }
+
   if (!nameArc) {
     return (
       <span title={title} className="inline-flex">
@@ -152,10 +194,10 @@ export function KanbanPersonAvatar({
   return (
     <span
       title={title}
-      className="relative inline-flex w-[3rem] flex-col items-center pt-[11px]"
+      className="relative inline-flex h-6 w-7 shrink-0 items-center justify-center overflow-visible"
     >
       <AvatarNameArc label={arcLabel} pathId={pathId} />
-      {face}
+      <span className="relative z-0">{face}</span>
     </span>
   );
 }
