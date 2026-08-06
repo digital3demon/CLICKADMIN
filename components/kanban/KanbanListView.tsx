@@ -66,21 +66,21 @@ function ListMemberAddButton({
   /** @deprecated размер круга фиксирован — всегда меньше аватара */
   size?: "xs" | "sm";
 }) {
-  // Диаметр круга ~14px (аватар listSm = 28px). Классы полностью в литерале — Tailwind JIT.
+  // Диаметр 16px (аватар listSm = 28px). box-border + max — без раздувания от SVG.
   return (
     <button
       type="button"
       disabled={disabled}
       title={title}
       aria-label={title}
-      className="inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--kanban-text-muted)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+      className="box-border inline-flex h-4 w-4 max-h-4 max-w-4 min-h-0 min-w-0 shrink-0 items-center justify-center overflow-hidden rounded-full border border-dashed border-[var(--kanban-text-muted)] p-0 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
     >
-      <IconPlus className="h-[8px] w-[8px]" />
+      <IconPlus className="h-2.5 w-2.5" />
     </button>
   );
 }
@@ -132,7 +132,7 @@ function ListMembersCell({
         </div>
       ) : null}
       {canManage ? (
-        <span className="inline-flex h-7 shrink-0 items-center">
+        <span className="mt-1.5 inline-flex shrink-0 items-center">
           <ListMemberAddButton
             title={
               variant === "assignee" ? "Добавить ответственного" : "Добавить участника"
@@ -141,7 +141,7 @@ function ListMembersCell({
           />
         </span>
       ) : userIds.length === 0 ? (
-        <span className="inline-flex h-7 items-center text-[0.75rem] text-[var(--kanban-text-muted)]">
+        <span className="mt-1.5 inline-flex items-center text-[0.75rem] text-[var(--kanban-text-muted)]">
           —
         </span>
       ) : null}

@@ -6,6 +6,10 @@ import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { formatRuDateTime, ordersHistoryHref } from "@/lib/corrections-history";
 import type { LabTaskJson } from "@/lib/lab-tasks";
 import { isAllowedLabTaskImageMime, LAB_TASK_MAX_ATTACHMENTS } from "@/lib/lab-tasks";
+import {
+  ImageLightbox,
+  type ImageLightboxState,
+} from "@/components/ui/ImageLightbox";
 
 function cardShell(isHarmony: boolean): string {
   return isHarmony
@@ -36,6 +40,9 @@ export function LabTasksActionCard({
   const [text, setText] = useState("");
   const [draftFiles, setDraftFiles] = useState<DraftFile[]>([]);
   const [canResolveLive, setCanResolveLive] = useState(canResolve);
+  const [imageViewer, setImageViewer] = useState<ImageLightboxState | null>(
+    null,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const draftFilesRef = useRef(draftFiles);
   draftFilesRef.current = draftFiles;
@@ -226,7 +233,10 @@ export function LabTasksActionCard({
           role="dialog"
           aria-modal="true"
           aria-label="Задачи"
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+            setImageViewer(null);
+          }}
         >
           <div
             className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl"
@@ -279,13 +289,23 @@ export function LabTasksActionCard({
                           ) : null}
                           {row.attachments.length > 0 ? (
                             <div className="mt-2 flex flex-wrap gap-2">
-                              {row.attachments.map((a) => (
-                                <a
+                              {row.attachments.map((a, ai) => (
+                                <button
                                   key={a.id}
-                                  href={a.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="block overflow-hidden rounded-md border border-[var(--card-border)]"
+                                  type="button"
+                                  title="Просмотр"
+                                  aria-label={`Просмотр: ${a.fileName}`}
+                                  className="block overflow-hidden rounded-md border border-[var(--card-border)] outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-[var(--sidebar-blue)]"
+                                  onClick={() =>
+                                    setImageViewer({
+                                      images: row.attachments.map((x) => ({
+                                        id: x.id,
+                                        fileName: x.fileName,
+                                        url: x.url,
+                                      })),
+                                      index: ai,
+                                    })
+                                  }
                                 >
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
@@ -293,7 +313,7 @@ export function LabTasksActionCard({
                                     alt={a.fileName}
                                     className="h-20 w-20 object-cover"
                                   />
-                                </a>
+                                </button>
                               ))}
                             </div>
                           ) : null}
@@ -410,6 +430,15 @@ export function LabTasksActionCard({
             </div>
           </div>
         </div>
+      ) : null}
+      {imageViewer ? (
+        <ImageLightbox
+          state={imageViewer}
+          onClose={() => setImageViewer(null)}
+          onIndexChange={(index) =>
+            setImageViewer((s) => (s ? { ...s, index } : null))
+          }
+        />
       ) : null}
     </>
   );

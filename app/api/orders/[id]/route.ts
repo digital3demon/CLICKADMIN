@@ -26,7 +26,6 @@ import { applyOrderListAdminMemo } from "@/lib/order-list-admin-memo.server";
 import { isLabWorkStatus } from "@/lib/lab-work-status";
 import { parseUrgentSelection } from "@/lib/order-urgency";
 import { isOrderStatus } from "@/lib/order-status-labels";
-import { ensureDefaultWarehouse } from "@/lib/inventory/ensure-default-warehouse";
 import {
   normalizeProstheticsInput,
   prostheticsFromDb,
@@ -1194,12 +1193,9 @@ export async function PATCH(
   }
 
   const prostheticsSync = body.prosthetics !== undefined;
-  let warehouseId: string | null = null;
   let prevProsthetics: OrderProstheticsV1 | null = null;
   let nextProsthetics: OrderProstheticsV1 | null = null;
   if (prostheticsSync) {
-    const wh = await ensureDefaultWarehouse();
-    warehouseId = wh.id;
     prevProsthetics = prostheticsFromDb(existing.prosthetics);
     nextProsthetics = normalizeProstheticsInput(body.prosthetics);
   }
@@ -1207,12 +1203,11 @@ export async function PATCH(
   let prostheticsStockApplied = false;
   let orderSaved = false;
   try {
-    if (prostheticsSync && warehouseId) {
+    if (prostheticsSync) {
       const syncRes = await pricingPrisma.$transaction((tx) =>
         syncOrderProstheticsStockTx(
           tx,
           orderId,
-          warehouseId,
           prevProsthetics,
           nextProsthetics,
         ),
@@ -1445,13 +1440,12 @@ export async function PATCH(
       kaitenTitleSyncError,
     });
   } catch (e) {
-    if (prostheticsStockApplied && !orderSaved && warehouseId) {
+    if (prostheticsStockApplied && !orderSaved) {
       try {
         const rollback = await pricingPrisma.$transaction((tx) =>
           syncOrderProstheticsStockTx(
             tx,
             orderId,
-            warehouseId,
             nextProsthetics,
             prevProsthetics,
           ),

@@ -9,12 +9,12 @@ type Tx = Prisma.TransactionClient;
 
 /**
  * Дельта «наше» по наряду: списание (SALE_ISSUE) или возврат на склад (RETURN_IN).
+ * Склад берётся у каждой позиции (InventoryItem.warehouseId), не единый default.
  * Вызывать внутри транзакции Prisma вместе с обновлением наряда.
  */
 export async function syncOrderProstheticsStockTx(
   tx: Tx,
   orderId: string,
-  warehouseId: string,
   previous: OrderProstheticsV1 | null,
   next: OrderProstheticsV1 | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -28,6 +28,15 @@ export async function syncOrderProstheticsStockTx(
       const newQ = newMap.get(itemId) ?? 0;
       const delta = newQ - oldQ;
       if (delta === 0) continue;
+
+      const item = await tx.inventoryItem.findUnique({
+        where: { id: itemId },
+        select: { warehouseId: true },
+      });
+      const warehouseId = item?.warehouseId?.trim() ?? "";
+      if (!warehouseId) {
+        throw new Error("У позиции не задан склад");
+      }
 
       if (delta > 0) {
         await applyStockMovement(tx, {

@@ -20,7 +20,6 @@ import {
 import { ensureKaitenDirectory } from "@/lib/kaiten-directory-bootstrap";
 import { getKaitenEnvConfig } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
-import { ensureDefaultWarehouse } from "@/lib/inventory/ensure-default-warehouse";
 import {
   normalizeProstheticsInput,
   prostheticsToJson,
@@ -535,9 +534,8 @@ export async function createOrderFromBody(
     );
   }
 
-  const warehouse = await ensureDefaultWarehouse();
   const stockSync = await pricingPrisma.$transaction(async (tx) =>
-    syncOrderProstheticsStockTx(tx, order.id, warehouse.id, null, normalizedProsthetics),
+    syncOrderProstheticsStockTx(tx, order.id, null, normalizedProsthetics),
   );
   if (!stockSync.ok) {
     try {

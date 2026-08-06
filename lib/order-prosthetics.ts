@@ -8,10 +8,12 @@ export type ProstheticsClientLine = {
   quantity: number;
 };
 
-/** Строка «наше» — позиция склада + количество (списание при сохранении наряда) */
+/** Строка «наше» — склад (UI) + позиция + количество (списание при сохранении наряда) */
 export type ProstheticsOurLine = {
   inventoryItemId: string;
   quantity: number;
+  /** Склад строки; при отсутствии берётся из InventoryItem при синке */
+  warehouseId?: string;
 };
 
 export type OrderProstheticsV1 = {
@@ -63,13 +65,20 @@ export function normalizeProstheticsInput(raw: unknown): OrderProstheticsV1 {
   if (Array.isArray(o.ourLines)) {
     for (const row of o.ourLines) {
       if (row == null || typeof row !== "object") continue;
-      const r = row as { inventoryItemId?: unknown; quantity?: unknown };
+      const r = row as {
+        inventoryItemId?: unknown;
+        quantity?: unknown;
+        warehouseId?: unknown;
+      };
       const inventoryItemId = String(r.inventoryItemId ?? "").trim();
       if (!inventoryItemId) continue;
-      ourLines.push({
+      const warehouseId = String(r.warehouseId ?? "").trim();
+      const line: ProstheticsOurLine = {
         inventoryItemId,
         quantity: clampQty(r.quantity),
-      });
+      };
+      if (warehouseId) line.warehouseId = warehouseId;
+      ourLines.push(line);
     }
   }
 
