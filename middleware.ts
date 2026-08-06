@@ -130,6 +130,8 @@ function isPublicPath(pathname: string): boolean {
   /** КликМиг: публичная форма, ЛК, дозагрузка, просмотр файлов. */
   if (pathname.startsWith("/p/clickmig/")) return true;
   if (pathname.startsWith("/api/clickmig/public/")) return true;
+  /** Сканер книг / внешние агенты: auth внутри TenantApiKey внутри роуте. */
+  if (pathname.startsWith("/api/scanner/")) return true;
   return false;
 }
 

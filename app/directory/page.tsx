@@ -79,6 +79,18 @@ export default async function DirectoryHubPage() {
         ) : null}
         {session?.role === "OWNER" ? (
           <Link
+            href="/directory/api"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">API</h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Именные ключи для сканера книг и внешних интеграций. Ключ
+              показывается один раз при создании.
+            </p>
+          </Link>
+        ) : null}
+        {session?.role === "OWNER" ? (
+          <Link
             href="/directory/telegram"
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
           >

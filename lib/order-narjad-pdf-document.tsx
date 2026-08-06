@@ -120,7 +120,7 @@ export function OrderNarjadPdfDocument({
   notes,
   kaitenUrl,
   qrDataUrl,
-  qrPlaceholder = "Нет ссылки на карточку Kaiten",
+  qrPlaceholder = "Нет ссылки витрины наряда",
 }: OrderNarjadPdfProps) {
   ensureNarjadFonts();
   const clientBlock =

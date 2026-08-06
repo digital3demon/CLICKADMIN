@@ -1,12 +1,13 @@
 import QRCode from "qrcode";
 import { renderToBuffer } from "@react-pdf/renderer";
-import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
-import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
-import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { OrderNarjadPdfDocument } from "@/lib/order-narjad-pdf-document";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { ensureStickerPublicTokenForOrder } from "@/lib/order-sticker-token";
+import { prisma } from "@/lib/prisma";
 import { getSiteOrigin } from "@/lib/site-origin-server";
+import { stickerPublicHubAbsoluteUrl } from "@/lib/sticker-public-path";
+
 /** react-pdf + шрифты из node_modules не работают в Edge */
 export const runtime = "nodejs";
 
@@ -47,6 +48,7 @@ export async function GET(_req: Request, ctx: Ctx) {
         where: { id: oid },
         select: {
           id: true,
+          tenantId: true,
           orderNumber: true,
           patientName: true,
           dueDate: true,
@@ -56,7 +58,6 @@ export async function GET(_req: Request, ctx: Ctx) {
           urgentCoefficient: true,
           clientOrderText: true,
           notes: true,
-          kaitenCardId: true,
           doctorId: true,
           kaitenCardTypeId: true,
         },
@@ -70,7 +71,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     if (!order) {
       return new Response("Not found", { status: 404 });
     }
-    const [doctor, kaitenCardType] = await Promise.all([
+    const [doctor, kaitenCardType, tenant] = await Promise.all([
       clientsPrisma.doctor.findUnique({
         where: { id: order.doctorId },
         select: { fullName: true },
@@ -81,26 +82,33 @@ export async function GET(_req: Request, ctx: Ctx) {
             select: { name: true },
           })
         : Promise.resolve(null),
+      prisma.tenant.findUnique({
+        where: { id: order.tenantId },
+        select: { slug: true },
+      }),
     ]);
 
-
-    const session = await getSessionFromCookies();
     const origin = await getSiteOrigin();
-    const demoKanbanQr =
-      session?.demo && origin
-        ? `${origin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(oid)}`
-        : null;
-    const kaitenCardUrl =
-      demoKanbanQr ??
-      (order.kaitenCardId != null ? getKaitenCardWebUrl(order.kaitenCardId) : null);
-    const qrPlaceholder = session?.demo
-      ? "Нет абсолютного URL для канбана (проверьте Host / прокси)"
-      : "Нет ссылки на карточку Kaiten";
+    const tenantSlug = tenant?.slug?.trim() || "";
+    let hubUrl: string | null = null;
+    if (tenantSlug && origin) {
+      const token = await ensureStickerPublicTokenForOrder(
+        ordersPrisma,
+        order.tenantId,
+        order.id,
+      );
+      hubUrl = stickerPublicHubAbsoluteUrl(origin, tenantSlug, token);
+    }
+    const qrPlaceholder = !tenantSlug
+      ? "У организации не задан slug"
+      : !origin
+        ? "Нет абсолютного URL сайта (проверьте Host / прокси)"
+        : "Не удалось сформировать ссылку витрины";
 
     let qrDataUrl: string | null = null;
-    if (kaitenCardUrl) {
+    if (hubUrl) {
       try {
-        qrDataUrl = await QRCode.toDataURL(kaitenCardUrl, {
+        qrDataUrl = await QRCode.toDataURL(hubUrl, {
           width: 512,
           margin: 2,
           errorCorrectionLevel: "M",
@@ -146,7 +154,7 @@ export async function GET(_req: Request, ctx: Ctx) {
         titleLine={titleLine}
         clientOrderText={order.clientOrderText ?? ""}
         notes={order.notes ?? ""}
-        kaitenUrl={kaitenCardUrl}
+        kaitenUrl={hubUrl}
         qrDataUrl={qrDataUrl}
         qrPlaceholder={qrPlaceholder}
       />,

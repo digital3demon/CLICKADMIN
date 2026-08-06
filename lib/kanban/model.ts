@@ -490,6 +490,31 @@ export function tryBlockCard(
   return true;
 }
 
+/**
+ * Смена причины при уже установленной блокировке.
+ * Не трогает blockedAt / blockedByUserId.
+ */
+export function updateKanbanBlockReason(
+  card: KanbanCard,
+  board: KanbanBoard,
+  reason: string,
+  activityActorLabel?: string,
+): boolean {
+  if (!card.blocked) return false;
+  const r = (reason || "").trim();
+  if (!r) return false;
+  if (r === (card.blockReason || "").trim()) return true;
+  card.blockReason = r;
+  pushActivity(
+    card,
+    "Причина блокировки: " + r.slice(0, 140),
+    actorUserId(board),
+    board,
+    activityActorLabel,
+  );
+  return true;
+}
+
 export function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 }

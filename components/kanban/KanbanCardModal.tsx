@@ -69,6 +69,7 @@ import {
   relativeTimeRu,
   trackLanes,
   tryBlockCard,
+  updateKanbanBlockReason,
   userNameById,
 } from "@/lib/kanban/model";
 import type { CSSProperties } from "react";
@@ -272,6 +273,10 @@ export function KanbanCardModal({
   const [rightTab, setRightTab] = useState<"done" | "chat" | "act">("chat");
   const [blockPopupOpen, setBlockPopupOpen] = useState(false);
   const [blockReasonDraft, setBlockReasonDraft] = useState("");
+  const [blockReasonEditing, setBlockReasonEditing] = useState(false);
+  const [blockReasonEditDraft, setBlockReasonEditDraft] = useState("");
+  const blockReasonEditRef = useRef<HTMLTextAreaElement>(null);
+  const blockReasonEditingRef = useRef(false);
   const [pickerMode, setPickerMode] = useState<null | "assign" | "part">(null);
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
@@ -328,6 +333,9 @@ export function KanbanCardModal({
     setRightTab("chat");
     setBlockReasonDraft("");
     setBlockPopupOpen(false);
+    setBlockReasonEditing(false);
+    blockReasonEditingRef.current = false;
+    setBlockReasonEditDraft("");
     setPickerMode(null);
     setFileViewer(null);
     setManualRouteOpen(false);
@@ -336,6 +344,14 @@ export function KanbanCardModal({
     setDescExpanded(false);
     setPlacementFieldsOpen(false);
   }, [cardId]);
+
+  useEffect(() => {
+    if (!blockReasonEditing) return;
+    const el = blockReasonEditRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [blockReasonEditing]);
 
   useEffect(() => {
     if (card) setDescDraft(card.description || "");
@@ -513,6 +529,44 @@ export function KanbanCardModal({
             : {}),
         });
       }
+    });
+  };
+
+  const beginEditBlockReason = () => {
+    if (!canManageKanbanBlock || !card?.blocked) {
+      if (!canManageKanbanBlock) toast(KANBAN_BLOCK_PERM_HINT, true);
+      return;
+    }
+    setBlockReasonEditDraft((card.blockReason || "").trim());
+    blockReasonEditingRef.current = true;
+    setBlockReasonEditing(true);
+  };
+
+  const cancelEditBlockReason = () => {
+    blockReasonEditingRef.current = false;
+    setBlockReasonEditing(false);
+    setBlockReasonEditDraft("");
+  };
+
+  const saveEditBlockReason = () => {
+    if (!canManageKanbanBlock || !cardId) return;
+    if (!blockReasonEditingRef.current) return;
+    const next = blockReasonEditDraft.trim();
+    if (!next) {
+      toast("Укажите причину остановки работы", true);
+      return;
+    }
+    onApply((b) => {
+      const fc = findCard(b, cardId);
+      if (!fc) return;
+      const ok = updateKanbanBlockReason(fc.card, b, next, act);
+      if (!ok) {
+        toast("Укажите причину остановки работы", true);
+        return;
+      }
+      blockReasonEditingRef.current = false;
+      setBlockReasonEditing(false);
+      setBlockReasonEditDraft("");
     });
   };
 
@@ -1225,9 +1279,51 @@ export function KanbanCardModal({
                 Работа остановлена
                 {card.blockedAt ? ` · ${formatBlockedAt(card.blockedAt)}` : ""}
               </div>
-              <div className="mt-0.5 text-[0.8125rem] font-medium leading-snug">
-                {(card.blockReason || "").trim() || "—"}
-              </div>
+              {blockReasonEditing ? (
+                <textarea
+                  ref={blockReasonEditRef}
+                  value={blockReasonEditDraft}
+                  onChange={(e) => setBlockReasonEditDraft(e.target.value)}
+                  rows={2}
+                  className="mt-1 w-full resize-y rounded-md border border-white/30 bg-black/20 px-2 py-1.5 text-[0.8125rem] font-medium leading-snug text-white outline-none placeholder:text-white/50 focus:border-white/60"
+                  placeholder="Причина остановки…"
+                  aria-label="Причина блокировки"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelEditBlockReason();
+                    }
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      saveEditBlockReason();
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!blockReasonEditingRef.current) return;
+                    saveEditBlockReason();
+                  }}
+                />
+              ) : (
+                <div
+                  className={`mt-0.5 text-[0.8125rem] font-medium leading-snug ${
+                    canManageKanbanBlock
+                      ? "cursor-text rounded-sm outline-none hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40"
+                      : ""
+                  }`}
+                  title={
+                    canManageKanbanBlock
+                      ? "Двойной клик — изменить причину"
+                      : undefined
+                  }
+                  onDoubleClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    beginEditBlockReason();
+                  }}
+                >
+                  {(card.blockReason || "").trim() || "—"}
+                </div>
+              )}
             </div>
             <button
               type="button"

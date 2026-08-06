@@ -41,12 +41,14 @@ describe("compareOrdersByEffectiveAppointment", () => {
       orderNumber: "2606-001",
       appointmentDate: new Date("2026-06-01T10:00:00.000Z"),
       dueToAdminsAt: null,
+      dueToAdminsHasTime: true,
     };
     const newer = {
       id: "b",
       orderNumber: "2606-002",
       appointmentDate: new Date("2026-07-08T10:00:00.000Z"),
       dueToAdminsAt: null,
+      dueToAdminsHasTime: true,
     };
     expect(compareOrdersByEffectiveAppointment(older, newer)).toBeLessThan(0);
   });
@@ -63,8 +65,63 @@ describe("compareOrdersByEffectiveAppointment", () => {
       orderNumber: "2606-002",
       appointmentDate: new Date("2026-06-01T10:00:00.000Z"),
       dueToAdminsAt: null,
+      dueToAdminsHasTime: true,
     };
     expect(compareOrdersByEffectiveAppointment(noDate, dated)).toBeLessThan(0);
+  });
+
+  it("same day: timed ascending, then ВТЧД, then noReception", () => {
+    const day = "2026-08-07";
+    const timed1400 = {
+      id: "t14",
+      orderNumber: "2608-014",
+      appointmentDate: new Date(`${day}T11:00:00.000Z`), // 14:00 МСК
+      dueToAdminsAt: null,
+      dueToAdminsHasTime: true,
+    };
+    const timed0900 = {
+      id: "t09",
+      orderNumber: "2608-009",
+      appointmentDate: new Date(`${day}T06:00:00.000Z`), // 09:00 МСК
+      dueToAdminsAt: null,
+      dueToAdminsHasTime: true,
+    };
+    const wholeDay = {
+      id: "wd",
+      orderNumber: "2608-012",
+      appointmentDate: new Date(`${day}T09:00:00.000Z`), // 12:00 МСК
+      dueToAdminsAt: null,
+      dueToAdminsHasTime: false,
+    };
+    const noReception = {
+      id: "nr",
+      orderNumber: "2608-008",
+      appointmentDate: new Date(`${day}T05:00:00.000Z`), // 08:00 МСК
+      dueToAdminsAt: null,
+      dueToAdminsHasTime: false,
+    };
+    const sorted = [timed1400, wholeDay, noReception, timed0900].sort(
+      compareOrdersByEffectiveAppointment,
+    );
+    expect(sorted.map((x) => x.id)).toEqual(["t09", "t14", "wd", "nr"]);
+  });
+
+  it("orders by Moscow calendar day before time-of-day", () => {
+    const aug8 = {
+      id: "a8",
+      orderNumber: "2608-001",
+      appointmentDate: new Date("2026-08-08T12:00:00.000Z"), // 15:00 МСК
+      dueToAdminsAt: null,
+      dueToAdminsHasTime: true,
+    };
+    const aug10 = {
+      id: "a10",
+      orderNumber: "2608-002",
+      appointmentDate: new Date("2026-08-10T09:00:00.000Z"), // 12:00 МСК
+      dueToAdminsAt: null,
+      dueToAdminsHasTime: true,
+    };
+    expect(compareOrdersByEffectiveAppointment(aug8, aug10)).toBeLessThan(0);
   });
 });
 

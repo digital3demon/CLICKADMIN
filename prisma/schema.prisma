@@ -135,6 +135,7 @@ model Tenant {
   clickMigOrders                    ClickMigOrder[]
   clickMigFiles                     ClickMigFile[]
   labTasks                          LabTask[]
+  tenantApiKeys                     TenantApiKey[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -2334,4 +2335,25 @@ model ClickMigConfig {
   smtpFromEmail          String?
   smtpFromName           String?
   updatedAt              DateTime @updatedAt
+}
+
+/// Именные API-ключи лаборатории (сканер книг, внешние интеграции). Сырой ключ в БД не хранится.
+model TenantApiKey {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Человекочитаемое имя, напр. «Сканер основной»
+  name       String
+  /// bcrypt от plaintext ключа
+  tokenHash  String
+  /// Короткий префикс для UI (dl_xxxx…)
+  prefix     String
+  /// JSON-массив scope, напр. ["scanner.ingest"]
+  scopes     Json      @default("[\"scanner.ingest\"]")
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  @@index([tenantId])
+  @@index([prefix])
 }
