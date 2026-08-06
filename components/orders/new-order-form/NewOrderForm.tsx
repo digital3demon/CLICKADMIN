@@ -313,7 +313,7 @@ export function NewOrderForm({
   });
   const [labWholeDay, setLabWholeDay] = useState(true);
   const [appointmentMode, setAppointmentMode] =
-    useState<AppointmentTimeMode>("wholeDay");
+    useState<AppointmentTimeMode>("noReception");
   const [formOpenedAtIso] = useState(() => new Date().toISOString());
   const [labDueHmSlots, setLabDueHmSlots] = useState<string[]>(() => [
     ...DEFAULT_LAB_DUE_HM_SLOTS,
@@ -729,7 +729,7 @@ export function NewOrderForm({
     } else if (typeof snap16.appointmentWholeDay === "boolean") {
       setAppointmentMode(snap16.appointmentWholeDay ? "wholeDay" : "timed");
     } else if (!pa.trim()) {
-      setAppointmentMode("wholeDay");
+      setAppointmentMode("noReception");
     } else {
       setAppointmentMode(appointmentTimeModeFromLocal(false, pa));
       const hm = parseHmFromDueGridLocal(pa);
@@ -2240,7 +2240,7 @@ export function NewOrderForm({
                       raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
                     if (!s.trim()) {
                       setPatientAppointmentLocal("");
-                      setAppointmentMode("wholeDay");
+                      setAppointmentMode("noReception");
                       return;
                     }
                     if (s.trim()) clearAiUnfilled("appointment");
@@ -2252,6 +2252,13 @@ export function NewOrderForm({
                       newHm &&
                       newHm !== forced
                     ) {
+                      // Пустое поле + клик по дню: пикер подставляет 12:00 — не считаем это «точными часами».
+                      if (!patientAppointmentLocal.trim()) {
+                        setPatientAppointmentLocal(
+                          replaceAppointmentLocalHm(s, forced),
+                        );
+                        return;
+                      }
                       setAppointmentMode("timed");
                       setPatientAppointmentLocal(s);
                       return;

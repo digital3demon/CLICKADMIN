@@ -11,7 +11,6 @@ import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
-import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
@@ -56,6 +55,20 @@ export type FinanceOfficeOrderTableRow = {
   listPendingProstheticsRequests: boolean;
   listKaitenLabMentionHighlight: boolean;
 };
+
+/** Только отображение (без редактирования). */
+function formatFinanceDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function formatFinanceCardDate(iso: string | null): string | undefined {
   if (!iso) return undefined;
@@ -171,7 +184,18 @@ export function FinanceOfficeOrdersTable({
               <th className="px-2 py-2 text-center">Клиника</th>
               <th className="px-2 py-2 text-center">Врач</th>
               <th className="px-2 py-2 text-center">Пациент</th>
-              <th className="px-2 py-2 text-center">Запись</th>
+              <th
+                className="px-2 py-2 text-center"
+                title="Лаб-срок: dueDate"
+              >
+                Лаб срок
+              </th>
+              <th
+                className="px-2 py-2 text-center"
+                title="Запись: дата и время приёма пациента"
+              >
+                Запись
+              </th>
               <th className="w-[11rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Реквизиты</th>
               <th className="w-[7rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Наше юрлицо</th>
               <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
@@ -186,7 +210,8 @@ export function FinanceOfficeOrdersTable({
               const patientName = o.patientName
                 ? personNameSurnameInitials(o.patientName)
                 : "";
-              const labDate = formatFinanceCardDate(
+              const labDueLabel = formatFinanceCardDate(o.dueDate);
+              const appointmentLabel = formatFinanceCardDate(
                 o.appointmentDate ?? o.dueToAdminsAt,
               );
               const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
@@ -331,14 +356,12 @@ export function FinanceOfficeOrdersTable({
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
-                    <div className="flex justify-center">
-                      <OrderListDueCell
-                        orderId={o.id}
-                        dueIso={o.appointmentDate ?? o.dueToAdminsAt}
-                        createdAtIso={o.createdAt}
-                        variant="appointment"
-                      />
-                    </div>
+                    {formatFinanceDateTime(o.dueDate)}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
+                    {formatFinanceDateTime(
+                      o.appointmentDate ?? o.dueToAdminsAt,
+                    )}
                   </td>
                   <td className="w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
                     {o.counterpartyRequisitesText || "—"}
@@ -379,10 +402,15 @@ export function FinanceOfficeOrdersTable({
                             placement="underOrderNumber"
                           />
                         </div>
-                        {labDate ? (
-                          <span className="mt-0.5 shrink-0 text-xs text-[var(--text-muted)]">
-                            {labDate}
-                          </span>
+                        {labDueLabel || appointmentLabel ? (
+                          <div className="mt-0.5 shrink-0 text-right text-xs text-[var(--text-muted)]">
+                            {labDueLabel ? (
+                              <div title="Лаб срок">Лаб {labDueLabel}</div>
+                            ) : null}
+                            {appointmentLabel ? (
+                              <div title="Запись">Зап. {appointmentLabel}</div>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
 

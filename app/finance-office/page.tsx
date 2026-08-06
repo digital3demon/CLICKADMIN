@@ -115,7 +115,7 @@ export default async function FinanceOfficePage({
   let rangeSummary: string | null = null;
 
   if (mode === "actual") {
-    rangeSummary = `Актуальное: непросчитанные с лаб-сроком до завтра (${moscowTomorrowYmd()} МСК), этапы от «Производство» до «На проверку»`;
+    rangeSummary = `Актуальное: непросчитанные с лаб-сроком до завтра (${moscowTomorrowYmd()} МСК), все этапы воронки`;
   } else if (!toRaw) {
     error = "Укажите дату «по» и нажмите «Показать».";
   } else if (fromRaw && fromRaw > toRaw) {
@@ -123,9 +123,9 @@ export default async function FinanceOfficePage({
   } else if (fromRaw && rangeDaySpan(fromRaw, toRaw) > MAX_RANGE_DAYS) {
     error = `Максимальный период — ${MAX_RANGE_DAYS} дней. Сузьте диапазон.`;
   } else if (fromRaw) {
-    rangeSummary = `Лаб-срок (МСК): с ${fromRaw} по ${toRaw}, этапы от «Производство» до «На проверку»`;
+    rangeSummary = `Лаб-срок (МСК): с ${fromRaw} по ${toRaw}, все этапы воронки`;
   } else {
-    rangeSummary = `Лаб-срок (МСК): по ${toRaw} (включая прошлые), этапы от «Производство» до «На проверку»`;
+    rangeSummary = `Лаб-срок (МСК): по ${toRaw} (включая прошлые), все этапы воронки`;
   }
 
   const shouldFetch = mode === "actual" || (mode === "period" && Boolean(toRaw) && !error);
@@ -213,7 +213,7 @@ export default async function FinanceOfficePage({
             </h1>
             <p className="mt-2 hidden max-w-4xl text-sm leading-snug text-[var(--text-secondary)] md:block">
               Контроль просчёта, корректировок, заказа протетики и оплат.
-              Список — от «Производство» до «На проверку» (без скана, «к исполнению», согласования и «сдана админам»).
+              Список без ограничения по этапу воронки (включая согласование и ранние этапы).
             </p>
           </div>
           <FinanceOfficeModePanel

@@ -61,7 +61,7 @@ export function FinanceOfficeModePanel({
               ? "bg-[var(--sidebar-blue)] text-white shadow-sm"
               : "border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-strong)] hover:bg-[var(--surface-hover)]",
           ].join(" ")}
-          title="Непросчитанные наряды с лаб-сроком до завтра (включая прошлые), начиная с этапа «Производство»"
+          title="Непросчитанные наряды с лаб-сроком до завтра (включая прошлые), без ограничения по этапу воронки"
           aria-current={actualActive ? "page" : undefined}
         >
           Актуальное

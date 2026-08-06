@@ -5,7 +5,6 @@ import {
 } from "@/lib/finance-office-list-scope";
 import {
   compareOrdersByEffectiveFinanceRecord,
-  orderMatchesFinanceOfficeProductionPlus,
 } from "@/lib/finance-office-list-filter";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
@@ -403,18 +402,12 @@ export async function fetchFinanceOfficeOrders(
     }
   }
 
-  const rows = await db.order.findMany({
+  const stageFiltered = await db.order.findMany({
     where: { AND: parts },
     orderBy: [{ createdAt: "desc" }, { orderNumber: "desc" }],
     take: 500,
     select: financeOfficeOrderSelect,
   });
-  const stageFiltered = rows.filter((row) =>
-    orderMatchesFinanceOfficeProductionPlus({
-      labWorkStatus: row.labWorkStatus,
-      kaitenColumnTitle: row.kaitenColumnTitle,
-    }),
-  );
 
   const clientsPrisma = await getClientsPrisma();
   const pricingPrisma = await getPricingPrisma();

@@ -48,13 +48,13 @@ describe("financeOfficeListTagSkipsDueDateWindow", () => {
 });
 
 describe("financeOfficeScopeWhere", () => {
-  it("всегда включает tenant, архив и этап производство+", () => {
+  it("всегда включает tenant и архив (без фильтра по этапу воронки)", () => {
     const w = financeOfficeScopeWhere("t1", {});
     const json = JSON.stringify(w);
     expect(json).toContain("tenantId");
     expect(json).toContain("archivedAt");
-    expect(json).toContain("labWorkStatus");
-    expect(json).toContain("kaitenColumnTitle");
+    expect(json).not.toContain("labWorkStatus");
+    expect(json).not.toContain("kaitenColumnTitle");
   });
 
   it("actual добавляет непросчитанные и верхнюю границу лаб-срока", () => {

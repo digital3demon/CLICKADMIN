@@ -4,7 +4,6 @@ import {
   financeOfficeLabDueBeforeEndExclusive,
   financeOfficeLabDueInRange,
   financeOfficeActualEndExclusive,
-  financeOfficeProductionAndLaterWhere,
   type FinanceOfficeMode,
 } from "@/lib/finance-office-list-filter";
 import { moscowDayBoundsUtc } from "@/lib/shipments-date-range";
@@ -41,7 +40,6 @@ export function financeOfficeScopeWhere(
 ): Prisma.OrderWhereInput {
   const parts: Prisma.OrderWhereInput[] = [
     { tenantId, archivedAt: null },
-    financeOfficeProductionAndLaterWhere(),
   ];
   const search = searchWhere(opts.search ?? "");
   if (Object.keys(search).length > 0) parts.push(search);

@@ -9,7 +9,7 @@ import { labWorkStatusFromColumnTitle } from "@/lib/order-status-display";
 import { ordersShipmentActualEndExclusive } from "@/lib/orders-shipment-list-filter";
 import { moscowDayBoundsUtc } from "@/lib/shipments-date-range";
 
-/** Этапы вне воронки ФинОтдела: до «Производство» и финал «Сдана админам». */
+/** @deprecated ФинОтдел больше не режет по этапу; оставлено для тестов/совместимости. */
 export const FINANCE_OFFICE_EXCLUDED_LAB_STATUSES = [
   "TO_SCAN",
   "TO_EXECUTION",
@@ -17,7 +17,7 @@ export const FINANCE_OFFICE_EXCLUDED_LAB_STATUSES = [
   "TO_ADMINS",
 ] as const satisfies readonly LabWorkStatus[];
 
-/** «Производство» … «На проверку» (без «Сдана админам»). */
+/** @deprecated см. FINANCE_OFFICE_EXCLUDED_LAB_STATUSES */
 export const FINANCE_OFFICE_INCLUDED_LAB_STATUSES: LabWorkStatus[] =
   LAB_WORK_STATUS_ORDER.filter(
     (s) =>
@@ -85,6 +85,7 @@ export function effectiveFinanceLabWorkStatus(order: {
   );
 }
 
+/** @deprecated ФинОтдел не фильтрует по этапу. */
 export function orderMatchesFinanceOfficeProductionPlus(order: {
   labWorkStatus: string;
   kaitenColumnTitle: string | null;
@@ -99,6 +100,7 @@ const FINANCE_KAITEN_COLUMN_TITLES = FINANCE_OFFICE_INCLUDED_LAB_STATUSES.map(
   (s) => LAB_WORK_STATUS_LABELS[s],
 );
 
+/** @deprecated ФинОтдел не фильтрует по этапу. */
 export function financeOfficeProductionAndLaterWhere(): Prisma.OrderWhereInput {
   return {
     OR: [
