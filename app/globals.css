@@ -252,6 +252,16 @@ html {
   font-size: 110%;
 }
 
+/*
+ * Мобильный канбан (список / календарь / доски): по умолчанию как браузерный зум 75%
+ * при базовых 110% → 110% × 0.75 = 82.5%. Десктопный shell не трогаем.
+ */
+@media (max-width: 1023px), ((min-width: 1024px) and (max-height: 559px)) {
+  html:has(.kanban-root) {
+    font-size: 82.5%;
+  }
+}
+
 body {
   @apply antialiased;
   overflow-x: clip;
