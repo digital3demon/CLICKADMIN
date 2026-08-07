@@ -1,4 +1,4 @@
-# Build self-contained GUI exe (no console window)
+# Build single ClickLab-Scanner.exe (no zip pack)
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
@@ -38,32 +38,15 @@ Remove-Item -Recurse -Force $Dist, $Build -ErrorAction SilentlyContinue
 $Exe = Join-Path $Dist "ClickLab-Scanner.exe"
 if (-not (Test-Path $Exe)) { throw "EXE не собран: $Exe" }
 
-$PackDir = Join-Path $Dist "ClickLab-Scanner"
-Remove-Item -Recurse -Force $PackDir -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Path $PackDir | Out-Null
-Copy-Item $Exe (Join-Path $PackDir "ClickLab-Scanner.exe")
-Copy-Item (Join-Path $Root "README.md") (Join-Path $PackDir "README.md") -Force
+$Desk = Join-Path $env:USERPROFILE "Desktop\ClickLab-Scanner.exe"
+Copy-Item $Exe $Desk -Force
 
-@"
-Click Lab — сканер в заказ
-==========================
-
-1. Запустите ClickLab-Scanner.exe
-2. Вкладка «Настройки»: папка сканера, адрес CRM, API-ключ (и при желании автозапуск)
-3. Нажмите «Начать работу» — на вкладке «Сканы» появятся миниатюры
-4. Зелёная рамка = в заказ, красная = ошибка. ПКМ: ссылка / корректировка / удаление
-
-Python устанавливать не нужно.
-"@ | Set-Content -Path (Join-Path $PackDir "КАК ЗАПУСТИТЬ.txt") -Encoding UTF8
-
-$Zip = Join-Path $Root "book-scanner-watcher-exe.zip"
-if (Test-Path $Zip) { Remove-Item $Zip -Force }
-Compress-Archive -Path (Join-Path $PackDir "*") -DestinationPath $Zip -Force
-
-$Desk = Join-Path $env:USERPROFILE "Desktop\ClickLab-Scanner-Watcher.zip"
-Copy-Item $Zip $Desk -Force
+$Scan = "C:\Users\sevas\Pictures\тест сканер\ClickLab-Scanner.exe"
+if (Test-Path (Split-Path -Parent $Scan)) {
+  Copy-Item $Exe $Scan -Force
+}
 
 Write-Host "OK: $Exe"
-Write-Host "ZIP: $Zip"
 Write-Host "Desktop: $Desk"
-Get-Item $Exe, $Zip | Format-Table Name, @{N='MB';E={[math]::Round($_.Length/1MB,1)}} -AutoSize
+if (Test-Path $Scan) { Write-Host "Scanner folder: $Scan" }
+Get-Item $Exe | Format-Table Name, @{N='MB';E={[math]::Round($_.Length/1MB,1)}}, FullName -AutoSize

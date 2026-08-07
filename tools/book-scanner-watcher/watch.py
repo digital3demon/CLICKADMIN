@@ -11,6 +11,7 @@ import base64
 import json
 import logging
 import mimetypes
+import os
 import queue
 import re
 import shutil
@@ -45,10 +46,12 @@ APP_TITLE = "Click Lab — сканер в заказ"
 AUTOSTART_REG_NAME = "ClickLabScanner"
 COLS = 4
 # 100–1000 сканов/день: очередь + мало воркеров (лимит CRM ~60/мин на ключ)
-WORKER_COUNT = 2
-SWEEP_INTERVAL_SEC = 2.5
+WORKER_COUNT = 1  # один поток: CRM OCR тяжёлый, параллель даёт «тихие» зависания
+SWEEP_INTERVAL_SEC = 2.0
 GALLERY_MAX = 48
 RATE_LIMIT_BACKOFF_SEC = 8.0
+UPLOAD_TIMEOUT_SEC = 120
+SINGLE_INSTANCE_MUTEX = "Local\\ClickLabScannerSingleton"
 
 
 # ─── paths / settings / autostart ───────────────────────────────────────────
@@ -58,6 +61,55 @@ def app_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
+
+
+def data_dir() -> Path:
+    """Настройки/логи вне Temp — иначе запуск из ZIP теряет всё и плодит копии."""
+    base = Path(
+        os.environ.get("LOCALAPPDATA")
+        or (Path.home() / "AppData" / "Local")
+    )
+    d = base / "ClickLabScanner"
+    d.mkdir(parents=True, exist_ok=True)
+    # перенос со старого места рядом с exe (в т.ч. из Temp-распаковки)
+    for name in ("settings.json", "gallery.json"):
+        dest = d / name
+        if dest.is_file():
+            continue
+        src = app_dir() / name
+        if src.is_file():
+            try:
+                shutil.copy2(src, dest)
+            except OSError:
+                pass
+    return d
+
+
+def is_ephemeral_install() -> bool:
+    p = str(app_dir()).lower().replace("/", "\\")
+    return (
+        "\\temp\\" in p
+        or "\\tmp\\" in p
+        or ".zip." in p
+        or "\\appdata\\local\\temp\\" in p
+    )
+
+
+def acquire_single_instance() -> bool:
+    """False — уже запущена другая копия."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.CreateMutexW(None, False, SINGLE_INSTANCE_MUTEX)
+        # держим handle до выхода процесса
+        acquire_single_instance._handle = handle  # type: ignore[attr-defined]
+        ERROR_ALREADY_EXISTS = 183
+        return int(kernel32.GetLastError()) != ERROR_ALREADY_EXISTS
+    except Exception:
+        return True
 
 
 def launch_command() -> str:
@@ -111,11 +163,11 @@ def set_windows_autostart(enabled: bool) -> tuple[bool, str]:
 
 
 def settings_path() -> Path:
-    return app_dir() / "settings.json"
+    return data_dir() / "settings.json"
 
 
 def gallery_index_path() -> Path:
-    return app_dir() / "gallery.json"
+    return data_dir() / "gallery.json"
 
 
 def load_settings() -> dict:
@@ -255,6 +307,7 @@ def api_request(
     data: bytes | None = None,
     headers: dict[str, str] | None = None,
     json_body: dict | None = None,
+    timeout: int = UPLOAD_TIMEOUT_SEC,
 ) -> tuple[int, dict]:
     import urllib.error
     import urllib.request
@@ -266,7 +319,7 @@ def api_request(
         hdrs["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=body, headers=hdrs, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=300) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             try:
                 parsed = json.loads(raw) if raw.strip() else {}
@@ -839,7 +892,7 @@ class ScannerApp:
                 return
             self._pending.add(key)
         self.job_q.put(path)
-        self._refresh_status()
+        self._refresh_status(force=True)
 
     def _release_pending(self, path: Path) -> None:
         key = self._path_key(path)
@@ -1036,10 +1089,25 @@ class ScannerApp:
             return "fail"
 
         logging.info("process %s", path.name)
+        t0 = time.time()
         try:
             qr = decode_qr(path)
+            logging.info(
+                "qr %s → %s (%.1fs)",
+                path.name,
+                "yes" if qr else "no",
+                time.time() - t0,
+            )
+            t_up = time.time()
             ok, status, parsed = upload_scan(
                 crm_base=crm, api_key=key, path=path, qr_hint=qr
+            )
+            logging.info(
+                "upload %s status=%s ok=%s (%.1fs)",
+                path.name,
+                status,
+                ok,
+                time.time() - t_up,
             )
         except Exception as e:
             logging.exception("upload %s", path.name)
@@ -1426,12 +1494,38 @@ class ScannerApp:
 
 
 def main() -> int:
-    log_file = app_dir() / "watcher.log"
+    log_file = data_dir() / "watcher.log"
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
         handlers=[logging.FileHandler(log_file, encoding="utf-8")],
     )
+    if not acquire_single_instance():
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showwarning(
+                APP_TITLE,
+                "Программа уже запущена.\nЗакройте другое окно Click Lab — сканер.",
+            )
+            root.destroy()
+        except Exception:
+            pass
+        return 1
+    if is_ephemeral_install():
+        logging.warning("exe from Temp/ZIP — data dir %s", data_dir())
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showwarning(
+                APP_TITLE,
+                "Похоже, программа запущена из архива (временная папка).\n\n"
+                "Скопируйте ClickLab-Scanner.exe в обычную папку "
+                "(например в папку сканера) и запускайте оттуда.",
+            )
+            root.destroy()
+        except Exception:
+            pass
     ScannerApp().run()
     return 0
 
