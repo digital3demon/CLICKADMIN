@@ -121,9 +121,24 @@ export async function decodeQrFromImageBuffer(
   const tctx = top.getContext("2d");
   tctx.drawImage(full, 0, 0, w, topH, 0, 0, w, topH);
   const topData = tctx.getImageData(0, 0, w, topH);
-  return decodeQrFromRgba(
+  const fromTop = decodeQrFromRgba(
     topData.data as unknown as Uint8ClampedArray,
     w,
     topH,
+  );
+  if (fromTop) return fromTop;
+
+  // Правый верх (QR на печатном наряде обычно справа)
+  const qx = Math.floor(w * 0.45);
+  const qw = Math.max(1, w - qx);
+  const qh = Math.max(1, Math.floor(h * 0.45));
+  const corner = createCanvas(qw, qh);
+  const cctx = corner.getContext("2d");
+  cctx.drawImage(full, qx, 0, qw, qh, 0, 0, qw, qh);
+  const cornerData = cctx.getImageData(0, 0, qw, qh);
+  return decodeQrFromRgba(
+    cornerData.data as unknown as Uint8ClampedArray,
+    qw,
+    qh,
   );
 }

@@ -50,7 +50,7 @@ WORKER_COUNT = 1  # один поток: CRM OCR тяжёлый, паралле�
 SWEEP_INTERVAL_SEC = 2.0
 GALLERY_MAX = 48
 RATE_LIMIT_BACKOFF_SEC = 8.0
-UPLOAD_TIMEOUT_SEC = 120
+UPLOAD_TIMEOUT_SEC = 90
 SINGLE_INSTANCE_MUTEX = "Local\\ClickLabScannerSingleton"
 
 
@@ -253,18 +253,53 @@ def imread_bgr(path: Path) -> np.ndarray | None:
 
 
 def decode_qr(path: Path) -> str | None:
+    """Несколько попыток: цвет / серый / контраст / верх кадра / масштабы."""
     img = imread_bgr(path)
     if img is None:
         return None
     detector = cv2.QRCodeDetector()
-    data, _points, _ = detector.detectAndDecode(img)
-    text = (data or "").strip()
-    if text:
-        return text
-    h = img.shape[0]
-    top = img[0 : max(1, h // 2), :]
-    data2, _p2, _ = detector.detectAndDecode(top)
-    return (data2 or "").strip() or None
+
+    def try_decode(mat: np.ndarray) -> str | None:
+        try:
+            data, _points, _ = detector.detectAndDecode(mat)
+        except Exception:
+            return None
+        text = (data or "").strip()
+        return text or None
+
+    h, w = img.shape[:2]
+    candidates: list[np.ndarray] = [img]
+    if h > 2:
+        candidates.append(img[0 : h // 2, :])
+        candidates.append(img[0 : max(1, int(h * 0.4)), :])
+    # QR часто справа сверху на наряде
+    if w > 4 and h > 4:
+        candidates.append(img[0 : h // 2, w // 2 :])
+
+    variants: list[np.ndarray] = []
+    for c in candidates:
+        variants.append(c)
+        gray = cv2.cvtColor(c, cv2.COLOR_BGR2GRAY)
+        variants.append(gray)
+        variants.append(cv2.equalizeHist(gray))
+        thr = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 5
+        )
+        variants.append(thr)
+
+    scales = (1.0, 1.5, 2.0, 0.75)
+    for mat in variants:
+        for sc in scales:
+            if sc == 1.0:
+                scaled = mat
+            else:
+                scaled = cv2.resize(
+                    mat, None, fx=sc, fy=sc, interpolation=cv2.INTER_CUBIC
+                )
+            hit = try_decode(scaled)
+            if hit:
+                return hit
+    return None
 
 
 def short_name(name: str, limit: int = 26) -> str:
@@ -1089,6 +1124,7 @@ class ScannerApp:
             return "fail"
 
         logging.info("process %s", path.name)
+        self.ui_q.put(("toast", f"Загрузка в CRM… {path.name}"))
         t0 = time.time()
         try:
             qr = decode_qr(path)
@@ -1098,6 +1134,10 @@ class ScannerApp:
                 "yes" if qr else "no",
                 time.time() - t0,
             )
+            if not qr:
+                self.ui_q.put(
+                    ("toast", f"QR локально нет — ждём CRM/OCR… {path.name}")
+                )
             t_up = time.time()
             ok, status, parsed = upload_scan(
                 crm_base=crm, api_key=key, path=path, qr_hint=qr
@@ -1111,6 +1151,11 @@ class ScannerApp:
             )
         except Exception as e:
             logging.exception("upload %s", path.name)
+            err_s = str(e)
+            # Сетевой таймаут — оставим файл, sweep повторит
+            if "timed out" in err_s.lower() or "timeout" in err_s.lower():
+                self.ui_q.put(("toast", f"Таймаут CRM, повторю: {path.name}"))
+                return "retry"
             dest = move_to(watch / "error", path)
             self.ui_q.put(
                 (
@@ -1119,7 +1164,7 @@ class ScannerApp:
                         uid=uuid.uuid4().hex,
                         path=dest,
                         ok=False,
-                        error=str(e)[:200],
+                        error=err_s[:200],
                         caption=short_name(dest.name),
                     ),
                 )
@@ -1127,11 +1172,20 @@ class ScannerApp:
             self._processed_fail += 1
             return "fail"
 
-        if status == 429 or str(parsed.get("error") or "").lower() in {
+        if status == 0 and (
+            "timed out" in str(parsed.get("error") or "").lower()
+            or "timeout" in str(parsed.get("error") or "").lower()
+        ):
+            logging.warning("timeout on %s — retry", path.name)
+            self.ui_q.put(("toast", f"Таймаут CRM, повторю: {path.name}"))
+            return "retry"
+
+        if status in {429, 502, 503, 504} or str(parsed.get("error") or "").lower() in {
             "rate_limited",
             "too_many_requests",
         }:
-            logging.warning("rate limited on %s — retry", path.name)
+            logging.warning("HTTP %s on %s — retry", status, path.name)
+            self.ui_q.put(("toast", f"CRM HTTP {status}, повторю: {path.name}"))
             return "retry"
 
         done_dir = watch / "done"
