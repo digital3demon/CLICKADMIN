@@ -315,22 +315,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!resolved.ok) {
-      console.info("[scanner/ingest]", {
-        step: "resolve_fail",
-        reason: resolved.reason,
-        keyId: apiKey.keyId,
-        ms: Date.now() - t0,
-      });
-      const status =
-        resolved.reason === "tenant_mismatch"
-          ? 403
-          : resolved.reason === "unknown_qr" ||
-              resolved.reason === "no_text_match"
-            ? 422
-            : 404;
-      return NextResponse.json({ error: resolved.reason }, { status });
-    }
+    // Здесь resolved всегда ok:true — все fail-ветки выше уже вернули ответ.
 
     const ordersDb = await resolveTenantPrismaClient(apiKey.tenantId);
     const attachmentId = newOrderAttachmentId();
