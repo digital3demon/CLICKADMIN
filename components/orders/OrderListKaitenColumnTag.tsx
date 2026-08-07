@@ -57,8 +57,9 @@ export function OrderListKaitenColumnTag({
 }: Props) {
   const isHarmony = useUiDesign() === "harmony";
   const underOrder = placement === "underOrderNumber";
+  // Под №: чуть крупнее и с запасом по бокам (раньше text-[9–10px]/px-1.5 было «впритык»).
   const padClass = underOrder
-    ? "px-1.5 py-px text-[9px] leading-tight sm:text-[10px]"
+    ? "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:text-[12px]"
     : "order-list-tag-pill";
 
   const wrapClass = underOrder

@@ -9,11 +9,59 @@ import {
   parseKaitenCardMemberRow,
   parseKaitenSpaceUserRow,
 } from "@/lib/kaiten-rest";
-import { normalizeKaitenMatchEmail } from "@/lib/kaiten-members-parse";
+import {
+  findUniqueIdByNormalizedFullName,
+  normalizeKaitenMatchEmail,
+  normalizeKaitenMatchFullName,
+} from "@/lib/kaiten-members-parse";
 
 describe("normalizeKaitenMatchEmail", () => {
   it("trim and lowercase", () => {
     expect(normalizeKaitenMatchEmail("  Admin@Lab.RU ")).toBe("admin@lab.ru");
+  });
+});
+
+describe("normalizeKaitenMatchFullName", () => {
+  it("trim, lowercase, ё→е, collapse spaces", () => {
+    expect(normalizeKaitenMatchFullName("  Всеволод   Соколов ")).toBe(
+      "всеволод соколов",
+    );
+    expect(normalizeKaitenMatchFullName("Алёна")).toBe("алена");
+  });
+});
+
+describe("findUniqueIdByNormalizedFullName", () => {
+  it("matches unique FIO ignoring case/spaces", () => {
+    expect(
+      findUniqueIdByNormalizedFullName(
+        [
+          { id: "u1", name: "Всеволод Соколов" },
+          { id: "u2", name: "Иван Петров" },
+        ],
+        "всеволод  соколов",
+      ),
+    ).toBe("u1");
+  });
+
+  it("returns null when FIO is ambiguous", () => {
+    expect(
+      findUniqueIdByNormalizedFullName(
+        [
+          { id: "u1", name: "Иван Иванов" },
+          { id: "u2", name: "иван иванов" },
+        ],
+        "Иван Иванов",
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when no match", () => {
+    expect(
+      findUniqueIdByNormalizedFullName(
+        [{ id: "u1", name: "Всеволод Соколов" }],
+        "Другой Человек",
+      ),
+    ).toBeNull();
   });
 });
 

@@ -772,7 +772,7 @@ model User {
   avatarCustomData          Bytes?
   /// Ник для @упоминаний (латиница, цифры, _; хранится без @), позже — уведомления в Telegram
   mentionHandle             String?           @unique
-  /// Числовой id пользователя в Kaiten (кэш после match по email)
+  /// Числовой id пользователя в Kaiten (кэш после match по email или уникальному ФИО)
   kaitenUserId              Int?
   /// Сколько нарядов на странице списка /orders (1–200); null — значение по умолчанию в приложении
   ordersListPageSize        Int?

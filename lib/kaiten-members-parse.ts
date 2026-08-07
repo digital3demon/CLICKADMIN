@@ -9,6 +9,31 @@ export function normalizeKaitenMatchEmail(raw: string | null | undefined): strin
     .toLowerCase();
 }
 
+/** ФИО для match Kaiten↔CRM: trim, lowercase, ё→е, схлопнуть пробелы. */
+export function normalizeKaitenMatchFullName(raw: string | null | undefined): string {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Однозначное совпадение по нормализованному имени.
+ * 0 или >1 hit → null (не угадываем при дублях ФИО).
+ */
+export function findUniqueIdByNormalizedFullName(
+  items: ReadonlyArray<{ id: string; name: string }>,
+  needleRaw: string | null | undefined,
+): string | null {
+  const needle = normalizeKaitenMatchFullName(needleRaw);
+  if (!needle) return null;
+  const hits = items.filter(
+    (x) => normalizeKaitenMatchFullName(x.name) === needle,
+  );
+  return hits.length === 1 ? hits[0]!.id : null;
+}
+
 export type KaitenUnmappedMember = {
   kaitenUserId: number;
   label: string;

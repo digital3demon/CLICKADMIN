@@ -6,14 +6,18 @@ import {
   KAITEN_USERS_DIRECTORY_KEY,
   KAITEN_USERS_DIRECTORY_TTL_MS,
 } from "@/lib/kaiten-members-config";
-import { normalizeKaitenMatchEmail } from "@/lib/kaiten-members-parse";
+import {
+  findUniqueIdByNormalizedFullName,
+  normalizeKaitenMatchEmail,
+  normalizeKaitenMatchFullName,
+} from "@/lib/kaiten-members-parse";
 import {
   kaitenListSpaceUsers,
   type KaitenAuth,
   type KaitenSpaceUserRow,
 } from "@/lib/kaiten-rest";
 
-export { normalizeKaitenMatchEmail };
+export { normalizeKaitenMatchEmail, normalizeKaitenMatchFullName };
 
 type DirectoryCache = {
   fetchedAt: string;
@@ -136,7 +140,7 @@ async function cacheKaitenUserIdOnUser(
   });
 }
 
-/** Kaiten member → CRM User.id (email primary, затем User.kaitenUserId). */
+/** Kaiten member → CRM User.id: kaitenUserId → email → уникальное displayName. */
 export async function resolveKaitenMemberToCrmUser(
   db: PrismaClient,
   tenantId: string,
@@ -149,11 +153,9 @@ export async function resolveKaitenMemberToCrmUser(
 ): Promise<ResolveKaitenMemberResult> {
   const dirRow = directory.byUserId[String(member.userId)];
   const email = normalizeKaitenMatchEmail(member.email ?? dirRow?.email);
-  const label =
-    member.fullName?.trim() ||
-    dirRow?.fullName ||
-    email ||
-    `user-${member.userId}`;
+  const fullName =
+    member.fullName?.trim() || dirRow?.fullName?.trim() || "";
+  const label = fullName || email || `user-${member.userId}`;
 
   const byKaitenId = await db.user.findFirst({
     where: { tenantId, isActive: true, kaitenUserId: member.userId },
@@ -169,6 +171,21 @@ export async function resolveKaitenMemberToCrmUser(
     if (byEmail) {
       await cacheKaitenUserIdOnUser(db, tenantId, byEmail.id, member.userId);
       return { ok: true, crmUserId: byEmail.id };
+    }
+  }
+
+  if (normalizeKaitenMatchFullName(fullName)) {
+    const activeUsers = await db.user.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, displayName: true },
+    });
+    const crmUserId = findUniqueIdByNormalizedFullName(
+      activeUsers.map((u) => ({ id: u.id, name: u.displayName })),
+      fullName,
+    );
+    if (crmUserId) {
+      await cacheKaitenUserIdOnUser(db, tenantId, crmUserId, member.userId);
+      return { ok: true, crmUserId };
     }
   }
 
@@ -213,8 +230,22 @@ export async function resolveCrmUserToKaitenUser(
     }
   }
 
+  const nameKey = normalizeKaitenMatchFullName(user.displayName);
+  if (nameKey) {
+    const nameHits = Object.entries(directory.byUserId).filter(
+      ([, row]) => normalizeKaitenMatchFullName(row.fullName) === nameKey,
+    );
+    if (nameHits.length === 1) {
+      const n = Number(nameHits[0]![0]);
+      if (Number.isFinite(n)) {
+        await cacheKaitenUserIdOnUser(db, tenantId, user.id, n);
+        return { ok: true, kaitenUserId: n };
+      }
+    }
+  }
+
   return {
     ok: false,
-    error: `Нет пользователя Kaiten с email ${user.email}`,
+    error: `Нет пользователя Kaiten с email ${user.email} или однозначным ФИО «${user.displayName}»`,
   };
 }
