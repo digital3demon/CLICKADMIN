@@ -183,8 +183,20 @@ def wait_until_stable(path: Path) -> bool:
     return False
 
 
+def imread_bgr(path: Path) -> np.ndarray | None:
+    """Читает картинку; cv2.imread ломается на кириллических путях Windows."""
+    try:
+        data = np.fromfile(str(path), dtype=np.uint8)
+    except OSError:
+        return None
+    if data.size == 0:
+        return None
+    img = cv2.imdecode(data, cv2.IMREAD_COLOR)
+    return img if img is not None else None
+
+
 def decode_qr(path: Path) -> str | None:
-    img = cv2.imread(str(path))
+    img = imread_bgr(path)
     if img is None:
         return None
     detector = cv2.QRCodeDetector()
@@ -196,6 +208,16 @@ def decode_qr(path: Path) -> str | None:
     top = img[0 : max(1, h // 2), :]
     data2, _p2, _ = detector.detectAndDecode(top)
     return (data2 or "").strip() or None
+
+
+def short_name(name: str, limit: int = 26) -> str:
+    if len(name) <= limit:
+        return name
+    stem, dot, suf = name.rpartition(".")
+    if not dot:
+        return name[: limit - 1] + "…"
+    keep = max(8, limit - len(suf) - 2)
+    return stem[:keep] + "…." + suf
 
 
 def move_to(subdir: Path, path: Path) -> Path:
@@ -297,8 +319,9 @@ def delete_crm_attachment(
 
 
 def make_thumb_png(path: Path, size: int = THUMB_SIZE) -> Path | None:
-    img = cv2.imread(str(path))
+    img = imread_bgr(path)
     if img is None:
+        logging.warning("thumb: cannot read %s", path)
         return None
     h, w = img.shape[:2]
     scale = min(size / max(w, 1), size / max(h, 1), 1.0)
@@ -307,10 +330,16 @@ def make_thumb_png(path: Path, size: int = THUMB_SIZE) -> Path | None:
     canvas = 255 * np.ones((size, size, 3), dtype=np.uint8)
     y0, x0 = (size - nh) // 2, (size - nw) // 2
     canvas[y0 : y0 + nh, x0 : x0 + nw] = resized
-    tmp = Path(tempfile.gettempdir()) / f"clscan_thumb_{uuid.uuid4().hex}.png"
-    if not cv2.imwrite(str(tmp), canvas):
+    # PPM — нативный формат tk.PhotoImage (без зависимости от PNG в Tcl).
+    tmp = Path(tempfile.gettempdir()) / f"clscan_thumb_{uuid.uuid4().hex}.ppm"
+    try:
+        rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
+        header = f"P6\n{size} {size}\n255\n".encode("ascii")
+        tmp.write_bytes(header + rgb.tobytes())
+    except OSError as e:
+        logging.warning("thumb write: %s", e)
         return None
-    return tmp
+    return tmp if tmp.is_file() else None
 
 
 # ─── gallery item ───────────────────────────────────────────────────────────
@@ -839,7 +868,7 @@ class ScannerApp:
                 order_number=onum or None,
                 attachment_id=aid or None,
                 order_url=order_url(crm, oid, opath_s) if oid else None,
-                caption=f"{onum or 'OK'} · {dest.name}",
+                caption=f"{onum or 'OK'}\n{short_name(dest.name)}",
             )
         else:
             err = str(parsed.get("error") or parsed.get("detail") or "ошибка")
@@ -853,7 +882,7 @@ class ScannerApp:
                 path=dest,
                 ok=False,
                 error=err,
-                caption=f"Ошибка · {dest.name}",
+                caption=f"Ошибка\n{short_name(dest.name)}",
             )
         self.ui_q.put(("item", item))
 
@@ -908,14 +937,20 @@ class ScannerApp:
                     cursor="hand2",
                 )
             lbl.pack()
+            cap_text = item.caption or short_name(item.path.name)
+            if "\n" not in cap_text and " · " in cap_text:
+                # старые записи gallery.json
+                a, _, b = cap_text.partition(" · ")
+                cap_text = f"{a}\n{short_name(b or item.path.name)}"
             cap = tk.Label(
                 inner,
-                text=(item.caption[:42] + ("…" if len(item.caption) > 42 else "")),
+                text=cap_text,
                 bg="#f5f5f5",
                 font=("Segoe UI", 8),
-                wraplength=THUMB_SIZE + 8,
+                justify=tk.CENTER,
+                wraplength=THUMB_SIZE + 4,
             )
-            cap.pack(pady=(2, 2))
+            cap.pack(pady=(2, 4))
             item.frame = outer
             for w in (outer, inner, lbl, cap):
                 w.bind("<Double-Button-1>", lambda e, it=item: self._expand(it))
@@ -927,7 +962,7 @@ class ScannerApp:
         win = tk.Toplevel(self.root)
         win.title(item.caption or item.path.name)
         win.geometry("900x700")
-        img = cv2.imread(str(item.path))
+        img = imread_bgr(item.path)
         if img is None:
             ttk.Label(win, text="Не удалось открыть файл").pack(padx=20, pady=20)
             return
@@ -936,11 +971,13 @@ class ScannerApp:
         scale = min(max_w / w, max_h / h, 1.0)
         nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
         resized = cv2.resize(img, (nw, nh))
-        tmp = Path(tempfile.gettempdir()) / f"clscan_full_{uuid.uuid4().hex}.png"
-        cv2.imwrite(str(tmp), resized)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        tmp = Path(tempfile.gettempdir()) / f"clscan_full_{uuid.uuid4().hex}.ppm"
         try:
+            header = f"P6\n{nw} {nh}\n255\n".encode("ascii")
+            tmp.write_bytes(header + rgb.tobytes())
             photo = tk.PhotoImage(file=str(tmp))
-        except tk.TclError:
+        except (OSError, tk.TclError):
             ttk.Label(win, text="Превью недоступно").pack()
             return
         lbl = tk.Label(win, image=photo)
@@ -1063,7 +1100,7 @@ class ScannerApp:
                 else None
             )
             item.error = None
-            item.caption = f"{item.order_number} · {item.path.name}"
+            item.caption = f"{item.order_number}\n{short_name(item.path.name)}"
             watch = Path(s["watch_dir"])
             if item.path.parent.name != "done":
                 try:
