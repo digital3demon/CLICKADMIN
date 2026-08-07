@@ -3,7 +3,9 @@ import {
   listTagKaitenColumnTitle,
   listTagParamsEqual,
   listTagUrgentCoefficient,
+  listTagWhere,
   parseListTagParam,
+  LIST_TAG_PROSTHETICS_PENDING,
 } from "@/lib/order-list-tag-filter";
 
 describe("parseListTagParam / urgent", () => {
@@ -52,5 +54,18 @@ describe("parseListTagParam / urgent", () => {
 
   it("parses admin-memo (колонка Пометки)", () => {
     expect(parseListTagParam("admin-memo")).toEqual({ kind: "adminMemo" });
+  });
+});
+
+describe("listTagWhere prostheticsPending", () => {
+  it("включает pending из inbox и legacy (как счётчик чипа)", () => {
+    const parsed = parseListTagParam(LIST_TAG_PROSTHETICS_PENDING);
+    expect(parsed?.kind).toBe("prostheticsPending");
+    if (parsed?.kind !== "prostheticsPending") return;
+    const json = JSON.stringify(listTagWhere(parsed));
+    expect(json).toContain("prostheticsOrdered");
+    expect(json).toContain("prostheticsRequests");
+    expect(json).toContain("chatInboxItems");
+    expect(json).toContain("PROSTHETICS");
   });
 });

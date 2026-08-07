@@ -201,11 +201,29 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
     case "prosthetics":
       return { prostheticsOrdered: true };
     case "prostheticsPending":
+      // Как счётчик чипа: pending в legacy ИЛИ в inbox (dual-read).
       return {
-        prostheticsOrdered: false,
-        prostheticsRequests: {
-          some: { resolvedAt: null, rejectedAt: null },
-        },
+        AND: [
+          { prostheticsOrdered: false },
+          {
+            OR: [
+              {
+                prostheticsRequests: {
+                  some: { resolvedAt: null, rejectedAt: null },
+                },
+              },
+              {
+                chatInboxItems: {
+                  some: {
+                    type: "PROSTHETICS",
+                    resolvedAt: null,
+                    rejectedAt: null,
+                  },
+                },
+              },
+            ],
+          },
+        ],
       };
     case "otpr":
       return { adminShippedOtpr: true };
