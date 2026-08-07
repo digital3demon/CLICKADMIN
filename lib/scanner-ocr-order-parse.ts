@@ -1,12 +1,18 @@
 /**
  * Извлечение номера наряда YYMM-NNN из OCR-текста печатного наряда.
  * Границы без `\b` — рядом кириллица (Гордиенко, занёс: Оля).
+ * Также: URL/ID карточки Kaiten с распечатки (если QR не считался).
  */
 
 import { ORDER_NUMBER_PATTERN } from "@/lib/order-number";
 
-/** Кандидаты вида 2607-422 в тексте; без word-boundary `\b` (кириллица). */
-const ORDER_NUM_IN_TEXT_RE = /(?<![\dA-Za-z])(\d{4}-\d{3})(?![\dA-Za-z])/g;
+/** Кандидаты вида 2607-422; допускает пробелы вокруг тире (OCR). Без `\b` (кириллица). */
+const ORDER_NUM_IN_TEXT_RE =
+  /(?<![\dA-Za-z])(\d{4})\s*[-–—−]\s*(\d{3})(?![\dA-Za-z])/g;
+
+/** Legacy Kaiten URL в OCR-тексте распечатки наряда. */
+const KAITEN_URL_RE =
+  /(?:https?:\/\/)?(?:[\w.-]+\.)?kaiten\.ru\/(?:card\/)?(\d{4,})/gi;
 
 export function extractOrderNumbersFromOcrText(raw: string): string[] {
   const text = String(raw ?? "");
@@ -14,7 +20,7 @@ export function extractOrderNumbersFromOcrText(raw: string): string[] {
   const found: string[] = [];
   const seen = new Set<string>();
   for (const m of text.matchAll(ORDER_NUM_IN_TEXT_RE)) {
-    const num = m[1] ?? "";
+    const num = `${m[1]}-${m[2]}`;
     if (!ORDER_NUMBER_PATTERN.test(num)) continue;
     if (seen.has(num)) continue;
     seen.add(num);
@@ -45,4 +51,30 @@ export function pickBestOrderNumberFromOcr(raw: string): string | null {
   });
   scored.sort((a, b) => b.score - a.score);
   return scored[0]?.n ?? null;
+}
+
+/** ID карточки Kaiten из URL в OCR (распечатка наряда / карточки). */
+export function pickKaitenCardIdFromOcr(raw: string): number | null {
+  const text = String(raw ?? "");
+  if (!text.trim()) return null;
+  const ids: number[] = [];
+  const seen = new Set<number>();
+  for (const m of text.matchAll(KAITEN_URL_RE)) {
+    const id = Number(m[1]);
+    if (!Number.isFinite(id) || id < 1000) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  // Поле «ID» на распечатке карточки Kaiten (8+ цифр), если URL не попал в OCR
+  if (ids.length === 0) {
+    const idField =
+      /(?:^|[\s:])ID\s*[:：]?\s*(\d{6,})(?![\d])/im.exec(text) ??
+      /(?:^|[\s])ID\s+(\d{6,})(?![\d])/im.exec(text);
+    if (idField?.[1]) {
+      const id = Number(idField[1]);
+      if (Number.isFinite(id) && id >= 1000) ids.push(id);
+    }
+  }
+  return ids[0] ?? null;
 }

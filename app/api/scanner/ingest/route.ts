@@ -262,7 +262,17 @@ export async function POST(req: Request) {
         );
         const ocr = await ocrOrderNumberFromScanImage(fileBuf);
         ocrMs = ocr.ocrMs;
-        if (!ocr.orderNumber) {
+        if (ocr.orderNumber) {
+          resolved = await resolveOrderFromOrderNumber(
+            ocr.orderNumber,
+            apiKey.tenantId,
+          );
+        } else if (ocr.kaitenCardId) {
+          resolved = await resolveOrderFromScannerQr(
+            `https://clicklab.kaiten.ru/${ocr.kaitenCardId}`,
+            apiKey.tenantId,
+          );
+        } else {
           console.info("[scanner/ingest]", {
             step: "no_qr_no_ocr",
             keyId: apiKey.keyId,
@@ -275,19 +285,17 @@ export async function POST(req: Request) {
           return NextResponse.json(
             {
               error: "no_text_match",
-              detail: "Нет QR и не найден номер наряда на фото",
+              detail:
+                "Нет QR и не найден номер наряда / карточка Kaiten на фото",
             },
             { status: 422 },
           );
         }
-        resolved = await resolveOrderFromOrderNumber(
-          ocr.orderNumber,
-          apiKey.tenantId,
-        );
         if (!resolved.ok) {
           console.info("[scanner/ingest]", {
             step: "ocr_order_missing",
             orderNumber: ocr.orderNumber,
+            kaitenCardId: ocr.kaitenCardId,
             keyId: apiKey.keyId,
             ocrMs,
             ms: Date.now() - t0,
@@ -296,7 +304,10 @@ export async function POST(req: Request) {
             {
               error: "order_not_found",
               orderNumber: ocr.orderNumber,
-              detail: `Номер ${ocr.orderNumber} распознан, но заказ не найден`,
+              kaitenCardId: ocr.kaitenCardId,
+              detail: ocr.orderNumber
+                ? `Номер ${ocr.orderNumber} распознан, но заказ не найден`
+                : `Карточка Kaiten ${ocr.kaitenCardId} распознана, но заказ не найден`,
             },
             { status: 404 },
           );
@@ -304,6 +315,7 @@ export async function POST(req: Request) {
         console.info("[scanner/ingest]", {
           step: "ocr_ok",
           orderNumber: resolved.orderNumber,
+          via: ocr.orderNumber ? "ocr_number" : "ocr_kaiten",
           keyId: apiKey.keyId,
           ocrMs,
         });

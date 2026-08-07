@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractOrderNumbersFromOcrText,
   pickBestOrderNumberFromOcr,
+  pickKaitenCardIdFromOcr,
 } from "@/lib/scanner-ocr-order-parse";
 
 describe("extractOrderNumbersFromOcrText", () => {
@@ -23,6 +24,14 @@ describe("extractOrderNumbersFromOcrText", () => {
       "2607-366",
     ]);
   });
+
+  it("допускает пробелы вокруг тире (OCR)", () => {
+    expect(
+      extractOrderNumbersFromOcrText(
+        "2608 - 001 Журова Карпенко М.В. Каппа рет. 05.08",
+      ),
+    ).toEqual(["2608-001"]);
+  });
 });
 
 describe("pickBestOrderNumberFromOcr", () => {
@@ -32,5 +41,23 @@ describe("pickBestOrderNumberFromOcr", () => {
         "2607-390 Шаповалова А. Перчак\nв тексте случайно 1999-001",
       ),
     ).toBe("2607-390");
+  });
+});
+
+describe("pickKaitenCardIdFromOcr", () => {
+  it("достаёт id из URL kaiten в OCR", () => {
+    expect(
+      pickKaitenCardIdFromOcr(
+        "https://clicklab.kaiten.ru/68081570\nШаповалова",
+      ),
+    ).toBe(68081570);
+  });
+
+  it("достаёт ID с распечатки карточки Kaiten", () => {
+    expect(
+      pickKaitenCardIdFromOcr(
+        "2608-001 Журова\nID 68218911\nТип ОртоАппараты",
+      ),
+    ).toBe(68218911);
   });
 });

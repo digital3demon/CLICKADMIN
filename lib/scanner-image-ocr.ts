@@ -1,7 +1,10 @@
 import "server-only";
 
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { pickBestOrderNumberFromOcr } from "@/lib/scanner-ocr-order-parse";
+import {
+  pickBestOrderNumberFromOcr,
+  pickKaitenCardIdFromOcr,
+} from "@/lib/scanner-ocr-order-parse";
 
 const MAX_OCR_EDGE = 1200;
 /** Жёсткий потолок: иначе nginx отдаёт 502, пока tesseract думает. */
@@ -27,18 +30,29 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
+export type ScannerOcrResult = {
+  orderNumber: string | null;
+  kaitenCardId: number | null;
+  textPreview: string;
+  ocrMs: number;
+};
+
 /**
- * OCR верхней части скана (там наряд) → номер YYMM-NNN или null.
- * Использует tesseract.js (rus+eng), как bank-import.
- * Карта: буфер → jpeg верх → recognize с таймаутом → pickBestOrderNumber.
+ * OCR верхней части скана → номер YYMM-NNN и/или ID Kaiten.
+ * Сначала eng (быстрее для цифр/URL), при нужде — rus+eng.
  */
 export async function ocrOrderNumberFromScanImage(
   buf: Buffer,
-): Promise<{ orderNumber: string | null; textPreview: string; ocrMs: number }> {
+): Promise<ScannerOcrResult> {
   const t0 = Date.now();
-  if (!OCR_ENABLED) {
-    return { orderNumber: null, textPreview: "", ocrMs: 0 };
-  }
+  const empty = (): ScannerOcrResult => ({
+    orderNumber: null,
+    kaitenCardId: null,
+    textPreview: "",
+    ocrMs: Date.now() - t0,
+  });
+  if (!OCR_ENABLED) return empty();
+
   let workBuf: Buffer = buf;
   try {
     const img = await loadImage(buf);
@@ -47,34 +61,61 @@ export async function ocrOrderNumberFromScanImage(
     const scale = Math.min(1, MAX_OCR_EDGE / Math.max(srcW, srcH));
     const w = Math.max(1, Math.round(srcW * scale));
     const h = Math.max(1, Math.round(srcH * scale));
-    // Верхние ~55% — лист с текстом наряда
-    const topH = Math.max(1, Math.floor(h * 0.55));
+    // Верхние ~40% — заголовок наряда / шапка Kaiten (номер + QR-зона)
+    const topH = Math.max(1, Math.floor(h * 0.4));
     const canvas = createCanvas(w, topH);
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0, w, h, 0, 0, w, topH);
-    workBuf = Buffer.from(canvas.toBuffer("image/jpeg", 80));
+    workBuf = Buffer.from(canvas.toBuffer("image/jpeg", 78));
   } catch {
     workBuf = buf;
   }
 
+  const budget = OCR_TIMEOUT_MS;
+  let text = "";
   try {
     const { recognize } = await import("tesseract.js");
-    const result = await withTimeout(
-      recognize(workBuf, "rus+eng", {
-        logger: () => undefined,
-      }),
-      OCR_TIMEOUT_MS,
-      "SCANNER_OCR",
+    // eng быстрее и лучше для 2607-390 / kaiten.ru/…
+    const eng = await withTimeout(
+      recognize(workBuf, "eng", { logger: () => undefined }),
+      Math.min(12_000, budget),
+      "SCANNER_OCR_ENG",
     );
-    const text = String(result.data?.text ?? "");
-    const orderNumber = pickBestOrderNumberFromOcr(text);
+    text = String(eng.data?.text ?? "");
+    let orderNumber = pickBestOrderNumberFromOcr(text);
+    let kaitenCardId = pickKaitenCardIdFromOcr(text);
+    if (orderNumber || kaitenCardId) {
+      return {
+        orderNumber,
+        kaitenCardId,
+        textPreview: text.replace(/\s+/g, " ").trim().slice(0, 200),
+        ocrMs: Date.now() - t0,
+      };
+    }
+    const left = budget - (Date.now() - t0);
+    if (left > 4000) {
+      const rus = await withTimeout(
+        recognize(workBuf, "rus+eng", { logger: () => undefined }),
+        left,
+        "SCANNER_OCR_RUS",
+      );
+      text = `${text}\n${String(rus.data?.text ?? "")}`;
+      orderNumber = pickBestOrderNumberFromOcr(text);
+      kaitenCardId = pickKaitenCardIdFromOcr(text);
+    }
     return {
       orderNumber,
+      kaitenCardId,
       textPreview: text.replace(/\s+/g, " ").trim().slice(0, 200),
       ocrMs: Date.now() - t0,
     };
   } catch (e) {
     console.warn("[scanner-ocr]", e instanceof Error ? e.message : e);
-    return { orderNumber: null, textPreview: "", ocrMs: Date.now() - t0 };
+    return {
+      orderNumber: pickBestOrderNumberFromOcr(text) || null,
+      kaitenCardId: pickKaitenCardIdFromOcr(text) || null,
+      textPreview: text.replace(/\s+/g, " ").trim().slice(0, 200),
+      ocrMs: Date.now() - t0,
+    };
   }
 }
