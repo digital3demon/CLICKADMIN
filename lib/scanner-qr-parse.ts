@@ -91,12 +91,12 @@ export type ScannerOrderResolveOk = {
   orderId: string;
   orderNumber: string;
   tenantId: string;
-  qrKind: "hub" | "kaiten";
+  qrKind: "hub" | "kaiten" | "ocr";
 };
 
 export type ScannerOrderResolveFail = {
   ok: false;
-  reason: "unknown_qr" | "order_not_found" | "tenant_mismatch";
+  reason: "unknown_qr" | "order_not_found" | "tenant_mismatch" | "no_text_match";
 };
 
 export type ScannerOrderResolve = ScannerOrderResolveOk | ScannerOrderResolveFail;

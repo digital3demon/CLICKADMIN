@@ -80,3 +80,42 @@ export async function resolveOrderFromScannerQr(
     qrKind: "kaiten",
   };
 }
+
+/** Поиск наряда по номеру YYMM-NNN (OCR печатного наряда без QR). */
+export async function resolveOrderFromOrderNumber(
+  orderNumberRaw: string,
+  apiKeyTenantId: string,
+): Promise<ScannerOrderResolve> {
+  const tenantId = String(apiKeyTenantId || "").trim();
+  const orderNumber = String(orderNumberRaw || "").trim();
+  if (!tenantId || !orderNumber) {
+    return { ok: false, reason: "order_not_found" };
+  }
+  const ordersDb: PrismaClient = await resolveTenantPrismaClient(tenantId);
+  const order = await ordersDb.order.findFirst({
+    where: { tenantId, orderNumber, archivedAt: null },
+    select: { id: true, orderNumber: true },
+  });
+  if (!order) {
+    // Архивный/любой статус — второй шанс без archivedAt фильтра
+    const any = await ordersDb.order.findFirst({
+      where: { tenantId, orderNumber },
+      select: { id: true, orderNumber: true },
+    });
+    if (!any) return { ok: false, reason: "order_not_found" };
+    return {
+      ok: true,
+      orderId: any.id,
+      orderNumber: any.orderNumber,
+      tenantId,
+      qrKind: "ocr",
+    };
+  }
+  return {
+    ok: true,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    tenantId,
+    qrKind: "ocr",
+  };
+}

@@ -22,7 +22,11 @@ import {
   detectImageMagic,
   mimeForImageMagic,
 } from "@/lib/scanner-image-qr-decode";
-import { resolveOrderFromScannerQr } from "@/lib/scanner-qr-resolve";
+import {
+  resolveOrderFromOrderNumber,
+  resolveOrderFromScannerQr,
+} from "@/lib/scanner-qr-resolve";
+import { orderPathById } from "@/lib/order-public-ref";
 import { rateLimitAllow } from "@/lib/server/rate-limit-edge";
 import {
   bearerTokenFromAuthorizationHeader,
@@ -208,57 +212,124 @@ export async function POST(req: Request) {
       req.headers.get("x-upload-mime")?.trim() || mimeForImageMagic(magic);
 
     const tDecode = Date.now();
-    const qrFromImage = await decodeQrFromImageBuffer(fileBuf);
-    const decodeMs = Date.now() - tDecode;
+    /** Ручная корректировка: номер наряда с клиента, без QR/OCR. */
+    const forcedOrderNumber =
+      req.headers.get("x-scanner-order-number")?.trim() || "";
 
-    // Подсказка от клиента только если сервер не смог декодировать (напр. TIFF)
-    const hintRaw = req.headers.get("x-scanner-qr")?.trim() || "";
-    let hint = hintRaw;
-    if (hintRaw) {
-      try {
-        hint = decodeURIComponent(hintRaw);
-      } catch {
-        hint = hintRaw;
+    let decodeMs = 0;
+    let ocrMs = 0;
+    let resolved:
+      | Awaited<ReturnType<typeof resolveOrderFromScannerQr>>
+      | Awaited<ReturnType<typeof resolveOrderFromOrderNumber>>;
+
+    if (forcedOrderNumber) {
+      resolved = await resolveOrderFromOrderNumber(
+        forcedOrderNumber,
+        apiKey.tenantId,
+      );
+      if (!resolved.ok) {
+        return NextResponse.json(
+          {
+            error: "order_not_found",
+            orderNumber: forcedOrderNumber,
+            detail: `Заказ ${forcedOrderNumber} не найден`,
+          },
+          { status: 404 },
+        );
+      }
+    } else {
+      const qrFromImage = await decodeQrFromImageBuffer(fileBuf);
+      decodeMs = Date.now() - tDecode;
+
+      const hintRaw = req.headers.get("x-scanner-qr")?.trim() || "";
+      let hint = hintRaw;
+      if (hintRaw) {
+        try {
+          hint = decodeURIComponent(hintRaw);
+        } catch {
+          hint = hintRaw;
+        }
+      }
+      const qrText = qrFromImage || (magic === "tiff" ? hint : "");
+
+      resolved = qrText
+        ? await resolveOrderFromScannerQr(qrText, apiKey.tenantId)
+        : ({ ok: false, reason: "unknown_qr" as const });
+
+      if (!resolved.ok) {
+        const { ocrOrderNumberFromScanImage } = await import(
+          "@/lib/scanner-image-ocr"
+        );
+        const ocr = await ocrOrderNumberFromScanImage(fileBuf);
+        ocrMs = ocr.ocrMs;
+        if (!ocr.orderNumber) {
+          console.info("[scanner/ingest]", {
+            step: "no_qr_no_ocr",
+            keyId: apiKey.keyId,
+            bytes: fileBuf.length,
+            decodeMs,
+            ocrMs,
+            preview: ocr.textPreview,
+            ms: Date.now() - t0,
+          });
+          return NextResponse.json(
+            {
+              error: "no_text_match",
+              detail: "Нет QR и не найден номер наряда на фото",
+            },
+            { status: 422 },
+          );
+        }
+        resolved = await resolveOrderFromOrderNumber(
+          ocr.orderNumber,
+          apiKey.tenantId,
+        );
+        if (!resolved.ok) {
+          console.info("[scanner/ingest]", {
+            step: "ocr_order_missing",
+            orderNumber: ocr.orderNumber,
+            keyId: apiKey.keyId,
+            ocrMs,
+            ms: Date.now() - t0,
+          });
+          return NextResponse.json(
+            {
+              error: "order_not_found",
+              orderNumber: ocr.orderNumber,
+              detail: `Номер ${ocr.orderNumber} распознан, но заказ не найден`,
+            },
+            { status: 404 },
+          );
+        }
+        console.info("[scanner/ingest]", {
+          step: "ocr_ok",
+          orderNumber: resolved.orderNumber,
+          keyId: apiKey.keyId,
+          ocrMs,
+        });
+      } else if (!qrFromImage && hint) {
+        console.info("[scanner/ingest]", {
+          step: "qr_hint",
+          keyId: apiKey.keyId,
+        });
       }
     }
-    const qrText = qrFromImage || (magic === "tiff" ? hint : "");
-    if (!qrText) {
-      console.info("[scanner/ingest]", {
-        step: "no_qr",
-        keyId: apiKey.keyId,
-        bytes: fileBuf.length,
-        decodeMs,
-        ms: Date.now() - t0,
-      });
-      return NextResponse.json({ error: "no_qr" }, { status: 422 });
-    }
-    if (!qrFromImage && hint) {
-      // TIFF fallback: принимаем hint только для TIFF
-      console.info("[scanner/ingest]", {
-        step: "qr_hint_tiff",
-        keyId: apiKey.keyId,
-      });
-    }
 
-    const resolved = await resolveOrderFromScannerQr(qrText, apiKey.tenantId);
     if (!resolved.ok) {
       console.info("[scanner/ingest]", {
         step: "resolve_fail",
         reason: resolved.reason,
         keyId: apiKey.keyId,
-        qrKind: qrText.slice(0, 80),
         ms: Date.now() - t0,
       });
       const status =
         resolved.reason === "tenant_mismatch"
           ? 403
-          : resolved.reason === "unknown_qr"
+          : resolved.reason === "unknown_qr" ||
+              resolved.reason === "no_text_match"
             ? 422
             : 404;
-      return NextResponse.json(
-        { error: resolved.reason },
-        { status },
-      );
+      return NextResponse.json({ error: resolved.reason }, { status });
     }
 
     const ordersDb = await resolveTenantPrismaClient(apiKey.tenantId);
@@ -343,6 +414,7 @@ export async function POST(req: Request) {
       ok: true,
       orderId: resolved.orderId,
       orderNumber: resolved.orderNumber,
+      orderPath: orderPathById(resolved.orderId),
       attachmentId: row.id,
       qrKind: resolved.qrKind,
       actor: apiKey.name,

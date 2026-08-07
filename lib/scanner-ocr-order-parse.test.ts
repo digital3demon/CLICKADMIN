@@ -1,0 +1,36 @@
+import { describe, expect, it } from "vitest";
+import {
+  extractOrderNumbersFromOcrText,
+  pickBestOrderNumberFromOcr,
+} from "@/lib/scanner-ocr-order-parse";
+
+describe("extractOrderNumbersFromOcrText", () => {
+  it("находит номер в заголовке с кириллицей до и после", () => {
+    const raw =
+      "занёс: Оля\n2607-422 Гордиенко А.В. Егорова О.К. Ретенционная каппа 05.08";
+    expect(extractOrderNumbersFromOcrText(raw)).toEqual(["2607-422"]);
+  });
+
+  it("пусто → []", () => {
+    expect(extractOrderNumbersFromOcrText("")).toEqual([]);
+    expect(extractOrderNumbersFromOcrText("Гордиенко без номера")).toEqual([]);
+  });
+
+  it("несколько номеров — все уникальные", () => {
+    const raw = "2607-353 Чирухина … см. также 2607-366 Комягинская";
+    expect(extractOrderNumbersFromOcrText(raw)).toEqual([
+      "2607-353",
+      "2607-366",
+    ]);
+  });
+});
+
+describe("pickBestOrderNumberFromOcr", () => {
+  it("берёт первый (заголовок) при нескольких", () => {
+    expect(
+      pickBestOrderNumberFromOcr(
+        "2607-390 Шаповалова А. Перчак\nв тексте случайно 1999-001",
+      ),
+    ).toBe("2607-390");
+  });
+});

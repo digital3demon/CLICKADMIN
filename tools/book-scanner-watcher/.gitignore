@@ -3,8 +3,10 @@
 dist/
 build/
 *.spec
+settings.json
 config.env
 .env
 watcher.log
 __pycache__/
 *.pyc
+book-scanner-watcher-exe.zip
