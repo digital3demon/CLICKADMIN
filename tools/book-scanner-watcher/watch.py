@@ -489,10 +489,18 @@ class ScannerApp:
 
         self.grid.bind("<Configure>", _on_cfg)
         self.canvas.bind("<Configure>", _on_cfg)
-        self.canvas.bind_all(
-            "<MouseWheel>",
-            lambda e: self.canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"),
-        )
+
+        def _wheel(e: tk.Event) -> None:
+            self.canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+
+        def _wheel_on(_e=None) -> None:
+            self.canvas.bind_all("<MouseWheel>", _wheel)
+
+        def _wheel_off(_e=None) -> None:
+            self.canvas.unbind_all("<MouseWheel>")
+
+        self.canvas.bind("<Enter>", _wheel_on)
+        self.canvas.bind("<Leave>", _wheel_off)
 
         self.empty_lbl = ttk.Label(
             self.grid,
@@ -720,7 +728,26 @@ class ScannerApp:
     def on_close(self) -> None:
         self._stop()
         self._persist_gallery()
+        for it in self.items:
+            self._drop_thumb(it)
+        try:
+            self.canvas.unbind_all("<MouseWheel>")
+        except tk.TclError:
+            pass
         self.root.destroy()
+
+    @staticmethod
+    def _drop_thumb(item: ScanItem) -> None:
+        tf = item.thumb_file
+        item.thumb_file = None
+        item.photo = None
+        if tf is None:
+            return
+        try:
+            if tf.is_file():
+                tf.unlink()
+        except OSError:
+            pass
 
     # ── gallery persist ──
 
@@ -785,6 +812,7 @@ class ScannerApp:
         if not path.is_file():
             return
 
+        logging.info("process %s", path.name)
         qr = decode_qr(path)
         ok, parsed = upload_scan(
             crm_base=crm, api_key=key, path=path, qr_hint=qr
@@ -800,6 +828,9 @@ class ScannerApp:
             aid = str(parsed.get("attachmentId") or "")
             opath = parsed.get("orderPath")
             opath_s = str(opath) if opath else None
+            logging.info(
+                "ok %s → %s (%s)", path.name, onum or oid, parsed.get("via") or ""
+            )
             item = ScanItem(
                 uid=uuid.uuid4().hex,
                 path=dest,
@@ -816,6 +847,7 @@ class ScannerApp:
             dest = move_to(
                 noqr_dir if "no_text" in low or "no_qr" in low else err_dir, path
             )
+            logging.warning("fail %s: %s", path.name, err)
             item = ScanItem(
                 uid=uuid.uuid4().hex,
                 path=dest,
@@ -829,7 +861,10 @@ class ScannerApp:
         self.empty_lbl.grid_remove()
         # newest first
         self.items.insert(0, item)
+        dropped = self.items[80:]
         self.items = self.items[:80]
+        for old in dropped:
+            self._drop_thumb(old)
         thumb = make_thumb_png(item.path)
         if thumb and thumb.is_file():
             try:
@@ -837,8 +872,10 @@ class ScannerApp:
                 item.photo = photo
                 item.thumb_file = thumb
                 self._thumb_keep.append(photo)
+                self._thumb_keep = self._thumb_keep[-120:]
             except tk.TclError:
                 item.photo = None
+                self._drop_thumb(item)
         self._relayout()
         if persist:
             self._persist_gallery()
@@ -912,6 +949,15 @@ class ScannerApp:
         info = item.order_number or item.error or ""
         ttk.Label(win, text=f"{item.path.name}\n{info}").pack(pady=(0, 8))
 
+        def _cleanup(_e=None) -> None:
+            try:
+                if tmp.is_file():
+                    tmp.unlink()
+            except OSError:
+                pass
+
+        win.protocol("WM_DELETE_WINDOW", lambda: (_cleanup(), win.destroy()))
+
     def _context(self, event: tk.Event, item: ScanItem) -> None:
         menu = tk.Menu(self.root, tearoff=0)
         if item.ok and item.order_url:
@@ -971,21 +1017,10 @@ class ScannerApp:
     def _correct_worker(self, item: ScanItem, order_number: str) -> None:
         s = load_settings()
         crm, key = s["crm_base_url"], s["crm_api_key"]
-        if item.ok and item.order_id and item.attachment_id:
-            dok, dparsed = delete_crm_attachment(
-                crm_base=crm,
-                api_key=key,
-                order_id=item.order_id,
-                attachment_id=item.attachment_id,
-            )
-            if not dok:
-                self.ui_q.put(
-                    (
-                        "toast",
-                        f"Не удалось удалить старое вложение: {dparsed.get('error')}",
-                    )
-                )
-                return
+        old_order_id = item.order_id if item.ok else None
+        old_attachment_id = item.attachment_id if item.ok else None
+
+        # Сначала новое вложение — иначе при сбое upload старое уже стёрто.
         ok, parsed = upload_scan(
             crm_base=crm,
             api_key=key,
@@ -997,12 +1032,30 @@ class ScannerApp:
                 ("toast", f"Корректировка не удалась: {parsed.get('error')}")
             )
             return
-        # update item in place on UI thread
+
+        new_aid = str(parsed.get("attachmentId") or "") or None
+        warn_old = ""
+        if (
+            old_order_id
+            and old_attachment_id
+            and new_aid
+            and old_attachment_id != new_aid
+        ):
+            dok, dparsed = delete_crm_attachment(
+                crm_base=crm,
+                api_key=key,
+                order_id=old_order_id,
+                attachment_id=old_attachment_id,
+            )
+            if not dok:
+                warn_old = str(dparsed.get("error") or "старое вложение не удалено")
+                logging.warning("correct: old attach left: %s", warn_old)
+
         def apply() -> None:
             item.ok = True
             item.order_id = str(parsed.get("orderId") or "") or None
             item.order_number = str(parsed.get("orderNumber") or order_number)
-            item.attachment_id = str(parsed.get("attachmentId") or "") or None
+            item.attachment_id = new_aid
             op = parsed.get("orderPath")
             item.order_url = (
                 order_url(crm, item.order_id, str(op) if op else None)
@@ -1011,7 +1064,6 @@ class ScannerApp:
             )
             item.error = None
             item.caption = f"{item.order_number} · {item.path.name}"
-            # move to done if needed
             watch = Path(s["watch_dir"])
             if item.path.parent.name != "done":
                 try:
@@ -1020,7 +1072,12 @@ class ScannerApp:
                     pass
             self._relayout()
             self._persist_gallery()
-            self.var_status.set(f"Исправлено → {item.order_number}")
+            if warn_old:
+                self.var_status.set(
+                    f"В заказ {item.order_number}, но старое вложение: {warn_old}"
+                )
+            else:
+                self.var_status.set(f"Исправлено → {item.order_number}")
 
         self.root.after(0, apply)
 
@@ -1059,6 +1116,7 @@ class ScannerApp:
             return
 
         def apply() -> None:
+            self._drop_thumb(item)
             self.items = [i for i in self.items if i.uid != item.uid]
             self._relayout()
             self._persist_gallery()
