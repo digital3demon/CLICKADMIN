@@ -623,7 +623,7 @@ class ScannerApp:
             text=(
                 "Над рамкой — номер наряда, пациент и врач. "
                 "Зелёная рамка — ушло в заказ, красная — ошибка. "
-                "Двойной клик — увеличить. ПКМ — ссылка / корректировка / удаление."
+                "Двойной клик — увеличить. ПКМ — повтор / ссылка / корректировка / удаление."
             ),
             wraplength=820,
         )
@@ -1374,6 +1374,11 @@ class ScannerApp:
                 label="Скопировать ссылку на заказ",
                 command=lambda: self._copy_link(item),
             )
+        if not item.ok:
+            menu.add_command(
+                label="Попробовать ещё раз",
+                command=lambda: self._retry(item),
+            )
         menu.add_command(
             label="Корректировка (номер наряда)…",
             command=lambda: self._correct(item),
@@ -1394,6 +1399,134 @@ class ScannerApp:
         self.root.clipboard_clear()
         self.root.clipboard_append(item.order_url)
         self.var_status.set(f"Ссылка скопирована: {item.order_number or ''}")
+
+    def _retry(self, item: ScanItem) -> None:
+        if not item.path.is_file():
+            messagebox.showwarning(
+                APP_TITLE, f"Файл не найден:\n{item.path}"
+            )
+            return
+        self.var_status.set(f"Повтор… {item.path.name}")
+        threading.Thread(
+            target=self._retry_worker, args=(item,), daemon=True
+        ).start()
+
+    def _retry_worker(self, item: ScanItem) -> None:
+        s = load_settings()
+        crm, key = s["crm_base_url"], s["crm_api_key"]
+        watch = Path(s["watch_dir"])
+        path = item.path
+        self.ui_q.put(("toast", f"Повторная отправка… {path.name}"))
+        try:
+            qr = decode_qr(path)
+            ok, status, parsed = upload_scan(
+                crm_base=crm, api_key=key, path=path, qr_hint=qr
+            )
+        except Exception as e:
+            err = str(e)[:200]
+            logging.exception("retry %s", path.name)
+
+            def fail_ex() -> None:
+                item.ok = False
+                item.error = err
+                item.caption = short_name(item.path.name)
+                self._relayout()
+                self._persist_gallery()
+                self.var_status.set(f"Повтор не удался: {err[:80]}")
+
+            self.root.after(0, fail_ex)
+            return
+
+        if (
+            status in {0, 429, 502, 503, 504}
+            or "timed out" in str(parsed.get("error") or "").lower()
+            or "timeout" in str(parsed.get("error") or "").lower()
+        ):
+            err = str(parsed.get("error") or f"HTTP {status}")
+
+            def fail_retry() -> None:
+                item.ok = False
+                item.error = err
+                self._relayout()
+                self._persist_gallery()
+                self.var_status.set(f"Повтор: {err[:80]} — попробуйте ещё раз позже")
+
+            self.root.after(0, fail_retry)
+            return
+
+        if not ok:
+            err = str(parsed.get("error") or parsed.get("detail") or "ошибка")
+            low = err.lower()
+            try:
+                if path.parent.name not in {"error", "no-qr"}:
+                    dest = move_to(
+                        watch
+                        / (
+                            "no-qr"
+                            if "no_text" in low or "no_qr" in low
+                            else "error"
+                        ),
+                        path,
+                    )
+                    path = dest
+            except OSError:
+                pass
+
+            def fail_biz() -> None:
+                item.ok = False
+                item.path = path
+                item.error = err
+                item.order_id = None
+                item.order_number = None
+                item.patient_name = None
+                item.doctor_name = None
+                item.attachment_id = None
+                item.order_url = None
+                item.caption = short_name(path.name)
+                self._relayout()
+                self._persist_gallery()
+                self.var_status.set(f"Повтор: {err[:100]}")
+
+            self.root.after(0, fail_biz)
+            return
+
+        oid = str(parsed.get("orderId") or "")
+        onum = str(parsed.get("orderNumber") or "")
+        aid = str(parsed.get("attachmentId") or "")
+        op = parsed.get("orderPath")
+        try:
+            if path.parent.name != "done":
+                path = move_to(watch / "done", path)
+        except OSError:
+            pass
+
+        def apply_ok() -> None:
+            item.ok = True
+            item.path = path
+            item.error = None
+            item.order_id = oid or None
+            item.order_number = onum or None
+            item.patient_name = (
+                str(parsed["patientName"]).strip()
+                if parsed.get("patientName")
+                else None
+            )
+            item.doctor_name = (
+                str(parsed["doctorName"]).strip()
+                if parsed.get("doctorName")
+                else None
+            )
+            item.attachment_id = aid or None
+            item.order_url = (
+                order_url(crm, oid, str(op) if op else None) if oid else None
+            )
+            item.caption = short_name(path.name)
+            self._processed_ok += 1
+            self._relayout()
+            self._persist_gallery()
+            self.var_status.set(f"Повтор ок → {item.order_number or oid}")
+
+        self.root.after(0, apply_ok)
 
     def _correct(self, item: ScanItem) -> None:
         prompt = (
