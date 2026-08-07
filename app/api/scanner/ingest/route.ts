@@ -399,6 +399,8 @@ export async function POST(req: Request) {
       ok: true,
       orderId: resolved.orderId,
       orderNumber: resolved.orderNumber,
+      patientName: resolved.patientName,
+      doctorName: resolved.doctorName,
       orderPath: orderPathById(resolved.orderId),
       attachmentId: row.id,
       qrKind: resolved.qrKind,

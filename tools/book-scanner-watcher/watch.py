@@ -220,6 +220,15 @@ def short_name(name: str, limit: int = 26) -> str:
     return stem[:keep] + "…." + suf
 
 
+def clip_person(name: str | None, limit: int = 20) -> str:
+    s = (name or "").strip()
+    if not s:
+        return "—"
+    if len(s) <= limit:
+        return s
+    return s[: limit - 1] + "…"
+
+
 def move_to(subdir: Path, path: Path) -> Path:
     subdir.mkdir(parents=True, exist_ok=True)
     dest = subdir / path.name
@@ -352,6 +361,8 @@ class ScanItem:
     ok: bool
     order_id: str | None = None
     order_number: str | None = None
+    patient_name: str | None = None
+    doctor_name: str | None = None
     attachment_id: str | None = None
     order_url: str | None = None
     error: str | None = None
@@ -360,6 +371,17 @@ class ScanItem:
     thumb_file: Path | None = field(default=None, repr=False)
     frame: tk.Frame | None = field(default=None, repr=False)
 
+    def header_text(self) -> str:
+        if not self.ok:
+            err = (self.error or "ошибка").strip()
+            return err if len(err) <= 48 else err[:47] + "…"
+        num = self.order_number or "—"
+        return (
+            f"{num}\n"
+            f"пац {clip_person(self.patient_name)}\n"
+            f"док {clip_person(self.doctor_name)}"
+        )
+
     def to_dict(self) -> dict:
         return {
             "uid": self.uid,
@@ -367,6 +389,8 @@ class ScanItem:
             "ok": self.ok,
             "order_id": self.order_id,
             "order_number": self.order_number,
+            "patient_name": self.patient_name,
+            "doctor_name": self.doctor_name,
             "attachment_id": self.attachment_id,
             "order_url": self.order_url,
             "error": self.error,
@@ -384,6 +408,8 @@ class ScanItem:
             ok=bool(d.get("ok")),
             order_id=(str(d["order_id"]) if d.get("order_id") else None),
             order_number=(str(d["order_number"]) if d.get("order_number") else None),
+            patient_name=(str(d["patient_name"]) if d.get("patient_name") else None),
+            doctor_name=(str(d["doctor_name"]) if d.get("doctor_name") else None),
             attachment_id=(str(d["attachment_id"]) if d.get("attachment_id") else None),
             order_url=(str(d["order_url"]) if d.get("order_url") else None),
             error=(str(d["error"]) if d.get("error") else None),
@@ -495,8 +521,9 @@ class ScannerApp:
         hint = ttk.Label(
             parent,
             text=(
-                "Миниатюры свежих сканов. Зелёная рамка — ушло в заказ, красная — ошибка. "
-                "Двойной клик — увеличить. Правая кнопка — ссылка / корректировка / удаление."
+                "Над рамкой — номер наряда, пациент и врач. "
+                "Зелёная рамка — ушло в заказ, красная — ошибка. "
+                "Двойной клик — увеличить. ПКМ — ссылка / корректировка / удаление."
             ),
             wraplength=820,
         )
@@ -866,9 +893,19 @@ class ScannerApp:
                 ok=True,
                 order_id=oid or None,
                 order_number=onum or None,
+                patient_name=(
+                    str(parsed["patientName"]).strip()
+                    if parsed.get("patientName")
+                    else None
+                ),
+                doctor_name=(
+                    str(parsed["doctorName"]).strip()
+                    if parsed.get("doctorName")
+                    else None
+                ),
                 attachment_id=aid or None,
                 order_url=order_url(crm, oid, opath_s) if oid else None,
-                caption=f"{onum or 'OK'}\n{short_name(dest.name)}",
+                caption=short_name(dest.name),
             )
         else:
             err = str(parsed.get("error") or parsed.get("detail") or "ошибка")
@@ -882,7 +919,7 @@ class ScannerApp:
                 path=dest,
                 ok=False,
                 error=err,
-                caption=f"Ошибка\n{short_name(dest.name)}",
+                caption=short_name(dest.name),
             )
         self.ui_q.put(("item", item))
 
@@ -921,8 +958,22 @@ class ScannerApp:
         for idx, item in enumerate(self.items):
             r, c = divmod(idx, COLS)
             border = "#1a7f37" if item.ok else "#c62828"
-            outer = tk.Frame(self.grid, bg=border, padx=3, pady=3)
-            outer.grid(row=r, column=c, padx=8, pady=8, sticky=tk.N)
+            cell = tk.Frame(self.grid, bg="#ffffff")
+            cell.grid(row=r, column=c, padx=8, pady=8, sticky=tk.N)
+
+            head = tk.Label(
+                cell,
+                text=item.header_text(),
+                bg="#ffffff",
+                fg="#111111" if item.ok else "#8b0000",
+                font=("Segoe UI", 9, "bold"),
+                justify=tk.CENTER,
+                wraplength=THUMB_SIZE + 12,
+            )
+            head.pack(pady=(0, 4))
+
+            outer = tk.Frame(cell, bg=border, padx=3, pady=3)
+            outer.pack()
             inner = tk.Frame(outer, bg="#f5f5f5")
             inner.pack()
             if item.photo is not None:
@@ -937,22 +988,18 @@ class ScannerApp:
                     cursor="hand2",
                 )
             lbl.pack()
-            cap_text = item.caption or short_name(item.path.name)
-            if "\n" not in cap_text and " · " in cap_text:
-                # старые записи gallery.json
-                a, _, b = cap_text.partition(" · ")
-                cap_text = f"{a}\n{short_name(b or item.path.name)}"
             cap = tk.Label(
                 inner,
-                text=cap_text,
+                text=short_name(item.path.name),
                 bg="#f5f5f5",
-                font=("Segoe UI", 8),
+                fg="#555555",
+                font=("Segoe UI", 7),
                 justify=tk.CENTER,
                 wraplength=THUMB_SIZE + 4,
             )
             cap.pack(pady=(2, 4))
-            item.frame = outer
-            for w in (outer, inner, lbl, cap):
+            item.frame = cell
+            for w in (cell, head, outer, inner, lbl, cap):
                 w.bind("<Double-Button-1>", lambda e, it=item: self._expand(it))
                 w.bind("<Button-3>", lambda e, it=item: self._context(e, it))
 
@@ -983,7 +1030,7 @@ class ScannerApp:
         lbl = tk.Label(win, image=photo)
         lbl.image = photo  # type: ignore[attr-defined]
         lbl.pack(padx=8, pady=8)
-        info = item.order_number or item.error or ""
+        info = item.header_text() if item.ok else (item.error or "")
         ttk.Label(win, text=f"{item.path.name}\n{info}").pack(pady=(0, 8))
 
         def _cleanup(_e=None) -> None:
@@ -1092,6 +1139,16 @@ class ScannerApp:
             item.ok = True
             item.order_id = str(parsed.get("orderId") or "") or None
             item.order_number = str(parsed.get("orderNumber") or order_number)
+            item.patient_name = (
+                str(parsed["patientName"]).strip()
+                if parsed.get("patientName")
+                else None
+            )
+            item.doctor_name = (
+                str(parsed["doctorName"]).strip()
+                if parsed.get("doctorName")
+                else None
+            )
             item.attachment_id = new_aid
             op = parsed.get("orderPath")
             item.order_url = (
@@ -1100,7 +1157,7 @@ class ScannerApp:
                 else None
             )
             item.error = None
-            item.caption = f"{item.order_number}\n{short_name(item.path.name)}"
+            item.caption = short_name(item.path.name)
             watch = Path(s["watch_dir"])
             if item.path.parent.name != "done":
                 try:

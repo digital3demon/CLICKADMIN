@@ -90,6 +90,8 @@ export type ScannerOrderResolveOk = {
   ok: true;
   orderId: string;
   orderNumber: string;
+  patientName: string | null;
+  doctorName: string | null;
   tenantId: string;
   qrKind: "hub" | "kaiten" | "ocr";
 };

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import {
   parseScannerQrPayload,
   type ScannerOrderResolve,
+  type ScannerOrderResolveOk,
 } from "@/lib/scanner-qr-parse";
 import { resolveStickerOrderBySlugAndToken } from "@/lib/sticker-public-order-resolve";
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
@@ -16,6 +17,36 @@ export type {
   ScannerOrderResolveFail,
   ScannerOrderResolveOk,
 } from "@/lib/scanner-qr-parse";
+
+const ORDER_SCAN_SELECT = {
+  id: true,
+  orderNumber: true,
+  patientName: true,
+  doctor: { select: { fullName: true } },
+} as const;
+
+type OrderScanRow = {
+  id: string;
+  orderNumber: string;
+  patientName: string | null;
+  doctor: { fullName: string } | null;
+};
+
+function toResolveOk(
+  order: OrderScanRow,
+  tenantId: string,
+  qrKind: ScannerOrderResolveOk["qrKind"],
+): ScannerOrderResolveOk {
+  return {
+    ok: true,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    patientName: order.patientName?.trim() || null,
+    doctorName: order.doctor?.fullName?.trim() || null,
+    tenantId,
+    qrKind,
+  };
+}
 
 /**
  * По тексту QR и tenantId API-ключа находит наряд.
@@ -53,32 +84,20 @@ export async function resolveOrderFromScannerQr(
     }
     const order = await resolved.ordersDb.order.findFirst({
       where: { id: resolved.orderId, tenantId },
-      select: { id: true, orderNumber: true },
+      select: ORDER_SCAN_SELECT,
     });
     if (!order) return { ok: false, reason: "order_not_found" };
-    return {
-      ok: true,
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      tenantId,
-      qrKind: "hub",
-    };
+    return toResolveOk(order, tenantId, "hub");
   }
 
   // kaiten
   const ordersDb: PrismaClient = await resolveTenantPrismaClient(tenantId);
   const order = await ordersDb.order.findFirst({
     where: { tenantId, kaitenCardId: parsed.cardId },
-    select: { id: true, orderNumber: true },
+    select: ORDER_SCAN_SELECT,
   });
   if (!order) return { ok: false, reason: "order_not_found" };
-  return {
-    ok: true,
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    tenantId,
-    qrKind: "kaiten",
-  };
+  return toResolveOk(order, tenantId, "kaiten");
 }
 
 /** Поиск наряда по номеру YYMM-NNN (OCR печатного наряда без QR). */
@@ -94,28 +113,16 @@ export async function resolveOrderFromOrderNumber(
   const ordersDb: PrismaClient = await resolveTenantPrismaClient(tenantId);
   const order = await ordersDb.order.findFirst({
     where: { tenantId, orderNumber, archivedAt: null },
-    select: { id: true, orderNumber: true },
+    select: ORDER_SCAN_SELECT,
   });
   if (!order) {
     // Архивный/любой статус — второй шанс без archivedAt фильтра
     const any = await ordersDb.order.findFirst({
       where: { tenantId, orderNumber },
-      select: { id: true, orderNumber: true },
+      select: ORDER_SCAN_SELECT,
     });
     if (!any) return { ok: false, reason: "order_not_found" };
-    return {
-      ok: true,
-      orderId: any.id,
-      orderNumber: any.orderNumber,
-      tenantId,
-      qrKind: "ocr",
-    };
+    return toResolveOk(any, tenantId, "ocr");
   }
-  return {
-    ok: true,
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    tenantId,
-    qrKind: "ocr",
-  };
+  return toResolveOk(order, tenantId, "ocr");
 }
