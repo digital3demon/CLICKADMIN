@@ -45,8 +45,8 @@ const SCANNER_MAX_BYTES = Math.min(
   Number(process.env.SCANNER_INGEST_MAX_BYTES) || 40 * 1024 * 1024,
 );
 const UPLOAD_BODY_TIMEOUT_MS = 300_000;
-const RATE_LIMIT_PER_KEY = Number(process.env.SCANNER_INGEST_RATE_PER_KEY) || 60;
-const RATE_LIMIT_PER_IP = Number(process.env.SCANNER_INGEST_RATE_PER_IP) || 120;
+const RATE_LIMIT_PER_KEY = Number(process.env.SCANNER_INGEST_RATE_PER_KEY) || 180;
+const RATE_LIMIT_PER_IP = Number(process.env.SCANNER_INGEST_RATE_PER_IP) || 300;
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));

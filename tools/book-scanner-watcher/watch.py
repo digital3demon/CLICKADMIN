@@ -38,12 +38,17 @@ from watchdog.observers import Observer
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
 STABLE_CHECKS = 4
-STABLE_INTERVAL_SEC = 0.4
-PROCESS_DELAY_SEC = 0.8
+STABLE_INTERVAL_SEC = 0.35
+PROCESS_DELAY_SEC = 0.5
 THUMB_SIZE = 148
 APP_TITLE = "Click Lab — сканер в заказ"
 AUTOSTART_REG_NAME = "ClickLabScanner"
 COLS = 4
+# 100–1000 сканов/день: очередь + мало воркеров (лимит CRM ~60/мин на ключ)
+WORKER_COUNT = 2
+SWEEP_INTERVAL_SEC = 2.5
+GALLERY_MAX = 48
+RATE_LIMIT_BACKOFF_SEC = 8.0
 
 
 # ─── paths / settings / autostart ───────────────────────────────────────────
@@ -289,7 +294,7 @@ def upload_scan(
     path: Path,
     qr_hint: str | None = None,
     force_order_number: str | None = None,
-) -> tuple[bool, dict]:
+) -> tuple[bool, int, dict]:
     url = crm_base.rstrip("/") + "/api/scanner/ingest"
     data = path.read_bytes()
     mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -306,7 +311,7 @@ def upload_scan(
         method="POST", url=url, api_key=api_key, data=data, headers=headers
     )
     ok = 200 <= status < 300 and bool(parsed.get("ok"))
-    return ok, parsed
+    return ok, status, parsed
 
 
 def delete_crm_attachment(
@@ -421,11 +426,10 @@ class ScanItem:
 
 
 class ScanHandler(FileSystemEventHandler):
-    def __init__(self, watch_dir: Path, on_file) -> None:
+    def __init__(self, watch_dir: Path, enqueue) -> None:
         super().__init__()
         self.watch_dir = watch_dir
-        self.on_file = on_file
-        self._seen: set[str] = set()
+        self.enqueue = enqueue
 
     def on_created(self, event):  # type: ignore[no-untyped-def]
         if not event.is_directory:
@@ -435,25 +439,23 @@ class ScanHandler(FileSystemEventHandler):
         if not event.is_directory:
             self._maybe(Path(event.src_path))
 
+    def on_moved(self, event):  # type: ignore[no-untyped-def]
+        if not event.is_directory:
+            self._maybe(Path(event.dest_path))
+
     def _maybe(self, path: Path) -> None:
         try:
             path = path.resolve()
         except OSError:
             return
-        if path.parent.resolve() != self.watch_dir.resolve():
+        try:
+            if path.parent.resolve() != self.watch_dir.resolve():
+                return
+        except OSError:
             return
         if path.suffix.lower() not in IMAGE_EXTS:
             return
-        key = str(path)
-        if key in self._seen:
-            return
-        self._seen.add(key)
-        time.sleep(PROCESS_DELAY_SEC)
-        try:
-            if path.is_file() and wait_until_stable(path):
-                self.on_file(path)
-        finally:
-            self._seen.discard(key)
+        self.enqueue(path)
 
 
 # ─── GUI ────────────────────────────────────────────────────────────────────
@@ -467,10 +469,20 @@ class ScannerApp:
         self.root.geometry("900x640")
 
         self.ui_q: queue.Queue = queue.Queue()
+        self.job_q: queue.Queue = queue.Queue()
+        self._pending: set[str] = set()
+        self._pending_lock = threading.Lock()
         self.observer: Observer | None = None
         self.running = False
+        self._workers: list[threading.Thread] = []
+        self._sweep_thread: threading.Thread | None = None
+        self._watch_dir: Path | None = None
+        self._persist_after_id: str | None = None
+        self._status_tick = 0
         self.items: list[ScanItem] = []
         self._thumb_keep: list[tk.PhotoImage] = []
+        self._processed_ok = 0
+        self._processed_fail = 0
 
         s = load_settings()
         autostart_on = bool(s.get("autostart")) or is_windows_autostart_enabled()
@@ -745,10 +757,18 @@ class ScannerApp:
         for name in ("done", "error", "no-qr"):
             (watch_dir / name).mkdir(parents=True, exist_ok=True)
 
-        def on_file(path: Path) -> None:
-            self.ui_q.put(("process", path))
+        self._watch_dir = watch_dir
+        self._processed_ok = 0
+        self._processed_fail = 0
+        with self._pending_lock:
+            self._pending.clear()
+        while True:
+            try:
+                self.job_q.get_nowait()
+            except queue.Empty:
+                break
 
-        handler = ScanHandler(watch_dir, on_file)
+        handler = ScanHandler(watch_dir, self._enqueue_path)
         obs = Observer()
         obs.schedule(handler, str(watch_dir), recursive=False)
         obs.start()
@@ -756,17 +776,22 @@ class ScannerApp:
         self.running = True
         self.btn_start.configure(state=tk.DISABLED)
         self.btn_stop.configure(state=tk.NORMAL)
-        self.var_status.set(f"Работает — {watch_dir}")
+        self._refresh_status(force=True)
         self.nb.select(self.tab_gallery)
 
-        def catch_up() -> None:
-            for p in sorted(watch_dir.iterdir()):
-                if not self.running:
-                    break
-                if p.is_file() and p.suffix.lower() in IMAGE_EXTS:
-                    self.ui_q.put(("process", p))
-
-        threading.Thread(target=catch_up, daemon=True).start()
+        self._workers = []
+        for i in range(WORKER_COUNT):
+            t = threading.Thread(
+                target=self._worker_loop, name=f"scan-worker-{i}", daemon=True
+            )
+            t.start()
+            self._workers.append(t)
+        self._sweep_thread = threading.Thread(
+            target=self._sweep_loop, name="scan-sweep", daemon=True
+        )
+        self._sweep_thread.start()
+        # сразу подхватить всё, что уже лежит в корне
+        self._sweep_once()
 
     def _stop(self) -> None:
         self.running = False
@@ -777,9 +802,139 @@ class ScannerApp:
             except Exception:
                 pass
             self.observer = None
+        # разбудить воркеров
+        for _ in self._workers:
+            try:
+                self.job_q.put_nowait(None)
+            except Exception:
+                pass
+        self._workers = []
+        self._sweep_thread = None
+        self._watch_dir = None
+        with self._pending_lock:
+            self._pending.clear()
         self.btn_start.configure(state=tk.NORMAL)
         self.btn_stop.configure(state=tk.DISABLED)
         self.var_status.set("Остановлено")
+
+    def _path_key(self, path: Path) -> str:
+        try:
+            return str(path.resolve()).lower()
+        except OSError:
+            return str(path).lower()
+
+    def _enqueue_path(self, path: Path) -> None:
+        if not self.running:
+            return
+        try:
+            if not path.is_file():
+                return
+        except OSError:
+            return
+        if path.suffix.lower() not in IMAGE_EXTS:
+            return
+        key = self._path_key(path)
+        with self._pending_lock:
+            if key in self._pending:
+                return
+            self._pending.add(key)
+        self.job_q.put(path)
+        self._refresh_status()
+
+    def _release_pending(self, path: Path) -> None:
+        key = self._path_key(path)
+        with self._pending_lock:
+            self._pending.discard(key)
+
+    def _refresh_status(self, *, force: bool = False) -> None:
+        if not self.running or self._watch_dir is None:
+            return
+        self._status_tick += 1
+        if not force and self._status_tick % 8 != 0:
+            return
+        qsize = self.job_q.qsize()
+        with self._pending_lock:
+            pending = len(self._pending)
+        self.ui_q.put(
+            (
+                "toast",
+                f"Работает — очередь {qsize} (в работе {pending}) · "
+                f"ок {self._processed_ok} / ош {self._processed_fail} · "
+                f"{self._watch_dir}",
+            )
+        )
+
+    def _sweep_once(self) -> None:
+        watch = self._watch_dir
+        if watch is None or not self.running:
+            return
+        try:
+            names = list(watch.iterdir())
+        except OSError as e:
+            logging.warning("sweep list: %s", e)
+            return
+        for p in names:
+            if not self.running:
+                break
+            try:
+                if p.is_file() and p.suffix.lower() in IMAGE_EXTS:
+                    self._enqueue_path(p)
+            except OSError:
+                continue
+
+    def _sweep_loop(self) -> None:
+        # Windows иногда пропускает события watchdog — добираем файлы опросом.
+        while self.running:
+            self._sweep_once()
+            time.sleep(SWEEP_INTERVAL_SEC)
+
+    def _worker_loop(self) -> None:
+        while True:
+            try:
+                item = self.job_q.get(timeout=0.6)
+            except queue.Empty:
+                if not self.running:
+                    return
+                continue
+            if item is None:
+                self.job_q.task_done()
+                return
+            path = item
+            try:
+                if not self.running:
+                    self._release_pending(path)
+                    continue
+                time.sleep(PROCESS_DELAY_SEC)
+                if not path.is_file():
+                    self._release_pending(path)
+                    continue
+                if not wait_until_stable(path):
+                    # ещё пишется — снимем с pending, sweep подхватит снова
+                    self._release_pending(path)
+                    continue
+                outcome = self._process_path(path)
+                if outcome == "retry":
+                    self._release_pending(path)
+                    time.sleep(RATE_LIMIT_BACKOFF_SEC)
+                    if self.running and path.is_file():
+                        self._enqueue_path(path)
+                else:
+                    self._release_pending(path)
+            except Exception:
+                logging.exception("worker failed on %s", path)
+                try:
+                    if path.is_file() and self._watch_dir is not None:
+                        move_to(self._watch_dir / "error", path)
+                except OSError:
+                    pass
+                self._release_pending(path)
+                self._processed_fail += 1
+            finally:
+                try:
+                    self.job_q.task_done()
+                except Exception:
+                    pass
+                self._refresh_status(force=True)
 
     def on_close(self) -> None:
         self._stop()
@@ -811,7 +966,7 @@ class ScannerApp:
         try:
             gallery_index_path().write_text(
                 json.dumps(
-                    [i.to_dict() for i in self.items[:80]],
+                    [i.to_dict() for i in self.items[:GALLERY_MAX]],
                     ensure_ascii=False,
                     indent=2,
                 )
@@ -831,12 +986,28 @@ class ScannerApp:
             return
         if not isinstance(raw, list):
             return
+        loaded: list[ScanItem] = []
         for d in raw:
             if not isinstance(d, dict):
                 continue
             item = ScanItem.from_dict(d)
             if item:
-                self._add_item_ui(item, persist=False)
+                loaded.append(item)
+        if not loaded:
+            return
+        self.empty_lbl.grid_remove()
+        for item in loaded[:GALLERY_MAX]:
+            thumb = make_thumb_png(item.path)
+            if thumb and thumb.is_file():
+                try:
+                    photo = tk.PhotoImage(file=str(thumb))
+                    item.photo = photo
+                    item.thumb_file = thumb
+                    self._thumb_keep.append(photo)
+                except tk.TclError:
+                    item.photo = None
+            self.items.append(item)
+        self._relayout()
 
     # ── process scan ──
 
@@ -847,32 +1018,54 @@ class ScannerApp:
             except queue.Empty:
                 break
             kind = msg[0]
-            if kind == "process":
-                threading.Thread(
-                    target=self._process_path, args=(msg[1],), daemon=True
-                ).start()
-            elif kind == "item":
+            if kind == "item":
                 self._add_item_ui(msg[1])
             elif kind == "refresh":
                 self._relayout()
             elif kind == "toast":
-                # status line only
                 self.var_status.set(str(msg[1]))
         self.root.after(150, self._drain_ui)
 
-    def _process_path(self, path: Path) -> None:
+    def _process_path(self, path: Path) -> str:
+        """ok | fail | retry — retry при rate limit, файл остаётся на месте."""
         s = load_settings()
         crm = s["crm_base_url"]
         key = s["crm_api_key"]
         watch = Path(s["watch_dir"])
         if not path.is_file():
-            return
+            return "fail"
 
         logging.info("process %s", path.name)
-        qr = decode_qr(path)
-        ok, parsed = upload_scan(
-            crm_base=crm, api_key=key, path=path, qr_hint=qr
-        )
+        try:
+            qr = decode_qr(path)
+            ok, status, parsed = upload_scan(
+                crm_base=crm, api_key=key, path=path, qr_hint=qr
+            )
+        except Exception as e:
+            logging.exception("upload %s", path.name)
+            dest = move_to(watch / "error", path)
+            self.ui_q.put(
+                (
+                    "item",
+                    ScanItem(
+                        uid=uuid.uuid4().hex,
+                        path=dest,
+                        ok=False,
+                        error=str(e)[:200],
+                        caption=short_name(dest.name),
+                    ),
+                )
+            )
+            self._processed_fail += 1
+            return "fail"
+
+        if status == 429 or str(parsed.get("error") or "").lower() in {
+            "rate_limited",
+            "too_many_requests",
+        }:
+            logging.warning("rate limited on %s — retry", path.name)
+            return "retry"
+
         done_dir = watch / "done"
         err_dir = watch / "error"
         noqr_dir = watch / "no-qr"
@@ -885,7 +1078,7 @@ class ScannerApp:
             opath = parsed.get("orderPath")
             opath_s = str(opath) if opath else None
             logging.info(
-                "ok %s → %s (%s)", path.name, onum or oid, parsed.get("via") or ""
+                "ok %s → %s (%s)", path.name, onum or oid, parsed.get("qrKind") or ""
             )
             item = ScanItem(
                 uid=uuid.uuid4().hex,
@@ -907,6 +1100,7 @@ class ScannerApp:
                 order_url=order_url(crm, oid, opath_s) if oid else None,
                 caption=short_name(dest.name),
             )
+            self._processed_ok += 1
         else:
             err = str(parsed.get("error") or parsed.get("detail") or "ошибка")
             low = err.lower()
@@ -921,14 +1115,23 @@ class ScannerApp:
                 error=err,
                 caption=short_name(dest.name),
             )
+            self._processed_fail += 1
         self.ui_q.put(("item", item))
+        return "ok" if ok else "fail"
+
+    def _schedule_persist(self) -> None:
+        if self._persist_after_id is not None:
+            try:
+                self.root.after_cancel(self._persist_after_id)
+            except Exception:
+                pass
+        self._persist_after_id = self.root.after(1500, self._persist_gallery)
 
     def _add_item_ui(self, item: ScanItem, *, persist: bool = True) -> None:
         self.empty_lbl.grid_remove()
-        # newest first
         self.items.insert(0, item)
-        dropped = self.items[80:]
-        self.items = self.items[:80]
+        dropped = self.items[GALLERY_MAX:]
+        self.items = self.items[:GALLERY_MAX]
         for old in dropped:
             self._drop_thumb(old)
         thumb = make_thumb_png(item.path)
@@ -938,13 +1141,13 @@ class ScannerApp:
                 item.photo = photo
                 item.thumb_file = thumb
                 self._thumb_keep.append(photo)
-                self._thumb_keep = self._thumb_keep[-120:]
+                self._thumb_keep = self._thumb_keep[-(GALLERY_MAX + 20) :]
             except tk.TclError:
                 item.photo = None
                 self._drop_thumb(item)
         self._relayout()
         if persist:
-            self._persist_gallery()
+            self._schedule_persist()
 
     def _relayout(self) -> None:
         for child in self.grid.winfo_children():
@@ -1105,7 +1308,7 @@ class ScannerApp:
         old_attachment_id = item.attachment_id if item.ok else None
 
         # Сначала новое вложение — иначе при сбое upload старое уже стёрто.
-        ok, parsed = upload_scan(
+        ok, _status, parsed = upload_scan(
             crm_base=crm,
             api_key=key,
             path=item.path,
