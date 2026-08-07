@@ -4,6 +4,7 @@ dist/
 build/
 *.spec
 settings.json
+gallery.json
 config.env
 .env
 watcher.log
