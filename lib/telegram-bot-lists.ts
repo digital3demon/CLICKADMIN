@@ -3,15 +3,13 @@ import "server-only";
 import type { PrismaClient } from "@prisma/client";
 import { UserRole } from "@prisma/client";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
-import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
+import { orderPathById } from "@/lib/order-public-ref";
+import { orderShipmentListStatusLabel } from "@/lib/order-shipment-list-status-label";
 import {
   addCalendarDaysYmd,
   moscowDayBoundsUtc,
-  moscowShipmentDayBoundsUtc,
-  moscowShipmentInclusiveRangeBoundsUtc,
   moscowTodayYmd,
-  moscowTomorrowYmd,
   moscowWorkWeekFridayYmd,
 } from "@/lib/shipments-date-range";
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
@@ -20,14 +18,24 @@ import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { getClientsPrisma } from "@/lib/get-domain-prisma";
 import { fetchKanbanStageDlineTelegramItems } from "@/lib/telegram-bot-kanban-stage-dline";
 import { isTelegramBotCardStageCommand } from "@/lib/telegram-bot-menu-commands";
-import { formatTelegramHtmlLinkList } from "@/lib/telegram-html-message";
 import {
+  formatTelegramHtmlLinkList,
+  type TelegramHtmlListItem,
+} from "@/lib/telegram-html-message";
+import {
+  compareOrdersByEffectiveAppointment,
+  ordersShipmentListWhere,
+} from "@/lib/orders-shipment-list-filter";
+import { ordersShipmentModeLabel } from "@/lib/orders-shipment-list-query";
+import {
+  telegramRoleLinksToOrderPage,
   telegramRoleMayCardStageDline,
   telegramRoleMayDline,
   telegramRoleMayShip,
   telegramRoleUsesLabOrderDline,
   telegramRoleUsesPersonalCardStageDline,
 } from "@/lib/telegram-bot-role-matrix";
+import type { Prisma } from "@prisma/client";
 
 export {
   isTelegramBotListCommand,
@@ -61,12 +69,11 @@ function telegramOrderCardTitleOneLineFromParts(p: {
     .trim();
 }
 
-function orderCardHref(kaitenCardId: number | null, orderId: string): string {
-  if (kaitenCardId != null) {
-    const k = getKaitenCardWebUrl(kaitenCardId);
-    if (k) return k;
-  }
+function orderCardHref(orderId: string, linkToOrderPage: boolean): string {
   const base = crmPublicBaseUrl().replace(/\/+$/, "");
+  if (linkToOrderPage) {
+    return `${base}${orderPathById(orderId)}`;
+  }
   return `${base}${kanbanOrderDeepLinkPath(orderId)}`;
 }
 
@@ -75,6 +82,9 @@ const orderTelegramTitleSelect = {
   orderNumber: true,
   patientName: true,
   dueDate: true,
+  appointmentDate: true,
+  dueToAdminsAt: true,
+  dueToAdminsHasTime: true,
   kaitenAdminDueHasTime: true,
   kaitenCardTitleLabel: true,
   doctorId: true,
@@ -82,24 +92,31 @@ const orderTelegramTitleSelect = {
   kaitenCardId: true,
   isUrgent: true,
   urgentCoefficient: true,
+  kaitenColumnTitle: true,
+  demoKanbanColumn: true,
+  labWorkStatus: true,
+  kaitenBlocked: true,
 } as const;
 
-/** Лёгкий запрос для бота — только поля заголовка карточки, без гидрации отгрузок. */
-async function fetchOrderTelegramLinkItems(
-  ordersDb: PrismaClient,
-  tenantId: string,
-  start: Date,
-  endExclusive: Date,
-): Promise<{ url: string; label: string }[]> {
-  const dueRows = await ordersDb.order.findMany({
-    where: {
-      tenantId,
-      archivedAt: null,
-      dueDate: { not: null, gte: start, lt: endExclusive },
-    },
-    orderBy: [{ dueDate: "asc" }, { orderNumber: "asc" }],
-    select: orderTelegramTitleSelect,
-  });
+async function mapOrdersToTelegramLinkItems(
+  dueRows: Array<{
+    id: string;
+    orderNumber: string;
+    patientName: string | null;
+    dueDate: Date | null;
+    kaitenAdminDueHasTime: boolean | null;
+    kaitenCardTitleLabel: string | null;
+    doctorId: string;
+    kaitenCardTypeId: string | null;
+    isUrgent: boolean;
+    urgentCoefficient: number | null;
+    kaitenColumnTitle: string | null;
+    demoKanbanColumn: string | null;
+    labWorkStatus: string;
+    kaitenBlocked: boolean | null;
+  }>,
+  linkToOrderPage: boolean,
+): Promise<TelegramHtmlListItem[]> {
   if (dueRows.length === 0) return [];
 
   const clientsPrisma = await getClientsPrisma();
@@ -127,8 +144,9 @@ async function fetchOrderTelegramLinkItems(
     const kt = row.kaitenCardTypeId
       ? cardTypeById.get(row.kaitenCardTypeId)
       : undefined;
+    const status = orderShipmentListStatusLabel(row);
     return {
-      url: orderCardHref(row.kaitenCardId, row.id),
+      url: orderCardHref(row.id, linkToOrderPage),
       label: telegramOrderCardTitleOneLineFromParts({
         orderNumber: row.orderNumber,
         patientName: row.patientName,
@@ -140,8 +158,50 @@ async function fetchOrderTelegramLinkItems(
         isUrgent: row.isUrgent,
         urgentCoefficient: row.urgentCoefficient,
       }),
+      detail: `Статус: ${status}`,
     };
   });
+}
+
+/** Лёгкий запрос для бота — только поля заголовка карточки, без гидрации отгрузок. */
+async function fetchOrderTelegramLinkItems(
+  ordersDb: PrismaClient,
+  tenantId: string,
+  start: Date,
+  endExclusive: Date,
+  linkToOrderPage: boolean,
+): Promise<TelegramHtmlListItem[]> {
+  const dueRows = await ordersDb.order.findMany({
+    where: {
+      tenantId,
+      archivedAt: null,
+      dueDate: { not: null, gte: start, lt: endExclusive },
+    },
+    orderBy: [{ dueDate: "asc" }, { orderNumber: "asc" }],
+    select: orderTelegramTitleSelect,
+  });
+  return mapOrdersToTelegramLinkItems(dueRows, linkToOrderPage);
+}
+
+/** То же окно «Актуальное» / дата записи, что на списке заказов. */
+async function fetchOrderTelegramLinkItemsActualAppointment(
+  ordersDb: PrismaClient,
+  tenantId: string,
+  linkToOrderPage: boolean,
+): Promise<TelegramHtmlListItem[]> {
+  const shipWhere = ordersShipmentListWhere({
+    mode: "actual",
+    shipFrom: null,
+    shipTo: null,
+  });
+  const dueRows = await ordersDb.order.findMany({
+    where: {
+      AND: [{ tenantId, archivedAt: null }, shipWhere],
+    } satisfies Prisma.OrderWhereInput,
+    select: orderTelegramTitleSelect,
+  });
+  dueRows.sort(compareOrdersByEffectiveAppointment);
+  return mapOrdersToTelegramLinkItems(dueRows, linkToOrderPage);
 }
 
 /** Нижняя клавиатура в чате: только кнопки, разрешённые роли (остальное — команды вручную). */
@@ -150,11 +210,7 @@ export function telegramReplyKeyboardMarkupForRole(
 ): Record<string, unknown> | null {
   const rows: { text: string }[][] = [];
   if (telegramRoleMayShip(role)) {
-    rows.push([
-      { text: "Отгрузки на сегодня" },
-      { text: "Отгрузки на завтра" },
-    ]);
-    rows.push([{ text: "Отгрузки до конца недели" }]);
+    rows.push([{ text: "Актуальная запись" }]);
   }
   if (telegramRoleUsesLabOrderDline(role)) {
     rows.push([
@@ -195,7 +251,10 @@ export async function tryTelegramBotListCommand(opts: {
   const { tenantId, role, crmUserId } = opts;
 
   const shipCmd =
-    cmd === "/shiptd" || cmd === "/shiptm" || cmd === "/shipw";
+    cmd === "/shipact" ||
+    cmd === "/shiptd" ||
+    cmd === "/shiptm" ||
+    cmd === "/shipw";
   const dlineCmd =
     cmd === "/dlinew" ||
     cmd === "/dlinetd" ||
@@ -219,46 +278,29 @@ export async function tryTelegramBotListCommand(opts: {
   if (cardStageCmd && !telegramRoleMayCardStageDline(role)) {
     return {
       parseMode: "HTML",
-      text: "Срок карточек канбана доступен только владельцу.",
+      text: "Срок карточек канбана сейчас недоступен. Используйте «Мой срок» или кнопки ниже.",
     };
   }
 
   const ordersDb = await resolveTenantPrismaClient(tenantId);
   const todayYmd = moscowTodayYmd();
+  const linkToOrderPage = telegramRoleLinksToOrderPage(role);
 
   if (shipCmd) {
-    let start: Date;
-    let endExclusive: Date;
-    let header: string;
-
-    if (cmd === "/shiptd") {
-      const b = moscowShipmentDayBoundsUtc(todayYmd);
-      start = b.start;
-      endExclusive = b.endExclusive;
-      header = `Отгрузки на сегодня (${todayYmd} 00:00 — ${addCalendarDaysYmd(todayYmd, 1)} 12:00 МСК)`;
-    } else if (cmd === "/shiptm") {
-      const ymd = moscowTomorrowYmd();
-      const b = moscowShipmentDayBoundsUtc(ymd);
-      start = b.start;
-      endExclusive = b.endExclusive;
-      header = `Отгрузки на завтра (${ymd} 00:00 — ${addCalendarDaysYmd(ymd, 1)} 12:00 МСК)`;
-    } else {
-      const fri = moscowWorkWeekFridayYmd(todayYmd);
-      const b = moscowShipmentInclusiveRangeBoundsUtc(todayYmd, fri);
-      start = b.start;
-      endExclusive = b.endExclusive;
-      header = `Отгрузки до конца рабочей недели (${todayYmd} … ${fri}, окна срока лаборатории как на странице «Отгрузки»)`;
-    }
-
-    const items = await fetchOrderTelegramLinkItems(
+    const header = `Актуальная запись (${ordersShipmentModeLabel({
+      mode: "actual",
+      shipFrom: null,
+      shipTo: null,
+      periodError: null,
+    })})`;
+    const items = await fetchOrderTelegramLinkItemsActualAppointment(
       ordersDb,
       tenantId,
-      start,
-      endExclusive,
+      linkToOrderPage,
     );
     return {
       parseMode: "HTML",
-      text: formatTelegramHtmlLinkList(items, "Отгрузок нет", header),
+      text: formatTelegramHtmlLinkList(items, "Нарядов нет", header),
     };
   }
 
@@ -267,6 +309,7 @@ export async function tryTelegramBotListCommand(opts: {
     const stage = await fetchKanbanStageDlineTelegramItems(
       tenantId,
       cmd as "/cardtd" | "/cardtm" | "/cardw",
+      { linkToOrderPage },
     );
     return {
       parseMode: "HTML",
@@ -278,7 +321,7 @@ export async function tryTelegramBotListCommand(opts: {
     const stage = await fetchKanbanStageDlineTelegramItems(
       tenantId,
       cmd as "/dlinetd" | "/dlinetm" | "/dlinew",
-      { crmUserId: crmUserId ?? null },
+      { crmUserId: crmUserId ?? null, linkToOrderPage },
     );
     const emptyRu = crmUserId
       ? "Карточек на вас (ответственный или участник) с этапным сроком в этом окне нет"
@@ -316,6 +359,7 @@ export async function tryTelegramBotListCommand(opts: {
     tenantId,
     start,
     endExclusive,
+    linkToOrderPage,
   );
 
   return {

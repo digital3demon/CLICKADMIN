@@ -1,6 +1,16 @@
 /** Лимит Telegram Bot API на длину text. */
 export const TELEGRAM_MESSAGE_MAX_LEN = 4096;
 
+/** Разделитель между записями в списках бота. */
+export const TELEGRAM_LIST_ITEM_SEPARATOR = "____________________________";
+
+export type TelegramHtmlListItem = {
+  url: string;
+  label: string;
+  /** Строка под ссылкой (например актуальный статус / колонка). */
+  detail?: string | null;
+};
+
 export function telegramEscapeHtmlText(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -27,12 +37,21 @@ export function truncateTelegramHtmlMessage(text: string, maxLen = TELEGRAM_MESS
   return cut.trimEnd();
 }
 
+function formatTelegramListItemBlock(item: TelegramHtmlListItem): string | null {
+  const url = item.url.trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+  const link = `<a href="${telegramEscapeHtmlAttr(url)}">${telegramEscapeHtmlText(item.label)}</a>`;
+  const detail = String(item.detail ?? "").trim();
+  if (!detail) return link;
+  return `${link}\n${telegramEscapeHtmlText(detail)}`;
+}
+
 /**
  * Заголовок + список HTML-ссылок с учётом лимита Telegram.
- * Пропускает url без http(s).
+ * Между записями — разделитель; под ссылкой опционально статус (`detail`).
  */
 export function formatTelegramHtmlLinkList(
-  items: { url: string; label: string }[],
+  items: TelegramHtmlListItem[],
   emptyRu: string,
   header: string,
   maxLen = TELEGRAM_MESSAGE_MAX_LEN,
@@ -42,24 +61,35 @@ export function formatTelegramHtmlLinkList(
     return `${headerBlock}\n${telegramEscapeHtmlText(emptyRu)}`;
   }
 
+  const blocks: string[] = [];
+  for (const x of items) {
+    const block = formatTelegramListItemBlock(x);
+    if (block) blocks.push(block);
+  }
+  if (blocks.length === 0) {
+    return `${headerBlock}\n${telegramEscapeHtmlText(emptyRu)}`;
+  }
+
   const lines: string[] = [headerBlock];
   let included = 0;
-  for (const x of items) {
-    const url = x.url.trim();
-    if (!/^https?:\/\//i.test(url)) continue;
-    const line = `<a href="${telegramEscapeHtmlAttr(url)}">${telegramEscapeHtmlText(x.label)}</a>`;
-    const withLine = [...lines, line].join("\n");
-    const remaining = items.length - included - 1;
+  for (let i = 0; i < blocks.length; i += 1) {
+    const block = blocks[i]!;
+    const chunk =
+      included === 0
+        ? `\n${block}`
+        : `\n${TELEGRAM_LIST_ITEM_SEPARATOR}\n${block}`;
+    const remaining = blocks.length - included - 1;
     const footer = remaining > 0 ? `\n… ещё ${remaining}` : "";
-    if (withLine.length + footer.length > maxLen - 8) break;
-    lines.push(line);
+    const candidate = lines.join("") + chunk + footer;
+    if (candidate.length > maxLen - 8) break;
+    lines.push(chunk);
     included += 1;
   }
 
-  const skipped = items.length - included;
+  const skipped = blocks.length - included;
   if (included === 0) {
     return `${headerBlock}\n${telegramEscapeHtmlText(emptyRu)}`;
   }
   const extra = skipped > 0 ? `\n… ещё ${skipped}` : "";
-  return truncateTelegramHtmlMessage(lines.join("\n") + extra, maxLen);
+  return truncateTelegramHtmlMessage(lines.join("") + extra, maxLen);
 }

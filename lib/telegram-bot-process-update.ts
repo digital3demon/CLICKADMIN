@@ -408,7 +408,7 @@ export async function processTelegramBotUpdate(
       await replyWithRoleKeyboard(
         botToken,
         chatId,
-        "Неизвестная команда. Отгрузки: /shiptd /shiptm /shipw. Лаб. срок (админ/владелец): /dlinetd /dlinetm /dlinew. Срок карточек (владелец): /cardtd /cardtm /cardw. Или кнопки ниже.",
+        "Неизвестная команда. Запись: /shipact. Лаб. срок (админ): /dlinetd /dlinetm /dlinew. Мой срок: кнопки ниже или /dlinetd /dlinetm /dlinew.",
         effectiveRole,
         true,
       );

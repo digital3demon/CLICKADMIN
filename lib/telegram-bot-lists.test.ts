@@ -6,19 +6,21 @@ import {
 
 describe("telegramMenuLabelToCommand", () => {
   it("распознаёт подписи кнопок", () => {
-    expect(telegramMenuLabelToCommand("Отгрузки на сегодня")).toBe("/shiptd");
+    expect(telegramMenuLabelToCommand("Актуальная запись")).toBe("/shipact");
+    expect(telegramMenuLabelToCommand("Отгрузки на сегодня")).toBe("/shipact");
     expect(telegramMenuLabelToCommand("Срок на завтра")).toBe("/dlinetm");
     expect(telegramMenuLabelToCommand("Мой срок на сегодня")).toBe("/dlinetd");
     expect(telegramMenuLabelToCommand("Срок карточек на сегодня")).toBe("/cardtd");
   });
 
   it("нормализует пробелы и регистр", () => {
-    expect(telegramMenuLabelToCommand("  отгрузки на сегодня  ")).toBe("/shiptd");
+    expect(telegramMenuLabelToCommand("  актуальная запись  ")).toBe("/shipact");
   });
 });
 
 describe("resolveTelegramBotListCommand", () => {
   it("распознаёт slash-команды", () => {
+    expect(resolveTelegramBotListCommand("/shipact")).toBe("/shipact");
     expect(resolveTelegramBotListCommand("/shiptd")).toBe("/shiptd");
     expect(resolveTelegramBotListCommand("/dlinew@MyBot")).toBe("/dlinew");
     expect(resolveTelegramBotListCommand("/cardtm")).toBe("/cardtm");

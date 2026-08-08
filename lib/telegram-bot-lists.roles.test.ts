@@ -9,11 +9,11 @@ import {
 } from "@/lib/telegram-bot-role-matrix";
 
 describe("telegram bot role matrix", () => {
-  it("владелец: отгрузки, лаб. срок и срок всех карточек", () => {
+  it("владелец: актуальная запись и мой срок (без лаб. срока и срока всех карточек)", () => {
     expect(telegramRoleMayShip(UserRole.OWNER)).toBe(true);
-    expect(telegramRoleUsesLabOrderDline(UserRole.OWNER)).toBe(true);
-    expect(telegramRoleUsesPersonalCardStageDline(UserRole.OWNER)).toBe(false);
-    expect(telegramRoleMayCardStageDline(UserRole.OWNER)).toBe(true);
+    expect(telegramRoleUsesLabOrderDline(UserRole.OWNER)).toBe(false);
+    expect(telegramRoleUsesPersonalCardStageDline(UserRole.OWNER)).toBe(true);
+    expect(telegramRoleMayCardStageDline(UserRole.OWNER)).toBe(false);
     expect(telegramRoleMayDline(UserRole.OWNER)).toBe(true);
   });
 

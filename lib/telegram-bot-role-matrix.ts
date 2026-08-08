@@ -8,15 +8,15 @@ const SHIP_COMMAND_ROLES = new Set<UserRole>([
   UserRole.OWNER,
 ]);
 
-/** Лабораторный срок наряда (Order.dueDate) — админы и владелец. */
+/** Лабораторный срок наряда (Order.dueDate) — только админы (не владелец). */
 const LAB_DLINE_ROLES = new Set<UserRole>([
   UserRole.ADMINISTRATOR,
   UserRole.SENIOR_ADMINISTRATOR,
-  UserRole.OWNER,
 ]);
 
 /** Этапный срок карточек канбана, где пользователь ответственный или участник. */
 const PERSONAL_CARD_DLINE_ROLES = new Set<UserRole>([
+  UserRole.OWNER,
   UserRole.SENIOR_TECHNICIAN,
   UserRole.PRODUCTION,
   UserRole.SENIOR_PRODUCTION,
@@ -28,6 +28,15 @@ export function telegramRoleMayShip(role: UserRole): boolean {
   return SHIP_COMMAND_ROLES.has(role);
 }
 
+/** Ссылки в списках бота: админы/владелец → карточка заказа, остальные → канбан. */
+export function telegramRoleLinksToOrderPage(role: UserRole): boolean {
+  return (
+    role === UserRole.ADMINISTRATOR ||
+    role === UserRole.SENIOR_ADMINISTRATOR ||
+    role === UserRole.OWNER
+  );
+}
+
 export function telegramRoleUsesLabOrderDline(role: UserRole): boolean {
   return LAB_DLINE_ROLES.has(role);
 }
@@ -36,8 +45,9 @@ export function telegramRoleUsesPersonalCardStageDline(role: UserRole): boolean 
   return PERSONAL_CARD_DLINE_ROLES.has(role);
 }
 
-export function telegramRoleMayCardStageDline(role: UserRole): boolean {
-  return role === UserRole.OWNER;
+/** Общий «Срок карточек» (вся доска) — сейчас никому; у владельца только «Мой срок». */
+export function telegramRoleMayCardStageDline(_role: UserRole): boolean {
+  return false;
 }
 
 export function telegramRoleMayDline(role: UserRole): boolean {

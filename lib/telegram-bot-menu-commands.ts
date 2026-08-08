@@ -1,8 +1,10 @@
 /** Текст на reply-кнопке → slash-команда (полное совпадение строки сообщения). */
 export const TELEGRAM_MENU_LABEL_TO_COMMAND: Record<string, string> = {
-  "Отгрузки на сегодня": "/shiptd",
-  "Отгрузки на завтра": "/shiptm",
-  "Отгрузки до конца недели": "/shipw",
+  "Актуальная запись": "/shipact",
+  /** Старые подписи → то же окно «Актуальное», что на списке заказов. */
+  "Отгрузки на сегодня": "/shipact",
+  "Отгрузки на завтра": "/shipact",
+  "Отгрузки до конца недели": "/shipact",
   "Срок на сегодня": "/dlinetd",
   "Срок на завтра": "/dlinetm",
   "Срок до конца недели": "/dlinew",
@@ -15,6 +17,7 @@ export const TELEGRAM_MENU_LABEL_TO_COMMAND: Record<string, string> = {
 };
 
 const LIST_COMMANDS = new Set([
+  "/shipact",
   "/shiptd",
   "/shiptm",
   "/shipw",

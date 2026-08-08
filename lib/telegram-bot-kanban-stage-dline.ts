@@ -3,6 +3,7 @@ import "server-only";
 import { getPrisma } from "@/lib/get-prisma";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
+import { orderPathById } from "@/lib/order-public-ref";
 import {
   KANBAN_CHAT_STATE_KEY,
   parseKanbanAppState,
@@ -13,6 +14,7 @@ import {
   kanbanCardTelegramLabel,
   kanbanStageDlineWindowForCommand,
 } from "@/lib/telegram-bot-kanban-stage-dline-helpers";
+import type { TelegramHtmlListItem } from "@/lib/telegram-html-message";
 
 export {
   collectKanbanStageDueCards,
@@ -20,14 +22,40 @@ export {
   kanbanStageDlineWindowForCommand,
 } from "@/lib/telegram-bot-kanban-stage-dline-helpers";
 
-function kanbanCardTelegramHref(card: KanbanCard): string {
+function kanbanCardTelegramHref(
+  card: KanbanCard,
+  linkToOrderPage: boolean,
+): string {
   const base = crmPublicBaseUrl().replace(/\/+$/, "");
   const linked = card.linkedOrderId?.trim();
   if (linked) {
+    if (linkToOrderPage) {
+      return `${base}${orderPathById(linked)}`;
+    }
     return `${base}${kanbanOrderDeepLinkPath(linked)}`;
   }
   const params = new URLSearchParams({ card: card.id });
   return `${base}/kanban?${params.toString()}`;
+}
+
+/** Колонка / стоп / архив для статуса в списках бота. */
+function kanbanCardStatusById(state: KanbanAppState): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const board of state.boards ?? []) {
+    for (const col of board.columns ?? []) {
+      const title = String(col.title ?? "").trim() || "—";
+      for (const card of col.cards ?? []) {
+        m.set(card.id, card.blocked ? "Стоп" : title);
+      }
+    }
+    for (const ac of board.archivedCards ?? []) {
+      if (ac?.card) m.set(ac.card.id, "Архив");
+    }
+    for (const sc of board.stoppedCards ?? []) {
+      if (sc?.card) m.set(sc.card.id, "Стоп");
+    }
+  }
+  return m;
 }
 
 export async function loadKanbanAppStateForTenant(
@@ -44,19 +72,22 @@ export async function loadKanbanAppStateForTenant(
 export async function fetchKanbanStageDlineTelegramItems(
   tenantId: string,
   cmd: "/cardtd" | "/cardtm" | "/cardw" | "/dlinetd" | "/dlinetm" | "/dlinew",
-  opts?: { crmUserId?: string | null },
-): Promise<{ header: string; items: { url: string; label: string }[] }> {
+  opts?: { crmUserId?: string | null; linkToOrderPage?: boolean },
+): Promise<{ header: string; items: TelegramHtmlListItem[] }> {
   const window = kanbanStageDlineWindowForCommand(cmd);
   const state = await loadKanbanAppStateForTenant(tenantId);
   if (!state) {
     return { header: window.header, items: [] };
   }
+  const linkToOrderPage = opts?.linkToOrderPage === true;
+  const statusById = kanbanCardStatusById(state);
   const cards = collectKanbanStageDueCards(state, window, opts);
   return {
     header: window.header,
     items: cards.map((card) => ({
-      url: kanbanCardTelegramHref(card),
+      url: kanbanCardTelegramHref(card, linkToOrderPage),
       label: kanbanCardTelegramLabel(card),
+      detail: `Статус: ${statusById.get(card.id) ?? "—"}`,
     })),
   };
 }
