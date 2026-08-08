@@ -2,6 +2,7 @@
  * Отправка сообщения в Telegram (Bot API). Сервер-only.
  */
 
+import { telegramBotApiUrl } from "@/lib/telegram-api-base";
 import {
   TELEGRAM_MESSAGE_MAX_LEN,
   truncateTelegramHtmlMessage,
@@ -15,7 +16,7 @@ function normalizeTelegramNetworkError(e: unknown): string {
   const msg =
     e instanceof Error ? e.message.trim().toLowerCase() : String(e ?? "").trim().toLowerCase();
   if (!msg || msg === "fetch failed") {
-    return "Сеть до api.telegram.org недоступна";
+    return "Сеть до Telegram Bot API недоступна";
   }
   return e instanceof Error ? e.message : "Сеть";
 }
@@ -27,15 +28,12 @@ async function sendMessageRequest(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      },
-    );
+    const res = await fetch(telegramBotApiUrl(botToken, "sendMessage"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
     const j = (await res.json().catch(() => ({}))) as {
       ok?: boolean;
       description?: string;
@@ -108,7 +106,11 @@ export async function telegramSendMessage(
       sent = await sendMessageRequest(botToken, retryBody);
     }
   }
-  if (!sent.ok && sent.error === "Сеть до api.telegram.org недоступна") {
+  if (
+    !sent.ok &&
+    (sent.error === "Сеть до Telegram Bot API недоступна" ||
+      sent.error === "Сеть до api.telegram.org недоступна")
+  ) {
     sent = await sendMessageRequest(botToken, body);
   }
   return sent;

@@ -1,3 +1,5 @@
+import { telegramBotApiUrl } from "@/lib/telegram-api-base";
+
 export type TelegramWebhookInfo = {
   ok: true;
   url: string;
@@ -22,10 +24,9 @@ async function telegramApiJson<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
   try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${encodeURIComponent(botToken)}/${method}`,
-      { signal: controller.signal },
-    );
+    const res = await fetch(telegramBotApiUrl(botToken, method), {
+      signal: controller.signal,
+    });
     const j = (await res.json().catch(() => ({}))) as {
       ok?: boolean;
       description?: string;
@@ -37,11 +38,11 @@ async function telegramApiJson<T>(
     return { ok: true, result: j.result as T };
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") {
-      return { ok: false, error: "Таймаут запроса к api.telegram.org" };
+      return { ok: false, error: "Таймаут запроса к Telegram Bot API" };
     }
     return {
       ok: false,
-      error: e instanceof Error ? e.message : "Сеть до api.telegram.org",
+      error: e instanceof Error ? e.message : "Сеть до Telegram Bot API",
     };
   } finally {
     clearTimeout(timer);

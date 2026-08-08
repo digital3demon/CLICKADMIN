@@ -3,6 +3,10 @@ import "server-only";
 import dns from "node:dns/promises";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
+import {
+  telegramApiBaseUrl,
+  telegramApiHost,
+} from "@/lib/telegram-api-base";
 import { normalizeTelegramBotUsername } from "@/lib/telegram-bot-username";
 import {
   fetchTelegramBotMe,
@@ -34,6 +38,7 @@ function isNetworkFailError(error: string | null | undefined): boolean {
   return (
     e.includes("fetch failed") ||
     e.includes("сеть до api.telegram.org") ||
+    e.includes("сеть до telegram bot api") ||
     e.includes("network") ||
     e.includes("timeout") ||
     e.includes("таймаут") ||
@@ -181,10 +186,13 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
   const publicBotUsername = publicBotUsernameRaw || null;
   const base = crmPublicBaseUrl();
   const expectedWebhookUrl = `${base}/api/telegram/webhook`;
+  const apiBase = telegramApiBaseUrl();
+  const apiHost = telegramApiHost();
+  const usingCustomApiBase = Boolean(process.env.TELEGRAM_API_BASE?.trim());
 
   const [dnsProbe, httpsProbe] = await Promise.all([
-    probeDns("api.telegram.org"),
-    probeHttpsRoot("https://api.telegram.org"),
+    probeDns(apiHost),
+    probeHttpsRoot(`${apiBase}/`),
   ]);
 
   let getMeMs = 0;
@@ -284,8 +292,16 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
       detail: `Эффективный URL: ${base}. Ожидаемый webhook: ${expectedWebhookUrl}`,
     },
     {
+      id: "api_base",
+      title: "TELEGRAM_API_BASE",
+      status: usingCustomApiBase ? "pass" : "warn",
+      detail: usingCustomApiBase
+        ? `Исходящие запросы через ${apiBase}`
+        : `По умолчанию ${apiBase}. При блокировке хостинга задайте HTTPS-прокси (например https://bot.click-lab.online)`,
+    },
+    {
       id: "dns",
-      title: "DNS api.telegram.org",
+      title: `DNS ${apiHost}`,
       status: dnsProbe.ok ? "pass" : "fail",
       detail: dnsProbe.ok
         ? `${dnsProbe.ms} мс · ${dnsProbe.addresses.join(", ") || "ok"}`
@@ -293,7 +309,7 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
     },
     {
       id: "https_root",
-      title: "HTTPS до api.telegram.org",
+      title: `HTTPS до ${apiHost}`,
       status: httpsProbe.ok ? "pass" : "fail",
       detail: httpsProbe.ok
         ? `${httpsProbe.ms} мс · HTTP ${httpsProbe.httpStatus}`
@@ -351,8 +367,9 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
 
   let verdictCode: TelegramDiagVerdictCode = "ok";
   let verdictTitle = "Telegram API доступен";
-  let verdictSummary =
-    "Сервер CRM достучался до api.telegram.org. Бот может отправлять ответы, если webhook и секрет настроены верно.";
+  let verdictSummary = usingCustomApiBase
+    ? `Сервер CRM достучался до Bot API через ${apiBase}. Бот может отправлять ответы, если webhook и секрет настроены верно.`
+    : "Сервер CRM достучался до api.telegram.org. Бот может отправлять ответы, если webhook и секрет настроены верно.";
 
   if (singleUser) {
     verdictCode = "single_user";
@@ -366,9 +383,12 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
       "В окружении приложения на Timeweb не задан токен бота. Добавьте переменную и перезапустите приложение.";
   } else if (outboundBlocked) {
     verdictCode = "outbound_blocked";
-    verdictTitle = "Нет исходящего доступа к api.telegram.org";
-    verdictSummary =
-      "С хоста CRM (Timeweb) не открывается Telegram Bot API. Сообщения могут доходить вебхуком, но ответы бота и уведомления уходить не будут. Нужен исходящий HTTPS:443 к api.telegram.org или прокси/релей за рубежом.";
+    verdictTitle = usingCustomApiBase
+      ? `Нет исходящего доступа к ${apiHost}`
+      : "Нет исходящего доступа к api.telegram.org";
+    verdictSummary = usingCustomApiBase
+      ? `С хоста CRM не открывается прокси Bot API (${apiBase}). Проверьте Caddy на VPS и TELEGRAM_API_BASE.`
+      : "С хоста CRM (Timeweb) не открывается Telegram Bot API. Сообщения могут доходить вебхуком, но ответы бота и уведомления уходить не будут. Нужен исходящий HTTPS:443 к api.telegram.org или прокси/релей за рубежом (TELEGRAM_API_BASE).";
   } else if (tokenInvalid) {
     verdictCode = "token_invalid";
     verdictTitle = "Токен бота отклонён Telegram";

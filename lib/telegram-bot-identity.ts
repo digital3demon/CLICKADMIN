@@ -1,4 +1,5 @@
 import "server-only";
+import { telegramBotApiUrl } from "@/lib/telegram-api-base";
 import { telegramPeerIdToString } from "@/lib/telegram-json-ids";
 
 let cachedBotUserIdStr: string | null = null;
@@ -9,9 +10,7 @@ export async function getTelegramBotUserIdStr(
 ): Promise<string | null> {
   if (cachedBotUserIdStr != null) return cachedBotUserIdStr;
   try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${encodeURIComponent(botToken)}/getMe`,
-    );
+    const res = await fetch(telegramBotApiUrl(botToken, "getMe"));
     const j = (await res.json()) as { ok?: boolean; result?: { id?: unknown } };
     if (j.ok !== true || !j.result) return null;
     const s = telegramPeerIdToString(j.result.id);
