@@ -228,7 +228,7 @@ export async function fetchPersonalMentionToastRows(
       },
     },
   });
-  return (rows as Array<{
+  const mapped = (rows as Array<{
     id: string;
     text: string;
     authorLabel: string | null;
@@ -248,6 +248,14 @@ export async function fetchPersonalMentionToastRows(
     ...orderToastNames(r.order),
     createdAt: r.createdAt.toISOString(),
   }));
+  // Если от double-submit остались две inbox-строки — в UI одна карточка «Для вас».
+  return mapped.filter((row, _i, all) => {
+    const key = `${row.orderId}\0${row.text.trim().toLowerCase()}`;
+    const first = all.find(
+      (x) => `${x.orderId}\0${x.text.trim().toLowerCase()}` === key,
+    );
+    return first?.id === row.id;
+  });
 }
 
 export async function fetchOrderNotificationToasts(

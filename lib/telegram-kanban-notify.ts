@@ -194,6 +194,8 @@ export async function notifyKanbanTelegramTargetUsers(
     linesAdmin?: string[];
     /** Дублирование на общий админский Telegram тенанта (если привязан и включены prefs). */
     tenantId?: string | null;
+    /** Не слать в общий админ-чат (личные @упоминания — только в ЛС, иначе дубль «упомянул вас»). */
+    skipTenantSharedChat?: boolean;
   },
 ): Promise<void> {
   if (opts.skip) return;
@@ -282,7 +284,7 @@ export async function notifyKanbanTelegramTargetUsers(
   }
 
   const tid = opts.tenantId?.trim();
-  if (tid) {
+  if (tid && !opts.skipTenantSharedChat) {
     await notifyTenantAdminSharedTelegramChat(prisma, {
       tenantId: tid,
       event: opts.event,

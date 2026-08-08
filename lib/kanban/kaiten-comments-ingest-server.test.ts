@@ -59,7 +59,25 @@ describe("kaitenParsedCommentsToKanbanSyncRows", () => {
       created: "2026-07-03T12:00:00.000Z",
       authorName: "Админ",
       parentId: null,
+      isCrm: false,
+      crmDraftId: null,
     });
+  });
+
+  it("пробрасывает isCrm и crmDraftId", () => {
+    const rows = kaitenParsedCommentsToKanbanSyncRows([
+      {
+        id: 7,
+        text: "привет",
+        created: "2026-08-08T12:00:00.000Z",
+        authorName: "Всеволод",
+        parentId: null,
+        isCrm: true,
+        crmDraftId: "cm-1",
+      },
+    ]);
+    expect(rows[0]?.isCrm).toBe(true);
+    expect(rows[0]?.crmDraftId).toBe("cm-1");
   });
 });
 

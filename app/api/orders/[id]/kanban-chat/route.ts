@@ -252,6 +252,8 @@ function kaitenIncomingForSync(parsed: ParsedKaitenComment[]) {
     created: c.created,
     authorName: c.authorName,
     parentId: c.parentId,
+    isCrm: c.isCrm === true,
+    crmDraftId: c.crmDraftId ?? null,
   }));
 }
 
@@ -431,13 +433,7 @@ export async function GET(
           }
           const merged = upsertKaitenCommentsToCard(
             card.comments || [],
-            parsed.map((c) => ({
-              id: c.id,
-              text: c.text,
-              created: c.created,
-              authorName: c.authorName,
-              parentId: c.parentId,
-            })),
+            kaitenIncomingForSync(parsed),
           );
           const compacted = compactCardComments(merged.next);
           const needPersist =
@@ -599,16 +595,21 @@ export async function POST(
       : null;
     let row = (card.comments || []).find((c) => String(c.id || "").trim() === draftCommentId);
     if (!row && textBodyKey) {
-      row = (card.comments || []).find(
-        (c) =>
-          c.source === "CRM" &&
-          !String(c.externalCommentId || "").trim() &&
-          c.userId === session.sub &&
-          (c.syncStatus === "pending" || c.syncStatus === "failed") &&
-          commentBodyDedupKey(c.text) === textBodyKey,
-      );
+      // Недавний такой же CRM-комментарий (в т.ч. уже synced) — не плодим дубль при double-submit.
+      const recentMs = 120_000;
+      const nowMs = Date.now();
+      row = (card.comments || []).find((c) => {
+        if (c.source !== "CRM" || c.userId !== session.sub) return false;
+        if (commentBodyDedupKey(c.text) !== textBodyKey) return false;
+        const cParent = String(c.parentId || "").trim() || null;
+        if (cParent !== parentId) return false;
+        const created = Date.parse(String(c.createdAt || ""));
+        if (!Number.isFinite(created) || nowMs - created > recentMs) return false;
+        return true;
+      });
     }
     const createdAt = row?.createdAt || nowIso();
+    const isNewComment = !row;
     if (!row) {
       row = normalizeCardComment({
         id: draftCommentId,
@@ -649,6 +650,12 @@ export async function POST(
     const saved = await saveTenantKanbanStateWithRetry(tenantId, next, loaded.updatedAt);
     if (!saved) continue;
 
+    // Повтор того же текста (double-submit) — отдаём уже созданный комментарий без 2-го TG/inbox.
+    if (!isNewComment) {
+      return NextResponse.json({ ok: true, comment: row });
+    }
+
+    const inboxDraftId = String(row.id || "").trim() || draftCommentId;
     const labTag = order.tenant?.kanbanAdminMentionTag;
     try {
       await ingestCrmKanbanCommentForOrder({
@@ -658,7 +665,7 @@ export async function POST(
         commentText: messageText,
         authorLabel,
         kanbanAdminMentionTag: labTag,
-        crmDraftId: draftCommentId,
+        crmDraftId: inboxDraftId,
         syncState:
           card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)
             ? "PENDING_EXTERNAL"
@@ -678,7 +685,7 @@ export async function POST(
         try {
           await bindOrderChatInboxItemsByCrmDraft(ordersPrisma, {
             orderId: order.id,
-            crmDraftId: draftCommentId,
+            crmDraftId: inboxDraftId,
             kaitenCommentId: externalId,
           });
           await advanceKaitenLabMentionWaterlineOnly(
@@ -697,7 +704,7 @@ export async function POST(
         try {
           await markOrderChatInboxDraftSyncFailed(ordersPrisma, {
             orderId: order.id,
-            crmDraftId: draftCommentId,
+            crmDraftId: inboxDraftId,
           });
         } catch (e) {
           console.error("[kanban-chat POST] inbox mark failed failed", orderId, e);

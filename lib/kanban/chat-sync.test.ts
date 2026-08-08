@@ -7,6 +7,53 @@ import {
 import type { CardComment } from "./types";
 
 describe("kanban chat sync", () => {
+  it("CRM readback с DRAFT не добавляет второе сообщение в канбан", () => {
+    const existing: CardComment[] = [
+      {
+        id: "cm-local-1",
+        userId: "u1",
+        text: "@digitaldemon тест",
+        createdAt: "2026-08-08T12:00:00.000Z",
+        authorLabel: "Всеволод Соколов",
+        source: "CRM",
+        syncStatus: "pending",
+      },
+    ];
+    const merged = upsertKaitenCommentsToCard(existing, [
+      {
+        id: 7788,
+        text: "@digitaldemon тест",
+        created: "2026-08-08T12:00:01.000Z",
+        authorName: "Всеволод Соколов",
+        parentId: null,
+        isCrm: true,
+        crmDraftId: "cm-local-1",
+      },
+    ]);
+    expect(merged.next).toHaveLength(1);
+    expect(merged.next[0]?.id).toBe("cm-local-1");
+    expect(merged.next[0]?.source).toBe("CRM");
+    expect(merged.next[0]?.externalCommentId).toBe("7788");
+    expect(merged.next[0]?.syncStatus).toBe("synced");
+  });
+
+  it("CRM readback без локальной строки не создаёт source=KAITEN", () => {
+    const merged = upsertKaitenCommentsToCard([], [
+      {
+        id: 8899,
+        text: "из канбана",
+        created: "2026-08-08T12:00:00.000Z",
+        authorName: "Всеволод",
+        isCrm: true,
+        crmDraftId: "cm-abc",
+      },
+    ]);
+    expect(merged.next).toHaveLength(1);
+    expect(merged.next[0]?.source).toBe("CRM");
+    expect(merged.next[0]?.id).toBe("cm-abc");
+    expect(merged.next[0]?.externalCommentId).toBe("8899");
+  });
+
   it("сохраняет CRM-origin у комментария, отправленного из канбана и синкнутого в Kaiten", () => {
     const existing: CardComment[] = [
       {

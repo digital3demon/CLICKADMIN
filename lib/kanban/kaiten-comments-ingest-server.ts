@@ -75,6 +75,8 @@ export function kaitenParsedCommentsToKanbanSyncRows(
     created: c.created,
     authorName: c.authorName ?? undefined,
     parentId: c.parentId ?? null,
+    isCrm: c.isCrm === true,
+    crmDraftId: c.crmDraftId ?? null,
   }));
 }
 

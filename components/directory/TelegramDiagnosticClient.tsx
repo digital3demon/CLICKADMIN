@@ -208,7 +208,7 @@ export function TelegramDiagnosticClient() {
                     : ""}
                 </div>
                 <div>
-                  HTTPS api.telegram.org:{" "}
+                  HTTPS {report.network.httpsRoot.host}:{" "}
                   {report.network.httpsRoot.ok ? "OK" : "FAIL"} (
                   {report.network.httpsRoot.ms} мс
                   {report.network.httpsRoot.httpStatus != null

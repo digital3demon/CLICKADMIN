@@ -277,6 +277,7 @@ export function KanbanCardModal({
   const [blockReasonEditDraft, setBlockReasonEditDraft] = useState("");
   const blockReasonEditRef = useRef<HTMLTextAreaElement>(null);
   const blockReasonEditingRef = useRef(false);
+  const sendCommentInFlightRef = useRef(false);
   const [pickerMode, setPickerMode] = useState<null | "assign" | "part">(null);
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
@@ -635,6 +636,20 @@ export function KanbanCardModal({
   ): Promise<boolean> => {
     const trimmed = text.trim();
     if (!trimmed) return false;
+    if (sendCommentInFlightRef.current) return false;
+    sendCommentInFlightRef.current = true;
+    try {
+      return await sendCommentBody(trimmed, requestedAction, parentId);
+    } finally {
+      sendCommentInFlightRef.current = false;
+    }
+  };
+
+  const sendCommentBody = async (
+    trimmed: string,
+    requestedAction: ChatAction = "comment",
+    parentId: string | null = null,
+  ): Promise<boolean> => {
     const replyParentId = String(parentId || "").trim() || null;
 
     const actor = chatActorUserId || board.users[0]?.id || "";
@@ -695,6 +710,32 @@ export function KanbanCardModal({
       }
     };
 
+    const refreshCommentsAfterKanbanChatPost = async (
+      orderId: string,
+    ): Promise<boolean> => {
+      try {
+        const getRes = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const getData = (await getRes.json().catch(() => ({}))) as {
+          comments?: CardComment[];
+        };
+        if (getRes.ok && Array.isArray(getData.comments)) {
+          const nextComments = getData.comments as CardComment[];
+          onApply((b) => {
+            const fc = findCard(b, cardId);
+            if (!fc) return;
+            fc.card.comments = withImagePlaceholders(nextComments, fc.card);
+            pushActivity(fc.card, "Комментарий", actor, b, act);
+          });
+        }
+      } catch {
+        /* POST уже успешен — не дублируем локально/в Telegram */
+      }
+      return true;
+    };
+
     if (
       card.linkedOrderId &&
       (requestedAction === "correction" || requestedAction === "prosthetics")
@@ -715,24 +756,7 @@ export function KanbanCardModal({
           toast(postData.error ?? "Не удалось отправить сообщение в CRM-канбан", true);
           return false;
         }
-        const getRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
-          credentials: "include",
-          cache: "no-store",
-        });
-        const getData = (await getRes.json().catch(() => ({}))) as {
-          comments?: CardComment[];
-        };
-        if (getRes.ok && Array.isArray(getData.comments)) {
-          const nextComments = getData.comments as CardComment[];
-          onApply((b) => {
-            const fc = findCard(b, cardId);
-            if (!fc) return;
-            fc.card.comments = withImagePlaceholders(nextComments, fc.card);
-            pushActivity(fc.card, "Комментарий", actor, b, act);
-          });
-          return true;
-        }
-        return true;
+        return refreshCommentsAfterKanbanChatPost(card.linkedOrderId);
       } catch {
         toast("Сеть недоступна", true);
         return false;
@@ -764,23 +788,8 @@ export function KanbanCardModal({
           toast(postData.error ?? "Не удалось отправить сообщение в CRM-канбан", true);
           return false;
         }
-        const getRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
-          credentials: "include",
-          cache: "no-store",
-        });
-        const getData = (await getRes.json().catch(() => ({}))) as {
-          comments?: CardComment[];
-        };
-        if (getRes.ok && Array.isArray(getData.comments)) {
-          const nextComments = getData.comments as CardComment[];
-          onApply((b) => {
-            const fc = findCard(b, cardId);
-            if (!fc) return;
-            fc.card.comments = withImagePlaceholders(nextComments, fc.card);
-            pushActivity(fc.card, "Комментарий", actor, b, act);
-          });
-          return true;
-        }
+        // Успешный POST уже шлёт mention TG на сервере — не падаем в локальный fireMentionTelegram.
+        return refreshCommentsAfterKanbanChatPost(card.linkedOrderId);
       } catch {
         toast("Сеть недоступна", true);
         return false;

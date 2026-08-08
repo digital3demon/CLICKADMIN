@@ -247,11 +247,14 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
     whError = "однопользовательский режим — бот отключён";
   }
 
+  // Корневой GET к прокси иногда падает (fetch failed), при этом /bot…/getMe жив.
+  // Вердикт outbound_blocked — только если реально не работает Bot API.
   const outboundBlocked =
-    (!httpsProbe.ok && isNetworkFailError(httpsProbe.error)) ||
     (!getMeOk && isNetworkFailError(getMeError)) ||
-    (!whOk && isNetworkFailError(whError)) ||
-    (!dnsProbe.ok && !httpsProbe.ok);
+    (!getMeOk &&
+      !whOk &&
+      ((!httpsProbe.ok && isNetworkFailError(httpsProbe.error)) ||
+        (!dnsProbe.ok && !httpsProbe.ok)));
 
   const tokenInvalid =
     Boolean(token) &&
@@ -310,10 +313,16 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
     {
       id: "https_root",
       title: `HTTPS до ${apiHost}`,
-      status: httpsProbe.ok ? "pass" : "fail",
+      status: httpsProbe.ok
+        ? "pass"
+        : getMeOk
+          ? "warn"
+          : "fail",
       detail: httpsProbe.ok
         ? `${httpsProbe.ms} мс · HTTP ${httpsProbe.httpStatus}`
-        : `${httpsProbe.ms} мс · ${httpsProbe.error ?? "нет ответа"}`,
+        : getMeOk
+          ? `${httpsProbe.ms} мс · ${httpsProbe.error ?? "нет ответа"} (корень недоступен, но getMe OK — исходящий Bot API жив)`
+          : `${httpsProbe.ms} мс · ${httpsProbe.error ?? "нет ответа"}`,
     },
     {
       id: "get_me",
@@ -417,7 +426,12 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
       ? "Если бот «молчит» при живом API — часто 403 из‑за несовпадения TELEGRAM_WEBHOOK_SECRET и secret_token в setWebhook."
       : null,
     outboundBlocked
-      ? "Типично для хостингов в РФ: входящий webhook ещё работает, исходящий api.telegram.org — нет."
+      ? usingCustomApiBase
+        ? `Исходящий канал к ${apiHost} недоступен. Проверьте Caddy на VPS и TELEGRAM_API_BASE.`
+        : "Типично для хостингов в РФ: входящий webhook ещё работает, исходящий api.telegram.org — нет."
+      : null,
+    whOk && whLastErr
+      ? "Connection timed out у вебхука: Telegram не достучался до CRM (firewall/прокси хостинга или приложение не слушало :443). Исходящий прокси bot.* на это не влияет."
       : null,
     whOk && (whPending ?? 0) > 0
       ? `В очереди Telegram pending_update_count=${whPending}: ответы могут прийти с большой задержкой, когда вебхук снова доставится.`
@@ -463,6 +477,7 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
       publicBotUsername,
       crmPublicBaseUrl: base,
       expectedWebhookUrl,
+      telegramApiBase: apiBase,
     },
     network: {
       dns: {
@@ -476,6 +491,7 @@ export async function buildTelegramConnectivityDiagnostic(): Promise<TelegramCon
         ms: httpsProbe.ms,
         httpStatus: httpsProbe.httpStatus,
         error: httpsProbe.error,
+        host: apiHost,
       },
     },
     botApi: {

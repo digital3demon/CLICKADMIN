@@ -141,6 +141,8 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
       lines: [line],
       parseMode: "HTML",
       tenantId: opts.tenantId,
+      // ЛС ок; общий админ-чат даёт второй push «упомянул вас» тем же ботом.
+      skipTenantSharedChat: true,
     });
   }
 
@@ -154,6 +156,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
       lines: [line],
       parseMode: "HTML",
       tenantId: opts.tenantId,
+      skipTenantSharedChat: true,
     });
   }
 }

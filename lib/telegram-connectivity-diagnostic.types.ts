@@ -35,6 +35,7 @@ export type TelegramConnectivityDiagnostic = {
     publicBotUsername: string | null;
     crmPublicBaseUrl: string;
     expectedWebhookUrl: string;
+    telegramApiBase: string;
   };
   network: {
     dns: {
@@ -48,6 +49,7 @@ export type TelegramConnectivityDiagnostic = {
       ms: number;
       httpStatus: number | null;
       error: string | null;
+      host: string;
     };
   };
   botApi: {

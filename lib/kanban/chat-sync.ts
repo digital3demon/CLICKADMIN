@@ -8,6 +8,9 @@ export type KaitenCommentForSync = {
   created?: string;
   authorName?: string;
   parentId?: number | null;
+  /** Комментарий ушёл из CRM в Kaiten (маркер [CRM ·] / [DRAFT:]) — не создавать вторую строку в канбане. */
+  isCrm?: boolean;
+  crmDraftId?: string | null;
 };
 
 export type CardLocation = {
@@ -208,7 +211,8 @@ export function compactCardComments(comments: CardComment[]): CardComment[] {
 
 /**
  * Upsert комментариев из Kaiten в CRM-карточку.
- * Anti-loop: сообщения с source=CRM и тем же externalCommentId не дублируются.
+ * Anti-loop: CRM → Kaiten → readback не добавляет второе сообщение в канбан
+ * (только привязка externalCommentId / syncStatus к уже существующему CRM-комментарию).
  */
 export function upsertKaitenCommentsToCard(
   comments: CardComment[],
@@ -223,46 +227,112 @@ export function upsertKaitenCommentsToCard(
     if (ext) byExternalId.set(ext, row);
   }
   let changed = false;
+
+  const bindCrmReadback = (
+    target: CardComment,
+    row: KaitenCommentForSync,
+    extId: string,
+  ): void => {
+    const nextParentExt = row.parentId != null ? String(row.parentId) : null;
+    const nextCreatedAt = createdIso(row.created);
+    const nextAuthor = row.authorName?.trim() || target.authorLabel;
+    let localChanged = false;
+    if ((target.externalCommentId || null) !== extId) {
+      target.externalCommentId = extId;
+      localChanged = true;
+    }
+    if ((target.externalParentId || null) !== nextParentExt) {
+      target.externalParentId = nextParentExt;
+      localChanged = true;
+    }
+    if (target.syncStatus !== "synced") {
+      target.syncStatus = "synced";
+      localChanged = true;
+    }
+    // Текст/автора CRM не перетираем readback’ом — иначе «круг» визуально меняет своё же сообщение.
+    if (nextAuthor && !(target.authorLabel || "").trim()) {
+      target.authorLabel = nextAuthor;
+      localChanged = true;
+    }
+    if (!target.createdAt) {
+      target.createdAt = nextCreatedAt;
+      localChanged = true;
+    }
+    target.source = "CRM";
+    target.syncedAt = new Date().toISOString();
+    byExternalId.set(extId, target);
+    if (localChanged) changed = true;
+  };
+
   for (const row of incoming) {
     const extId = String(row.id);
+    const draftId = String(row.crmDraftId || "").trim();
+    const fromCrm = row.isCrm === true || Boolean(draftId);
+
+    const byDraft = draftId ? byId.get(draftId) : undefined;
+    if (byDraft && byDraft.source === "CRM") {
+      bindCrmReadback(byDraft, row, extId);
+      continue;
+    }
+
     const existing = byExternalId.get(extId);
     if (existing) {
+      if (existing.source === "CRM" || fromCrm) {
+        bindCrmReadback(existing, row, extId);
+        continue;
+      }
       const nextText = row.text ?? "";
       const nextCreatedAt = createdIso(row.created);
       const nextAuthor = row.authorName?.trim() || existing.authorLabel;
       const nextParentExt = row.parentId != null ? String(row.parentId) : null;
-      const nextSource = existing.source === "CRM" ? "CRM" : "KAITEN";
       if (
         existing.text !== nextText ||
         existing.createdAt !== nextCreatedAt ||
         (existing.authorLabel || "") !== (nextAuthor || "") ||
         (existing.externalParentId || null) !== nextParentExt ||
-        existing.source !== nextSource ||
         existing.syncStatus !== "synced"
       ) {
         existing.text = nextText;
         existing.createdAt = nextCreatedAt;
         existing.authorLabel = nextAuthor;
         existing.externalParentId = nextParentExt;
-        existing.source = nextSource;
+        existing.source = "KAITEN";
         existing.syncStatus = "synced";
         existing.syncedAt = new Date().toISOString();
         changed = true;
       }
       continue;
     }
+
     const orphanCrm = next.find((c) => orphanCrmMatchesIncoming(c, row));
     if (orphanCrm) {
-      orphanCrm.externalCommentId = extId;
-      orphanCrm.externalParentId = row.parentId != null ? String(row.parentId) : null;
-      orphanCrm.authorLabel = row.authorName?.trim() || orphanCrm.authorLabel;
-      orphanCrm.createdAt = createdIso(row.created);
-      orphanCrm.syncStatus = "synced";
-      orphanCrm.syncedAt = new Date().toISOString();
-      byExternalId.set(extId, orphanCrm);
+      bindCrmReadback(orphanCrm, row, extId);
+      continue;
+    }
+
+    // CRM→Kaiten readback: не создавать source=KAITEN (круг канбан→кайтен→канбан).
+    // Если локальной строки ещё нет (fallback / первый импорт) — одна CRM-строка по draft id.
+    if (fromCrm) {
+      const created: CardComment = {
+        id: draftId || `crm-kt-${extId}`,
+        userId: "",
+        text: row.text ?? "",
+        createdAt: createdIso(row.created),
+        parentId: null,
+        authorLabel: row.authorName?.trim() || undefined,
+        externalCommentId: extId,
+        externalParentId: row.parentId != null ? String(row.parentId) : null,
+        source: "CRM",
+        syncStatus: "synced",
+        syncedAt: new Date().toISOString(),
+      };
+      next.push(created);
+      byExternalId.set(extId, created);
+      byId.set(created.id, created);
       changed = true;
       continue;
     }
+
     const created: CardComment = {
       id: `kt-${extId}`,
       userId: "",

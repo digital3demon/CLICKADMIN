@@ -206,7 +206,11 @@ export async function POST(
 
   invalidateKaitenSnapshotCache(orderId.trim());
 
-  if (session?.sub && !session.demo) {
+  // Упоминания в TG уже шлёт POST /kanban-chat. Этот роут — прямой Kaiten API;
+  // повторный notify даёт дубль, если комментарий пришёл из CRM (маркер [CRM]/[DRAFT:]).
+  const fromCrmMirror =
+    /\[CRM\s*·/i.test(text) || /\[DRAFT:[A-Za-z0-9_-]{6,120}\]/i.test(text);
+  if (session?.sub && !session.demo && !fromCrmMirror) {
     const origin = await getSiteOrigin();
     void notifyTelegramForMentionsInOrderKaitenComment({
       sessionDemo: Boolean(session.demo),
