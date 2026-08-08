@@ -1,6 +1,7 @@
 """
 Click Lab — сканер в заказ.
 
+Разбор на ПК (QR + локальный OCR) → CRM только attach в найденный заказ.
 Главное окно: галерея миниатюр (зелёная/красная рамка).
 Вкладка «Настройки»: папка, CRM, ключ, автозапуск.
 """
@@ -46,12 +47,16 @@ APP_TITLE = "Click Lab — сканер в заказ"
 AUTOSTART_REG_NAME = "ClickLabScanner"
 COLS = 4
 # 100–1000 сканов/день: очередь + мало воркеров (лимит CRM ~60/мин на ключ)
-WORKER_COUNT = 1  # один поток: CRM OCR тяжёлый, параллель даёт «тихие» зависания
+# Разбор (QR/OCR) на ПК; CRM = только attach — один воркер достаточен.
+WORKER_COUNT = 1
 SWEEP_INTERVAL_SEC = 2.0
 GALLERY_MAX = 48
 RATE_LIMIT_BACKOFF_SEC = 8.0
 UPLOAD_TIMEOUT_SEC = 90
 SINGLE_INSTANCE_MUTEX = "Local\\ClickLabScannerSingleton"
+MAX_AUTO_ATTEMPTS = 3
+AUTO_RETRY_DELAY_SEC = 4.0
+GIVE_UP_HEADER = "Не удалось спустя 3 попытки,\nвнесите номер вручную"
 
 
 # ─── paths / settings / autostart ───────────────────────────────────────────
@@ -609,20 +614,27 @@ class ScanItem:
     order_url: str | None = None
     error: str | None = None
     caption: str = ""
+    attempts: int = 0
+    give_up: bool = False
     photo: tk.PhotoImage | None = field(default=None, repr=False)
     thumb_file: Path | None = field(default=None, repr=False)
     frame: tk.Frame | None = field(default=None, repr=False)
 
     def header_text(self) -> str:
-        if not self.ok:
-            err = (self.error or "ошибка").strip()
-            return err if len(err) <= 48 else err[:47] + "…"
-        num = self.order_number or "—"
-        return (
-            f"{num}\n"
-            f"пац {clip_person(self.patient_name)}\n"
-            f"док {clip_person(self.doctor_name)}"
-        )
+        if self.ok:
+            num = self.order_number or "—"
+            return (
+                f"{num}\n"
+                f"пац {clip_person(self.patient_name)}\n"
+                f"док {clip_person(self.doctor_name)}"
+            )
+        if self.give_up or self.attempts >= MAX_AUTO_ATTEMPTS:
+            return GIVE_UP_HEADER
+        err = (self.error or "ошибка").strip()
+        if len(err) > 36:
+            err = err[:35] + "…"
+        n = max(1, self.attempts)
+        return f"Попытка {n}/{MAX_AUTO_ATTEMPTS}\n{err}"
 
     def to_dict(self) -> dict:
         return {
@@ -637,6 +649,8 @@ class ScanItem:
             "order_url": self.order_url,
             "error": self.error,
             "caption": self.caption,
+            "attempts": self.attempts,
+            "give_up": self.give_up,
         }
 
     @staticmethod
@@ -644,6 +658,10 @@ class ScanItem:
         p = Path(str(d.get("path") or ""))
         if not p.is_file():
             return None
+        attempts = int(d.get("attempts") or 0)
+        give_up = bool(d.get("give_up")) or (
+            not bool(d.get("ok")) and attempts >= MAX_AUTO_ATTEMPTS
+        )
         return ScanItem(
             uid=str(d.get("uid") or uuid.uuid4().hex),
             path=p,
@@ -656,6 +674,8 @@ class ScanItem:
             order_url=(str(d["order_url"]) if d.get("order_url") else None),
             error=(str(d["error"]) if d.get("error") else None),
             caption=str(d.get("caption") or p.name),
+            attempts=attempts,
+            give_up=give_up,
         )
 
 
@@ -709,6 +729,7 @@ class ScannerApp:
         self.job_q: queue.Queue = queue.Queue()
         self._pending: set[str] = set()
         self._pending_lock = threading.Lock()
+        self._path_attempts: dict[str, int] = {}
         self.observer: Observer | None = None
         self.running = False
         self._workers: list[threading.Thread] = []
@@ -999,6 +1020,7 @@ class ScannerApp:
         self._processed_fail = 0
         with self._pending_lock:
             self._pending.clear()
+        self._path_attempts.clear()
         while True:
             try:
                 self.job_q.get_nowait()
@@ -1053,6 +1075,124 @@ class ScannerApp:
         self.btn_start.configure(state=tk.NORMAL)
         self.btn_stop.configure(state=tk.DISABLED)
         self.var_status.set("Остановлено")
+
+    def _attempt_key(self, path: Path) -> str:
+        return path.name.lower()
+
+    def _bump_path_attempts(self, path: Path) -> int:
+        key = self._attempt_key(path)
+        n = self._path_attempts.get(key, 0) + 1
+        self._path_attempts[key] = n
+        return n
+
+    def _clear_path_attempts(self, path: Path) -> None:
+        self._path_attempts.pop(self._attempt_key(path), None)
+
+    def _schedule_auto_retry(self, uid: str) -> None:
+        delay_ms = int(AUTO_RETRY_DELAY_SEC * 1000)
+
+        def _fire() -> None:
+            self._auto_retry_uid(uid)
+
+        self.root.after(delay_ms, _fire)
+
+    def _auto_retry_uid(self, uid: str) -> None:
+        if not self.running:
+            return
+        item = next((i for i in self.items if i.uid == uid), None)
+        if item is None or item.ok or item.give_up:
+            return
+        if item.attempts >= MAX_AUTO_ATTEMPTS:
+            return
+        if not item.path.is_file():
+            return
+        self.var_status.set(
+            f"Автоповтор {item.attempts + 1}/{MAX_AUTO_ATTEMPTS}… {item.path.name}"
+        )
+        threading.Thread(
+            target=self._retry_worker, args=(item, True), daemon=True
+        ).start()
+
+    def _mark_item_failed(
+        self,
+        item: ScanItem,
+        *,
+        path: Path,
+        err: str,
+        schedule_auto: bool,
+        bump: bool = True,
+    ) -> None:
+        item.ok = False
+        item.path = path
+        item.error = err
+        item.order_id = None
+        item.order_number = None
+        item.patient_name = None
+        item.doctor_name = None
+        item.attachment_id = None
+        item.order_url = None
+        item.caption = short_name(path.name)
+        if bump:
+            item.attempts = self._bump_path_attempts(path)
+        else:
+            item.attempts = self._path_attempts.get(
+                self._attempt_key(path), max(1, item.attempts)
+            )
+        item.give_up = item.attempts >= MAX_AUTO_ATTEMPTS
+        self._relayout()
+        self._persist_gallery()
+        if item.give_up:
+            self._clear_path_attempts(path)
+            self._processed_fail += 1
+            self.var_status.set(
+                f"Сдались после {MAX_AUTO_ATTEMPTS} попыток: {path.name}"
+            )
+        elif schedule_auto:
+            self.var_status.set(
+                f"Ошибка, автоповтор {item.attempts}/{MAX_AUTO_ATTEMPTS}…"
+            )
+            self._schedule_auto_retry(item.uid)
+
+    def _emit_new_fail_item(
+        self,
+        path: Path,
+        err: str,
+        *,
+        watch: Path,
+        attempts: int | None = None,
+    ) -> ScanItem:
+        if attempts is None:
+            attempts = self._bump_path_attempts(path)
+        give_up = attempts >= MAX_AUTO_ATTEMPTS
+        low = err.lower()
+        try:
+            if path.parent.resolve() == watch.resolve():
+                dest = move_to(
+                    watch
+                    / (
+                        "no-qr"
+                        if "no_text" in low or "no_qr" in low
+                        else "error"
+                    ),
+                    path,
+                )
+            else:
+                dest = path
+        except OSError:
+            dest = path
+        item = ScanItem(
+            uid=uuid.uuid4().hex,
+            path=dest,
+            ok=False,
+            error=err[:200],
+            caption=short_name(dest.name),
+            attempts=attempts,
+            give_up=give_up,
+        )
+        if give_up:
+            self._clear_path_attempts(path)
+            self._processed_fail += 1
+        return item
 
     def _path_key(self, path: Path) -> str:
         try:
@@ -1151,21 +1291,46 @@ class ScannerApp:
                     continue
                 outcome = self._process_path(path)
                 if outcome == "retry":
+                    n = self._bump_path_attempts(path)
                     self._release_pending(path)
-                    time.sleep(RATE_LIMIT_BACKOFF_SEC)
-                    if self.running and path.is_file():
-                        self._enqueue_path(path)
+                    if n < MAX_AUTO_ATTEMPTS and self.running and path.is_file():
+                        self.ui_q.put(
+                            (
+                                "toast",
+                                f"Повтор {n}/{MAX_AUTO_ATTEMPTS}… {path.name}",
+                            )
+                        )
+                        time.sleep(RATE_LIMIT_BACKOFF_SEC)
+                        if self.running and path.is_file():
+                            self._enqueue_path(path)
+                    elif path.is_file() and self._watch_dir is not None:
+                        item = self._emit_new_fail_item(
+                            path,
+                            "CRM недоступен после 3 попыток",
+                            watch=self._watch_dir,
+                            attempts=n,
+                        )
+                        self.ui_q.put(("item", item))
+                    else:
+                        self._clear_path_attempts(path)
+                elif outcome == "ok":
+                    self._clear_path_attempts(path)
+                    self._release_pending(path)
                 else:
                     self._release_pending(path)
             except Exception:
                 logging.exception("worker failed on %s", path)
                 try:
                     if path.is_file() and self._watch_dir is not None:
-                        move_to(self._watch_dir / "error", path)
+                        item = self._emit_new_fail_item(
+                            path, "внутренняя ошибка", watch=self._watch_dir
+                        )
+                        self.ui_q.put(("item", item))
+                        if not item.give_up:
+                            self.ui_q.put(("auto_retry", item.uid))
                 except OSError:
                     pass
                 self._release_pending(path)
-                self._processed_fail += 1
             finally:
                 try:
                     self.job_q.task_done()
@@ -1257,6 +1422,8 @@ class ScannerApp:
             kind = msg[0]
             if kind == "item":
                 self._add_item_ui(msg[1])
+            elif kind == "auto_retry":
+                self._schedule_auto_retry(str(msg[1]))
             elif kind == "refresh":
                 self._relayout()
             elif kind == "toast":
@@ -1284,12 +1451,19 @@ class ScannerApp:
                 force_num or "-",
                 time.time() - t0,
             )
+            if not force_num and not qr_hint:
+                logging.warning("no local hint %s — skip CRM", path.name)
+                item = self._emit_new_fail_item(
+                    path, "не распознан номер", watch=watch
+                )
+                self.ui_q.put(("item", item))
+                if not item.give_up:
+                    self.ui_q.put(("auto_retry", item.uid))
+                return "fail"
             if force_num:
                 self.ui_q.put(("toast", f"OCR: {force_num} → CRM… {path.name}"))
-            elif qr_hint:
-                self.ui_q.put(("toast", f"QR → CRM… {path.name}"))
             else:
-                self.ui_q.put(("toast", f"Без QR/OCR — CRM… {path.name}"))
+                self.ui_q.put(("toast", f"QR → CRM… {path.name}"))
             t_up = time.time()
             ok, status, parsed = upload_scan(
                 crm_base=crm,
@@ -1308,24 +1482,13 @@ class ScannerApp:
         except Exception as e:
             logging.exception("upload %s", path.name)
             err_s = str(e)
-            # Сетевой таймаут — оставим файл, sweep повторит
             if "timed out" in err_s.lower() or "timeout" in err_s.lower():
                 self.ui_q.put(("toast", f"Таймаут CRM, повторю: {path.name}"))
                 return "retry"
-            dest = move_to(watch / "error", path)
-            self.ui_q.put(
-                (
-                    "item",
-                    ScanItem(
-                        uid=uuid.uuid4().hex,
-                        path=dest,
-                        ok=False,
-                        error=err_s[:200],
-                        caption=short_name(dest.name),
-                    ),
-                )
-            )
-            self._processed_fail += 1
+            item = self._emit_new_fail_item(path, err_s[:200], watch=watch)
+            self.ui_q.put(("item", item))
+            if not item.give_up:
+                self.ui_q.put(("auto_retry", item.uid))
             return "fail"
 
         if status == 0 and (
@@ -1345,8 +1508,6 @@ class ScannerApp:
             return "retry"
 
         done_dir = watch / "done"
-        err_dir = watch / "error"
-        noqr_dir = watch / "no-qr"
 
         if ok:
             dest = move_to(done_dir, path)
@@ -1358,6 +1519,7 @@ class ScannerApp:
             logging.info(
                 "ok %s → %s (%s)", path.name, onum or oid, parsed.get("qrKind") or ""
             )
+            self._clear_path_attempts(path)
             item = ScanItem(
                 uid=uuid.uuid4().hex,
                 path=dest,
@@ -1377,25 +1539,20 @@ class ScannerApp:
                 attachment_id=aid or None,
                 order_url=order_url(crm, oid, opath_s) if oid else None,
                 caption=short_name(dest.name),
+                attempts=0,
+                give_up=False,
             )
             self._processed_ok += 1
-        else:
-            err = str(parsed.get("error") or parsed.get("detail") or "ошибка")
-            low = err.lower()
-            dest = move_to(
-                noqr_dir if "no_text" in low or "no_qr" in low else err_dir, path
-            )
-            logging.warning("fail %s: %s", path.name, err)
-            item = ScanItem(
-                uid=uuid.uuid4().hex,
-                path=dest,
-                ok=False,
-                error=err,
-                caption=short_name(dest.name),
-            )
-            self._processed_fail += 1
+            self.ui_q.put(("item", item))
+            return "ok"
+
+        err = str(parsed.get("error") or parsed.get("detail") or "ошибка")
+        logging.warning("fail %s: %s", path.name, err)
+        item = self._emit_new_fail_item(path, err, watch=watch)
         self.ui_q.put(("item", item))
-        return "ok" if ok else "fail"
+        if not item.give_up:
+            self.ui_q.put(("auto_retry", item.uid))
+        return "fail"
 
     def _schedule_persist(self) -> None:
         if self._persist_after_id is not None:
@@ -1480,25 +1637,42 @@ class ScannerApp:
             )
             cap.pack(pady=(2, 4))
             item.frame = cell
+            for w in (lbl, outer, inner):
+                w.bind("<Button-1>", lambda e, it=item: self._expand(it))
             for w in (cell, head, outer, inner, lbl, cap):
-                w.bind("<Double-Button-1>", lambda e, it=item: self._expand(it))
                 w.bind("<Button-3>", lambda e, it=item: self._context(e, it))
 
     # ── preview / context ──
 
     def _expand(self, item: ScanItem) -> None:
+        if not item.path.is_file():
+            messagebox.showwarning(APP_TITLE, f"Файл не найден:\n{item.path}")
+            return
         win = tk.Toplevel(self.root)
         win.title(item.caption or item.path.name)
-        win.geometry("900x700")
+        win.configure(bg="#111111")
+        win.transient(self.root)
+        win.focus_set()
+
+        screen_w = max(800, int(self.root.winfo_screenwidth() * 0.96))
+        screen_h = max(600, int(self.root.winfo_screenheight() * 0.92))
+        win.geometry(f"{screen_w}x{screen_h}+0+0")
+        try:
+            win.state("zoomed")
+        except tk.TclError:
+            pass
+
         img = imread_bgr(item.path)
         if img is None:
             ttk.Label(win, text="Не удалось открыть файл").pack(padx=20, pady=20)
             return
         h, w = img.shape[:2]
-        max_w, max_h = 880, 620
+        # Чуть меньше окна — место под подпись; не увеличиваем сверх 1:1
+        max_w = max(200, screen_w - 40)
+        max_h = max(200, screen_h - 80)
         scale = min(max_w / w, max_h / h, 1.0)
         nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
-        resized = cv2.resize(img, (nw, nh))
+        resized = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         tmp = Path(tempfile.gettempdir()) / f"clscan_full_{uuid.uuid4().hex}.ppm"
         try:
@@ -1508,20 +1682,37 @@ class ScannerApp:
         except (OSError, tk.TclError):
             ttk.Label(win, text="Превью недоступно").pack()
             return
-        lbl = tk.Label(win, image=photo)
-        lbl.image = photo  # type: ignore[attr-defined]
-        lbl.pack(padx=8, pady=8)
-        info = item.header_text() if item.ok else (item.error or "")
-        ttk.Label(win, text=f"{item.path.name}\n{info}").pack(pady=(0, 8))
 
-        def _cleanup(_e=None) -> None:
+        holder = tk.Frame(win, bg="#111111")
+        holder.pack(fill=tk.BOTH, expand=True)
+        lbl = tk.Label(holder, image=photo, bg="#111111", cursor="hand2")
+        lbl.image = photo  # type: ignore[attr-defined]
+        lbl.pack(expand=True)
+        info = item.header_text() if item.ok else (item.error or "")
+        tk.Label(
+            win,
+            text=f"{item.path.name}  ·  Esc / клик — закрыть\n{info}",
+            bg="#111111",
+            fg="#dddddd",
+            font=("Segoe UI", 9),
+            justify=tk.CENTER,
+        ).pack(pady=(0, 10))
+
+        def _cleanup() -> None:
             try:
                 if tmp.is_file():
                     tmp.unlink()
             except OSError:
                 pass
 
-        win.protocol("WM_DELETE_WINDOW", lambda: (_cleanup(), win.destroy()))
+        def _close(_e=None) -> None:
+            _cleanup()
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", _close)
+        win.bind("<Escape>", _close)
+        lbl.bind("<Button-1>", _close)
+        holder.bind("<Button-1>", _close)
 
     def _context(self, event: tk.Event, item: ScanItem) -> None:
         menu = tk.Menu(self.root, tearoff=0)
@@ -1562,19 +1753,35 @@ class ScannerApp:
                 APP_TITLE, f"Файл не найден:\n{item.path}"
             )
             return
+        # Ручной повтор — новый цикл из 3 автопопыток
+        item.give_up = False
+        item.attempts = 0
+        self._clear_path_attempts(item.path)
         self.var_status.set(f"Повтор… {item.path.name}")
         threading.Thread(
-            target=self._retry_worker, args=(item,), daemon=True
+            target=self._retry_worker, args=(item, False), daemon=True
         ).start()
 
-    def _retry_worker(self, item: ScanItem) -> None:
+    def _retry_worker(self, item: ScanItem, auto: bool = False) -> None:
         s = load_settings()
         crm, key = s["crm_base_url"], s["crm_api_key"]
         watch = Path(s["watch_dir"])
         path = item.path
-        self.ui_q.put(("toast", f"Повтор… {path.name}"))
+        label = "Автоповтор" if auto else "Повтор"
+        self.ui_q.put(("toast", f"{label}… {path.name}"))
         try:
             qr_hint, force_num = resolve_upload_hints(path)
+            if not force_num and not qr_hint:
+                err = "не распознан номер"
+
+                def fail_no_hint() -> None:
+                    # файл уже в error/no-qr — не двигаем
+                    self._mark_item_failed(
+                        item, path=path, err=err, schedule_auto=True
+                    )
+
+                self.root.after(0, fail_no_hint)
+                return
             ok, status, parsed = upload_scan(
                 crm_base=crm,
                 api_key=key,
@@ -1587,12 +1794,9 @@ class ScannerApp:
             logging.exception("retry %s", path.name)
 
             def fail_ex() -> None:
-                item.ok = False
-                item.error = err
-                item.caption = short_name(item.path.name)
-                self._relayout()
-                self._persist_gallery()
-                self.var_status.set(f"Повтор не удался: {err[:80]}")
+                self._mark_item_failed(
+                    item, path=path, err=err, schedule_auto=True
+                )
 
             self.root.after(0, fail_ex)
             return
@@ -1605,11 +1809,9 @@ class ScannerApp:
             err = str(parsed.get("error") or f"HTTP {status}")
 
             def fail_retry() -> None:
-                item.ok = False
-                item.error = err
-                self._relayout()
-                self._persist_gallery()
-                self.var_status.set(f"Повтор: {err[:80]} — попробуйте ещё раз позже")
+                self._mark_item_failed(
+                    item, path=path, err=err, schedule_auto=True
+                )
 
             self.root.after(0, fail_retry)
             return
@@ -1633,19 +1835,9 @@ class ScannerApp:
                 pass
 
             def fail_biz() -> None:
-                item.ok = False
-                item.path = path
-                item.error = err
-                item.order_id = None
-                item.order_number = None
-                item.patient_name = None
-                item.doctor_name = None
-                item.attachment_id = None
-                item.order_url = None
-                item.caption = short_name(path.name)
-                self._relayout()
-                self._persist_gallery()
-                self.var_status.set(f"Повтор: {err[:100]}")
+                self._mark_item_failed(
+                    item, path=path, err=err, schedule_auto=True
+                )
 
             self.root.after(0, fail_biz)
             return
@@ -1681,6 +1873,9 @@ class ScannerApp:
                 order_url(crm, oid, str(op) if op else None) if oid else None
             )
             item.caption = short_name(path.name)
+            item.attempts = 0
+            item.give_up = False
+            self._clear_path_attempts(path)
             self._processed_ok += 1
             self._relayout()
             self._persist_gallery()
@@ -1776,6 +1971,9 @@ class ScannerApp:
             )
             item.error = None
             item.caption = short_name(item.path.name)
+            item.attempts = 0
+            item.give_up = False
+            self._clear_path_attempts(item.path)
             watch = Path(s["watch_dir"])
             if item.path.parent.name != "done":
                 try:

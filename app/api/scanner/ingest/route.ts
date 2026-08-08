@@ -6,7 +6,7 @@
  * - таймаут чтения тела UPLOAD_BODY_TIMEOUT_MS;
  * - SQLITE_BUSY / write conflict — withTransientWriteRetry;
  * - auth: Bearer TenantApiKey + scope scanner.ingest (без user-session);
- * - QR только с пикселей изображения (jsQR); tenant из ключа.
+ * - заказ: x-scanner-order-number или QR (пиксели / x-scanner-qr); без серверного OCR.
  */
 import { OrderAttachmentScope } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -217,7 +217,6 @@ export async function POST(req: Request) {
       req.headers.get("x-scanner-order-number")?.trim() || "";
 
     let decodeMs = 0;
-    let ocrMs = 0;
     let resolved:
       | Awaited<ReturnType<typeof resolveOrderFromScannerQr>>
       | Awaited<ReturnType<typeof resolveOrderFromOrderNumber>>;
@@ -238,6 +237,7 @@ export async function POST(req: Request) {
         );
       }
     } else {
+      // Разбор номера/QR — на ПК. Здесь только QR с картинки или x-scanner-qr.
       const qrFromImage = await decodeQrFromImageBuffer(fileBuf);
       decodeMs = Date.now() - tDecode;
 
@@ -250,76 +250,43 @@ export async function POST(req: Request) {
           hint = hintRaw;
         }
       }
-      const qrText = qrFromImage || (magic === "tiff" ? hint : "");
+      const qrText = (qrFromImage || hint).trim();
 
-      resolved = qrText
-        ? await resolveOrderFromScannerQr(qrText, apiKey.tenantId)
-        : ({ ok: false, reason: "unknown_qr" as const });
-
-      if (!resolved.ok) {
-        const { ocrOrderNumberFromScanImage } = await import(
-          "@/lib/scanner-image-ocr"
-        );
-        const ocr = await ocrOrderNumberFromScanImage(fileBuf);
-        ocrMs = ocr.ocrMs;
-        if (ocr.orderNumber) {
-          resolved = await resolveOrderFromOrderNumber(
-            ocr.orderNumber,
-            apiKey.tenantId,
-          );
-        } else if (ocr.kaitenCardId) {
-          resolved = await resolveOrderFromScannerQr(
-            `https://clicklab.kaiten.ru/${ocr.kaitenCardId}`,
-            apiKey.tenantId,
-          );
-        } else {
-          console.info("[scanner/ingest]", {
-            step: "no_qr_no_ocr",
-            keyId: apiKey.keyId,
-            bytes: fileBuf.length,
-            decodeMs,
-            ocrMs,
-            preview: ocr.textPreview,
-            ms: Date.now() - t0,
-          });
-          return NextResponse.json(
-            {
-              error: "no_text_match",
-              detail:
-                "Нет QR и не найден номер наряда / карточка Kaiten на фото",
-            },
-            { status: 422 },
-          );
-        }
-        if (!resolved.ok) {
-          console.info("[scanner/ingest]", {
-            step: "ocr_order_missing",
-            orderNumber: ocr.orderNumber,
-            kaitenCardId: ocr.kaitenCardId,
-            keyId: apiKey.keyId,
-            ocrMs,
-            ms: Date.now() - t0,
-          });
-          return NextResponse.json(
-            {
-              error: "order_not_found",
-              orderNumber: ocr.orderNumber,
-              kaitenCardId: ocr.kaitenCardId,
-              detail: ocr.orderNumber
-                ? `Номер ${ocr.orderNumber} распознан, но заказ не найден`
-                : `Карточка Kaiten ${ocr.kaitenCardId} распознана, но заказ не найден`,
-            },
-            { status: 404 },
-          );
-        }
+      if (!qrText) {
         console.info("[scanner/ingest]", {
-          step: "ocr_ok",
-          orderNumber: resolved.orderNumber,
-          via: ocr.orderNumber ? "ocr_number" : "ocr_kaiten",
+          step: "client_hint_required",
           keyId: apiKey.keyId,
-          ocrMs,
+          bytes: fileBuf.length,
+          decodeMs,
+          ms: Date.now() - t0,
         });
-      } else if (!qrFromImage && hint) {
+        return NextResponse.json(
+          {
+            error: "client_hint_required",
+            detail:
+              "Нужен номер наряда или QR с клиента (серверный OCR отключён)",
+          },
+          { status: 422 },
+        );
+      }
+
+      resolved = await resolveOrderFromScannerQr(qrText, apiKey.tenantId);
+      if (!resolved.ok) {
+        console.info("[scanner/ingest]", {
+          step: "qr_order_missing",
+          keyId: apiKey.keyId,
+          decodeMs,
+          ms: Date.now() - t0,
+        });
+        return NextResponse.json(
+          {
+            error: "order_not_found",
+            detail: "QR распознан, но заказ не найден",
+          },
+          { status: 404 },
+        );
+      }
+      if (!qrFromImage && hint) {
         console.info("[scanner/ingest]", {
           step: "qr_hint",
           keyId: apiKey.keyId,
