@@ -81,7 +81,15 @@ export default async function StickerPublicHubPage({
           ))}
         </section>
 
-        <div className="mt-6 border-t border-zinc-100 pt-5">
+        <div className="mt-6 space-y-2 border-t border-zinc-100 pt-5">
+          <a
+            href="https://t.me/CLICKlab_Admin"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-center text-sm font-medium text-sky-950 transition-colors hover:bg-sky-100"
+          >
+            Написать Администраторам
+          </a>
           <Link
             href={employeesHref}
             className="block w-full rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-3 text-center text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-200"
