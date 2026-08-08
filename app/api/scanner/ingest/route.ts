@@ -7,16 +7,12 @@
  * - SQLITE_BUSY / write conflict — withTransientWriteRetry;
  * - auth: Bearer TenantApiKey + scope scanner.ingest (без user-session);
  * - заказ: x-scanner-order-number или QR (пиксели / x-scanner-qr); без серверного OCR;
- * - после сохранения — пуш файла в Kaiten (карточка канбана), как ручная загрузка.
+ * - успех = OrderAttachment (CRM-канбан подтянет через linked-orders);
+ * - тихий фоновый sync в Kaiten при наличии карточки — не критерий успеха.
  */
 import { OrderAttachmentScope } from "@prisma/client";
 import { NextResponse } from "next/server";
-import {
-  KaitenCardNotReadyError,
-  KaitenRateLimitError,
-  pushAttachmentToKaitenWithCardWait,
-} from "@/lib/kaiten-sync";
-import { isOrderAttachmentUploadedToKaiten } from "@/lib/kaiten-attachment-upload-state";
+import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
 import {
   isOrderAttachmentS3Enabled,
   newOrderAttachmentId,
@@ -371,49 +367,12 @@ export async function POST(req: Request) {
       "orderAttachment.create",
     );
 
-    /**
-     * Вложение в CRM-заказ (= файлы карточки CRM-канбана) + выгрузка в Kaiten,
-     * как при ручной загрузке из заказа/канбана.
-     */
-    let kaitenSynced = false;
-    let kaitenSkipReason: string | null = null;
+    // CRM-канбан берёт файлы из OrderAttachment через linked-orders.
+    // Kaiten — тихий побочный sync, не критерий успеха.
     try {
-      await pushAttachmentToKaitenWithCardWait(
-        resolved.orderId,
-        row.id,
-        ordersDb,
-        { maxWaitMs: 25_000 },
-      );
-      const pushed = await ordersDb.orderAttachment.findUnique({
-        where: { id: row.id },
-        select: { uploadedToKaitenAt: true, kaitenFileId: true },
-      });
-      kaitenSynced =
-        pushed?.kaitenFileId != null ||
-        isOrderAttachmentUploadedToKaiten(pushed?.uploadedToKaitenAt);
-      if (!kaitenSynced) {
-        const ord = await ordersDb.order.findUnique({
-          where: { id: resolved.orderId },
-          select: { kaitenCardId: true },
-        });
-        kaitenSkipReason = !ord?.kaitenCardId
-          ? "no_kaiten_card"
-          : "kaiten_pending";
-      }
+      await syncUnpushedOrderAttachmentsToKaiten(resolved.orderId, ordersDb);
     } catch (e) {
-      if (e instanceof KaitenRateLimitError) {
-        kaitenSkipReason = "kaiten_rate_limited";
-      } else if (e instanceof KaitenCardNotReadyError) {
-        kaitenSkipReason = "no_kaiten_card";
-      } else {
-        kaitenSkipReason = "kaiten_error";
-      }
-      console.warn("[scanner/ingest] kaiten sync failed", {
-        orderId: resolved.orderId,
-        attachmentId: row.id,
-        reason: kaitenSkipReason,
-        err: e instanceof Error ? e.message : String(e),
-      });
+      console.warn("[scanner/ingest] kaiten sync failed", e);
     }
 
     console.info("[scanner/ingest]", {
@@ -426,8 +385,6 @@ export async function POST(req: Request) {
       qrKind: resolved.qrKind,
       bytes: fileBuf.length,
       decodeMs,
-      kaitenSynced,
-      kaitenSkipReason,
       ms: Date.now() - t0,
       actor: `api:${apiKey.name}`,
     });
@@ -441,8 +398,6 @@ export async function POST(req: Request) {
       orderPath: orderPathById(resolved.orderId),
       attachmentId: row.id,
       qrKind: resolved.qrKind,
-      kaitenSynced,
-      kaitenSkipReason,
       actor: apiKey.name,
     });
   } catch (e) {
