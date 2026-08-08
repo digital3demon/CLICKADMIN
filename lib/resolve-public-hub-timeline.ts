@@ -1,5 +1,6 @@
 import type { KanbanBoard } from "@/lib/kanban/types";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
+import { LAB_WORK_STATUS_LABELS } from "@/lib/lab-work-status";
 import { isHandedToAdminsKaitenColumnTitle } from "@/lib/sticker-public-client-copy";
 import {
   DEFAULT_PUBLIC_HUB_TIMELINE,
@@ -114,9 +115,10 @@ type MoveEvent = { at: string; from: string | null; to: string };
 
 function collectKanbanMoves(
   activity: Array<{ at?: string; text?: string }>,
+  seedFromColumn?: string | null,
 ): MoveEvent[] {
   const moves: MoveEvent[] = [];
-  let prevColumn: string | null = null;
+  let prevColumn = String(seedFromColumn ?? "").trim() || null;
   const act = activity ?? [];
   for (let i = act.length - 1; i >= 0; i--) {
     const text = (act[i]?.text || "").trim();
@@ -131,6 +133,24 @@ function collectKanbanMoves(
   }
   return moves;
 }
+
+function earliestRevisionColumn(
+  rows: Array<{ at: Date; column: string | null }>,
+): string | null {
+  for (const row of rows) {
+    const col = row.column?.trim();
+    if (col) return col;
+  }
+  return null;
+}
+
+/** Этапы после «Сборки» — fallback для «Произведено», если сборку пропустили. */
+const POST_ASSEMBLY_TITLES = [
+  LAB_WORK_STATUS_LABELS.PROCESSING,
+  LAB_WORK_STATUS_LABELS.MANUAL,
+  LAB_WORK_STATUS_LABELS.TO_REVIEW,
+  LAB_WORK_STATUS_LABELS.TO_ADMINS,
+] as const;
 
 function collectRevisionMoves(
   rows: Array<{ at: Date; column: string | null }>,
@@ -164,15 +184,16 @@ function resolveFromKanbanMoves(
     let matched = false;
     switch (condition.type) {
       case "kanban_move": {
-        const fromOk =
-          move.from != null && columnRefMatchesTitle(move.from, condition.from, boards);
         const toOk = columnRefMatchesTitle(
           move.to,
           condition.to,
           boards,
           move.from ?? undefined,
         );
-        matched = fromOk && toOk;
+        const fromOk =
+          move.from != null &&
+          columnRefMatchesTitle(move.from, condition.from, boards);
+        matched = Boolean(fromOk && toOk);
         break;
       }
       case "kanban_enter": {
@@ -194,6 +215,36 @@ function resolveFromKanbanMoves(
     }
   }
   return result;
+}
+
+/** Если выход из «Сборки» не найден — дата входа в обработку / проверку / админам. */
+function resolveLeaveAssemblyFallback(moves: MoveEvent[]): string | null {
+  let result: string | null = null;
+  for (const move of moves) {
+    const hit = POST_ASSEMBLY_TITLES.some((title) =>
+      columnTitleMatches(move.to, {
+        mode: "column",
+        boardId: "",
+        columnId: "",
+        title,
+      }),
+    );
+    if (hit) result = result ? earlierIso(result, move.at) : move.at;
+  }
+  return result;
+}
+
+function isLeaveAssemblyCondition(
+  condition: PublicHubTimelineCondition,
+): boolean {
+  if (condition.type !== "kanban_leave") return false;
+  if (condition.column.mode !== "column") return false;
+  return columnTitleMatches(condition.column.title, {
+    mode: "column",
+    boardId: "",
+    columnId: "",
+    title: LAB_WORK_STATUS_LABELS.ASSEMBLY,
+  });
 }
 
 function resolveKanbanBlocked(
@@ -259,7 +310,8 @@ function resolveRow(
   input: ResolvePublicHubTimelineInput,
 ): ResolvedTimelineRow {
   const { condition } = row;
-  const kanbanMoves = collectKanbanMoves(input.kanbanActivity);
+  const seedFrom = earliestRevisionColumn(input.revisionColumnRows);
+  const kanbanMoves = collectKanbanMoves(input.kanbanActivity, seedFrom);
   const revisionMoves = collectRevisionMoves(input.revisionColumnRows);
 
   switch (condition.type) {
@@ -288,7 +340,13 @@ function resolveRow(
         condition,
         input.kanbanBoards,
       );
-      const at = earlierIso(fromKanban, fromRevisions);
+      let at = earlierIso(fromKanban, fromRevisions);
+      if (!at && isLeaveAssemblyCondition(condition)) {
+        at = earlierIso(
+          resolveLeaveAssemblyFallback(kanbanMoves),
+          resolveLeaveAssemblyFallback(revisionMoves),
+        );
+      }
       return { id: row.id, label: row.label, at };
     }
     default:

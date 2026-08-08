@@ -55,24 +55,17 @@ export function PublicStickerReceivedPhotos({
               type="button"
               className="group relative block w-full overflow-hidden rounded-xl bg-zinc-100 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-zinc-200/80 transition hover:ring-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
               onClick={() => setLightbox({ images: items, index })}
-              aria-label={`Открыть ${p.fileName}`}
+              aria-label="Открыть фото"
             >
               <span className="relative block aspect-square">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={p.url}
-                  alt={p.fileName}
+                  alt=""
                   loading="lazy"
                   decoding="async"
                   className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03] group-active:scale-[0.99]"
                 />
-                <span
-                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent opacity-80"
-                  aria-hidden
-                />
-                <span className="pointer-events-none absolute bottom-1.5 left-1.5 right-1.5 truncate text-left text-[10px] font-medium text-white/95 drop-shadow-sm">
-                  {p.fileName}
-                </span>
               </span>
             </button>
           </li>
@@ -82,6 +75,7 @@ export function PublicStickerReceivedPhotos({
       {lightbox ? (
         <ImageLightbox
           state={lightbox}
+          showFileName={false}
           onClose={() => setLightbox(null)}
           onIndexChange={(index) =>
             setLightbox((prev) => (prev ? { ...prev, index } : prev))

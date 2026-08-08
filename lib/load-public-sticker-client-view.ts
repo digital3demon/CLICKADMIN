@@ -23,7 +23,7 @@ import {
 } from "@/lib/sticker-template";
 import {
   isPublicStickerHubImageMime,
-  isPublicStickerHubScannerScope,
+  isPublicStickerHubAttachmentScope,
   stickerPublicAttachmentPath,
 } from "@/lib/sticker-public-attachment-path";
 
@@ -41,7 +41,7 @@ export type PublicStickerClientView = {
   patientShort: string | null;
   timelineRows: ResolvedTimelineRow[];
   orderStatus: PublicStickerOrderStatusPills;
-  /** Сканы книжного сканера (scope SCANNER) для блока «Приняли и Отправили». */
+  /** Фото приёма/отправки: SCANNER + GENERAL image/* (не платёжки). */
   hubPhotos: PublicStickerHubPhoto[];
 };
 
@@ -145,7 +145,10 @@ export async function loadPublicStickerClientView(
   let hubPhotos: PublicStickerHubPhoto[] = [];
   if (slug && tok) {
     const rows = await ordersDb.orderAttachment.findMany({
-      where: { orderId, scope: "SCANNER" },
+      where: {
+        orderId,
+        scope: { in: ["SCANNER", "GENERAL"] },
+      },
       orderBy: { createdAt: "desc" },
       take: HUB_PHOTOS_MAX * 2,
       select: {
@@ -156,19 +159,24 @@ export async function loadPublicStickerClientView(
         createdAt: true,
       },
     });
-    hubPhotos = rows
-      .filter(
-        (r) =>
-          isPublicStickerHubScannerScope(r.scope) &&
-          isPublicStickerHubImageMime(r.mimeType),
-      )
-      .slice(0, HUB_PHOTOS_MAX)
-      .map((r) => ({
-        id: r.id,
-        fileName: r.fileName,
-        url: stickerPublicAttachmentPath(slug, tok, r.id),
-        createdAt: r.createdAt.toISOString(),
-      }));
+    /* Сначала сканы книжного сканера, затем обычные фото наряда. */
+    const eligible = rows.filter(
+      (r) =>
+        isPublicStickerHubAttachmentScope(r.scope) &&
+        isPublicStickerHubImageMime(r.mimeType),
+    );
+    const scanner = eligible.filter(
+      (r) => String(r.scope).toUpperCase() === "SCANNER",
+    );
+    const general = eligible.filter(
+      (r) => String(r.scope).toUpperCase() === "GENERAL",
+    );
+    hubPhotos = [...scanner, ...general].slice(0, HUB_PHOTOS_MAX).map((r) => ({
+      id: r.id,
+      fileName: r.fileName,
+      url: stickerPublicAttachmentPath(slug, tok, r.id),
+      createdAt: r.createdAt.toISOString(),
+    }));
   }
 
   return {

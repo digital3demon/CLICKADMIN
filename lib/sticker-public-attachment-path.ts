@@ -1,4 +1,4 @@
-/** Публичные фото наряда по QR этикетки (только image/* от книжного сканера). */
+/** Публичные фото наряда по QR этикетки (image/*; без платёжек). */
 
 export function isPublicStickerHubImageMime(mimeType: string | null | undefined): boolean {
   const m = String(mimeType || "")
@@ -7,11 +7,24 @@ export function isPublicStickerHubImageMime(mimeType: string | null | undefined)
   return m.startsWith("image/");
 }
 
-/** Вложения для блока «Приняли и Отправили» — только scope SCANNER. */
+/**
+ * Вложения для блока «Приняли и Отправили»:
+ * — SCANNER (книжный сканер);
+ * — GENERAL (фото с телефона / канбана — часто тоже «приём/отправка»).
+ * PAYMENT_SLIP и прочее — нет.
+ */
+export function isPublicStickerHubAttachmentScope(
+  scope: string | null | undefined,
+): boolean {
+  const s = String(scope || "").trim().toUpperCase();
+  return s === "SCANNER" || s === "GENERAL";
+}
+
+/** @deprecated Используйте isPublicStickerHubAttachmentScope */
 export function isPublicStickerHubScannerScope(
   scope: string | null | undefined,
 ): boolean {
-  return String(scope || "").trim().toUpperCase() === "SCANNER";
+  return isPublicStickerHubAttachmentScope(scope);
 }
 
 export function stickerPublicAttachmentPath(

@@ -108,6 +108,31 @@ describe("resolvePublicHubTimeline — дефолтный пресет", () => {
     expect(received?.note).toContain("оформления");
   });
 
+  it("первый вход в Производство без записи «из Согласования»", () => {
+    const rows = resolvePublicHubTimeline({
+      config: DEFAULT_PUBLIC_HUB_TIMELINE,
+      order: {
+        createdAt: "2026-06-01T08:00:00.000Z",
+        workReceivedAt: null,
+      },
+      kanbanActivity: [
+        { at: "2026-06-25T14:00:00.000Z", text: "Перемещена в «Сдана админам»" },
+        { at: "2026-06-18T09:00:00.000Z", text: "Перемещена в «Производство»" },
+      ],
+      revisionColumnRows: [],
+      revisionFieldRows: [],
+    });
+    expect(rows.find((r) => r.id === "row-agreed")?.at).toBe(
+      "2026-06-18T09:00:00.000Z",
+    );
+    expect(rows.find((r) => r.id === "row-produced")?.at).toBe(
+      "2026-06-25T14:00:00.000Z",
+    );
+    expect(rows.find((r) => r.id === "row-ready")?.at).toBe(
+      "2026-06-25T14:00:00.000Z",
+    );
+  });
+
   it("фиксирует вход в «Сдана админам»", () => {
     const rows = resolvePublicHubTimeline({
       config: DEFAULT_PUBLIC_HUB_TIMELINE,

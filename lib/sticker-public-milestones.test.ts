@@ -17,6 +17,21 @@ describe("milestonesFromKanbanActivity", () => {
     expect(m.agreedAt).toBe("2026-06-18T09:00:00.000Z");
     expect(m.producedAt).toBe("2026-06-22T12:00:00.000Z");
   });
+
+  it("согласование по первому входу в Производство", () => {
+    const m = milestonesFromKanbanActivity([
+      { at: "2026-06-18T09:00:00.000Z", text: "Перемещена в «Производство»" },
+    ]);
+    expect(m.agreedAt).toBe("2026-06-18T09:00:00.000Z");
+  });
+
+  it("произведено — fallback на Сдана админам без Сборки", () => {
+    const m = milestonesFromKanbanActivity([
+      { at: "2026-06-25T14:00:00.000Z", text: "Перемещена в «Сдана админам»" },
+      { at: "2026-06-18T09:00:00.000Z", text: "Перемещена в «Производство»" },
+    ]);
+    expect(m.producedAt).toBe("2026-06-25T14:00:00.000Z");
+  });
 });
 
 describe("milestonesFromRevisionColumns", () => {

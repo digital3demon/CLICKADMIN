@@ -57,9 +57,8 @@ export const DEFAULT_PUBLIC_HUB_TIMELINE: PublicHubTimelineConfig = {
       id: "row-agreed",
       label: "Согласовано",
       condition: {
-        type: "kanban_move",
-        from: titleColumnRef(LAB_WORK_STATUS_LABELS.APPROVAL),
-        to: titleColumnRef(LAB_WORK_STATUS_LABELS.PRODUCTION),
+        type: "kanban_enter",
+        column: titleColumnRef(LAB_WORK_STATUS_LABELS.PRODUCTION),
       },
     },
     {
@@ -139,6 +138,42 @@ function normalizeCondition(raw: unknown): PublicHubTimelineCondition | null {
   return null;
 }
 
+function migrateLegacyDefaultCondition(
+  id: string,
+  label: string,
+  condition: PublicHubTimelineCondition,
+): PublicHubTimelineCondition {
+  const looksLikeAgreed =
+    id === "row-agreed" ||
+    label.trim().toLocaleLowerCase("ru") === "согласовано";
+  /* Старый пресет: Согласование→Производство — часто нет from в журнале. */
+  if (
+    looksLikeAgreed &&
+    condition.type === "kanban_move" &&
+    condition.from.mode === "column" &&
+    condition.to.mode === "column" &&
+    normColLoose(condition.from.title) ===
+      normColLoose(LAB_WORK_STATUS_LABELS.APPROVAL) &&
+    normColLoose(condition.to.title) ===
+      normColLoose(LAB_WORK_STATUS_LABELS.PRODUCTION)
+  ) {
+    return {
+      type: "kanban_enter",
+      column: {
+        mode: "column",
+        boardId: "",
+        columnId: "",
+        title: LAB_WORK_STATUS_LABELS.PRODUCTION,
+      },
+    };
+  }
+  return condition;
+}
+
+function normColLoose(title: string): string {
+  return title.trim().toLocaleLowerCase("ru");
+}
+
 function normalizeRow(raw: unknown, index: number): PublicHubTimelineRow | null {
   if (raw == null || typeof raw !== "object") return null;
   const o = raw as Partial<PublicHubTimelineRow>;
@@ -150,8 +185,9 @@ function normalizeRow(raw: unknown, index: number): PublicHubTimelineRow | null 
     typeof o.label === "string" && o.label.trim()
       ? o.label.trim().slice(0, PUBLIC_HUB_TIMELINE_LIMITS.labelMax)
       : `Строка ${index + 1}`;
-  const condition = normalizeCondition(o.condition);
-  if (!condition) return null;
+  const conditionRaw = normalizeCondition(o.condition);
+  if (!conditionRaw) return null;
+  const condition = migrateLegacyDefaultCondition(id, label, conditionRaw);
   return { id, label, condition };
 }
 

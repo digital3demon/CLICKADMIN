@@ -19,10 +19,13 @@ export function ImageLightbox({
   state,
   onClose,
   onIndexChange,
+  showFileName = true,
 }: {
   state: ImageLightboxState;
   onClose: () => void;
   onIndexChange?: (index: number) => void;
+  /** На публичной витрине имя файла не показываем. */
+  showFileName?: boolean;
 }) {
   const current = state.images[state.index];
   const count = state.images.length;
@@ -64,12 +67,16 @@ export function ImageLightbox({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2 text-white">
-          <p
-            className="min-w-0 truncate text-xs font-medium sm:text-sm"
-            title={current.fileName}
-          >
-            {current.fileName}
-          </p>
+          {showFileName ? (
+            <p
+              className="min-w-0 truncate text-xs font-medium sm:text-sm"
+              title={current.fileName}
+            >
+              {current.fileName}
+            </p>
+          ) : (
+            <span className="min-w-0 flex-1" />
+          )}
           <div className="flex shrink-0 items-center gap-2">
             {count > 1 ? (
               <span className="tabular-nums text-[11px] text-white/60">
@@ -111,7 +118,7 @@ export function ImageLightbox({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={current.url}
-            alt={current.fileName}
+            alt={showFileName ? current.fileName : "Фото"}
             className="max-h-[min(70vh,620px)] max-w-full rounded-md object-contain"
           />
         </div>

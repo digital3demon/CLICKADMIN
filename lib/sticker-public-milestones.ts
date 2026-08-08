@@ -1,9 +1,9 @@
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
 import { LAB_WORK_STATUS_LABELS } from "@/lib/lab-work-status";
 
-/** «Перемещена в «…»» — кириллические кавычки «». */
+/** «Перемещена в «…»» — кириллические «» или обычные "". */
 export const KANBAN_MOVE_TO_COLUMN_RE =
-  /Перемещена\s+в\s+«([^»]+)»(?:\s*\([^)]*\))?/u;
+  /Перемещена\s+в\s+[«"]([^»"]+)[»"](?:\s*\([^)]*\))?/u;
 
 export type StickerPublicMilestones = {
   agreedAt: string | null;
@@ -39,8 +39,19 @@ export function earlierMilestoneIso(
   return x < y ? x : y;
 }
 
+function isPostAssemblyColumn(title: string): boolean {
+  return (
+    columnMatches(title, LAB_WORK_STATUS_LABELS.PROCESSING) ||
+    columnMatches(title, LAB_WORK_STATUS_LABELS.MANUAL) ||
+    columnMatches(title, LAB_WORK_STATUS_LABELS.TO_REVIEW) ||
+    columnMatches(title, LAB_WORK_STATUS_LABELS.TO_ADMINS)
+  );
+}
+
 /**
- * По журналу перемещений карточки: Согласование→Производство, уход из Сборки дальше.
+ * По журналу перемещений карточки:
+ * — согласование: первый вход в «Производство»;
+ * — произведено: уход из «Сборки», иначе первый вход в этап после сборки.
  * activity хранится от новых к старым; обход с конца = по времени по возрастанию.
  */
 export function milestonesFromKanbanActivity(
@@ -48,6 +59,7 @@ export function milestonesFromKanbanActivity(
 ): StickerPublicMilestones {
   let agreedAt: string | null = null;
   let producedAt: string | null = null;
+  let producedFallback: string | null = null;
   let prevColumn: string | null = null;
   const act = activity ?? [];
   for (let i = act.length - 1; i >= 0; i--) {
@@ -56,25 +68,29 @@ export function milestonesFromKanbanActivity(
     if (!m) continue;
     const toCol = (m[1] || "").trim();
     const at = toIso(act[i]?.at);
-    if (prevColumn !== null && at) {
+    if (at) {
       if (
         !agreedAt &&
-        columnMatches(prevColumn, LAB_WORK_STATUS_LABELS.APPROVAL) &&
-        columnMatches(toCol, LAB_WORK_STATUS_LABELS.PRODUCTION)
+        columnMatches(toCol, LAB_WORK_STATUS_LABELS.PRODUCTION) &&
+        !columnMatches(prevColumn, LAB_WORK_STATUS_LABELS.PRODUCTION)
       ) {
         agreedAt = at;
       }
       if (
         !producedAt &&
+        prevColumn !== null &&
         columnMatches(prevColumn, LAB_WORK_STATUS_LABELS.ASSEMBLY) &&
         !columnMatches(toCol, LAB_WORK_STATUS_LABELS.ASSEMBLY)
       ) {
         producedAt = at;
       }
+      if (!producedFallback && isPostAssemblyColumn(toCol)) {
+        producedFallback = at;
+      }
     }
     prevColumn = toCol;
   }
-  return { agreedAt, producedAt };
+  return { agreedAt, producedAt: producedAt ?? producedFallback };
 }
 
 /** По снимкам ревизий: смена kaitenColumnTitle в хронологическом порядке. */
@@ -83,27 +99,32 @@ export function milestonesFromRevisionColumns(
 ): StickerPublicMilestones {
   let agreedAt: string | null = null;
   let producedAt: string | null = null;
+  let producedFallback: string | null = null;
   let prevColumn: string | null = null;
   for (const row of rows) {
     const col = row.column?.trim() || null;
     const at = toIso(row.at);
-    if (prevColumn && col && at) {
+    if (col && at) {
       if (
         !agreedAt &&
-        columnMatches(prevColumn, LAB_WORK_STATUS_LABELS.APPROVAL) &&
-        columnMatches(col, LAB_WORK_STATUS_LABELS.PRODUCTION)
+        columnMatches(col, LAB_WORK_STATUS_LABELS.PRODUCTION) &&
+        !columnMatches(prevColumn, LAB_WORK_STATUS_LABELS.PRODUCTION)
       ) {
         agreedAt = at;
       }
       if (
         !producedAt &&
+        prevColumn &&
         columnMatches(prevColumn, LAB_WORK_STATUS_LABELS.ASSEMBLY) &&
         !columnMatches(col, LAB_WORK_STATUS_LABELS.ASSEMBLY)
       ) {
         producedAt = at;
       }
+      if (!producedFallback && isPostAssemblyColumn(col)) {
+        producedFallback = at;
+      }
     }
     if (col) prevColumn = col;
   }
-  return { agreedAt, producedAt };
+  return { agreedAt, producedAt: producedAt ?? producedFallback };
 }
