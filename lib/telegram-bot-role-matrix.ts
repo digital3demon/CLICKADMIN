@@ -28,12 +28,10 @@ export function telegramRoleMayShip(role: UserRole): boolean {
   return SHIP_COMMAND_ROLES.has(role);
 }
 
-/** Ссылки в списках бота: админы/владелец → карточка заказа, остальные → канбан. */
+/** Ссылки / Mini App: только админы → полный заказ; владелец и остальные → lite-карточка. */
 export function telegramRoleLinksToOrderPage(role: UserRole): boolean {
   return (
-    role === UserRole.ADMINISTRATOR ||
-    role === UserRole.SENIOR_ADMINISTRATOR ||
-    role === UserRole.OWNER
+    role === UserRole.ADMINISTRATOR || role === UserRole.SENIOR_ADMINISTRATOR
   );
 }
 

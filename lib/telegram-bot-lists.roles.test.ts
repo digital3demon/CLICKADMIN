@@ -1,6 +1,7 @@
 import { UserRole } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  telegramRoleLinksToOrderPage,
   telegramRoleMayCardStageDline,
   telegramRoleMayDline,
   telegramRoleMayShip,
@@ -9,19 +10,21 @@ import {
 } from "@/lib/telegram-bot-role-matrix";
 
 describe("telegram bot role matrix", () => {
-  it("владелец: актуальная запись и мой срок (без лаб. срока и срока всех карточек)", () => {
+  it("владелец: актуальная запись и мой срок; Mini App — карточка, не заказ", () => {
     expect(telegramRoleMayShip(UserRole.OWNER)).toBe(true);
     expect(telegramRoleUsesLabOrderDline(UserRole.OWNER)).toBe(false);
     expect(telegramRoleUsesPersonalCardStageDline(UserRole.OWNER)).toBe(true);
     expect(telegramRoleMayCardStageDline(UserRole.OWNER)).toBe(false);
     expect(telegramRoleMayDline(UserRole.OWNER)).toBe(true);
+    expect(telegramRoleLinksToOrderPage(UserRole.OWNER)).toBe(false);
   });
 
-  it("админ: отгрузки и лаб. срок, без срока карточек", () => {
+  it("админ: отгрузки, лаб. срок, полный заказ в Mini App", () => {
     expect(telegramRoleMayShip(UserRole.ADMINISTRATOR)).toBe(true);
     expect(telegramRoleUsesLabOrderDline(UserRole.ADMINISTRATOR)).toBe(true);
     expect(telegramRoleMayCardStageDline(UserRole.ADMINISTRATOR)).toBe(false);
     expect(telegramRoleMayDline(UserRole.ADMINISTRATOR)).toBe(true);
+    expect(telegramRoleLinksToOrderPage(UserRole.ADMINISTRATOR)).toBe(true);
   });
 
   it("пользователь канбана: этапный срок своих карточек, без отгрузок", () => {
@@ -30,5 +33,6 @@ describe("telegram bot role matrix", () => {
     expect(telegramRoleUsesLabOrderDline(UserRole.USER)).toBe(false);
     expect(telegramRoleMayCardStageDline(UserRole.USER)).toBe(false);
     expect(telegramRoleMayDline(UserRole.USER)).toBe(true);
+    expect(telegramRoleLinksToOrderPage(UserRole.USER)).toBe(false);
   });
 });

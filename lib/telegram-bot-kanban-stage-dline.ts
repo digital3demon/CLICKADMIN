@@ -5,8 +5,8 @@ import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { orderPathById } from "@/lib/order-public-ref";
 import {
-  telegramMiniAppCardDeepLink,
-  telegramMiniAppOrderDeepLink,
+  telegramMiniAppCardWebAppUrl,
+  telegramMiniAppOrderWebAppUrl,
 } from "@/lib/telegram-mini-app-links";
 import {
   KANBAN_CHAT_STATE_KEY,
@@ -26,25 +26,33 @@ export {
   kanbanStageDlineWindowForCommand,
 } from "@/lib/telegram-bot-kanban-stage-dline-helpers";
 
-function kanbanCardTelegramHref(
+function kanbanCardTelegramItem(
   card: KanbanCard,
   linkToOrderPage: boolean,
-): string {
+  statusLabel: string,
+): TelegramHtmlListItem {
   const linked = card.linkedOrderId?.trim();
-  if (linked) {
-    const mini = telegramMiniAppOrderDeepLink(linked);
-    if (mini) return mini;
-    const base = crmPublicBaseUrl().replace(/\/+$/, "");
-    if (linkToOrderPage) {
-      return `${base}${orderPathById(linked)}`;
-    }
-    return `${base}${kanbanOrderDeepLinkPath(linked)}`;
-  }
-  const miniCard = telegramMiniAppCardDeepLink(card.id);
-  if (miniCard) return miniCard;
   const base = crmPublicBaseUrl().replace(/\/+$/, "");
+  if (linked) {
+    const webAppUrl = telegramMiniAppOrderWebAppUrl(linked);
+    const url = linkToOrderPage
+      ? `${base}${orderPathById(linked)}`
+      : `${base}${kanbanOrderDeepLinkPath(linked)}`;
+    return {
+      url,
+      webAppUrl,
+      label: kanbanCardTelegramLabel(card),
+      detail: `Статус: ${statusLabel}`,
+    };
+  }
+  const webAppUrl = telegramMiniAppCardWebAppUrl(card.id);
   const params = new URLSearchParams({ card: card.id });
-  return `${base}/kanban?${params.toString()}`;
+  return {
+    url: `${base}/kanban?${params.toString()}`,
+    webAppUrl,
+    label: kanbanCardTelegramLabel(card),
+    detail: `Статус: ${statusLabel}`,
+  };
 }
 
 /** Колонка / стоп / архив для статуса в списках бота. */
@@ -93,10 +101,12 @@ export async function fetchKanbanStageDlineTelegramItems(
   const cards = collectKanbanStageDueCards(state, window, opts);
   return {
     header: window.header,
-    items: cards.map((card) => ({
-      url: kanbanCardTelegramHref(card, linkToOrderPage),
-      label: kanbanCardTelegramLabel(card),
-      detail: `Статус: ${statusById.get(card.id) ?? "—"}`,
-    })),
+    items: cards.map((card) =>
+      kanbanCardTelegramItem(
+        card,
+        linkToOrderPage,
+        statusById.get(card.id) ?? "—",
+      ),
+    ),
   };
 }

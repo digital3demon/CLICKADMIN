@@ -6,7 +6,7 @@ import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { orderPathById } from "@/lib/order-public-ref";
 import { orderShipmentListStatusLabel } from "@/lib/order-shipment-list-status-label";
-import { telegramMiniAppOrderDeepLink } from "@/lib/telegram-mini-app-links";
+import { telegramMiniAppOrderWebAppUrl } from "@/lib/telegram-mini-app-links";
 import {
   addCalendarDaysYmd,
   moscowDayBoundsUtc,
@@ -20,7 +20,8 @@ import { getClientsPrisma } from "@/lib/get-domain-prisma";
 import { fetchKanbanStageDlineTelegramItems } from "@/lib/telegram-bot-kanban-stage-dline";
 import { isTelegramBotCardStageCommand } from "@/lib/telegram-bot-menu-commands";
 import {
-  formatTelegramHtmlLinkList,
+  formatTelegramBotWebAppList,
+  type TelegramBotListReply,
   type TelegramHtmlListItem,
 } from "@/lib/telegram-html-message";
 import {
@@ -70,14 +71,16 @@ function telegramOrderCardTitleOneLineFromParts(p: {
     .trim();
 }
 
-function orderCardHref(orderId: string, _linkToOrderPage: boolean): string {
-  const mini = telegramMiniAppOrderDeepLink(orderId);
-  if (mini) return mini;
+function orderListItemUrls(
+  orderId: string,
+  linkToOrderPage: boolean,
+): { url: string; webAppUrl: string | null } {
+  const webAppUrl = telegramMiniAppOrderWebAppUrl(orderId);
   const base = crmPublicBaseUrl().replace(/\/+$/, "");
-  if (_linkToOrderPage) {
-    return `${base}${orderPathById(orderId)}`;
-  }
-  return `${base}${kanbanOrderDeepLinkPath(orderId)}`;
+  const url = linkToOrderPage
+    ? `${base}${orderPathById(orderId)}`
+    : `${base}${kanbanOrderDeepLinkPath(orderId)}`;
+  return { url, webAppUrl };
 }
 
 const orderTelegramTitleSelect = {
@@ -148,8 +151,10 @@ async function mapOrdersToTelegramLinkItems(
       ? cardTypeById.get(row.kaitenCardTypeId)
       : undefined;
     const status = orderShipmentListStatusLabel(row);
+    const { url, webAppUrl } = orderListItemUrls(row.id, linkToOrderPage);
     return {
-      url: orderCardHref(row.id, linkToOrderPage),
+      url,
+      webAppUrl,
       label: telegramOrderCardTitleOneLineFromParts({
         orderNumber: row.orderNumber,
         patientName: row.patientName,
@@ -249,7 +254,7 @@ export async function tryTelegramBotListCommand(opts: {
   tenantId: string;
   role: UserRole;
   crmUserId?: string | null;
-}): Promise<{ text: string; parseMode: "HTML" } | null> {
+}): Promise<TelegramBotListReply | null> {
   const cmd = opts.command.toLowerCase();
   const { tenantId, role, crmUserId } = opts;
 
@@ -301,10 +306,7 @@ export async function tryTelegramBotListCommand(opts: {
       tenantId,
       linkToOrderPage,
     );
-    return {
-      parseMode: "HTML",
-      text: formatTelegramHtmlLinkList(items, "Нарядов нет", header),
-    };
+    return formatTelegramBotWebAppList(items, "Нарядов нет", header);
   }
 
   /* dline / card stage */
@@ -314,10 +316,11 @@ export async function tryTelegramBotListCommand(opts: {
       cmd as "/cardtd" | "/cardtm" | "/cardw",
       { linkToOrderPage },
     );
-    return {
-      parseMode: "HTML",
-      text: formatTelegramHtmlLinkList(stage.items, "Карточек не найдено", stage.header),
-    };
+    return formatTelegramBotWebAppList(
+      stage.items,
+      "Карточек не найдено",
+      stage.header,
+    );
   }
 
   if (dlineCmd && telegramRoleUsesPersonalCardStageDline(role)) {
@@ -329,13 +332,10 @@ export async function tryTelegramBotListCommand(opts: {
     const emptyRu = crmUserId
       ? "Карточек на вас (ответственный или участник) с этапным сроком в этом окне нет"
       : "Привяжите Telegram к пользователю CRM, чтобы видеть карточки на вас";
-    return {
-      parseMode: "HTML",
-      text: formatTelegramHtmlLinkList(stage.items, emptyRu, stage.header),
-    };
+    return formatTelegramBotWebAppList(stage.items, emptyRu, stage.header);
   }
 
-  /* dline — лабораторный срок наряда (админы, владелец) */
+  /* dline — лабораторный срок наряда (админы) */
   let start: Date;
   let endExclusive: Date;
   let header: string;
@@ -365,8 +365,5 @@ export async function tryTelegramBotListCommand(opts: {
     linkToOrderPage,
   );
 
-  return {
-    parseMode: "HTML",
-    text: formatTelegramHtmlLinkList(items, "Работ не найдено", header),
-  };
+  return formatTelegramBotWebAppList(items, "Работ не найдено", header);
 }
