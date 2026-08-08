@@ -29,7 +29,7 @@ export async function GET() {
 
     const prisma = await getOrdersPrisma();
     const [items, pendingCount] = await Promise.all([
-      loadCorrectionsHistoryOnly({ limit: 80, tenantId }),
+      loadCorrectionsHistoryOnly({ limit: 80, tenantId, pendingOnly: true }),
       countOrdersWithPendingMergedCorrections(prisma, tenantId),
     ]);
 

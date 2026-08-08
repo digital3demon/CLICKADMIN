@@ -150,6 +150,8 @@ export async function loadCorrectionsHistoryOnly(opts?: {
   q?: string | null;
   limit?: number;
   tenantId?: string | null;
+  /** Только непринятые (resolved/rejected пусты) — для модалки списка нарядов. */
+  pendingOnly?: boolean;
 }): Promise<CorrectionHistoryRow[]> {
   const q = normalizeRevisionsHistorySearchQuery(opts?.q);
   const take = opts?.limit ?? (q ? TAKE_SEARCH : TAKE_DEFAULT);
@@ -158,6 +160,9 @@ export async function loadCorrectionsHistoryOnly(opts?: {
     where: {
       order: orderScope(opts?.tenantId),
       ...(q ? buildCorrectionSearchWhere(q) : {}),
+      ...(opts?.pendingOnly
+        ? { resolvedAt: null, rejectedAt: null }
+        : {}),
     },
     orderBy: { createdAt: "desc" },
     take,

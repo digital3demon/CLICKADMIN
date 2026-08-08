@@ -7,8 +7,8 @@ import {
 import { FinanceOfficeBankImportPanel } from "@/components/finance-office/FinanceOfficeBankImportPanel";
 import { FinanceOfficeQuickFilterChips } from "@/components/finance-office/FinanceOfficeQuickFilterChips";
 import { FinanceOfficeModePanel } from "@/components/finance-office/FinanceOfficeModePanel";
-import { FinanceOfficePageTitle } from "@/components/finance-office/FinanceOfficePageTitle";
 import { CorrectionsHistoryActionCard } from "@/components/orders/CorrectionsHistoryActionCard";
+import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
@@ -28,13 +28,14 @@ import {
   moscowTomorrowYmd,
   parseYmdOrNull,
 } from "@/lib/shipments-date-range";
+import { fontDisplay } from "@/lib/app-fonts";
 
 export const dynamic = "force-dynamic";
 
-const FINANCE_OFFICE_LIST_STACK = "w-full max-w-full min-w-0 self-start space-y-2.5";
+const FINANCE_OFFICE_LIST_STACK = "w-full max-w-full min-w-0 self-start space-y-4";
 
 const FINANCE_OFFICE_FRAME_ROOT =
-  "!px-2 !pb-6 !pt-2.5 sm:!px-3 sm:!pb-7 sm:!pt-3.5 md:!px-4 md:!pb-8 md:!pt-4 lg:!px-4 lg:!pb-9 lg:!pt-5";
+  "!px-2 !pb-6 !pt-4 sm:!px-3 sm:!pb-7 sm:!pt-5 md:!px-4 md:!pb-8 md:!pt-6 lg:!px-4 lg:!pb-9 lg:!pt-7";
 
 const MAX_RANGE_DAYS = 366;
 
@@ -93,6 +94,8 @@ export default async function FinanceOfficePage({
   const sp = await searchParams;
   const session = await getSessionFromCookies();
   const tenantId = session ? await getTenantIdForSession(session) : null;
+  const canAcceptCorrections =
+    session != null && canAcceptOrderChatCorrections(session.role);
 
   if (!tenantId) {
     return (
@@ -162,10 +165,10 @@ export default async function FinanceOfficePage({
   if (q) exportParams.set("q", q);
   const exportHref = `/api/finance-office/export?${exportParams.toString()}`;
   const searchControls = (
-    <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
       <form
         action="/finance-office"
-        className="flex min-w-0 max-w-xl flex-1 flex-nowrap items-center gap-1.5"
+        className="flex min-w-0 max-w-xl flex-1 flex-col gap-2 sm:min-w-[220px] sm:flex-row"
       >
         <input type="hidden" name="tab" value={mode} />
         {fromRaw ? <input type="hidden" name="from" value={fromRaw} /> : null}
@@ -176,72 +179,85 @@ export default async function FinanceOfficePage({
         <input
           name="q"
           defaultValue={q}
-          placeholder="№ наряда или пациент…"
-          className="h-8 min-w-[8rem] max-w-md flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-2.5 text-sm text-[var(--text-strong)] outline-none"
+          placeholder="Поиск по номеру наряда или пациенту"
+          className="min-w-0 w-full max-w-md flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
         />
         <button
           type="submit"
-          className="h-8 shrink-0 rounded-full bg-[var(--sidebar-blue)] px-3 text-xs font-semibold text-white hover:opacity-90"
+          className="rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90 sm:shrink-0"
         >
           Найти
         </button>
       </form>
-      <a
-        href={exportHref}
-        className="inline-flex h-8 shrink-0 items-center rounded-full border border-emerald-300 bg-emerald-50 px-3 text-xs font-semibold text-emerald-950 shadow-sm hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/35 dark:text-emerald-100 dark:hover:bg-emerald-950/55"
-      >
-        Выгрузить
-      </a>
-      {rawTag || q ? (
-        <Link
-          href={financeOfficeListHref({
-            tab: mode,
-            from: fromRaw,
-            to: toRaw,
-          })}
-          className="inline-flex h-8 shrink-0 items-center rounded-full border border-[var(--input-border)] bg-[var(--card-bg)] px-3 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          href={exportHref}
+          className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/35 dark:text-emerald-100 dark:hover:bg-emerald-950/55"
         >
-          Сбросить
-        </Link>
-      ) : null}
+          Выгрузить
+        </a>
+        {rawTag || q ? (
+          <Link
+            href={financeOfficeListHref({
+              tab: mode,
+              from: fromRaw,
+              to: toRaw,
+            })}
+            className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+          >
+            Сбросить
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
   const financeOfficeHeader = (
-    <section className="space-y-2">
-      <FinanceOfficePageTitle />
-      <FinanceOfficeModePanel
-        mode={mode}
-        appliedFrom={fromRaw}
-        appliedTo={toRaw}
-        listTag={rawTagInvalid ? null : rawTag}
-        q={q}
-        listSummaryLine={listSummaryLine}
-      />
-      <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1.5 sm:px-2.5">
-        {searchControls}
-      </div>
-      <div className="grid grid-cols-2 gap-2 xl:grid-cols-[minmax(11rem,13rem)_minmax(0,1fr)] xl:items-stretch">
-        <CorrectionsHistoryActionCard
-          className="w-full"
-          dense
-          initialPendingCount={correctionsPendingCount}
-        />
-        <FinanceOfficeBankImportPanel className="w-full" compact />
-      </div>
-      {rawTagInvalid || error ? (
-        <div className="space-y-2">
-          {rawTagInvalid ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-              Параметр фильтра не распознан, показан общий список ФинОтдела.
+    <section>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(11rem,13rem)_minmax(18rem,24rem)] xl:items-end">
+        <div className="min-w-0 space-y-3">
+          <div>
+            <h1
+              className={`${fontDisplay.className} text-xl font-semibold tracking-tight text-[var(--app-text)] lg:text-2xl`}
+            >
+              ФинОтдел
+            </h1>
+            <p className="mt-2 hidden max-w-4xl text-sm leading-snug text-[var(--text-secondary)] md:block">
+              Контроль просчёта, корректировок, заказа протетики и оплат.
+              Список без ограничения по этапу воронки (включая согласование и
+              ранние этапы).
             </p>
-          ) : null}
-          {error ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-              {error}
-            </p>
-          ) : null}
+          </div>
+          <FinanceOfficeModePanel
+            mode={mode}
+            appliedFrom={fromRaw}
+            appliedTo={toRaw}
+            listTag={rawTagInvalid ? null : rawTag}
+            q={q}
+            listSummaryLine={listSummaryLine}
+          />
+          <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">
+            {searchControls}
+          </div>
         </div>
-      ) : null}
+        <CorrectionsHistoryActionCard
+          className="w-full xl:self-end"
+          initialPendingCount={correctionsPendingCount}
+          canAcceptCorrections={canAcceptCorrections}
+        />
+        <FinanceOfficeBankImportPanel className="w-full xl:self-end" />
+      </div>
+      <div className="mt-3 space-y-2">
+        {rawTagInvalid ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            Параметр фильтра не распознан, показан общий список ФинОтдела.
+          </p>
+        ) : null}
+        {error ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {error}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 

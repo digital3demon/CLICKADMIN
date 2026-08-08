@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   isPublicStickerHubImageMime,
-  isPublicStickerHubAttachmentScope,
   isPublicStickerHubScannerScope,
   stickerPublicAttachmentPath,
 } from "@/lib/sticker-public-attachment-path";
@@ -23,11 +22,10 @@ describe("isPublicStickerHubImageMime", () => {
   });
 });
 
-describe("isPublicStickerHubAttachmentScope", () => {
-  it("SCANNER и GENERAL — да; платёжки — нет", () => {
-    expect(isPublicStickerHubAttachmentScope("SCANNER")).toBe(true);
-    expect(isPublicStickerHubAttachmentScope("GENERAL")).toBe(true);
-    expect(isPublicStickerHubAttachmentScope("PAYMENT_SLIP")).toBe(false);
-    expect(isPublicStickerHubScannerScope("GENERAL")).toBe(true);
+describe("isPublicStickerHubScannerScope", () => {
+  it("only SCANNER", () => {
+    expect(isPublicStickerHubScannerScope("SCANNER")).toBe(true);
+    expect(isPublicStickerHubScannerScope("GENERAL")).toBe(false);
+    expect(isPublicStickerHubScannerScope("PAYMENT_SLIP")).toBe(false);
   });
 });

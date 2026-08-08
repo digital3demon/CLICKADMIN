@@ -1,5 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 import { stripOrderChatCorrectionPrefix } from "@/lib/order-chat-correction";
+import {
+  canAdvanceProstheticsProgressStep,
+  type ProstheticsProgressStep,
+} from "@/lib/prosthetics-in-transit-step";
 
 type CloseAction = "accept" | "reject";
 
@@ -411,6 +415,143 @@ export async function setOrderProstheticsArrivedPair(
         resolvedAt: { not: null },
         rejectedAt: null,
         ...(arrived ? { arrivedAt: null } : { arrivedAt: { not: null } }),
+      },
+      select: { id: true },
+    });
+    for (const t of twinLegacy) legacyIds.add(t.id);
+  }
+
+  for (const id of inboxIds) {
+    await (db as any).orderChatInboxItem.update({
+      where: { id },
+      data,
+    });
+  }
+  for (const id of legacyIds) {
+    await db.orderProstheticsRequest.update({
+      where: { id },
+      data,
+    });
+  }
+
+  return {
+    ok: true,
+    inboxIds: [...inboxIds],
+    legacyIds: [...legacyIds],
+  };
+}
+
+type ProgressPairRow = PairRow & {
+  arrivedAt: Date | null;
+  checkedAt: Date | null;
+  completedAt: Date | null;
+};
+
+const progressSelect = {
+  id: true,
+  resolvedAt: true,
+  rejectedAt: true,
+  arrivedAt: true,
+  checkedAt: true,
+  completedAt: true,
+  kaitenCommentId: true,
+} as const;
+
+/**
+ * Продвигает степпер протетики (arrived / checked / completed) на inbox + legacy.
+ * arrived делегирует в setOrderProstheticsArrivedPair.
+ */
+export async function advanceOrderProstheticsProgressPair(
+  db: PrismaClient,
+  orderId: string,
+  requestId: string,
+  step: ProstheticsProgressStep,
+  userId: string,
+): Promise<ClosePairResult> {
+  if (step === "arrived") {
+    return setOrderProstheticsArrivedPair(db, orderId, requestId, true, userId);
+  }
+
+  const oid = orderId.trim();
+  const rid = requestId.trim();
+  const inboxRow = (await (db as any).orderChatInboxItem.findFirst({
+    where: { id: rid, orderId: oid, type: "PROSTHETICS" },
+    select: progressSelect,
+  })) as ProgressPairRow | null;
+
+  const legacyRow = (await db.orderProstheticsRequest.findFirst({
+    where: { id: rid, orderId: oid },
+    select: progressSelect,
+  })) as ProgressPairRow | null;
+
+  const primary = inboxRow ?? legacyRow;
+  if (!primary) {
+    return { ok: false, status: 404, error: "Запись не найдена" };
+  }
+  if (primary.rejectedAt != null) {
+    return { ok: false, status: 409, error: "Заявка отклонена" };
+  }
+
+  const gate = canAdvanceProstheticsProgressStep(
+    {
+      resolvedAt: primary.resolvedAt,
+      arrivedAt: primary.arrivedAt,
+      checkedAt: primary.checkedAt,
+      completedAt: primary.completedAt,
+    },
+    step,
+  );
+  if (!gate.ok) {
+    return { ok: false, status: 409, error: gate.error };
+  }
+
+  const now = new Date();
+  const data =
+    step === "checked"
+      ? { checkedAt: now, checkedByUserId: userId }
+      : { completedAt: now, completedByUserId: userId };
+
+  const kaitenCommentId =
+    inboxRow?.kaitenCommentId ?? legacyRow?.kaitenCommentId ?? null;
+  const inboxIds = new Set<string>();
+  const legacyIds = new Set<string>();
+
+  if (inboxRow) inboxIds.add(inboxRow.id);
+  if (legacyRow) legacyIds.add(legacyRow.id);
+
+  const twinFilter =
+    step === "checked"
+      ? {
+          arrivedAt: { not: null },
+          checkedAt: null,
+          completedAt: null,
+        }
+      : {
+          checkedAt: { not: null },
+          completedAt: null,
+        };
+
+  if (kaitenCommentId != null) {
+    const twinInbox = (await (db as any).orderChatInboxItem.findMany({
+      where: {
+        orderId: oid,
+        type: "PROSTHETICS",
+        kaitenCommentId,
+        resolvedAt: { not: null },
+        rejectedAt: null,
+        ...twinFilter,
+      },
+      select: { id: true },
+    })) as Array<{ id: string }>;
+    for (const t of twinInbox) inboxIds.add(t.id);
+
+    const twinLegacy = await db.orderProstheticsRequest.findMany({
+      where: {
+        orderId: oid,
+        kaitenCommentId,
+        resolvedAt: { not: null },
+        rejectedAt: null,
+        ...twinFilter,
       },
       select: { id: true },
     });

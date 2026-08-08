@@ -663,6 +663,7 @@ export default async function OrdersPage({
           initialPickupsPendingCount={labPickupsPendingCount}
           canMarkArrived={canMarkProstheticsArrived}
           canResolveTasks={canMarkProstheticsArrived}
+          canAcceptCorrections={canMarkProstheticsArrived}
           showProstheticsBlock={canSeeProstheticsChip}
         />
       </div>
@@ -690,6 +691,7 @@ export default async function OrdersPage({
             initialPickupsPendingCount={labPickupsPendingCount}
             canMarkArrived={canMarkProstheticsArrived}
             canResolveTasks={canMarkProstheticsArrived}
+            canAcceptCorrections={canMarkProstheticsArrived}
             showProstheticsBlock={canSeeProstheticsChip}
           />
         </div>

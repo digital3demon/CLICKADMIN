@@ -41,8 +41,8 @@ export const CORRECTION_HISTORY_KIND_LABEL = {
   prosthetics: "Заказ протетики",
 } as const;
 
-/** Финальный статус протетики в UI (в Kaiten — «протетика пришла»). */
-export const PROSTHETICS_ARRIVED_STATUS_LABEL = "Готово";
+/** Статус «Пришла» в истории (после степпера «Готово» = completedAt). */
+export const PROSTHETICS_ARRIVED_STATUS_LABEL = "Пришла";
 
 export function parseOrdersHistoryTab(
   raw: string | null | undefined,

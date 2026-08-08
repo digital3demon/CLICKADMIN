@@ -9,14 +9,21 @@ import {
   advanceOrderProstheticsProgressPair,
   setOrderProstheticsArrivedPair,
 } from "@/lib/order-chat-inbox-resolve-pair.server";
+import type { ProstheticsProgressStep } from "@/lib/prosthetics-in-transit-step";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 const REPLY_TEXT = "протетика пришла";
 
-type Body = { arrived?: boolean };
+type Body = { step?: string };
 
-/** Тонкая обёртка: arrived=true → progress arrived; arrived=false → снять отметку. */
+function parseStep(raw: unknown): ProstheticsProgressStep | null {
+  if (raw === "arrived" || raw === "checked" || raw === "completed") {
+    return raw;
+  }
+  return null;
+}
+
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string; requestId: string }> },
@@ -44,33 +51,31 @@ export async function POST(
   } catch {
     body = {};
   }
-  const arrived = body.arrived !== false;
-
-  const prisma = await getOrdersPrisma();
-
-  if (!arrived) {
-    const closed = await setOrderProstheticsArrivedPair(
-      prisma,
-      orderId,
-      requestId,
-      false,
-      session.sub,
+  const step = parseStep(body.step);
+  if (!step) {
+    return NextResponse.json(
+      { error: "Укажите step: arrived | checked | completed" },
+      { status: 400 },
     );
-    if (!closed.ok) {
-      return NextResponse.json({ error: closed.error }, { status: closed.status });
-    }
-    return NextResponse.json({ ok: true });
   }
 
-  const closed = await advanceOrderProstheticsProgressPair(
+  const prisma = await getOrdersPrisma();
+  const advanced = await advanceOrderProstheticsProgressPair(
     prisma,
     orderId,
     requestId,
-    "arrived",
+    step,
     session.sub,
   );
-  if (!closed.ok) {
-    return NextResponse.json({ error: closed.error }, { status: closed.status });
+  if (!advanced.ok) {
+    return NextResponse.json(
+      { error: advanced.error },
+      { status: advanced.status },
+    );
+  }
+
+  if (step !== "arrived") {
+    return NextResponse.json({ ok: true, step });
   }
 
   const order = await prisma.order.findFirst({
@@ -88,6 +93,7 @@ export async function POST(
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
   }
 
+  /* Приход = протетика уже заказана/получена — отмечаем галочку на наряде. */
   if (!order.prostheticsOrdered) {
     await prisma.order.update({
       where: { id: order.id },
@@ -136,5 +142,5 @@ export async function POST(
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, step });
 }

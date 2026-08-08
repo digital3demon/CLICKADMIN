@@ -390,9 +390,14 @@ function KanbanCardView({
                 <span className="text-[var(--kanban-text)]">{foreignBoardLabel}</span>
               </div>
             ) : null}
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-1.5 px-2 pb-0.5 pt-1.5">
+            <div className="min-h-0 min-w-0 flex-1 px-2 pb-0.5 pt-1.5">
               <KanbanCardTitleFit title={card.title} />
-              <div className="flex max-w-[5.25rem] shrink-0 flex-row flex-wrap items-start justify-end gap-x-0.5 gap-y-0.5 self-start">
+            </div>
+            <div className="relative z-[1] mt-auto flex shrink-0 items-end gap-1.5 bg-[var(--kanban-card-bg)] px-2 pb-2 pt-0.5">
+              <span className={duePillClass} title={stageDue ? "Срок этапа" : "Срок не задан"}>
+                {stageDue ? formatDate(stageDue) : "дд.мм.гггг"}
+              </span>
+              <div className="ml-auto flex min-w-0 flex-row flex-wrap items-end justify-end gap-x-0.5 gap-y-0.5">
                 {primaryMemberId ? (
                   <KanbanPersonAvatar
                     userId={primaryMemberId}
@@ -421,21 +426,16 @@ function KanbanCardView({
                       />
                     ))}
                     {stackOverflow > 0 ? (
-                      <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-black/40 text-[0.45rem] font-bold text-white">
+                      <span className="mb-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-black/40 text-[0.45rem] font-bold text-white">
                         +{stackOverflow}
                       </span>
                     ) : null}
                   </>
                 ) : null}
               </div>
-            </div>
-            <div className="mt-auto flex shrink-0 items-center gap-1 px-2 pb-2 pt-0.5">
-              <span className={duePillClass} title={stageDue ? "Срок этапа" : "Срок не задан"}>
-                {stageDue ? formatDate(stageDue) : "дд.мм.гггг"}
-              </span>
               <KanbanTimerIcon
                 card={card}
-                className="ml-auto shrink-0"
+                className="mb-0.5 shrink-0"
                 sizeClassName="h-[1.125rem] w-[1.125rem]"
               />
             </div>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readOrderAttachmentBytes } from "@/lib/order-attachment-storage";
 import {
   isPublicStickerHubImageMime,
-  isPublicStickerHubAttachmentScope,
+  isPublicStickerHubScannerScope,
 } from "@/lib/sticker-public-attachment-path";
 import { resolveStickerOrderBySlugAndToken } from "@/lib/sticker-public-order-resolve";
 
@@ -15,8 +15,8 @@ type Ctx = {
 };
 
 /**
- * Фото для публичной витрины QR-этикетки (SCANNER + GENERAL image/*).
- * Auth = slug + stickerPublicToken.
+ * Фото книжного сканера для публичной витрины QR-этикетки.
+ * Auth = slug + stickerPublicToken; только SCANNER + image/*.
  */
 export async function GET(_req: Request, ctx: Ctx) {
   try {
@@ -35,7 +35,7 @@ export async function GET(_req: Request, ctx: Ctx) {
       where: {
         id,
         orderId: resolved.orderId,
-        scope: { in: ["SCANNER", "GENERAL"] },
+        scope: "SCANNER",
       },
       select: {
         fileName: true,
@@ -47,7 +47,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     });
     if (
       !row ||
-      !isPublicStickerHubAttachmentScope(row.scope) ||
+      !isPublicStickerHubScannerScope(row.scope) ||
       !isPublicStickerHubImageMime(row.mimeType)
     ) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });

@@ -3,12 +3,14 @@
 import { useLayoutEffect, useRef } from "react";
 
 const FONT_MAX_PX = 12.8; // ~0.8rem
-const FONT_MIN_PX = 8; // ~0.5rem
+const FONT_MIN_PX = 6.5;
 const STEP_PX = 0.5;
 
 /**
- * Заголовок карточки канбана: базовый размер, при нехватке места — только здесь
- * уменьшает шрифт, пока текст влезает (или до минимума).
+ * Заголовок карточки канбана: занимает всю выделенную высоту ячейки
+ * и уменьшает шрифт, пока текст влезает (или до минимума).
+ * Важно: обёртка должна иметь реальную высоту (h-full + stretch родителя),
+ * иначе clientHeight = scrollHeight и подгон никогда не срабатывает.
  */
 export function KanbanCardTitleFit({ title }: { title: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -20,13 +22,15 @@ export function KanbanCardTitleFit({ title }: { title: string }) {
     if (!wrap || !text) return;
 
     const fit = () => {
-      if (wrap.clientHeight < 4 || wrap.clientWidth < 4) return;
+      const boxH = wrap.clientHeight;
+      const boxW = wrap.clientWidth;
+      if (boxH < 4 || boxW < 4) return;
+
       let size = FONT_MAX_PX;
       text.style.fontSize = `${size}px`;
-      // Сначала полный размер; если не влез по высоте — шагаем вниз.
       while (
         size > FONT_MIN_PX &&
-        text.scrollHeight > wrap.clientHeight + 1
+        (text.scrollHeight > boxH + 1 || text.scrollWidth > boxW + 1)
       ) {
         size -= STEP_PX;
         text.style.fontSize = `${size}px`;
@@ -35,7 +39,6 @@ export function KanbanCardTitleFit({ title }: { title: string }) {
 
     fit();
     const ro = new ResizeObserver(() => {
-      // rAF — после layout колонки/аватаров
       requestAnimationFrame(fit);
     });
     ro.observe(wrap);
@@ -45,12 +48,12 @@ export function KanbanCardTitleFit({ title }: { title: string }) {
   return (
     <div
       ref={wrapRef}
-      className="min-h-0 min-w-0 overflow-hidden font-semibold leading-snug text-[var(--kanban-text)]"
+      className="h-full min-h-0 min-w-0 overflow-hidden font-semibold leading-snug text-[var(--kanban-text)]"
       title={title}
     >
       <span
         ref={textRef}
-        className="break-words [overflow-wrap:anywhere] [word-break:normal]"
+        className="block break-words [overflow-wrap:anywhere] [word-break:break-word]"
         style={{ fontSize: FONT_MAX_PX }}
       >
         {title}

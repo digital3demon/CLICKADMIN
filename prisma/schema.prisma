@@ -788,6 +788,8 @@ model User {
   orderProstheticsRequestsResolved OrderProstheticsRequest[]  @relation("OrderProstheticsRequestResolvedBy")
   orderProstheticsRequestsRejected OrderProstheticsRequest[]  @relation("OrderProstheticsRequestRejectedBy")
   orderProstheticsRequestsArrived  OrderProstheticsRequest[]  @relation("OrderProstheticsRequestArrivedBy")
+  orderProstheticsRequestsChecked  OrderProstheticsRequest[]  @relation("OrderProstheticsRequestCheckedBy")
+  orderProstheticsRequestsCompleted OrderProstheticsRequest[] @relation("OrderProstheticsRequestCompletedBy")
   labTasksCreated                  LabTask[]                  @relation("LabTaskAuthor")
   labTasksResolved                 LabTask[]                  @relation("LabTaskResolvedBy")
   orderListAdminMemoEvents         OrderListAdminMemoEvent[]
@@ -1593,11 +1595,20 @@ model OrderProstheticsRequest {
   arrivedAt        DateTime?
   arrivedByUserId  String?
   arrivedBy        User?                     @relation("OrderProstheticsRequestArrivedBy", fields: [arrivedByUserId], references: [id], onDelete: SetNull)
+  /// Проверена после прихода
+  checkedAt        DateTime?
+  checkedByUserId  String?
+  checkedBy        User?                     @relation("OrderProstheticsRequestCheckedBy", fields: [checkedByUserId], references: [id], onDelete: SetNull)
+  /// Закрыта («Готово») — уходит из списка «в пути»
+  completedAt      DateTime?
+  completedByUserId String?
+  completedBy      User?                     @relation("OrderProstheticsRequestCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([orderId, kaitenCommentId])
   @@index([orderId, resolvedAt])
   @@index([orderId, rejectedAt])
   @@index([arrivedAt])
+  @@index([completedAt])
 }
 
 /// Общая задача / «Забрать из» лаборатории (список заказов).
@@ -1663,6 +1674,12 @@ model OrderChatInboxItem {
   /// Для PROSTHETICS: физически пришла (после accept / «в пути»)
   arrivedAt        DateTime?
   arrivedByUserId  String?
+  /// Для PROSTHETICS: проверена после прихода
+  checkedAt        DateTime?
+  checkedByUserId  String?
+  /// Для PROSTHETICS: закрыта («Готово»)
+  completedAt      DateTime?
+  completedByUserId String?
   /// Для USER_MENTION — кому адресовано упоминание
   targetUserId     String?
 
@@ -1672,6 +1689,7 @@ model OrderChatInboxItem {
   @@index([tenantId, type, resolvedAt, rejectedAt])
   @@index([orderId, type, resolvedAt, rejectedAt])
   @@index([orderId, syncState, createdAt])
+  @@index([completedAt])
 }
 
 /// Свободный тег наряда (фильтр «как у этого тега» в списке заказов)

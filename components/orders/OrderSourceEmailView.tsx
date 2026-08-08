@@ -127,12 +127,19 @@ export function OrderSourceEmailView({
                 </a>
               );
             }
-            if (attachment.id.startsWith("yandex-disk:")) {
+            if (
+              attachment.id.startsWith("yandex-disk:") ||
+              attachment.id.startsWith("public-no-download:")
+            ) {
               return (
                 <div
                   key={attachment.id}
                   className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-2 text-xs text-[var(--text-body)]"
-                  title="Файл на Яндекс.Диске: в теле письма нет URL, откройте письмо во внешней почте"
+                  title={
+                    attachment.id.startsWith("yandex-disk:")
+                      ? "Файл на Яндекс.Диске: в теле письма нет URL, откройте письмо во внешней почте"
+                      : "Скачивание вложения доступно после входа в CRM"
+                  }
                 >
                   <span className="min-w-0 truncate font-medium">{attachment.fileName}</span>
                   <span className="shrink-0 text-[var(--text-muted)]">{meta}</span>

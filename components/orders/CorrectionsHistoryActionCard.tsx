@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
   correctionHistoryRowFromJson,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/corrections-history";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
+import { CorrectionOrderCompositionPanel } from "@/components/orders/CorrectionOrderCompositionPanel";
 
 function correctionStatusClass(
   status: "pending" | "accepted" | "rejected" | "arrived",
@@ -40,18 +42,25 @@ export function CorrectionsHistoryActionCard({
   className = "",
   initialPendingCount = 0,
   dense = false,
+  canAcceptCorrections = false,
 }: {
   className?: string;
   initialPendingCount?: number;
   /** Компактная высота для шапки ФинОтдела. */
   dense?: boolean;
+  /** Принять / отклонить корректировки (та же permission, что у панели в наряде). */
+  canAcceptCorrections?: boolean;
 }) {
   const isHarmony = useUiDesign() === "harmony";
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<CorrectionHistoryJsonRow[]>([]);
   const [pendingCount, setPendingCount] = useState(initialPendingCount);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const saveCompositionRef = useRef<(() => Promise<boolean>) | null>(null);
 
   useEffect(() => {
     setPendingCount(initialPendingCount);
@@ -94,9 +103,86 @@ export function CorrectionsHistoryActionCard({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setExpandedId(null);
+      saveCompositionRef.current = null;
+      return;
+    }
     void loadHistory();
   }, [open, loadHistory]);
+
+  const removeRow = useCallback(
+    (id: string) => {
+      setItems((prev) => prev.filter((x) => x.id !== id));
+      setPendingCount((n) => Math.max(0, n - 1));
+      setExpandedId((cur) => (cur === id ? null : cur));
+      saveCompositionRef.current = null;
+      router.refresh();
+    },
+    [router],
+  );
+
+  const accept = useCallback(
+    async (row: CorrectionHistoryJsonRow) => {
+      if (!canAcceptCorrections || busyId) return;
+      setBusyId(row.id);
+      setErr(null);
+      try {
+        if (expandedId === row.id && saveCompositionRef.current) {
+          const saved = await saveCompositionRef.current();
+          if (!saved) return;
+        }
+        const res = await fetch(
+          `/api/orders/${row.orderId}/chat-corrections/${row.id}/accept`,
+          { method: "POST", credentials: "include" },
+        );
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setErr(j.error ?? "Не удалось принять");
+          return;
+        }
+        removeRow(row.id);
+      } catch {
+        setErr("Сеть недоступна");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [busyId, canAcceptCorrections, expandedId, removeRow],
+  );
+
+  const reject = useCallback(
+    async (row: CorrectionHistoryJsonRow) => {
+      if (!canAcceptCorrections || busyId) return;
+      setBusyId(row.id);
+      setErr(null);
+      try {
+        const res = await fetch(
+          `/api/orders/${row.orderId}/chat-corrections/${row.id}/reject`,
+          { method: "POST", credentials: "include" },
+        );
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setErr(j.error ?? "Не удалось отклонить");
+          return;
+        }
+        removeRow(row.id);
+      } catch {
+        setErr("Сеть недоступна");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [busyId, canAcceptCorrections, removeRow],
+  );
+
+  const onPanelError = useCallback((message: string) => {
+    setErr(message.trim() ? message : null);
+  }, []);
+
+  const registerSave = useCallback((fn: (() => Promise<boolean>) | null) => {
+    saveCompositionRef.current = fn;
+  }, []);
 
   return (
     <>
@@ -142,7 +228,7 @@ export function CorrectionsHistoryActionCard({
           onClick={() => setOpen(false)}
         >
           <div
-            className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl"
+            className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
@@ -167,33 +253,56 @@ export function CorrectionsHistoryActionCard({
                 <p className="text-sm text-[var(--text-muted)]">Загрузка…</p>
               ) : items.length === 0 ? (
                 <p className="text-sm text-[var(--text-secondary)]">
-                  Журнал корректировок пуст.
+                  Нет корректировок со статусом «Ожидает».
                 </p>
               ) : (
                 <ul className="space-y-2">
                   {items.map((row) => {
                     const historyRow = correctionHistoryRowFromJson(row);
                     const decision = formatCorrectionHistoryDecision(historyRow);
-                    const authorDetail = formatCorrectionHistoryAuthorDetail(historyRow);
+                    const authorDetail =
+                      formatCorrectionHistoryAuthorDetail(historyRow);
                     const doctorName = row.doctorName
                       ? personNameSurnameInitials(row.doctorName)
                       : null;
                     const patientName = row.patientName
                       ? personNameSurnameInitials(row.patientName)
                       : null;
+                    const expanded = expandedId === row.id;
 
                     return (
                       <li
                         key={row.id}
                         className="min-w-0 overflow-hidden rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]/50 px-3 py-2"
                       >
-                        <div className="flex items-start justify-between gap-3">
+                        <div
+                          className="flex cursor-pointer items-start justify-between gap-3"
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={expanded}
+                          onClick={() =>
+                            setExpandedId((cur) =>
+                              cur === row.id ? null : row.id,
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setExpandedId((cur) =>
+                                cur === row.id ? null : row.id,
+                              );
+                            }
+                          }}
+                        >
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
                               <Link
                                 href={orderPathById(row.orderId)}
                                 className="font-mono text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
-                                onClick={() => setOpen(false)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpen(false);
+                                }}
                               >
                                 {row.orderNumber}
                               </Link>
@@ -203,7 +312,9 @@ export function CorrectionsHistoryActionCard({
                                 </span>
                               ) : null}
                               {doctorName && patientName ? (
-                                <span className="text-[var(--text-muted)]">·</span>
+                                <span className="text-[var(--text-muted)]">
+                                  ·
+                                </span>
                               ) : null}
                               {patientName ? (
                                 <span className="text-sm font-semibold text-[var(--app-text)]">
@@ -229,12 +340,52 @@ export function CorrectionsHistoryActionCard({
                               {row.text}
                             </p>
                           </div>
-                          <span
-                            className={`shrink-0 text-xs font-semibold uppercase tracking-wide ${correctionStatusClass(decision.status)}`}
-                          >
-                            {decision.label}
-                          </span>
+                          <div className="flex shrink-0 flex-col items-end gap-1.5">
+                            <span
+                              className={`text-xs font-semibold uppercase tracking-wide ${correctionStatusClass(decision.status)}`}
+                            >
+                              {decision.label}
+                            </span>
+                            {canAcceptCorrections ? (
+                              <div className="flex flex-wrap justify-end gap-1">
+                                <button
+                                  type="button"
+                                  className="rounded-md border border-emerald-400/90 bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-950 hover:bg-emerald-200 disabled:opacity-50 dark:border-emerald-700/80 dark:bg-emerald-950/50 dark:text-emerald-100"
+                                  disabled={busyId === row.id}
+                                  title="Принять корректировку"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void accept(row);
+                                  }}
+                                >
+                                  {busyId === row.id ? "…" : "Принять"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-md border border-rose-300/80 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-800 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-200"
+                                  disabled={busyId === row.id}
+                                  title="Отклонить корректировку"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void reject(row);
+                                  }}
+                                >
+                                  {busyId === row.id ? "…" : "Отклонить"}
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
+
+                        {expanded ? (
+                          <CorrectionOrderCompositionPanel
+                            orderId={row.orderId}
+                            canEdit={canAcceptCorrections}
+                            busy={busyId === row.id}
+                            onError={onPanelError}
+                            registerSave={registerSave}
+                          />
+                        ) : null}
                       </li>
                     );
                   })}

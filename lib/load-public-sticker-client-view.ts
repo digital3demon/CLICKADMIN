@@ -23,7 +23,7 @@ import {
 } from "@/lib/sticker-template";
 import {
   isPublicStickerHubImageMime,
-  isPublicStickerHubAttachmentScope,
+  isPublicStickerHubScannerScope,
   stickerPublicAttachmentPath,
 } from "@/lib/sticker-public-attachment-path";
 
@@ -41,8 +41,10 @@ export type PublicStickerClientView = {
   patientShort: string | null;
   timelineRows: ResolvedTimelineRow[];
   orderStatus: PublicStickerOrderStatusPills;
-  /** Фото приёма/отправки: SCANNER + GENERAL image/* (не платёжки). */
+  /** Сканы книжного сканера (scope SCANNER) для блока «Приняли и Отправили». */
   hubPhotos: PublicStickerHubPhoto[];
+  /** Число писем, из которых занесён наряд (EmailSourceOrder). */
+  sourceEmailCount: number;
 };
 
 const HUB_PHOTOS_MAX = 36;
@@ -66,6 +68,7 @@ export async function loadPublicStickerClientView(
       adminShippedOtpr: true,
       clinic: { select: { name: true } },
       doctor: { select: { fullName: true } },
+      _count: { select: { sourceEmailLinks: true } },
     },
   });
   if (!order) return null;
@@ -145,10 +148,7 @@ export async function loadPublicStickerClientView(
   let hubPhotos: PublicStickerHubPhoto[] = [];
   if (slug && tok) {
     const rows = await ordersDb.orderAttachment.findMany({
-      where: {
-        orderId,
-        scope: { in: ["SCANNER", "GENERAL"] },
-      },
+      where: { orderId, scope: "SCANNER" },
       orderBy: { createdAt: "desc" },
       take: HUB_PHOTOS_MAX * 2,
       select: {
@@ -159,24 +159,19 @@ export async function loadPublicStickerClientView(
         createdAt: true,
       },
     });
-    /* Сначала сканы книжного сканера, затем обычные фото наряда. */
-    const eligible = rows.filter(
-      (r) =>
-        isPublicStickerHubAttachmentScope(r.scope) &&
-        isPublicStickerHubImageMime(r.mimeType),
-    );
-    const scanner = eligible.filter(
-      (r) => String(r.scope).toUpperCase() === "SCANNER",
-    );
-    const general = eligible.filter(
-      (r) => String(r.scope).toUpperCase() === "GENERAL",
-    );
-    hubPhotos = [...scanner, ...general].slice(0, HUB_PHOTOS_MAX).map((r) => ({
-      id: r.id,
-      fileName: r.fileName,
-      url: stickerPublicAttachmentPath(slug, tok, r.id),
-      createdAt: r.createdAt.toISOString(),
-    }));
+    hubPhotos = rows
+      .filter(
+        (r) =>
+          isPublicStickerHubScannerScope(r.scope) &&
+          isPublicStickerHubImageMime(r.mimeType),
+      )
+      .slice(0, HUB_PHOTOS_MAX)
+      .map((r) => ({
+        id: r.id,
+        fileName: r.fileName,
+        url: stickerPublicAttachmentPath(slug, tok, r.id),
+        createdAt: r.createdAt.toISOString(),
+      }));
   }
 
   return {
@@ -187,5 +182,6 @@ export async function loadPublicStickerClientView(
     timelineRows,
     orderStatus,
     hubPhotos,
+    sourceEmailCount: order._count?.sourceEmailLinks ?? 0,
   };
 }
