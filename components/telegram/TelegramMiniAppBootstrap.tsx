@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { orderPathById } from "@/lib/order-public-ref";
 import { parseTelegramMiniAppStartParam } from "@/lib/telegram-mini-app-start-param";
 import {
@@ -17,45 +18,34 @@ type AuthOk = {
   startParam: string | null;
 };
 
-type LiteOrder = {
-  kind: "order";
-  orderNumber: string;
-  patientName: string | null;
-  doctorName: string;
-  workLabel: string | null;
-  statusLabel: string;
-  dueLabel: string | null;
-  kanbanRelPath: string;
-  orderPath: string;
-};
-
-type LiteCard = {
-  kind: "card";
-  title: string;
-  statusLabel: string;
-  kanbanRelPath: string;
-};
-
-type Lite = LiteOrder | LiteCard;
-
 const BOOT_TIMEOUT_MS = 15_000;
+
+function kanbanHrefForTarget(
+  target: ReturnType<typeof parseTelegramMiniAppStartParam>,
+): string {
+  if (!target) return "/kanban";
+  if (target.kind === "order") return kanbanOrderDeepLinkPath(target.orderId);
+  return `/kanban?${new URLSearchParams({ card: target.cardId }).toString()}`;
+}
 
 function browserFallbackHref(
   target: ReturnType<typeof parseTelegramMiniAppStartParam>,
+  linksToOrderPage: boolean,
 ): string {
   if (!target) return "/";
-  if (target.kind === "order") return orderPathById(target.orderId);
-  return `/kanban?${new URLSearchParams({ card: target.cardId }).toString()}`;
+  if (target.kind === "order" && linksToOrderPage) {
+    return orderPathById(target.orderId);
+  }
+  return kanbanHrefForTarget(target);
 }
 
 export function TelegramMiniAppBootstrap() {
   const started = useRef(false);
   const settled = useRef(false);
   const fallbackRef = useRef<string | null>(null);
-  const [phase, setPhase] = useState<"boot" | "error" | "lite">("boot");
+  const [phase, setPhase] = useState<"boot" | "error">("boot");
   const [message, setMessage] = useState("Открываем…");
   const [fallbackHref, setFallbackHref] = useState<string | null>(null);
-  const [lite, setLite] = useState<Lite | null>(null);
 
   const setFallback = useCallback((href: string | null) => {
     fallbackRef.current = href;
@@ -80,14 +70,13 @@ export function TelegramMiniAppBootstrap() {
 
     const startParam = readTelegramWebAppStartParam();
     const target = parseTelegramMiniAppStartParam(startParam);
-    const fallback = browserFallbackHref(target);
-    setFallback(fallback);
+    setFallback(browserFallbackHref(target, false));
 
     const initData = readTelegramWebAppInitData();
     if (!initData) {
       fail(
         "Нет данных Telegram (initData). Откройте Mini App из чата с ботом, не из обычного браузера.",
-        fallback,
+        browserFallbackHref(target, false),
       );
       return;
     }
@@ -102,7 +91,7 @@ export function TelegramMiniAppBootstrap() {
         body: JSON.stringify({ initData }),
       });
     } catch {
-      fail("Сеть: не удалось связаться с CRM.", fallback);
+      fail("Сеть: не удалось связаться с CRM.", browserFallbackHref(target, false));
       return;
     }
 
@@ -115,48 +104,28 @@ export function TelegramMiniAppBootstrap() {
       fail(
         authJson.error ||
           "Не удалось войти. Привяжите Telegram в профиле CRM.",
-        fallback,
+        browserFallbackHref(target, false),
       );
       return;
     }
 
-    if (authJson.linksToOrderPage && target?.kind === "order") {
+    if (!target) {
+      fail("В ссылке нет наряда или карточки.", "/kanban");
+      return;
+    }
+
+    setFallback(browserFallbackHref(target, authJson.linksToOrderPage));
+
+    if (authJson.linksToOrderPage && target.kind === "order") {
       setMessage("Открываем наряд…");
       settled.current = true;
       window.location.replace(orderPathById(target.orderId));
       return;
     }
 
-    const qs = new URLSearchParams();
-    if (target?.kind === "order") qs.set("orderId", target.orderId);
-    else if (target?.kind === "card") qs.set("cardId", target.cardId);
-    else {
-      fail("В ссылке нет наряда или карточки.", fallback);
-      return;
-    }
-
-    setMessage("Загрузка карточки…");
-    let cardRes: Response;
-    try {
-      cardRes = await fetch(`/api/tg-app/card?${qs.toString()}`, {
-        credentials: "same-origin",
-      });
-    } catch {
-      fail("Сеть: не удалось загрузить карточку.", fallback);
-      return;
-    }
-
-    const cardJson = (await cardRes.json().catch(() => ({}))) as Lite & {
-      error?: string;
-    };
-    if (!cardRes.ok) {
-      fail(cardJson.error || "Карточка не найдена", fallback);
-      return;
-    }
-
+    setMessage("Открываем канбан…");
     settled.current = true;
-    setLite(cardJson as Lite);
-    setPhase("lite");
+    window.location.replace(kanbanHrefForTarget(target));
   }, [fail, setFallback]);
 
   useEffect(() => {
@@ -193,49 +162,6 @@ export function TelegramMiniAppBootstrap() {
             </a>
           ) : null}
         </div>
-      ) : null}
-
-      {phase === "lite" && lite ? (
-        <article className="space-y-3 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm">
-          {lite.kind === "order" ? (
-            <>
-              <h1 className="text-lg font-semibold leading-snug">
-                {lite.orderNumber}
-              </h1>
-              <p className="text-sm">
-                {lite.doctorName}
-                {lite.patientName ? ` · ${lite.patientName}` : ""}
-              </p>
-              {lite.workLabel ? (
-                <p className="text-sm opacity-90">{lite.workLabel}</p>
-              ) : null}
-              <p className="text-sm">
-                <span className="opacity-60">Статус: </span>
-                {lite.statusLabel}
-              </p>
-              {lite.dueLabel ? (
-                <p className="text-sm">
-                  <span className="opacity-60">Срок: </span>
-                  {lite.dueLabel}
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <h1 className="text-lg font-semibold leading-snug">{lite.title}</h1>
-              <p className="text-sm">
-                <span className="opacity-60">Статус: </span>
-                {lite.statusLabel}
-              </p>
-            </>
-          )}
-          <a
-            className="mt-2 inline-flex w-full items-center justify-center rounded-md bg-sky-600 px-3 py-2.5 text-sm font-medium text-white"
-            href={lite.kanbanRelPath}
-          >
-            Открыть канбан
-          </a>
-        </article>
       ) : null}
     </div>
   );

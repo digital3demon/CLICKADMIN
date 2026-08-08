@@ -1,7 +1,7 @@
 /** Лимит Telegram Bot API на длину text. */
 export const TELEGRAM_MESSAGE_MAX_LEN = 4096;
 
-/** Разделитель между записями в списках бота. */
+/** Разделитель между записями (legacy / тесты совместимости). */
 export const TELEGRAM_LIST_ITEM_SEPARATOR = "____________________________";
 
 /** Лимит текста кнопки inline keyboard. */
@@ -14,7 +14,7 @@ export type TelegramHtmlListItem = {
   /** Fallback URL (браузер), если нет web_app. */
   url: string;
   label: string;
-  /** Строка под заголовком (например актуальный статус / колонка). */
+  /** Строка статуса (например «Статус: Производство»). */
   detail?: string | null;
   /** HTTPS URL для InlineKeyboardButton.web_app (`/tg-app?startapp=…`). */
   webAppUrl?: string | null;
@@ -72,26 +72,50 @@ export function truncateTelegramButtonText(
   return `${t.slice(0, Math.max(1, maxLen - 1))}…`;
 }
 
-function formatTelegramListItemTextBlock(
-  item: TelegramHtmlListItem,
-  index: number,
-): string {
-  const label = telegramEscapeHtmlText(item.label);
-  const detail = String(item.detail ?? "").trim();
-  const head = `${index}. ${label}`;
-  if (!detail) return head;
-  return `${head}\n${telegramEscapeHtmlText(detail)}`;
+/** Статус для второй строки кнопки (без префикса «Статус:»). */
+export function telegramListStatusForButton(detail: string | null | undefined): string {
+  const raw = String(detail ?? "").trim();
+  if (!raw) return "";
+  // Явный префикс «Статус:» (после цифр/кириллицы \b ненадёжен).
+  const m = raw.match(/^Статус:\s*(.+)$/u);
+  return (m?.[1] ?? raw).trim();
 }
 
 /**
- * Заголовок + нумерованный список (без синих ссылок) + inline web_app-кнопки.
- * Кнопки не требуют подтверждения Launch на каждый клик (в отличие от t.me deep link).
+ * Текст кнопки: название на первой строке, статус на второй (лимит 64 символа Telegram).
+ */
+export function formatTelegramListButtonText(
+  label: string,
+  detail?: string | null,
+  maxLen = TELEGRAM_INLINE_BUTTON_TEXT_MAX,
+): string {
+  const title = String(label || "")
+    .replace(/\s+/g, " ")
+    .trim() || "Открыть";
+  const status = telegramListStatusForButton(detail);
+  if (!status) return truncateTelegramButtonText(title, maxLen);
+
+  // «title\nstatus» — перевод строки тоже входит в лимит 64.
+  const sep = "\n";
+  const statusBudget = Math.min(status.length, Math.max(8, Math.floor(maxLen / 3)));
+  let statusLine = status.length <= statusBudget ? status : `${status.slice(0, statusBudget - 1)}…`;
+  const titleMax = maxLen - sep.length - statusLine.length;
+  if (titleMax < 8) {
+    statusLine = truncateTelegramButtonText(status, Math.max(4, maxLen - 9));
+    const tMax = maxLen - sep.length - statusLine.length;
+    return `${truncateTelegramButtonText(title, Math.max(1, tMax))}${sep}${statusLine}`;
+  }
+  return `${truncateTelegramButtonText(title, titleMax)}${sep}${statusLine}`;
+}
+
+/**
+ * Только заголовок в тексте + inline web_app-кнопки (название + статус).
+ * Текстовый список записей не выводим — всё в кнопках.
  */
 export function formatTelegramBotWebAppList(
   items: TelegramHtmlListItem[],
   emptyRu: string,
   header: string,
-  maxLen = TELEGRAM_MESSAGE_MAX_LEN,
 ): TelegramBotListReply {
   const headerBlock = `<b>${telegramEscapeHtmlText(header)}</b>`;
   if (items.length === 0) {
@@ -101,8 +125,6 @@ export function formatTelegramBotWebAppList(
     };
   }
 
-  const lines: string[] = [headerBlock];
-  let included = 0;
   const buttonRows: Array<
     Array<
       | { text: string; web_app: { url: string } }
@@ -111,22 +133,11 @@ export function formatTelegramBotWebAppList(
   > = [];
 
   for (let i = 0; i < items.length; i += 1) {
+    if (buttonRows.length >= TELEGRAM_LIST_WEBAPP_BUTTONS_MAX) break;
     const item = items[i]!;
-    const block = formatTelegramListItemTextBlock(item, included + 1);
-    const chunk =
-      included === 0
-        ? `\n${block}`
-        : `\n${TELEGRAM_LIST_ITEM_SEPARATOR}\n${block}`;
-    const remainingAfter = items.length - included - 1;
-    const footer = remainingAfter > 0 ? `\n… ещё ${remainingAfter}` : "";
-    const candidate = lines.join("") + chunk + footer;
-    if (candidate.length > maxLen - 8) break;
-
     const webApp = String(item.webAppUrl ?? "").trim();
     const fallbackUrl = String(item.url ?? "").trim();
-    const btnText = truncateTelegramButtonText(
-      `${included + 1}. ${item.label}`,
-    );
+    const btnText = formatTelegramListButtonText(item.label, item.detail);
     let button:
       | { text: string; web_app: { url: string } }
       | { text: string; url: string }
@@ -137,38 +148,34 @@ export function formatTelegramBotWebAppList(
       button = { text: btnText, url: fallbackUrl };
     }
     if (!button) continue;
-    if (buttonRows.length >= TELEGRAM_LIST_WEBAPP_BUTTONS_MAX) break;
-
-    lines.push(chunk);
     buttonRows.push([button]);
-    included += 1;
   }
 
-  const skipped = items.length - included;
-  if (included === 0) {
+  if (buttonRows.length === 0) {
     return {
       parseMode: "HTML",
       text: `${headerBlock}\n${telegramEscapeHtmlText(emptyRu)}`,
     };
   }
-  const extra = skipped > 0 ? `\n… ещё ${skipped}` : "";
-  const text = truncateTelegramHtmlMessage(lines.join("") + extra, maxLen);
+
+  const skipped = items.length - buttonRows.length;
+  const extra =
+    skipped > 0 ? `\n${telegramEscapeHtmlText(`… ещё ${skipped}`)}` : "";
+
   return {
     parseMode: "HTML",
-    text,
+    text: `${headerBlock}${extra}`,
     replyMarkup: { inline_keyboard: buttonRows },
   };
 }
 
 /**
  * @deprecated Для списков бота используйте formatTelegramBotWebAppList.
- * Заголовок + список HTML-ссылок с учётом лимита Telegram.
  */
 export function formatTelegramHtmlLinkList(
   items: TelegramHtmlListItem[],
   emptyRu: string,
   header: string,
-  maxLen = TELEGRAM_MESSAGE_MAX_LEN,
 ): string {
-  return formatTelegramBotWebAppList(items, emptyRu, header, maxLen).text;
+  return formatTelegramBotWebAppList(items, emptyRu, header).text;
 }
