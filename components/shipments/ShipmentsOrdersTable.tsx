@@ -20,6 +20,11 @@ import { orderPathById } from "@/lib/order-public-ref";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { listTagKaitenColumnTitle, LIST_TAG_KAITEN_BLOCKED } from "@/lib/order-list-tag-filter";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
+import {
+  mergeOrderListRowClass,
+  orderListMobileCardAccentClass,
+  resolveOrderListRowAccentKind,
+} from "@/lib/order-list-row-accent";
 import { shipmentsListHref } from "@/lib/shipments-list-query";
 
 const TAGS_PAGE_SIZE = clampOrdersPageSize(null);
@@ -312,9 +317,19 @@ export function ShipmentsOrdersTable({
               const appointmentDate = formatShipmentCardDate(
                 o.appointmentDate ?? o.dueToAdminsAt,
               );
-              const rowClass = workSent
-                ? `${ORDER_SHIPPED_ROW_CLASS} print:border-zinc-400 print:bg-transparent`
-                : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
+              const rowAccent = resolveOrderListRowAccentKind({
+                listPendingChatCorrections: o.listPendingChatCorrections,
+                listCompositionMismatch: o.listCompositionMismatch,
+                listPendingProstheticsRequests:
+                  o.listPendingProstheticsRequests,
+                prostheticsOrdered: o.prostheticsOrdered,
+              });
+              const rowClass = mergeOrderListRowClass({
+                shipped: workSent,
+                accent: rowAccent,
+                shippedClass: `${ORDER_SHIPPED_ROW_CLASS} print:border-zinc-400 print:bg-transparent`,
+              });
+              const mobileCardAccent = orderListMobileCardAccentClass(rowAccent);
               const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
               const blocked = o.kaitenBlocked === true;
               const kaitenStatusFilterHref = blocked
@@ -544,7 +559,7 @@ export function ShipmentsOrdersTable({
                   className="border-b border-[var(--card-border)] shell-desktop:hidden print:hidden"
                 >
                   <td colSpan={99} className="p-0">
-                    <div className="p-3">
+                    <div className={["p-3", mobileCardAccent].filter(Boolean).join(" ")}>
                       <div className="mb-1.5 flex items-start justify-between gap-2">
                         <div className="flex min-w-0 flex-col items-start gap-1">
                           <Link

@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
+import {
+  orderListMobileCardAccentClass,
+  type OrderListHarmonyRowState,
+  type OrderListRowAccentKind,
+} from "@/lib/order-list-row-accent";
 import { orderPathById } from "@/lib/order-public-ref";
 
 function targetInsideInteractive(target: EventTarget | null) {
@@ -43,6 +48,7 @@ export function OrdersListTableRow({
   kaitenBlockReason = null,
   kaitenFilterHref = null,
   harmonyRowState = "default",
+  rowAccent = null,
   isLabOverdue = false,
   mobileActionsNode,
   mobileShippedNode,
@@ -66,7 +72,9 @@ export function OrdersListTableRow({
   kaitenBlocked?: boolean;
   kaitenBlockReason?: string | null;
   kaitenFilterHref?: string | null;
-  harmonyRowState?: "blocked" | "shipped" | "default";
+  harmonyRowState?: OrderListHarmonyRowState;
+  /** Цветная рамка вместо пилюль корректировок / протетики. */
+  rowAccent?: OrderListRowAccentKind | null;
   isLabOverdue?: boolean;
   mobileActionsNode?: ReactNode;
   /** Галочка отгрузки — в шапке рядом с № / статусом. */
@@ -103,6 +111,13 @@ export function OrdersListTableRow({
     : className
       ? `hidden md:table-row print:table-row ${className} cursor-pointer`
       : "hidden cursor-pointer md:table-row print:table-row";
+  const mobileCardAccent = orderListMobileCardAccentClass(rowAccent);
+  const mobileCardClass = [
+    "cursor-pointer p-3",
+    mobileCardAccent || (kaitenBlocked ? "rounded-lg border-2 border-red-500/55 bg-red-50/35 dark:border-red-700/55 dark:bg-red-950/25" : ""),
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <>
@@ -124,7 +139,7 @@ export function OrdersListTableRow({
       <tr className="border-b border-[var(--card-border)] md:hidden print:hidden">
         <td colSpan={99} className="p-0">
           <div
-            className="cursor-pointer p-3"
+            className={mobileCardClass}
             role="link"
             tabIndex={0}
             aria-label={`Открыть наряд ${orderNumber}`}

@@ -67,6 +67,11 @@ import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { orderPathById } from "@/lib/order-public-ref";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
+import {
+  mergeOrderListRowClass,
+  resolveOrderListHarmonyRowState,
+  resolveOrderListRowAccentKind,
+} from "@/lib/order-list-row-accent";
 export const dynamic = "force-dynamic";
 
 /** Контент списка на всю ширину рабочей области (таблица сама делит колонки). */
@@ -1006,16 +1011,25 @@ export default async function OrdersPage({
                         tag: listTagKaitenColumnTitle(kaitenColTrimmed),
                       })
                     : null;
+                const rowAccent = resolveOrderListRowAccentKind({
+                  listPendingChatCorrections: o.listPendingChatCorrections,
+                  listCompositionMismatch: o.listCompositionMismatch,
+                  listPendingProstheticsRequests:
+                    o.listPendingProstheticsRequests,
+                  prostheticsOrdered: o.prostheticsOrdered,
+                });
                 const rowClass = blocked
                   ? "border-b-2 border-red-800/45 bg-gradient-to-r from-red-950/40 via-red-950/25 to-red-900/15 text-[var(--app-text)] dark:border-red-900/60 dark:from-red-950/50 dark:via-red-950/35 dark:to-red-950/20 [&>td:not(:first-child):not(:last-child)]:text-red-950/95 dark:[&>td:not(:first-child):not(:last-child)]:text-red-50/90"
-                  : workSent
-                    ? ORDER_SHIPPED_ROW_CLASS
-                    : "border-b-2 border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
-                const harmonyRowState = blocked
-                  ? "blocked"
-                  : workSent
-                    ? "shipped"
-                    : "default";
+                  : mergeOrderListRowClass({
+                      shipped: workSent,
+                      accent: rowAccent,
+                      shippedClass: ORDER_SHIPPED_ROW_CLASS,
+                    });
+                const harmonyRowState = resolveOrderListHarmonyRowState({
+                  blocked,
+                  shipped: workSent,
+                  accent: rowAccent,
+                });
                 const renderTagsNode = (opts?: { omitKaitenColumnTag?: boolean }) => (
                   <OrderListTagsCell
                     orderId={o.id}
@@ -1064,6 +1078,7 @@ export default async function OrdersPage({
                   orderNumber={o.orderNumber}
                   className={rowClass}
                   harmonyRowState={harmonyRowState}
+                  rowAccent={blocked ? null : rowAccent}
                   clinicName={o.clinic?.name ?? "Частное лицо"}
                   clinicAddress={o.clinic?.address?.trim() || undefined}
                   doctorName={personNameSurnameInitials(o.doctor.fullName)}

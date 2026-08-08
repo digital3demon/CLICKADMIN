@@ -21,6 +21,11 @@ import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
+import {
+  mergeOrderListRowClass,
+  orderListMobileCardAccentClass,
+  resolveOrderListRowAccentKind,
+} from "@/lib/order-list-row-accent";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import { listTagKaitenColumnTitle, LIST_TAG_KAITEN_BLOCKED } from "@/lib/order-list-tag-filter";
 
@@ -253,9 +258,21 @@ export function FinanceOfficeOrdersTable({
                       q: (q ?? "").trim() || undefined,
                     })
                   : null;
-              const rowClass = workSent
-                ? ORDER_SHIPPED_ROW_CLASS
-                : "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
+              const rowAccent = resolveOrderListRowAccentKind({
+                listPendingChatCorrections: o.listPendingChatCorrections,
+                listCompositionMismatch: o.listCompositionMismatch,
+                listPendingProstheticsRequests:
+                  o.listPendingProstheticsRequests,
+                prostheticsOrdered: o.prostheticsOrdered,
+              });
+              const rowClass = mergeOrderListRowClass({
+                shipped: workSent,
+                accent: rowAccent,
+                shippedClass: ORDER_SHIPPED_ROW_CLASS,
+                idleClass:
+                  "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]",
+              });
+              const mobileCardAccent = orderListMobileCardAccentClass(rowAccent);
               const renderTagsCell = () => (
                 <OrderListTagsCell
                   orderId={o.id}
@@ -402,7 +419,9 @@ export function FinanceOfficeOrdersTable({
                 <tr className="border-b border-[var(--card-border)] shell-desktop:hidden print:hidden">
                   <td colSpan={99} className="p-0">
                     <div
-                      className="cursor-pointer px-2.5 py-2"
+                      className={["cursor-pointer px-2.5 py-2", mobileCardAccent]
+                        .filter(Boolean)
+                        .join(" ")}
                       role="link"
                       tabIndex={0}
                       aria-label={`Открыть наряд ${o.orderNumber}`}

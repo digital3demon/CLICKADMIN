@@ -11,8 +11,6 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { useSessionUser } from "@/components/providers/SessionUserProvider";
-import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import {
   customListTagLabelMeansKaitenBlock,
   type KaitenBlockFromListTagResult,
@@ -29,14 +27,11 @@ import {
   LIST_TAG_INVOICE_PRINTED,
   LIST_TAG_KAITEN_BLOCKED,
   LIST_TAG_NO_EDO,
-  LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PAYMENT_EXPECTED,
   LIST_TAG_PAYMENT_PAID,
   LIST_TAG_PAYMENT_PARTIAL,
   LIST_TAG_PAYMENT_RECON,
   LIST_TAG_PAYMENT_RECON_PAID,
-  LIST_TAG_PROSTHETICS,
-  LIST_TAG_PROSTHETICS_PENDING,
   LIST_TAG_URGENT_NO_COEF,
   listTagCustomLabel,
   listTagKaitenColumnTitle,
@@ -89,7 +84,10 @@ type Props = {
   demoCardTypeName?: string | null;
   kaitenColumnTitle: string | null;
   prostheticsOrdered: boolean;
-  /** Открытые заявки «???» по протетике (без «Протетика заказана») */
+  /**
+   * Открытые заявки «???» по протетике — оставляем в API для совместимости;
+   * в облаке тегов не рисуем (акцент строки списка).
+   */
   listPendingProstheticsRequests?: boolean;
   /** Отметка «Счёт распечатан» (как в наряде) */
   invoicePrinted?: boolean;
@@ -117,11 +115,12 @@ type Props = {
   /** Период по дате создания (URL `from` / `to`). */
   periodFrom?: string | null;
   periodTo?: string | null;
-  /** Жёлтый треугольник «!»: непринятые корректировки «!!!» или расхождение счёта с составом. */
+  /**
+   * Флаги внимания / корректировок — для совместимости вызовов;
+   * визуал перенесён на цветную рамку строки списка.
+   */
   orderAttentionWarning?: boolean;
-  /** Явно: открытые корректировки «!!!» (для RBAC уведомлений). */
   listPendingChatCorrections?: boolean;
-  /** Явно: расхождение суммы счёта с составом. */
   listCompositionMismatch?: boolean;
   /** Если задано — ссылки фильтра по пилюлям ведут на «Отгрузки», а не на «Заказы». */
   shipmentsFilterContext?: {
@@ -217,68 +216,6 @@ function renderTagsOverlay(
       </div>
     </div>,
     document.body,
-  );
-}
-
-/** Жёлтый треугольник с «!» (как знак внимания), без клика. */
-/** Белый контур шестерёнки на «небесной» пилюле — как стек уведомлений по протетике. */
-function ProstheticsPendingGearGlyph({ className }: { className: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={className}
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      {/* Внешний контур 6-зубой шестерёнки + втулка — только обводка */}
-      <path
-        d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
-        stroke="#ffffff"
-        strokeWidth="2.45"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
-        stroke="#ffffff"
-        strokeWidth="2.15"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function OrderAttentionWarningGlyph({ className }: { className: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={className}
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <path
-        d="M12 2.35c.42 0 .81.22 1.03.6l8.72 15.1c.43.74-.1 1.68-1.03 1.68H4.28c-.93 0-1.46-.94-1.03-1.68l8.72-15.1c.22-.38.61-.6 1.03-.6z"
-        fill="#FACC15"
-        stroke="#EAB308"
-        strokeWidth="1.15"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M12 3.85c.12 0 .23.06.3.17l7.55 13.1c.14.24-.03.55-.3.55H4.45c-.27 0-.44-.31-.3-.55l7.55-13.1c.07-.11.18-.17.3-.17z"
-        fill="#FDE047"
-        stroke="#171717"
-        strokeWidth="0.75"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M12 9.15v4.35"
-        stroke="#171717"
-        strokeWidth="1.85"
-        strokeLinecap="round"
-      />
-      <circle cx="12" cy="17.05" r="1.2" fill="#171717" />
-    </svg>
   );
 }
 
@@ -414,7 +351,6 @@ export function OrderListTagsCell({
   demoCardTypeName,
   kaitenColumnTitle,
   prostheticsOrdered,
-  listPendingProstheticsRequests = false,
   invoicePrinted = false,
   hasInvoiceAttachment,
   invoiceAttachmentId = null,
@@ -432,9 +368,6 @@ export function OrderListTagsCell({
   listSearchQ,
   periodFrom,
   periodTo,
-  orderAttentionWarning = false,
-  listPendingChatCorrections,
-  listCompositionMismatch,
   shipmentsFilterContext = null,
   financeOfficeFilterContext = null,
   financeCalculated = null,
@@ -442,26 +375,6 @@ export function OrderListTagsCell({
   omitKaitenColumnTag = false,
 }: Props) {
   const router = useRouter();
-  const { user } = useSessionUser();
-  const canSeeCorrectionsIndicators = canSeeOrderNotificationKind(
-    "corrections",
-    user?.role,
-    user?.moduleAccess,
-  );
-  const canSeeProstheticsIndicators = canSeeOrderNotificationKind(
-    "prosthetics",
-    user?.role,
-    user?.moduleAccess,
-  );
-  const pendingCorrections = listPendingChatCorrections === true;
-  const compositionMismatch = listCompositionMismatch === true;
-  const showAttentionIcon =
-    compositionMismatch ||
-    (pendingCorrections && canSeeCorrectionsIndicators) ||
-    (listPendingChatCorrections == null &&
-      listCompositionMismatch == null &&
-      orderAttentionWarning &&
-      canSeeCorrectionsIndicators);
   const isHarmony = useUiDesign() === "harmony";
   const kaitenColTrimmed = kaitenColumnTitle?.trim() ?? "";
   const kaitenFilterKey =
@@ -1116,22 +1029,6 @@ export function OrderListTagsCell({
       });
     }
 
-    if (prostheticsOrdered) {
-      items.push({
-        key: "prost",
-        slot: "large",
-        node: (
-          <Link
-            href={href(LIST_TAG_PROSTHETICS)}
-            title="Показать наряды с отметкой «Протетика заказана»"
-            className={`rounded-full border border-emerald-200 bg-emerald-50 font-semibold text-emerald-900 shadow-sm outline-none focus-visible:outline-none dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100 ${padTable}`}
-          >
-            Протетика заказана
-          </Link>
-        ),
-      });
-    }
-
     if (hasInvoiceAttachment) {
       items.push({
         key: "inv",
@@ -1294,90 +1191,11 @@ export function OrderListTagsCell({
     paymentPill,
     paymentPillToneClass,
     paymentPartialRub,
-    prostheticsOrdered,
     removeTag,
     urgentCoefficient,
     omitKaitenColumnTag,
     filterListHref,
   ]);
-
-  const stripProstheticsPending =
-    canSeeProstheticsIndicators &&
-    !prostheticsOrdered &&
-    listPendingProstheticsRequests;
-  const useLeadingIconStrip =
-    showAttentionIcon || stripProstheticsPending;
-  const prostheticsPendingHref = filterListHref(LIST_TAG_PROSTHETICS_PENDING);
-  const inFinanceOffice = Boolean(financeOfficeFilterContext);
-  const iconShellClass = inFinanceOffice
-    ? "h-7 w-7"
-    : "h-[2.75rem] w-[2.75rem] sm:h-[3.25rem] sm:w-[3.25rem]";
-  const iconGlyphClass = inFinanceOffice
-    ? "h-4 w-4"
-    : "h-6 w-6 sm:h-7 sm:w-7";
-  const orderAttentionFilterHref = financeOfficeFilterContext
-    ? filterListHref(LIST_TAG_ORDER_ATTENTION)
-    : shipmentsFilterContext
-      ? shipmentsListHref({
-          tab: shipmentsFilterContext.tab,
-          tag: LIST_TAG_ORDER_ATTENTION,
-          from: shipmentsFilterContext.periodFrom ?? undefined,
-          to: shipmentsFilterContext.periodTo ?? undefined,
-        })
-      : ordersListHref({
-          limit: pageSize,
-          tag: LIST_TAG_ORDER_ATTENTION,
-          hideShipped: hideShipped === true,
-          onlyShipped: onlyShipped === true,
-          q: listSearchQ?.trim() ? listSearchQ.trim() : undefined,
-          from: periodFrom?.trim() || undefined,
-          to: periodTo?.trim() || undefined,
-        });
-
-  const leadingIconStrip = (
-    <>
-      {showAttentionIcon ? (
-        <Link
-          href={orderAttentionFilterHref}
-          className="shrink-0 self-start text-inherit no-underline outline-none focus-visible:outline-none"
-          title={
-            shipmentsFilterContext
-              ? "Показать в отгрузках наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
-              : financeOfficeFilterContext
-                ? "Показать в ФинОтделе наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
-                : "Показать в списке заказов все наряды с этой отметкой (корректировки «!!!» или несовпадение суммы со счётом)"
-          }
-          aria-label="Фильтр: внимание — корректировки или расхождение сумм"
-        >
-          <span
-            className={`flex ${iconShellClass} shrink-0 items-center justify-center rounded-full border border-amber-400/90 bg-amber-100 shadow-sm dark:border-amber-700 dark:bg-amber-950/70`}
-          >
-            <OrderAttentionWarningGlyph className={iconGlyphClass} />
-          </span>
-        </Link>
-      ) : null}
-      {stripProstheticsPending ? (
-        <Link
-          href={prostheticsPendingHref}
-          title={
-            shipmentsFilterContext
-              ? "Показать в отгрузках наряды с открытыми заявками по протетике из чата («???»)"
-              : financeOfficeFilterContext
-                ? "Показать в ФинОтделе наряды с открытыми заявками по протетике из чата («???»)"
-                : "Показать наряды с открытыми заявками по протетике из чата («???»)"
-          }
-          aria-label="Протетика: заявки из чата"
-          className="shrink-0 self-start text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none"
-        >
-          <span
-            className={`flex ${iconShellClass} shrink-0 items-center justify-center rounded-full border border-sky-400/90 bg-sky-100 shadow-sm dark:border-sky-600 dark:bg-sky-950/75`}
-          >
-            <ProstheticsPendingGearGlyph className={iconGlyphClass} />
-          </span>
-        </Link>
-      ) : null}
-    </>
-  );
 
   const blockReasonHit =
     Boolean(kaitenCardId) &&
@@ -1460,23 +1278,10 @@ export function OrderListTagsCell({
         }
       `}</style>
       <div
-        className={
-          useLeadingIconStrip
-            ? "order-list-tags-root flex w-full min-w-0 max-w-full flex-col gap-1.5 overflow-hidden"
-            : "order-list-tags-root flex w-full min-w-0 max-w-full flex-col overflow-hidden"
-        }
+        className="order-list-tags-root flex w-full min-w-0 max-w-full flex-col overflow-hidden"
         title="Отметки переносятся по ширине колонки таблицы"
       >
-        {useLeadingIconStrip ? (
-          <>
-            <div className="flex w-full min-w-0 shrink-0 flex-row flex-nowrap items-center gap-x-1 sm:gap-x-1.5">
-              {leadingIconStrip}
-            </div>
-            {tagsWithAddButton}
-          </>
-        ) : (
-          tagsWithAddButton
-        )}
+        {tagsWithAddButton}
       </div>
 
       {renderTagsOverlay(addOpen, "Новый тег", closeAdd, (
