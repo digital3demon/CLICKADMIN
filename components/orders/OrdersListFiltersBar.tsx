@@ -39,8 +39,8 @@ export function OrdersListFiltersBar({
 
   const cardClass = [
     isHarmony
-      ? "no-print flex h-full min-h-[3.25rem] w-full min-w-0 items-center rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 card-shadow sm:px-3 sm:py-2"
-      : "no-print flex h-full min-h-[3.25rem] w-full min-w-0 items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-3 sm:py-2",
+      ? "no-print relative z-[55] flex h-full min-h-[3.25rem] w-full min-w-0 items-center overflow-visible rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 card-shadow sm:px-3 sm:py-2"
+      : "no-print relative z-[55] flex h-full min-h-[3.25rem] w-full min-w-0 items-center overflow-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-3 sm:py-2",
     className,
   ]
     .filter(Boolean)

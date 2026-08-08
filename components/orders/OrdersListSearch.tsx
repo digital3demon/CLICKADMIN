@@ -167,7 +167,7 @@ export function OrdersListSearch({
       <label className="sr-only" htmlFor="orders-list-search-q">
         Поиск по наряду, врачу, клинике, пациенту
       </label>
-      <div className="relative min-w-0 flex-1">
+      <div className="relative z-[60] min-w-0 flex-1">
         <input
           ref={inputRef}
           id="orders-list-search-q"
@@ -186,7 +186,7 @@ export function OrdersListSearch({
           enterKeyHint="search"
         />
         {suggestOpen ? (
-          <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-1 shadow-lg">
+          <div className="absolute left-0 right-0 top-full z-[60] mt-1 max-h-64 overflow-y-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-1 shadow-lg">
             {suggestions.map((s, idx) => (
               <button
                 key={`${s.kind}-${s.value}-${idx}`}
