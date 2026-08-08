@@ -260,29 +260,66 @@ def imread_bgr(path: Path) -> np.ndarray | None:
     return img if img is not None else None
 
 
+def _qr_candidates(img: np.ndarray) -> list[np.ndarray]:
+    h, w = img.shape[:2]
+    out: list[np.ndarray] = [img]
+    if h > 2:
+        out.append(img[0 : h // 2, :])
+        out.append(img[0 : max(1, int(h * 0.4)), :])
+    # QR часто справа сверху на наряде
+    if w > 4 and h > 4:
+        out.append(img[0 : h // 2, w // 2 :])
+        out.append(img[0 : max(1, int(h * 0.45)), max(0, int(w * 0.45)) :])
+    return out
+
+
+def _decode_qr_zxing(mat: np.ndarray) -> str | None:
+    """zxing-cpp надёжнее OpenCV на фото нарядов (детект без decode)."""
+    try:
+        import zxingcpp
+    except ImportError:
+        return None
+    try:
+        if mat.ndim == 2:
+            rgb = cv2.cvtColor(mat, cv2.COLOR_GRAY2RGB)
+        else:
+            rgb = cv2.cvtColor(mat, cv2.COLOR_BGR2RGB)
+        results = zxingcpp.read_barcodes(rgb)
+    except Exception:
+        return None
+    for r in results or []:
+        text = (getattr(r, "text", None) or "").strip()
+        if text:
+            return text
+    return None
+
+
 def decode_qr(path: Path) -> str | None:
-    """Несколько попыток: цвет / серый / контраст / верх кадра / масштабы."""
+    """QR: сначала zxing, затем OpenCV (цвет / серый / контраст / кропы / масштаб)."""
     img = imread_bgr(path)
     if img is None:
         return None
+
+    candidates = _qr_candidates(img)
+    for c in candidates:
+        hit = _decode_qr_zxing(c)
+        if hit:
+            return hit
+        for sc in (1.5, 2.0):
+            scaled = cv2.resize(c, None, fx=sc, fy=sc, interpolation=cv2.INTER_CUBIC)
+            hit = _decode_qr_zxing(scaled)
+            if hit:
+                return hit
+
     detector = cv2.QRCodeDetector()
 
-    def try_decode(mat: np.ndarray) -> str | None:
+    def try_cv(mat: np.ndarray) -> str | None:
         try:
             data, _points, _ = detector.detectAndDecode(mat)
         except Exception:
             return None
         text = (data or "").strip()
         return text or None
-
-    h, w = img.shape[:2]
-    candidates: list[np.ndarray] = [img]
-    if h > 2:
-        candidates.append(img[0 : h // 2, :])
-        candidates.append(img[0 : max(1, int(h * 0.4)), :])
-    # QR часто справа сверху на наряде
-    if w > 4 and h > 4:
-        candidates.append(img[0 : h // 2, w // 2 :])
 
     variants: list[np.ndarray] = []
     for c in candidates:
@@ -294,6 +331,7 @@ def decode_qr(path: Path) -> str | None:
             gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 5
         )
         variants.append(thr)
+        variants.append(cv2.flip(c, 1))
 
     scales = (1.0, 1.5, 2.0, 0.75)
     for mat in variants:
@@ -304,7 +342,7 @@ def decode_qr(path: Path) -> str | None:
                 scaled = cv2.resize(
                     mat, None, fx=sc, fy=sc, interpolation=cv2.INTER_CUBIC
                 )
-            hit = try_decode(scaled)
+            hit = try_cv(scaled)
             if hit:
                 return hit
     return None
@@ -331,11 +369,14 @@ def clip_person(name: str | None, limit: int = 20) -> str:
 
 # ─── local OCR (в exe: номер наряда / Kaiten без серверного tesseract) ─────
 
+# После номера OCR часто клеит латиницу (2607-359KaMpaHOB) — режем только цифры.
+# \b не используем: кириллица до/после ломает word-boundary в JS/Python без \p{L}.
 _ORDER_OCR_RE = re.compile(
-    r"(?<![\dA-Za-z])(\d{4})\s*[-–—−]\s*(\d{3})(?![\dA-Za-z])"
+    r"(?<![\dA-Za-z])(\d{4})\s*[-–—−]\s*(\d{3})(?!\d)"
 )
+# OCR путает .ru→.rw, https→ittps/ttps
 _KAITEN_OCR_RE = re.compile(
-    r"(?:https?://)?(?:[\w.-]+\.)?kaiten\.ru/(?:card/)?(\d{4,})", re.I
+    r"(?:h?t?tps?://)?(?:[\w.-]+\.)?kaiten\.r[uw]/(?:card/)?(\d{4,})", re.I
 )
 _ID_FIELD_RE = re.compile(r"(?:^|[\s:])ID\s*[:：]?\s*(\d{6,})(?!\d)", re.I)
 
@@ -418,6 +459,20 @@ def pick_kaiten_url_from_text(raw: str) -> str | None:
     return None
 
 
+def _ocr_mats_for_crop(crop: np.ndarray) -> list[np.ndarray]:
+    """Нормальный размер + 2× серый (склеенный мелкий текст шапки)."""
+    ch, cw = crop.shape[:2]
+    work = crop
+    if max(ch, cw) > 1600:
+        sc = 1600 / max(ch, cw)
+        work = cv2.resize(crop, None, fx=sc, fy=sc, interpolation=cv2.INTER_AREA)
+    mats = [work]
+    gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY)
+    up = cv2.resize(gray, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+    mats.append(cv2.cvtColor(up, cv2.COLOR_GRAY2BGR))
+    return mats
+
+
 def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
     """
     Локальный OCR верхней части скана.
@@ -435,26 +490,20 @@ def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
     t0 = time.time()
     blob_all = ""
     for crop in crops:
-        # чуть уменьшаем очень большие кадры
-        ch, cw = crop.shape[:2]
-        if max(ch, cw) > 1600:
-            sc = 1600 / max(ch, cw)
-            crop = cv2.resize(
-                crop, None, fx=sc, fy=sc, interpolation=cv2.INTER_AREA
-            )
-        text = _ocr_text_from_bgr(crop)
-        blob_all += " " + text
-        order_n = pick_order_number_from_text(blob_all)
-        kaiten = pick_kaiten_url_from_text(blob_all)
-        if order_n or kaiten:
-            logging.info(
-                "local OCR %s → order=%s kaiten=%s (%.1fs)",
-                path.name,
-                order_n,
-                "yes" if kaiten else "no",
-                time.time() - t0,
-            )
-            return order_n, kaiten
+        for mat in _ocr_mats_for_crop(crop):
+            text = _ocr_text_from_bgr(mat)
+            blob_all += " " + text
+            order_n = pick_order_number_from_text(blob_all)
+            kaiten = pick_kaiten_url_from_text(blob_all)
+            if order_n or kaiten:
+                logging.info(
+                    "local OCR %s → order=%s kaiten=%s (%.1fs)",
+                    path.name,
+                    order_n,
+                    "yes" if kaiten else "no",
+                    time.time() - t0,
+                )
+                return order_n, kaiten
     logging.info(
         "local OCR %s: no match (%.1fs, chars=%s)",
         path.name,
@@ -671,6 +720,9 @@ class ScanItem:
     photo: tk.PhotoImage | None = field(default=None, repr=False)
     thumb_file: Path | None = field(default=None, repr=False)
     frame: tk.Frame | None = field(default=None, repr=False)
+    head_lbl: tk.Label | None = field(default=None, repr=False)
+    border_frame: tk.Frame | None = field(default=None, repr=False)
+    cap_lbl: tk.Label | None = field(default=None, repr=False)
 
     def header_text(self) -> str:
         if self.ok:
@@ -1224,7 +1276,7 @@ class ScannerApp:
                 self._attempt_key(path), max(1, item.attempts)
             )
         item.give_up = item.attempts >= MAX_AUTO_ATTEMPTS
-        self._relayout()
+        self._refresh_item_cell(item)
         self._persist_gallery()
         if item.give_up:
             self._clear_path_attempts(path)
@@ -1679,6 +1731,36 @@ class ScannerApp:
         if persist:
             self._schedule_persist()
 
+    def _refresh_item_cell(self, item: ScanItem) -> None:
+        """Обновить шапку/рамку без пересборки всей галереи (без мерцания)."""
+        if item.frame is None:
+            self._relayout()
+            return
+        try:
+            if not item.frame.winfo_exists():
+                self._relayout()
+                return
+        except tk.TclError:
+            self._relayout()
+            return
+        border = "#1a7f37" if item.ok else "#c62828"
+        fg = "#111111" if item.ok else "#8b0000"
+        try:
+            if item.head_lbl is not None and item.head_lbl.winfo_exists():
+                item.head_lbl.configure(text=item.header_text(), fg=fg)
+            else:
+                self._relayout()
+                return
+            if item.border_frame is not None and item.border_frame.winfo_exists():
+                item.border_frame.configure(bg=border)
+            else:
+                self._relayout()
+                return
+            if item.cap_lbl is not None and item.cap_lbl.winfo_exists():
+                item.cap_lbl.configure(text=short_name(item.path.name))
+        except tk.TclError:
+            self._relayout()
+
     def _relayout(self) -> None:
         for child in self.grid.winfo_children():
             if child is self.empty_lbl:
@@ -1740,6 +1822,9 @@ class ScannerApp:
             )
             cap.pack(pady=(2, 4))
             item.frame = cell
+            item.head_lbl = head
+            item.border_frame = outer
+            item.cap_lbl = cap
             for w in (lbl, outer, inner):
                 w.bind("<Button-1>", lambda e, it=item: self._expand(it))
             for w in (cell, head, outer, inner, lbl, cap):
@@ -1984,7 +2069,7 @@ class ScannerApp:
             item.give_up = False
             self._clear_path_attempts(path)
             self._processed_ok += 1
-            self._relayout()
+            self._refresh_item_cell(item)
             self._persist_gallery()
             self.var_status.set(f"Повтор ок → {item.order_number or oid}")
 

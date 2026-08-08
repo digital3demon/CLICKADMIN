@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PublicStickerOrderStatusPillsView } from "@/components/sticker/PublicStickerOrderStatusPills";
+import { PublicStickerReceivedPhotos } from "@/components/sticker/PublicStickerReceivedPhotos";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { loadPublicStickerClientView } from "@/lib/load-public-sticker-client-view";
 import { resolveStickerEmployeesHref } from "@/lib/sticker-public-employee-href";
@@ -34,6 +35,7 @@ export default async function StickerPublicHubPage({
     resolved.ordersDb,
     resolved.tenantId,
     resolved.orderId,
+    { tenantSlug, stickerToken: token },
   );
   if (!data) notFound();
 
@@ -80,6 +82,8 @@ export default async function StickerPublicHubPage({
             </p>
           ))}
         </section>
+
+        <PublicStickerReceivedPhotos photos={data.hubPhotos} />
 
         <div className="mt-6 space-y-2 border-t border-zinc-100 pt-5">
           <a

@@ -129,6 +129,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/favicon.ico") return true;
   /** QR с этикетки отгрузки: витрина без входа (клиент) + редиректы для сотрудников. */
   if (pathname.startsWith("/p/t/")) return true;
+  /** Фото наряда на витрине QR (auth = slug + sticker token внутри роута). */
+  if (pathname.startsWith("/api/public/sticker/")) return true;
   /** КликМиг: публичная форма, ЛК, дозагрузка, просмотр файлов. */
   if (pathname.startsWith("/p/clickmig/")) return true;
   if (pathname.startsWith("/api/clickmig/public/")) return true;

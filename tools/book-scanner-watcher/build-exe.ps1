@@ -18,7 +18,7 @@ if (-not (Test-Path (Join-Path $Venv "Scripts\python.exe"))) {
 $Pip = Join-Path $Venv "Scripts\pip.exe"
 $PyInst = Join-Path $Venv "Scripts\pyinstaller.exe"
 
-& $Pip install pyinstaller opencv-python-headless watchdog rapidocr-onnxruntime -i $Mirror --trusted-host $Trusted --default-timeout=180
+& $Pip install pyinstaller opencv-python-headless watchdog rapidocr-onnxruntime zxing-cpp -i $Mirror --trusted-host $Trusted --default-timeout=180
 
 $Dist = Join-Path $Root "dist"
 $Build = Join-Path $Root "build"
@@ -33,9 +33,11 @@ Remove-Item -Recurse -Force $Dist, $Build -ErrorAction SilentlyContinue
   --collect-all cv2 `
   --collect-all rapidocr_onnxruntime `
   --collect-all onnxruntime `
+  --collect-all zxingcpp `
   --hidden-import=watchdog.observers.polling `
   --hidden-import=numpy `
   --hidden-import=rapidocr_onnxruntime `
+  --hidden-import=zxingcpp `
   watch.py
 
 $Exe = Join-Path $Dist "ClickLab-Scanner.exe"

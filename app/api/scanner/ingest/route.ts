@@ -386,7 +386,7 @@ export async function POST(req: Request) {
           data: {
             id: attachmentId,
             orderId: resolved.orderId,
-            scope: OrderAttachmentScope.GENERAL,
+            scope: OrderAttachmentScope.SCANNER,
             fileName: safeName || "scan.jpg",
             mimeType,
             size: fileBuf.byteLength,
