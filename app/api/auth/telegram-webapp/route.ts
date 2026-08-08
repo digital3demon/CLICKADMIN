@@ -91,14 +91,15 @@ export async function POST(req: Request) {
       );
     }
 
-    try {
-      await prisma.user.update({
+    // lastLoginAt не блокирует вход Mini App
+    void prisma.user
+      .update({
         where: { id: userRow.id },
         data: { lastLoginAt: new Date() },
+      })
+      .catch((e) => {
+        console.warn("[auth/telegram-webapp] skip lastLoginAt:", e);
       });
-    } catch (e) {
-      console.warn("[auth/telegram-webapp] skip lastLoginAt:", e);
-    }
 
     let sid: string;
     try {

@@ -120,9 +120,9 @@ const KANBAN_BOARD_CARD_FRAME_CLASS =
 
 const CARD_MENU_GAP = 4;
 const CARD_MENU_EST_HEIGHT = 150;
-/** Одна ширина колонок на mobile и desktop — иначе на 140px карточки мнутся не как на десктопе. */
+/** Одна ширина колонок на mobile и desktop — иначе на узких карточках мнётся лицо. */
 const BOARD_COLUMN_WIDTH_CLASS =
-  "w-[176px] sm:w-[184px] lg:w-[196px] xl:w-[208px]";
+  "w-[230px] sm:w-[240px] lg:w-[255px] xl:w-[270px]";
 
 /** На touch-экранах: удержание перед перетаскиванием карточки, чтобы работал горизонтальный скролл. */
 const KANBAN_TOUCH_DRAG_DELAY_MS = 420;
@@ -389,13 +389,13 @@ function KanbanCardView({
                 <span className="text-[var(--kanban-text)]">{foreignBoardLabel}</span>
               </div>
             ) : null}
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-1 px-2 pb-0.5 pt-1.5">
-              <div className="min-h-0 overflow-y-auto text-[0.8rem] font-semibold leading-snug text-[var(--kanban-text)]">
-                <span className="break-words [overflow-wrap:anywhere] [word-break:normal]">
+            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-1.5 px-2 pb-0.5 pt-1.5">
+              <div className="min-h-0 min-w-0 overflow-hidden text-[0.8rem] font-semibold leading-snug text-[var(--kanban-text)]">
+                <span className="line-clamp-4 break-words [overflow-wrap:anywhere] [word-break:normal]">
                   {card.title}
                 </span>
               </div>
-              <div className="flex shrink-0 items-start gap-1 self-start">
+              <div className="flex max-w-[5.25rem] shrink-0 flex-row flex-wrap items-start justify-end gap-x-0.5 gap-y-0.5 self-start">
                 {primaryMemberId ? (
                   <KanbanPersonAvatar
                     userId={primaryMemberId}
@@ -403,16 +403,13 @@ function KanbanCardView({
                     variant={
                       assignees.includes(primaryMemberId) ? "assignee" : "participant"
                     }
-                    size="sm"
+                    size="xs"
                     nameCaption
                     titleSuffix=""
                   />
                 ) : null}
                 {stackVisible.length > 0 || stackOverflow > 0 ? (
-                  <div
-                    className="flex flex-col items-center gap-0.5"
-                    title="Участники и ответственные"
-                  >
+                  <>
                     {stackVisible.map((uid) => (
                       <KanbanPersonAvatar
                         key={uid}
@@ -421,17 +418,17 @@ function KanbanCardView({
                         variant={
                           assignees.includes(uid) ? "assignee" : "participant"
                         }
-                        size="sm"
+                        size="xs"
                         nameCaption
                         titleSuffix=""
                       />
                     ))}
                     {stackOverflow > 0 ? (
-                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-black/40 text-[0.5rem] font-bold text-white">
+                      <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-black/40 text-[0.45rem] font-bold text-white">
                         +{stackOverflow}
                       </span>
                     ) : null}
-                  </div>
+                  </>
                 ) : null}
               </div>
             </div>

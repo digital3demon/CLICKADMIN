@@ -137,7 +137,11 @@ export function KanbanPersonAvatar({
   const arcLabel = nameArc ? shortLabel : "";
 
   const compactRing =
-    size === "card" || size === "list" || size === "listSm" || size === "sm";
+    size === "card" ||
+    size === "list" ||
+    size === "listSm" ||
+    size === "sm" ||
+    size === "xs";
   const ring =
     variant === "assignee"
       ? compactRing || size === "picker"
@@ -202,15 +206,21 @@ export function KanbanPersonAvatar({
       <span
         title={title}
         className={`inline-flex flex-col items-center gap-0.5 ${
-          dense ? "max-w-[3.1rem]" : "max-w-[4.2rem]"
+          size === "xs"
+            ? "max-w-[2.45rem]"
+            : dense
+              ? "max-w-[3.1rem]"
+              : "max-w-[4.2rem]"
         }`}
       >
         {face}
         <span
           className={`w-full truncate text-center font-semibold leading-tight text-[var(--kanban-text)] ${
-            dense
-              ? "text-[0.62rem]"
-              : "text-[0.68rem] sm:text-[0.75rem]"
+            size === "xs"
+              ? "text-[0.5rem]"
+              : dense
+                ? "text-[0.62rem]"
+                : "text-[0.68rem] sm:text-[0.75rem]"
           }`}
         >
           {shortLabel || "—"}
