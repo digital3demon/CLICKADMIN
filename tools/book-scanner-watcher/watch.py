@@ -45,7 +45,10 @@ PROCESS_DELAY_SEC = 0.5
 THUMB_SIZE = 148
 APP_TITLE = "Click Lab — сканер в заказ"
 AUTOSTART_REG_NAME = "ClickLabScanner"
-COLS = 4
+# Ширина одной ячейки галереи (превью + поля + отступы) — колонки считаем по окну
+CELL_SLOT_W = 188
+COLS_MIN = 2
+COLS_MAX = 12
 # 100–1000 сканов/день: очередь + мало воркеров (лимит CRM ~60/мин на ключ)
 # Разбор (QR/OCR) на ПК; CRM = только attach — один воркер достаточен.
 WORKER_COUNT = 1
@@ -540,6 +543,10 @@ def upload_scan(
     qr_hint: str | None = None,
     force_order_number: str | None = None,
 ) -> tuple[bool, int, dict]:
+    """
+    Загрузка с повторами: на проде тело иногда обрезается (415 unsupported_type /
+    408 body_incomplete) — клиент шлёт файл снова.
+    """
     url = crm_base.rstrip("/") + "/api/scanner/ingest"
     data = path.read_bytes()
     mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -547,16 +554,58 @@ def upload_scan(
         "Content-Type": "application/octet-stream",
         "x-upload-filename": quote(path.name),
         "x-upload-mime": mime,
+        # Keep-alive на проде иногда отдаёт обрезанное тело → 415 unsupported_type
+        "Connection": "close",
     }
     if qr_hint:
         headers["x-scanner-qr"] = quote(qr_hint, safe=":/?&=#%")
     if force_order_number:
         headers["x-scanner-order-number"] = force_order_number.strip()
-    status, parsed = api_request(
-        method="POST", url=url, api_key=api_key, data=data, headers=headers
-    )
-    ok = 200 <= status < 300 and bool(parsed.get("ok"))
-    return ok, status, parsed
+
+    upload_attempts = max(MAX_AUTO_ATTEMPTS, 5)
+    last_status = 0
+    last_parsed: dict = {}
+    for attempt in range(1, upload_attempts + 1):
+        status, parsed = api_request(
+            method="POST", url=url, api_key=api_key, data=data, headers=headers
+        )
+        last_status, last_parsed = status, parsed
+        ok = 200 <= status < 300 and bool(parsed.get("ok"))
+        if ok:
+            if attempt > 1:
+                logging.info(
+                    "upload ok on retry %s/%s %s",
+                    attempt,
+                    upload_attempts,
+                    path.name,
+                )
+            return True, status, parsed
+
+        err = str(parsed.get("error") or "").lower()
+        truncated = (
+            status in {408, 415}
+            and (
+                "unsupported_type" in err
+                or "body_incomplete" in err
+                or "not_image" in str(parsed.get("detail") or "").lower()
+            )
+        )
+        if truncated and attempt < upload_attempts:
+            got = parsed.get("bytes")
+            logging.warning(
+                "upload truncated %s attempt %s/%s status=%s bytes=%s — retry",
+                path.name,
+                attempt,
+                upload_attempts,
+                status,
+                got,
+            )
+            time.sleep(0.8 * attempt)
+            data = path.read_bytes()
+            continue
+        break
+
+    return False, last_status, last_parsed
 
 
 def delete_crm_attachment(
@@ -744,6 +793,8 @@ class ScannerApp:
         self._thumb_keep: list[tk.PhotoImage] = []
         self._processed_ok = 0
         self._processed_fail = 0
+        self._gallery_cols = 4
+        self._relayout_after_id: str | None = None
 
         s = load_settings()
         autostart_on = bool(s.get("autostart")) or is_windows_autostart_enabled()
@@ -791,20 +842,20 @@ class ScannerApp:
         self._build_settings(self.tab_settings)
 
     def _build_gallery(self, parent: ttk.Frame) -> None:
-        hint = ttk.Label(
+        self.gallery_hint = ttk.Label(
             parent,
             text=(
                 "Над рамкой — номер наряда, пациент и врач. "
                 "Зелёная рамка — ушло в заказ, красная — ошибка. "
-                "Двойной клик — увеличить. ПКМ — повтор / ссылка / корректировка / удаление."
+                "Клик по фото — увеличить. ПКМ — повтор / ссылка / корректировка / удаление."
             ),
             wraplength=820,
         )
-        hint.pack(anchor=tk.W, padx=8, pady=6)
+        self.gallery_hint.pack(anchor=tk.W, padx=8, pady=6)
 
         wrap = ttk.Frame(parent)
         wrap.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        self.canvas = tk.Canvas(wrap, highlightthickness=0)
+        self.canvas = tk.Canvas(wrap, highlightthickness=0, bg="#ffffff")
         sb = ttk.Scrollbar(wrap, orient=tk.VERTICAL, command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=sb.set)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
@@ -813,8 +864,14 @@ class ScannerApp:
         self._grid_win = self.canvas.create_window((0, 0), window=self.grid, anchor=tk.NW)
 
         def _on_cfg(_e=None) -> None:
+            cw = max(1, int(self.canvas.winfo_width()))
+            self.canvas.itemconfigure(self._grid_win, width=cw)
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            self.canvas.itemconfigure(self._grid_win, width=self.canvas.winfo_width())
+            try:
+                self.gallery_hint.configure(wraplength=max(320, cw - 24))
+            except tk.TclError:
+                pass
+            self._schedule_gallery_fit()
 
         self.grid.bind("<Configure>", _on_cfg)
         self.canvas.bind("<Configure>", _on_cfg)
@@ -837,6 +894,31 @@ class ScannerApp:
             justify=tk.CENTER,
         )
         self.empty_lbl.grid(row=0, column=0, padx=40, pady=40)
+
+    def _gallery_cols_for_width(self, width: int) -> int:
+        w = max(1, int(width))
+        cols = max(COLS_MIN, w // CELL_SLOT_W)
+        return min(COLS_MAX, cols)
+
+    def _schedule_gallery_fit(self) -> None:
+        if self._relayout_after_id is not None:
+            try:
+                self.root.after_cancel(self._relayout_after_id)
+            except Exception:
+                pass
+
+        def _fit() -> None:
+            self._relayout_after_id = None
+            try:
+                cw = max(1, int(self.canvas.winfo_width()))
+            except tk.TclError:
+                return
+            cols = self._gallery_cols_for_width(cw)
+            if cols != self._gallery_cols:
+                self._gallery_cols = cols
+                self._relayout()
+
+        self._relayout_after_id = self.root.after(80, _fit)
 
     def _build_settings(self, parent: ttk.Frame) -> None:
         main = ttk.Frame(parent, padding=12)
@@ -1510,6 +1592,15 @@ class ScannerApp:
             self.ui_q.put(("toast", f"CRM HTTP {status}, повторю: {path.name}"))
             return "retry"
 
+        # Обрезанное тело на проде (после внутренних ретраев upload_scan)
+        err_low = str(parsed.get("error") or "").lower()
+        if status in {408, 415} and (
+            "unsupported_type" in err_low or "body_incomplete" in err_low
+        ):
+            logging.warning("truncated body still on %s — queue retry", path.name)
+            self.ui_q.put(("toast", f"Сеть обрезала файл, повторю: {path.name}"))
+            return "retry"
+
         done_dir = watch / "done"
 
         if ok:
@@ -1597,8 +1688,16 @@ class ScannerApp:
             self.empty_lbl.grid(row=0, column=0, padx=40, pady=40)
             return
         self.empty_lbl.grid_remove()
+        try:
+            cw = max(1, int(self.canvas.winfo_width()))
+        except tk.TclError:
+            cw = 900
+        cols = self._gallery_cols_for_width(cw)
+        self._gallery_cols = cols
+        for c in range(cols):
+            self.grid.columnconfigure(c, weight=1, uniform="scan")
         for idx, item in enumerate(self.items):
-            r, c = divmod(idx, COLS)
+            r, c = divmod(idx, cols)
             border = "#1a7f37" if item.ok else "#c62828"
             cell = tk.Frame(self.grid, bg="#ffffff")
             cell.grid(row=r, column=c, padx=8, pady=8, sticky=tk.N)
@@ -1645,6 +1744,10 @@ class ScannerApp:
                 w.bind("<Button-1>", lambda e, it=item: self._expand(it))
             for w in (cell, head, outer, inner, lbl, cap):
                 w.bind("<Button-3>", lambda e, it=item: self._context(e, it))
+        try:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        except tk.TclError:
+            pass
 
     # ── preview / context ──
 

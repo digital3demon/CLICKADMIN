@@ -116,10 +116,15 @@ async function readBody(req: Request, timeoutMs: number): Promise<Buffer> {
     while (true) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error(`BODY_READ_TIMEOUT:${timeoutMs}`);
+      let settled = false;
       const part = await Promise.race([
-        reader.read(),
+        reader.read().then((v) => {
+          settled = true;
+          return v;
+        }),
         sleepMs(remaining).then(() => {
-          throw new Error(`BODY_READ_TIMEOUT:${timeoutMs}`);
+          if (!settled) throw new Error(`BODY_READ_TIMEOUT:${timeoutMs}`);
+          return { done: true as const, value: undefined };
         }),
       ]);
       if (part.done) break;
@@ -193,12 +198,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "empty_file" }, { status: 400 });
     }
 
+    const contentLengthRaw = req.headers.get("content-length");
+    const contentLength = contentLengthRaw ? Number(contentLengthRaw) : NaN;
+    if (
+      Number.isFinite(contentLength) &&
+      contentLength > 0 &&
+      fileBuf.length !== contentLength
+    ) {
+      console.info("[scanner/ingest]", {
+        step: "body_incomplete",
+        keyId: apiKey.keyId,
+        expected: contentLength,
+        got: fileBuf.length,
+        ms: Date.now() - t0,
+      });
+      return NextResponse.json(
+        {
+          error: "body_incomplete",
+          detail: "Тело обрезано по пути (прокси/сеть)",
+          expected: contentLength,
+          bytes: fileBuf.length,
+        },
+        { status: 408 },
+      );
+    }
+
     const magic = detectImageMagic(fileBuf);
     if (!magic) {
       console.info("[scanner/ingest]", {
         step: "unsupported_type",
         keyId: apiKey.keyId,
         bytes: fileBuf.length,
+        contentLength: Number.isFinite(contentLength) ? contentLength : null,
         head: fileBuf.subarray(0, 8).toString("hex"),
         ms: Date.now() - t0,
       });
