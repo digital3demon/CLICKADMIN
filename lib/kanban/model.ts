@@ -1310,12 +1310,18 @@ export function slimKanbanStateForClientState(
   const dropSnapshots = level >= 1;
 
   const slimCard = (card: KanbanCard, archiveLike = false) => {
-    const dMax = archiveLike ? PERSIST_ARCHIVE_DESC_MAX : descMax;
-    if (
-      typeof card.description === "string" &&
-      card.description.length > dMax
-    ) {
-      card.description = card.description.slice(0, dMax) + "…";
+    // Описание наряда живёт в Order / linked-orders merge — в tenant JSON не храним
+    // обрезок (раньше slice(0,120)+"…" выглядел как «пропало описание»).
+    if (card.linkedOrderId) {
+      card.description = "";
+    } else {
+      const dMax = archiveLike ? PERSIST_ARCHIVE_DESC_MAX : descMax;
+      if (
+        typeof card.description === "string" &&
+        card.description.length > dMax
+      ) {
+        card.description = card.description.slice(0, dMax) + "…";
+      }
     }
     // data:URL (скриншоты/файлы из чата) — главный раздуватель JSON (~МБ → 500 на PUT).
     slimCardFiles(card, archiveLike, archiveLike ? 0 : filesKeep);

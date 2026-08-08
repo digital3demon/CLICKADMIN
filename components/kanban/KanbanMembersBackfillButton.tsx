@@ -198,11 +198,10 @@ export function KanbanMembersBackfillButton({
         disabled={disabled || running}
         title={tip}
         aria-label={running ? "Обновление…" : "Обновить"}
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)] hover:brightness-[0.98] disabled:cursor-wait disabled:opacity-60 dark:hover:brightness-110 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[0.75rem] sm:font-medium"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)] hover:brightness-[0.98] disabled:cursor-wait disabled:opacity-60 dark:hover:brightness-110"
         onClick={() => void runBackfill()}
       >
         <IconRefresh className={`h-4 w-4 ${running ? "animate-spin" : ""}`} />
-        <span className="hidden sm:inline">{running ? "Обновление…" : "Обновить"}</span>
       </button>
       {running ? (
         <button

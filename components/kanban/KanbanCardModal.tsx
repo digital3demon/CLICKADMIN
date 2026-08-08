@@ -1934,6 +1934,12 @@ export function KanbanCardModal({
                         onBlur={() => {
                           void (async () => {
                             if (descDraft === (card.description || "")) return;
+                            // Пока description подтягивается из наряда (slim чистит persist),
+                            // пустой blur не должен затирать полное описание в Kaiten.
+                            if (card.linkedOrderId && !descDraft.trim()) {
+                              setDescDraft(card.description || "");
+                              return;
+                            }
                             if (
                               card.linkedOrderId &&
                               card.kaitenCardId != null &&

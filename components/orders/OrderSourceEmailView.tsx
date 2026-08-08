@@ -105,20 +105,53 @@ export function OrderSourceEmailView({
           <div className="text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             Вложения
           </div>
-          {email.attachments.map((attachment) => (
-            <a
-              key={attachment.id}
-              href={`/api/mail/emails/${email.id}/attachments/${attachment.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-2 text-xs text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
-            >
-              <span className="min-w-0 truncate font-medium">{attachment.fileName}</span>
-              <span className="shrink-0 text-[var(--text-muted)]">
-                {fileSizeLabel(attachment.size)}
-              </span>
-            </a>
-          ))}
+          {email.attachments.map((attachment) => {
+            const externalUrl = attachment.externalUrl?.trim() || null;
+            const size = fileSizeLabel(attachment.size);
+            const meta = externalUrl
+              ? [size, "Яндекс.Диск"].filter(Boolean).join(" · ")
+              : attachment.id.startsWith("yandex-disk:")
+                ? [size, "Яндекс.Диск (ссылка в письме не сохранена)"].filter(Boolean).join(" · ")
+                : size;
+            if (externalUrl) {
+              return (
+                <a
+                  key={attachment.id}
+                  href={externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-2 text-xs text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+                >
+                  <span className="min-w-0 truncate font-medium">{attachment.fileName}</span>
+                  <span className="shrink-0 text-[var(--text-muted)]">{meta}</span>
+                </a>
+              );
+            }
+            if (attachment.id.startsWith("yandex-disk:")) {
+              return (
+                <div
+                  key={attachment.id}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-2 text-xs text-[var(--text-body)]"
+                  title="Файл на Яндекс.Диске: в теле письма нет URL, откройте письмо во внешней почте"
+                >
+                  <span className="min-w-0 truncate font-medium">{attachment.fileName}</span>
+                  <span className="shrink-0 text-[var(--text-muted)]">{meta}</span>
+                </div>
+              );
+            }
+            return (
+              <a
+                key={attachment.id}
+                href={`/api/mail/emails/${email.id}/attachments/${attachment.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-2 text-xs text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+              >
+                <span className="min-w-0 truncate font-medium">{attachment.fileName}</span>
+                <span className="shrink-0 text-[var(--text-muted)]">{size}</span>
+              </a>
+            );
+          })}
         </div>
       ) : null}
     </article>

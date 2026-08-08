@@ -14,7 +14,85 @@ import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-colum
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+const LINKED_ORDER_SELECT = {
+  id: true,
+  orderNumber: true,
+  doctorId: true,
+  patientName: true,
+  dueDate: true,
+  dueToAdminsAt: true,
+  kaitenAdminDueHasTime: true,
+  kaitenCardTitleLabel: true,
+  kaitenCardTypeId: true,
+  kaitenTrackLane: true,
+  isUrgent: true,
+  urgentCoefficient: true,
+  kaitenCardId: true,
+  kaitenColumnTitle: true,
+  kaitenCardSortOrder: true,
+  kaitenCardTitleMirror: true,
+  kaitenCardDescriptionMirror: true,
+  kaitenBlocked: true,
+  kaitenBlockReason: true,
+  kaitenBlockedAt: true,
+  demoKanbanColumn: true,
+  clientOrderText: true,
+  notes: true,
+  _count: {
+    select: { sourceEmailLinks: true },
+  },
+  continuesFromOrder: {
+    select: {
+      id: true,
+      orderNumber: true,
+      kaitenCardId: true,
+    },
+  },
+  continuationOrders: {
+    where: activeContinuationChildrenWhere,
+    orderBy: { createdAt: "desc" as const },
+    select: {
+      id: true,
+      orderNumber: true,
+      kaitenCardId: true,
+    },
+  },
+  invoiceAttachmentId: true,
+  attachments: {
+    orderBy: { createdAt: "desc" as const },
+    select: {
+      id: true,
+      fileName: true,
+      mimeType: true,
+      size: true,
+      createdAt: true,
+    },
+  },
+  constructions: {
+    where: { category: ConstructionCategory.PRICE_LIST },
+    orderBy: { sortOrder: "asc" as const },
+    take: 1,
+    select: {
+      priceListItemId: true,
+    },
+  },
+} as const;
+
+function parseLinkedOrderIdsParam(raw: string | null): string[] {
+  if (!raw?.trim()) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(",")) {
+    const id = part.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= 80) break;
+  }
+  return out;
+}
+
+export async function GET(request: Request) {
   const session = await getSessionFromCookies();
   if (!session?.sub) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
@@ -26,6 +104,9 @@ export async function GET() {
   }
 
   try {
+    const boardOrderIds = parseLinkedOrderIdsParam(
+      new URL(request.url).searchParams.get("ids"),
+    );
     const [ordersPrisma, clientsPrisma, pricingPrisma] = await Promise.all([
       getOrdersPrisma(),
       getClientsPrisma(),
@@ -42,74 +123,22 @@ export async function GET() {
         { kaitenCardId: { not: null } },
       ],
     };
-    const rows = await ordersPrisma.order.findMany({
+    const recentRows = await ordersPrisma.order.findMany({
       where: linkedOrdersWhere,
       orderBy: { createdAt: "desc" },
       take: 200,
-      select: {
-        id: true,
-        orderNumber: true,
-        doctorId: true,
-        patientName: true,
-        dueDate: true,
-        dueToAdminsAt: true,
-        kaitenAdminDueHasTime: true,
-        kaitenCardTitleLabel: true,
-        kaitenCardTypeId: true,
-        kaitenTrackLane: true,
-        isUrgent: true,
-        urgentCoefficient: true,
-        kaitenCardId: true,
-        kaitenColumnTitle: true,
-        kaitenCardSortOrder: true,
-        kaitenCardTitleMirror: true,
-        kaitenCardDescriptionMirror: true,
-        kaitenBlocked: true,
-        kaitenBlockReason: true,
-        kaitenBlockedAt: true,
-        demoKanbanColumn: true,
-        clientOrderText: true,
-        notes: true,
-        _count: {
-          select: { sourceEmailLinks: true },
-        },
-        continuesFromOrder: {
-          select: {
-            id: true,
-            orderNumber: true,
-            kaitenCardId: true,
-          },
-        },
-        continuationOrders: {
-          where: activeContinuationChildrenWhere,
-          orderBy: { createdAt: "desc" },
-          select: {
-            id: true,
-            orderNumber: true,
-            kaitenCardId: true,
-          },
-        },
-        invoiceAttachmentId: true,
-        attachments: {
-          orderBy: { createdAt: "desc" },
-          select: {
-            id: true,
-            fileName: true,
-            mimeType: true,
-            size: true,
-            createdAt: true,
-          },
-        },
-        constructions: {
-          where: { category: ConstructionCategory.PRICE_LIST },
-          orderBy: { sortOrder: "asc" },
-          take: 1,
-          select: {
-            priceListItemId: true,
-          },
-        },
-      },
+      select: LINKED_ORDER_SELECT,
     });
+    const recentIds = new Set(recentRows.map((r) => r.id));
+    const missingBoardIds = boardOrderIds.filter((id) => !recentIds.has(id));
+    const boardExtraRows =
+      missingBoardIds.length > 0
+        ? await ordersPrisma.order.findMany({
+            where: { ...linkedOrdersWhere, id: { in: missingBoardIds } },
+            select: LINKED_ORDER_SELECT,
+          })
+        : [];
+    const rows = [...boardExtraRows, ...recentRows];
     const doctorIds = Array.from(new Set(rows.map((x) => x.doctorId)));
     const cardTypeIds = Array.from(
       new Set(rows.map((x) => x.kaitenCardTypeId).filter(Boolean)),

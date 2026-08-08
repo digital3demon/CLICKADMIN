@@ -177,6 +177,23 @@ function parseKaitenRetryAfterMs(value: string | null): number {
   return 90_000;
 }
 
+function collectAllLinkedOrderIdsOnBoards(state: KanbanAppState): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const b of state.boards ?? []) {
+    for (const col of b.columns ?? []) {
+      for (const c of col.cards ?? []) {
+        const oid = String(c.linkedOrderId || "").trim();
+        if (!oid || seen.has(oid)) continue;
+        seen.add(oid);
+        ids.push(oid);
+        if (ids.length >= 80) return ids;
+      }
+    }
+  }
+  return ids;
+}
+
 /**
  * Id нарядов с карточками Kaiten на досках: сначала активная доска (дорожка),
  * чтобы позиция на экране обновлялась раньше остальных.
@@ -510,8 +527,15 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         }
       }
 
+      const boardIds = appStateRef.current
+        ? collectAllLinkedOrderIdsOnBoards(appStateRef.current)
+        : [];
+      const linkedOrdersUrl =
+        boardIds.length > 0
+          ? `/api/kanban/linked-orders?ids=${encodeURIComponent(boardIds.join(","))}`
+          : "/api/kanban/linked-orders";
       const [rLinked, rStandalone] = await Promise.all([
-        fetch("/api/kanban/linked-orders", { credentials: "include" }),
+        fetch(linkedOrdersUrl, { credentials: "include" }),
         fetch("/api/kanban/standalone-cards", { credentials: "include" }),
       ]);
       if (!rLinked.ok) return;
@@ -2067,9 +2091,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     <div className="flex h-[calc(100dvh)] min-h-0 w-full flex-col overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text)]">
       <header className="flex max-w-full flex-col gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:gap-2 sm:px-4 sm:py-2.5">
         <div className="flex min-w-0 max-w-full items-center gap-1.5 sm:gap-2">
-          <label className="min-w-0 max-w-[min(42%,11rem)] flex-none max-md:ms-[max(2.75rem,calc(env(safe-area-inset-left,0px)+2.35rem+0.2rem))] sm:max-w-[14rem] md:ms-0 md:max-w-[16rem]">
+          <div className="relative max-md:ms-[max(2.75rem,calc(env(safe-area-inset-left,0px)+2.35rem+0.2rem))] md:ms-0">
             <select
-              className="min-h-[2.25rem] w-full min-w-0 max-w-full truncate rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-1.5 py-1 text-[0.72rem] font-semibold leading-tight text-[var(--kanban-text)] sm:min-h-[2.75rem] sm:px-2.5 sm:py-2 sm:text-[0.875rem]"
+              className="inline-flex min-h-[2.25rem] max-w-[min(42vw,11rem)] appearance-none truncate rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] py-1 pl-1.5 pr-6 text-[0.68rem] font-semibold leading-tight text-[var(--kanban-text)] sm:min-h-[2.75rem] sm:max-w-[14rem] sm:py-2 sm:pl-3 sm:pr-7 sm:text-[0.8125rem] md:max-w-[16rem] md:text-[0.875rem]"
               value={
                 isKanbanAggregateBoardId(appState.activeBoardId)
                   ? (visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
@@ -2093,7 +2117,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 </option>
               ))}
             </select>
-          </label>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden
+              className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--kanban-text-muted)] sm:right-2 sm:h-3.5 sm:w-3.5"
+            >
+              <path
+                d="M6 9l6 6 6-6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
           <div
             className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-1.5"
             role="group"
@@ -2202,7 +2242,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             <button
               id="kanban-stop-drop-target"
               type="button"
-              className={`inline-flex h-9 shrink-0 items-center justify-center rounded-md border px-1.5 text-[0.68rem] font-extrabold tracking-wide shadow-sm transition-[transform,box-shadow,background-color,border-color,color] duration-100 hover:brightness-[0.98] dark:hover:brightness-110 sm:h-auto sm:px-3 sm:py-1.5 sm:text-[0.95rem] ${
+              className={`inline-flex h-9 shrink-0 items-center justify-center rounded-md border px-2 text-[0.68rem] font-extrabold tracking-wide shadow-sm transition-[transform,box-shadow,background-color,border-color,color] duration-100 hover:brightness-[0.98] dark:hover:brightness-110 sm:px-3 sm:text-[0.8125rem] ${
                 stopOpen
                   ? "border-white/70 bg-white text-black ring-2 ring-white/70"
                   : "border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)]"
@@ -2267,7 +2307,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               : null}
             <button
               type="button"
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-1.5 text-[0.65rem] font-medium text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:h-auto sm:px-2 sm:py-1.5 sm:text-[0.75rem]"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 text-[0.68rem] font-medium text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:px-3 sm:text-[0.8125rem]"
               title={`Архив (${archivedCards.length})`}
               aria-label={`Архив (${archivedCards.length})`}
               onClick={() => setArchiveOpen(true)}

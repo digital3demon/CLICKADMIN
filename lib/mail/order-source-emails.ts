@@ -1,6 +1,7 @@
 import "server-only";
 import type { PrismaClient } from "@prisma/client";
 import { cleanMailTextBody, mailHtmlToText } from "@/lib/mail/mail-text-cleanup";
+import { mergeEmailAttachmentsWithYandexDisk } from "@/lib/mail/yandex-disk-mail-attachments";
 
 export type OrderSourceEmailRow = {
   id: string;
@@ -18,6 +19,8 @@ export type OrderSourceEmailRow = {
     fileName: string;
     mimeType: string;
     size: number;
+    /** Яндекс.Диск / внешняя ссылка; null|undefined — обычное MIME-вложение. */
+    externalUrl?: string | null;
   }>;
 };
 
@@ -81,11 +84,9 @@ export async function fetchOrderSourceEmails(
     textBody: orderSourceEmailBodyText(link.email),
     isReplyTarget: link.isReplyTarget,
     autoReplySentAt: link.autoReplySentAt?.toISOString() ?? null,
-    attachments: link.email.attachments.map((a) => ({
-      id: a.id,
-      fileName: a.fileName,
-      mimeType: a.mimeType,
-      size: a.size,
-    })),
+    attachments: mergeEmailAttachmentsWithYandexDisk(link.email.attachments, {
+      textBody: link.email.textBody,
+      htmlBody: link.email.htmlBody,
+    }),
   }));
 }

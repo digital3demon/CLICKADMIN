@@ -217,6 +217,7 @@ export function stringField(value: unknown, max = 2000): string {
 export { previewFromText, textFromHtml, previewFromMailBody } from "@/lib/mail/mail-preview";
 
 import { sanitizeMailHtml } from "@/lib/mail/sanitize-mail-html";
+import { mergeEmailAttachmentsWithYandexDisk } from "@/lib/mail/yandex-disk-mail-attachments";
 
 export { sanitizeMailHtml } from "@/lib/mail/sanitize-mail-html";
 
@@ -1242,8 +1243,21 @@ export async function getEmailDetail(
   }
   const sanitizedHtml = sanitizeMailHtml(email.htmlBody);
   const { encryptedAppPassword: _encryptedAppPassword, imapHost: _imapHost, imapPort: _imapPort, imapSecure: _imapSecure, ...safeAccount } = email.account;
+  const attachments = mergeEmailAttachmentsWithYandexDisk(email.attachments, {
+    textBody: email.textBody,
+    htmlBody: email.htmlBody,
+  }).map((attachment) => ({
+    id: attachment.id,
+    fileName: attachment.fileName,
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+    contentId: email.attachments.find((row) => row.id === attachment.id)?.contentId ?? null,
+    isInline: email.attachments.find((row) => row.id === attachment.id)?.isInline ?? false,
+    externalUrl: attachment.externalUrl ?? null,
+  }));
   return {
     ...email,
+    attachments,
     account: safeAccount,
     folder: email.folder ? toMailFolderDto(email.folder) : null,
     isRead: markRead ? true : email.isRead,

@@ -98,7 +98,7 @@ function kanbanDescriptionTail(
     : "Наряд в CRM. Карточка Kaiten ещё не создана.";
 }
 
-/** Описание карточки CRM-канбана: из Kaiten (зеркало), иначе из полей наряда. */
+/** Описание карточки CRM-канбана: зеркало Kaiten и поля наряда — берём более полное. */
 export function resolveLinkedOrderKanbanDescription(
   row: Pick<
     KaitenLinkedOrderForKanban,
@@ -107,17 +107,28 @@ export function resolveLinkedOrderKanbanDescription(
   demo: boolean,
 ): string {
   const tail = kanbanDescriptionTail(row, demo);
+  const fromFields = buildKanbanDescriptionFromOrderFields(row);
   const mirror = row.kaitenCardDescriptionMirror?.trim();
-  if (mirror && row.kaitenCardId != null) {
-    const body = stripKaitenDescriptionForKanbanBody(mirror);
-    return body ? `${body}\n\n${tail}` : tail;
-  }
+  const fromMirror =
+    mirror && row.kaitenCardId != null
+      ? stripKaitenDescriptionForKanbanBody(mirror)
+      : "";
+
+  // Короткое/устаревшее зеркало не должно перекрывать полный clientOrderText
+  // (в tenant JSON описание раньше ужимали до 120 символов и могли записать обратно).
+  const body =
+    fromMirror.length >= fromFields.length ? fromMirror : fromFields;
+  return body ? `${body}\n\n${tail}` : tail;
+}
+
+function buildKanbanDescriptionFromOrderFields(
+  row: Pick<KaitenLinkedOrderForKanban, "clientOrderText" | "notes">,
+): string {
   const blocks: string[] = [];
   const client = row.clientOrderText?.trim();
   const notes = row.notes?.trim();
   if (client) blocks.push(`Заказ от клиента:\n${client}`);
   if (notes) blocks.push(`Комментарий от админов:\n${notes}`);
-  blocks.push(tail);
   return blocks.join("\n\n");
 }
 

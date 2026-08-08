@@ -142,24 +142,59 @@ export function MailViewer({
               className="grid w-full max-w-[760px] min-w-0 gap-3"
               style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
             >
-              {email.attachments.map((a) => (
-                <a
-                  key={a.id}
-                  href={`/api/mail/emails/${email.id}/attachments/${a.id}`}
-                  className="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 transition hover:border-[var(--sidebar-blue)]/40 hover:bg-[var(--surface-hover)]"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-selection-bg)] text-xl">
-                    {a.mimeType.startsWith("image/") ? "▧" : "▤"}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-[var(--app-text)]">
-                      {a.fileName}
+              {email.attachments.map((a) => {
+                const externalUrl = a.externalUrl?.trim() || null;
+                const isVirtualDisk = a.id.startsWith("yandex-disk:");
+                const href = externalUrl
+                  ? externalUrl
+                  : isVirtualDisk
+                    ? null
+                    : `/api/mail/emails/${email.id}/attachments/${a.id}`;
+                const meta = [
+                  sizeLabel(a.size),
+                  externalUrl || isVirtualDisk ? "Яндекс.Диск" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+                const inner = (
+                  <>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-selection-bg)] text-xl">
+                      {a.mimeType.startsWith("image/") ? "▧" : "▤"}
                     </span>
-                    <span className="text-xs text-[var(--text-muted)]">{sizeLabel(a.size)}</span>
-                  </span>
-                  <span className="shrink-0 text-sm font-semibold text-[var(--sidebar-blue)]">Скачать</span>
-                </a>
-              ))}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-[var(--app-text)]">
+                        {a.fileName}
+                      </span>
+                      <span className="text-xs text-[var(--text-muted)]">{meta}</span>
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold text-[var(--sidebar-blue)]">
+                      {href ? (externalUrl ? "Открыть" : "Скачать") : "Нет ссылки"}
+                    </span>
+                  </>
+                );
+                if (!href) {
+                  return (
+                    <div
+                      key={a.id}
+                      title="Файл на Яндекс.Диске: в теле письма нет URL"
+                      className="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)] p-3"
+                    >
+                      {inner}
+                    </div>
+                  );
+                }
+                return (
+                  <a
+                    key={a.id}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3 transition hover:border-[var(--sidebar-blue)]/40 hover:bg-[var(--surface-hover)]"
+                  >
+                    {inner}
+                  </a>
+                );
+              })}
             </div>
           </div>
         ) : null}

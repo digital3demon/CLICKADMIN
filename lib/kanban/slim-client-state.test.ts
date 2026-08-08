@@ -230,4 +230,44 @@ describe("slimKanbanStateForClientState", () => {
     expect(stop.comments).toEqual([]);
     expect(stop.files).toEqual([]);
   });
+
+  it("clears description for linked-order cards (rehydrated from Order)", () => {
+    const base = structuredClone(defaultAppState()) as KanbanAppState;
+    const ortho = base.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;
+    ortho.columns[0]!.cards = [
+      {
+        id: "linked1",
+        title: "2607-327",
+        description:
+          "Заказ от клиента:\nПисьмо: Велижанина\nОт: Никита Соколов\nДата: 23.07.26\n\nПолный текст с https://disk.yandex.ru/d/x",
+        cardTypeId: "",
+        assignees: [],
+        participants: [],
+        dueDate: "",
+        urgent: false,
+        checklist: [],
+        files: [],
+        comments: [],
+        activity: [],
+        blocked: false,
+        blockReason: "",
+        blockedByUserId: "",
+        blockedAt: "",
+        createdByUserId: "u1",
+        lastMovedAt: null,
+        trackLane: "",
+        linkedOrderId: "order-velizhanina",
+        kaitenCardId: 123,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    const slim = slimKanbanStateForClientState(base);
+    const card = slim.boards
+      .find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!
+      .columns[0]!.cards[0]!;
+    expect(card.description).toBe("");
+    expect(card.linkedOrderId).toBe("order-velizhanina");
+  });
 });

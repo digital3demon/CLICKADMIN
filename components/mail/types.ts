@@ -97,6 +97,8 @@ export type MailAttachment = {
   size: number;
   contentId?: string | null;
   isInline: boolean;
+  /** Ссылка на Яндекс.Диск (виртуальное вложение из тела письма). */
+  externalUrl?: string | null;
 };
 
 export type MailEmailDetail = MailEmailRow & {

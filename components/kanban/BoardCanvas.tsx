@@ -111,6 +111,13 @@ type BoardCanvasProps = {
 };
 
 const CARD_MENU_WIDTH = 220;
+/**
+ * Карточка на доске: формат листа серии ISO A (A0/A1/…), длинная сторона горизонтально.
+ * Соотношение сторон width/height = √2.
+ */
+const KANBAN_BOARD_CARD_FRAME_CLASS =
+  "w-full min-w-0 shrink-0 aspect-[1414/1000] touch-pan-x touch-pan-y";
+
 const CARD_MENU_GAP = 4;
 const CARD_MENU_EST_HEIGHT = 150;
 /** Одна ширина колонок на mobile и desktop — иначе на 140px карточки мнутся не как на десктопе. */
@@ -319,13 +326,11 @@ function KanbanCardView({
       : "transition-[box-shadow,transform,border-color]";
 
   const blockReasonText = (card.blockReason || "").trim() || "Карточка остановлена";
-  /** При STOP — выше, чтобы причина влезала; иначе место под подписи аватаров. */
-  const cardHeightClass = blocked ? "h-[11.5rem]" : "h-[10rem]";
 
   return (
     <div
       data-card-id={card.id}
-      className={`block w-full min-w-0 shrink-0 touch-pan-x touch-pan-y ${cardHeightClass}`}
+      className={KANBAN_BOARD_CARD_FRAME_CLASS}
     >
       <div
         className="relative h-full rounded-[9px] p-[2px]"
@@ -385,8 +390,8 @@ function KanbanCardView({
               </div>
             ) : null}
             <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-1 px-2 pb-0.5 pt-1.5">
-              <div className="min-w-0 text-[0.8rem] font-semibold leading-snug text-[var(--kanban-text)]">
-                <span className="line-clamp-3 break-words [overflow-wrap:break-word] [word-break:normal]">
+              <div className="min-h-0 overflow-y-auto text-[0.8rem] font-semibold leading-snug text-[var(--kanban-text)]">
+                <span className="break-words [overflow-wrap:anywhere] [word-break:normal]">
                   {card.title}
                 </span>
               </div>
@@ -589,15 +594,12 @@ function SortableKanbanCard({
     ...(dndLocked || !isDragging ? {} : { touchAction: "none" as const }),
   };
 
-  const blocked = isCardBlocked(card);
-  const wrapperHeightClass = blocked ? "h-[11.5rem]" : "h-[10rem]";
-
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className={`${wrapperHeightClass} w-full min-w-0 shrink-0`}
+      className={KANBAN_BOARD_CARD_FRAME_CLASS}
     >
       <KanbanCardView
         card={card}

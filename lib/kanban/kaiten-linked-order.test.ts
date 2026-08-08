@@ -49,6 +49,33 @@ describe("resolveLinkedOrderKanbanDescription", () => {
     );
   });
 
+  it("короткое зеркало не перекрывает полный clientOrderText", () => {
+    const fullClient = [
+      "Письмо: Велижанина",
+      "От: Никита Соколов",
+      "Дата: 23.07.26, 14:40",
+      "",
+      "Добрый день! Заказ-наряд:",
+      "Пациент: Велижанина Елена Анатольевна",
+      "Сканы, фото, КТ по ссылке:",
+      "https://disk.yandex.ru/d/2yh-VY6Hig_M4g",
+    ].join("\n");
+    const stubMirror =
+      "Заказ от клиента:\nПисьмо: Велижанина\nОт: Никита Соколов\nДата…";
+    const desc = resolveLinkedOrderKanbanDescription(
+      {
+        clientOrderText: fullClient,
+        notes: null,
+        kaitenCardId: 1,
+        kaitenCardDescriptionMirror: stubMirror,
+      },
+      false,
+    );
+    expect(desc).toContain("https://disk.yandex.ru/d/2yh-VY6Hig_M4g");
+    expect(desc).toContain("Велижанина Елена Анатольевна");
+    expect(desc).not.toMatch(/Дата…$/u);
+  });
+
   it("без зеркала — из clientOrderText и notes", () => {
     const desc = resolveLinkedOrderKanbanDescription(
       {

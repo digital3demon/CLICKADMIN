@@ -959,6 +959,7 @@ export function MailLayout() {
             fileName: attachment.fileName,
             mimeType: attachment.mimeType,
             size: attachment.size,
+            externalUrl: attachment.externalUrl ?? null,
           })),
         })),
       });

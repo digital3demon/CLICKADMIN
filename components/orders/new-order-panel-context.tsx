@@ -44,6 +44,7 @@ export type OrderSourceEmail = {
     fileName: string;
     mimeType: string;
     size: number;
+    externalUrl?: string | null;
   }>;
 };
 

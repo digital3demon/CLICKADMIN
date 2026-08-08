@@ -1794,6 +1794,12 @@ export function NewOrderForm({
     email: OrderSourceEmail,
     attachment: OrderSourceEmail["attachments"][number],
   ) {
+    if (attachment.externalUrl?.trim() || attachment.id.startsWith("yandex-disk:")) {
+      setSaveError(
+        "Файл на Яндекс.Диске: скачайте его по ссылке из письма и приложите к заказу вручную (CRM не качает архивы с Диска).",
+      );
+      return;
+    }
     const loadingKey = `${email.id}:${attachment.id}`;
     if (attachment.size > CRM_UPLOAD_MAX_BYTES) {
       setSaveError(CRM_UPLOAD_TOO_LARGE_MESSAGE);
@@ -2943,16 +2949,28 @@ function SourceEmailAttachmentRow({
   isLoading?: boolean;
   onAdd: (email: OrderSourceEmail, attachment: OrderSourceEmail["attachments"][number]) => void;
 }) {
-  const downloadUrl = sourceEmailAttachmentUrl(email.id, attachment.id);
+  const externalUrl = attachment.externalUrl?.trim() || null;
+  const isVirtualDisk = attachment.id.startsWith("yandex-disk:");
+  const downloadUrl = externalUrl
+    ? externalUrl
+    : isVirtualDisk
+      ? null
+      : sourceEmailAttachmentUrl(email.id, attachment.id);
   const previewUrl = sourceEmailAttachmentUrl(email.id, attachment.id, true);
-  const previewable = canPreviewSourceAttachment(attachment);
+  const previewable = !externalUrl && !isVirtualDisk && canPreviewSourceAttachment(attachment);
   const [previewOpen, setPreviewOpen] = useState(false);
   const isImage = attachment.mimeType.toLowerCase().startsWith("image/");
+  const sizeText = [
+    sourceFileSize(attachment.size),
+    externalUrl || isVirtualDisk ? "Яндекс.Диск" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <>
       <div className="group flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]">
         <span className="min-w-0 truncate">{attachment.fileName}</span>
-        <span className={`shrink-0 ${sizeClassName}`}>{sourceFileSize(attachment.size)}</span>
+        <span className={`shrink-0 ${sizeClassName}`}>{sizeText}</span>
         <span
           className={`flex shrink-0 items-center gap-1.5 transition ${
             isLoading ? "opacity-100" : "opacity-0 group-hover:opacity-100"
@@ -2969,24 +2987,36 @@ function SourceEmailAttachmentRow({
               ◉
             </button>
           ) : null}
-          <a
-            href={downloadUrl}
-            download={attachment.fileName}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold leading-none text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
-            title="Скачать"
-            aria-label="Скачать вложение"
-          >
-            ⬇
-          </a>
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold leading-none text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)] disabled:pointer-events-none"
-            title={isLoading ? "Файл добавляется" : "Добавить в заказ"}
-            aria-label={isLoading ? "Файл добавляется" : "Добавить вложение в заказ"}
-            disabled={isLoading}
-            onClick={() => onAdd(email, attachment)}
-          >
-            {isLoading ? (
+          {downloadUrl ? (
+            <a
+              href={downloadUrl}
+              {...(externalUrl
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : { download: attachment.fileName })}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold leading-none text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)]"
+              title={externalUrl ? "Открыть на Яндекс.Диске" : "Скачать"}
+              aria-label={externalUrl ? "Открыть на Яндекс.Диске" : "Скачать вложение"}
+            >
+              ⬇
+            </a>
+          ) : (
+            <span
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[0.65rem] font-semibold text-[var(--text-muted)]"
+              title="В теле письма нет URL на Диск"
+            >
+              —
+            </span>
+          )}
+          {!isVirtualDisk && !externalUrl ? (
+            <button
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold leading-none text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--app-text)] disabled:pointer-events-none"
+              title={isLoading ? "Файл добавляется" : "Добавить в заказ"}
+              aria-label={isLoading ? "Файл добавляется" : "Добавить вложение в заказ"}
+              disabled={isLoading}
+              onClick={() => onAdd(email, attachment)}
+            >
+              {isLoading ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src="/favicons/favicon-blue-48.png"
@@ -2997,6 +3027,7 @@ function SourceEmailAttachmentRow({
               "＋"
             )}
           </button>
+          ) : null}
         </span>
       </div>
       {previewOpen ? (
