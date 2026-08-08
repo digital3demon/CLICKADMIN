@@ -113,6 +113,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/login")) return true;
   if (pathname.startsWith("/api/auth/login")) return true;
   if (pathname.startsWith("/api/auth/telegram-login")) return true;
+  if (pathname.startsWith("/api/auth/telegram-webapp")) return true;
+  if (pathname === "/tg-app" || pathname.startsWith("/tg-app/")) return true;
   if (pathname.startsWith("/api/auth/activate-invite")) return true;
   if (pathname.startsWith("/api/auth/bootstrap-owner")) return true;
   if (pathname.startsWith("/api/auth/status")) return true;
@@ -239,6 +241,7 @@ export async function middleware(req: NextRequest) {
     if (
       pathname.startsWith("/api/auth/login") ||
       pathname.startsWith("/api/auth/telegram-login") ||
+      pathname.startsWith("/api/auth/telegram-webapp") ||
       pathname.startsWith("/api/auth/activate-invite") ||
       pathname.startsWith("/api/auth/bootstrap-owner")
     ) {

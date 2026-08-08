@@ -5,6 +5,10 @@ import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { orderPathById } from "@/lib/order-public-ref";
 import {
+  telegramMiniAppCardDeepLink,
+  telegramMiniAppOrderDeepLink,
+} from "@/lib/telegram-mini-app-links";
+import {
   KANBAN_CHAT_STATE_KEY,
   parseKanbanAppState,
 } from "@/lib/kanban/chat-sync";
@@ -26,14 +30,19 @@ function kanbanCardTelegramHref(
   card: KanbanCard,
   linkToOrderPage: boolean,
 ): string {
-  const base = crmPublicBaseUrl().replace(/\/+$/, "");
   const linked = card.linkedOrderId?.trim();
   if (linked) {
+    const mini = telegramMiniAppOrderDeepLink(linked);
+    if (mini) return mini;
+    const base = crmPublicBaseUrl().replace(/\/+$/, "");
     if (linkToOrderPage) {
       return `${base}${orderPathById(linked)}`;
     }
     return `${base}${kanbanOrderDeepLinkPath(linked)}`;
   }
+  const miniCard = telegramMiniAppCardDeepLink(card.id);
+  if (miniCard) return miniCard;
+  const base = crmPublicBaseUrl().replace(/\/+$/, "");
   const params = new URLSearchParams({ card: card.id });
   return `${base}/kanban?${params.toString()}`;
 }

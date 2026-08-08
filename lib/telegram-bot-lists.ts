@@ -6,6 +6,7 @@ import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { orderPathById } from "@/lib/order-public-ref";
 import { orderShipmentListStatusLabel } from "@/lib/order-shipment-list-status-label";
+import { telegramMiniAppOrderDeepLink } from "@/lib/telegram-mini-app-links";
 import {
   addCalendarDaysYmd,
   moscowDayBoundsUtc,
@@ -69,9 +70,11 @@ function telegramOrderCardTitleOneLineFromParts(p: {
     .trim();
 }
 
-function orderCardHref(orderId: string, linkToOrderPage: boolean): string {
+function orderCardHref(orderId: string, _linkToOrderPage: boolean): string {
+  const mini = telegramMiniAppOrderDeepLink(orderId);
+  if (mini) return mini;
   const base = crmPublicBaseUrl().replace(/\/+$/, "");
-  if (linkToOrderPage) {
+  if (_linkToOrderPage) {
     return `${base}${orderPathById(orderId)}`;
   }
   return `${base}${kanbanOrderDeepLinkPath(orderId)}`;

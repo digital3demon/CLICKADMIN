@@ -50,6 +50,7 @@ type AppShellProps = {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
+  const isTgApp = pathname === "/tg-app" || pathname?.startsWith("/tg-app/");
   const isPublicSticker = isPublicStickerHubPath(pathname ?? "");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -80,7 +81,7 @@ export function AppShell({ children }: AppShellProps) {
     };
   }, [mobileNavOpen]);
 
-  if (isLogin || isPublicSticker) {
+  if (isLogin || isTgApp || isPublicSticker) {
     return (
       <div className="min-h-screen w-full bg-[var(--app-bg)]">{children}</div>
     );
