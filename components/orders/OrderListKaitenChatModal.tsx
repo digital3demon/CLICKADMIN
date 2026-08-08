@@ -27,6 +27,7 @@ import {
   orderListChatMessageShellClass,
   shouldShowKanbanChatSyncStatus,
 } from "@/lib/kanban/chat-message-display";
+import { needsOrderListKaitenChatFallback } from "@/lib/kanban/order-list-chat-hydrate";
 import { formatOrderListChatModalTitle } from "@/lib/order-list-chat-modal-title";
 
 type CommentRow = {
@@ -206,15 +207,16 @@ export function OrderListKaitenChatModal({
     setLoadError(null);
     setChatMode("kanban");
     try {
-      // local=1: зеркало CRM без live Kaiten — как карточка на доске канбана.
-      const chatRes = await fetch(`/api/orders/${orderId}/kanban-chat?local=1`, {
+      // Как карточка на доске: без local=1 — сервер подмешивает Kaiten в зеркало CRM.
+      const chatRes = await fetch(`/api/orders/${orderId}/kanban-chat`, {
         credentials: "include",
         cache: "no-store",
       });
       const chatData = (await chatRes.json().catch(() => ({}))) as KanbanChatPayload;
       applyOrderHeader(chatData.orderHeader);
-      const kanbanComments =
-        chatRes.ok && chatData.hasCard === true
+      const hasCard = chatRes.ok && chatData.hasCard === true;
+      let kanbanComments =
+        hasCard
           ? normalizeKanbanChatComments(chatData.comments)
           : chatRes.ok && Array.isArray(chatData.comments) && chatData.comments.length > 0
             ? normalizeKanbanChatComments(chatData.comments)
@@ -222,8 +224,29 @@ export function OrderListKaitenChatModal({
       const kanbanImages =
         chatRes.ok && Array.isArray(chatData.cardImages) ? chatData.cardImages : [];
 
-      if (chatRes.ok && (chatData.hasCard === true || kanbanComments.length > 0)) {
-        setChatMode("kanban");
+      if (
+        needsOrderListKaitenChatFallback({
+          mirrorOk: chatRes.ok,
+          commentCount: kanbanComments.length,
+        })
+      ) {
+        const kaitenChatRes = await fetch(`/api/orders/${orderId}/kaiten/chat`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (kaitenChatRes.ok) {
+          const kaitenChatData = (await kaitenChatRes.json().catch(() => ({}))) as {
+            comments?: KaitenSnapshot["comments"];
+          };
+          const fromKaiten = kaitenSnapshotToCommentRows(kaitenChatData.comments);
+          if (fromKaiten.length > 0) {
+            kanbanComments = fromKaiten;
+          }
+        }
+      }
+
+      if (chatRes.ok && (hasCard || kanbanComments.length > 0)) {
+        setChatMode(hasCard ? "kanban" : "kaiten");
         setSnap({
           configured: true,
           card: {},

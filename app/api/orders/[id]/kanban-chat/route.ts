@@ -181,13 +181,15 @@ function parseKanbanAppState(raw: unknown): KanbanAppState | null {
 }
 
 function findCardByLinkedOrderId(state: KanbanAppState, orderId: string): CardLocation | null {
+  const orderIdTrim = String(orderId || "").trim();
+  if (!orderIdTrim) return null;
   for (let bi = 0; bi < state.boards.length; bi += 1) {
     const board = state.boards[bi]!;
     for (let ci = 0; ci < board.columns.length; ci += 1) {
       const col = board.columns[ci]!;
       for (let i = 0; i < col.cards.length; i += 1) {
         const card = col.cards[i]!;
-        if (String(card.linkedOrderId || "").trim() !== orderId) continue;
+        if (String(card.linkedOrderId || "").trim() !== orderIdTrim) continue;
         return { boardIndex: bi, columnIndex: ci, cardIndex: i };
       }
     }
@@ -375,37 +377,86 @@ export async function GET(
       orderHeader,
     });
   }
-  const card = state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
-  const linkedKaiten = card.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
-  if (!localOnly && linkedKaiten) {
+
+  const ordersPrisma = await getOrdersPrisma();
+  const orderMeta = await ordersPrisma.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: {
+      kaitenCardId: true,
+      tenant: { select: { kanbanAdminMentionTag: true } },
+    },
+  });
+
+  let workingState = state;
+  let workingUpdatedAt = statePayload.updatedAt;
+  let workingLoc = loc;
+  let card =
+    workingState.boards[workingLoc.boardIndex]!.columns[workingLoc.columnIndex]!
+      .cards[workingLoc.cardIndex]!;
+  const cardKaitenId =
+    card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)
+      ? (card.kaitenCardId as number)
+      : null;
+  const orderKaitenId =
+    orderMeta?.kaitenCardId != null && Number.isFinite(orderMeta.kaitenCardId)
+      ? orderMeta.kaitenCardId
+      : null;
+  /** Карточка CRM иногда без kaitenCardId — берём id с наряда. */
+  const resolvedKaitenId = cardKaitenId ?? orderKaitenId;
+  const linkedKaiten = resolvedKaitenId != null;
+
+  if (!localOnly && resolvedKaitenId != null) {
     const auth = getKaitenRestAuth();
     if (auth) {
-      const list = await kaitenListComments(auth, card.kaitenCardId as number);
+      const list = await kaitenListComments(auth, resolvedKaitenId);
       if (list.ok) {
         const parsed = dedupeParsedKaitenComments(
-          list.comments.map(parseKaitenListComment).filter((x): x is NonNullable<typeof x> => x != null),
+          list.comments
+            .map(parseKaitenListComment)
+            .filter((x): x is NonNullable<typeof x> => x != null),
         );
-        const merged = upsertKaitenCommentsToCard(
-          card.comments || [],
-          parsed.map((c) => ({
-            id: c.id,
-            text: c.text,
-            created: c.created,
-            authorName: c.authorName,
-            parentId: c.parentId,
-          })),
-        );
-        const compacted = compactCardComments(merged.next);
-        if (merged.changed || compacted.length !== (card.comments || []).length) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          if (attempt > 0) {
+            const reloaded = await loadTenantKanbanState(tenantId);
+            if (!reloaded.state) break;
+            const relLoc = findCardByLinkedOrderId(reloaded.state, orderId);
+            if (!relLoc) break;
+            workingState = reloaded.state;
+            workingUpdatedAt = reloaded.updatedAt;
+            workingLoc = relLoc;
+            card =
+              workingState.boards[workingLoc.boardIndex]!.columns[
+                workingLoc.columnIndex
+              ]!.cards[workingLoc.cardIndex]!;
+          }
+          const merged = upsertKaitenCommentsToCard(
+            card.comments || [],
+            parsed.map((c) => ({
+              id: c.id,
+              text: c.text,
+              created: c.created,
+              authorName: c.authorName,
+              parentId: c.parentId,
+            })),
+          );
+          const compacted = compactCardComments(merged.next);
+          const needPersist =
+            merged.changed ||
+            compacted.length !== (card.comments || []).length ||
+            (cardKaitenId == null && orderKaitenId != null);
+          if (!needPersist) break;
           card.comments = compacted;
+          if (cardKaitenId == null && orderKaitenId != null) {
+            card.kaitenCardId = orderKaitenId;
+          }
           card.updatedAt = nowIso();
-          await saveTenantKanbanStateWithRetry(tenantId, state, statePayload.updatedAt);
+          const saved = await saveTenantKanbanStateWithRetry(
+            tenantId,
+            workingState,
+            workingUpdatedAt,
+          );
+          if (saved) break;
         }
-        const ordersPrisma = await getOrdersPrisma();
-        const orderMeta = await ordersPrisma.order.findFirst({
-          where: { id: orderId, tenantId },
-          select: { tenant: { select: { kanbanAdminMentionTag: true } } },
-        });
         try {
           await importKaitenCommentsSideEffects(
             orderId,
@@ -419,6 +470,7 @@ export async function GET(
       }
     }
   }
+
   const comments = normalizeCardCommentsForApi(
     compactCardComments(card.comments || []),
   );
@@ -436,7 +488,7 @@ export async function GET(
     hasCard: true,
     comments,
     cardImages,
-    boardId: state.boards[loc.boardIndex]!.id,
+    boardId: workingState.boards[workingLoc.boardIndex]!.id,
     cardId: card.id,
     linkedKaiten,
     orderHeader,
