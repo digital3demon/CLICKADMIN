@@ -59,6 +59,8 @@
     "db:contractors:import": "node --env-file=.env scripts/contractors-backup-restore.cjs import",
     "db:price:export": "node --env-file=.env scripts/price-backup-restore.cjs export",
     "db:price:import": "node --env-file=.env scripts/price-backup-restore.cjs import",
+    "demo:anonymize-dump": "node scripts/anonymize-crm-dump.cjs",
+    "demo:apply-dump": "node scripts/apply-crm-dump-to-demo.cjs",
     "db:studio": "prisma studio",
     "import:clinics": "node --env-file=.env scripts/import-clinics-xlsx.cjs",
     "import:clinics:1": "node --env-file=.env scripts/import-clinics-xlsx.cjs data/imports/1.xlsx",

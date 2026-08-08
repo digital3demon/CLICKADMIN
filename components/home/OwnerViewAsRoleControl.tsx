@@ -1,14 +1,15 @@
-"use client";
-
+import type { UserRole } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import type { UserRole } from "@prisma/client";
 import { INVITABLE_ROLES, USER_ROLE_LABELS } from "@/lib/user-role-labels";
 
 type Props = {
   currentRole: UserRole;
 };
 
+/**
+ * Владелец смотрит CRM под одной ролью за раз (тот же пользователь, меняется session.role).
+ */
 export function OwnerViewAsRoleControl({ currentRole }: Props) {
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<UserRole>(
@@ -41,22 +42,39 @@ export function OwnerViewAsRoleControl({ currentRole }: Props) {
       aria-label="Показать CRM как"
       className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm"
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <label className="text-sm font-semibold text-[var(--text-strong)]">
-          Показать CRM как
-        </label>
-        <select
-          value={selectedRole}
-          disabled={isPending}
-          onChange={(event) => setSelectedRole(event.target.value as UserRole)}
-          className="min-w-0 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none sm:min-w-[15rem]"
-        >
-          {INVITABLE_ROLES.map((role) => (
-            <option key={role} value={role}>
-              {USER_ROLE_LABELS[role]}
-            </option>
-          ))}
-        </select>
+      <p className="text-sm font-semibold text-[var(--text-strong)]">
+        Показать CRM как
+      </p>
+      <p className="mt-1 text-xs text-[var(--text-secondary)]">
+        Один пользователь — меняется только роль просмотра.
+      </p>
+      <fieldset className="mt-3 space-y-2" disabled={isPending}>
+        <legend className="sr-only">Роль</legend>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {INVITABLE_ROLES.map((role) => {
+            const id = `view-as-role-${role}`;
+            return (
+              <label
+                key={role}
+                htmlFor={id}
+                className="flex cursor-pointer items-center gap-2 rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+              >
+                <input
+                  id={id}
+                  type="radio"
+                  name="view-as-role"
+                  value={role}
+                  checked={selectedRole === role}
+                  onChange={() => setSelectedRole(role)}
+                  className="h-4 w-4 accent-[var(--sidebar-blue)]"
+                />
+                <span>{USER_ROLE_LABELS[role]}</span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
         <button
           type="button"
           disabled={isPending}

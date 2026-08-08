@@ -10,6 +10,7 @@ import {
 import { profileAvatarEmoji } from "@/lib/profile-avatar-presets";
 import type { KanbanCrmUserRow } from "./kanban-crm-users-context";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
 
 const sizeClass = {
   xs: "h-[18px] w-[18px] text-[0.5rem]",
@@ -107,15 +108,32 @@ export function KanbanPersonAvatar({
   const pathId = `kanban-name-arc-${reactId.replace(/:/g, "")}`;
   const [customPhotoFailed, setCustomPhotoFailed] = useState(false);
   const { byId } = useKanbanCrmUsers();
+  const { isDemo } = useSessionUser();
   const crm = byId.get(userId);
   const legacy = homeBoard.users.find((x) => x.id === userId);
 
-  const displayName = crm?.displayName ?? legacy?.name ?? "Пользователь";
-  const initials =
-    legacy?.initials ??
-    initialsFromDisplayName(crm?.displayName ?? crm?.email ?? displayName);
+  const forceDemoPersonLabel =
+    isDemo ||
+    Boolean(
+      typeof process !== "undefined" &&
+        (process.env.NEXT_PUBLIC_CRM_STANDALONE_DEMO ?? "")
+          .trim()
+          .match(/^(1|true|yes|on)$/i),
+    );
+
+  const displayName = forceDemoPersonLabel
+    ? "Пользователь"
+    : (crm?.displayName ?? legacy?.name ?? "Пользователь");
+  const initials = forceDemoPersonLabel
+    ? "П"
+    : (legacy?.initials ??
+      initialsFromDisplayName(crm?.displayName ?? crm?.email ?? displayName));
   const shortLabel =
-    nameArc || nameCaption ? shortArcLabelFromDisplayName(displayName) : "";
+    nameArc || nameCaption
+      ? forceDemoPersonLabel
+        ? "Пользоват"
+        : shortArcLabelFromDisplayName(displayName)
+      : "";
   const arcLabel = nameArc ? shortLabel : "";
 
   const compactRing =

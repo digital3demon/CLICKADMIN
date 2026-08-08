@@ -3,6 +3,7 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { isCrmStandaloneDemo } from "@/lib/crm-standalone-demo";
 import {
   isKaitenEnvConfigured,
   loadKaitenIntegrationTenantState,
@@ -26,6 +27,14 @@ export async function gateKaitenIntegration(
   db: PrismaClient,
   tenantId: string,
 ): Promise<KaitenIntegrationGateResult> {
+  if (isCrmStandaloneDemo()) {
+    return {
+      ok: false,
+      enabled: false,
+      reason: KAITEN_INTEGRATION_DISABLED_CODE,
+      message: "В демо-версии Kaiten отключён.",
+    };
+  }
   const state = await loadKaitenIntegrationTenantState(db, tenantId);
   if (state.reenableInProgress) {
     return { ok: true, enabled: true };

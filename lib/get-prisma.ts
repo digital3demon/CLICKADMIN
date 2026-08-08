@@ -16,6 +16,7 @@ import { getDemoPrisma } from "@/lib/prisma-demo";
 import { getDemoDatabaseUrl } from "@/lib/prisma-demo";
 import { prisma } from "@/lib/prisma";
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
+import { assertCrmStandaloneDemoSafe } from "@/lib/crm-standalone-demo";
 
 function isSqliteUrl(url: string | undefined): boolean {
   return String(url || "").trim().startsWith("file:");
@@ -40,6 +41,7 @@ async function prepareClient(
  * чтобы не попасть в основную БД при любом расхождении путей чтения cookie.
  */
 export async function getPrisma(): Promise<PrismaClient> {
+  assertCrmStandaloneDemoSafe();
   try {
     const c = await cookies();
     const demoT = c.get(SESSION_DEMO_COOKIE_NAME)?.value;

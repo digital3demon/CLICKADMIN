@@ -9,6 +9,7 @@ import {
   canManageUsers,
 } from "@/lib/auth/permissions";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
+import { isCrmStandaloneDemo } from "@/lib/crm-standalone-demo";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function DirectoryHubPage() {
     a?.CONFIG_KANBAN_BOARDS === true ||
     a?.CONFIG_KANBAN_PRODUCTION === true ||
     a?.CONFIG_KANBAN_CARD_TYPES === true;
-  const showKaiten = a?.CONFIG_KAITEN === true;
+  const showKaiten = a?.CONFIG_KAITEN === true && !isCrmStandaloneDemo();
   const showCouriers = a?.CONFIG_COURIERS === true;
   const showOrdersImportExport = a?.CONFIG_ORDERS_IMPORT_EXPORT === true;
   const showContractTemplate = a?.CONFIG_CONTRACT_TEMPLATE === true;

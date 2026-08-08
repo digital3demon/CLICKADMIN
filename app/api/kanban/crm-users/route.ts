@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import {
+  DEMO_KANBAN_PERSON_LABEL,
+  isCrmStandaloneDemo,
+} from "@/lib/crm-standalone-demo";
 import { getPrisma } from "@/lib/get-prisma";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +17,8 @@ export async function GET() {
   if (!s?.sub) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
+
+  const forceDemoLabel = Boolean(s.demo) || isCrmStandaloneDemo();
 
   const prisma = await getPrisma();
   const rows = await prisma.user.findMany({
@@ -31,9 +37,11 @@ export async function GET() {
 
   const users = rows.map((u) => ({
     id: u.id,
-    displayName: u.displayName?.trim() || u.email || "Пользователь",
-    email: u.email,
-    mentionHandle: u.mentionHandle?.trim() || null,
+    displayName: forceDemoLabel
+      ? DEMO_KANBAN_PERSON_LABEL
+      : u.displayName?.trim() || u.email || DEMO_KANBAN_PERSON_LABEL,
+    email: forceDemoLabel ? "user@demo.local" : u.email,
+    mentionHandle: forceDemoLabel ? null : u.mentionHandle?.trim() || null,
     role: u.role,
     avatarPresetId: u.avatarPresetId,
     avatarCustomUploadedAt: u.avatarCustomUploadedAt?.toISOString() ?? null,

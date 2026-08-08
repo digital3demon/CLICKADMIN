@@ -29,8 +29,8 @@ describe("tenantSlugFromHostHeader", () => {
     expect(tenantSlugFromHostHeader("www.example.com")).toBe("default");
   });
 
-  it("test.click-lab.online → default (form-поддомен, не tenant)", () => {
-    expect(tenantSlugFromHostHeader("test.click-lab.online")).toBe("default");
+  it("demo.click-lab.online → default (standalone демо, не tenant)", () => {
+    expect(tenantSlugFromHostHeader("demo.click-lab.online")).toBe("default");
   });
 
   it("CRM_DEFAULT_TENANT_SLUG фиксирует slug для любого хоста (одна организация)", () => {

@@ -10,6 +10,8 @@ const RESERVED = new Set([
   "admin",
   /** Публичная форма КликМиг, не отдельный tenant. */
   "test",
+  /** Standalone демо CRM, не tenant slug. */
+  "demo",
 ]);
 
 /**
