@@ -5,8 +5,6 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
 import {
   URGENT_MENU_OPTIONS,
-  URGENT_NO_COEF,
-  URGENT_UNSET,
 } from "@/lib/order-urgency";
 import { useMenuDismiss } from "@/components/orders/LabStatusPillMenu";
 
@@ -27,7 +25,7 @@ function ChevronMini({ open }: { open: boolean }) {
 }
 
 const BTN =
-  "inline-flex min-h-7 max-w-[5.75rem] items-center gap-0.5 rounded-full border border-sky-200/80 bg-sky-50 px-1.5 py-0.5 text-left text-[10px] font-semibold leading-tight text-sky-950 shadow-sm dark:border-sky-800/50 dark:bg-sky-950/35 dark:text-sky-100 sm:min-h-9 sm:max-w-[min(100vw-8rem,12rem)] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[11px] md:min-h-10 md:px-3 md:text-xs";
+  "inline-flex min-h-7 max-w-[min(100vw-6rem,14rem)] items-center gap-0.5 rounded-full border border-sky-200/80 bg-sky-50 px-1.5 py-0.5 text-left text-[10px] font-semibold leading-tight text-sky-950 shadow-sm dark:border-sky-800/50 dark:bg-sky-950/35 dark:text-sky-100 sm:min-h-9 sm:max-w-[min(100vw-8rem,14rem)] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[11px] md:min-h-10 md:px-3 md:text-xs";
 
 export function UrgentPillMenu({
   value,
@@ -52,14 +50,6 @@ export function UrgentPillMenu({
     return o?.label ?? "Срочность";
   }, [value]);
 
-  /** Короткая подпись в узкой пилюле (книжная ориентация). */
-  const shortLabel = useMemo(() => {
-    if (value === URGENT_UNSET) return "—";
-    if (value === URGENT_NO_COEF) return "срочно";
-    const o = URGENT_MENU_OPTIONS.find((x) => x.value === value);
-    return o?.label ?? "…";
-  }, [value]);
-
   return (
     <div className="relative z-[60]" ref={wrapRef}>
       <button
@@ -71,12 +61,7 @@ export function UrgentPillMenu({
         aria-label={`Срочность: ${label}. Открыть список`}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="min-w-0 truncate sm:max-w-none">
-          <span className="sm:hidden">
-            {value === URGENT_NO_COEF ? "Срочно" : `С\u00a0${shortLabel}`}
-          </span>
-          <span className="hidden sm:inline">Срочн.: {label}</span>
-        </span>
+        <span className="min-w-0 truncate">Срочн.: {label}</span>
         <ChevronMini open={open} />
       </button>
       {typeof document !== "undefined" && open

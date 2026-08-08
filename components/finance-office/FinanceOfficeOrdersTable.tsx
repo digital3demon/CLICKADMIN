@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Fragment,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
@@ -16,6 +23,18 @@ import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import { listTagKaitenColumnTitle, LIST_TAG_KAITEN_BLOCKED } from "@/lib/order-list-tag-filter";
+
+function targetInsideInteractive(target: EventTarget | null) {
+  if (target == null || !(target instanceof Node)) return false;
+  const el =
+    target instanceof Element ? target : (target.parentElement ?? null);
+  if (!el) return false;
+  return Boolean(
+    el.closest(
+      "a, button, input, select, textarea, label, [role='button'], [role='combobox'], [data-row-click-ignore]",
+    ),
+  );
+}
 
 export type FinanceOfficeOrderTableRow = {
   id: string;
@@ -98,6 +117,7 @@ export function FinanceOfficeOrdersTable({
   q?: string | null;
   toolbar?: ReactNode;
 }) {
+  const router = useRouter();
   const { user } = useSessionUser();
   const canSeeAdminIndicators = canSeeOrderNotificationKind(
     "admin",
@@ -381,105 +401,141 @@ export function FinanceOfficeOrdersTable({
                 </tr>
                 <tr className="border-b border-[var(--card-border)] shell-desktop:hidden print:hidden">
                   <td colSpan={99} className="p-0">
-                    <div className="p-3">
-                      <div className="mb-1.5 flex items-start justify-between gap-2">
-                        <div className="flex min-w-0 flex-col items-start gap-1">
-                          <Link
-                            href={orderPathById(o.id)}
-                            className="font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
-                            title={`${o.orderNumber} — открыть наряд`}
-                          >
-                            № {o.orderNumber}
-                          </Link>
-                          <OrderListKaitenColumnTag
-                            kaitenCardId={o.kaitenCardId}
-                            demoKanbanColumn={o.demoKanbanColumn}
-                            demoCardTypeName={o.kaitenCardType?.name ?? null}
-                            kaitenColumnTitle={o.kaitenColumnTitle}
-                            kaitenBlocked={blocked}
-                            kaitenBlockReason={o.kaitenBlockReason}
-                            filterHref={kaitenStatusFilterHref}
-                            placement="underOrderNumber"
-                          />
-                        </div>
-                        {labDueLabel || appointmentLabel ? (
-                          <div className="mt-0.5 shrink-0 text-right text-xs text-[var(--text-muted)]">
-                            {labDueLabel ? (
-                              <div title="Лаб срок">Лаб {labDueLabel}</div>
-                            ) : null}
-                            {appointmentLabel ? (
-                              <div title="Запись">Зап. {appointmentLabel}</div>
-                            ) : null}
+                    <div
+                      className="cursor-pointer px-2.5 py-2"
+                      role="link"
+                      tabIndex={0}
+                      aria-label={`Открыть наряд ${o.orderNumber}`}
+                      onClick={(e: MouseEvent<HTMLElement>) => {
+                        if (targetInsideInteractive(e.target)) return;
+                        if (e.button !== 0) return;
+                        const href = orderPathById(o.id);
+                        if (e.metaKey || e.ctrlKey) {
+                          window.open(href, "_blank", "noopener,noreferrer");
+                          return;
+                        }
+                        router.push(href);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        if (targetInsideInteractive(e.target)) return;
+                        e.preventDefault();
+                        router.push(orderPathById(o.id));
+                      }}
+                    >
+                      <div className="mb-1 flex min-w-0 items-center gap-1.5">
+                        <Link
+                          href={orderPathById(o.id)}
+                          className="shrink-0 font-mono text-[0.95rem] font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
+                          title={`${o.orderNumber} — открыть наряд`}
+                        >
+                          № {o.orderNumber}
+                        </Link>
+                        <OrderListKaitenColumnTag
+                          kaitenCardId={o.kaitenCardId}
+                          demoKanbanColumn={o.demoKanbanColumn}
+                          demoCardTypeName={o.kaitenCardType?.name ?? null}
+                          kaitenColumnTitle={o.kaitenColumnTitle}
+                          kaitenBlocked={blocked}
+                          kaitenBlockReason={o.kaitenBlockReason}
+                          filterHref={kaitenStatusFilterHref}
+                          placement="underOrderNumber"
+                        />
+                        <div
+                          className="ms-auto flex shrink-0 items-center gap-1.5"
+                          data-row-click-ignore
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <label className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]">
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 rounded border-[var(--input-border)]"
+                              checked={selected.has(o.id)}
+                              onChange={(e) =>
+                                setSelected((prev) => {
+                                  const next = new Set(prev);
+                                  if (e.target.checked) next.add(o.id);
+                                  else next.delete(o.id);
+                                  return next;
+                                })
+                              }
+                              aria-label={`Выбрать наряд ${o.orderNumber}`}
+                            />
+                          </label>
+                          <div className="[&_button]:h-8 [&_button]:min-h-8 [&_button]:min-w-8 [&_button]:w-8">
+                            <OrderShippedToggle
+                              orderId={o.id}
+                              shipped={workSent}
+                            />
                           </div>
-                        ) : null}
+                        </div>
                       </div>
 
-                      <div className="mb-0.5 truncate text-xs font-normal text-[var(--text-secondary)]">
-                        {clinicName}
-                      </div>
-
-                      <div className="mb-2 max-w-[12rem]">
+                      <div
+                        className="mb-1 max-w-full"
+                        data-row-click-ignore
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <OrderListAdminMemoCell
                           orderId={o.id}
                           initialMemo={o.listAdminMemo}
                         />
                       </div>
 
-                      <div className="mb-1.5 flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">
+                      <div className="truncate text-xs text-[var(--text-secondary)]">
+                        {clinicName}
+                      </div>
+
+                      <div className="mb-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 text-sm font-semibold leading-snug text-[var(--app-text)]">
                         {doctorName ? <span>{doctorName}</span> : null}
                         {doctorName && patientName ? (
-                          <span className="text-[var(--text-muted)]">·</span>
+                          <span className="font-normal text-[var(--text-muted)]">
+                            ·
+                          </span>
                         ) : null}
                         {patientName ? <span>{patientName}</span> : null}
+                        {labDueLabel || appointmentLabel ? (
+                          <span className="ms-auto text-[11px] font-normal text-[var(--text-muted)]">
+                            {labDueLabel ? `Лаб ${labDueLabel}` : null}
+                            {labDueLabel && appointmentLabel ? " · " : null}
+                            {appointmentLabel
+                              ? `Зап. ${appointmentLabel}`
+                              : null}
+                          </span>
+                        ) : null}
                       </div>
 
                       {o.counterpartyRequisitesText?.trim() ? (
-                        <div className="mb-2 text-xs leading-snug text-[var(--text-secondary)]">
+                        <div className="mb-1 truncate text-[11px] leading-snug text-[var(--text-muted)]">
                           {o.counterpartyRequisitesText.trim()}
                         </div>
                       ) : null}
 
-                      <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-[44px] [&_button]:min-w-[44px]">
-                        <OrderListOrderChatCell
-                          orderId={o.id}
-                          orderNumber={o.orderNumber}
-                          patientName={patientName || undefined}
-                          doctorName={doctorName || undefined}
-                          labMentionHighlight={
-                      canSeeAdminIndicators && o.listKaitenLabMentionHighlight
-                    }
-                          embedded
-                        />
-                        <label className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-[var(--input-border)]"
-                            checked={selected.has(o.id)}
-                            onChange={(e) =>
-                              setSelected((prev) => {
-                                const next = new Set(prev);
-                                if (e.target.checked) next.add(o.id);
-                                else next.delete(o.id);
-                                return next;
-                              })
-                            }
-                            aria-label={`Выбрать наряд ${o.orderNumber}`}
-                          />
-                        </label>
-                        <Link
-                          href={orderPathById(o.id)}
-                          className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm font-medium text-[var(--text-strong)] active:bg-[var(--surface-hover)]"
-                          title={`${o.orderNumber} — открыть наряд`}
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <div
+                          className="shrink-0 [&_button]:h-8 [&_button]:min-h-8 [&_button]:min-w-8"
+                          data-row-click-ignore
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          Открыть
-                        </Link>
-                        <div className="min-h-[44px] flex-1 rounded-lg bg-[var(--surface-subtle)] px-2 py-1">
-                          <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                          <OrderListOrderChatCell
+                            orderId={o.id}
+                            orderNumber={o.orderNumber}
+                            patientName={patientName || undefined}
+                            doctorName={doctorName || undefined}
+                            labMentionHighlight={
+                              canSeeAdminIndicators &&
+                              o.listKaitenLabMentionHighlight
+                            }
+                            embedded
+                          />
                         </div>
-                      </div>
-
-                      <div className="mt-2 text-xs text-[var(--text-secondary)] [&_.order-list-tags-pack]:items-center">
-                        {renderTagsCell()}
+                        <div
+                          className="min-w-0 flex-1 text-xs text-[var(--text-secondary)] [&_.order-list-tags-pack]:items-center"
+                          data-row-click-ignore
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {renderTagsCell()}
+                        </div>
                       </div>
                     </div>
                   </td>

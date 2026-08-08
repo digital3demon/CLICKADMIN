@@ -2,10 +2,11 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { OrderCorrectionToastStack } from "@/components/orders/OrderCorrectionToastStack";
 import { OrderBackgroundUploadToast } from "@/components/orders/OrderBackgroundUploadToast";
 import { isPublicStickerHubPath } from "@/lib/sticker-public-path";
+import { MobileNavProvider, useMobileNav } from "@/components/layout/mobile-nav";
 import { Sidebar } from "./Sidebar";
 
 const SIDEBAR_W_CLASSIC = "calc(100% / 7)";
@@ -39,22 +40,14 @@ function MenuToggleIcon({ open }: { open: boolean }) {
   );
 }
 
-type AppShellProps = {
-  children: ReactNode;
-};
-
-/**
- * Десктоп (shell-desktop = ширина ≥1024px и высота ≥560px): колонка меню 1/7, контент 6/7.
- * Иначе — выезжающее меню и «гамбургер», как на телефоне (узкое окно или низкая высота).
- */
-export function AppShell({ children }: AppShellProps) {
+function AppShellChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isLogin = pathname === "/login" || pathname.startsWith("/login/");
-  const isTgApp = pathname === "/tg-app" || pathname?.startsWith("/tg-app/");
-  const isPublicSticker = isPublicStickerHubPath(pathname ?? "");
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
+  const {
+    mobileNavOpen,
+    setMobileNavOpen,
+    closeMobileNav,
+    titleAsMenu,
+  } = useMobileNav();
 
   useEffect(() => {
     closeMobileNav();
@@ -81,12 +74,6 @@ export function AppShell({ children }: AppShellProps) {
     };
   }, [mobileNavOpen]);
 
-  if (isLogin || isTgApp || isPublicSticker) {
-    return (
-      <div className="min-h-screen w-full bg-[var(--app-bg)]">{children}</div>
-    );
-  }
-
   return (
     <div
       className="min-h-screen w-full"
@@ -97,20 +84,22 @@ export function AppShell({ children }: AppShellProps) {
         } as CSSProperties
       }
     >
-      <button
-        type="button"
-        className="fixed z-[80] flex h-11 w-11 items-center justify-center rounded-md border border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text-strong)] shadow-md shell-desktop:hidden"
-        style={{
-          top: "max(0.75rem, env(safe-area-inset-top, 0px))",
-          left: "max(0.75rem, env(safe-area-inset-left, 0px))",
-        }}
-        aria-expanded={mobileNavOpen}
-        aria-controls="app-primary-nav"
-        aria-label={mobileNavOpen ? "Закрыть меню" : "Открыть меню"}
-        onClick={() => setMobileNavOpen((o) => !o)}
-      >
-        <MenuToggleIcon open={mobileNavOpen} />
-      </button>
+      {!titleAsMenu || mobileNavOpen ? (
+        <button
+          type="button"
+          className="fixed z-[80] flex h-11 w-11 items-center justify-center rounded-md border border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text-strong)] shadow-md shell-desktop:hidden"
+          style={{
+            top: "max(0.75rem, env(safe-area-inset-top, 0px))",
+            left: "max(0.75rem, env(safe-area-inset-left, 0px))",
+          }}
+          aria-expanded={mobileNavOpen}
+          aria-controls="app-primary-nav"
+          aria-label={mobileNavOpen ? "Закрыть меню" : "Открыть меню"}
+          onClick={() => setMobileNavOpen((o) => !o)}
+        >
+          <MenuToggleIcon open={mobileNavOpen} />
+        </button>
+      ) : null}
 
       <main
         className={[
@@ -126,7 +115,9 @@ export function AppShell({ children }: AppShellProps) {
 
       <div
         className={`fixed inset-0 z-[60] bg-black/50 transition-opacity duration-200 shell-desktop:hidden ${
-          mobileNavOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          mobileNavOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
         }`}
         aria-hidden
         onClick={closeMobileNav}
@@ -145,5 +136,33 @@ export function AppShell({ children }: AppShellProps) {
       <OrderCorrectionToastStack />
       <OrderBackgroundUploadToast />
     </div>
+  );
+}
+
+type AppShellProps = {
+  children: ReactNode;
+};
+
+/**
+ * Десктоп (shell-desktop = ширина ≥1024px и высота ≥560px): колонка меню 1/7, контент 6/7.
+ * Иначе — выезжающее меню и «гамбургер», как на телефоне (узкое окно или низкая высота).
+ */
+export function AppShell({ children }: AppShellProps) {
+  const pathname = usePathname();
+  const isLogin = pathname === "/login" || pathname.startsWith("/login/");
+  const isTgApp = pathname === "/tg-app" || pathname?.startsWith("/tg-app/");
+  const isPublicSticker = isPublicStickerHubPath(pathname ?? "");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  if (isLogin || isTgApp || isPublicSticker) {
+    return (
+      <div className="min-h-screen w-full bg-[var(--app-bg)]">{children}</div>
+    );
+  }
+
+  return (
+    <MobileNavProvider open={mobileNavOpen} setOpen={setMobileNavOpen}>
+      <AppShellChrome>{children}</AppShellChrome>
+    </MobileNavProvider>
   );
 }

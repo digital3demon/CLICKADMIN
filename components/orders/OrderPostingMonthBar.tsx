@@ -208,13 +208,14 @@ export function OrderPostingMonthBar({ toolbarEnd }: Props) {
           <p className="mt-2 text-sm text-red-600">{error}</p>
         ) : null}
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
+      <div className="flex min-w-0 max-sm:flex-wrap sm:flex-nowrap items-stretch gap-2">
         <Button
           type="button"
           variant="secondary"
           size="sm"
           disabled={busy}
           onClick={() => void load()}
+          className="shrink-0"
         >
           Обновить
         </Button>
@@ -224,6 +225,7 @@ export function OrderPostingMonthBar({ toolbarEnd }: Props) {
           size="sm"
           disabled={busy}
           onClick={() => void advance()}
+          className="shrink-0"
         >
           Старт нового месяца
         </Button>

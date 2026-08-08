@@ -131,15 +131,15 @@ export function OrdersProstheticsHistoryTable({
         </p>
       ) : null}
       <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm [-webkit-overflow-scrolling:touch]">
-        <table className="w-full min-w-[58rem] table-fixed border-collapse text-left text-sm sm:min-w-[64rem]">
+        <table className="w-full min-w-[72rem] table-fixed border-collapse text-left text-sm sm:min-w-[78rem]">
           <colgroup>
-            <col style={{ width: "12rem" }} />
-            <col style={{ width: "8rem" }} />
-            <col style={{ width: "10.25rem" }} />
-            <col style={{ width: "8rem" }} />
             <col style={{ width: "11rem" }} />
-            <col style={{ width: "6.5rem" }} />
-            <col />
+            <col style={{ width: "7rem" }} />
+            <col style={{ width: "10rem" }} />
+            <col style={{ width: "7.5rem" }} />
+            <col style={{ width: "10.5rem" }} />
+            <col style={{ width: "6.25rem" }} />
+            <col style={{ width: "24rem" }} />
           </colgroup>
           <thead>
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
@@ -217,10 +217,10 @@ export function OrdersProstheticsHistoryTable({
                     )}
                   </td>
                   <td
-                    className="px-2 py-2 text-[var(--text-secondary)] sm:px-3 sm:py-2.5"
+                    className="min-w-0 px-2 py-2 text-[var(--text-secondary)] sm:px-3 sm:py-2.5"
                     title={item.text}
                   >
-                    <span className="block whitespace-normal break-words line-clamp-3">
+                    <span className="block overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere] line-clamp-4">
                       {item.text}
                     </span>
                   </td>

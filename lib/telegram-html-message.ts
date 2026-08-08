@@ -82,30 +82,52 @@ export function telegramListStatusForButton(detail: string | null | undefined): 
 }
 
 /**
- * Текст кнопки: название на первой строке, статус на второй (лимит 64 символа Telegram).
+ * Убирает инициалы («А.В.», «И.») — в кнопке остаются фамилии и остальной текст.
+ * Даты вроде 10.08 не трогаем (там цифры, не буквы).
+ */
+export function telegramListTitleSurnamesOnly(label: string): string {
+  return String(label || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    // «Фамилия А.В.» / «Фамилия А.» → «Фамилия»
+    .replace(/\s+[A-Za-zА-Яа-яЁё]\.(?:[A-Za-zА-Яа-яЁё]\.)?/gu, " ")
+    // нумерация «1. » в начале, если осталась
+    .replace(/^\d+\.\s+/u, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Текст кнопки: название (фамилии) + перевод строки + «→ статус» (лимит 64).
  */
 export function formatTelegramListButtonText(
   label: string,
   detail?: string | null,
   maxLen = TELEGRAM_INLINE_BUTTON_TEXT_MAX,
 ): string {
-  const title = String(label || "")
-    .replace(/\s+/g, " ")
-    .trim() || "Открыть";
-  const status = telegramListStatusForButton(detail);
-  if (!status) return truncateTelegramButtonText(title, maxLen);
+  const title =
+    telegramListTitleSurnamesOnly(label) ||
+    String(label || "")
+      .replace(/\s+/g, " ")
+      .trim() ||
+    "Открыть";
+  const statusRaw = telegramListStatusForButton(detail);
+  if (!statusRaw) return truncateTelegramButtonText(title, maxLen);
 
-  // «title\nstatus» — перевод строки тоже входит в лимит 64.
   const sep = "\n";
-  const statusBudget = Math.min(status.length, Math.max(8, Math.floor(maxLen / 3)));
-  let statusLine = status.length <= statusBudget ? status : `${status.slice(0, statusBudget - 1)}…`;
-  const titleMax = maxLen - sep.length - statusLine.length;
-  if (titleMax < 8) {
-    statusLine = truncateTelegramButtonText(status, Math.max(4, maxLen - 9));
-    const tMax = maxLen - sep.length - statusLine.length;
-    return `${truncateTelegramButtonText(title, Math.max(1, tMax))}${sep}${statusLine}`;
+  const arrow = "→ ";
+  // Стрелка + статус на второй строке; приоритет — уместить статус.
+  let statusLine = `${arrow}${statusRaw}`;
+  if (statusLine.length > maxLen - 10) {
+    const room = Math.max(4, maxLen - 10 - arrow.length);
+    statusLine = `${arrow}${truncateTelegramButtonText(statusRaw, room)}`;
   }
-  return `${truncateTelegramButtonText(title, titleMax)}${sep}${statusLine}`;
+  if (statusLine.length >= maxLen) {
+    return truncateTelegramButtonText(statusLine, maxLen);
+  }
+
+  const titleMax = maxLen - sep.length - statusLine.length;
+  return `${truncateTelegramButtonText(title, Math.max(1, titleMax))}${sep}${statusLine}`;
 }
 
 /**

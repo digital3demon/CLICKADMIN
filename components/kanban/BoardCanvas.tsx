@@ -65,6 +65,7 @@ import {
   IconTrash,
 } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
+import { KanbanCardTitleFit } from "./KanbanCardTitleFit";
 import { useKanbanCardHoverPreview } from "./KanbanCardHoverPreview";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import type { AggregateCardDragArgs } from "@/lib/kanban/aggregate-card-drag";
@@ -390,11 +391,7 @@ function KanbanCardView({
               </div>
             ) : null}
             <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-1.5 px-2 pb-0.5 pt-1.5">
-              <div className="min-h-0 min-w-0 overflow-hidden text-[0.8rem] font-semibold leading-snug text-[var(--kanban-text)]">
-                <span className="line-clamp-4 break-words [overflow-wrap:anywhere] [word-break:normal]">
-                  {card.title}
-                </span>
-              </div>
+              <KanbanCardTitleFit title={card.title} />
               <div className="flex max-w-[5.25rem] shrink-0 flex-row flex-wrap items-start justify-end gap-x-0.5 gap-y-0.5 self-start">
                 {primaryMemberId ? (
                   <KanbanPersonAvatar

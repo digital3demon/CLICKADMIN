@@ -3,6 +3,7 @@ import {
   formatTelegramBotWebAppList,
   formatTelegramHtmlLinkList,
   formatTelegramListButtonText,
+  telegramListTitleSurnamesOnly,
   truncateTelegramButtonText,
   truncateTelegramHtmlMessage,
 } from "@/lib/telegram-html-message";
@@ -45,7 +46,7 @@ describe("formatTelegramBotWebAppList", () => {
       web_app: { url: "https://click-lab.online/tg-app?startapp=o_or_a" },
     });
     expect(btn?.text).toContain("\n");
-    expect(btn?.text).toContain("Производство");
+    expect(btn?.text).toContain("→ Производство");
     expect(btn?.text).not.toMatch(/^\d+\./);
     expect(btn!.text.length).toBeLessThanOrEqual(64);
   });
@@ -57,7 +58,7 @@ describe("formatTelegramBotWebAppList", () => {
       "H",
     );
     expect(out.replyMarkup?.inline_keyboard[0]?.[0]).toEqual({
-      text: "Наряд 1\nСборка",
+      text: "Наряд 1\n→ Сборка",
       url: "https://example.com/o/1",
     });
   });
@@ -77,14 +78,26 @@ describe("formatTelegramBotWebAppList", () => {
 });
 
 describe("formatTelegramListButtonText", () => {
-  it("две строки в пределах 64", () => {
+  it("фамилии без инициалов и статус со стрелкой", () => {
     const t = formatTelegramListButtonText(
       "2608-037 Марченко А.В. Зубарев С.В. Композит.кор 10.08 09:00",
       "Статус: Сдана админам",
     );
     expect(t).toContain("\n");
-    expect(t.split("\n")[1]).toContain("Сдана админам");
+    expect(t).toContain("Марченко");
+    expect(t).toContain("Зубарев");
+    expect(t).not.toMatch(/А\.В\./);
+    expect(t).not.toMatch(/С\.В\./);
+    expect(t.split("\n")[1]).toBe("→ Сдана админам");
     expect(t.length).toBeLessThanOrEqual(64);
+  });
+
+  it("telegramListTitleSurnamesOnly режет инициалы и нумерацию", () => {
+    expect(
+      telegramListTitleSurnamesOnly(
+        "1. 2608-062 Дроздова А.Ю. Лойберг Э.И. позиционер",
+      ),
+    ).toBe("2608-062 Дроздова Лойберг позиционер");
   });
 });
 

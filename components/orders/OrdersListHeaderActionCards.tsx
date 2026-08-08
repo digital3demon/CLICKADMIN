@@ -17,8 +17,8 @@ import { LabTasksActionCard } from "@/components/orders/LabTasksActionCard";
 
 function cardShell(isHarmony: boolean): string {
   return isHarmony
-    ? "flex min-h-[7.5rem] min-w-[11rem] flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50 sm:min-w-[13rem]"
-    : "flex min-h-[7.5rem] min-w-[11rem] flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06] sm:min-w-[13rem]";
+    ? "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
+    : "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
 }
 
 export function OrdersListHeaderActionCards({
@@ -123,14 +123,14 @@ export function OrdersListHeaderActionCards({
 
   return (
     <>
-      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap lg:w-auto lg:max-w-[56rem] xl:max-w-[64rem]">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:w-auto lg:max-w-[36rem] xl:max-w-[42rem]">
         {showProstheticsBlock ? (
         <button
           type="button"
           className={cardShell(isHarmony)}
           onClick={() => setProstheticsOpen(true)}
         >
-          <span className="text-sm font-bold uppercase tracking-wide text-[var(--sidebar-blue)]">
+          <span className="text-[11px] font-bold uppercase leading-tight tracking-wide text-[var(--sidebar-blue)] sm:text-xs">
             Заказы протетики
           </span>
           <span className="flex items-center justify-center gap-2">

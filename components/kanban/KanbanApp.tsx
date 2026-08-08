@@ -2137,7 +2137,17 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           <div
             className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-1.5"
             role="group"
-            aria-label="Виртуальные доски и вид"
+            aria-label="Вид доски"
+          >
+            <KanbanViewModePicker
+              viewMode={appState.viewMode}
+              onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
+            />
+          </div>
+          <div
+            className="ms-auto flex min-w-0 shrink-0 items-center justify-end gap-1 sm:gap-1.5"
+            role="group"
+            aria-label="Виртуальные доски"
           >
             <button
               type="button"
@@ -2197,10 +2207,6 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               <span className="sm:hidden">отвст</span>
               <span className="hidden sm:inline">Ответственный</span>
             </button>
-            <KanbanViewModePicker
-              viewMode={appState.viewMode}
-              onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
-            />
           </div>
         </div>
       </header>

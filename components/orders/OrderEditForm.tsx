@@ -470,16 +470,22 @@ type ClinicRow = {
 };
 
 const inputClass =
-  "mt-1 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-base text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:text-sm";
+  "mt-0.5 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-base text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:text-sm";
 const comboboxClass = `${inputClass} cursor-text`;
-const labelClass = "block text-sm font-medium text-[var(--text-body)]";
+const labelClass = "block text-sm font-medium leading-none text-[var(--text-body)]";
+const labelInlineClass =
+  "text-sm font-medium leading-none text-[var(--text-body)]";
+const labelRowClass =
+  "mb-0 flex min-h-[1.25rem] items-center gap-x-2";
+const editChangeBtnClass =
+  "shrink-0 text-xs font-medium leading-none text-[var(--text-muted)] underline decoration-[var(--text-muted)]/45 underline-offset-2 hover:text-[var(--text-secondary)] hover:no-underline";
 const checkboxLabelClassEdit =
   "flex cursor-pointer items-center gap-2 text-xs font-medium text-[var(--text-strong)] select-none sm:text-sm";
 const checkboxInputClassEdit =
   "h-3.5 w-3.5 shrink-0 rounded border-[var(--input-border)] text-[var(--sidebar-blue)] focus:ring-sky-500";
 /** Колонка сетки наряда (как секции в «Новом заказе», без «плавающего» центрирования). */
 const editColWrap =
-  "min-w-0 space-y-0 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4";
+  "min-w-0 space-y-0 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 sm:p-3.5";
 /** То же для верхней четырёхколоночной сетки: выравнивание по высоте строки. */
 const editMainCol = `${editColWrap} flex min-h-0 flex-col xl:h-full`;
 /** Заказ от клиента / комментарий от админов: без xl:h-full — иначе колонка тянется за соседями и авт высота textarea ломается. */
@@ -2201,20 +2207,20 @@ export function OrderEditForm({
       {loadClinicsError ? (
         <p className="mb-2 text-sm text-amber-700">{loadClinicsError}</p>
       ) : null}
-      <section className="border-b border-[var(--card-border)] pb-2">
-        <h3 className="mb-1.5 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
+      <section className="border-b border-[var(--card-border)] pb-1.5">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
           Заказчик
         </h3>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <div>
-            <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
-              <label className={labelClass} htmlFor="oe-clinic">
+            <div className={labelRowClass}>
+              <label className={labelInlineClass} htmlFor="oe-clinic">
                 Клиника
               </label>
               {!customerEditClinic ? (
                 <button
                   type="button"
-                  className="shrink-0 text-xs font-medium text-[var(--text-muted)] underline decoration-[var(--text-muted)]/45 underline-offset-2 hover:text-[var(--text-secondary)] hover:no-underline sm:text-sm"
+                  className={editChangeBtnClass}
                   onClick={() => setCustomerEditClinic(true)}
                 >
                   Изменить
@@ -2233,14 +2239,14 @@ export function OrderEditForm({
             />
           </div>
           <div>
-            <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
-              <label className={labelClass} htmlFor="oe-doctor">
+            <div className={labelRowClass}>
+              <label className={labelInlineClass} htmlFor="oe-doctor">
                 Врач
               </label>
               {!customerEditDoctor ? (
                 <button
                   type="button"
-                  className="shrink-0 text-xs font-medium text-[var(--text-muted)] underline decoration-[var(--text-muted)]/45 underline-offset-2 hover:text-[var(--text-secondary)] hover:no-underline sm:text-sm"
+                  className={editChangeBtnClass}
                   onClick={() => setCustomerEditDoctor(true)}
                 >
                   Изменить
@@ -2264,20 +2270,20 @@ export function OrderEditForm({
           </div>
         </div>
       </section>
-      <section className="pt-2">
-        <h3 className="mb-1.5 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
+      <section className="pt-1.5">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
           Пациент
         </h3>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <div>
-            <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
-              <label className={labelClass} htmlFor="oe-patient">
+            <div className={labelRowClass}>
+              <label className={labelInlineClass} htmlFor="oe-patient">
                 ФИО пациента
               </label>
               {!customerEditPatient ? (
                 <button
                   type="button"
-                  className="shrink-0 text-xs font-medium text-[var(--text-muted)] underline decoration-[var(--text-muted)]/45 underline-offset-2 hover:text-[var(--text-secondary)] hover:no-underline sm:text-sm"
+                  className={editChangeBtnClass}
                   onClick={() => setCustomerEditPatient(true)}
                 >
                   Изменить
@@ -2293,7 +2299,7 @@ export function OrderEditForm({
               onChange={(e) => setPatientName(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
             <div>
               <label className={labelClass} htmlFor="oe-legal">
                 Юр. лицо
@@ -3456,71 +3462,62 @@ export function OrderEditForm({
 
   const workSentNarjadActions = useMemo(
     () => (
-      <div className="flex w-full max-w-full flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-end">
-        <div className="flex flex-wrap items-start gap-2">
-          {adminShippedOtpr ? (
-            <div className="flex max-w-[15rem] items-start gap-2 rounded-md border border-emerald-200/80 bg-emerald-50/55 px-2 py-1.5 dark:border-emerald-800/45 dark:bg-emerald-950/35">
-              <div
-                className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm"
-                aria-hidden
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+        {adminShippedOtpr ? (
+          <div className="flex max-w-[12rem] items-center gap-1.5 rounded-md border border-emerald-200/80 bg-emerald-50/55 px-1.5 py-1 dark:border-emerald-800/45 dark:bg-emerald-950/35 sm:max-w-[15rem]">
+            <div
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm"
+              aria-hidden
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1 opacity-[0.72]">
-                <p className="text-[11px] font-semibold leading-snug text-[var(--text-strong)]">
-                  Работа отправлена
-                </p>
-                <button
-                  type="button"
-                  className="mt-1 text-left text-[10px] font-medium text-[var(--sidebar-blue)] underline decoration-transparent hover:decoration-current"
-                  onClick={() => setAdminShippedOtpr(false)}
-                >
-                  Снять отметку
-                </button>
-              </div>
+                <path d="M5 13l4 4L19 7" />
+              </svg>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                if (!shippedDescription.trim()) {
-                  openShipModalForMark();
-                } else {
-                  setAdminShippedOtpr(true);
-                }
-              }}
-              className="rounded-md border border-zinc-400/80 bg-zinc-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-zinc-600 dark:border-zinc-500 dark:bg-zinc-600 dark:hover:bg-zinc-500 sm:text-sm"
-            >
-              Работа отправлена
-            </button>
-          )}
-        </div>
-        {adminShippedOtpr && shippedDescription.trim() ? (
-          <div className="min-w-0 max-w-full flex-1 rounded-md border border-teal-200/80 bg-teal-50/50 px-2.5 py-1.5 text-left dark:border-teal-900/40 dark:bg-teal-950/30 sm:max-w-[22rem]">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-              Отгружено
-            </p>
-            <p className="mt-0.5 whitespace-pre-wrap text-xs leading-snug text-[var(--text-strong)]">
-              {shippedDescription.trim()}
-            </p>
-            <button
-              type="button"
-              className="mt-1 text-left text-[10px] font-medium text-[var(--sidebar-blue)] underline decoration-transparent hover:decoration-current"
-              onClick={() => openShipModalForEdit()}
-            >
-              Изменить текст
-            </button>
+            <div className="min-w-0 flex-1 opacity-[0.72]">
+              <p className="truncate text-[10px] font-semibold leading-tight text-[var(--text-strong)] sm:text-[11px]">
+                Работа отправлена
+              </p>
+              <button
+                type="button"
+                className="text-left text-[9px] font-medium text-[var(--sidebar-blue)] underline decoration-transparent hover:decoration-current"
+                onClick={() => setAdminShippedOtpr(false)}
+              >
+                Снять
+              </button>
+            </div>
           </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              if (!shippedDescription.trim()) {
+                openShipModalForMark();
+              } else {
+                setAdminShippedOtpr(true);
+              }
+            }}
+            className="shrink-0 whitespace-nowrap rounded-md border border-zinc-400/80 bg-zinc-500 px-2 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-zinc-600 dark:border-zinc-500 dark:bg-zinc-600 dark:hover:bg-zinc-500 sm:px-3 sm:text-xs"
+          >
+            Работа отправлена
+          </button>
+        )}
+        {adminShippedOtpr && shippedDescription.trim() ? (
+          <button
+            type="button"
+            className="hidden max-w-[10rem] truncate text-left text-[10px] font-medium text-[var(--sidebar-blue)] underline decoration-transparent hover:decoration-current sm:inline"
+            title={shippedDescription.trim()}
+            onClick={() => openShipModalForEdit()}
+          >
+            Текст отгрузки
+          </button>
         ) : null}
       </div>
     ),
@@ -3568,7 +3565,7 @@ export function OrderEditForm({
         </div>
       ) : null}
     <div
-      className={`w-full min-w-0 space-y-4 ${isHarmony ? "order-edit-harmony-shell" : ""}`}
+      className={`w-full min-w-0 space-y-2.5 sm:space-y-3 ${isHarmony ? "order-edit-harmony-shell" : ""}`}
     >
       {!isOrderPageFramed ? (
         <div className="max-w-md">
@@ -3595,62 +3592,56 @@ export function OrderEditForm({
       <div
         className={
           isHarmony
-            ? "order-edit-harmony-toolbar flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:px-4"
-            : "flex flex-col gap-2 rounded-lg border border-[var(--card-border)] bg-gradient-to-b from-[var(--surface-subtle)] to-[var(--card-bg)] px-3 py-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:px-4"
+            ? "order-edit-harmony-toolbar flex flex-nowrap items-center gap-1.5 overflow-x-auto px-2 py-1.5 sm:gap-2 sm:px-3 sm:py-2"
+            : "flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-lg border border-[var(--card-border)] bg-gradient-to-b from-[var(--surface-subtle)] to-[var(--card-bg)] px-2 py-1.5 sm:gap-2 sm:px-3 sm:py-2"
         }
       >
-        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-3 sm:gap-y-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2">
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs text-[var(--text-strong)] sm:text-sm">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 rounded border-[var(--input-border)]"
-                  checked={narjadPrinted}
-                  onChange={(e) => setNarjadPrinted(e.target.checked)}
-                />
-                <span>Наряд распечатан</span>
-              </label>
-              <OrderNarjadPrintTrigger
-                orderId={initial.id}
-                variant="custom"
-                className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-sm"
-                title="Диалог печати браузера (как Ctrl+P)"
-              >
-                Печать наряда (PDF)
-              </OrderNarjadPrintTrigger>
-              {showKaitenExternalUi &&
-              (initial.kaitenCardUrl || kanbanCardUrl) ? (
-                <OrderKaitenQrModal
-                  url={initial.kaitenCardUrl || kanbanCardUrl}
-                  kanbanUrl={
-                    initial.kaitenCardUrl && kanbanCardUrl
-                      ? kanbanCardUrl
-                      : null
-                  }
-                  labelFull={
-                    initial.kaitenCardUrl
-                      ? isDemoMode
-                        ? "QR канбана"
-                        : "QR Kaiten"
-                      : "QR канбана"
-                  }
-                  variant={initial.kaitenCardUrl ? (isDemoMode ? "kanban" : "kaiten") : "kanban"}
-                />
-              ) : initial.kaitenCardId != null && !isDemoMode ? (
-                <span
-                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 sm:text-sm"
-                  title="Карточка есть (id в CRM), но не задана веб-ссылка. Укажите KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE в .env"
-                >
-                  Kaiten: настройте URL
-                </span>
-              ) : null}
-            </div>
-            <div className="flex w-full min-w-0 shrink-0 flex-col items-stretch sm:ml-auto sm:w-auto sm:items-end">
-              {workSentNarjadActions}
-            </div>
-        </div>
+        <label className="flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-1.5 text-[11px] text-[var(--text-strong)] sm:gap-1.5 sm:text-xs">
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 rounded border-[var(--input-border)]"
+            checked={narjadPrinted}
+            onChange={(e) => setNarjadPrinted(e.target.checked)}
+          />
+          <span>Наряд распечатан</span>
+        </label>
+        <OrderNarjadPrintTrigger
+          orderId={initial.id}
+          variant="custom"
+          className="shrink-0 whitespace-nowrap rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-[11px] font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:px-3 sm:text-xs"
+          title="Диалог печати браузера (как Ctrl+P)"
+        >
+          Печать наряда
+        </OrderNarjadPrintTrigger>
+        {showKaitenExternalUi &&
+        (initial.kaitenCardUrl || kanbanCardUrl) ? (
+          <OrderKaitenQrModal
+            url={initial.kaitenCardUrl || kanbanCardUrl}
+            kanbanUrl={
+              initial.kaitenCardUrl && kanbanCardUrl
+                ? kanbanCardUrl
+                : null
+            }
+            labelFull={
+              initial.kaitenCardUrl
+                ? isDemoMode
+                  ? "QR канбана"
+                  : "QR Kaiten"
+                : "QR канбана"
+            }
+            variant={initial.kaitenCardUrl ? (isDemoMode ? "kanban" : "kaiten") : "kanban"}
+          />
+        ) : initial.kaitenCardId != null && !isDemoMode ? (
+          <span
+            className="shrink-0 whitespace-nowrap rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 sm:text-xs"
+            title="Карточка есть (id в CRM), но не задана веб-ссылка. Укажите KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE в .env"
+          >
+            Kaiten: URL
+          </span>
+        ) : null}
+        {workSentNarjadActions}
         {!isOrderPageFramed && !previewMode ? (
-          <div className="flex shrink-0 justify-end">
+          <div className="ms-auto flex shrink-0 justify-end">
             {renderSaveButton()}
           </div>
         ) : null}
@@ -3865,7 +3856,7 @@ export function OrderEditForm({
   );
 
   const orderPageHeaderAccessory = orderPageFrame ? (
-    <div className="relative z-50 flex min-w-0 max-w-full flex-wrap items-center gap-2 lg:gap-2.5">
+    <div className="relative z-50 flex min-w-0 max-w-full flex-nowrap items-center gap-2">
       {showKaitenExternalUi ? (
       <KaitenHeaderPillMenu
         orderId={initial.id}
@@ -3894,7 +3885,10 @@ export function OrderEditForm({
       <>
         <ModuleFrame
           title={orderPageFrame.title}
-          headerClassName="sticky top-0 z-40 -mx-3 bg-[var(--app-bg)] px-3 pb-2 pt-1 sm:-mx-6 sm:px-6 sm:pb-3 lg:-mx-10 lg:px-10"
+          titleAlign="center"
+          titleClassName="text-center text-lg sm:text-xl lg:text-xl"
+          rootClassName="!gap-3 !pt-3 sm:!pt-4 md:!pt-5 lg:!pt-5 !pb-6"
+          headerClassName="sticky top-0 z-40 -mx-3 bg-[var(--app-bg)] px-3 pb-1.5 pt-1 sm:-mx-6 sm:px-6 sm:pb-2 lg:-mx-10 lg:px-10"
           titleSubline={
             <button
               type="button"
@@ -3905,16 +3899,20 @@ export function OrderEditForm({
                 );
                 setOrderNumberModalOpen(true);
               }}
-              className="border-0 bg-transparent p-0 text-left text-[0.65rem] font-normal text-[var(--text-muted)] underline decoration-transparent underline-offset-2 hover:decoration-current"
+              className="border-0 bg-transparent p-0 text-center text-[0.65rem] font-normal text-[var(--text-muted)] underline decoration-transparent underline-offset-2 hover:decoration-current"
             >
               Изменить номер
             </button>
           }
           description={orderPageFrame.description ?? undefined}
           titleAccessory={orderPageHeaderAccessory}
-          titleRowEnd={renderSaveButton()}
         >
           {formInner}
+          {!previewMode && canEditOrder ? (
+            <div className="mt-4 hidden justify-end shell-desktop:flex">
+              {renderSaveButton()}
+            </div>
+          ) : null}
           {!previewMode ? (
           <div className="mt-10 flex justify-start border-t border-[var(--card-border)] pt-6">
             <button

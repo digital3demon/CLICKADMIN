@@ -25,18 +25,26 @@ function correctionStatusClass(
   return "text-amber-800 dark:text-amber-200";
 }
 
-function cardShell(isHarmony: boolean): string {
+function cardShell(isHarmony: boolean, dense = false): string {
+  if (dense) {
+    return isHarmony
+      ? "flex min-h-[3.25rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-1.5 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
+      : "flex min-h-[3.25rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-1.5 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
+  }
   return isHarmony
-    ? "flex min-h-[7.5rem] w-full min-w-[11rem] flex-col items-center justify-center gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50 sm:min-w-[13rem]"
-    : "flex min-h-[7.5rem] w-full min-w-[11rem] flex-col items-center justify-center gap-3 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06] sm:min-w-[13rem]";
+    ? "flex min-h-[4.75rem] w-full min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
+    : "flex min-h-[4.75rem] w-full min-w-0 flex-col items-center justify-center gap-1.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
 }
 
 export function CorrectionsHistoryActionCard({
   className = "",
   initialPendingCount = 0,
+  dense = false,
 }: {
   className?: string;
   initialPendingCount?: number;
+  /** Компактная высота для шапки ФинОтдела. */
+  dense?: boolean;
 }) {
   const isHarmony = useUiDesign() === "harmony";
   const [open, setOpen] = useState(false);
@@ -94,14 +102,26 @@ export function CorrectionsHistoryActionCard({
     <>
       <button
         type="button"
-        className={`${cardShell(isHarmony)} ${className}`.trim()}
+        className={`${cardShell(isHarmony, dense)} ${className}`.trim()}
         onClick={() => setOpen(true)}
       >
-        <span className="text-sm font-bold uppercase tracking-wide text-orange-500 dark:text-orange-400">
+        <span
+          className={
+            dense
+              ? "text-[10px] font-bold uppercase leading-tight tracking-wide text-orange-500 dark:text-orange-400 sm:text-[11px]"
+              : "text-[11px] font-bold uppercase leading-tight tracking-wide text-orange-500 dark:text-orange-400 sm:text-xs"
+          }
+        >
           Корректировки
         </span>
-        <span className="flex items-center justify-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+        <span className="flex items-center justify-center gap-1.5 sm:gap-2">
+          <span
+            className={
+              dense
+                ? "text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-xs"
+                : "text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]"
+            }
+          >
             Непринятые
           </span>
           <span

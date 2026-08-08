@@ -1083,16 +1083,47 @@ export default async function OrdersPage({
                   kaitenFilterHref={kaitenStatusFilterHref}
                   isLabOverdue={isLabOverdue}
                   tagsNode={tagsNode}
+                  mobileShippedNode={
+                    <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                  }
+                  mobileDatesNode={
+                    <div className="flex w-full max-w-[9.5rem] flex-col gap-0.5">
+                      <div className="flex items-center gap-1">
+                        <span className="w-7 shrink-0 text-[9px] font-semibold uppercase text-[var(--text-muted)]">
+                          Лаб
+                        </span>
+                        <div className="min-w-0 flex-1 scale-90 origin-right">
+                          <OrderListDueCell
+                            orderId={o.id}
+                            dueIso={o.dueDate?.toISOString() ?? null}
+                            createdAtIso={o.createdAt.toISOString()}
+                            labHmSlots={labDueHmSlots}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="w-7 shrink-0 text-[9px] font-semibold uppercase text-[var(--text-muted)]">
+                          Зап
+                        </span>
+                        <div className="min-w-0 flex-1 scale-90 origin-right">
+                          <OrderListDueCell
+                            variant="appointment"
+                            orderId={o.id}
+                            dueIso={
+                              o.appointmentDate?.toISOString() ??
+                              o.dueToAdminsAt?.toISOString() ??
+                              null
+                            }
+                            createdAtIso={o.createdAt.toISOString()}
+                            appointmentHasTime={o.dueToAdminsHasTime !== false}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  }
                   mobileActionsNode={
                     <>
-                      <Link
-                        href={orderPathById(o.id)}
-                        className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm font-medium text-[var(--text-strong)] active:bg-[var(--surface-hover)]"
-                        title={`${o.orderNumber} — открыть наряд`}
-                      >
-                        Открыть
-                      </Link>
-                      <div className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]">
                         <OrderListOrderChatCell
                           orderId={o.id}
                           orderNumber={o.orderNumber}
@@ -1108,7 +1139,7 @@ export default async function OrdersPage({
                           embedded
                         />
                       </div>
-                      <div className="flex items-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1">
+                      <div className="flex h-8 items-center gap-0.5 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-0.5">
                         {!workSent ? (
                           <OrderNarjadPrintTrigger
                             orderId={o.id}
@@ -1132,15 +1163,12 @@ export default async function OrdersPage({
                           />
                         ) : o.kaitenCardId != null ? (
                           <span
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
+                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400"
                             title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
                           >
                             ⚠
                           </span>
                         ) : null}
-                      </div>
-                      <div className="min-h-[44px] flex-1 rounded-lg bg-[var(--surface-subtle)] px-2 py-1">
-                        <OrderShippedToggle orderId={o.id} shipped={workSent} />
                       </div>
                     </>
                   }

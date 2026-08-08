@@ -84,7 +84,7 @@ export function OrderKaitenQrModal({
 
   const btnClass = compact
     ? "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-6 sm:w-6"
-    : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-sm";
+    : "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-9 sm:px-2.5 sm:text-sm";
 
   const kaitenHref = isKanbanOnly ? null : url;
   const kanbanHref = kanbanUrl?.trim() || (isKanbanOnly ? url : null);
@@ -95,15 +95,12 @@ export function OrderKaitenQrModal({
         type="button"
         className={btnClass}
         title={btnTitle}
+        aria-label={labelFull}
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
-        {compact ? (
-          <QrIcon className="h-3.5 w-3.5" />
-        ) : (
-          labelFull
-        )}
+        <QrIcon className={compact ? "h-3.5 w-3.5" : "h-4 w-4 sm:h-[1.1rem] sm:w-[1.1rem]"} />
       </button>
 
       {open ? (

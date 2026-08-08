@@ -19,8 +19,8 @@ import {
 
 function cardShell(isHarmony: boolean): string {
   return isHarmony
-    ? "flex min-h-[7.5rem] min-w-[11rem] flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50 sm:min-w-[13rem]"
-    : "flex min-h-[7.5rem] min-w-[11rem] flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06] sm:min-w-[13rem]";
+    ? "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
+    : "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
 }
 
 type KindUiConfig = {
@@ -271,7 +271,7 @@ export function LabTasksActionCard({
         className={`${cardShell(isHarmony)} ${className}`.trim()}
         onClick={() => setOpen(true)}
       >
-        <span className={`text-sm font-bold uppercase tracking-wide ${ui.titleClass}`}>
+        <span className={`text-[11px] font-bold uppercase leading-tight tracking-wide sm:text-xs ${ui.titleClass}`}>
           {ui.title}
         </span>
         <span className="flex items-center justify-center gap-2">

@@ -45,6 +45,8 @@ export function OrdersListTableRow({
   harmonyRowState = "default",
   isLabOverdue = false,
   mobileActionsNode,
+  mobileShippedNode,
+  mobileDatesNode,
   tagsNode,
 }: {
   orderId: string;
@@ -67,6 +69,10 @@ export function OrdersListTableRow({
   harmonyRowState?: "blocked" | "shipped" | "default";
   isLabOverdue?: boolean;
   mobileActionsNode?: ReactNode;
+  /** Галочка отгрузки — в шапке рядом с № / статусом. */
+  mobileShippedNode?: ReactNode;
+  /** Пикеры ЛАБ / Запись справа от иконок. */
+  mobileDatesNode?: ReactNode;
   tagsNode?: ReactNode;
 }) {
   const router = useRouter();
@@ -117,9 +123,28 @@ export function OrdersListTableRow({
       </tr>
       <tr className="border-b border-[var(--card-border)] md:hidden print:hidden">
         <td colSpan={99} className="p-0">
-          <div className="p-3">
+          <div
+            className="cursor-pointer p-3"
+            role="link"
+            tabIndex={0}
+            aria-label={`Открыть наряд ${orderNumber}`}
+            onClick={(e) => {
+              if (targetInsideInteractive(e.target)) return;
+              go(e);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" && e.key !== " ") return;
+              if (targetInsideInteractive(e.target)) return;
+              e.preventDefault();
+              if (e.metaKey || e.ctrlKey) {
+                window.open(href, "_blank", "noopener,noreferrer");
+                return;
+              }
+              router.push(href);
+            }}
+          >
             <div className="mb-1.5 flex items-start justify-between gap-2">
-              <div className="flex min-w-0 flex-col items-start gap-1">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
                 <Link
                   href={href}
                   className="font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
@@ -138,17 +163,14 @@ export function OrdersListTableRow({
                   placement="underOrderNumber"
                 />
               </div>
-              {labDate ? (
-                <span
-                  className={[
-                    "mt-0.5 shrink-0 text-xs",
-                    isLabOverdue
-                      ? "font-semibold text-red-600"
-                      : "text-[var(--text-muted)]",
-                  ].join(" ")}
+              {mobileShippedNode ? (
+                <div
+                  className="mt-0.5 shrink-0"
+                  data-row-click-ignore
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  {labDate}
-                </span>
+                  {mobileShippedNode}
+                </div>
               ) : null}
             </div>
 
@@ -167,7 +189,7 @@ export function OrdersListTableRow({
               </div>
             ) : null}
 
-            <div className="mb-1.5 flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">
+            <div className="mb-2 flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">
               {doctorName ? <span>{doctorName}</span> : null}
               {doctorName && patientName ? (
                 <span className="text-[var(--text-muted)]">·</span>
@@ -175,39 +197,37 @@ export function OrdersListTableRow({
               {patientName ? <span>{patientName}</span> : null}
             </div>
 
-            <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
-              {labDate ? (
-                <span>
-                  <span className="font-medium text-[var(--text-secondary)]">
-                    ЛАБ{" "}
-                  </span>
-                  <span
-                    className={
-                      isLabOverdue ? "font-semibold text-red-600" : undefined
-                    }
+            {(mobileActionsNode || mobileDatesNode) ? (
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                {mobileActionsNode ? (
+                  <div
+                    className="flex shrink-0 flex-wrap items-center gap-1 [&_a]:inline-flex [&_a]:h-8 [&_a]:min-h-8 [&_a]:min-w-8 [&_a]:w-8 [&_a]:items-center [&_a]:justify-center [&_button]:h-8 [&_button]:min-h-8 [&_button]:min-w-8"
+                    data-row-click-ignore
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    {labDate}
-                  </span>
-                </span>
-              ) : null}
-              {appointmentDate ? (
-                <span>
-                  <span className="font-medium text-[var(--text-secondary)]">
-                    Запись{" "}
-                  </span>
-                  {appointmentDate}
-                </span>
-              ) : null}
-            </div>
-
-            {mobileActionsNode ? (
-              <div className="flex flex-wrap items-center gap-2 [&_a]:inline-flex [&_a]:min-h-[44px] [&_a]:min-w-[44px] [&_a]:items-center [&_a]:justify-center [&_button]:min-h-[44px] [&_button]:min-w-[44px]">
-                {mobileActionsNode}
+                    {mobileActionsNode}
+                  </div>
+                ) : (
+                  <span />
+                )}
+                {mobileDatesNode ? (
+                  <div
+                    className="flex min-w-0 flex-1 flex-col items-end gap-0.5"
+                    data-row-click-ignore
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {mobileDatesNode}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
             {tagsNode && isNarrow ? (
-              <div className="mt-2 text-xs text-[var(--text-secondary)]">
+              <div
+                className="mt-2 text-xs text-[var(--text-secondary)]"
+                data-row-click-ignore
+                onClick={(e) => e.stopPropagation()}
+              >
                 {tagsNode}
               </div>
             ) : null}

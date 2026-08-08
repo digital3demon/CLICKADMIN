@@ -39,8 +39,8 @@ export function OrdersListFiltersBar({
 
   const cardClass = [
     isHarmony
-      ? "no-print relative z-[55] flex h-full min-h-[3.25rem] w-full min-w-0 items-center overflow-visible rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 card-shadow sm:px-3 sm:py-2"
-      : "no-print relative z-[55] flex h-full min-h-[3.25rem] w-full min-w-0 items-center overflow-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-3 sm:py-2",
+      ? "no-print relative z-[55] flex h-full min-h-[2.75rem] w-full min-w-0 items-center overflow-visible rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1 card-shadow sm:px-2.5 sm:py-1.5"
+      : "no-print relative z-[55] flex h-full min-h-[2.75rem] w-full min-w-0 items-center overflow-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-2.5 sm:py-1.5",
     className,
   ]
     .filter(Boolean)
@@ -48,8 +48,7 @@ export function OrdersListFiltersBar({
 
   return (
     <div className={cardClass}>
-      {/* Без горизонтального скролла: сначала сжимаются поиск/даты, потом wrap. */}
-      <div className="flex min-w-0 w-full flex-wrap items-center gap-x-1.5 gap-y-1.5">
+      <div className="flex min-w-0 w-full flex-nowrap items-center gap-x-1.5 overflow-x-auto [-webkit-overflow-scrolling:touch]">
         {showSearch ? (
           <OrdersListSearch
             initialValue={initialSearchQ}
@@ -57,7 +56,7 @@ export function OrdersListFiltersBar({
             tag={tag}
             hideShipped={hideShipped}
             onlyShipped={onlyShipped}
-            className="min-w-0 max-w-full basis-[7.5rem] grow shrink sm:basis-[9rem] sm:max-w-[12rem] lg:max-w-[14rem]"
+            className="min-w-0 max-w-[10rem] basis-[7rem] shrink grow sm:max-w-[12rem] sm:basis-[8rem] lg:max-w-[14rem]"
             dense
           />
         ) : null}
@@ -66,7 +65,7 @@ export function OrdersListFiltersBar({
           pageSize={pageSize}
           appliedFrom={appliedFrom}
           appliedTo={appliedTo}
-          className="min-w-0 shrink"
+          className="min-w-0 shrink-0"
           dense
         />
 
