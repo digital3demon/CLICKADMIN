@@ -1,3 +1,5 @@
+"use client";
+
 import type { UserRole } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
