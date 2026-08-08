@@ -2,15 +2,20 @@
  * Карта дампа CRM (месяц):
  * - READ-ONLY к прод-БД (только findMany / findUnique / findFirst)
  * - Сырой срез для выгрузки в storage; обезличивание — отдельным шагом
- * - Без байтов вложений / аватаров / договоров / сверки
+ * - Вложения: только картинки (байты в zip `attachments/`); PDF/документы не включаем
  * - Без aiApiKey и tenantDatabaseUrl
  */
 import "server-only";
 
 import type { PrismaClient } from "@prisma/client";
 import JSZip from "jszip";
+import {
+  crmDumpAttachmentExt,
+  isCrmDumpImageAttachment,
+} from "@/lib/crm-dump/attachment-kinds";
 import { parseMonthKey, type MonthBounds } from "@/lib/crm-dump/month-bounds";
 import { scrubRowForDump, scrubRowsForDump } from "@/lib/crm-dump/serialize";
+import { readOrderAttachmentBytes } from "@/lib/order-attachment-storage";
 
 export const CRM_DUMP_VERSION = 1;
 export const CRM_DUMP_KIND = "crm-month-dump";
@@ -30,6 +35,8 @@ export type BuildCrmMonthDumpResult = {
     clinicCount: number;
     doctorCount: number;
     roleModuleAccessCount: number;
+    imageAttachmentCount: number;
+    skippedNonImageAttachments: number;
   };
 };
 
@@ -204,6 +211,7 @@ async function buildCrmMonthDumpZipWithBounds(params: {
             diskRelPath: true,
             uploadedToKaitenAt: true,
             kaitenFileId: true,
+            data: true,
           },
         })
       : Promise.resolve([]),
@@ -252,6 +260,61 @@ async function buildCrmMonthDumpZipWithBounds(params: {
     payrollEntries,
   };
 
+  /** Картинки → байты в zip; PDF/docs пропускаем. */
+  const imageAttachmentRows: Array<{
+    id: string;
+    orderId: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+    scope: string;
+    createdAt: Date;
+    zipPath: string;
+  }> = [];
+  const attachmentFiles: Array<{ zipPath: string; bytes: Buffer }> = [];
+  let skippedNonImageAttachments = 0;
+  let skippedImageReadErrors = 0;
+
+  for (const row of attachmentsMeta) {
+    if (
+      !isCrmDumpImageAttachment({
+        mimeType: row.mimeType,
+        fileName: row.fileName,
+      })
+    ) {
+      skippedNonImageAttachments += 1;
+      continue;
+    }
+    try {
+      const bytes = await readOrderAttachmentBytes({
+        data: row.data,
+        diskRelPath: row.diskRelPath,
+      });
+      const ext = crmDumpAttachmentExt(row.mimeType, row.fileName);
+      const zipPath = `attachments/${row.id}.${ext}`;
+      attachmentFiles.push({ zipPath, bytes });
+      imageAttachmentRows.push({
+        id: row.id,
+        orderId: row.orderId,
+        fileName: row.fileName,
+        mimeType: row.mimeType,
+        size: bytes.length,
+        scope: row.scope,
+        createdAt: row.createdAt,
+        zipPath,
+      });
+    } catch (e) {
+      skippedImageReadErrors += 1;
+      console.warn(
+        JSON.stringify({
+          msg: "crm_dump_attachment_skip",
+          attachmentId: row.id,
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
+    }
+  }
+
   const exportedAt = new Date().toISOString();
   const meta = {
     version: CRM_DUMP_VERSION,
@@ -265,8 +328,11 @@ async function buildCrmMonthDumpZipWithBounds(params: {
     clinicCount: clinicsOut.length,
     doctorCount: doctorsOut.length,
     roleModuleAccessCount: roleModuleAccess.length,
+    imageAttachmentCount: imageAttachmentRows.length,
+    skippedNonImageAttachments,
+    skippedImageReadErrors,
     durationMs: Date.now() - t0,
-    note: "Сырой срез (без обезличивания). Байты вложений/аватаров не включены. aiApiKey и tenantDatabaseUrl вырезаны.",
+    note: "Сырой срез. Картинки вложений в attachments/*. PDF и документы не включены. aiApiKey/tenantDatabaseUrl вырезаны. Обезличивание — отдельно.",
   };
 
   const payload = {
@@ -306,7 +372,7 @@ async function buildCrmMonthDumpZipWithBounds(params: {
       orders: scrubRowsForDump(asRecords(orders)),
       orderConstructions: scrubRowsForDump(asRecords(linked.constructions)),
       orderAttachmentsMeta: scrubRowsForDump(
-        asRecords(linked.attachmentsMeta),
+        asRecords(imageAttachmentRows),
       ),
       orderRevisions: scrubRowsForDump(asRecords(linked.revisions)),
       orderChatCorrections: scrubRowsForDump(
@@ -323,14 +389,11 @@ async function buildCrmMonthDumpZipWithBounds(params: {
   };
 
   const zip = new JSZip();
-  zip.file(
-    "meta.json",
-    JSON.stringify(meta, null, 2),
-  );
-  zip.file(
-    "dump.json",
-    JSON.stringify(payload),
-  );
+  zip.file("meta.json", JSON.stringify(meta, null, 2));
+  zip.file("dump.json", JSON.stringify(payload));
+  for (const f of attachmentFiles) {
+    zip.file(f.zipPath, f.bytes);
+  }
 
   const zipBytes = Buffer.from(
     await zip.generateAsync({
@@ -350,6 +413,8 @@ async function buildCrmMonthDumpZipWithBounds(params: {
       month: bounds.monthKey,
       orderCount: orders.length,
       userCount: users.length,
+      imageAttachmentCount: imageAttachmentRows.length,
+      skippedNonImageAttachments,
       bytes: zipBytes.length,
       durationMs: Date.now() - t0,
     }),

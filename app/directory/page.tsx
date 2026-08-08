@@ -126,7 +126,8 @@ export default async function DirectoryHubPage() {
             </h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
               Срез за месяц в zip: наряды, пользователи, доступы, клиники,
-              прайс. Только чтение; для демо обезличивается отдельно.
+              прайс и картинки вложений (без PDF). Только чтение; для демо
+              обезличивается отдельно.
             </p>
           </Link>
         ) : null}

@@ -42,9 +42,10 @@ export function CrmDumpClient() {
 
       const orders = res.headers.get("X-Crm-Dump-Orders") ?? "?";
       const users = res.headers.get("X-Crm-Dump-Users") ?? "?";
+      const images = res.headers.get("X-Crm-Dump-Images") ?? "?";
       const storage = res.headers.get("X-Crm-Dump-Storage") ?? "?";
       setOkInfo(
-        `Готово: нарядов ${orders}, пользователей ${users}. Сохранено в ${storage}, файл скачан.`,
+        `Готово: нарядов ${orders}, пользователей ${users}, картинок ${images}. Сохранено в ${storage}, файл скачан.`,
       );
     } catch {
       setErr("Не удалось сформировать дамп");
@@ -57,9 +58,10 @@ export function CrmDumpClient() {
     <div className="space-y-4">
       <p className="max-w-2xl text-sm text-[var(--text-secondary)]">
         Сырой срез за календарный месяц (наряды по дате создания) плюс
-        пользователи, матрица доступов, клиники, врачи, прайс и канбан-состояние.
-        Байты вложений не включаются. Обезличивание — отдельным шагом после
-        выгрузки. Прод-данные при дампе только читаются.
+        пользователи, матрица доступов, клиники, врачи, прайс, канбан-состояние и
+        картинки вложений (PDF и документы не включаются). Обезличивание —
+        отдельным шагом: имена/реквизиты + пикселизация фото. Прод при дампе
+        только читается.
       </p>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <label className="flex flex-col gap-1 text-sm">

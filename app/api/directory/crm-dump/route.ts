@@ -76,6 +76,7 @@ export async function POST(req: Request) {
         "X-Crm-Dump-Month": built.meta.month,
         "X-Crm-Dump-Orders": String(built.meta.orderCount),
         "X-Crm-Dump-Users": String(built.meta.userCount),
+        "X-Crm-Dump-Images": String(built.meta.imageAttachmentCount),
         "X-Crm-Dump-Storage": stored.storage,
         "X-Crm-Dump-Storage-Path": encodeURIComponent(stored.keyOrPath),
       },

@@ -7,6 +7,7 @@
  * - суммы оставляем
  * - прайс: name → «позиция»/«пункт», description → «описание позиции», leadWorkingDays → null
  * - Kaiten ids вычищаем
+ * - картинки вложений — сильная пикселизация; PDF/документы не копируем
  *
  * Использование:
  *   node scripts/anonymize-crm-dump.cjs path/to/crm-dump-….zip
@@ -18,6 +19,15 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const JSZip = require("jszip");
+
+let createCanvas;
+let loadImage;
+try {
+  ({ createCanvas, loadImage } = require("@napi-rs/canvas"));
+} catch {
+  createCanvas = null;
+  loadImage = null;
+}
 
 const CYR_FROM =
   "абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
@@ -244,9 +254,41 @@ function anonymizeDump(payload) {
     ...(payload.meta || {}),
     anonymizedAt: new Date().toISOString(),
     anonymizeRules:
-      "names scramble; requisites random; sums kept; price names→пункт/позиция; days cleared",
+      "names scramble; requisites random; sums kept; price→пункт/позиция; days cleared; images pixelated; pdf/docs dropped",
   };
   return payload;
+}
+
+/** Крупные пиксели: downscale → nearest-neighbor upscale. */
+async function pixelateImageBuffer(buf) {
+  if (!createCanvas || !loadImage) {
+    throw new Error("@napi-rs/canvas недоступен — нельзя пикселить картинки");
+  }
+  const img = await loadImage(buf);
+  const w = Math.max(1, img.width);
+  const h = Math.max(1, img.height);
+  // ~12–24 блока по длинной стороне — лица/текст нечитаемы
+  const longSide = Math.max(w, h);
+  const targetBlocks = longSide > 2000 ? 16 : longSide > 800 ? 20 : 24;
+  const sw = Math.max(1, Math.round(w / (longSide / targetBlocks)));
+  const sh = Math.max(1, Math.round(h / (longSide / targetBlocks)));
+  const small = createCanvas(sw, sh);
+  const sctx = small.getContext("2d");
+  sctx.imageSmoothingEnabled = false;
+  sctx.drawImage(img, 0, 0, sw, sh);
+  const out = createCanvas(w, h);
+  const octx = out.getContext("2d");
+  octx.imageSmoothingEnabled = false;
+  octx.drawImage(small, 0, 0, w, h);
+  return Buffer.from(out.toBuffer("image/jpeg", 72));
+}
+
+function isAttachmentZipPath(name) {
+  return /^attachments\//i.test(name) && !name.endsWith("/");
+}
+
+function looksLikeNonImageAttachment(name) {
+  return /\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|txt|csv|rtf)$/i.test(name);
 }
 
 async function main() {
@@ -278,6 +320,63 @@ async function main() {
   const anon = anonymizeDump(raw);
 
   const out = new JSZip();
+  let pixelated = 0;
+  let droppedNonImage = 0;
+  let pixelateErrors = 0;
+  const keptZipPaths = new Set();
+
+  const names = Object.keys(zip.files);
+  for (const name of names) {
+    const entry = zip.files[name];
+    if (!entry || entry.dir) continue;
+    if (!isAttachmentZipPath(name)) continue;
+    if (looksLikeNonImageAttachment(name)) {
+      droppedNonImage += 1;
+      continue;
+    }
+    try {
+      const bytes = Buffer.from(await entry.async("nodebuffer"));
+      const pix = await pixelateImageBuffer(bytes);
+      const outName = name.replace(/\.[^.]+$/i, ".jpg");
+      out.file(outName, pix);
+      keptZipPaths.add(outName);
+      // также старый путь, если расширение сменилось — обновим meta ниже
+      keptZipPaths.add(name);
+      pixelated += 1;
+    } catch (e) {
+      pixelateErrors += 1;
+      console.warn("[anonymize] skip attachment", name, e.message || e);
+    }
+  }
+
+  if (Array.isArray(anon.tables?.orderAttachmentsMeta)) {
+    anon.tables.orderAttachmentsMeta = anon.tables.orderAttachmentsMeta
+      .filter((a) => {
+        const zp = String(a.zipPath || "");
+        if (looksLikeNonImageAttachment(zp) || looksLikeNonImageAttachment(a.fileName)) {
+          droppedNonImage += 1;
+          return false;
+        }
+        const jpgPath = zp.replace(/\.[^.]+$/i, ".jpg");
+        return keptZipPaths.has(zp) || keptZipPaths.has(jpgPath);
+      })
+      .map((a) => {
+        const zp = String(a.zipPath || "").replace(/\.[^.]+$/i, ".jpg");
+        return {
+          ...a,
+          zipPath: zp,
+          mimeType: "image/jpeg",
+          fileName: String(a.fileName || "image.jpg").replace(/\.[^.]+$/i, ".jpg"),
+          pixelated: true,
+        };
+      });
+    anon.meta.imageAttachmentCount = anon.tables.orderAttachmentsMeta.length;
+  }
+
+  anon.meta.pixelatedImages = pixelated;
+  anon.meta.droppedNonImageAttachments = droppedNonImage;
+  anon.meta.pixelateErrors = pixelateErrors;
+
   out.file("meta.json", JSON.stringify(anon.meta, null, 2));
   out.file("dump.json", JSON.stringify(anon));
   const outBuf = await out.generateAsync({
@@ -295,6 +394,9 @@ async function main() {
         orderCount: anon.meta?.orderCount,
         userCount: anon.tables?.users?.length,
         clinicCount: anon.tables?.clinics?.length,
+        pixelatedImages: pixelated,
+        droppedNonImage,
+        pixelateErrors,
       },
       null,
       2,
