@@ -115,6 +115,20 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
+        {(session?.actualRole ?? session?.role) === "OWNER" ? (
+          <Link
+            href="/directory/crm-dump"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">
+              Дамп CRM
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Срез за месяц в zip: наряды, пользователи, доступы, клиники,
+              прайс. Только чтение; для демо обезличивается отдельно.
+            </p>
+          </Link>
+        ) : null}
         {session?.role === "OWNER" ? (
           <Link
             href="/directory/payroll"

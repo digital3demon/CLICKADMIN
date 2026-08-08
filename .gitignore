@@ -28,3 +28,5 @@ data/templates/*.legacy.docx
 
 # Суточные JSONL-логи CRM (data/logs/crm-YYYY-MM-DD.log)
 data/logs/
+# Дампы CRM (zip срезов для демо)
+data/crm-dumps/
