@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { orderPathById } from "@/lib/order-public-ref";
 import { parseTelegramMiniAppStartParam } from "@/lib/telegram-mini-app-start-param";
+import {
+  readTelegramWebAppInitData,
+  readTelegramWebAppStartParam,
+  tryTelegramWebAppReadyExpand,
+} from "@/lib/telegram-webapp-launch-params";
 
 type AuthOk = {
   ok: true;
@@ -33,32 +38,7 @@ type LiteCard = {
 
 type Lite = LiteOrder | LiteCard;
 
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: {
-        initData: string;
-        initDataUnsafe?: { start_param?: string };
-        ready: () => void;
-        expand: () => void;
-        close?: () => void;
-        openLink?: (url: string) => void;
-      };
-    };
-  }
-}
-
-const BOOT_TIMEOUT_MS = 12_000;
-const WEBAPP_POLL_MS = 40;
-const WEBAPP_WAIT_MS = 2500;
-
-function readStartParam(): string | null {
-  if (typeof window === "undefined") return null;
-  const fromUnsafe = window.Telegram?.WebApp?.initDataUnsafe?.start_param?.trim();
-  if (fromUnsafe) return fromUnsafe;
-  const q = new URLSearchParams(window.location.search);
-  return q.get("tgWebAppStartParam")?.trim() || q.get("startapp")?.trim() || null;
-}
+const BOOT_TIMEOUT_MS = 15_000;
 
 function browserFallbackHref(
   target: ReturnType<typeof parseTelegramMiniAppStartParam>,
@@ -66,28 +46,6 @@ function browserFallbackHref(
   if (!target) return "/";
   if (target.kind === "order") return orderPathById(target.orderId);
   return `/kanban?${new URLSearchParams({ card: target.cardId }).toString()}`;
-}
-
-/** Ждём инжект Telegram (без загрузки telegram.org — в РФ часто таймаут). */
-function waitForTelegramWebApp(maxMs: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (window.Telegram?.WebApp) {
-      resolve(true);
-      return;
-    }
-    const startedAt = Date.now();
-    const id = window.setInterval(() => {
-      if (window.Telegram?.WebApp) {
-        window.clearInterval(id);
-        resolve(true);
-        return;
-      }
-      if (Date.now() - startedAt >= maxMs) {
-        window.clearInterval(id);
-        resolve(false);
-      }
-    }, WEBAPP_POLL_MS);
-  });
 }
 
 export function TelegramMiniAppBootstrap() {
@@ -118,38 +76,18 @@ export function TelegramMiniAppBootstrap() {
     if (started.current) return;
     started.current = true;
 
-    const startParamEarly = readStartParam();
-    const targetEarly = parseTelegramMiniAppStartParam(startParamEarly);
-    const fallback = browserFallbackHref(targetEarly);
+    tryTelegramWebAppReadyExpand();
+
+    const startParam = readTelegramWebAppStartParam();
+    const target = parseTelegramMiniAppStartParam(startParam);
+    const fallback = browserFallbackHref(target);
     setFallback(fallback);
 
-    setMessage("Подключение к Telegram…");
-    const hasWa = await waitForTelegramWebApp(WEBAPP_WAIT_MS);
-    if (!hasWa || !window.Telegram?.WebApp) {
-      fail(
-        "Telegram WebApp не ответил. Откройте ссылку из чата с ботом или перейдите в браузер.",
-        fallback,
-      );
-      return;
-    }
-
-    const wa = window.Telegram.WebApp;
-    try {
-      wa.ready();
-      wa.expand();
-    } catch {
-      /* ignore */
-    }
-
-    const startParam = readStartParam() ?? startParamEarly;
-    const target = parseTelegramMiniAppStartParam(startParam) ?? targetEarly;
-    setFallback(browserFallbackHref(target));
-
-    const initData = wa.initData?.trim() || "";
+    const initData = readTelegramWebAppInitData();
     if (!initData) {
       fail(
-        "Нет данных Telegram (initData). Откройте Mini App из Telegram, не из браузера.",
-        browserFallbackHref(target),
+        "Нет данных Telegram (initData). Откройте Mini App из чата с ботом, не из обычного браузера.",
+        fallback,
       );
       return;
     }
@@ -164,7 +102,7 @@ export function TelegramMiniAppBootstrap() {
         body: JSON.stringify({ initData }),
       });
     } catch {
-      fail("Сеть: не удалось связаться с CRM.", browserFallbackHref(target));
+      fail("Сеть: не удалось связаться с CRM.", fallback);
       return;
     }
 
@@ -177,7 +115,7 @@ export function TelegramMiniAppBootstrap() {
       fail(
         authJson.error ||
           "Не удалось войти. Привяжите Telegram в профиле CRM.",
-        browserFallbackHref(target),
+        fallback,
       );
       return;
     }
@@ -204,7 +142,7 @@ export function TelegramMiniAppBootstrap() {
         credentials: "same-origin",
       });
     } catch {
-      fail("Сеть: не удалось загрузить карточку.", browserFallbackHref(target));
+      fail("Сеть: не удалось загрузить карточку.", fallback);
       return;
     }
 
@@ -212,7 +150,7 @@ export function TelegramMiniAppBootstrap() {
       error?: string;
     };
     if (!cardRes.ok) {
-      fail(cardJson.error || "Карточка не найдена", browserFallbackHref(target));
+      fail(cardJson.error || "Карточка не найдена", fallback);
       return;
     }
 
