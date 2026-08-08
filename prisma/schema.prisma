@@ -1600,11 +1600,18 @@ model OrderProstheticsRequest {
   @@index([arrivedAt])
 }
 
-/// Общая задача лаборатории (список заказов → «Задачи»).
+/// Общая задача / «Забрать из» лаборатории (список заказов).
+enum LabTaskKind {
+  TASK
+  PICKUP_FROM
+}
+
+/// Общая задача лаборатории (список заказов → «Задачи» / «Забрать из»).
 model LabTask {
   id               String              @id @default(cuid())
   tenantId         String
   tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind             LabTaskKind         @default(TASK)
   text             String              @default("")
   authorUserId     String?
   author           User?               @relation("LabTaskAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
@@ -1615,6 +1622,8 @@ model LabTask {
   resolvedBy       User?               @relation("LabTaskResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
   attachments      LabTaskAttachment[]
 
+  @@index([tenantId, kind, resolvedAt, createdAt])
+  @@index([tenantId, kind, createdAt])
   @@index([tenantId, resolvedAt, createdAt])
   @@index([tenantId, createdAt])
 }

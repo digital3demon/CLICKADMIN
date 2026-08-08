@@ -254,6 +254,7 @@ export default async function OrdersPage({
 
   let prostheticsInTransitCount = 0;
   let labTasksPendingCount = 0;
+  let labPickupsPendingCount = 0;
   try {
     if (canSeeProstheticsChip) {
       const transit = await loadProstheticsInTransitForTenant(tenantId);
@@ -264,10 +265,15 @@ export default async function OrdersPage({
   }
   try {
     if (tenantId) {
-      labTasksPendingCount = await countPendingLabTasks(tenantId);
+      const [tasksN, pickupsN] = await Promise.all([
+        countPendingLabTasks(tenantId, "TASK"),
+        countPendingLabTasks(tenantId, "PICKUP_FROM"),
+      ]);
+      labTasksPendingCount = tasksN;
+      labPickupsPendingCount = pickupsN;
     }
   } catch (e) {
-    console.error("[orders] lab tasks pending count", e);
+    console.error("[orders] lab tasks/pickups pending count", e);
   }
 
   let kaitenIntegrationActive = true;
@@ -649,6 +655,7 @@ export default async function OrdersPage({
           initialInTransitCount={prostheticsInTransitCount}
           initialCorrectionsPendingCount={attentionCount}
           initialTasksPendingCount={labTasksPendingCount}
+          initialPickupsPendingCount={labPickupsPendingCount}
           canMarkArrived={canMarkProstheticsArrived}
           canResolveTasks={canMarkProstheticsArrived}
           showProstheticsBlock={canSeeProstheticsChip}
@@ -675,6 +682,7 @@ export default async function OrdersPage({
             initialInTransitCount={prostheticsInTransitCount}
             initialCorrectionsPendingCount={attentionCount}
             initialTasksPendingCount={labTasksPendingCount}
+            initialPickupsPendingCount={labPickupsPendingCount}
             canMarkArrived={canMarkProstheticsArrived}
             canResolveTasks={canMarkProstheticsArrived}
             showProstheticsBlock={canSeeProstheticsChip}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getPrisma } from "@/lib/get-prisma";
+import type { LabTaskKind } from "@/lib/lab-tasks";
 import { countPendingLabTasks, loadLabTasks } from "@/lib/lab-tasks.server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
@@ -20,7 +21,7 @@ export async function POST(_req: Request, ctx: Ctx) {
     }
     if (!canAcceptOrderChatCorrections(session.role)) {
       return NextResponse.json(
-        { error: "Нет права отметить задачу готовой" },
+        { error: "Нет права отметить готовым" },
         { status: 403 },
       );
     }
@@ -42,13 +43,13 @@ export async function POST(_req: Request, ctx: Ctx) {
     const prisma = await getPrisma();
     const existing = await prisma.labTask.findFirst({
       where: { id: taskId, tenantId },
-      select: { id: true, resolvedAt: true },
+      select: { id: true, resolvedAt: true, kind: true },
     });
     if (!existing) {
-      return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
+      return NextResponse.json({ error: "Не найдено" }, { status: 404 });
     }
     if (existing.resolvedAt) {
-      return NextResponse.json({ error: "Уже решена" }, { status: 409 });
+      return NextResponse.json({ error: "Уже решено" }, { status: 409 });
     }
 
     await prisma.labTask.update({
@@ -59,15 +60,17 @@ export async function POST(_req: Request, ctx: Ctx) {
       },
     });
 
+    const kind = existing.kind as LabTaskKind;
     return NextResponse.json({
       ok: true,
-      pendingCount: await countPendingLabTasks(tenantId),
-      items: await loadLabTasks({ tenantId, status: "pending" }),
+      kind,
+      pendingCount: await countPendingLabTasks(tenantId, kind),
+      items: await loadLabTasks({ tenantId, kind, status: "pending" }),
     });
   } catch (e) {
     console.error("[lab-tasks/resolve]", e);
     return NextResponse.json(
-      { error: "Не удалось отметить задачу" },
+      { error: "Не удалось отметить" },
       { status: 500 },
     );
   }

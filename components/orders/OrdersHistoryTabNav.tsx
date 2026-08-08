@@ -47,6 +47,12 @@ export function OrdersHistoryTabNav({
       >
         Задачи
       </Link>
+      <Link
+        href={ordersHistoryHref({ tab: "pickups", q: searchQ })}
+        className={tabClass(active === "pickups")}
+      >
+        Забрать из
+      </Link>
     </nav>
   );
 }

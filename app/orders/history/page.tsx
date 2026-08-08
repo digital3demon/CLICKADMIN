@@ -42,6 +42,7 @@ export default async function OrdersHistoryPage({
     ReturnType<typeof loadProstheticsHistoryOnly>
   >;
   let tasksItems = [] as LabTaskJson[];
+  let pickupsItems = [] as LabTaskJson[];
 
   try {
     if (tab === "changes") {
@@ -53,6 +54,15 @@ export default async function OrdersHistoryPage({
     } else if (tab === "tasks" && tenantId) {
       tasksItems = await loadLabTasks({
         tenantId,
+        kind: "TASK",
+        status: "all",
+        limit: 150,
+        q,
+      });
+    } else if (tab === "pickups" && tenantId) {
+      pickupsItems = await loadLabTasks({
+        tenantId,
+        kind: "PICKUP_FROM",
         status: "all",
         limit: 150,
         q,
@@ -69,7 +79,9 @@ export default async function OrdersHistoryPage({
         ? prostheticsItems.length
         : tab === "tasks"
           ? tasksItems.length
-          : changesItems.length;
+          : tab === "pickups"
+            ? pickupsItems.length
+            : changesItems.length;
   const limitReached = itemCount >= 150;
 
   const emptyMessage =
@@ -79,7 +91,12 @@ export default async function OrdersHistoryPage({
         ? "Журнал заказов протетики пуст."
         : tab === "tasks"
           ? "Журнал задач пуст."
-          : "Журнал пуст. После сохранения нарядов и карточек клиентов здесь появятся записи.";
+          : tab === "pickups"
+            ? "Журнал «Забрать из» пуст."
+            : "Журнал пуст. После сохранения нарядов и карточек клиентов здесь появятся записи.";
+
+  const isLabNotesTab = tab === "tasks" || tab === "pickups";
+  const labNotesItems = tab === "pickups" ? pickupsItems : tasksItems;
 
   return (
     <ModuleFrame title="История изменений">
@@ -98,7 +115,7 @@ export default async function OrdersHistoryPage({
               <OrdersCorrectionsHistoryTable items={[]} />
             ) : tab === "prosthetics" ? (
               <OrdersProstheticsHistoryTable items={[]} />
-            ) : tab === "tasks" ? (
+            ) : isLabNotesTab ? (
               <OrdersTasksHistoryTable items={[]} />
             ) : (
               <OrdersHistoryTable items={[]} />
@@ -123,8 +140,8 @@ export default async function OrdersHistoryPage({
                 items={prostheticsItems}
                 canMarkArrived={canMarkArrived}
               />
-            ) : tab === "tasks" ? (
-              <OrdersTasksHistoryTable items={tasksItems} />
+            ) : isLabNotesTab ? (
+              <OrdersTasksHistoryTable items={labNotesItems} />
             ) : (
               <OrdersHistoryTable items={changesItems} />
             )}

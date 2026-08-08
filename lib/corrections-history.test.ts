@@ -15,10 +15,11 @@ describe("parseOrdersHistoryTab", () => {
     expect(parseOrdersHistoryTab("")).toBe("changes");
   });
 
-  it("corrections и prosthetics и tasks", () => {
+  it("corrections и prosthetics и tasks и pickups", () => {
     expect(parseOrdersHistoryTab("corrections")).toBe("corrections");
     expect(parseOrdersHistoryTab("prosthetics")).toBe("prosthetics");
     expect(parseOrdersHistoryTab("tasks")).toBe("tasks");
+    expect(parseOrdersHistoryTab("pickups")).toBe("pickups");
   });
 });
 
@@ -33,6 +34,9 @@ describe("ordersHistoryHref", () => {
     expect(
       ordersHistoryHref({ tab: "tasks", q: "срочно" }),
     ).toBe("/orders/history?tab=tasks&q=%D1%81%D1%80%D0%BE%D1%87%D0%BD%D0%BE");
+    expect(
+      ordersHistoryHref({ tab: "pickups", q: "склад" }),
+    ).toBe("/orders/history?tab=pickups&q=%D1%81%D0%BA%D0%BB%D0%B0%D0%B4");
   });
 });
 

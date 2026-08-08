@@ -4,8 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type DragEvent, type ClipboardEvent } from "react";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { formatRuDateTime, ordersHistoryHref } from "@/lib/corrections-history";
+import type { OrdersHistoryTab } from "@/lib/corrections-history";
 import type { LabTaskJson } from "@/lib/lab-tasks";
-import { isAllowedLabTaskImageMime, LAB_TASK_MAX_ATTACHMENTS } from "@/lib/lab-tasks";
+import {
+  isAllowedLabTaskImageMime,
+  LAB_TASK_MAX_ATTACHMENTS,
+  type LabTaskKind,
+  labTaskKindToQuery,
+} from "@/lib/lab-tasks";
 import {
   ImageLightbox,
   type ImageLightboxState,
@@ -17,17 +23,67 @@ function cardShell(isHarmony: boolean): string {
     : "flex min-h-[7.5rem] min-w-[11rem] flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06] sm:min-w-[13rem]";
 }
 
+type KindUiConfig = {
+  titleClass: string;
+  title: string;
+  dialogTitle: string;
+  dialogAriaLabel: string;
+  empty: string;
+  placeholder: string;
+  history: string;
+  historyTab: OrdersHistoryTab;
+  createError: string;
+  resolveConfirm: string;
+  resolveTitle: string;
+  pendingCountAria: (count: number) => string;
+};
+
+const KIND_UI: Record<LabTaskKind, KindUiConfig> = {
+  TASK: {
+    titleClass: "text-violet-600 dark:text-violet-400",
+    title: "Задачи",
+    dialogTitle: "Задачи · нерешённые",
+    dialogAriaLabel: "Задачи",
+    empty: "Нет нерешённых задач. Создайте ниже.",
+    placeholder: "Новая задача… Можно вставить или перетащить картинки",
+    history: "Вся история задач →",
+    historyTab: "tasks",
+    createError: "Не удалось создать задачу",
+    resolveConfirm: "Подтвердить: задача выполнена",
+    resolveTitle: "Отметить задачу готовой",
+    pendingCountAria: (count) => `Нерешённых задач: ${count}`,
+  },
+  PICKUP_FROM: {
+    titleClass: "text-teal-700 dark:text-teal-400",
+    title: "Забрать из",
+    dialogTitle: "Забрать из · нерешённые",
+    dialogAriaLabel: "Забрать из",
+    empty: "Нет нерешённых записей. Создайте ниже.",
+    placeholder: "Откуда забрать… Можно вставить или перетащить картинки",
+    history: "Вся история «Забрать из» →",
+    historyTab: "pickups" as OrdersHistoryTab,
+    createError: "Не удалось создать запись",
+    resolveConfirm: "Подтвердить: забрали",
+    resolveTitle: "Отметить «Забрать из» готовым",
+    pendingCountAria: (count) => `Нерешённых записей «Забрать из»: ${count}`,
+  },
+};
+
 type DraftFile = { id: string; file: File; previewUrl: string };
 
 export function LabTasksActionCard({
+  kind = "TASK",
   initialPendingCount = 0,
   canResolve = false,
   className = "",
 }: {
+  kind?: LabTaskKind;
   initialPendingCount?: number;
   canResolve?: boolean;
   className?: string;
 }) {
+  const ui = KIND_UI[kind];
+  const kindQ = labTaskKindToQuery(kind);
   const isHarmony = useUiDesign() === "harmony";
   const [open, setOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(initialPendingCount);
@@ -61,10 +117,13 @@ export function LabTasksActionCard({
     setLoading(true);
     setErr(null);
     try {
-      const res = await fetch("/api/lab-tasks?status=pending", {
-        credentials: "include",
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/lab-tasks?status=pending&kind=${encodeURIComponent(kindQ)}`,
+        {
+          credentials: "include",
+          cache: "no-store",
+        },
+      );
       const j = (await res.json().catch(() => ({}))) as {
         items?: LabTaskJson[];
         pendingCount?: number;
@@ -83,7 +142,7 @@ export function LabTasksActionCard({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [kindQ]);
 
   useEffect(() => {
     if (!open) {
@@ -147,6 +206,7 @@ export function LabTasksActionCard({
     setErr(null);
     try {
       const fd = new FormData();
+      fd.set("kind", kindQ);
       fd.set("text", bodyText);
       for (const d of draftFiles) fd.append("files", d.file, d.file.name);
       const res = await fetch("/api/lab-tasks", {
@@ -160,7 +220,7 @@ export function LabTasksActionCard({
         error?: string;
       };
       if (!res.ok) {
-        setErr(j.error ?? "Не удалось создать задачу");
+        setErr(j.error ?? ui.createError);
         return;
       }
       setText("");
@@ -173,7 +233,7 @@ export function LabTasksActionCard({
     } finally {
       setSending(false);
     }
-  }, [text, draftFiles]);
+  }, [text, draftFiles, kindQ, ui.createError]);
 
   const resolveTask = useCallback(async (taskId: string) => {
     setBusyId(taskId);
@@ -211,8 +271,8 @@ export function LabTasksActionCard({
         className={`${cardShell(isHarmony)} ${className}`.trim()}
         onClick={() => setOpen(true)}
       >
-        <span className="text-sm font-bold uppercase tracking-wide text-violet-600 dark:text-violet-400">
-          Задачи
+        <span className={`text-sm font-bold uppercase tracking-wide ${ui.titleClass}`}>
+          {ui.title}
         </span>
         <span className="flex items-center justify-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
@@ -220,7 +280,7 @@ export function LabTasksActionCard({
           </span>
           <span
             className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
-            aria-label={`Нерешённых задач: ${pendingCount}`}
+            aria-label={ui.pendingCountAria(pendingCount)}
           >
             {pendingCount}
           </span>
@@ -232,7 +292,7 @@ export function LabTasksActionCard({
           className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="Задачи"
+          aria-label={ui.dialogAriaLabel}
           onClick={() => {
             setOpen(false);
             setImageViewer(null);
@@ -243,8 +303,8 @@ export function LabTasksActionCard({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
-              <h2 className="text-base font-semibold text-violet-600 dark:text-violet-400">
-                Задачи · нерешённые
+              <h2 className={`text-base font-semibold ${ui.titleClass}`}>
+                {ui.dialogTitle}
               </h2>
               <button
                 type="button"
@@ -265,7 +325,7 @@ export function LabTasksActionCard({
                 <p className="text-sm text-[var(--text-muted)]">Загрузка…</p>
               ) : items.length === 0 ? (
                 <p className="text-sm text-[var(--text-secondary)]">
-                  Нет нерешённых задач. Создайте ниже.
+                  {ui.empty}
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -329,8 +389,8 @@ export function LabTasksActionCard({
                             disabled={busyId === row.id}
                             title={
                               confirmDoneId === row.id
-                                ? "Подтвердить: задача выполнена"
-                                : "Отметить задачу готовой"
+                                ? ui.resolveConfirm
+                                : ui.resolveTitle
                             }
                             onClick={() => {
                               if (confirmDoneId === row.id) {
@@ -384,7 +444,7 @@ export function LabTasksActionCard({
               ) : null}
               <textarea
                 className="min-h-[4.5rem] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)] placeholder:text-[var(--text-muted)]"
-                placeholder="Новая задача… Можно вставить или перетащить картинки"
+                placeholder={ui.placeholder}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onPaste={onPaste}
@@ -411,11 +471,11 @@ export function LabTasksActionCard({
                     Картинка
                   </button>
                   <Link
-                    href={ordersHistoryHref({ tab: "tasks" })}
+                    href={ordersHistoryHref({ tab: ui.historyTab })}
                     className="text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
                     onClick={() => setOpen(false)}
                   >
-                    Вся история задач →
+                    {ui.history}
                   </Link>
                 </div>
                 <button

@@ -4,21 +4,26 @@ import { getPrisma } from "@/lib/get-prisma";
 import {
   labTaskAttachmentUrl,
   type LabTaskJson,
+  type LabTaskKind,
 } from "@/lib/lab-tasks";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 
 type LoadOpts = {
   tenantId: string;
+  kind: LabTaskKind;
   /** pending = только нерешённые; all = все */
   status?: "pending" | "all";
   limit?: number;
   q?: string;
 };
 
-export async function countPendingLabTasks(tenantId: string): Promise<number> {
+export async function countPendingLabTasks(
+  tenantId: string,
+  kind: LabTaskKind = "TASK",
+): Promise<number> {
   const prisma = await getPrisma();
   return prisma.labTask.count({
-    where: { tenantId, resolvedAt: null },
+    where: { tenantId, kind, resolvedAt: null },
   });
 }
 
@@ -29,6 +34,7 @@ export async function loadLabTasks(opts: LoadOpts): Promise<LabTaskJson[]> {
   const rows = await prisma.labTask.findMany({
     where: {
       tenantId: opts.tenantId,
+      kind: opts.kind,
       ...(opts.status === "pending" ? { resolvedAt: null } : {}),
       ...(q
         ? {
@@ -59,6 +65,7 @@ export async function loadLabTasks(opts: LoadOpts): Promise<LabTaskJson[]> {
 
   return rows.map((row) => ({
     id: row.id,
+    kind: row.kind,
     text: row.text,
     authorLabel: row.authorLabel,
     createdAt: row.createdAt.toISOString(),

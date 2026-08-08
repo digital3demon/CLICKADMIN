@@ -25,6 +25,7 @@ export function OrdersListHeaderActionCards({
   initialInTransitCount,
   initialCorrectionsPendingCount = 0,
   initialTasksPendingCount = 0,
+  initialPickupsPendingCount = 0,
   canMarkArrived = false,
   canResolveTasks = false,
   showProstheticsBlock = true,
@@ -32,6 +33,7 @@ export function OrdersListHeaderActionCards({
   initialInTransitCount: number;
   initialCorrectionsPendingCount?: number;
   initialTasksPendingCount?: number;
+  initialPickupsPendingCount?: number;
   canMarkArrived?: boolean;
   canResolveTasks?: boolean;
   /** Скрыть блок «Заказы протетики», если у роли нет права на эти уведомления. */
@@ -121,7 +123,7 @@ export function OrdersListHeaderActionCards({
 
   return (
     <>
-      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row lg:w-auto lg:max-w-[42rem] xl:max-w-[48rem]">
+      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap lg:w-auto lg:max-w-[56rem] xl:max-w-[64rem]">
         {showProstheticsBlock ? (
         <button
           type="button"
@@ -151,7 +153,14 @@ export function OrdersListHeaderActionCards({
         />
         <LabTasksActionCard
           className="flex-1"
+          kind="TASK"
           initialPendingCount={initialTasksPendingCount}
+          canResolve={canResolveTasks}
+        />
+        <LabTasksActionCard
+          className="flex-1"
+          kind="PICKUP_FROM"
+          initialPendingCount={initialPickupsPendingCount}
           canResolve={canResolveTasks}
         />
       </div>

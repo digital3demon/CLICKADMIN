@@ -7,6 +7,7 @@ import {
   LAB_TASK_MAX_ATTACHMENT_BYTES,
   LAB_TASK_MAX_ATTACHMENTS,
   LAB_TASK_MAX_TEXT_LEN,
+  parseLabTaskKindParam,
 } from "@/lib/lab-tasks";
 import {
   countPendingLabTasks,
@@ -36,10 +37,11 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
+    const kind = parseLabTaskKindParam(url.searchParams.get("kind"));
     if (url.searchParams.get("countOnly") === "1") {
-      const pendingCount = await countPendingLabTasks(tenantId);
+      const pendingCount = await countPendingLabTasks(tenantId, kind);
       return NextResponse.json(
-        { pendingCount },
+        { pendingCount, kind },
         { headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -48,13 +50,15 @@ export async function GET(req: Request) {
     const status = statusRaw === "all" ? "all" : "pending";
     const items = await loadLabTasks({
       tenantId,
+      kind,
       status,
       limit: status === "all" ? 80 : 100,
     });
 
     return NextResponse.json(
       {
-        pendingCount: await countPendingLabTasks(tenantId),
+        kind,
+        pendingCount: await countPendingLabTasks(tenantId, kind),
         canResolve: canAcceptOrderChatCorrections(session.role),
         items,
       },
@@ -63,7 +67,7 @@ export async function GET(req: Request) {
   } catch (e) {
     console.error("[lab-tasks] GET", e);
     return NextResponse.json(
-      { error: "Не удалось загрузить задачи" },
+      { error: "Не удалось загрузить" },
       { status: 500 },
     );
   }
@@ -88,6 +92,9 @@ export async function POST(req: Request) {
     }
 
     const form = await req.formData();
+    const kind = parseLabTaskKindParam(
+      typeof form.get("kind") === "string" ? String(form.get("kind")) : null,
+    );
     const text = String(form.get("text") ?? "").trim().slice(0, LAB_TASK_MAX_TEXT_LEN);
     const files = form
       .getAll("files")
@@ -123,7 +130,9 @@ export async function POST(req: Request) {
       }
       if (file.size > LAB_TASK_MAX_ATTACHMENT_BYTES) {
         return NextResponse.json(
-          { error: `Файл слишком большой (макс. ${LAB_TASK_MAX_ATTACHMENT_BYTES / (1024 * 1024)} МБ)` },
+          {
+            error: `Файл слишком большой (макс. ${LAB_TASK_MAX_ATTACHMENT_BYTES / (1024 * 1024)} МБ)`,
+          },
           { status: 400 },
         );
       }
@@ -148,6 +157,7 @@ export async function POST(req: Request) {
     const created = await prisma.labTask.create({
       data: {
         tenantId,
+        kind,
         text,
         authorUserId: session.sub,
         authorLabel,
@@ -170,17 +180,18 @@ export async function POST(req: Request) {
       }
     }
 
-    const items = await loadLabTasks({ tenantId, status: "pending" });
+    const items = await loadLabTasks({ tenantId, kind, status: "pending" });
     return NextResponse.json({
       ok: true,
       id: created.id,
-      pendingCount: await countPendingLabTasks(tenantId),
+      kind,
+      pendingCount: await countPendingLabTasks(tenantId, kind),
       items,
     });
   } catch (e) {
     console.error("[lab-tasks] POST", e);
     return NextResponse.json(
-      { error: "Не удалось создать задачу" },
+      { error: "Не удалось создать запись" },
       { status: 500 },
     );
   }
