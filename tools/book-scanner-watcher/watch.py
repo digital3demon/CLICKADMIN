@@ -321,6 +321,155 @@ def clip_person(name: str | None, limit: int = 20) -> str:
     return s[: limit - 1] + "…"
 
 
+# ─── local OCR (в exe: номер наряда / Kaiten без серверного tesseract) ─────
+
+_ORDER_OCR_RE = re.compile(
+    r"(?<![\dA-Za-z])(\d{4})\s*[-–—−]\s*(\d{3})(?![\dA-Za-z])"
+)
+_KAITEN_OCR_RE = re.compile(
+    r"(?:https?://)?(?:[\w.-]+\.)?kaiten\.ru/(?:card/)?(\d{4,})", re.I
+)
+_ID_FIELD_RE = re.compile(r"(?:^|[\s:])ID\s*[:：]?\s*(\d{6,})(?!\d)", re.I)
+
+_ocr_engine = None
+_ocr_lock = threading.Lock()
+
+
+def _get_ocr_engine():
+    global _ocr_engine
+    if _ocr_engine is not None:
+        return _ocr_engine
+    with _ocr_lock:
+        if _ocr_engine is not None:
+            return _ocr_engine
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+
+            _ocr_engine = RapidOCR()
+            logging.info("local OCR engine ready (RapidOCR)")
+        except Exception as e:
+            logging.warning("local OCR unavailable: %s", e)
+            _ocr_engine = False  # type: ignore[assignment]
+        return _ocr_engine
+
+
+def _ocr_text_from_bgr(img: np.ndarray) -> str:
+    engine = _get_ocr_engine()
+    if not engine:
+        return ""
+    try:
+        result, _elapse = engine(img)
+    except Exception as e:
+        logging.warning("local OCR run: %s", e)
+        return ""
+    if not result:
+        return ""
+    parts: list[str] = []
+    for row in result:
+        if len(row) >= 2 and row[1]:
+            parts.append(str(row[1]))
+    return " ".join(parts)
+
+
+def pick_order_number_from_text(raw: str) -> str | None:
+    found: list[str] = []
+    seen: set[str] = set()
+    for m in _ORDER_OCR_RE.finditer(raw or ""):
+        num = f"{m.group(1)}-{m.group(2)}"
+        if num in seen:
+            continue
+        seen.add(num)
+        found.append(num)
+    if not found:
+        return None
+    if len(found) == 1:
+        return found[0]
+    # предпочитаем разумный YYMM
+    best = found[0]
+    best_score = -1
+    for i, n in enumerate(found):
+        yymm, _, nn = n.partition("-")
+        score = 100 - i
+        if len(yymm) == 4:
+            yy, mm = int(yymm[:2]), int(yymm[2:])
+            if 20 <= yy <= 39 and 1 <= mm <= 12:
+                score += 50
+        if score > best_score:
+            best_score = score
+            best = n
+    return best
+
+
+def pick_kaiten_url_from_text(raw: str) -> str | None:
+    m = _KAITEN_OCR_RE.search(raw or "")
+    if m:
+        return f"https://clicklab.kaiten.ru/{m.group(1)}"
+    m2 = _ID_FIELD_RE.search(raw or "")
+    if m2:
+        return f"https://clicklab.kaiten.ru/{m2.group(1)}"
+    return None
+
+
+def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
+    """
+    Локальный OCR верхней части скана.
+    Возвращает (номер_наряда YYMM-NNN | None, qr_hint URL | None).
+    """
+    img = imread_bgr(path)
+    if img is None:
+        return None, None
+    h = img.shape[0]
+    crops = [
+        img[0 : max(1, h * 2 // 5), :],
+        img[0 : max(1, h // 2), :],
+        img,
+    ]
+    t0 = time.time()
+    blob_all = ""
+    for crop in crops:
+        # чуть уменьшаем очень большие кадры
+        ch, cw = crop.shape[:2]
+        if max(ch, cw) > 1600:
+            sc = 1600 / max(ch, cw)
+            crop = cv2.resize(
+                crop, None, fx=sc, fy=sc, interpolation=cv2.INTER_AREA
+            )
+        text = _ocr_text_from_bgr(crop)
+        blob_all += " " + text
+        order_n = pick_order_number_from_text(blob_all)
+        kaiten = pick_kaiten_url_from_text(blob_all)
+        if order_n or kaiten:
+            logging.info(
+                "local OCR %s → order=%s kaiten=%s (%.1fs)",
+                path.name,
+                order_n,
+                "yes" if kaiten else "no",
+                time.time() - t0,
+            )
+            return order_n, kaiten
+    logging.info(
+        "local OCR %s: no match (%.1fs, chars=%s)",
+        path.name,
+        time.time() - t0,
+        len(blob_all.strip()),
+    )
+    return None, None
+
+
+def resolve_upload_hints(path: Path) -> tuple[str | None, str | None]:
+    """QR, иначе локальный OCR → (qr_hint, force_order_number)."""
+    qr = decode_qr(path)
+    if qr:
+        return qr, None
+    order_n, kaiten_url = local_ocr_hints(path)
+    # приоритет: явный номер наряда (сервер без OCR); URL — как qr hint
+    if order_n:
+        return kaiten_url or qr, order_n
+    if kaiten_url:
+        return kaiten_url, None
+    return None, None
+
+
 def move_to(subdir: Path, path: Path) -> Path:
     subdir.mkdir(parents=True, exist_ok=True)
     dest = subdir / path.name
@@ -1124,23 +1273,30 @@ class ScannerApp:
             return "fail"
 
         logging.info("process %s", path.name)
-        self.ui_q.put(("toast", f"Загрузка в CRM… {path.name}"))
+        self.ui_q.put(("toast", f"Разбор… {path.name}"))
         t0 = time.time()
         try:
-            qr = decode_qr(path)
+            qr_hint, force_num = resolve_upload_hints(path)
             logging.info(
-                "qr %s → %s (%.1fs)",
+                "hints %s → qr=%s order=%s (%.1fs)",
                 path.name,
-                "yes" if qr else "no",
+                "yes" if qr_hint else "no",
+                force_num or "-",
                 time.time() - t0,
             )
-            if not qr:
-                self.ui_q.put(
-                    ("toast", f"QR локально нет — ждём CRM/OCR… {path.name}")
-                )
+            if force_num:
+                self.ui_q.put(("toast", f"OCR: {force_num} → CRM… {path.name}"))
+            elif qr_hint:
+                self.ui_q.put(("toast", f"QR → CRM… {path.name}"))
+            else:
+                self.ui_q.put(("toast", f"Без QR/OCR — CRM… {path.name}"))
             t_up = time.time()
             ok, status, parsed = upload_scan(
-                crm_base=crm, api_key=key, path=path, qr_hint=qr
+                crm_base=crm,
+                api_key=key,
+                path=path,
+                qr_hint=qr_hint,
+                force_order_number=force_num,
             )
             logging.info(
                 "upload %s status=%s ok=%s (%.1fs)",
@@ -1416,11 +1572,15 @@ class ScannerApp:
         crm, key = s["crm_base_url"], s["crm_api_key"]
         watch = Path(s["watch_dir"])
         path = item.path
-        self.ui_q.put(("toast", f"Повторная отправка… {path.name}"))
+        self.ui_q.put(("toast", f"Повтор… {path.name}"))
         try:
-            qr = decode_qr(path)
+            qr_hint, force_num = resolve_upload_hints(path)
             ok, status, parsed = upload_scan(
-                crm_base=crm, api_key=key, path=path, qr_hint=qr
+                crm_base=crm,
+                api_key=key,
+                path=path,
+                qr_hint=qr_hint,
+                force_order_number=force_num,
             )
         except Exception as e:
             err = str(e)[:200]
