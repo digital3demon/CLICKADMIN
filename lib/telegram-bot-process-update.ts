@@ -367,17 +367,15 @@ export async function processTelegramBotUpdate(
       });
       if (listReply) {
         let sent = false;
-        const listMarkup = listReply.replyMarkup;
         if (isPrivateChat) {
-          /* Inline web_app-кнопки списка; reply-клавиатура снизу уже стоит после /start. */
+          const kb = telegramReplyKeyboardMarkupForRole(effectiveRole);
           sent = await reply(botToken, chatId, listReply.text, {
             parseMode: listReply.parseMode,
-            ...(listMarkup ? { replyMarkup: listMarkup } : {}),
+            ...(kb ? { replyMarkup: kb } : {}),
           });
         } else {
           sent = await reply(botToken, chatId, listReply.text, {
             parseMode: listReply.parseMode,
-            ...(listMarkup ? { replyMarkup: listMarkup } : {}),
           });
         }
         if (!sent) {

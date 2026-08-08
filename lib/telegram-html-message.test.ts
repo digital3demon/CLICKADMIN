@@ -1,128 +1,61 @@
 import { describe, expect, it } from "vitest";
 import {
-  formatTelegramBotWebAppList,
   formatTelegramHtmlLinkList,
-  formatTelegramListButtonText,
-  telegramListTitleSurnamesOnly,
-  truncateTelegramButtonText,
+  TELEGRAM_LIST_ITEM_SEPARATOR,
   truncateTelegramHtmlMessage,
 } from "@/lib/telegram-html-message";
 
-describe("formatTelegramBotWebAppList", () => {
+describe("formatTelegramHtmlLinkList", () => {
   it("пустой список — заголовок и текст", () => {
-    const out = formatTelegramBotWebAppList([], "Пусто", "Заголовок");
-    expect(out.text).toContain("<b>Заголовок</b>");
-    expect(out.text).toContain("Пусто");
-    expect(out.replyMarkup).toBeUndefined();
+    const out = formatTelegramHtmlLinkList([], "Пусто", "Заголовок");
+    expect(out).toContain("<b>Заголовок</b>");
+    expect(out).toContain("Пусто");
   });
 
-  it("только заголовок + кнопки с названием и статусом", () => {
-    const out = formatTelegramBotWebAppList(
+  it("пропускает url без http(s)", () => {
+    const out = formatTelegramHtmlLinkList(
+      [{ url: "/kanban?x=1", label: "bad" }],
+      "Пусто",
+      "H",
+    );
+    expect(out).not.toContain("<a href");
+    expect(out).toContain("Пусто");
+  });
+
+  it("разделитель и статус между записями", () => {
+    const out = formatTelegramHtmlLinkList(
       [
         {
           url: "https://example.com/a",
-          webAppUrl: "https://click-lab.online/tg-app?startapp=o_or_a",
-          label: "2607-349 Марченко А.В. Зубарев С.В. Композит",
+          label: "2607-349",
           detail: "Статус: Производство",
         },
         {
           url: "https://example.com/b",
-          webAppUrl: "https://click-lab.online/tg-app?startapp=o_or_b",
           label: "2607-359",
           detail: "Статус: Сборка",
         },
       ],
       "Пусто",
-      "Актуальная запись (актуальное 08.08.2026–11.08.2026)",
+      "Актуальная запись",
     );
-    expect(out.text).toBe(
-      "<b>Актуальная запись (актуальное 08.08.2026–11.08.2026)</b>",
+    expect(out).toContain(TELEGRAM_LIST_ITEM_SEPARATOR);
+    expect(out).toContain("Статус: Производство");
+    expect(out).toContain("Статус: Сборка");
+    expect(out.indexOf("2607-349")).toBeLessThan(
+      out.indexOf(TELEGRAM_LIST_ITEM_SEPARATOR),
     );
-    expect(out.text).not.toContain("Статус: Производство");
-    expect(out.text).not.toContain("2607-349");
-    expect(out.replyMarkup?.inline_keyboard).toHaveLength(2);
-    const btn = out.replyMarkup?.inline_keyboard[0]?.[0];
-    expect(btn).toMatchObject({
-      web_app: { url: "https://click-lab.online/tg-app?startapp=o_or_a" },
-    });
-    expect(btn?.text).toContain("\n");
-    expect(btn?.text).toContain("→ Производство");
-    expect(btn?.text).not.toMatch(/^\d+\./);
-    expect(btn!.text.length).toBeLessThanOrEqual(64);
   });
 
-  it("без webAppUrl — url-кнопка", () => {
-    const out = formatTelegramBotWebAppList(
-      [{ url: "https://example.com/o/1", label: "Наряд 1", detail: "Статус: Сборка" }],
-      "Пусто",
-      "H",
-    );
-    expect(out.replyMarkup?.inline_keyboard[0]?.[0]).toEqual({
-      text: "Наряд 1\n→ Сборка",
-      url: "https://example.com/o/1",
-    });
-  });
-
-  it("обрезает число кнопок и пишет «ещё»", () => {
-    const items = Array.from({ length: 50 }, (_, i) => ({
+  it("укладывается в лимит Telegram", () => {
+    const items = Array.from({ length: 200 }, (_, i) => ({
       url: `https://example.com/o/${i}`,
-      webAppUrl: `https://example.com/tg-app?startapp=o_${i}`,
-      label: `Наряд ${i}`,
+      label: `Наряд ${i} пациент длинное имя врача клиника`,
       detail: `Статус: Колонка ${i}`,
     }));
-    const out = formatTelegramBotWebAppList(items, "Пусто", "Отгрузки");
-    expect(out.text).toContain("<b>Отгрузки</b>");
-    expect(out.text).toMatch(/… ещё \d+/);
-    expect(out.replyMarkup!.inline_keyboard.length).toBe(40);
-  });
-});
-
-describe("formatTelegramListButtonText", () => {
-  it("фамилии без инициалов и статус со стрелкой", () => {
-    const t = formatTelegramListButtonText(
-      "2608-037 Марченко А.В. Зубарев С.В. Композит.кор 10.08 09:00",
-      "Статус: Сдана админам",
-    );
-    expect(t).toContain("\n");
-    expect(t).toContain("Марченко");
-    expect(t).toContain("Зубарев");
-    expect(t).not.toMatch(/А\.В\./);
-    expect(t).not.toMatch(/С\.В\./);
-    expect(t.split("\n")[1]).toBe("→ Сдана админам");
-    expect(t.length).toBeLessThanOrEqual(64);
-  });
-
-  it("telegramListTitleSurnamesOnly режет инициалы и нумерацию", () => {
-    expect(
-      telegramListTitleSurnamesOnly(
-        "1. 2608-062 Дроздова А.Ю. Лойберг Э.И. позиционер",
-      ),
-    ).toBe("2608-062 Дроздова Лойберг позиционер");
-  });
-});
-
-describe("formatTelegramHtmlLinkList (совместимость)", () => {
-  it("возвращает только заголовок", () => {
-    const out = formatTelegramHtmlLinkList(
-      [
-        {
-          url: "https://example.com/a",
-          webAppUrl: "https://example.com/tg-app?x=1",
-          label: "2607-349",
-          detail: "Статус: Производство",
-        },
-      ],
-      "Пусто",
-      "H",
-    );
-    expect(out).toBe("<b>H</b>");
-  });
-});
-
-describe("truncateTelegramButtonText", () => {
-  it("режет до 64", () => {
-    const long = "x".repeat(80);
-    expect(truncateTelegramButtonText(long).length).toBe(64);
+    const out = formatTelegramHtmlLinkList(items, "Пусто", "Отгрузки");
+    expect(out.length).toBeLessThanOrEqual(4096);
+    expect(out).toMatch(/… ещё \d+/);
   });
 });
 

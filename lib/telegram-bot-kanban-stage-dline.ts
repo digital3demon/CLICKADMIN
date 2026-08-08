@@ -5,10 +5,6 @@ import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { orderPathById } from "@/lib/order-public-ref";
 import {
-  telegramMiniAppCardWebAppUrl,
-  telegramMiniAppOrderWebAppUrl,
-} from "@/lib/telegram-mini-app-links";
-import {
   KANBAN_CHAT_STATE_KEY,
   parseKanbanAppState,
 } from "@/lib/kanban/chat-sync";
@@ -26,30 +22,29 @@ export {
   kanbanStageDlineWindowForCommand,
 } from "@/lib/telegram-bot-kanban-stage-dline-helpers";
 
+function kanbanCardTelegramHref(
+  card: KanbanCard,
+  linkToOrderPage: boolean,
+): string {
+  const base = crmPublicBaseUrl().replace(/\/+$/, "");
+  const linked = card.linkedOrderId?.trim();
+  if (linked) {
+    if (linkToOrderPage) {
+      return `${base}${orderPathById(linked)}`;
+    }
+    return `${base}${kanbanOrderDeepLinkPath(linked)}`;
+  }
+  const params = new URLSearchParams({ card: card.id });
+  return `${base}/kanban?${params.toString()}`;
+}
+
 function kanbanCardTelegramItem(
   card: KanbanCard,
   linkToOrderPage: boolean,
   statusLabel: string,
 ): TelegramHtmlListItem {
-  const linked = card.linkedOrderId?.trim();
-  const base = crmPublicBaseUrl().replace(/\/+$/, "");
-  if (linked) {
-    const webAppUrl = telegramMiniAppOrderWebAppUrl(linked);
-    const url = linkToOrderPage
-      ? `${base}${orderPathById(linked)}`
-      : `${base}${kanbanOrderDeepLinkPath(linked)}`;
-    return {
-      url,
-      webAppUrl,
-      label: kanbanCardTelegramLabel(card),
-      detail: `Статус: ${statusLabel}`,
-    };
-  }
-  const webAppUrl = telegramMiniAppCardWebAppUrl(card.id);
-  const params = new URLSearchParams({ card: card.id });
   return {
-    url: `${base}/kanban?${params.toString()}`,
-    webAppUrl,
+    url: kanbanCardTelegramHref(card, linkToOrderPage),
     label: kanbanCardTelegramLabel(card),
     detail: `Статус: ${statusLabel}`,
   };
