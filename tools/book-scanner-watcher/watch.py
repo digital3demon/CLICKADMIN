@@ -475,6 +475,22 @@ def resolve_upload_hints(path: Path) -> tuple[str | None, str | None]:
     return None, None
 
 
+def kaiten_status_from_parsed(parsed: dict) -> tuple[bool | None, str]:
+    """(synced_flag, короткая подпись для статуса)."""
+    if "kaitenSynced" not in parsed:
+        return None, ""
+    if parsed.get("kaitenSynced"):
+        return True, " + канбан"
+    reason = str(parsed.get("kaitenSkipReason") or "")
+    if reason == "no_kaiten_card":
+        return False, " (нет карточки Kaiten)"
+    if reason == "kaiten_rate_limited":
+        return False, " (Kaiten лимит, догрузится)"
+    if reason == "kaiten_pending":
+        return False, " (канбан догрузится)"
+    return False, " (канбан позже)"
+
+
 def move_to(subdir: Path, path: Path) -> Path:
     subdir.mkdir(parents=True, exist_ok=True)
     dest = subdir / path.name
@@ -506,6 +522,9 @@ def api_request(
     if json_body is not None:
         body = json.dumps(json_body).encode("utf-8")
         hdrs["Content-Type"] = "application/json"
+    # Без Content-Length часть прокси (nginx) отдаёт пустое тело → CRM 415 unsupported_type
+    if body is not None:
+        hdrs["Content-Length"] = str(len(body))
     req = urllib.request.Request(url, data=body, headers=hdrs, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -616,6 +635,7 @@ class ScanItem:
     caption: str = ""
     attempts: int = 0
     give_up: bool = False
+    kaiten_synced: bool | None = None
     photo: tk.PhotoImage | None = field(default=None, repr=False)
     thumb_file: Path | None = field(default=None, repr=False)
     frame: tk.Frame | None = field(default=None, repr=False)
@@ -623,10 +643,16 @@ class ScanItem:
     def header_text(self) -> str:
         if self.ok:
             num = self.order_number or "—"
+            kaiten = ""
+            if self.kaiten_synced is True:
+                kaiten = "\nканбан ✓"
+            elif self.kaiten_synced is False:
+                kaiten = "\nканбан…"
             return (
                 f"{num}\n"
                 f"пац {clip_person(self.patient_name)}\n"
                 f"док {clip_person(self.doctor_name)}"
+                f"{kaiten}"
             )
         if self.give_up or self.attempts >= MAX_AUTO_ATTEMPTS:
             return GIVE_UP_HEADER
@@ -651,6 +677,7 @@ class ScanItem:
             "caption": self.caption,
             "attempts": self.attempts,
             "give_up": self.give_up,
+            "kaiten_synced": self.kaiten_synced,
         }
 
     @staticmethod
@@ -676,6 +703,11 @@ class ScanItem:
             caption=str(d.get("caption") or p.name),
             attempts=attempts,
             give_up=give_up,
+            kaiten_synced=(
+                bool(d["kaiten_synced"])
+                if d.get("kaiten_synced") is not None
+                else None
+            ),
         )
 
 
@@ -1517,9 +1549,14 @@ class ScannerApp:
             opath = parsed.get("orderPath")
             opath_s = str(opath) if opath else None
             logging.info(
-                "ok %s → %s (%s)", path.name, onum or oid, parsed.get("qrKind") or ""
+                "ok %s → %s (%s) kaiten=%s",
+                path.name,
+                onum or oid,
+                parsed.get("qrKind") or "",
+                parsed.get("kaitenSynced"),
             )
             self._clear_path_attempts(path)
+            kaiten_flag, kaiten_note = kaiten_status_from_parsed(parsed)
             item = ScanItem(
                 uid=uuid.uuid4().hex,
                 path=dest,
@@ -1541,9 +1578,16 @@ class ScannerApp:
                 caption=short_name(dest.name),
                 attempts=0,
                 give_up=False,
+                kaiten_synced=kaiten_flag,
             )
             self._processed_ok += 1
             self.ui_q.put(("item", item))
+            self.ui_q.put(
+                (
+                    "toast",
+                    f"Ок → {onum or oid}{kaiten_note}: {path.name}",
+                )
+            )
             return "ok"
 
         err = str(parsed.get("error") or parsed.get("detail") or "ошибка")
@@ -1853,6 +1897,7 @@ class ScannerApp:
             pass
 
         def apply_ok() -> None:
+            kaiten_flag, kaiten_note = kaiten_status_from_parsed(parsed)
             item.ok = True
             item.path = path
             item.error = None
@@ -1875,11 +1920,14 @@ class ScannerApp:
             item.caption = short_name(path.name)
             item.attempts = 0
             item.give_up = False
+            item.kaiten_synced = kaiten_flag
             self._clear_path_attempts(path)
             self._processed_ok += 1
             self._relayout()
             self._persist_gallery()
-            self.var_status.set(f"Повтор ок → {item.order_number or oid}")
+            self.var_status.set(
+                f"Повтор ок → {item.order_number or oid}{kaiten_note}"
+            )
 
         self.root.after(0, apply_ok)
 
@@ -1949,6 +1997,7 @@ class ScannerApp:
                 logging.warning("correct: old attach left: %s", warn_old)
 
         def apply() -> None:
+            kaiten_flag, kaiten_note = kaiten_status_from_parsed(parsed)
             item.ok = True
             item.order_id = str(parsed.get("orderId") or "") or None
             item.order_number = str(parsed.get("orderNumber") or order_number)
@@ -1973,6 +2022,7 @@ class ScannerApp:
             item.caption = short_name(item.path.name)
             item.attempts = 0
             item.give_up = False
+            item.kaiten_synced = kaiten_flag
             self._clear_path_attempts(item.path)
             watch = Path(s["watch_dir"])
             if item.path.parent.name != "done":
@@ -1987,7 +2037,9 @@ class ScannerApp:
                     f"В заказ {item.order_number}, но старое вложение: {warn_old}"
                 )
             else:
-                self.var_status.set(f"Исправлено → {item.order_number}")
+                self.var_status.set(
+                    f"Исправлено → {item.order_number}{kaiten_note}"
+                )
 
         self.root.after(0, apply)
 

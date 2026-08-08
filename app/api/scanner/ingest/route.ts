@@ -6,11 +6,17 @@
  * - таймаут чтения тела UPLOAD_BODY_TIMEOUT_MS;
  * - SQLITE_BUSY / write conflict — withTransientWriteRetry;
  * - auth: Bearer TenantApiKey + scope scanner.ingest (без user-session);
- * - заказ: x-scanner-order-number или QR (пиксели / x-scanner-qr); без серверного OCR.
+ * - заказ: x-scanner-order-number или QR (пиксели / x-scanner-qr); без серверного OCR;
+ * - после сохранения — пуш файла в Kaiten (карточка канбана), как ручная загрузка.
  */
 import { OrderAttachmentScope } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
+import {
+  KaitenCardNotReadyError,
+  KaitenRateLimitError,
+  pushAttachmentToKaitenWithCardWait,
+} from "@/lib/kaiten-sync";
+import { isOrderAttachmentUploadedToKaiten } from "@/lib/kaiten-attachment-upload-state";
 import {
   isOrderAttachmentS3Enabled,
   newOrderAttachmentId,
@@ -193,8 +199,19 @@ export async function POST(req: Request) {
 
     const magic = detectImageMagic(fileBuf);
     if (!magic) {
+      console.info("[scanner/ingest]", {
+        step: "unsupported_type",
+        keyId: apiKey.keyId,
+        bytes: fileBuf.length,
+        head: fileBuf.subarray(0, 8).toString("hex"),
+        ms: Date.now() - t0,
+      });
       return NextResponse.json(
-        { error: "unsupported_type", detail: "not_image" },
+        {
+          error: "unsupported_type",
+          detail: "not_image",
+          bytes: fileBuf.length,
+        },
         { status: 415 },
       );
     }
@@ -354,10 +371,49 @@ export async function POST(req: Request) {
       "orderAttachment.create",
     );
 
+    /**
+     * Вложение в CRM-заказ (= файлы карточки CRM-канбана) + выгрузка в Kaiten,
+     * как при ручной загрузке из заказа/канбана.
+     */
+    let kaitenSynced = false;
+    let kaitenSkipReason: string | null = null;
     try {
-      await syncUnpushedOrderAttachmentsToKaiten(resolved.orderId, ordersDb);
+      await pushAttachmentToKaitenWithCardWait(
+        resolved.orderId,
+        row.id,
+        ordersDb,
+        { maxWaitMs: 25_000 },
+      );
+      const pushed = await ordersDb.orderAttachment.findUnique({
+        where: { id: row.id },
+        select: { uploadedToKaitenAt: true, kaitenFileId: true },
+      });
+      kaitenSynced =
+        pushed?.kaitenFileId != null ||
+        isOrderAttachmentUploadedToKaiten(pushed?.uploadedToKaitenAt);
+      if (!kaitenSynced) {
+        const ord = await ordersDb.order.findUnique({
+          where: { id: resolved.orderId },
+          select: { kaitenCardId: true },
+        });
+        kaitenSkipReason = !ord?.kaitenCardId
+          ? "no_kaiten_card"
+          : "kaiten_pending";
+      }
     } catch (e) {
-      console.warn("[scanner/ingest] kaiten sync failed", e);
+      if (e instanceof KaitenRateLimitError) {
+        kaitenSkipReason = "kaiten_rate_limited";
+      } else if (e instanceof KaitenCardNotReadyError) {
+        kaitenSkipReason = "no_kaiten_card";
+      } else {
+        kaitenSkipReason = "kaiten_error";
+      }
+      console.warn("[scanner/ingest] kaiten sync failed", {
+        orderId: resolved.orderId,
+        attachmentId: row.id,
+        reason: kaitenSkipReason,
+        err: e instanceof Error ? e.message : String(e),
+      });
     }
 
     console.info("[scanner/ingest]", {
@@ -370,6 +426,8 @@ export async function POST(req: Request) {
       qrKind: resolved.qrKind,
       bytes: fileBuf.length,
       decodeMs,
+      kaitenSynced,
+      kaitenSkipReason,
       ms: Date.now() - t0,
       actor: `api:${apiKey.name}`,
     });
@@ -383,6 +441,8 @@ export async function POST(req: Request) {
       orderPath: orderPathById(resolved.orderId),
       attachmentId: row.id,
       qrKind: resolved.qrKind,
+      kaitenSynced,
+      kaitenSkipReason,
       actor: apiKey.name,
     });
   } catch (e) {
