@@ -9,6 +9,21 @@ export type ProstheticsInTransitOurLine = {
   quantity: number;
 };
 
+/** Заявка ещё не принята — секция «Заказать». */
+export type ProstheticsToOrderRow = {
+  id: string;
+  text: string;
+  source: "KAITEN" | "DEMO_KANBAN";
+  authorLabel: string | null;
+  createdAt: string;
+  orderId: string;
+  orderNumber: string;
+  patientName: string | null;
+  doctorName: string | null;
+  clientProvided: ProstheticsInTransitClientLine[];
+  ourLines: ProstheticsInTransitOurLine[];
+};
+
 export type ProstheticsInTransitStep =
   | "ordered"
   | "arrived"

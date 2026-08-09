@@ -49,11 +49,19 @@ export async function POST(
 
   const order = await prisma.order.findFirst({
     where: { id: orderId.trim(), tenantId },
-    select: { id: true, kaitenCardId: true },
+    select: { id: true, kaitenCardId: true, prostheticsOrdered: true },
   });
   if (!order) {
     await reopenOrderProstheticsRequestPair(prisma, closed, "accept");
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+  }
+
+  /* «Заказал» в степпере = приняли заявку — галочка на наряде. */
+  if (!order.prostheticsOrdered) {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { prostheticsOrdered: true },
+    });
   }
 
   if (order.kaitenCardId != null) {

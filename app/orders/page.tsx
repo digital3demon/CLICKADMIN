@@ -658,6 +658,7 @@ export default async function OrdersPage({
         />
         <OrdersListHeaderActionCards
           initialInTransitCount={prostheticsInTransitCount}
+          initialToOrderCount={prostheticsPendingCount}
           initialCorrectionsPendingCount={attentionCount}
           initialTasksPendingCount={labTasksPendingCount}
           initialPickupsPendingCount={labPickupsPendingCount}
@@ -686,6 +687,7 @@ export default async function OrdersPage({
           </div>
           <OrdersListHeaderActionCards
             initialInTransitCount={prostheticsInTransitCount}
+            initialToOrderCount={prostheticsPendingCount}
             initialCorrectionsPendingCount={attentionCount}
             initialTasksPendingCount={labTasksPendingCount}
             initialPickupsPendingCount={labPickupsPendingCount}

@@ -391,17 +391,29 @@ export function OrderConstructionsEditor({
     return "позиция";
   };
 
+  const hasPriceListLines = value.some((r) => r.kind === "priceList");
+
   const addFromPriceTile = (
     <button
       type="button"
       aria-label="Добавить позицию из прайса"
       title="Добавить из прайса"
       onClick={() => setPickOpen(true)}
-      className="flex min-h-[11rem] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)]/40 p-3 text-[var(--text-muted)] transition-colors hover:border-[var(--sidebar-blue)] hover:bg-[var(--card-bg)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/80"
+      className={
+        hasPriceListLines
+          ? "flex min-h-[11rem] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)]/40 p-3 text-[var(--text-muted)] transition-colors hover:border-[var(--sidebar-blue)] hover:bg-[var(--card-bg)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/80"
+          : "flex min-h-[2.75rem] w-full min-w-0 flex-row items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)]/40 px-3 py-2 text-[var(--text-muted)] transition-colors hover:border-[var(--sidebar-blue)] hover:bg-[var(--card-bg)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/80"
+      }
     >
-      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-current bg-[var(--card-bg)] text-[var(--text-strong)]">
+      <span
+        className={
+          hasPriceListLines
+            ? "flex h-10 w-10 items-center justify-center rounded-full border border-current bg-[var(--card-bg)] text-[var(--text-strong)]"
+            : "flex h-7 w-7 items-center justify-center rounded-full border border-current bg-[var(--card-bg)] text-[var(--text-strong)]"
+        }
+      >
         <svg
-          className="h-5 w-5"
+          className={hasPriceListLines ? "h-5 w-5" : "h-4 w-4"}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -412,6 +424,11 @@ export function OrderConstructionsEditor({
           <path d="M12 5v14M5 12h14" />
         </svg>
       </span>
+      {!hasPriceListLines ? (
+        <span className="text-xs font-semibold uppercase tracking-wide">
+          Добавить из прайса
+        </span>
+      ) : null}
     </button>
   );
 
@@ -605,7 +622,13 @@ export function OrderConstructionsEditor({
         </ul>
       ) : null}
 
-      <div className="grid min-w-0 grid-cols-1 gap-3 pb-1 pt-1 sm:grid-cols-2">
+      <div
+        className={
+          hasPriceListLines
+            ? "grid min-w-0 grid-cols-1 gap-3 pb-1 pt-1 sm:grid-cols-2"
+            : "grid min-w-0 grid-cols-1 gap-3 pb-1 pt-1"
+        }
+      >
         {value.map((row, idx) => {
           if (row.kind !== "priceList") return null;
           const priceEditable = isPriceListUnitPriceEditable({

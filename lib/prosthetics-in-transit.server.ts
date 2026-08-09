@@ -6,9 +6,12 @@ import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-
 import { prostheticsFromDb } from "@/lib/order-prosthetics";
 import { getPricingPrismaClient } from "@/lib/prisma-pricing";
 import { prostheticsInTransitStepFromDates } from "@/lib/prosthetics-in-transit-step";
-import type { ProstheticsInTransitRow } from "@/lib/prosthetics-in-transit";
+import type {
+  ProstheticsInTransitRow,
+  ProstheticsToOrderRow,
+} from "@/lib/prosthetics-in-transit";
 
-export type { ProstheticsInTransitRow };
+export type { ProstheticsInTransitRow, ProstheticsToOrderRow };
 
 const orderScope = { archivedAt: null } as const;
 
@@ -249,11 +252,140 @@ export async function listProstheticsInTransit(
   return sliced.map((raw) => toRow(raw, labelByItemId));
 }
 
+/**
+ * Ещё не принята («Заказать»): resolved/rejected пусты. Dedup inbox+legacy.
+ */
+export async function listProstheticsToOrder(
+  db: PrismaClient,
+  opts?: { tenantId?: string | null; take?: number },
+): Promise<ProstheticsToOrderRow[]> {
+  const take = opts?.take ?? 200;
+  const tenantId = opts?.tenantId?.trim() || null;
+  const orderWhere = {
+    ...orderScope,
+    ...(tenantId ? { tenantId } : {}),
+  };
+  const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
+
+  const pendingWhere = {
+    resolvedAt: null,
+    rejectedAt: null,
+    order: orderWhere,
+  } as const;
+
+  const pendingSelect = {
+    id: true,
+    text: true,
+    source: true,
+    authorLabel: true,
+    createdAt: true,
+    kaitenCommentId: true,
+    order: { select: orderSelect },
+  } as const;
+
+  const [legacyRows, inboxRows] = await Promise.all([
+    db.orderProstheticsRequest.findMany({
+      where: pendingWhere,
+      orderBy: { createdAt: "desc" },
+      take,
+      select: pendingSelect,
+    }),
+    useInbox
+      ? ((db as any).orderChatInboxItem.findMany({
+          where: { type: "PROSTHETICS", ...pendingWhere },
+          orderBy: { createdAt: "desc" },
+          take,
+          select: pendingSelect,
+        }) as Promise<
+          Array<{
+            id: string;
+            text: string;
+            source: "KAITEN" | "DEMO_KANBAN";
+            authorLabel: string | null;
+            createdAt: Date;
+            kaitenCommentId: number | null;
+            order: OrderLite;
+          }>
+        >)
+      : Promise.resolve([]),
+  ]);
+
+  const inboxKaitenIds = new Set<number>();
+  const merged: Array<{
+    id: string;
+    text: string;
+    source: "KAITEN" | "DEMO_KANBAN";
+    authorLabel: string | null;
+    createdAt: Date;
+    kaitenCommentId: number | null;
+    order: OrderLite;
+  }> = [];
+
+  for (const row of inboxRows) {
+    if (row.kaitenCommentId != null) inboxKaitenIds.add(row.kaitenCommentId);
+    merged.push(row);
+  }
+  for (const row of legacyRows) {
+    if (row.kaitenCommentId != null && inboxKaitenIds.has(row.kaitenCommentId)) {
+      continue;
+    }
+    merged.push(row);
+  }
+
+  merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const sliced = merged.slice(0, take);
+
+  const allItemIds: string[] = [];
+  for (const raw of sliced) {
+    const p = prostheticsFromDb(raw.order.prosthetics);
+    for (const line of p.ourLines) {
+      if (line.inventoryItemId.trim()) allItemIds.push(line.inventoryItemId);
+    }
+  }
+  const labelByItemId = await resolveOurLineLabels(allItemIds);
+
+  return sliced.map((raw) => {
+    const p = prostheticsFromDb(raw.order.prosthetics);
+    return {
+      id: raw.id,
+      text: raw.text,
+      source: raw.source,
+      authorLabel: raw.authorLabel,
+      createdAt: raw.createdAt.toISOString(),
+      orderId: raw.order.id,
+      orderNumber: raw.order.orderNumber,
+      patientName: raw.order.patientName,
+      doctorName: raw.order.doctor?.fullName ?? null,
+      clientProvided: p.clientProvided.map((line) => ({
+        description: line.description,
+        quantity: line.quantity,
+      })),
+      ourLines: p.ourLines.map((line) => ({
+        label:
+          labelByItemId.get(line.inventoryItemId) ??
+          (line.inventoryItemId.trim() || "—"),
+        quantity: line.quantity,
+      })),
+    };
+  });
+}
+
 export async function loadProstheticsInTransitForTenant(
   tenantId: string | null | undefined,
 ): Promise<{ count: number; items: ProstheticsInTransitRow[] }> {
   const prisma = await getOrdersPrisma();
   const items = await listProstheticsInTransit(prisma, {
+    tenantId,
+    take: 200,
+  });
+  return { count: items.length, items };
+}
+
+export async function loadProstheticsToOrderForTenant(
+  tenantId: string | null | undefined,
+): Promise<{ count: number; items: ProstheticsToOrderRow[] }> {
+  const prisma = await getOrdersPrisma();
+  const items = await listProstheticsToOrder(prisma, {
     tenantId,
     take: 200,
   });

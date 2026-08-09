@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
@@ -12,17 +12,27 @@ import {
 import type {
   ProstheticsInTransitRow,
   ProstheticsInTransitStep,
+  ProstheticsToOrderRow,
 } from "@/lib/prosthetics-in-transit";
 import type { ProstheticsProgressStep } from "@/lib/prosthetics-in-transit-step";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { CorrectionsHistoryActionCard } from "@/components/orders/CorrectionsHistoryActionCard";
 import { LabTasksActionCard } from "@/components/orders/LabTasksActionCard";
+import { ProstheticsWarehouseEditPanel } from "@/components/orders/ProstheticsWarehouseEditPanel";
+
+type ProstheticsModalMode = "to-order" | "in-transit";
 
 function cardShell(isHarmony: boolean): string {
   return isHarmony
-    ? "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
-    : "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
+    ? "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
+    : "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
+}
+
+function modeTabClass(active: boolean): string {
+  return active
+    ? "inline-flex items-center gap-1.5 rounded-md bg-[var(--sidebar-blue)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-white shadow-sm"
+    : "inline-flex items-center gap-1.5 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]";
 }
 
 const STEPPER_UI: Array<{
@@ -33,7 +43,8 @@ const STEPPER_UI: Array<{
   { key: "ordered", label: "Заказал" },
   { key: "arrived", label: "Пришла", progress: "arrived" },
   { key: "checked", label: "Проверил", progress: "checked" },
-  { key: "done", label: "Готово", progress: "completed" },
+  /* Готово — только индикатор: выставляется вместе с «Проверил». */
+  { key: "done", label: "Готово" },
 ];
 
 const STEP_ORDER: ProstheticsInTransitStep[] = [
@@ -52,7 +63,6 @@ function nextProgressStep(
 ): ProstheticsProgressStep | null {
   if (step === "ordered") return "arrived";
   if (step === "arrived") return "checked";
-  if (step === "checked") return "completed";
   return null;
 }
 
@@ -136,6 +146,7 @@ function ProstheticsTransitStepper({
 
 export function OrdersListHeaderActionCards({
   initialInTransitCount,
+  initialToOrderCount = 0,
   initialCorrectionsPendingCount = 0,
   initialTasksPendingCount = 0,
   initialPickupsPendingCount = 0,
@@ -145,6 +156,8 @@ export function OrdersListHeaderActionCards({
   canAcceptCorrections = false,
 }: {
   initialInTransitCount: number;
+  /** Непринятые заявки «???» — счётчик «Заказать». */
+  initialToOrderCount?: number;
   initialCorrectionsPendingCount?: number;
   initialTasksPendingCount?: number;
   initialPickupsPendingCount?: number;
@@ -157,50 +170,89 @@ export function OrdersListHeaderActionCards({
   const isHarmony = useUiDesign() === "harmony";
   const router = useRouter();
   const [inTransitCount, setInTransitCount] = useState(initialInTransitCount);
+  const [toOrderCount, setToOrderCount] = useState(initialToOrderCount);
   const [prostheticsOpen, setProstheticsOpen] = useState(false);
-  const [items, setItems] = useState<ProstheticsInTransitRow[]>([]);
+  const [modalMode, setModalMode] = useState<ProstheticsModalMode>("in-transit");
+  const [inTransitItems, setInTransitItems] = useState<ProstheticsInTransitRow[]>(
+    [],
+  );
+  const [toOrderItems, setToOrderItems] = useState<ProstheticsToOrderRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const saveProstheticsRef = useRef<(() => Promise<boolean>) | null>(null);
 
   useEffect(() => {
     setInTransitCount(initialInTransitCount);
   }, [initialInTransitCount]);
 
+  useEffect(() => {
+    setToOrderCount(initialToOrderCount);
+  }, [initialToOrderCount]);
+
   const loadInTransit = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const res = await fetch("/api/order-prosthetics-requests/in-transit", {
-        credentials: "include",
-        cache: "no-store",
-      });
-      const j = (await res.json().catch(() => ({}))) as {
-        count?: number;
-        items?: ProstheticsInTransitRow[];
-        error?: string;
-      };
-      if (!res.ok) {
-        setErr(j.error ?? "Не удалось загрузить");
-        return;
-      }
-      setItems(Array.isArray(j.items) ? j.items : []);
-      setInTransitCount(typeof j.count === "number" ? j.count : 0);
-    } catch {
-      setErr("Сеть недоступна");
-    } finally {
-      setLoading(false);
-    }
+    const res = await fetch("/api/order-prosthetics-requests/in-transit", {
+      credentials: "include",
+      cache: "no-store",
+    });
+    const j = (await res.json().catch(() => ({}))) as {
+      count?: number;
+      items?: ProstheticsInTransitRow[];
+      error?: string;
+    };
+    if (!res.ok) throw new Error(j.error ?? "Не удалось загрузить «В пути»");
+    setInTransitItems(Array.isArray(j.items) ? j.items : []);
+    setInTransitCount(typeof j.count === "number" ? j.count : 0);
   }, []);
+
+  const loadToOrder = useCallback(async () => {
+    const res = await fetch("/api/order-prosthetics-requests/to-order", {
+      credentials: "include",
+      cache: "no-store",
+    });
+    const j = (await res.json().catch(() => ({}))) as {
+      count?: number;
+      items?: ProstheticsToOrderRow[];
+      error?: string;
+    };
+    if (!res.ok) throw new Error(j.error ?? "Не удалось загрузить «Заказать»");
+    setToOrderItems(Array.isArray(j.items) ? j.items : []);
+    setToOrderCount(typeof j.count === "number" ? j.count : 0);
+  }, []);
+
+  const loadModal = useCallback(
+    async (mode: ProstheticsModalMode) => {
+      setLoading(true);
+      setErr(null);
+      try {
+        if (mode === "in-transit") await loadInTransit();
+        else await loadToOrder();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Сеть недоступна");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadInTransit, loadToOrder],
+  );
+
+  const openProsthetics = useCallback(
+    (mode: ProstheticsModalMode) => {
+      setModalMode(mode);
+      setExpandedId(null);
+      setProstheticsOpen(true);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!prostheticsOpen) {
       setExpandedId(null);
       return;
     }
-    void loadInTransit();
-  }, [prostheticsOpen, loadInTransit]);
+    void loadModal(modalMode);
+  }, [prostheticsOpen, modalMode, loadModal]);
 
   const advanceStep = useCallback(
     async (row: ProstheticsInTransitRow, step: ProstheticsProgressStep) => {
@@ -222,26 +274,19 @@ export function OrdersListHeaderActionCards({
           return;
         }
 
-        if (step === "completed") {
-          setItems((prev) => prev.filter((x) => x.id !== row.id));
+        if (step === "completed" || step === "checked") {
+          setInTransitItems((prev) => prev.filter((x) => x.id !== row.id));
           setInTransitCount((n) => Math.max(0, n - 1));
         } else {
           const now = new Date().toISOString();
-          setItems((prev) =>
+          setInTransitItems((prev) =>
             prev.map((x) => {
               if (x.id !== row.id) return x;
-              if (step === "arrived") {
-                return {
-                  ...x,
-                  arrivedAt: now,
-                  step: "arrived",
-                  prostheticsOrdered: true,
-                };
-              }
               return {
                 ...x,
-                checkedAt: now,
-                step: "checked",
+                arrivedAt: now,
+                step: "arrived",
+                prostheticsOrdered: true,
               };
             }),
           );
@@ -256,30 +301,90 @@ export function OrdersListHeaderActionCards({
     [router],
   );
 
+  const onPanelError = useCallback((message: string) => {
+    setErr(message.trim() ? message : null);
+  }, []);
+
+  const registerSave = useCallback((fn: (() => Promise<boolean>) | null) => {
+    saveProstheticsRef.current = fn;
+  }, []);
+
+  const acceptToOrder = useCallback(
+    async (row: ProstheticsToOrderRow) => {
+      if (!canMarkArrived) return;
+      setBusyId(row.id);
+      setErr(null);
+      try {
+        if (expandedId === row.id && saveProstheticsRef.current) {
+          const saved = await saveProstheticsRef.current();
+          if (!saved) return;
+        }
+        const res = await fetch(
+          `/api/orders/${row.orderId}/prosthetics-requests/${row.id}/accept`,
+          { method: "POST", credentials: "include" },
+        );
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setErr(j.error ?? "Не удалось принять");
+          return;
+        }
+        setToOrderItems((prev) => prev.filter((x) => x.id !== row.id));
+        setToOrderCount((n) => Math.max(0, n - 1));
+        setInTransitCount((n) => n + 1);
+        setExpandedId(null);
+        router.refresh();
+      } catch {
+        setErr("Сеть недоступна");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [canMarkArrived, expandedId, router],
+  );
+
   return (
     <>
       <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:w-auto lg:max-w-[36rem] xl:max-w-[42rem]">
         {showProstheticsBlock ? (
-        <button
-          type="button"
-          className={cardShell(isHarmony)}
-          onClick={() => setProstheticsOpen(true)}
-        >
+        <div className={cardShell(isHarmony)}>
           <span className="text-[11px] font-bold uppercase leading-tight tracking-wide text-[var(--sidebar-blue)] sm:text-xs">
             Заказы протетики
           </span>
-          <span className="flex items-center justify-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-              В пути
-            </span>
-            <span
-              className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
-              aria-label={`В пути: ${inTransitCount}`}
+          <div className="grid w-full grid-cols-2 gap-1">
+            <button
+              type="button"
+              className="flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 py-0.5 hover:bg-[var(--surface-muted)]"
+              onClick={() => openProsthetics("to-order")}
+              title="Заявки к заказу"
             >
-              {inTransitCount}
-            </span>
-          </span>
-        </button>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-xs">
+                Заказать
+              </span>
+              <span
+                className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
+                aria-label={`Заказать: ${toOrderCount}`}
+              >
+                {toOrderCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 py-0.5 hover:bg-[var(--surface-muted)]"
+              onClick={() => openProsthetics("in-transit")}
+              title="Протетика в пути"
+            >
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-xs">
+                В пути
+              </span>
+              <span
+                className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
+                aria-label={`В пути: ${inTransitCount}`}
+              >
+                {inTransitCount}
+              </span>
+            </button>
+          </div>
+        </div>
         ) : null}
 
         <CorrectionsHistoryActionCard
@@ -306,17 +411,55 @@ export function OrdersListHeaderActionCards({
           className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="Заказы протетики в пути"
+          aria-label="Заказы протетики"
           onClick={() => setProstheticsOpen(false)}
         >
           <div
             className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
-              <h2 className="text-base font-semibold text-[var(--app-text)]">
-                Заказы протетики · в пути
-              </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold text-[var(--app-text)]">
+                  Заказы протетики
+                </h2>
+                <div
+                  className="flex flex-wrap items-center gap-1.5"
+                  role="tablist"
+                  aria-label="Режим списка"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={modalMode === "to-order"}
+                    className={modeTabClass(modalMode === "to-order")}
+                    onClick={() => {
+                      setExpandedId(null);
+                      setModalMode("to-order");
+                    }}
+                  >
+                    Заказать
+                    <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-black/15 px-1.5 py-0.5 text-[10px] tabular-nums">
+                      {toOrderCount}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={modalMode === "in-transit"}
+                    className={modeTabClass(modalMode === "in-transit")}
+                    onClick={() => {
+                      setExpandedId(null);
+                      setModalMode("in-transit");
+                    }}
+                  >
+                    В пути
+                    <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-black/15 px-1.5 py-0.5 text-[10px] tabular-nums">
+                      {inTransitCount}
+                    </span>
+                  </button>
+                </div>
+              </div>
               <button
                 type="button"
                 className="rounded-md px-2 py-1 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]"
@@ -333,13 +476,125 @@ export function OrdersListHeaderActionCards({
               ) : null}
               {loading ? (
                 <p className="text-sm text-[var(--text-muted)]">Загрузка…</p>
-              ) : items.length === 0 ? (
+              ) : modalMode === "to-order" ? (
+                toOrderItems.length === 0 ? (
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Нет заявок на заказ протетики.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {toOrderItems.map((row) => {
+                      const doctorName = row.doctorName
+                        ? personNameSurnameInitials(row.doctorName)
+                        : null;
+                      const patientName = row.patientName
+                        ? personNameSurnameInitials(row.patientName)
+                        : null;
+                      const authorDetail = formatCorrectionHistoryAuthorDetail({
+                        authorLabel: row.authorLabel,
+                        createdAt: new Date(row.createdAt),
+                      });
+                      const expanded = expandedId === row.id;
+
+                      return (
+                        <li
+                          key={row.id}
+                          className="min-w-0 overflow-hidden rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]/50 px-3 py-2"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div
+                              className="min-w-0 flex-1 cursor-pointer"
+                              role="button"
+                              tabIndex={0}
+                              aria-expanded={expanded}
+                              aria-label="Заполнить протетику наряда"
+                              onClick={() =>
+                                setExpandedId((cur) =>
+                                  cur === row.id ? null : row.id,
+                                )
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setExpandedId((cur) =>
+                                    cur === row.id ? null : row.id,
+                                  );
+                                }
+                              }}
+                            >
+                              <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                                <Link
+                                  href={orderPathById(row.orderId)}
+                                  className="font-mono text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setProstheticsOpen(false);
+                                  }}
+                                >
+                                  {row.orderNumber}
+                                </Link>
+                                {patientName ? (
+                                  <span className="text-sm font-semibold text-[var(--app-text)]">
+                                    {patientName}
+                                  </span>
+                                ) : null}
+                                {patientName && doctorName ? (
+                                  <span className="text-[var(--text-muted)]">
+                                    ·
+                                  </span>
+                                ) : null}
+                                {doctorName ? (
+                                  <span className="text-sm font-semibold text-[var(--app-text)]">
+                                    {doctorName}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                                <span className="font-medium text-[var(--text-muted)]">
+                                  От кого и когда:{" "}
+                                </span>
+                                {authorDetail}
+                              </p>
+                              <p className="mt-1 min-w-0 whitespace-pre-wrap break-words text-sm text-[var(--text-body)]">
+                                {row.text}
+                              </p>
+                            </div>
+                            {canMarkArrived ? (
+                              <button
+                                type="button"
+                                className="shrink-0 rounded-md border border-emerald-400/90 bg-emerald-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-950 hover:bg-emerald-200 disabled:opacity-50 dark:border-emerald-700/80 dark:bg-emerald-950/50 dark:text-emerald-100"
+                                disabled={busyId === row.id}
+                                title="Принять — протетика в пути"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void acceptToOrder(row);
+                                }}
+                              >
+                                {busyId === row.id ? "…" : "Принять"}
+                              </button>
+                            ) : null}
+                          </div>
+                          {expanded ? (
+                            <ProstheticsWarehouseEditPanel
+                              orderId={row.orderId}
+                              canEdit={canMarkArrived}
+                              busy={busyId === row.id}
+                              onError={onPanelError}
+                              registerSave={registerSave}
+                            />
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )
+              ) : inTransitItems.length === 0 ? (
                 <p className="text-sm text-[var(--text-secondary)]">
                   Нет протетики в пути.
                 </p>
               ) : (
                 <ul className="space-y-2">
-                  {items.map((row) => {
+                  {inTransitItems.map((row) => {
                     const doctorName = row.doctorName
                       ? personNameSurnameInitials(row.doctorName)
                       : null;
@@ -353,8 +608,6 @@ export function OrdersListHeaderActionCards({
                       authorLabel: row.authorLabel,
                       createdAt: new Date(row.createdAt),
                     });
-                    const clientLines = row.clientProvided ?? [];
-                    const ourLines = row.ourLines ?? [];
                     const expanded = expandedId === row.id;
 
                     return (
@@ -367,7 +620,7 @@ export function OrdersListHeaderActionCards({
                         role="button"
                         tabIndex={0}
                         aria-expanded={expanded}
-                        aria-label="Показать протетику со склада"
+                        aria-label="Заполнить протетику наряда"
                         onClick={() =>
                           setExpandedId((cur) =>
                             cur === row.id ? null : row.id,
@@ -406,22 +659,6 @@ export function OrdersListHeaderActionCards({
                               {doctorName}
                             </span>
                           ) : null}
-                          {row.prostheticsOrdered ? (
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full border border-emerald-300/80 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-900 dark:border-emerald-700/70 dark:bg-emerald-950/40 dark:text-emerald-100"
-                              title="На наряде отмечено «Протетика заказана»"
-                            >
-                              <span aria-hidden>✓</span>
-                              Заказана
-                            </span>
-                          ) : (
-                            <span
-                              className="inline-flex items-center rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]"
-                              title="Галочка «Протетика заказана» на наряде не стоит"
-                            >
-                              Не заказана
-                            </span>
-                          )}
                         </div>
                         <p className="mt-1 text-sm text-[var(--text-secondary)]">
                           <span className="font-medium text-[var(--text-muted)]">
@@ -450,62 +687,13 @@ export function OrdersListHeaderActionCards({
                       />
 
                       {expanded ? (
-                      <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 border-t border-[var(--card-border)]/80 pt-2 sm:grid-cols-2">
-                        <div className="min-w-0 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]/70 px-2.5 py-2">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                            Предоставлено клиентом
-                          </p>
-                          {clientLines.length === 0 ? (
-                            <p className="mt-1 text-xs text-[var(--text-muted)]">
-                              —
-                            </p>
-                          ) : (
-                            <ul className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-1">
-                              {clientLines.map((line, i) => (
-                                <li
-                                  key={`c-${row.id}-${i}`}
-                                  className="min-w-0 max-w-full rounded border border-[var(--card-border)] bg-[var(--surface-subtle)] px-1.5 py-0.5 text-xs text-[var(--app-text)]"
-                                >
-                                  <span className="break-words">
-                                    {line.description}
-                                  </span>
-                                  <span className="text-[var(--text-muted)]">
-                                    {" "}
-                                    · {line.quantity}шт
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                        <div className="min-w-0 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]/70 px-2.5 py-2">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                            Наше (со склада)
-                          </p>
-                          {ourLines.length === 0 ? (
-                            <p className="mt-1 text-xs text-[var(--text-muted)]">
-                              —
-                            </p>
-                          ) : (
-                            <ul className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-1">
-                              {ourLines.map((line, i) => (
-                                <li
-                                  key={`o-${row.id}-${i}`}
-                                  className="min-w-0 max-w-full rounded border border-[var(--card-border)] bg-[var(--surface-subtle)] px-1.5 py-0.5 text-xs text-[var(--app-text)]"
-                                >
-                                  <span className="break-words">
-                                    {line.label}
-                                  </span>
-                                  <span className="text-[var(--text-muted)]">
-                                    {" "}
-                                    · {line.quantity}шт
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      </div>
+                        <ProstheticsWarehouseEditPanel
+                          orderId={row.orderId}
+                          canEdit={canMarkArrived}
+                          busy={busyId === row.id}
+                          onError={onPanelError}
+                          registerSave={registerSave}
+                        />
                       ) : null}
                     </li>
                     );

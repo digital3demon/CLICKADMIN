@@ -80,7 +80,7 @@ describe("canAdvanceProstheticsProgressStep", () => {
     );
   });
 
-  it("allows completed only after checked", () => {
+  it("allows completed after checked (legacy: checked without completed)", () => {
     const checked = {
       ...ordered,
       arrivedAt: "2026-08-02T10:00:00.000Z",
@@ -92,6 +92,17 @@ describe("canAdvanceProstheticsProgressStep", () => {
     expect(canAdvanceProstheticsProgressStep(checked, "checked").ok).toBe(
       false,
     );
+  });
+
+  it("treats checked+completed as done (Проверил закрывает)", () => {
+    expect(
+      prostheticsInTransitStepFromDates({
+        resolvedAt: "2026-08-01T10:00:00.000Z",
+        arrivedAt: "2026-08-02T10:00:00.000Z",
+        checkedAt: "2026-08-03T10:00:00.000Z",
+        completedAt: "2026-08-03T10:00:00.000Z",
+      }),
+    ).toBe("done");
   });
 
   it("blocks any progress after completed", () => {
