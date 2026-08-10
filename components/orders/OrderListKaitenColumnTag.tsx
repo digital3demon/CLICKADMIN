@@ -85,7 +85,7 @@ export function OrderListKaitenColumnTag({
     );
     if (filterHref) {
       return (
-        <Link
+        <Link prefetch={false}
           href={filterHref}
           title="Показать наряды в СТОП"
           className={`${wrapClass} text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none`}
@@ -156,7 +156,7 @@ export function OrderListKaitenColumnTag({
 
   if (filterHref) {
     return (
-      <Link
+      <Link prefetch={false}
         href={filterHref}
         title="Показать наряды в этой колонке Kaiten"
         className={`${wrapClass} text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none`}

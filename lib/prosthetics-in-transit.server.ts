@@ -254,6 +254,9 @@ export async function listProstheticsInTransit(
 
 /**
  * Ещё не принята («Заказать»): resolved/rejected пусты. Dedup inbox+legacy.
+ * Inbox читаем всегда (как чип «Заказ протетики» на /orders), иначе READ_NEW=off
+ * даёт count=0 при живых заявках только в inbox.
+ * Только наряды без галочки «Протетика заказана» — тот же смысл, что у чипа.
  */
 export async function listProstheticsToOrder(
   db: PrismaClient,
@@ -263,10 +266,9 @@ export async function listProstheticsToOrder(
   const tenantId = opts?.tenantId?.trim() || null;
   const orderWhere = {
     ...orderScope,
+    prostheticsOrdered: false,
     ...(tenantId ? { tenantId } : {}),
   };
-  const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
-
   const pendingWhere = {
     resolvedAt: null,
     rejectedAt: null,
@@ -290,24 +292,22 @@ export async function listProstheticsToOrder(
       take,
       select: pendingSelect,
     }),
-    useInbox
-      ? ((db as any).orderChatInboxItem.findMany({
-          where: { type: "PROSTHETICS", ...pendingWhere },
-          orderBy: { createdAt: "desc" },
-          take,
-          select: pendingSelect,
-        }) as Promise<
-          Array<{
-            id: string;
-            text: string;
-            source: "KAITEN" | "DEMO_KANBAN";
-            authorLabel: string | null;
-            createdAt: Date;
-            kaitenCommentId: number | null;
-            order: OrderLite;
-          }>
-        >)
-      : Promise.resolve([]),
+    ((db as any).orderChatInboxItem.findMany({
+      where: { type: "PROSTHETICS", ...pendingWhere },
+      orderBy: { createdAt: "desc" },
+      take,
+      select: pendingSelect,
+    }) as Promise<
+      Array<{
+        id: string;
+        text: string;
+        source: "KAITEN" | "DEMO_KANBAN";
+        authorLabel: string | null;
+        createdAt: Date;
+        kaitenCommentId: number | null;
+        order: OrderLite;
+      }>
+    >),
   ]);
 
   const inboxKaitenIds = new Set<number>();
@@ -389,5 +389,7 @@ export async function loadProstheticsToOrderForTenant(
     tenantId,
     take: 200,
   });
-  return { count: items.length, items };
+  /* Как чип «Заказ протетики»: число нарядов, не заявок. */
+  const count = new Set(items.map((row) => row.orderId)).size;
+  return { count, items };
 }

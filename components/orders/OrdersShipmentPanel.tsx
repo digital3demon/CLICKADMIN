@@ -16,6 +16,8 @@ type Props = {
   appliedShipFrom: string | null;
   appliedShipTo: string | null;
   shipMode: "actual" | "period" | null;
+  /** Суффикс id — мобильная/десктопная копия на одной странице. */
+  idSuffix?: string;
 };
 
 /**
@@ -27,7 +29,12 @@ export function OrdersShipmentPanel({
   appliedShipFrom,
   appliedShipTo,
   shipMode,
+  idSuffix = "",
 }: Props) {
+  const fromId = idSuffix
+    ? `orders-ship-from-${idSuffix}`
+    : "orders-ship-from";
+  const toId = idSuffix ? `orders-ship-to-${idSuffix}` : "orders-ship-to";
   const router = useRouter();
   const sp = useSearchParams();
   const isHarmony = useUiDesign() === "harmony";
@@ -141,22 +148,22 @@ export function OrdersShipmentPanel({
           за период
         </span>
 
-        <label className="sr-only" htmlFor="orders-ship-from">
+        <label className="sr-only" htmlFor={fromId}>
           Дата с
         </label>
         <input
-          id="orders-ship-from"
+          id={fromId}
           type="date"
           className={dateInp}
           value={from}
           onChange={(e) => setFrom(e.target.value)}
           title="Дата записи с (необязательно)"
         />
-        <label className="sr-only" htmlFor="orders-ship-to">
+        <label className="sr-only" htmlFor={toId}>
           Дата по
         </label>
         <input
-          id="orders-ship-to"
+          id={toId}
           type="date"
           className={dateInp}
           value={to}

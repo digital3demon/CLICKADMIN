@@ -65,7 +65,7 @@ export function OrderListKaitenPoller({
   const fastInFlightRef = useRef(false);
   const fastSyncGenRef = useRef(0);
   const lastListRefreshAtRef = useRef(0);
-  const LIST_REFRESH_MIN_MS = 8_000;
+  const LIST_REFRESH_MIN_MS = 15_000;
 
   const refreshListDebounced = useCallback(() => {
     const now = Date.now();
@@ -156,7 +156,6 @@ export function OrderListKaitenPoller({
         fastBackoffRef.current = backoffRef.current;
         return;
       }
-      let lightCommentsImported = false;
       if (ids.length > fastLiveMax) {
         for (const orderId of batch.slice(0, LIGHT_COMMENT_PULL_MAX)) {
           if (Date.now() < backoffRef.current) break;
@@ -171,7 +170,6 @@ export function OrderListKaitenPoller({
               fastBackoffRef.current = backoffRef.current;
               break;
             }
-            if (ccRes.ok) lightCommentsImported = true;
           } catch {
             /* ignore */
           }
@@ -197,13 +195,13 @@ export function OrderListKaitenPoller({
         : "";
       const mentionChanged = mentionKey !== mentionStateRef.current;
       mentionStateRef.current = mentionKey;
+      /* Не refresh от голого ok chat-corrections — иначе каждые ~12с шторм RSC. */
       if (
         (data.syncedCount ?? 0) > 0 ||
         data.newCorrectionsImported ||
         data.newProstheticsImported ||
         data.kaitenLabMentionDbChanged === true ||
-        mentionChanged ||
-        lightCommentsImported
+        mentionChanged
       ) {
         refreshListDebounced();
       }
@@ -216,9 +214,9 @@ export function OrderListKaitenPoller({
 
   const runFastLiveThenRefresh = useCallback(async () => {
     if (ids.length === 0 || ids.length > fastLiveMax) return;
-    const ok = await pullKaitenChatFeedLiveForVisible();
-    if (ok) refreshListDebounced();
-  }, [ids.length, fastLiveMax, pullKaitenChatFeedLiveForVisible, refreshListDebounced]);
+    /* Тянем inbox в фоне; полный router.refresh — только из tick при реальных флагах. */
+    await pullKaitenChatFeedLiveForVisible();
+  }, [ids.length, fastLiveMax, pullKaitenChatFeedLiveForVisible]);
 
   /** Смена списка (поиск): один live-проход, тяжёлый tick — с паузой, без наложения на PATCH карточки. */
   useEffect(() => {

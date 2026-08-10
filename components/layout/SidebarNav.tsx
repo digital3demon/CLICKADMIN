@@ -17,6 +17,7 @@ import {
 } from "@/lib/sidebar-nav-order";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { sidebarNavIconForHref } from "@/lib/sidebar-nav-icons";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
 function isNavActive(pathname: string, href: string): boolean {
   if (href === "/orders") {
     return (
@@ -160,41 +161,16 @@ async function writeSidebarOrderToServer(order: string[]): Promise<boolean> {
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [moduleAccess, setModuleAccess] = useState<Record<string, boolean> | null>(null);
+  const { user, ready: sessionReady } = useSessionUser();
+  const role = user?.role ?? null;
+  const moduleAccess = user?.moduleAccess ?? null;
   const [orderHrefs, setOrderHrefs] = useState<string[]>(DEFAULT_HREF_ORDER);
   const [mailUnreadCount, setMailUnreadCount] = useState(0);
   const [clickMigPendingCount, setClickMigPendingCount] = useState(0);
   const dragHrefRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/session", { cache: "no-store" });
-        const j = (await res.json()) as {
-          user?: {
-            role?: UserRole;
-            moduleAccess?: Record<string, boolean> | null;
-          } | null;
-        };
-        if (!cancelled) {
-          setRole(j.user?.role ?? null);
-          setModuleAccess(
-            (j.user?.moduleAccess as Record<string, boolean> | null | undefined) ?? null,
-          );
-        }
-      } catch {
-        if (!cancelled) setRole(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const navItems = useMemo(() => {
-    if (role == null) {
+    if (!sessionReady || role == null) {
       return baseNavItems;
     }
     if (moduleAccess) {
@@ -218,7 +194,7 @@ export function SidebarNav() {
       return baseNavItems.filter((i) => i.href !== "/analytics");
     }
     return [...baseNavItems];
-  }, [role, moduleAccess]);
+  }, [role, moduleAccess, sessionReady]);
 
   const mailNavVisible = useMemo(
     () => navItems.some((item) => item.href === "/mail"),

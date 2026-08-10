@@ -160,7 +160,7 @@ export function OrdersListTableRow({
           >
             <div className="mb-1.5 flex items-start justify-between gap-2">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                <Link
+                <Link prefetch={false}
                   href={href}
                   className="font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
                   title={`${orderNumber} — открыть наряд`}

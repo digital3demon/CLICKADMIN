@@ -26,6 +26,7 @@ export function OrdersListStickySearch({
           tag={tag}
           hideShipped={hideShipped}
           onlyShipped={onlyShipped}
+          idSuffix="sticky"
         />
       </Suspense>
     </div>

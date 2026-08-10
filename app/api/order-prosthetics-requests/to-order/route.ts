@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
-import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
-import { listProstheticsToOrder } from "@/lib/prosthetics-in-transit.server";
+import { loadProstheticsToOrderForTenant } from "@/lib/prosthetics-in-transit.server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,14 +16,10 @@ export async function GET() {
   }
 
   const tenantId = await orderTenantIdForSession(session);
-  const prisma = await getOrdersPrisma();
-  const items = await listProstheticsToOrder(prisma, {
-    tenantId: tenantId ?? "",
-    take: 200,
-  });
+  const { count, items } = await loadProstheticsToOrderForTenant(tenantId ?? "");
 
   return NextResponse.json(
-    { count: items.length, items },
+    { count, items },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

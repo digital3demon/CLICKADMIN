@@ -20,6 +20,8 @@ type Props = {
   className?: string;
   /** Компактный инпут в одной строке с датами/фильтрами. */
   dense?: boolean;
+  /** Суффикс id — мобильная/десктопная копия на одной странице. */
+  idSuffix?: string;
 };
 
 type SearchSuggestItem = {
@@ -35,7 +37,11 @@ export function OrdersListSearch({
   onlyShipped,
   className = "",
   dense = false,
+  idSuffix = "",
 }: Props) {
+  const inputId = idSuffix
+    ? `orders-list-search-q-${idSuffix}`
+    : "orders-list-search-q";
   const router = useRouter();
   const sp = useSearchParams();
   const spRef = useRef(sp);
@@ -164,13 +170,13 @@ export function OrdersListSearch({
     <div
       className={`flex min-w-0 items-center gap-1 ${dense ? "flex-nowrap" : "flex-1 flex-wrap gap-2"} ${className}`.trim()}
     >
-      <label className="sr-only" htmlFor="orders-list-search-q">
+      <label className="sr-only" htmlFor={inputId}>
         Поиск по наряду, врачу, клинике, пациенту
       </label>
       <div className="relative z-[60] min-w-0 flex-1">
         <input
           ref={inputRef}
-          id="orders-list-search-q"
+          id={inputId}
           type="search"
           className={dense ? inputClassDense : inputClass}
           placeholder="Наряд, врач, клиника, пациент…"

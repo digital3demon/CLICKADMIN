@@ -17,6 +17,7 @@ type Props = {
   /** false — поиск вынесен в липкую полосу над списком (мобильная версия). */
   showSearch?: boolean;
   className?: string;
+  idSuffix?: string;
 };
 
 /**
@@ -33,6 +34,7 @@ export function OrdersListFiltersBar({
   onlyShipped,
   showSearch = true,
   className = "",
+  idSuffix = "",
 }: Props) {
   const { activeCount, resetFilters, setFilters } = useUrlFilters();
   const isHarmony = useUiDesign() === "harmony";
@@ -58,6 +60,7 @@ export function OrdersListFiltersBar({
             onlyShipped={onlyShipped}
             className="min-w-0 max-w-[10rem] basis-[7rem] shrink grow sm:max-w-[12rem] sm:basis-[8rem] lg:max-w-[14rem]"
             dense
+            idSuffix={idSuffix}
           />
         ) : null}
 
@@ -67,6 +70,7 @@ export function OrdersListFiltersBar({
           appliedTo={appliedTo}
           className="min-w-0 shrink-0"
           dense
+          idSuffix={idSuffix}
         />
 
         <DateRangePresets

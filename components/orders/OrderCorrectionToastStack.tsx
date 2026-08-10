@@ -111,9 +111,9 @@ function pollMs(): number {
   const n =
     raw != null && String(raw).trim()
       ? Number.parseInt(String(raw).trim(), 10)
-      : 8000;
-  if (!Number.isFinite(n)) return 8000;
-  return Math.min(Math.max(n, 4000), 30_000);
+      : 15_000;
+  if (!Number.isFinite(n)) return 15_000;
+  return Math.min(Math.max(n, 8000), 60_000);
 }
 
 function parseRetryAfterMs(value: string | null): number {
@@ -219,9 +219,6 @@ export function OrderCorrectionToastStack() {
   const pollInFlightRef = useRef(false);
   const nextPollAllowedAtRef = useRef(0);
   const pollBackoffMsRef = useRef(0);
-  /** Не чаще раза в 45 с — иначе RSC-пересборка списка заказов убивает отзывчивость. */
-  const lastListRefreshAtRef = useRef(0);
-  const LIST_REFRESH_MIN_MS = 45_000;
   const pathnameRef = useRef(pathname);
   const isKanbanRef = useRef(isKanban);
   const isLoginRef = useRef(isLogin);
@@ -294,7 +291,6 @@ export function OrderCorrectionToastStack() {
       if (nextPollAllowedAtRef.current > now) return;
       pollInFlightRef.current = true;
       const kanban = isKanbanRef.current;
-      const path = pathnameRef.current;
       try {
         const res = await fetch("/api/order-notifications/toasts", {
           credentials: "include",
@@ -348,21 +344,8 @@ export function OrderCorrectionToastStack() {
             setStackCollapsed(false);
             writeStackCollapsed(false);
           }
-          if (
-            hadPrevious &&
-            (path === "/orders" ||
-              path.startsWith("/orders/") ||
-              path === "/finance-office" ||
-              path.startsWith("/finance-office/") ||
-              path === "/shipments" ||
-              path.startsWith("/shipments/"))
-          ) {
-            const nowMs = Date.now();
-            if (nowMs - lastListRefreshAtRef.current >= LIST_REFRESH_MIN_MS) {
-              lastListRefreshAtRef.current = nowMs;
-              router.refresh();
-            }
-          }
+          /* Не делаем router.refresh() от тостов — список и так обновляет Kaiten-поллер;
+           * refresh здесь плодил шторм RSC + /session на /orders. */
         }
         pollBackoffMsRef.current = 0;
         nextPollAllowedAtRef.current =

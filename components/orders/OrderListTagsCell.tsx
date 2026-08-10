@@ -909,7 +909,7 @@ export function OrderListTagsCell({
         key: "blocked",
         slot: blockedSlot,
         node: (
-          <Link
+          <Link prefetch={false}
             href={href(LIST_TAG_KAITEN_BLOCKED)}
             title="Показать наряды, заблокированные в Kaiten"
             className={
@@ -965,7 +965,7 @@ export function OrderListTagsCell({
         key: "finance-calculated",
         slot: "large",
         node: (
-          <Link
+          <Link prefetch={false}
             href={href(financeTag)}
             title={
               financeCalculated
@@ -990,7 +990,7 @@ export function OrderListTagsCell({
         key: "clinic-edo",
         slot: "small",
         node: (
-          <Link
+          <Link prefetch={false}
             href={href(edoTag)}
             title={
               clinicWorksWithEdo
@@ -1014,7 +1014,7 @@ export function OrderListTagsCell({
         key: "urgent",
         slot: "small",
         node: (
-          <Link
+          <Link prefetch={false}
             href={href(
               urgentCoefficient != null
                 ? listTagUrgentCoefficient(urgentCoefficient)
@@ -1034,7 +1034,7 @@ export function OrderListTagsCell({
         key: "inv",
         slot: "small",
         node: (
-          <Link
+          <Link prefetch={false}
             href={href(LIST_TAG_INVOICE)}
             title="Показать наряды с загруженным счётом"
             className={`rounded-full border border-sky-300 bg-sky-50 font-semibold tracking-wide text-sky-950 shadow-sm outline-none focus-visible:outline-none dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-100 ${padTable}`}
@@ -1050,7 +1050,7 @@ export function OrderListTagsCell({
         key: "invpr",
         slot: "large",
         node: (
-          <Link
+          <Link prefetch={false}
             href={href(LIST_TAG_INVOICE_PRINTED)}
             title="Показать наряды с отметкой «Счёт распечатан»"
             className={`rounded-full border border-violet-300 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-100 ${padTable}`}
@@ -1065,7 +1065,7 @@ export function OrderListTagsCell({
       key: "pay",
       slot: "large",
       node: paymentFilterTag ? (
-        <Link
+        <Link prefetch={false}
           href={href(paymentFilterTag)}
           className={`outline-none focus-visible:outline-none ${paymentStatusPillClass}`}
           title={
@@ -1132,7 +1132,7 @@ export function OrderListTagsCell({
         slot: ctSlot,
         node: (
           <span className="inline-flex min-w-0 max-w-full items-start gap-0.5">
-            <Link
+            <Link prefetch={false}
               href={href(inner)}
               title="Показать наряды с этим тегом"
               className={`min-w-0 border border-violet-200 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-100 ${padTable} ${

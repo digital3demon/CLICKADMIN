@@ -15,6 +15,7 @@ type Props = {
   appliedShipFrom: string | null;
   appliedShipTo: string | null;
   shipMode: "actual" | "period" | null;
+  idSuffix?: string;
 };
 
 /**
@@ -32,6 +33,7 @@ export function OrdersListFiltersRow({
   appliedShipFrom,
   appliedShipTo,
   shipMode,
+  idSuffix = "",
 }: Props) {
   return (
     <div className="grid w-full min-w-0 grid-cols-1 items-stretch gap-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
@@ -45,12 +47,14 @@ export function OrdersListFiltersRow({
         onlyShipped={onlyShipped}
         showSearch={showSearch}
         className="min-w-0"
+        idSuffix={idSuffix}
       />
       <OrdersShipmentPanel
         pageSize={pageSize}
         appliedShipFrom={appliedShipFrom}
         appliedShipTo={appliedShipTo}
         shipMode={shipMode}
+        idSuffix={idSuffix}
       />
     </div>
   );

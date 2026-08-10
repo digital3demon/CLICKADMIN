@@ -17,6 +17,8 @@ type Props = {
   className?: string;
   /** Компактные подписи «с (вкл)» / «по (вкл)» в одной строке макета. */
   dense?: boolean;
+  /** Суффикс id — мобильная/десктопная копия на одной странице. */
+  idSuffix?: string;
 };
 
 export function OrdersListPeriodForm({
@@ -25,7 +27,12 @@ export function OrdersListPeriodForm({
   appliedTo,
   className = "",
   dense = false,
+  idSuffix = "",
 }: Props) {
+  const fromId = idSuffix
+    ? `orders-period-from-${idSuffix}`
+    : "orders-period-from";
+  const toId = idSuffix ? `orders-period-to-${idSuffix}` : "orders-period-to";
   const router = useRouter();
   const sp = useSearchParams();
   const defaultDraft = useMemo(() => ordersListPeriodDefaultDraft(), []);
@@ -102,14 +109,14 @@ export function OrdersListPeriodForm({
     >
       <div className={`flex min-w-0 items-center ${dense ? "gap-0.5" : "gap-2"}`}>
         <label
-          htmlFor="orders-period-from"
+          htmlFor={fromId}
           className={labelClass}
           title="Лабораторный срок с (МСК), включительно"
         >
           {dense ? "с (вкл)" : "С (МСК)"}
         </label>
         <input
-          id="orders-period-from"
+          id={fromId}
           type="date"
           className={dateInp}
           value={from}
@@ -118,14 +125,14 @@ export function OrdersListPeriodForm({
       </div>
       <div className={`flex min-w-0 items-center ${dense ? "gap-0.5" : "gap-2"}`}>
         <label
-          htmlFor="orders-period-to"
+          htmlFor={toId}
           className={labelClass}
           title="Лабораторный срок по (МСК), включительно"
         >
           {dense ? "по (вкл)" : "По (МСК)"}
         </label>
         <input
-          id="orders-period-to"
+          id={toId}
           type="date"
           className={dateInp}
           value={to}

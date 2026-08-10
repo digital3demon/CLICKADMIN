@@ -28,7 +28,6 @@ import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
 import { fetchOrdersShipmentListPage } from "@/lib/fetch-orders-shipment-list-page";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 import { orderIdsWithPendingMergedCorrections } from "@/lib/order-chat-corrections-read";
-import { orderIdsWithPendingMergedProsthetics } from "@/lib/order-prosthetics-requests-read";
 import {
   humanListTagLabel,
   LIST_TAG_KAITEN_LAB_MENTION,
@@ -55,7 +54,10 @@ import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { canAcceptOrderChatCorrections, canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
-import { loadProstheticsInTransitForTenant } from "@/lib/prosthetics-in-transit.server";
+import {
+  loadProstheticsInTransitForTenant,
+  loadProstheticsToOrderForTenant,
+} from "@/lib/prosthetics-in-transit.server";
 import { countPendingLabTasks } from "@/lib/lab-tasks.server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
@@ -258,15 +260,20 @@ export default async function OrdersPage({
   );
 
   let prostheticsInTransitCount = 0;
+  let prostheticsToOrderCount = 0;
   let labTasksPendingCount = 0;
   let labPickupsPendingCount = 0;
   try {
     if (canSeeProstheticsChip) {
-      const transit = await loadProstheticsInTransitForTenant(tenantId);
+      const [transit, toOrder] = await Promise.all([
+        loadProstheticsInTransitForTenant(tenantId),
+        loadProstheticsToOrderForTenant(tenantId),
+      ]);
       prostheticsInTransitCount = transit.count;
+      prostheticsToOrderCount = toOrder.count;
     }
   } catch (e) {
-    console.error("[orders] prosthetics in-transit count", e);
+    console.error("[orders] prosthetics in-transit/to-order count", e);
   }
   try {
     if (tenantId) {
@@ -391,19 +398,14 @@ export default async function OrdersPage({
       ? statusChipCountParts[0]
       : { AND: statusChipCountParts };
   /** Счётчики чипов — кандидаты из pending-строк (без findMany всех id тенанта). */
-  const [attentionCount, prostheticsPendingCount] = tenantId
+  const attentionCount = tenantId
     ? await (async () => {
         const inbox = (ordersPrisma as {
           orderChatInboxItem: {
             findMany: (args: unknown) => Promise<Array<{ orderId: string }>>;
           };
         }).orderChatInboxItem;
-        const [
-          legacyCorrPending,
-          inboxCorrPending,
-          legacyProsPending,
-          inboxProsPending,
-        ] = await Promise.all([
+        const [legacyCorrPending, inboxCorrPending] = await Promise.all([
           ordersPrisma.orderChatCorrection.findMany({
             where: {
               resolvedAt: null,
@@ -423,25 +425,6 @@ export default async function OrdersPage({
             select: { orderId: true },
             distinct: ["orderId"],
           }),
-          ordersPrisma.orderProstheticsRequest.findMany({
-            where: {
-              resolvedAt: null,
-              rejectedAt: null,
-              order: statusChipCountWhere,
-            },
-            select: { orderId: true },
-            distinct: ["orderId"],
-          }),
-          inbox.findMany({
-            where: {
-              type: "PROSTHETICS",
-              resolvedAt: null,
-              rejectedAt: null,
-              order: statusChipCountWhere,
-            },
-            select: { orderId: true },
-            distinct: ["orderId"],
-          }),
         ]);
         const corrCandidateIds = [
           ...new Set([
@@ -449,32 +432,15 @@ export default async function OrdersPage({
             ...inboxCorrPending.map((r) => r.orderId),
           ]),
         ];
-        const prosCandidateIds = [
-          ...new Set([
-            ...legacyProsPending.map((r) => r.orderId),
-            ...inboxProsPending.map((r) => r.orderId),
-          ]),
-        ];
-        const [pendingCorrections, pendingProsthetics] = await Promise.all([
-          orderIdsWithPendingMergedCorrections(ordersPrisma, corrCandidateIds),
-          orderIdsWithPendingMergedProsthetics(ordersPrisma, prosCandidateIds),
-        ]);
-        const pendingProsList = [...pendingProsthetics];
-        const prostheticsCount =
-          pendingProsList.length === 0
-            ? 0
-            : await ordersPrisma.order.count({
-                where: {
-                  AND: [
-                    statusChipCountWhere,
-                    { prostheticsOrdered: false },
-                    { id: { in: pendingProsList } },
-                  ],
-                },
-              });
-        return [pendingCorrections.size, prostheticsCount] as const;
+        const pendingCorrections = await orderIdsWithPendingMergedCorrections(
+          ordersPrisma,
+          corrCandidateIds,
+        );
+        return pendingCorrections.size;
       })()
-    : ([0, 0] as const);
+    : 0;
+  /** Тот же источник, что «Заказать» в шапке и GET /to-order. */
+  const prostheticsPendingCount = prostheticsToOrderCount;
 
   let labMentionCount = 0;
   if (tenantId) {
@@ -642,20 +608,22 @@ export default async function OrdersPage({
         searchActive={Boolean(listSearchQ)}
       >
       <div className={`${ORDERS_LIST_STACK} space-y-4`}>
-      <div className="lg:hidden space-y-3">
-        <OrderPostingMonthBar
-          toolbarEnd={
-            <OrdersListShippedToolbar
-              pageSize={pageSize}
-              rawTag={rawTag}
-              listSearchQ={listSearchQ}
-              fromUrl={fromUrl}
-              toUrl={toUrl}
-              onlyShippedActive={onlyShippedActive}
-              hideShippedActive={hideShippedActive}
-            />
-          }
-        />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+        <div className="min-w-0 flex-1">
+          <OrderPostingMonthBar
+            toolbarEnd={
+              <OrdersListShippedToolbar
+                pageSize={pageSize}
+                rawTag={rawTag}
+                listSearchQ={listSearchQ}
+                fromUrl={fromUrl}
+                toUrl={toUrl}
+                onlyShippedActive={onlyShippedActive}
+                hideShippedActive={hideShippedActive}
+              />
+            }
+          />
+        </div>
         <OrdersListHeaderActionCards
           initialInTransitCount={prostheticsInTransitCount}
           initialToOrderCount={prostheticsPendingCount}
@@ -669,34 +637,6 @@ export default async function OrdersPage({
         />
       </div>
       <div className="no-print space-y-4">
-        <div className="hidden lg:flex lg:flex-row lg:items-stretch lg:gap-3">
-          <div className="min-w-0 flex-1">
-            <OrderPostingMonthBar
-              toolbarEnd={
-                <OrdersListShippedToolbar
-                  pageSize={pageSize}
-                  rawTag={rawTag}
-                  listSearchQ={listSearchQ}
-                  fromUrl={fromUrl}
-                  toUrl={toUrl}
-                  onlyShippedActive={onlyShippedActive}
-                  hideShippedActive={hideShippedActive}
-                />
-              }
-            />
-          </div>
-          <OrdersListHeaderActionCards
-            initialInTransitCount={prostheticsInTransitCount}
-            initialToOrderCount={prostheticsPendingCount}
-            initialCorrectionsPendingCount={attentionCount}
-            initialTasksPendingCount={labTasksPendingCount}
-            initialPickupsPendingCount={labPickupsPendingCount}
-            canMarkArrived={canMarkProstheticsArrived}
-            canResolveTasks={canMarkProstheticsArrived}
-            canAcceptCorrections={canMarkProstheticsArrived}
-            showProstheticsBlock={canSeeProstheticsChip}
-          />
-        </div>
         {periodError ? (
           <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
             {periodError} Фильтр по дате не применён.
@@ -778,6 +718,7 @@ export default async function OrdersPage({
               appliedShipFrom={shipFromUrl}
               appliedShipTo={shipToUrl}
               shipMode={shipmentModeActive ? shipParsed.mode : null}
+              idSuffix="desktop"
             />
           </div>
           <div className="md:hidden">
@@ -793,6 +734,7 @@ export default async function OrdersPage({
               appliedShipFrom={shipFromUrl}
               appliedShipTo={shipToUrl}
               shipMode={shipmentModeActive ? shipParsed.mode : null}
+              idSuffix="mobile"
             />
           </div>
         </Suspense>
