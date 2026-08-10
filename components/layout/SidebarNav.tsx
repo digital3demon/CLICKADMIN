@@ -408,7 +408,7 @@ export function SidebarNav() {
                   >
                     <DragHandleIcon />
                   </button>
-                  <Link
+                  <Link prefetch={false}
                     href={item.href}
                     draggable={false}
                     className={[
@@ -470,7 +470,7 @@ export function SidebarNav() {
               >
                 <DragHandleIcon />
               </button>
-              <Link
+              <Link prefetch={false}
                 href={item.href}
                 draggable={false}
                 className={

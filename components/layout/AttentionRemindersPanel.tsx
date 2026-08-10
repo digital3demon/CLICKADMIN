@@ -133,7 +133,7 @@ export function AttentionRemindersPanel({ variant = "sidebar" }: { variant?: Var
         {listOpen ? (
           <>
             <p className={bodyMuted}>Нет напоминаний: автосверки и неполные карточки отсутствуют.</p>
-            <Link href="/attention" className={linkClass}>
+            <Link prefetch={false} href="/attention" className={linkClass}>
               Раздел «Внимание»
             </Link>
           </>
@@ -206,7 +206,7 @@ export function AttentionRemindersPanel({ variant = "sidebar" }: { variant?: Var
           <ul className={listUl}>
             {items.map((item) => (
               <li key={item.id}>
-                <Link href={item.href} className={rowLink}>
+                <Link prefetch={false} href={item.href} className={rowLink}>
                   <span className={rowPrimary}>{item.primary}</span>
                   <span className={rowDetail}>
                     {item.kind === "clinic"

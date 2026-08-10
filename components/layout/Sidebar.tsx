@@ -108,7 +108,7 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        <Link
+        <Link prefetch={false}
           href="/"
           className={
             isHarmony
@@ -236,7 +236,7 @@ export function Sidebar() {
         <div className="flex items-center gap-1.5">
           {sessionUser ? (
             <>
-              <Link
+              <Link prefetch={false}
                 href="/directory/profile"
                 className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--sidebar-border)] bg-black/10 text-base outline-offset-2 transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)] dark:bg-white/10"
                 title={

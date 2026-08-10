@@ -383,13 +383,18 @@ export async function loadProstheticsInTransitForTenant(
 
 export async function loadProstheticsToOrderForTenant(
   tenantId: string | null | undefined,
-): Promise<{ count: number; items: ProstheticsToOrderRow[] }> {
+): Promise<{
+  /** Число заявок «???» (бейдж «Заказать»). */
+  count: number;
+  /** Число нарядов с такими заявками (чип фильтра). */
+  orderCount: number;
+  items: ProstheticsToOrderRow[];
+}> {
   const prisma = await getOrdersPrisma();
   const items = await listProstheticsToOrder(prisma, {
     tenantId,
     take: 200,
   });
-  /* Как чип «Заказ протетики»: число нарядов, не заявок. */
-  const count = new Set(items.map((row) => row.orderId)).size;
-  return { count, items };
+  const orderCount = new Set(items.map((row) => row.orderId)).size;
+  return { count: items.length, orderCount, items };
 }

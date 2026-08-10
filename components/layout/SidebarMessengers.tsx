@@ -122,7 +122,7 @@ export function SidebarMessengers() {
         <ul className="mt-2.5 space-y-1.5 shell-short:mt-2 shell-short:space-y-1">
           {items.map((it) => (
             <li key={it.id}>
-              <Link
+              <Link prefetch={false}
                 href={`/messengers#m-${it.id}`}
                 className="block rounded-lg border border-[var(--sidebar-border)] bg-[var(--sidebar-bg)]/40 px-2.5 py-2 transition-colors hover:border-[var(--sidebar-blue)]/50 hover:bg-[var(--surface-subtle)] shell-short:px-2 shell-short:py-1.5"
               >
@@ -152,7 +152,7 @@ export function SidebarMessengers() {
       ) : null}
 
       {!collapsed ? (
-        <Link
+        <Link prefetch={false}
           href="/messengers"
           className="mt-2.5 inline-block text-xs font-medium text-[var(--sidebar-blue)] hover:underline shell-short:mt-2"
         >

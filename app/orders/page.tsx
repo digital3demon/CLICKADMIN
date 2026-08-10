@@ -261,6 +261,7 @@ export default async function OrdersPage({
 
   let prostheticsInTransitCount = 0;
   let prostheticsToOrderCount = 0;
+  let prostheticsToOrderOrderCount = 0;
   let labTasksPendingCount = 0;
   let labPickupsPendingCount = 0;
   try {
@@ -271,6 +272,7 @@ export default async function OrdersPage({
       ]);
       prostheticsInTransitCount = transit.count;
       prostheticsToOrderCount = toOrder.count;
+      prostheticsToOrderOrderCount = toOrder.orderCount;
     }
   } catch (e) {
     console.error("[orders] prosthetics in-transit/to-order count", e);
@@ -439,8 +441,8 @@ export default async function OrdersPage({
         return pendingCorrections.size;
       })()
     : 0;
-  /** Тот же источник, что «Заказать» в шапке и GET /to-order. */
-  const prostheticsPendingCount = prostheticsToOrderCount;
+  /** Чип фильтра — наряды; бейдж «Заказать» — заявки (их может быть несколько на один наряд). */
+  const prostheticsPendingCount = prostheticsToOrderOrderCount;
 
   let labMentionCount = 0;
   if (tenantId) {
@@ -626,7 +628,7 @@ export default async function OrdersPage({
         </div>
         <OrdersListHeaderActionCards
           initialInTransitCount={prostheticsInTransitCount}
-          initialToOrderCount={prostheticsPendingCount}
+          initialToOrderCount={prostheticsToOrderCount}
           initialCorrectionsPendingCount={attentionCount}
           initialTasksPendingCount={labTasksPendingCount}
           initialPickupsPendingCount={labPickupsPendingCount}
