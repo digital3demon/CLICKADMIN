@@ -123,8 +123,6 @@ export function OrdersListHeaderActionCards({
     setToOrderCount(initialToOrderCount);
   }, [initialToOrderCount]);
 
-  const totalOpenCount = toOrderCount + inTransitCount;
-
   const loadAll = useCallback(async () => {
     setLoading(true);
     setErr(null);
@@ -326,12 +324,28 @@ export function OrdersListHeaderActionCards({
             <span className="text-[11px] font-bold uppercase leading-tight tracking-wide text-[var(--sidebar-blue)] sm:text-xs">
               Заказы протетики
             </span>
-            <span className="flex items-center justify-center gap-2">
-              <span
-                className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
-                aria-label={`Открытых: ${totalOpenCount}`}
-              >
-                {totalOpenCount}
+            <span className="flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-xs">
+                  Заказать
+                </span>
+                <span
+                  className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
+                  aria-label={`Заказать: ${toOrderCount}`}
+                >
+                  {toOrderCount}
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-xs">
+                  В пути
+                </span>
+                <span
+                  className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
+                  aria-label={`В пути: ${inTransitCount}`}
+                >
+                  {inTransitCount}
+                </span>
               </span>
             </span>
           </button>
@@ -369,10 +383,19 @@ export function OrdersListHeaderActionCards({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
-              <h2 className="text-base font-semibold text-[var(--app-text)]">
-                Заказы протетики
-                <span className="ml-2 inline-flex min-w-[1.25rem] justify-center rounded-full bg-red-600/90 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
-                  {totalOpenCount}
+              <h2 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-base font-semibold text-[var(--app-text)]">
+                <span>Заказы протетики</span>
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                  Заказать
+                  <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+                    {toOrderCount}
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                  В пути
+                  <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-red-600/90 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+                    {inTransitCount}
+                  </span>
                 </span>
               </h2>
               <button
