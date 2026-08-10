@@ -66,16 +66,18 @@ export function CorrectionsHistoryActionCard({
     setPendingCount(initialPendingCount);
   }, [initialPendingCount]);
 
-  const loadHistory = useCallback(async () => {
-    setLoading(true);
+  const loadHistory = useCallback(async (opts?: {
+    background?: boolean;
+    signal?: AbortSignal;
+  }) => {
+    const background = opts?.background === true;
+    if (!background) setLoading(true);
     setErr(null);
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 25_000);
     try {
       const res = await fetch("/api/order-chat-corrections/history", {
         credentials: "include",
         cache: "no-store",
-        signal: controller.signal,
+        signal: opts?.signal,
       });
       const j = (await res.json().catch(() => ({}))) as {
         items?: CorrectionHistoryJsonRow[];
@@ -91,16 +93,17 @@ export function CorrectionsHistoryActionCard({
         setPendingCount(j.pendingCount);
       }
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") {
-        setErr("Превышено время ожидания. Попробуйте ещё раз.");
-      } else {
-        setErr("Сеть недоступна");
-      }
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setErr("Сеть недоступна");
     } finally {
-      window.clearTimeout(timer);
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
+
+  const prefetchHistory = useCallback(() => {
+    if (open) return;
+    void loadHistory({ background: true });
+  }, [open, loadHistory]);
 
   useEffect(() => {
     if (!open) {
@@ -108,8 +111,18 @@ export function CorrectionsHistoryActionCard({
       saveCompositionRef.current = null;
       return;
     }
-    void loadHistory();
-  }, [open, loadHistory]);
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), 15_000);
+    void loadHistory({
+      background: items.length > 0,
+      signal: ac.signal,
+    }).finally(() => window.clearTimeout(timer));
+    return () => {
+      ac.abort();
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on open
+  }, [open]);
 
   const removeRow = useCallback(
     (id: string) => {
@@ -190,6 +203,8 @@ export function CorrectionsHistoryActionCard({
         type="button"
         className={`${cardShell(isHarmony, dense)} ${className}`.trim()}
         onClick={() => setOpen(true)}
+        onMouseEnter={prefetchHistory}
+        onFocus={prefetchHistory}
       >
         <span
           className={

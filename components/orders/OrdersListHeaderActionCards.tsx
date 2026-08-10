@@ -114,6 +114,7 @@ export function OrdersListHeaderActionCards({
   const [err, setErr] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const saveProstheticsRef = useRef<(() => Promise<boolean>) | null>(null);
+  const loadInflightRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     setInTransitCount(initialInTransitCount);
@@ -123,66 +124,71 @@ export function OrdersListHeaderActionCards({
     setToOrderCount(initialToOrderCount);
   }, [initialToOrderCount]);
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
+  const loadAll = useCallback(async (opts?: { background?: boolean }) => {
+    const background = opts?.background === true;
+    if (!background) setLoading(true);
     setErr(null);
     try {
-      const [transitRes, toOrderRes] = await Promise.all([
-        fetch("/api/order-prosthetics-requests/in-transit", {
-          credentials: "include",
-          cache: "no-store",
-        }),
-        fetch("/api/order-prosthetics-requests/to-order", {
-          credentials: "include",
-          cache: "no-store",
-        }),
-      ]);
-      const transitJ = (await transitRes.json().catch(() => ({}))) as {
-        count?: number;
-        items?: ProstheticsInTransitRow[];
-        error?: string;
-      };
-      const toOrderJ = (await toOrderRes.json().catch(() => ({}))) as {
-        count?: number;
-        items?: ProstheticsToOrderRow[];
-        error?: string;
-      };
-      if (!transitRes.ok) {
-        throw new Error(transitJ.error ?? "Не удалось загрузить «В пути»");
+      if (!loadInflightRef.current) {
+        loadInflightRef.current = (async () => {
+          const res = await fetch("/api/order-prosthetics-requests/open", {
+            credentials: "include",
+            cache: "no-store",
+          });
+          const j = (await res.json().catch(() => ({}))) as {
+            toOrderCount?: number;
+            inTransitCount?: number;
+            toOrder?: ProstheticsToOrderRow[];
+            inTransit?: ProstheticsInTransitRow[];
+            error?: string;
+          };
+          if (!res.ok) {
+            throw new Error(j.error ?? "Не удалось загрузить заказы протетики");
+          }
+          const pending = Array.isArray(j.toOrder) ? j.toOrder : [];
+          const transit = Array.isArray(j.inTransit) ? j.inTransit : [];
+          const merged = [
+            ...pending.map(toUnifiedFromPending),
+            ...transit.map(toUnifiedFromTransit),
+          ].sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+          setItems(merged);
+          setToOrderCount(
+            typeof j.toOrderCount === "number" ? j.toOrderCount : pending.length,
+          );
+          setInTransitCount(
+            typeof j.inTransitCount === "number"
+              ? j.inTransitCount
+              : transit.length,
+          );
+        })().finally(() => {
+          loadInflightRef.current = null;
+        });
       }
-      if (!toOrderRes.ok) {
-        throw new Error(toOrderJ.error ?? "Не удалось загрузить «Заказать»");
-      }
-      const pending = Array.isArray(toOrderJ.items) ? toOrderJ.items : [];
-      const transit = Array.isArray(transitJ.items) ? transitJ.items : [];
-      const merged = [
-        ...pending.map(toUnifiedFromPending),
-        ...transit.map(toUnifiedFromTransit),
-      ].sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
-      setItems(merged);
-      setToOrderCount(
-        typeof toOrderJ.count === "number" ? toOrderJ.count : pending.length,
-      );
-      setInTransitCount(
-        typeof transitJ.count === "number" ? transitJ.count : transit.length,
-      );
+      await loadInflightRef.current;
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Сеть недоступна");
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
+
+  const prefetchProsthetics = useCallback(() => {
+    if (prostheticsOpen) return;
+    void loadAll({ background: true });
+  }, [prostheticsOpen, loadAll]);
 
   useEffect(() => {
     if (!prostheticsOpen) {
       setExpandedId(null);
       return;
     }
-    void loadAll();
-  }, [prostheticsOpen, loadAll]);
+    /* Уже есть кэш с prefetch — тихо обновить; иначе полный спиннер. */
+    void loadAll({ background: items.length > 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on open
+  }, [prostheticsOpen]);
 
   const onPanelError = useCallback((message: string) => {
     setErr(message.trim() ? message : null);
@@ -319,6 +325,8 @@ export function OrdersListHeaderActionCards({
             type="button"
             className={cardShell(isHarmony)}
             onClick={() => setProstheticsOpen(true)}
+            onMouseEnter={prefetchProsthetics}
+            onFocus={prefetchProsthetics}
             title="Заказы протетики"
           >
             <span className="text-[11px] font-bold uppercase leading-tight tracking-wide text-[var(--sidebar-blue)] sm:text-xs">

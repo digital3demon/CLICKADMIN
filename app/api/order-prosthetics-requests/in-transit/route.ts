@@ -20,11 +20,12 @@ export async function GET() {
   const prisma = await getOrdersPrisma();
   const items = await listProstheticsInTransit(prisma, {
     tenantId: tenantId ?? "",
-    take: 200,
+    take: 80,
+    slim: true,
   });
 
   return NextResponse.json(
     { count: items.length, items },
-    { headers: { "Cache-Control": "no-store" } },
+    { headers: { "Cache-Control": "private, max-age=5" } },
   );
 }

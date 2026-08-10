@@ -30,6 +30,51 @@ const correctionSelect = {
   },
 } as const;
 
+const correctionSelectPending = {
+  id: true,
+  text: true,
+  source: true,
+  authorLabel: true,
+  createdAt: true,
+  resolvedAt: true,
+  rejectedAt: true,
+  order: {
+    select: {
+      id: true,
+      orderNumber: true,
+      patientName: true,
+      doctor: { select: { fullName: true } },
+    },
+  },
+} as const;
+
+function mapCorrectionPending(
+  r: Prisma.OrderChatCorrectionGetPayload<{
+    select: typeof correctionSelectPending;
+  }>,
+): CorrectionHistoryRow {
+  return {
+    id: r.id,
+    kind: "correction",
+    text: r.text,
+    source: r.source,
+    authorLabel: r.authorLabel?.trim() || null,
+    createdAt: r.createdAt,
+    resolvedAt: r.resolvedAt,
+    rejectedAt: r.rejectedAt,
+    arrivedAt: null,
+    resolvedByName: null,
+    rejectedByName: null,
+    arrivedByName: null,
+    order: {
+      id: r.order.id,
+      orderNumber: r.order.orderNumber,
+      patientName: r.order.patientName,
+      doctorName: r.order.doctor?.fullName ?? null,
+    },
+  };
+}
+
 const prostheticsSelect = {
   ...correctionSelect,
   arrivedAt: true,
@@ -156,14 +201,23 @@ export async function loadCorrectionsHistoryOnly(opts?: {
   const q = normalizeRevisionsHistorySearchQuery(opts?.q);
   const take = opts?.limit ?? (q ? TAKE_SEARCH : TAKE_DEFAULT);
   const prisma = await getOrdersPrisma();
+  const pendingOnly = opts?.pendingOnly === true;
+  const where = {
+    order: orderScope(opts?.tenantId),
+    ...(q ? buildCorrectionSearchWhere(q) : {}),
+    ...(pendingOnly ? { resolvedAt: null, rejectedAt: null } : {}),
+  };
+  if (pendingOnly) {
+    const rows = await prisma.orderChatCorrection.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take,
+      select: correctionSelectPending,
+    });
+    return rows.map(mapCorrectionPending);
+  }
   const rows = await prisma.orderChatCorrection.findMany({
-    where: {
-      order: orderScope(opts?.tenantId),
-      ...(q ? buildCorrectionSearchWhere(q) : {}),
-      ...(opts?.pendingOnly
-        ? { resolvedAt: null, rejectedAt: null }
-        : {}),
-    },
+    where,
     orderBy: { createdAt: "desc" },
     take,
     select: correctionSelect,

@@ -20,7 +20,7 @@ type OrderLite = {
   orderNumber: string;
   patientName: string | null;
   prostheticsOrdered: boolean;
-  prosthetics: unknown;
+  prosthetics?: unknown;
   doctor: { fullName: string } | null;
 };
 
@@ -45,7 +45,7 @@ export async function countProstheticsInTransit(
   db: PrismaClient,
   opts?: { tenantId?: string | null },
 ): Promise<number> {
-  const rows = await listProstheticsInTransit(db, opts);
+  const rows = await listProstheticsInTransit(db, { ...opts, slim: true });
   return rows.length;
 }
 
@@ -55,6 +55,15 @@ const orderSelect = {
   patientName: true,
   prostheticsOrdered: true,
   prosthetics: true,
+  doctor: { select: { fullName: true } },
+} as const;
+
+/** Без JSON протетики и без inventory — для модалки/бейджей. */
+const orderSelectSlim = {
+  id: true,
+  orderNumber: true,
+  patientName: true,
+  prostheticsOrdered: true,
   doctor: { select: { fullName: true } },
 } as const;
 
@@ -70,6 +79,20 @@ const transitDateSelect = {
   completedAt: true,
   kaitenCommentId: true,
   order: { select: orderSelect },
+} as const;
+
+const transitDateSelectSlim = {
+  id: true,
+  text: true,
+  source: true,
+  authorLabel: true,
+  createdAt: true,
+  resolvedAt: true,
+  arrivedAt: true,
+  checkedAt: true,
+  completedAt: true,
+  kaitenCommentId: true,
+  order: { select: orderSelectSlim },
 } as const;
 
 async function resolveOurLineLabels(
@@ -101,12 +124,12 @@ function isoOrNull(d: Date | null | undefined): string | null {
 function toRow(
   raw: RawTransit,
   labelByItemId: Map<string, string>,
+  slim: boolean,
 ): ProstheticsInTransitRow {
-  const p = prostheticsFromDb(raw.order.prosthetics);
   const arrivedAt = isoOrNull(raw.arrivedAt);
   const checkedAt = isoOrNull(raw.checkedAt);
   const completedAt = isoOrNull(raw.completedAt);
-  return {
+  const base = {
     id: raw.id,
     text: raw.text,
     source: raw.source,
@@ -127,6 +150,13 @@ function toRow(
     patientName: raw.order.patientName,
     doctorName: raw.order.doctor?.fullName ?? null,
     prostheticsOrdered: raw.order.prostheticsOrdered === true,
+  };
+  if (slim) {
+    return { ...base, clientProvided: [], ourLines: [] };
+  }
+  const p = prostheticsFromDb(raw.order.prosthetics);
+  return {
+    ...base,
     clientProvided: p.clientProvided.map((line) => ({
       description: line.description,
       quantity: line.quantity,
@@ -142,9 +172,10 @@ function toRow(
 
 export async function listProstheticsInTransit(
   db: PrismaClient,
-  opts?: { tenantId?: string | null; take?: number },
+  opts?: { tenantId?: string | null; take?: number; slim?: boolean },
 ): Promise<ProstheticsInTransitRow[]> {
   const take = opts?.take ?? 200;
+  const slim = opts?.slim === true;
   const tenantId = opts?.tenantId?.trim() || null;
   const orderWhere = {
     ...orderScope,
@@ -152,6 +183,7 @@ export async function listProstheticsInTransit(
   };
 
   const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
+  const rowSelect = slim ? transitDateSelectSlim : transitDateSelect;
 
   const inTransitWhere = {
     resolvedAt: { not: null },
@@ -165,7 +197,7 @@ export async function listProstheticsInTransit(
       where: inTransitWhere,
       orderBy: { resolvedAt: "desc" },
       take,
-      select: transitDateSelect,
+      select: rowSelect,
     }),
     useInbox
       ? ((db as any).orderChatInboxItem.findMany({
@@ -175,7 +207,7 @@ export async function listProstheticsInTransit(
           },
           orderBy: { resolvedAt: "desc" },
           take,
-          select: transitDateSelect,
+          select: rowSelect,
         }) as Promise<
           Array<{
             id: string;
@@ -240,6 +272,10 @@ export async function listProstheticsInTransit(
   );
   const sliced = mergedRaw.slice(0, take);
 
+  if (slim) {
+    return sliced.map((raw) => toRow(raw, new Map(), true));
+  }
+
   const allItemIds: string[] = [];
   for (const raw of sliced) {
     const p = prostheticsFromDb(raw.order.prosthetics);
@@ -249,7 +285,7 @@ export async function listProstheticsInTransit(
   }
   const labelByItemId = await resolveOurLineLabels(allItemIds);
 
-  return sliced.map((raw) => toRow(raw, labelByItemId));
+  return sliced.map((raw) => toRow(raw, labelByItemId, false));
 }
 
 /**
@@ -260,9 +296,10 @@ export async function listProstheticsInTransit(
  */
 export async function listProstheticsToOrder(
   db: PrismaClient,
-  opts?: { tenantId?: string | null; take?: number },
+  opts?: { tenantId?: string | null; take?: number; slim?: boolean },
 ): Promise<ProstheticsToOrderRow[]> {
   const take = opts?.take ?? 200;
+  const slim = opts?.slim === true;
   const tenantId = opts?.tenantId?.trim() || null;
   const orderWhere = {
     ...orderScope,
@@ -282,7 +319,7 @@ export async function listProstheticsToOrder(
     authorLabel: true,
     createdAt: true,
     kaitenCommentId: true,
-    order: { select: orderSelect },
+    order: { select: slim ? orderSelectSlim : orderSelect },
   } as const;
 
   const [legacyRows, inboxRows] = await Promise.all([
@@ -335,6 +372,22 @@ export async function listProstheticsToOrder(
   merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   const sliced = merged.slice(0, take);
 
+  if (slim) {
+    return sliced.map((raw) => ({
+      id: raw.id,
+      text: raw.text,
+      source: raw.source,
+      authorLabel: raw.authorLabel,
+      createdAt: raw.createdAt.toISOString(),
+      orderId: raw.order.id,
+      orderNumber: raw.order.orderNumber,
+      patientName: raw.order.patientName,
+      doctorName: raw.order.doctor?.fullName ?? null,
+      clientProvided: [],
+      ourLines: [],
+    }));
+  }
+
   const allItemIds: string[] = [];
   for (const raw of sliced) {
     const p = prostheticsFromDb(raw.order.prosthetics);
@@ -377,6 +430,7 @@ export async function loadProstheticsInTransitForTenant(
   const items = await listProstheticsInTransit(prisma, {
     tenantId,
     take: 200,
+    slim: true,
   });
   return { count: items.length, items };
 }
@@ -394,6 +448,7 @@ export async function loadProstheticsToOrderForTenant(
   const items = await listProstheticsToOrder(prisma, {
     tenantId,
     take: 200,
+    slim: true,
   });
   const orderCount = new Set(items.map((row) => row.orderId)).size;
   return { count: items.length, orderCount, items };
