@@ -94,7 +94,7 @@ describe("canAdvanceProstheticsProgressStep", () => {
     );
   });
 
-  it("treats checked+completed as done (Проверил закрывает)", () => {
+  it("treats completedAt as done (Готово)", () => {
     expect(
       prostheticsInTransitStepFromDates({
         resolvedAt: "2026-08-01T10:00:00.000Z",

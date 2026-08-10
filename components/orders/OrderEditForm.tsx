@@ -39,6 +39,7 @@ import {
   type AppointmentTimeMode,
 } from "@/lib/appointment-time-mode";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import {
   clinicComboboxSearchPrefixes,
   doctorComboboxSearchPrefixes,
@@ -696,6 +697,8 @@ export function OrderEditForm({
   const isAccountant = viewerRole === "ACCOUNTANT";
   const isHarmony = useUiDesign() === "harmony";
   const router = useRouter();
+  const { user: sessionUser } = useSessionUser();
+  const sessionUserId = sessionUser?.id ?? null;
   const [activeTab, setActiveTab] = useState<EditTab>(() =>
     normalizeSecondaryTab(initialActiveTab),
   );
@@ -2088,27 +2091,10 @@ export function OrderEditForm({
   }, [initial.id, router]);
 
   /** В блоке «Наряд» справа от печати: отметка отправки (цвет не как у «Сохранить наряд»). */
-  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [orderLayoutPrefs, setOrderLayoutPrefs] = useState<OrderEditLayoutV1>(
     () => defaultOrderEditLayout(),
   );
   const [orderLayoutCustomize, setOrderLayoutCustomize] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/session", { cache: "no-store" });
-        const j = (await res.json()) as { user?: { id?: string } | null };
-        if (!cancelled) setSessionUserId(j.user?.id ?? null);
-      } catch {
-        if (!cancelled) setSessionUserId(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!orderPageFrame) return;

@@ -1,7 +1,7 @@
 /**
  * Степпер «в пути»: Заказал → Пришла → Проверил → Готово.
  * Даты: resolvedAt / arrivedAt / checkedAt / completedAt.
- * «Готово» выставляется вместе с «Проверил» (отдельный клик не нужен).
+ * Каждый шаг — отдельный клик (Готово = completedAt).
  */
 
 export type ProstheticsInTransitStep =

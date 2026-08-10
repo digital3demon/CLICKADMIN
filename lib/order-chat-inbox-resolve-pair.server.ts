@@ -506,14 +506,12 @@ export async function advanceOrderProstheticsProgressPair(
   }
 
   const now = new Date();
-  /* «Проверил» сразу закрывает заявку («Готово» без отдельного клика). */
+  /* Заказал → Пришла → Проверил → Готово — отдельные клики. */
   const data =
     step === "checked"
       ? {
           checkedAt: now,
           checkedByUserId: userId,
-          completedAt: now,
-          completedByUserId: userId,
         }
       : { completedAt: now, completedByUserId: userId };
 

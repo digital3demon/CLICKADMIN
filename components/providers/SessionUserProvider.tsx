@@ -17,11 +17,14 @@ import type {
 } from "@/lib/auth/client-session-bootstrap.server";
 import { CRM_PROFILE_UPDATED_EVENT } from "@/lib/crm-client-events";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
+import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
 
 type SessionUserContextValue = {
   user: ClientSessionUser | null;
   singleUser: boolean;
   isDemo: boolean;
+  /** Тег @… админской группы; null → дефолт на клиенте. */
+  kanbanAdminMentionTag: string | null;
   /** true после первого снимка (сервер или /api/auth/session). */
   ready: boolean;
   refresh: () => Promise<void>;
@@ -32,6 +35,7 @@ const SessionUserContext = createContext<SessionUserContextValue | null>(null);
 type SessionApiPayload = {
   singleUser?: boolean;
   demo?: boolean;
+  tenant?: { kanbanAdminMentionTag?: string | null };
   user?: {
     id?: string;
     email?: string;
@@ -80,15 +84,24 @@ function fetchSessionPayload(signal?: AbortSignal): Promise<SessionApiPayload> {
 
 function parseSessionPayload(
   j: SessionApiPayload,
-): Pick<SessionUserContextValue, "user" | "singleUser" | "isDemo"> {
+): Pick<
+  SessionUserContextValue,
+  "user" | "singleUser" | "isDemo" | "kanbanAdminMentionTag"
+> {
   const singleUser = Boolean(j.singleUser);
   const isDemo = Boolean(j.demo);
   writeClientStorageBucket(isDemo ? "demo" : "live");
+  const rawTag = j.tenant?.kanbanAdminMentionTag;
+  const kanbanAdminMentionTag =
+    rawTag != null && String(rawTag).trim()
+      ? normalizeKanbanAdminMentionTag(rawTag)
+      : null;
   const u = j.user;
   if (u?.email && u.displayName != null && u.role && u.id) {
     return {
       singleUser,
       isDemo,
+      kanbanAdminMentionTag,
       user: {
         id: u.id,
         email: u.email,
@@ -102,14 +115,15 @@ function parseSessionPayload(
       },
     };
   }
-  return { singleUser, isDemo, user: null };
+  return { singleUser, isDemo, kanbanAdminMentionTag, user: null };
 }
 
 function bootstrapFingerprint(initial: ClientSessionBootstrap | null): string {
   if (!initial) return "none";
   const u = initial.user;
+  const tag = initial.kanbanAdminMentionTag ?? "";
   if (!u) {
-    return `anon|${initial.demo ? 1 : 0}|${initial.singleUser ? 1 : 0}`;
+    return `anon|${initial.demo ? 1 : 0}|${initial.singleUser ? 1 : 0}|${tag}`;
   }
   return [
     u.id,
@@ -121,6 +135,7 @@ function bootstrapFingerprint(initial: ClientSessionBootstrap | null): string {
     u.avatarCustomUploadedAt ?? "",
     initial.demo ? 1 : 0,
     initial.singleUser ? 1 : 0,
+    tag,
   ].join("|");
 }
 
@@ -136,6 +151,9 @@ export function SessionUserProvider({
   );
   const [singleUser, setSingleUser] = useState(Boolean(initial?.singleUser));
   const [isDemo, setIsDemo] = useState(Boolean(initial?.demo));
+  const [kanbanAdminMentionTag, setKanbanAdminMentionTag] = useState<
+    string | null
+  >(initial?.kanbanAdminMentionTag ?? null);
   const [ready, setReady] = useState(Boolean(initial?.user));
   const bootKey = bootstrapFingerprint(initial);
   const lastBootKeyRef = useRef(bootKey);
@@ -144,6 +162,7 @@ export function SessionUserProvider({
     const next = parseSessionPayload(j);
     setSingleUser(next.singleUser);
     setIsDemo(next.isDemo);
+    setKanbanAdminMentionTag(next.kanbanAdminMentionTag);
     setUser(next.user);
     setReady(true);
   }, []);
@@ -152,6 +171,7 @@ export function SessionUserProvider({
     setSingleUser(Boolean(boot.singleUser));
     setIsDemo(Boolean(boot.demo));
     writeClientStorageBucket(boot.demo ? "demo" : "live");
+    setKanbanAdminMentionTag(boot.kanbanAdminMentionTag ?? null);
     setUser(boot.user);
     setReady(true);
   }, []);
@@ -184,6 +204,7 @@ export function SessionUserProvider({
         setUser(null);
         setSingleUser(false);
         setIsDemo(false);
+        setKanbanAdminMentionTag(null);
         writeClientStorageBucket("live");
         setReady(true);
       }
@@ -202,8 +223,15 @@ export function SessionUserProvider({
   }, [refresh]);
 
   const value = useMemo(
-    () => ({ user, singleUser, isDemo, ready, refresh }),
-    [user, singleUser, isDemo, ready, refresh],
+    () => ({
+      user,
+      singleUser,
+      isDemo,
+      kanbanAdminMentionTag,
+      ready,
+      refresh,
+    }),
+    [user, singleUser, isDemo, kanbanAdminMentionTag, ready, refresh],
   );
 
   return (

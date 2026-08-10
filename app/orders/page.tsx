@@ -611,6 +611,17 @@ export default async function OrdersPage({
       >
       <div className={`${ORDERS_LIST_STACK} space-y-4`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+        <OrdersListHeaderActionCards
+          initialInTransitCount={prostheticsInTransitCount}
+          initialToOrderCount={prostheticsToOrderCount}
+          initialCorrectionsPendingCount={attentionCount}
+          initialTasksPendingCount={labTasksPendingCount}
+          initialPickupsPendingCount={labPickupsPendingCount}
+          canMarkArrived={canMarkProstheticsArrived}
+          canResolveTasks={canMarkProstheticsArrived}
+          canAcceptCorrections={canMarkProstheticsArrived}
+          showProstheticsBlock={canSeeProstheticsChip}
+        />
         <div className="min-w-0 flex-1">
           <OrderPostingMonthBar
             toolbarEnd={
@@ -626,17 +637,6 @@ export default async function OrdersPage({
             }
           />
         </div>
-        <OrdersListHeaderActionCards
-          initialInTransitCount={prostheticsInTransitCount}
-          initialToOrderCount={prostheticsToOrderCount}
-          initialCorrectionsPendingCount={attentionCount}
-          initialTasksPendingCount={labTasksPendingCount}
-          initialPickupsPendingCount={labPickupsPendingCount}
-          canMarkArrived={canMarkProstheticsArrived}
-          canResolveTasks={canMarkProstheticsArrived}
-          canAcceptCorrections={canMarkProstheticsArrived}
-          showProstheticsBlock={canSeeProstheticsChip}
-        />
       </div>
       <div className="no-print space-y-4">
         {periodError ? (
