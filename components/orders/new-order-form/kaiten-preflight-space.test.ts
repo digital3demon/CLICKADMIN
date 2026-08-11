@@ -40,6 +40,20 @@ describe("resolvePreferredSpaceForCardType", () => {
     ).toBe("ORTHODONTICS");
   });
 
+  it("switches to orthodontics even if mirrored board map stuck on orthopedics", () => {
+    expect(
+      resolvePreferredSpaceForCardType({
+        typeId: "cuid-orto",
+        typeName: "ОртоАппараты",
+        defaultSpaceByCardType: {
+          "cuid-orto": "ORTHOPEDICS",
+          "name:ортоаппараты": "ORTHOPEDICS",
+        },
+        availableSpaces: both,
+      }),
+    ).toBe("ORTHODONTICS");
+  });
+
   it("defaults to orthopedics when available", () => {
     expect(
       resolvePreferredSpaceForCardType({

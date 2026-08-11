@@ -116,8 +116,11 @@ function defaultSpaceByCardTypeFromTenantKanbanState(
 }
 
 /**
- * Пространство при выборе типа: карта из канбана (id/имя) → эвристика по имени → единственная опция.
- * Id KaitenCardType и id типа на доске CRM часто разные — имя — главный ключ.
+ * Пространство при выборе типа: эвристика по «орто…» имени → карта из канбана (id/имя) →
+ * единственная опция / ортопедия по умолчанию.
+ *
+ * Имена вроде «ОртоАппараты» важнее карты: типы зеркалятся на обе CRM-доски, и первая
+ * (ортопедия) иначе залипает после случайного клика по «Временные».
  */
 export function resolvePreferredSpaceForCardType(opts: {
   typeId: string;
@@ -129,13 +132,6 @@ export function resolvePreferredSpaceForCardType(opts: {
   const pick = (lane: KaitenTrackLane | null | undefined): KaitenTrackLane | null =>
     lane && available.has(lane) ? lane : null;
 
-  const byId = pick(opts.defaultSpaceByCardType[opts.typeId]);
-  if (byId) return byId;
-
-  const nameKey = `name:${normalizeCardTypeName(opts.typeName)}`;
-  const byName = pick(opts.defaultSpaceByCardType[nameKey]);
-  if (byName) return byName;
-
   const n = normalizeCardTypeName(opts.typeName);
   const looksOrthodontics =
     n.includes("ортоаппарат") ||
@@ -145,6 +141,14 @@ export function resolvePreferredSpaceForCardType(opts: {
     const od = pick("ORTHODONTICS");
     if (od) return od;
   }
+
+  const byId = pick(opts.defaultSpaceByCardType[opts.typeId]);
+  if (byId) return byId;
+
+  const nameKey = `name:${n}`;
+  const byName = pick(opts.defaultSpaceByCardType[nameKey]);
+  if (byName) return byName;
+
   const op = pick("ORTHOPEDICS");
   if (op) return op;
   if (opts.availableSpaces.length === 1) return opts.availableSpaces[0] ?? null;
