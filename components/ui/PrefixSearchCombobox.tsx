@@ -30,6 +30,13 @@ type Props = {
   className?: string;
   /** Первая строка списка — сброс значения */
   emptyOptionLabel?: string;
+  /**
+   * Клик по заблокированному полю (disabled input сам не кликается —
+   * тогда используем readOnly + этот колбэк, обычно «скопировать»).
+   */
+  onDisabledClick?: () => void;
+  /** Подсказка для режима onDisabledClick */
+  disabledTitle?: string;
 };
 
 export function PrefixSearchCombobox({
@@ -42,6 +49,8 @@ export function PrefixSearchCombobox({
   disabled,
   className = "",
   emptyOptionLabel = "Выбрать из списка",
+  onDisabledClick,
+  disabledTitle,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +99,10 @@ export function PrefixSearchCombobox({
   }, [highlight, open]);
 
   const displayValue = open ? searchQuery : valueLabel;
+  /** disabled + onDisabledClick → readOnly, чтобы ЛКМ доходил до поля. */
+  const clickToActivateWhenLocked = Boolean(disabled && onDisabledClick);
+  const inputDisabled = Boolean(disabled && !clickToActivateWhenLocked);
+  const inputReadOnly = clickToActivateWhenLocked;
 
   const close = useCallback(() => {
     if (blurCloseTimer.current != null) {
@@ -130,7 +143,7 @@ export function PrefixSearchCombobox({
   }, [open, close]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (disabled) return;
+    if (disabled || clickToActivateWhenLocked) return;
 
     if (!open) {
       if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
@@ -173,7 +186,9 @@ export function PrefixSearchCombobox({
         ref={inputRef}
         id={id}
         type="text"
-        disabled={disabled}
+        disabled={inputDisabled}
+        readOnly={inputReadOnly}
+        aria-disabled={clickToActivateWhenLocked || undefined}
         role="combobox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
@@ -185,11 +200,20 @@ export function PrefixSearchCombobox({
         aria-labelledby={ariaLabelledBy}
         autoComplete="off"
         spellCheck={false}
-        className={className}
+        title={
+          clickToActivateWhenLocked
+            ? (disabledTitle ?? "Нажмите — скопировать в буфер обмена")
+            : undefined
+        }
+        className={
+          clickToActivateWhenLocked
+            ? `${className} cursor-pointer`.trim()
+            : className
+        }
         value={displayValue}
         placeholder={!valueLabel && !open ? placeholder : undefined}
         onChange={(e) => {
-          if (disabled) return;
+          if (disabled || clickToActivateWhenLocked) return;
           if (!open) {
             setOpen(true);
             setSearchQuery(e.target.value);
@@ -197,8 +221,11 @@ export function PrefixSearchCombobox({
             setSearchQuery(e.target.value);
           }
         }}
+        onClick={() => {
+          if (clickToActivateWhenLocked) onDisabledClick?.();
+        }}
         onFocus={() => {
-          if (disabled) return;
+          if (disabled || clickToActivateWhenLocked) return;
           if (blurCloseTimer.current != null) {
             clearTimeout(blurCloseTimer.current);
             blurCloseTimer.current = null;
@@ -207,6 +234,7 @@ export function PrefixSearchCombobox({
           setSearchQuery("");
         }}
         onBlur={() => {
+          if (clickToActivateWhenLocked) return;
           blurCloseTimer.current = setTimeout(() => {
             blurCloseTimer.current = null;
             const ae = document.activeElement;

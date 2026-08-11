@@ -6,12 +6,16 @@ import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 import { kaitenFastLivePollIntervalMs } from "@/lib/kaiten-rate-limit";
 
 const WINDOW = 10;
-/** На широком списке — лёгкий импорт !!!/??? без includeComments в titles-sync. */
-const LIGHT_COMMENT_PULL_MAX = 2;
-/** Без поиска: live-синк только для очень узкого списка. */
-const FAST_LIVE_SYNC_MAX_DEFAULT = 3;
-/** С активным q: не больше 5 нарядов за проход, строго по одному (без параллели). */
-const FAST_LIVE_SYNC_MAX_SEARCH = 5;
+/**
+ * Live-импорт чата из Kaiten на широком списке (chat-corrections).
+ * Было урезано до 2 против шторма RSC — из‑за этого тосты «Чат — …» ждали
+ * cron или открытие карточки. Держим умеренно и крутим по окну.
+ */
+const LIGHT_COMMENT_PULL_MAX = 6;
+/** Без поиска: live-синк всего видимого списка, если он не шире этого. */
+const FAST_LIVE_SYNC_MAX_DEFAULT = 8;
+/** С активным q: не больше N нарядов за проход, строго по одному (без параллели). */
+const FAST_LIVE_SYNC_MAX_SEARCH = 8;
 
 function isRateLimited(res: Response, data: { error?: string }): boolean {
   if (res.status === 429) return true;
@@ -58,6 +62,7 @@ export function OrderListKaitenPoller({
     ? FAST_LIVE_SYNC_MAX_SEARCH
     : FAST_LIVE_SYNC_MAX_DEFAULT;
   const offsetRef = useRef(0);
+  const lightCommentOffsetRef = useRef(0);
   const backoffRef = useRef(0);
   const fastBackoffRef = useRef(0);
   const mentionStateRef = useRef("");
@@ -120,10 +125,13 @@ export function OrderListKaitenPoller({
     if (inFlightRef.current || fastInFlightRef.current) return;
     inFlightRef.current = true;
 
-    /** Тяжёлый sync комментариев — только cron и fast-live для узкого списка. */
-    const includeComments = false;
-
     const n = ids.length;
+    /**
+     * Узкий список (≤ WINDOW): comments в titles-sync.
+     * Широкий: titles без comments + ротация live chat-corrections (см. LIGHT_COMMENT_PULL_MAX).
+     */
+    const includeComments = n <= WINDOW;
+
     let batch: string[];
     if (n <= WINDOW) {
       batch = ids;
@@ -156,8 +164,15 @@ export function OrderListKaitenPoller({
         fastBackoffRef.current = backoffRef.current;
         return;
       }
-      if (ids.length > fastLiveMax) {
-        for (const orderId of batch.slice(0, LIGHT_COMMENT_PULL_MAX)) {
+      if (!includeComments && ids.length > fastLiveMax) {
+        const lightStart = lightCommentOffsetRef.current % batch.length;
+        const lightIds: string[] = [];
+        const lightTake = Math.min(LIGHT_COMMENT_PULL_MAX, batch.length);
+        for (let i = 0; i < lightTake; i += 1) {
+          lightIds.push(batch[(lightStart + i) % batch.length]!);
+        }
+        lightCommentOffsetRef.current = lightStart + lightTake;
+        for (const orderId of lightIds) {
           if (Date.now() < backoffRef.current) break;
           try {
             const ccRes = await fetch(
@@ -222,6 +237,7 @@ export function OrderListKaitenPoller({
   useEffect(() => {
     if (ids.length === 0) return;
     offsetRef.current = 0;
+    lightCommentOffsetRef.current = 0;
     let cancelled = false;
     void (async () => {
       const ok = await pullKaitenChatFeedLiveForVisible();

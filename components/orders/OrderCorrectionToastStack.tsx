@@ -203,7 +203,6 @@ export function OrderCorrectionToastStack() {
     doctorName?: string | null;
   } | null>(null);
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
-  const isKanban = pathname === "/kanban" || pathname.startsWith("/kanban/");
   const isPublicSticker = isPublicStickerHubPath(pathname);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const [stackCollapsed, setStackCollapsed] = useState(false);
@@ -220,11 +219,9 @@ export function OrderCorrectionToastStack() {
   const nextPollAllowedAtRef = useRef(0);
   const pollBackoffMsRef = useRef(0);
   const pathnameRef = useRef(pathname);
-  const isKanbanRef = useRef(isKanban);
   const isLoginRef = useRef(isLogin);
   const isPublicStickerRef = useRef(isPublicSticker);
   pathnameRef.current = pathname;
-  isKanbanRef.current = isKanban;
   isLoginRef.current = isLogin;
   isPublicStickerRef.current = isPublicSticker;
   dismissedRef.current = dismissed;
@@ -290,7 +287,6 @@ export function OrderCorrectionToastStack() {
       if (pollInFlightRef.current) return;
       if (nextPollAllowedAtRef.current > now) return;
       pollInFlightRef.current = true;
-      const kanban = isKanbanRef.current;
       try {
         const res = await fetch("/api/order-notifications/toasts", {
           credentials: "include",
@@ -317,11 +313,11 @@ export function OrderCorrectionToastStack() {
           return;
         }
 
-        const chatList = kanban ? [] : Array.isArray(j.messages) ? j.messages : [];
-        const corrList = kanban ? [] : Array.isArray(j.corrections) ? j.corrections : [];
-        const proList = kanban ? [] : Array.isArray(j.requests) ? j.requests : [];
+        const chatList = Array.isArray(j.messages) ? j.messages : [];
+        const corrList = Array.isArray(j.corrections) ? j.corrections : [];
+        const proList = Array.isArray(j.requests) ? j.requests : [];
         const personalList = Array.isArray(j.personal) ? j.personal : [];
-        const labMentionCount = kanban ? 0 : (j.labMentionCount ?? 0);
+        const labMentionCount = j.labMentionCount ?? 0;
 
         const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}|m:${personalList.map((x) => x.id).join(",")}|lmc:${labMentionCount}`;
         if (fp !== lastFpRef.current) {

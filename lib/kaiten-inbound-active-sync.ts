@@ -19,9 +19,14 @@ import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
 export const INBOUND_CURSOR_KEY = "kaitenInboundActiveCursorV1";
 export const INBOUND_THROTTLE_KEY = "kaitenInboundNextAllowedAt";
 
-export const INBOUND_CRON_BATCH_PER_TENANT = 20;
-export const INBOUND_CRON_GAP_MS = 8_000;
+export const INBOUND_CRON_BATCH_PER_TENANT = 28;
+/** Пауза между батчами inbound на тенант (мс). Ниже — быстрее тосты чата, выше нагрузка на Kaiten. */
+export const INBOUND_CRON_GAP_MS = 4_000;
 export const INBOUND_MENTION_BOOST = 4;
+/** Сколько «давно не синкавшихся» нарядов брать вперёд очереди (null / старше порога). */
+export const INBOUND_STALE_BOOST = 8;
+/** Порог «давно не синкали чат» для stale-boost (мс). */
+export const INBOUND_STALE_AFTER_MS = 20 * 60_000;
 
 export type InboundCursorState = {
   lastOrderId?: string;
@@ -253,6 +258,8 @@ export async function pickActiveInboundOrderIds(
   cursor: InboundCursorState,
   opts?: {
     mentionBoost?: number;
+    staleBoost?: number;
+    staleAfterMs?: number;
     usePriorityColumns?: boolean;
     cycle?: number;
   },
@@ -273,6 +280,27 @@ export async function pickActiveInboundOrderIds(
       select: { id: true },
     });
     for (const r of mentionRows) picked.add(r.id);
+  }
+
+  /* Новые @lab ещё не в mentionBoost — тянем давно не sync'нутые / never-synced первыми. */
+  const staleTake = Math.min(opts?.staleBoost ?? 0, take - picked.size);
+  if (staleTake > 0) {
+    const staleAfterMs = opts?.staleAfterMs ?? INBOUND_STALE_AFTER_MS;
+    const staleBefore = new Date(Date.now() - staleAfterMs);
+    const staleRows = await db.order.findMany({
+      where: {
+        ...baseWhere,
+        ...(picked.size > 0 ? { id: { notIn: [...picked] } } : {}),
+        OR: [
+          { kaitenChatSyncedAt: null },
+          { kaitenChatSyncedAt: { lt: staleBefore } },
+        ],
+      },
+      orderBy: [{ kaitenChatSyncedAt: "asc" }, { id: "asc" }],
+      take: staleTake,
+      select: { id: true },
+    });
+    for (const r of staleRows) picked.add(r.id);
   }
 
   const cycle = opts?.cycle ?? cursor.cycle ?? 0;
@@ -388,6 +416,8 @@ export async function maybeRunActiveInboundKaitenSync(
     state.cursor,
     {
       mentionBoost: INBOUND_MENTION_BOOST,
+      staleBoost: INBOUND_STALE_BOOST,
+      staleAfterMs: INBOUND_STALE_AFTER_MS,
       usePriorityColumns: true,
       cycle: state.cursor.cycle ?? 0,
     },

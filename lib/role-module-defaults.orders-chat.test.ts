@@ -21,10 +21,10 @@ describe("ORDERS_CHAT defaults", () => {
     }
   });
 
-  it("не совпадает с ORDERS_EDIT: менеджер может чат без редактирования", () => {
+  it("чат и редактирование: менеджер и бухгалтер имеют оба по умолчанию", () => {
     expect(defaultModuleAllowed("MANAGER", "ORDERS_CHAT")).toBe(true);
     expect(defaultModuleAllowed("MANAGER", "ORDERS_EDIT")).toBe(true);
     expect(defaultModuleAllowed("ACCOUNTANT", "ORDERS_CHAT")).toBe(true);
-    expect(defaultModuleAllowed("ACCOUNTANT", "ORDERS_EDIT")).toBe(false);
+    expect(defaultModuleAllowed("ACCOUNTANT", "ORDERS_EDIT")).toBe(true);
   });
 });

@@ -313,7 +313,8 @@ export function defaultModuleAllowed(
       return (
         role === "ADMINISTRATOR" ||
         role === "SENIOR_ADMINISTRATOR" ||
-        role === "FINANCIAL_MANAGER"
+        role === "FINANCIAL_MANAGER" ||
+        role === "ACCOUNTANT"
       );
     case "KANBAN":
       return true;

@@ -846,7 +846,6 @@ export function InventoryWarehouseClient() {
                 setBalancesItemId("");
               }}
               placeholder="Все склады"
-              emptyHint="Нет складов"
               className={invComboboxClass}
             />
           </div>
@@ -858,7 +857,6 @@ export function InventoryWarehouseClient() {
               value={balancesItemId}
               onChange={setBalancesItemId}
               placeholder="Все позиции"
-              emptyHint="Нет позиций"
               className={invComboboxClass}
             />
           </div>

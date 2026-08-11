@@ -51,6 +51,8 @@ describe("inbound sync budgets", () => {
   it("возвращает cron batch и gap", () => {
     expect(inboundSyncBatchSize()).toBe(INBOUND_CRON_BATCH_PER_TENANT);
     expect(inboundSyncGapMs()).toBe(INBOUND_CRON_GAP_MS);
+    expect(INBOUND_CRON_BATCH_PER_TENANT).toBeGreaterThanOrEqual(20);
+    expect(INBOUND_CRON_GAP_MS).toBeLessThanOrEqual(8_000);
   });
 });
 

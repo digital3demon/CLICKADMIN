@@ -1491,6 +1491,26 @@ export function OrderEditForm({
     }
   }, [invoiceCopyClipboardText]);
 
+  const copyLockedFieldToClipboard = useCallback(async (text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    try {
+      await navigator.clipboard.writeText(t);
+      toast.success("Скопировано");
+    } catch {
+      toast.error("Не удалось скопировать");
+    }
+  }, []);
+
+  const clinicLockedLabel = useMemo(
+    () => clinicComboboxOptions.find((o) => o.value === clinicId)?.label ?? "",
+    [clinicComboboxOptions, clinicId],
+  );
+  const doctorLockedLabel = useMemo(
+    () => doctorComboboxOptions.find((o) => o.value === doctorId)?.label ?? "",
+    [doctorComboboxOptions, doctorId],
+  );
+
   const resolvedOrderPriceListKind = useMemo(() => {
     const cid =
       clinicId && clinicId !== ORDER_CLINIC_PRIVATE
@@ -2220,6 +2240,11 @@ export function OrderEditForm({
               value={clinicId}
               onChange={onClinicChange}
               disabled={!customerEditClinic}
+              onDisabledClick={
+                customerEditClinic
+                  ? undefined
+                  : () => void copyLockedFieldToClipboard(clinicLockedLabel)
+              }
               placeholder="Название клиники, ООО или юр. наименование…"
               emptyOptionLabel="Выбрать"
             />
@@ -2246,6 +2271,11 @@ export function OrderEditForm({
               value={doctorId}
               onChange={setDoctorId}
               disabled={clinicId === "" || !customerEditDoctor}
+              onDisabledClick={
+                !customerEditDoctor && clinicId !== ""
+                  ? () => void copyLockedFieldToClipboard(doctorLockedLabel)
+                  : undefined
+              }
               placeholder={
                 clinicId === ""
                   ? "Сначала выберите клинику"
@@ -2280,9 +2310,23 @@ export function OrderEditForm({
               id="oe-patient"
               type="text"
               readOnly={!customerEditPatient}
-              className={`${inputClass}${!customerEditPatient ? " cursor-default bg-[var(--surface-muted)]" : ""}`}
+              title={
+                !customerEditPatient
+                  ? "Нажмите — скопировать в буфер обмена"
+                  : undefined
+              }
+              className={`${inputClass}${
+                !customerEditPatient
+                  ? " cursor-pointer bg-[var(--surface-muted)]"
+                  : ""
+              }`}
               value={patientName}
               onChange={(e) => setPatientName(e.target.value)}
+              onClick={() => {
+                if (!customerEditPatient) {
+                  void copyLockedFieldToClipboard(patientName);
+                }
+              }}
             />
           </div>
           <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
@@ -3100,7 +3144,7 @@ export function OrderEditForm({
             </div>
           </div>
           <fieldset
-            disabled={!canEditClients}
+            disabled={!canEditOrder}
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
           >
           <div
@@ -3170,7 +3214,7 @@ export function OrderEditForm({
                 </p>
                 <OrderInvoiceFileDrop
                   orderId={initial.id}
-                  disabled={!canEditClients}
+                  disabled={!canEditOrder}
                   onDone={async (res) => {
                     setError(null);
                     toast.success("Счёт загружен");
@@ -3213,7 +3257,7 @@ export function OrderEditForm({
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={invoiceSaving || !canEditClients}
+                      disabled={invoiceSaving || !canEditOrder}
                       aria-pressed={invoicePaperDocs}
                       title="Бумажные документы распечатаны"
                       onClick={() =>
@@ -3232,7 +3276,7 @@ export function OrderEditForm({
                     </button>
                     <button
                       type="button"
-                      disabled={invoiceSaving || !canEditClients}
+                      disabled={invoiceSaving || !canEditOrder}
                       aria-pressed={invoiceSentToEdo}
                       title="Отправлен в ЭДО"
                       onClick={() =>
@@ -3251,7 +3295,7 @@ export function OrderEditForm({
                     </button>
                     <button
                       type="button"
-                      disabled={invoiceSaving || !canEditClients}
+                      disabled={invoiceSaving || !canEditOrder}
                       aria-pressed={invoiceEdoSigned}
                       title="Подпись в ЭДО"
                       onClick={() =>
@@ -3892,13 +3936,13 @@ export function OrderEditForm({
           }
           description={orderPageFrame.description ?? undefined}
           titleAccessory={orderPageHeaderAccessory}
+          titleRowEnd={
+            !previewMode && canEditOrder ? (
+              <div className="hidden shell-desktop:block">{renderSaveButton()}</div>
+            ) : null
+          }
         >
           {formInner}
-          {!previewMode && canEditOrder ? (
-            <div className="mt-4 hidden justify-end shell-desktop:flex">
-              {renderSaveButton()}
-            </div>
-          ) : null}
           {!previewMode ? (
           <div className="mt-10 flex justify-start border-t border-[var(--card-border)] pt-6">
             <button

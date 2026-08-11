@@ -1798,10 +1798,8 @@ export function findCardInAppState(
 }
 
 /**
- * Вид доски для рендера: поиск по всем дорожкам, виртуальные «Мои» / «Ответственный».
- * «Мои»: участник или ответственный текущего пользователя; либо локальная карточка без наряда,
- * созданная им (остальные пользователи такие карточки не видят в своём «Мои»).
- * «Ответственный»: только карточки, где пользователь в списке ответственных.
+ * Вид доски для рендера: поиск только по активной доске; виртуальные «Мои» / «Ответственный»
+ * по-прежнему собирают карточки со всех доступных дорожек.
  * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
  */
 export function buildKanbanDisplayView(
@@ -1898,34 +1896,12 @@ export function buildKanbanDisplayView(
     return { displayBoard: active, cardHomeBoardId };
   }
 
+  /* Поиск на обычной доске — только эта доска (не подмешиваем «чужие» дорожки). */
   const displayBoard = structuredClone(active);
-
   for (const colView of displayBoard.columns) {
-    const acc: KanbanCard[] = [];
-    const seen = new Set<string>();
-    const add = (card: KanbanCard, home: KanbanBoard) => {
-      if (seen.has(card.id)) return;
-      if (!textMatches(card) || !passesFiltersWithoutSearchText(card, home)) return;
-      seen.add(card.id);
-      acc.push(card);
-      cardHomeBoardId.set(card.id, home.id);
-    };
-
-    const colActive = active.columns.find((c) => c.id === colView.id);
-    if (colActive) colActive.cards.forEach((c) => add(c, active));
-
-    const titleNorm = colView.title.trim().toLowerCase();
-    for (const ob of state.boards) {
-      if (ob.id === active.id) continue;
-      if (!canUserAccessBoard(ob, sessionUserId || null, sessionUserRole)) continue;
-      const colO = ob.columns.find(
-        (c) => c.title.trim().toLowerCase() === titleNorm,
-      );
-      if (!colO) continue;
-      colO.cards.forEach((c) => add(c, ob));
-    }
-
-    colView.cards = acc;
+    colView.cards = colView.cards.filter(
+      (card) => textMatches(card) && passesFiltersWithoutSearchText(card, active),
+    );
   }
 
   return { displayBoard, cardHomeBoardId };
