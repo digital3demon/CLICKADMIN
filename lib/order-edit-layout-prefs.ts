@@ -45,26 +45,6 @@ export const ORDER_EDIT_BLOCK_IDS: OrderEditBlockId[] = [
   "bottomSecondary",
 ];
 
-/** Раскладка для бухгалтера: вкладки «Документооборот» и счёт — сверху, остальное ниже. */
-export function orderEditLayoutAccountantDocumentsFirst(): OrderEditLayoutV1 {
-  return {
-    v: 1,
-    row1: [{ id: "bottomSecondary", span: 12 }],
-    row2: [
-      { id: "topCustomer", span: 3 },
-      { id: "topDeadlines", span: 3 },
-      { id: "topFiles", span: 3 },
-      { id: "topClientNotes", span: 3 },
-    ],
-    row3: [
-      { id: "midConstructions", span: 6 },
-      { id: "midProsthetics", span: 6 },
-    ],
-    row4: [{ id: "midCorrections", span: 12 }],
-    blockColors: {},
-  };
-}
-
 /** Средний ряд: состав 6 + протетика 6; корректировки ниже (6 кол.); низ на всю ширину. */
 export function defaultOrderEditLayout(): OrderEditLayoutV1 {
   return {
@@ -83,6 +63,11 @@ export function defaultOrderEditLayout(): OrderEditLayoutV1 {
     row4: [{ id: "bottomSecondary", span: 12 }],
     blockColors: {},
   };
+}
+
+/** Раскладка для бухгалтера (устар.): вкладки теперь в спойлере под тулбаром. */
+export function orderEditLayoutAccountantDocumentsFirst(): OrderEditLayoutV1 {
+  return defaultOrderEditLayout();
 }
 
 function cloneLayout(l: OrderEditLayoutV1): OrderEditLayoutV1 {

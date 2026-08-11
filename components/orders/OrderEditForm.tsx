@@ -65,6 +65,7 @@ import {
 } from "@/lib/order-price-list-from-contractors";
 import {
   orderCompositionSubtotalAfterDiscountsRub,
+  orderPayableAfterDepositRub,
 } from "@/lib/format-order-construction";
 import {
   normalizeLegacyLabWorkStatus,
@@ -112,7 +113,6 @@ import {
   clearOrderEditLayout,
   defaultOrderEditLayout,
   loadOrderEditLayout,
-  orderEditLayoutAccountantDocumentsFirst,
   type OrderEditLayoutV1,
   saveOrderEditLayout,
 } from "@/lib/order-edit-layout-prefs";
@@ -181,6 +181,43 @@ function MobileCollapsibleSection({
         </span>
       </summary>
       {children}
+    </details>
+  );
+}
+
+/** Спойлер вкладок документооборота / канбана / истории — свёрнут и на десктопе. */
+function OrderSecondaryTabsSpoiler({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <details
+      className="group min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] open:shadow-sm"
+      open={open}
+      onToggle={(e) => {
+        setOpen((e.currentTarget as HTMLDetailsElement).open);
+      }}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 select-none [&::-webkit-details-marker]:hidden">
+        <span className="text-sm font-semibold text-[var(--text-strong)]">
+          {title}
+        </span>
+        <span
+          aria-hidden
+          className="shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-180"
+        >
+          ▾
+        </span>
+      </summary>
+      <div className="min-w-0 border-t border-[var(--card-border)] px-3 py-3">
+        {children}
+      </div>
     </details>
   );
 }
@@ -589,6 +626,11 @@ export type OrderEditInitial = {
   }>;
   /** Общая скидка на «Состав заказа», % */
   compositionDiscountPercent: number;
+  /** Учтённый депозит в наряде (руб.) */
+  depositAppliedRub: number | null;
+  depositAppliedParty: "CLINIC" | "DOCTOR" | null;
+  /** Баланс депозита релевантной стороны (клиника или врач) */
+  depositBalanceRub: number;
   /** ФинОтдел: состав заказа проверен и просчитан */
   financeCalculated: boolean;
   prosthetics: OrderProstheticsV1;
@@ -1627,6 +1669,19 @@ export function OrderEditForm({
     setPaymentPartialRubText("");
   }, [payment, paymentPartialRubText]);
 
+  const [depositAppliedRub, setDepositAppliedRub] = useState(
+    () => initial.depositAppliedRub ?? null,
+  );
+  const [depositBalanceRub, setDepositBalanceRub] = useState(
+    () => initial.depositBalanceRub ?? 0,
+  );
+  const [depositBusy, setDepositBusy] = useState(false);
+
+  useEffect(() => {
+    setDepositAppliedRub(initial.depositAppliedRub ?? null);
+    setDepositBalanceRub(initial.depositBalanceRub ?? 0);
+  }, [initial.id, initial.depositAppliedRub, initial.depositBalanceRub]);
+
   const financePreviewTotal = useMemo(() => {
     const payload = draftToConstructionPayload(draftLines) as Array<{
       quantity?: number;
@@ -1651,7 +1706,43 @@ export function OrderEditForm({
       lines,
       compositionDiscountPercent,
     );
-    return Math.round(sub * urgentPriceMult * 100) / 100;
+    return orderPayableAfterDepositRub(
+      sub,
+      urgentPriceMult,
+      depositAppliedRub,
+    );
+  }, [
+    draftLines,
+    compositionDiscountPercent,
+    urgentPriceMult,
+    depositAppliedRub,
+  ]);
+
+  const financePreviewBeforeDeposit = useMemo(() => {
+    const payload = draftToConstructionPayload(draftLines) as Array<{
+      quantity?: number;
+      unitPrice?: number | null;
+      lineDiscountPercent?: number;
+    }>;
+    const lines = payload.map((row) => ({
+      quantity: typeof row.quantity === "number" ? row.quantity : 1,
+      unitPrice:
+        row.unitPrice != null &&
+        typeof row.unitPrice === "number" &&
+        !Number.isNaN(row.unitPrice)
+          ? row.unitPrice
+          : null,
+      lineDiscountPercent:
+        typeof row.lineDiscountPercent === "number" &&
+        !Number.isNaN(row.lineDiscountPercent)
+          ? row.lineDiscountPercent
+          : 0,
+    }));
+    const sub = orderCompositionSubtotalAfterDiscountsRub(
+      lines,
+      compositionDiscountPercent,
+    );
+    return Math.round(sub * urgentPriceMult);
   }, [draftLines, compositionDiscountPercent, urgentPriceMult]);
 
   /** Сумма по счёту (выставлено) заполнена и расходится с итого по строкам состава (с учётом срочности). */
@@ -2150,13 +2241,7 @@ export function OrderEditForm({
     [sessionUserId],
   );
 
-  const orderLayoutForPageGrid = useMemo((): OrderEditLayoutV1 => {
-    if (!isAccountant || !orderPageFrame) return orderLayoutPrefs;
-    return {
-      ...orderEditLayoutAccountantDocumentsFirst(),
-      blockColors: orderLayoutPrefs.blockColors,
-    };
-  }, [isAccountant, orderPageFrame, orderLayoutPrefs]);
+  const orderLayoutForPageGrid = orderLayoutPrefs;
 
   useEffect(() => {
     if (isAccountant && orderLayoutCustomize) {
@@ -2922,6 +3007,110 @@ export function OrderEditForm({
     </div>
   );
 
+  const applyDepositOnOrder = useCallback(async () => {
+    if (!canEditOrder || previewMode) return;
+    setDepositBusy(true);
+    try {
+      const res = await fetch(`/api/orders/${initial.id}/deposit/apply`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        depositAppliedRub?: number;
+        balanceRub?: number;
+      };
+      if (!res.ok) {
+        toast.error(j.error ?? "Не удалось учесть депозит");
+        return;
+      }
+      setDepositAppliedRub(j.depositAppliedRub ?? 0);
+      if (typeof j.balanceRub === "number") setDepositBalanceRub(j.balanceRub);
+      toast.success("Депозит учтён в наряде");
+      router.refresh();
+    } catch {
+      toast.error("Сеть недоступна");
+    } finally {
+      setDepositBusy(false);
+    }
+  }, [canEditOrder, initial.id, previewMode, router]);
+
+  const unapplyDepositOnOrder = useCallback(async () => {
+    if (!canEditOrder || previewMode) return;
+    setDepositBusy(true);
+    try {
+      const res = await fetch(`/api/orders/${initial.id}/deposit/unapply`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        balanceRub?: number;
+      };
+      if (!res.ok) {
+        toast.error(j.error ?? "Не удалось отменить учёт");
+        return;
+      }
+      setDepositAppliedRub(null);
+      if (typeof j.balanceRub === "number") setDepositBalanceRub(j.balanceRub);
+      toast.success("Учёт депозита снят");
+      router.refresh();
+    } catch {
+      toast.error("Сеть недоступна");
+    } finally {
+      setDepositBusy(false);
+    }
+  }, [canEditOrder, initial.id, previewMode, router]);
+
+  const depositTile =
+    depositBalanceRub > 0 || (depositAppliedRub != null && depositAppliedRub > 0) ? (
+      <div className="flex min-h-[11rem] w-full min-w-0 flex-col gap-2 rounded-lg border border-violet-400/50 bg-violet-500/10 p-3">
+        <div className="text-sm font-bold uppercase tracking-wide text-violet-800 dark:text-violet-200">
+          Депозит
+        </div>
+        <p className="text-xs text-[var(--text-secondary)]">
+          Баланс:{" "}
+          <strong className="tabular-nums text-[var(--text-strong)]">
+            {moneyRu(depositBalanceRub)}
+          </strong>
+          {depositAppliedRub != null && depositAppliedRub > 0 ? (
+            <>
+              {" "}
+              · учтено:{" "}
+              <strong className="tabular-nums">{moneyRu(depositAppliedRub)}</strong>
+            </>
+          ) : null}
+        </p>
+        <p className="text-[11px] text-[var(--text-muted)]">
+          К оплате до учёта: {moneyRu(financePreviewBeforeDeposit)}. Учёт не уходит в
+          минус — остаток остаётся на карточке.
+        </p>
+        <div className="mt-auto flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={depositBusy || !canEditOrder || previewMode}
+            onClick={() => void applyDepositOnOrder()}
+            className="rounded-md bg-violet-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+          >
+            Учесть в этом заказе
+          </button>
+          <button
+            type="button"
+            disabled={
+              depositBusy ||
+              !canEditOrder ||
+              previewMode ||
+              !(depositAppliedRub != null && depositAppliedRub > 0)
+            }
+            onClick={() => void unapplyDepositOnOrder()}
+            className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-strong)] disabled:opacity-50"
+          >
+            Не учитывать
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   const oeMidConstructions = (
     <div
       className={`${editColWrap} flex min-h-0 flex-col xl:h-full ${
@@ -2977,6 +3166,9 @@ export function OrderEditForm({
             </span>
             <span className="mt-0.5 block text-[10px] font-normal leading-tight text-[var(--text-muted)] sm:mt-0 sm:ml-2 sm:inline">
               с учётом срочности
+              {depositAppliedRub != null && depositAppliedRub > 0
+                ? " и депозита"
+                : ""}
             </span>
           </p>
         </div>
@@ -2988,6 +3180,7 @@ export function OrderEditForm({
             onChange={setDraftLines}
             clinicId={clinicId || null}
             doctorId={doctorId || null}
+            leadingTile={depositTile}
           />
         </div>
       </div>
@@ -3087,7 +3280,6 @@ export function OrderEditForm({
   }, [initial.id, router]);
 
   const oeBottomSecondary = (
-    <MobileCollapsibleSection title="Документооборот">
     <div className="min-w-0 space-y-3">
       <div
         className="scrollbar-none flex snap-x gap-1 overflow-x-auto border-b border-[var(--card-border)] p-1 pb-2 lg:flex-wrap lg:overflow-x-visible"
@@ -3475,7 +3667,6 @@ export function OrderEditForm({
         </div>
       )}
     </div>
-    </MobileCollapsibleSection>
   );
 
   const openShipModalForMark = useCallback(() => {
@@ -3677,6 +3868,15 @@ export function OrderEditForm({
         ) : null}
       </div>
 
+      {isOrderPageFramed ? (
+        <OrderSecondaryTabsSpoiler
+          title="Документооборот-Канбан-История"
+          defaultOpen={isAccountant}
+        >
+          {oeBottomSecondary}
+        </OrderSecondaryTabsSpoiler>
+      ) : null}
+
       {error ? (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
           {error}
@@ -3752,7 +3952,6 @@ export function OrderEditForm({
                 </div>
                 {oeMidProsthetics}
               </div>
-              <div className="min-w-0 lg:col-span-12">{oeBottomSecondary}</div>
             </div>
           ) : (
             <OrderEditPageLayoutGrid
@@ -3767,7 +3966,7 @@ export function OrderEditForm({
                 midConstructions: oeMidConstructions,
                 midCorrections: oeMidCorrections,
                 midProsthetics: oeMidProsthetics,
-                bottomSecondary: oeBottomSecondary,
+                bottomSecondary: null,
               }}
             />
           )}

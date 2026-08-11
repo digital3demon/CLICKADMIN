@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { JawArch } from "@prisma/client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   PriceListPickModal,
   type PriceListPickRow,
@@ -295,11 +295,14 @@ export function OrderConstructionsEditor({
   onChange,
   clinicId,
   doctorId,
+  leadingTile = null,
 }: {
   value: DraftConstructionLine[];
   onChange: (next: DraftConstructionLine[]) => void;
   clinicId?: string | null;
   doctorId?: string | null;
+  /** Плитка перед карточками прайса (депозит и т.п.) */
+  leadingTile?: ReactNode;
 }) {
   const [types, setTypes] = useState<ConstructionTypeRow[]>([]);
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
@@ -629,6 +632,7 @@ export function OrderConstructionsEditor({
             : "grid min-w-0 grid-cols-1 gap-3 pb-1 pt-1"
         }
       >
+        {leadingTile}
         {value.map((row, idx) => {
           if (row.kind !== "priceList") return null;
           const priceEditable = isPriceListUnitPriceEditable({

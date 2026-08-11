@@ -82,12 +82,12 @@ export async function fetchOrderEditInitial(
     order.clinicId
       ? clientsPrisma.clinic.findUnique({
           where: { id: order.clinicId },
-          select: { name: true },
+          select: { name: true, depositBalanceRub: true },
         })
       : Promise.resolve(null),
     clientsPrisma.doctor.findUnique({
       where: { id: order.doctorId },
-      select: { fullName: true },
+      select: { fullName: true, depositBalanceRub: true },
     }),
     order.courierId
       ? clientsPrisma.courier.findUnique({
@@ -231,6 +231,11 @@ export async function fetchOrderEditInitial(
     hasPhoto: order.hasPhoto,
     additionalSourceNotes: order.additionalSourceNotes,
     compositionDiscountPercent: order.compositionDiscountPercent ?? 0,
+    depositAppliedRub: order.depositAppliedRub ?? null,
+    depositAppliedParty: order.depositAppliedParty ?? null,
+    depositBalanceRub: order.clinicId
+      ? (clinic?.depositBalanceRub ?? 0)
+      : (doctor?.depositBalanceRub ?? 0),
     financeCalculated: order.financeCalculated === true,
     constructions: order.constructions.map((c) => ({
       category: c.category,

@@ -11,6 +11,7 @@ import type {
 import {
   findBlockRow,
   moveBlockToRow,
+  rebalanceRow,
   resizeBetweenBlocks,
   setBlockColor,
 } from "@/lib/order-edit-layout-prefs";
@@ -65,7 +66,8 @@ type Props = {
   layout: OrderEditLayoutV1;
   onLayoutChange: (next: OrderEditLayoutV1) => void;
   customizeMode: boolean;
-  blocks: Record<OrderEditBlockId, ReactNode>;
+  /** `bottomSecondary` может быть null — блок закреплён под тулбаром печати. */
+  blocks: Record<OrderEditBlockId, ReactNode | null>;
 };
 
 export function OrderEditPageLayoutGrid({
@@ -206,7 +208,14 @@ export function OrderEditPageLayoutGrid({
         </div>
       ) : null}
       {ROW_KEYS.map((rowKey) => {
-        const row = layout[rowKey];
+        const rawRow = layout[rowKey];
+        /* Документооборот закреплён под тулбаром — не рисуем пустую ячейку в сетке. */
+        const stripped = rawRow.filter((c) => c.id !== "bottomSecondary");
+        if (stripped.length === 0) return null;
+        const row =
+          stripped.length === rawRow.length
+            ? stripped
+            : rebalanceRow(stripped);
         return (
           <div
             key={rowKey}

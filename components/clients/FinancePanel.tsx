@@ -1,5 +1,6 @@
 "use client";
 
+import { DepositFinanceBlock } from "@/components/clients/DepositFinanceBlock";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -549,6 +550,12 @@ export function FinancePanel({
           </div>
         </dl>
       </div>
+
+      <DepositFinanceBlock
+        party="clinic"
+        partyId={clinicId}
+        canEdit={canEditClients}
+      />
 
       <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
         <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">

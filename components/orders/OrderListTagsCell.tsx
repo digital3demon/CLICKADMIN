@@ -138,6 +138,10 @@ type Props = {
   financeCalculated?: boolean | null;
   /** ЭДО клиники (или ИП врача); только в ФинОтделе. */
   clinicWorksWithEdo?: boolean | null;
+  /** Клиника наряда (null — частная практика). */
+  clinicId?: string | null;
+  /** Врач наряда — для пополнения депозита врача. */
+  doctorId?: string | null;
   /** На mobile пилюля колонки Kaiten уже под № наряда — не дублировать в облаке тегов. */
   omitKaitenColumnTag?: boolean;
 };
@@ -270,6 +274,12 @@ type MissingTagAction =
       title: string;
       subtitle?: string;
       kind: "kaitenBlockFlow";
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "deposit";
     };
 
 function buildTagRows(items: TagCloudItem[]): TagCloudItem[][] {
@@ -373,6 +383,8 @@ export function OrderListTagsCell({
   financeCalculated = null,
   clinicWorksWithEdo = null,
   omitKaitenColumnTag = false,
+  clinicId = null,
+  doctorId = null,
 }: Props) {
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
@@ -393,12 +405,20 @@ export function OrderListTagsCell({
   const [urgentOpen, setUrgentOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [depositMode, setDepositMode] = useState(false);
+  const [depositParty, setDepositParty] = useState<"CLINIC" | "DOCTOR" | null>(
+    null,
+  );
+  const [depositAmount, setDepositAmount] = useState("");
 
   const closeAdd = useCallback(() => {
     setAddOpen(false);
     setNewLabel("");
     setBlockReasonDraft("");
     setErr(null);
+    setDepositMode(false);
+    setDepositParty(null);
+    setDepositAmount("");
   }, []);
 
   const closePayment = useCallback(() => {
@@ -746,9 +766,20 @@ export function OrderListTagsCell({
       }),
     );
 
+    if (doctorId || clinicId) {
+      actions.push({
+        id: "deposit-topup",
+        title: "Депозит",
+        subtitle: "Переплата на клинику или врача из этого наряда",
+        kind: "deposit",
+      });
+    }
+
     return actions;
   }, [
     currentPayment,
+    clinicId,
+    doctorId,
     invoiceAttachmentId,
     invoicePrinted,
     invoicePaperDocs,
@@ -846,11 +877,18 @@ export function OrderListTagsCell({
         void submitAdd(action.listTagLabel);
         return;
       }
+      if (action.kind === "deposit") {
+        setDepositMode(true);
+        setDepositParty(clinicId ? "CLINIC" : "DOCTOR");
+        setDepositAmount("");
+        setErr(null);
+        return;
+      }
       setNewLabel(QUICK_TAG_KAITEN_BLOCK_LABEL);
       setBlockReasonDraft("");
       setErr(null);
     },
-    [applyPaymentPatch, applyQuickPatch, paymentPartialRub, printInvoiceAndMark, submitAdd],
+    [applyPaymentPatch, applyQuickPatch, clinicId, paymentPartialRub, printInvoiceAndMark, submitAdd],
   );
 
   const filterListHref = useCallback(
@@ -1351,7 +1389,57 @@ export function OrderListTagsCell({
                 служебная метка «заблокировать» в список тегов не добавляется.
               </p>
             ) : null}
-            {quickSuggestions.length > 0 ? (
+            {depositMode ? (
+              <div className="mt-3 space-y-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Депозит / переплата
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy || !doctorId}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
+                      depositParty === "DOCTOR"
+                        ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)] text-white"
+                        : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--app-text)]"
+                    }`}
+                    onClick={() => setDepositParty("DOCTOR")}
+                  >
+                    Доктор
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || !clinicId}
+                    title={
+                      clinicId
+                        ? undefined
+                        : "В наряде нет клиники (частная практика)"
+                    }
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
+                      depositParty === "CLINIC"
+                        ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)] text-white"
+                        : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--app-text)]"
+                    }`}
+                    onClick={() => setDepositParty("CLINIC")}
+                  >
+                    Клиника
+                  </button>
+                </div>
+                <label className="block text-sm text-[var(--text-body)]">
+                  Сумма, ₽
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-base text-[var(--app-text)]"
+                    placeholder="0"
+                  />
+                </label>
+              </div>
+            ) : null}
+            {quickSuggestions.length > 0 && !depositMode ? (
               <div className="mt-3 max-h-52 space-y-1 overflow-y-auto rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] p-1.5">
                 <p className="px-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                   Действия по наряду
@@ -1391,9 +1479,62 @@ export function OrderListTagsCell({
               </button>
               <button
                 type="button"
-                disabled={busy || !newLabel.trim()}
+                disabled={
+                  busy ||
+                  (depositMode
+                    ? !depositParty ||
+                      !depositAmount.trim() ||
+                      (depositParty === "CLINIC" && !clinicId) ||
+                      (depositParty === "DOCTOR" && !doctorId)
+                    : !newLabel.trim())
+                }
                 className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-base font-medium text-white hover:opacity-95 disabled:opacity-50"
-                onClick={() => void submitAdd(undefined)}
+                onClick={() => {
+                  if (depositMode) {
+                    void (async () => {
+                      const amountRub = Math.round(
+                        Number(String(depositAmount).replace(",", ".")),
+                      );
+                      if (!depositParty || !Number.isFinite(amountRub) || amountRub <= 0) {
+                        setErr("Укажите сторону и сумму больше 0");
+                        return;
+                      }
+                      const path =
+                        depositParty === "CLINIC"
+                          ? `/api/clinics/${clinicId}/deposit`
+                          : `/api/doctors/${doctorId}/deposit`;
+                      setBusy(true);
+                      setErr(null);
+                      try {
+                        const res = await fetch(path, {
+                          method: "POST",
+                          credentials: "include",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            amountRub,
+                            kind: "TOPUP",
+                            note: `Переплата из наряда ${orderId}`,
+                          }),
+                        });
+                        const j = (await res.json().catch(() => ({}))) as {
+                          error?: string;
+                        };
+                        if (!res.ok) {
+                          setErr(j.error ?? "Не удалось внести депозит");
+                          return;
+                        }
+                        closeAdd();
+                        router.refresh();
+                      } catch {
+                        setErr("Сеть недоступна");
+                      } finally {
+                        setBusy(false);
+                      }
+                    })();
+                    return;
+                  }
+                  void submitAdd(undefined);
+                }}
               >
                 {busy ? "…" : "Добавить"}
               </button>

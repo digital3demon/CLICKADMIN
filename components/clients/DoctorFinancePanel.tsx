@@ -1,5 +1,6 @@
 "use client";
 
+import { DepositFinanceBlock } from "@/components/clients/DepositFinanceBlock";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -115,6 +116,12 @@ export function DoctorFinancePanel({
           </div>
         </dl>
       </div>
+
+      <DepositFinanceBlock
+        party="doctor"
+        partyId={doctorId}
+        canEdit={canEditClients}
+      />
 
       <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
         <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">

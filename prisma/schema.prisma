@@ -17,6 +17,20 @@ enum BillingLegalForm {
   OOO
 }
 
+/// Сторона кошелька депозита / переплаты.
+enum DepositParty {
+  CLINIC
+  DOCTOR
+}
+
+/// Тип движения депозита.
+enum DepositLedgerKind {
+  TOPUP
+  APPLY_ORDER
+  WRITE_OFF
+  ADJUST
+}
+
 /// Как часто сверяемся с клиникой (при worksWithReconciliation)
 enum ReconciliationFrequency {
   MONTHLY_1
@@ -136,6 +150,7 @@ model Tenant {
   clickMigFiles                     ClickMigFile[]
   labTasks                          LabTask[]
   tenantApiKeys                     TenantApiKey[]
+  depositLedgerEntries              DepositLedgerEntry[]
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -248,6 +263,9 @@ model Clinic {
   contractorRevisions          ContractorRevision[]
   reconciliationSnapshots      ClinicReconciliationSnapshot[]
   costingProfiles              CostingClientProfile[]
+  depositLedgerEntries         DepositLedgerEntry[]
+  /// Текущий остаток депозита / переплаты (кэш; источник истины — журнал).
+  depositBalanceRub            Int                            @default(0)
   createdAt                    DateTime                       @default(now())
   /// Мягкое удаление: скрыта в списках, восстановление из «Истории»
   deletedAt                    DateTime?
@@ -370,6 +388,9 @@ model Doctor {
   clinicPriceOverrides         DoctorClinicPriceOverride[]
   orders                       Order[]
   contractorRevisions          ContractorRevision[]
+  depositLedgerEntries         DepositLedgerEntry[]
+  /// Текущий остаток депозита / переплаты (кэш; источник истины — журнал).
+  depositBalanceRub            Int                           @default(0)
   createdAt                    DateTime                      @default(now())
   /// Мягкое удаление: скрыта в списках, восстановление из «Истории»
   deletedAt                    DateTime?
@@ -378,6 +399,31 @@ model Doctor {
   telegramMessages             DoctorTelegramMessage[]
 
   @@index([tenantId])
+}
+
+/// Движение депозита / переплаты у клиники или врача.
+model DepositLedgerEntry {
+  id              String            @id @default(cuid())
+  tenantId        String
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  party           DepositParty
+  clinicId        String?
+  clinic          Clinic?           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctorId        String?
+  doctor          Doctor?           @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  /// Со знаком: + пополнение, − списание / учёт в заказе
+  amountRub       Int
+  kind            DepositLedgerKind
+  orderId         String?
+  order           Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  note            String?
+  createdByUserId String?
+  createdByUser   User?             @relation("DepositLedgerCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime          @default(now())
+
+  @@index([tenantId, clinicId, createdAt])
+  @@index([tenantId, doctorId, createdAt])
+  @@index([orderId])
 }
 
 /// Группа Telegram, привязанная к карточке врача (несколько групп на одного доктора).
@@ -802,6 +848,7 @@ model User {
   clientState                      UserClientState[]
   deviceSessions                   UserDeviceSession[]
   doctorMessengerReplies           DoctorMessengerItem[]      @relation("DoctorMessengerReplyAuthor")
+  depositLedgerEntries             DepositLedgerEntry[]       @relation("DepositLedgerCreatedBy")
 
   @@unique([tenantId, email])
   @@index([role])
@@ -1437,6 +1484,10 @@ model Order {
   orderPriceListNote                 String?
   /// Общая скидка на весь «Состав заказа», % (0–100; применяется к сумме строк после скидок по позициям)
   compositionDiscountPercent         Float                      @default(0)
+  /// Сколько депозита / переплаты учтено в этом наряде (целые рубли)
+  depositAppliedRub                  Int?
+  /// С чьего кошелька списан учтённый депозит
+  depositAppliedParty                DepositParty?
   /// ФинОтдел: состав заказа проверен и просчитан
   financeCalculated                  Boolean                    @default(false)
   /// Логическое продолжение другого наряда (после отгрузки / новый этап)
@@ -1488,6 +1539,7 @@ model Order {
   payrollWorkEntries                 PayrollWorkEntry[]
   sourceEmailLinks                   EmailSourceOrder[]
   aiPredictions                      AiOrderPrediction[]
+  depositLedgerEntries               DepositLedgerEntry[]
   /// Мягкое архивирование («удаление»): наряд скрыт из списков и канбана; номер YYMM-NNN снимается (плейхолдер `ARCH:id`), чтобы его можно было выдать другому наряду.
   archivedAt                         DateTime?
   createdAt                          DateTime                   @default(now())

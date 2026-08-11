@@ -1006,6 +1006,8 @@ export default async function OrdersPage({
                     invoiceEdoSigned={o.invoiceEdoSigned}
                     payment={o.payment}
                     paymentPartialRub={o.paymentPartialRub}
+                    clinicId={o.clinic?.id ?? null}
+                    doctorId={o.doctor?.id ?? null}
                     adminShippedOtpr={o.adminShippedOtpr}
                     kaitenBlocked={o.kaitenBlocked === true}
                     kaitenBlockReason={o.kaitenBlockReason}
