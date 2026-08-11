@@ -838,7 +838,7 @@ export function InventoryWarehouseClient() {
           <div className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
             <span id="inv-balances-warehouse">Склад</span>
             <PrefixSearchCombobox
-              ariaLabelledBy="inv-balances-warehouse"
+              aria-labelledby="inv-balances-warehouse"
               options={balancesWarehouseOptions}
               value={balancesWarehouseId}
               onChange={(id) => {
@@ -853,7 +853,7 @@ export function InventoryWarehouseClient() {
           <div className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
             <span id="inv-balances-item">Позиция</span>
             <PrefixSearchCombobox
-              ariaLabelledBy="inv-balances-item"
+              aria-labelledby="inv-balances-item"
               options={balancesItemOptions}
               value={balancesItemId}
               onChange={setBalancesItemId}

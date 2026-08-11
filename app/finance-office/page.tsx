@@ -240,7 +240,8 @@ export default async function FinanceOfficePage({
           </div>
         </div>
         <CorrectionsHistoryActionCard
-          className="aspect-square w-full max-w-[13rem] justify-self-stretch xl:self-end"
+          dense
+          className="w-full max-w-[13rem] justify-self-stretch xl:self-end"
           initialPendingCount={correctionsPendingCount}
           canAcceptCorrections={canAcceptCorrections}
         />
