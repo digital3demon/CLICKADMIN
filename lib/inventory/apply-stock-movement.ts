@@ -21,6 +21,7 @@ function deltaForKind(kind: StockMovementKind, quantity: number): number {
     case "RETURN_IN":
       return quantity;
     case "SALE_ISSUE":
+    case "MANUAL_ISSUE":
     case "ADJUSTMENT_MINUS":
     case "DEFECT_WRITE_OFF":
       return -quantity;
@@ -118,6 +119,7 @@ export async function applyStockMovement(
     }
   } else if (
     kind === "SALE_ISSUE" ||
+    kind === "MANUAL_ISSUE" ||
     kind === "ADJUSTMENT_MINUS" ||
     kind === "DEFECT_WRITE_OFF"
   ) {

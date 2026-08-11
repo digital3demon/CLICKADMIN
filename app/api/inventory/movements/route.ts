@@ -7,6 +7,7 @@ import { applyStockMovement } from "@/lib/inventory/apply-stock-movement";
 import { isStockMovementKind } from "@/lib/inventory/stock-movement-kind-labels";
 import { ensureDefaultWarehouse } from "@/lib/inventory/ensure-default-warehouse";
 import { loadOrderRefsByIds } from "@/lib/inventory/order-lookup";
+import { mirrorStockDeltaToOrderProsthetics } from "@/lib/inventory/mirror-stock-to-order-prosthetics";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 
@@ -145,6 +146,26 @@ export async function POST(req: Request) {
       }),
     );
 
+    /* Расход по наряду со страницы «Склад» → строки «Наше» в протетике наряда. */
+    if (kindRaw === "SALE_ISSUE" && orderId) {
+      const qty = Number(body.quantity);
+      if (Number.isFinite(qty) && qty > 0) {
+        const mirrored = await mirrorStockDeltaToOrderProsthetics({
+          orderId,
+          inventoryItemId: itemId,
+          warehouseId,
+          quantityDelta: qty,
+          markOrdered: true,
+        });
+        if (!mirrored.ok) {
+          console.warn(
+            "[inventory/movements] mirror to order prosthetics:",
+            mirrored.error,
+          );
+        }
+      }
+    }
+
     const movement = await pricingPrisma.stockMovement.findUniqueOrThrow({
       where: { id: result.movementId },
       include: {
@@ -166,6 +187,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ...movement,
       order: movement.orderId ? orderRefs.get(movement.orderId) ?? null : null,
+      orderProstheticsMirrored: kindRaw === "SALE_ISSUE" && Boolean(orderId),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Ошибка";

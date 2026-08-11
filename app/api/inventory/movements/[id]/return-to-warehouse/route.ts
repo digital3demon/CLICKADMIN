@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPricingPrismaClient } from "@/lib/prisma-pricing";
 import { applyStockMovement } from "@/lib/inventory/apply-stock-movement";
 import { loadOrderRefsByIds } from "@/lib/inventory/order-lookup";
+import { mirrorStockDeltaToOrderProsthetics } from "@/lib/inventory/mirror-stock-to-order-prosthetics";
 
 export async function POST(
   _req: Request,
@@ -59,6 +60,21 @@ export async function POST(
         data: { returnedToWarehouseAt: new Date() },
       });
     });
+
+    if (sale.orderId) {
+      const mirrored = await mirrorStockDeltaToOrderProsthetics({
+        orderId: sale.orderId,
+        inventoryItemId: sale.itemId,
+        warehouseId: sale.warehouseId,
+        quantityDelta: -sale.quantity,
+      });
+      if (!mirrored.ok) {
+        console.warn(
+          "[return-to-warehouse] mirror to order prosthetics:",
+          mirrored.error,
+        );
+      }
+    }
 
     const updated = await prisma.stockMovement.findUniqueOrThrow({
       where: { id: movementId },

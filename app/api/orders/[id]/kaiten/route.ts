@@ -181,9 +181,128 @@ function friendlyKaitenLoadError(
   raw: string | null | undefined,
   fallback: string,
 ): string {
-  return kaitenRateLimitMessage(status, raw)
-    ? "Слишком много запросов к Kaiten. Подождите 1–2 минуты и обновите страницу."
-    : raw?.trim() || fallback;
+  if (kaitenRateLimitMessage(status, raw)) {
+    return "Слишком много запросов к Kaiten. Подождите 1–2 минуты и обновите страницу.";
+  }
+  const text = raw?.trim() || "";
+  if (/Position inconsistency/i.test(text)) {
+    return "Kaiten: колонка и дорожка не относятся к одной доске. Выберите дорожку из списка или снова откройте пространство и сохраните.";
+  }
+  return text || fallback;
+}
+
+/**
+ * board/column/lane должны быть согласованы — иначе Kaiten: Position inconsistency.
+ * Если lane не с доски или после смены пространства колонку переопределили без дорожки —
+ * подставляем первую дорожку доски.
+ */
+async function reconcileKaitenPositionPatch(
+  auth: NonNullable<ReturnType<typeof getKaitenRestAuth>>,
+  cardId: number,
+  patch: Record<string, unknown>,
+  opts: {
+    columnExplicit: boolean;
+    laneExplicit: boolean;
+    trackLaneChanged: boolean;
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const needsPos =
+    patch.board_id !== undefined ||
+    patch.column_id !== undefined ||
+    patch.lane_id !== undefined;
+  if (!needsPos) return { ok: true };
+
+  let boardId =
+    typeof patch.board_id === "number" && Number.isFinite(patch.board_id)
+      ? patch.board_id
+      : null;
+
+  let cardLane: number | null = null;
+  if (boardId == null || (!opts.laneExplicit && patch.lane_id === undefined)) {
+    const cardRes = await kaitenGetCard(auth, cardId);
+    if (!cardRes.ok || !cardRes.card) {
+      return {
+        ok: false,
+        error: friendlyKaitenLoadError(
+          cardRes.status,
+          cardRes.error,
+          "Не удалось загрузить карточку Kaiten для проверки позиции",
+        ),
+      };
+    }
+    const card = cardRes.card as Record<string, unknown>;
+    if (boardId == null) {
+      const raw = card.board_id;
+      boardId = typeof raw === "number" ? raw : null;
+    }
+    const ln = card.lane_id;
+    cardLane = typeof ln === "number" ? ln : null;
+  }
+  if (boardId == null) return { ok: true };
+
+  patch.board_id = boardId;
+
+  const lanesRes = await kaitenListBoardLanes(auth, boardId, { burst: true });
+  if (!lanesRes.ok) {
+    return {
+      ok: false,
+      error: friendlyKaitenLoadError(
+        lanesRes.status,
+        lanesRes.error,
+        "Не удалось получить дорожки доски Kaiten",
+      ),
+    };
+  }
+  const laneIds = new Set(lanesRes.lanes.map((l) => l.id));
+  const firstLane = lanesRes.lanes[0]?.id ?? null;
+
+  let lane: number | null =
+    typeof patch.lane_id === "number" && Number.isFinite(patch.lane_id)
+      ? patch.lane_id
+      : null;
+  if (lane == null && !opts.laneExplicit) {
+    lane = cardLane;
+  }
+
+  if (opts.laneExplicit && lane != null && !laneIds.has(lane)) {
+    return {
+      ok: false,
+      error:
+        "Выбранная дорожка не принадлежит этой доске Kaiten. Обновите список и выберите снова.",
+    };
+  }
+
+  const mustResetLane =
+    lane == null ||
+    !laneIds.has(lane) ||
+    (opts.trackLaneChanged && opts.columnExplicit && !opts.laneExplicit);
+
+  if (mustResetLane) {
+    if (firstLane == null) {
+      delete patch.lane_id;
+    } else {
+      patch.lane_id = firstLane;
+    }
+  } else if (typeof patch.column_id === "number" && lane != null) {
+    /* Колонку двигаем — lane должен уйти в том же PATCH. */
+    patch.lane_id = lane;
+  }
+
+  if (typeof patch.column_id === "number") {
+    const cols = await kaitenListBoardColumns(auth, boardId, { burst: true });
+    if (cols.ok) {
+      const colOk = cols.columns.some((c) => c.id === patch.column_id);
+      if (!colOk) {
+        return {
+          ok: false,
+          error:
+            "Выбранная колонка не принадлежит этой доске Kaiten. Снова выберите пространство и колонку.",
+        };
+      }
+    }
+  }
+
+  return { ok: true };
 }
 
 function sleepMs(ms: number): Promise<void> {
@@ -1272,6 +1391,22 @@ export async function PATCH(
     return NextResponse.json({ error: "Нет полей для обновления" }, { status: 400 });
   }
 
+  if (Object.keys(patch).length > 0) {
+    const reconciled = await reconcileKaitenPositionPatch(
+      auth,
+      order.kaitenCardId,
+      patch,
+      {
+        columnExplicit: body.columnId != null || resolvedColumnId != null,
+        laneExplicit: body.laneId !== undefined && body.laneId !== null,
+        trackLaneChanged: body.kaitenTrackLane != null,
+      },
+    );
+    if (!reconciled.ok) {
+      return NextResponse.json({ error: reconciled.error }, { status: 400 });
+    }
+  }
+
   let updated: {
     ok: boolean;
     card: Record<string, unknown> | null;
@@ -1284,7 +1419,13 @@ export async function PATCH(
     });
     if (!updated.ok || !updated.card) {
       return NextResponse.json(
-        { error: updated.error ?? "Kaiten не принял изменения" },
+        {
+          error: friendlyKaitenLoadError(
+            502,
+            updated.error,
+            "Kaiten не принял изменения",
+          ),
+        },
         { status: 502 },
       );
     }

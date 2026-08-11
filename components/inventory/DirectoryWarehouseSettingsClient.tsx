@@ -224,8 +224,10 @@ export function DirectoryWarehouseSettingsClient() {
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
         showBanner(data.error ?? "Ошибка", false);
+        await refresh();
         return;
       }
+      showBanner("Позиция сохранена", true);
       await refresh();
     } finally {
       setBusy(false);
@@ -492,7 +494,9 @@ export function DirectoryWarehouseSettingsClient() {
           Позиция привязана к одному складу. <strong>Поставка</strong> — сколько
           единиц учёта в одной упаковке (например 10 шт в коробке): на странице
           «Склад» можно списывать и поштучно, и поставками; цена закупки всегда
-          указывается за единицу учёта.
+          указывается за единицу учёта. Артикул и наименование в таблице ниже
+          можно править прямо в строке (сохранение при уходе с поля) — так
+          исправляют опечатку без новой позиции с тем же артикулом.
         </p>
 
         <form
@@ -625,8 +629,36 @@ export function DirectoryWarehouseSettingsClient() {
                       }}
                     />
                   </td>
-                  <td className="py-2 pr-2">{it.sku ?? "—"}</td>
-                  <td className="py-2 pr-2 font-medium">{it.name}</td>
+                  <td className="py-2 pr-2">
+                    <input
+                      className="w-full max-w-[110px] rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-1 py-0.5 font-mono text-xs"
+                      defaultValue={it.sku ?? ""}
+                      disabled={busy}
+                      title="Артикул — сохраняется при уходе с поля"
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        const prev = (it.sku ?? "").trim();
+                        if (v === prev) return;
+                        void patchItem(it.id, { sku: v || null });
+                      }}
+                    />
+                  </td>
+                  <td className="py-2 pr-2 font-medium">
+                    <input
+                      className="w-full min-w-[10rem] rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-1 py-0.5 text-xs font-medium text-[var(--app-text)]"
+                      defaultValue={it.name}
+                      disabled={busy}
+                      title="Наименование — сохраняется при уходе с поля"
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (!v || v === it.name.trim()) {
+                          if (!v) e.target.value = it.name;
+                          return;
+                        }
+                        void patchItem(it.id, { name: v });
+                      }}
+                    />
+                  </td>
                   <td className="py-2 pr-2">{it.unit}</td>
                   <td className="py-2 pr-2">
                     <input

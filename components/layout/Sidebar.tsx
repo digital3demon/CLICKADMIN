@@ -22,7 +22,8 @@ import { profileAvatarEmoji } from "@/lib/profile-avatar-presets";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { fontDisplay } from "@/lib/app-fonts";
-import { LogOut } from "lucide-react";
+import { LogOut, Plus } from "lucide-react";
+import { useDesktopSidebarCollapseOptional } from "@/components/layout/desktop-sidebar-collapse";
 
 const WorkdaySunMoon = dynamic(
   () =>
@@ -43,6 +44,7 @@ const WorkdaySunMoon = dynamic(
 export function Sidebar() {
   const uiDesign = useUiDesign();
   const isHarmony = uiDesign === "harmony";
+  const railCollapsed = useDesktopSidebarCollapseOptional()?.collapsed ?? false;
   const router = useRouter();
   const { open: openNewOrder, canOpen, canCreate, createAccessReady } =
     useNewOrderPanel();
@@ -79,12 +81,14 @@ export function Sidebar() {
     <div className="flex h-full min-h-0 min-w-0 w-full flex-col text-[var(--sidebar-text-strong)]">
       <div
         className={
-          isHarmony
-            ? "relative min-w-0 shrink-0 px-5 pb-5 pt-6 shell-short:px-4 shell-short:pb-2 shell-short:pt-4"
-            : "relative min-w-0 shrink-0 px-5 pb-5 pt-6 shell-short:px-4 shell-short:pb-2 shell-short:pt-3"
+          railCollapsed
+            ? "relative min-w-0 shrink-0 px-1.5 pb-3 pt-4"
+            : isHarmony
+              ? "relative min-w-0 shrink-0 px-5 pb-5 pt-6 shell-short:px-4 shell-short:pb-2 shell-short:pt-4"
+              : "relative min-w-0 shrink-0 px-5 pb-5 pt-6 shell-short:px-4 shell-short:pb-2 shell-short:pt-3"
         }
       >
-        {isWorkdaySkyWidgetEnabled() ? (
+        {isWorkdaySkyWidgetEnabled() && !railCollapsed ? (
           <div
             className={
               isHarmony
@@ -111,13 +115,23 @@ export function Sidebar() {
         <Link prefetch={false}
           href="/"
           className={
-            isHarmony
-              ? "relative z-10 mb-8 flex min-w-0 items-center gap-3 outline-offset-2 transition-opacity hover:opacity-80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
-              : "relative z-10 mx-auto block w-full min-w-0 max-w-full text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+            railCollapsed
+              ? "relative z-10 mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--sidebar-blue)] text-white outline-offset-2 transition-opacity hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+              : isHarmony
+                ? "relative z-10 mb-8 flex min-w-0 items-center gap-3 outline-offset-2 transition-opacity hover:opacity-80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+                : "relative z-10 mx-auto block w-full min-w-0 max-w-full text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
           }
           title={`На стартовый экран · ${APP_DISPLAY_NAME}`}
         >
-          {isHarmony ? (
+          {railCollapsed ? (
+            <img
+              src="/favicons/favicon-blue-48.png"
+              alt=""
+              className="h-5 w-5"
+              width={20}
+              height={20}
+            />
+          ) : isHarmony ? (
             <>
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--sidebar-blue)] text-white card-shadow">
                 <img
@@ -177,10 +191,15 @@ export function Sidebar() {
                 ? "Новый заказ"
                 : "Уже 5 окон нового заказа (включая свёрнутые полоски внизу экрана). Закройте лишние или разверните и очистите черновик."
             }
-            className={`${isHarmony ? "pressable" : "pressable-tap"} ${isHarmony ? "mt-3" : "mt-5"} flex w-full items-center justify-between text-white shell-short:mt-2 ${
-              isHarmony
-                ? "rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-wider card-shadow"
-                : "rounded-md px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wide shell-short:px-2 shell-short:py-2 shell-short:text-[9px] shell-short:tracking-[0.06em]"
+            aria-label="Новый заказ"
+            className={`${isHarmony ? "pressable" : "pressable-tap"} ${
+              railCollapsed
+                ? "mx-auto mt-1 flex h-9 w-9 items-center justify-center rounded-xl text-white"
+                : `${isHarmony ? "mt-3" : "mt-5"} flex w-full items-center justify-between text-white shell-short:mt-2 ${
+                    isHarmony
+                      ? "rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-wider card-shadow"
+                      : "rounded-md px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wide shell-short:px-2 shell-short:py-2 shell-short:text-[9px] shell-short:tracking-[0.06em]"
+                  }`
             } transition-colors ${
               !createAccessReady || canOpen
                 ? "cursor-pointer bg-[var(--sidebar-blue)] hover:bg-[var(--sidebar-blue-hover)]"
@@ -190,18 +209,25 @@ export function Sidebar() {
               if (!createAccessReady || canOpen) openNewOrder();
             }}
           >
-            <span className={isHarmony ? "" : "flex-1 text-center"}>Новый заказ</span>
+            {railCollapsed ? (
+              <Plus className="h-5 w-5" aria-hidden />
+            ) : (
+              <span className={isHarmony ? "" : "flex-1 text-center"}>Новый заказ</span>
+            )}
           </button>
         )}
       </div>
 
-      <div className="mx-5 h-px bg-[var(--sidebar-border)]" aria-hidden />
+      <div
+        className={railCollapsed ? "mx-2 h-px bg-[var(--sidebar-border)]" : "mx-5 h-px bg-[var(--sidebar-border)]"}
+        aria-hidden
+      />
 
       <div
         id="sidebar-main-stack"
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
-        {isEffectiveKanbanOnly ? null : (
+        {isEffectiveKanbanOnly || railCollapsed ? null : (
           <div className="shrink-0 px-4 pb-2 pt-1 shell-short:px-3 shell-short:pb-1">
             <CommandPalette />
           </div>
@@ -211,7 +237,7 @@ export function Sidebar() {
           <SidebarNav />
         </Suspense>
 
-        {isEffectiveKanbanOnly ? null : (
+        {isEffectiveKanbanOnly || railCollapsed ? null : (
           <>
             {sessionUser &&
             canAccessSidebarPayments(
@@ -229,11 +255,17 @@ export function Sidebar() {
       </div>
 
       <div
-        className={`mt-auto shrink-0 border-t border-[var(--sidebar-border)] px-3 py-2 ${
-          isHarmony ? "" : "dark:bg-black/25"
-        }`}
+        className={`mt-auto shrink-0 border-t border-[var(--sidebar-border)] ${
+          railCollapsed ? "px-1.5 py-2" : "px-3 py-2"
+        } ${isHarmony ? "" : "dark:bg-black/25"}`}
       >
-        <div className="flex items-center gap-1.5">
+        <div
+          className={
+            railCollapsed
+              ? "flex flex-col items-center gap-1.5"
+              : "flex items-center gap-1.5"
+          }
+        >
           {sessionUser ? (
             <>
               <Link prefetch={false}
@@ -261,25 +293,33 @@ export function Sidebar() {
                   <span aria-hidden>{profileAvatarEmoji(sessionUser.avatarPresetId)}</span>
                 )}
               </Link>
-              <div className="min-w-0 flex-1 leading-tight">
-                <div
-                  className="truncate text-xs font-medium text-[var(--sidebar-text-strong)]"
-                  title={sessionUser.displayName}
-                >
-                  {sessionUser.displayName}
+              {railCollapsed ? null : (
+                <div className="min-w-0 flex-1 leading-tight">
+                  <div
+                    className="truncate text-xs font-medium text-[var(--sidebar-text-strong)]"
+                    title={sessionUser.displayName}
+                  >
+                    {sessionUser.displayName}
+                  </div>
+                  <div
+                    className="truncate text-[10px] text-[var(--text-muted)]"
+                    title={sessionUser.email}
+                  >
+                    {sessionUser.email}
+                  </div>
                 </div>
-                <div
-                  className="truncate text-[10px] text-[var(--text-muted)]"
-                  title={sessionUser.email}
-                >
-                  {sessionUser.email}
-                </div>
-              </div>
+              )}
             </>
           ) : (
-            <div className="min-w-0 flex-1" />
+            railCollapsed ? null : <div className="min-w-0 flex-1" />
           )}
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div
+            className={
+              railCollapsed
+                ? "flex flex-col items-center gap-0.5"
+                : "flex shrink-0 items-center gap-0.5"
+            }
+          >
             <ThemeToggle compact />
             {singleUserMode ? null : (
               <button

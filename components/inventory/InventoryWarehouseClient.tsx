@@ -88,6 +88,7 @@ function canReverseJournalMovement(m: MovementRow): boolean {
   if (m.kind === "SALE_ISSUE") return false;
   return (
     m.kind === "PURCHASE_RECEIPT" ||
+    m.kind === "MANUAL_ISSUE" ||
     m.kind === "ADJUSTMENT_PLUS" ||
     m.kind === "ADJUSTMENT_MINUS" ||
     m.kind === "DEFECT_WRITE_OFF" ||
@@ -130,6 +131,9 @@ export function InventoryWarehouseClient() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [showInactiveItems, setShowInactiveItems] = useState(false);
+  const [balancesQ, setBalancesQ] = useState("");
+  const [balancesWarehouseId, setBalancesWarehouseId] = useState("");
+  const [balancesItemId, setBalancesItemId] = useState("");
   const [returningMovementId, setReturningMovementId] = useState<string | null>(
     null,
   );
@@ -342,6 +346,106 @@ export function InventoryWarehouseClient() {
     () => items.find((x) => x.id === itemId) ?? null,
     [items, itemId],
   );
+
+  const balancesWarehouseOptions = useMemo((): PrefixComboboxOption[] => {
+    const opts: PrefixComboboxOption[] = [
+      { value: "", label: "Все склады", searchPrefixes: ["все", "склад"] },
+    ];
+    for (const w of warehouses) {
+      const type = w.warehouseType?.trim();
+      const label = type ? `${w.name} (${type})` : w.name;
+      opts.push({
+        value: w.id,
+        label,
+        searchPrefixes: [
+          w.name,
+          type ?? "",
+          ...comboboxSearchPrefixesFromText(w.name, type),
+        ].filter(Boolean) as string[],
+      });
+    }
+    return opts;
+  }, [warehouses]);
+
+  const balancesItemOptions = useMemo((): PrefixComboboxOption[] => {
+    const opts: PrefixComboboxOption[] = [
+      {
+        value: "",
+        label: "Все позиции",
+        searchPrefixes: ["все", "позиция"],
+      },
+    ];
+    let list = showInactiveItems ? items : items.filter((x) => x.isActive);
+    if (balancesWarehouseId) {
+      list = list.filter((x) => x.warehouseId === balancesWarehouseId);
+    }
+    const seen = new Set<string>();
+    for (const it of list) {
+      if (seen.has(it.id)) continue;
+      seen.add(it.id);
+      const sku = it.sku?.trim();
+      const inactive = !it.isActive ? " (снята с учёта)" : "";
+      const label = `${sku ? `${sku} · ` : ""}${it.name}${inactive}`;
+      opts.push({
+        value: it.id,
+        label,
+        searchPrefixes: [
+          it.name,
+          sku ?? "",
+          it.manufacturer?.trim() ?? "",
+          ...comboboxSearchPrefixesFromText(it.name, sku, it.manufacturer),
+        ].filter(Boolean) as string[],
+      });
+    }
+    return opts;
+  }, [items, balancesWarehouseId, showInactiveItems]);
+
+  useEffect(() => {
+    if (
+      balancesItemId &&
+      !balancesItemOptions.some((o) => o.value === balancesItemId)
+    ) {
+      setBalancesItemId("");
+    }
+  }, [balancesItemOptions, balancesItemId]);
+
+  const filteredBalances = useMemo(() => {
+    const activeItemIds = showInactiveItems
+      ? null
+      : new Set(items.filter((x) => x.isActive).map((x) => x.id));
+    let rows = balances;
+    if (activeItemIds) {
+      rows = rows.filter((r) => activeItemIds.has(r.item.id));
+    }
+    if (balancesWarehouseId) {
+      rows = rows.filter((r) => r.warehouse.id === balancesWarehouseId);
+    }
+    if (balancesItemId) {
+      rows = rows.filter((r) => r.item.id === balancesItemId);
+    }
+    const q = balancesQ.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((r) => {
+        const hay = [
+          r.warehouse.name,
+          r.item.name,
+          r.item.sku ?? "",
+          r.item.manufacturer ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    return rows;
+  }, [
+    balances,
+    items,
+    showInactiveItems,
+    balancesWarehouseId,
+    balancesItemId,
+    balancesQ,
+  ]);
 
   useEffect(() => {
     if (kind !== "PURCHASE_RECEIPT") {
@@ -719,6 +823,46 @@ export function InventoryWarehouseClient() {
             Показывать снятые с учёта
           </label>
         </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)] sm:col-span-2 lg:col-span-1">
+            <span>Поиск</span>
+            <input
+              type="search"
+              value={balancesQ}
+              onChange={(e) => setBalancesQ(e.target.value)}
+              placeholder="Название, артикул, склад…"
+              className={invComboboxClass}
+              autoComplete="off"
+            />
+          </label>
+          <div className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
+            <span id="inv-balances-warehouse">Склад</span>
+            <PrefixSearchCombobox
+              ariaLabelledBy="inv-balances-warehouse"
+              options={balancesWarehouseOptions}
+              value={balancesWarehouseId}
+              onChange={(id) => {
+                setBalancesWarehouseId(id);
+                setBalancesItemId("");
+              }}
+              placeholder="Все склады"
+              emptyHint="Нет складов"
+              className={invComboboxClass}
+            />
+          </div>
+          <div className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
+            <span id="inv-balances-item">Позиция</span>
+            <PrefixSearchCombobox
+              ariaLabelledBy="inv-balances-item"
+              options={balancesItemOptions}
+              value={balancesItemId}
+              onChange={setBalancesItemId}
+              placeholder="Все позиции"
+              emptyHint="Нет позиций"
+              className={invComboboxClass}
+            />
+          </div>
+        </div>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
@@ -730,7 +874,7 @@ export function InventoryWarehouseClient() {
               </tr>
             </thead>
             <tbody>
-              {balances.map((r) => (
+              {filteredBalances.map((r) => (
                 <tr key={r.id} className="border-b border-[var(--border-subtle)]">
                   <td className="py-2 pr-3 text-[var(--text-body)]">{r.warehouse.name}</td>
                   <td className="py-2 pr-3">
@@ -750,8 +894,12 @@ export function InventoryWarehouseClient() {
               ))}
             </tbody>
           </table>
-          {balances.length === 0 ? (
-            <p className="mt-3 text-sm text-[var(--text-muted)]">Нет строк остатков.</p>
+          {filteredBalances.length === 0 ? (
+            <p className="mt-3 text-sm text-[var(--text-muted)]">
+              {balances.length === 0
+                ? "Нет строк остатков."
+                : "Нет строк по выбранным фильтрам."}
+            </p>
           ) : null}
         </div>
         {itemsNeverTouched.length > 0 ? (

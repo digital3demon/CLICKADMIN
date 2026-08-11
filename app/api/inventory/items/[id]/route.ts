@@ -38,10 +38,17 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
           warehouseId: existing.warehouseId,
           NOT: { id: id.trim() },
         },
-        select: { id: true },
+        select: { id: true, isActive: true },
       });
       if (taken) {
-        return NextResponse.json({ error: "На этом складе артикул уже занят" }, { status: 409 });
+        return NextResponse.json(
+          {
+            error: taken.isActive
+              ? "На этом складе артикул уже занят"
+              : "Артикул занят позицией, снятой с учёта",
+          },
+          { status: 409 },
+        );
       }
     }
 

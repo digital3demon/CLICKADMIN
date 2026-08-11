@@ -3,10 +3,16 @@
 import type { CSSProperties, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { OrderCorrectionToastStack } from "@/components/orders/OrderCorrectionToastStack";
 import { OrderBackgroundUploadToast } from "@/components/orders/OrderBackgroundUploadToast";
 import { isPublicStickerHubPath } from "@/lib/sticker-public-path";
 import { MobileNavProvider, useMobileNav } from "@/components/layout/mobile-nav";
+import {
+  DesktopSidebarCollapseProvider,
+  useDesktopSidebarCollapse,
+} from "@/components/layout/desktop-sidebar-collapse";
+import { APP_SIDEBAR_W_COLLAPSED } from "@/lib/app-sidebar-collapse";
 import { Sidebar } from "./Sidebar";
 
 const SIDEBAR_W_CLASSIC = "calc(100% / 7)";
@@ -48,6 +54,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
     closeMobileNav,
     titleAsMenu,
   } = useMobileNav();
+  const { collapsed, toggleCollapsed } = useDesktopSidebarCollapse();
 
   useEffect(() => {
     closeMobileNav();
@@ -74,12 +81,15 @@ function AppShellChrome({ children }: { children: ReactNode }) {
     };
   }, [mobileNavOpen]);
 
+  const sidebarW = collapsed ? APP_SIDEBAR_W_COLLAPSED : SIDEBAR_W_CLASSIC;
+
   return (
     <div
       className="min-h-screen w-full"
+      data-sidebar-collapsed={collapsed ? "1" : "0"}
       style={
         {
-          "--app-sidebar-w": SIDEBAR_W_CLASSIC,
+          "--app-sidebar-w": sidebarW,
           "--app-mobile-menu-inset": MOBILE_MENU_INSET,
         } as CSSProperties
       }
@@ -125,12 +135,28 @@ function AppShellChrome({ children }: { children: ReactNode }) {
 
       <aside
         id="app-primary-nav"
-        className={`fixed left-0 top-0 z-[70] flex h-[100dvh] min-w-0 flex-col overflow-x-hidden border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shadow-[4px_0_24px_rgba(0,0,0,0.12)] transition-transform duration-200 ease-out dark:shadow-[4px_0_28px_rgba(0,0,0,0.45)] shell-desktop:translate-x-0 shell-desktop:shadow-none ${
+        className={`fixed left-0 top-0 z-[70] flex h-[100dvh] min-w-0 flex-col overflow-x-hidden border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shadow-[4px_0_24px_rgba(0,0,0,0.12)] transition-[transform,width] duration-200 ease-out dark:shadow-[4px_0_28px_rgba(0,0,0,0.45)] shell-desktop:translate-x-0 shell-desktop:shadow-none ${
           mobileNavOpen ? "translate-x-0" : "-translate-x-full shell-desktop:translate-x-0"
         } w-[min(20rem,calc(100vw-2.5rem))] shell-desktop:w-[var(--app-sidebar-w)]`}
         aria-label="Основное меню"
       >
         <Sidebar />
+        <button
+          type="button"
+          className="absolute top-1/2 z-[71] hidden h-8 w-5 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-sm transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] shell-desktop:flex"
+          style={{ left: "100%" }}
+          aria-expanded={!collapsed}
+          aria-controls="app-primary-nav"
+          aria-label={collapsed ? "Развернуть меню" : "Свернуть меню"}
+          title={collapsed ? "Развернуть меню" : "Свернуть меню"}
+          onClick={toggleCollapsed}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+          )}
+        </button>
       </aside>
 
       <OrderCorrectionToastStack />
@@ -145,6 +171,7 @@ type AppShellProps = {
 
 /**
  * Десктоп (shell-desktop = ширина ≥1024px и высота ≥560px): колонка меню 1/7, контент 6/7.
+ * Узкое окно (<1400px): меню само сворачивается в рельс; вручную — кнопка на краю.
  * Иначе — выезжающее меню и «гамбургер», как на телефоне (узкое окно или низкая высота).
  */
 export function AppShell({ children }: AppShellProps) {
@@ -162,7 +189,9 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <MobileNavProvider open={mobileNavOpen} setOpen={setMobileNavOpen}>
-      <AppShellChrome>{children}</AppShellChrome>
+      <DesktopSidebarCollapseProvider>
+        <AppShellChrome>{children}</AppShellChrome>
+      </DesktopSidebarCollapseProvider>
     </MobileNavProvider>
   );
 }

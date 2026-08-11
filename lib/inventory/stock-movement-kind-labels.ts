@@ -1,5 +1,6 @@
 export const STOCK_MOVEMENT_KIND_LABELS = {
   PURCHASE_RECEIPT: "Приход (закупка)",
+  MANUAL_ISSUE: "Расход",
   SALE_ISSUE: "Расход по наряду",
   ADJUSTMENT_PLUS: "Корректировка +",
   ADJUSTMENT_MINUS: "Корректировка −",

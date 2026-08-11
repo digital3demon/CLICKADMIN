@@ -3,8 +3,10 @@ import { PublicStickerHubActions } from "@/components/sticker/PublicStickerHubAc
 import { PublicStickerOrderStatusPillsView } from "@/components/sticker/PublicStickerOrderStatusPills";
 import { PublicStickerReceivedPhotos } from "@/components/sticker/PublicStickerReceivedPhotos";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { loadPublicStickerClientView } from "@/lib/load-public-sticker-client-view";
-import { resolveStickerEmployeesHref } from "@/lib/sticker-public-employee-href";
+import { orderPathById } from "@/lib/order-public-ref";
+import { isStickerStaffSessionUnlocked, canMarkWorkSentOnStickerHub } from "@/lib/sticker-public-employee-href";
 import { resolveStickerOrderBySlugAndToken } from "@/lib/sticker-public-order-resolve";
 
 export const dynamic = "force-dynamic";
@@ -40,12 +42,13 @@ export default async function StickerPublicHubPage({
   if (!data) notFound();
 
   const session = await getSessionFromCookies();
-  const employeesHref = await resolveStickerEmployeesHref({
+  const staffUnlocked = await isStickerStaffSessionUnlocked({
     session,
     stickerTenantId: resolved.tenantId,
-    orderId: resolved.orderId,
-    tenantSlug,
-    token,
+  });
+  const canMarkWorkSent = await canMarkWorkSentOnStickerHub({
+    session,
+    stickerTenantId: resolved.tenantId,
   });
 
   return (
@@ -88,9 +91,14 @@ export default async function StickerPublicHubPage({
         <PublicStickerHubActions
           tenantSlug={tenantSlug}
           token={token}
+          orderId={resolved.orderId}
           orderNumber={data.orderNumber}
           sourceEmailCount={data.sourceEmailCount}
-          employeesHref={employeesHref}
+          staffUnlocked={staffUnlocked}
+          canMarkWorkSent={canMarkWorkSent}
+          orderHref={orderPathById(resolved.orderId)}
+          kanbanHref={kanbanOrderDeepLinkPath(resolved.orderId)}
+          workSent={data.workSent}
         />
       </div>
     </div>

@@ -45,6 +45,8 @@ export type PublicStickerClientView = {
   hubPhotos: PublicStickerHubPhoto[];
   /** Число писем, из которых занесён наряд (EmailSourceOrder). */
   sourceEmailCount: number;
+  /** Отметка «работа отправлена» (для меню сотрудников на QR-витрине). */
+  workSent: boolean;
 };
 
 const HUB_PHOTOS_MAX = 36;
@@ -183,5 +185,6 @@ export async function loadPublicStickerClientView(
     orderStatus,
     hubPhotos,
     sourceEmailCount: order._count?.sourceEmailLinks ?? 0,
+    workSent: Boolean(order.adminShippedOtpr),
   };
 }

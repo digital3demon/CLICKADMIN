@@ -637,6 +637,9 @@ export function OrderKaitenTab({
       }
       if (laneId !== "") {
         body.laneId = laneId;
+      } else if (columnId !== "" && laneOptions[0]?.id != null) {
+        /* «—» + колонка: иначе на сервер уходит lane от пространства и Kaiten даёт Position inconsistency. */
+        body.laneId = laneOptions[0].id;
       }
       if (cardTypeDirty) {
         const typeId = String(createKaitenCardTypeId).trim();

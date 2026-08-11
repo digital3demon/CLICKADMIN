@@ -80,11 +80,15 @@ export async function POST(req: Request) {
     if (sku) {
       const taken = await prisma.inventoryItem.findFirst({
         where: { warehouseId, sku },
-        select: { id: true },
+        select: { id: true, isActive: true },
       });
       if (taken) {
         return NextResponse.json(
-          { error: "На этом складе артикул уже занят" },
+          {
+            error: taken.isActive
+              ? "На этом складе артикул уже занят"
+              : "Этот артикул уже у позиции, снятой с учёта. Исправьте наименование в таблице ниже или нажмите «Вернуть» — новую с тем же артикулом создавать не нужно.",
+          },
           { status: 409 },
         );
       }

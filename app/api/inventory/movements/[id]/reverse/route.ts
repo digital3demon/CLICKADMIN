@@ -68,6 +68,9 @@ export async function POST(
       case "DEFECT_WRITE_OFF":
         compensatingKind = "ADJUSTMENT_PLUS";
         break;
+      case "MANUAL_ISSUE":
+        compensatingKind = "ADJUSTMENT_PLUS";
+        break;
       case "RETURN_IN":
         compensatingKind = "ADJUSTMENT_MINUS";
         break;

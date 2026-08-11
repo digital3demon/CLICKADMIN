@@ -18,6 +18,7 @@ import {
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { sidebarNavIconForHref } from "@/lib/sidebar-nav-icons";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
+import { useDesktopSidebarCollapseOptional } from "@/components/layout/desktop-sidebar-collapse";
 function isNavActive(pathname: string, href: string): boolean {
   if (href === "/orders") {
     return (
@@ -362,20 +363,60 @@ export function SidebarNav() {
 
   const uiDesign = useUiDesign();
   const isHarmony = uiDesign === "harmony";
+  const railCollapsed = useDesktopSidebarCollapseOptional()?.collapsed ?? false;
 
   return (
     <nav
       className={
-        isHarmony
-          ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-3 pt-3 custom-scrollbar shell-short:px-2"
-          : "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-5 pb-3 pt-5 shell-short:px-4 shell-short:pb-2 shell-short:pt-3"
+        railCollapsed
+          ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 pb-2 pt-2 custom-scrollbar"
+          : isHarmony
+            ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-3 pt-3 custom-scrollbar shell-short:px-2"
+            : "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-5 pb-3 pt-5 shell-short:px-4 shell-short:pb-2 shell-short:pt-3"
       }
       aria-label="Разделы"
     >
-      <ul className={isHarmony ? "flex flex-col gap-1" : "flex flex-col gap-0"}>
+      <ul className={railCollapsed || isHarmony ? "flex flex-col gap-1" : "flex flex-col gap-0"}>
         {orderedNav.map((item, index) => {
           const active = isNavActive(pathname, item.href);
-          const Icon = isHarmony ? sidebarNavIconForHref(item.href) : null;
+          const Icon = sidebarNavIconForHref(item.href);
+          const badge =
+            item.href === "/mail" && mailUnreadCount > 0
+              ? mailUnreadCount
+              : item.href === "/clickmig" && clickMigPendingCount > 0
+                ? clickMigPendingCount
+                : 0;
+
+          if (railCollapsed) {
+            return (
+              <li key={item.href} className="list-none">
+                <Link
+                  prefetch={false}
+                  href={item.href}
+                  title={item.label}
+                  aria-label={item.label}
+                  className={[
+                    "relative mx-auto flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+                    active
+                      ? "bg-[color-mix(in_srgb,var(--sidebar-blue)_16%,transparent)] text-[var(--sidebar-blue)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]",
+                  ].join(" ")}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {Icon ? (
+                    <Icon className="h-5 w-5 shrink-0" aria-hidden />
+                  ) : (
+                    <span className="text-[10px] font-semibold">{item.label.slice(0, 2)}</span>
+                  )}
+                  {badge > 0 ? (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--sidebar-blue)] px-1 text-[9px] font-bold tabular-nums text-white">
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  ) : null}
+                </Link>
+              </li>
+            );
+          }
 
           if (isHarmony) {
             return (

@@ -11,6 +11,7 @@ import {
   Users,
   Wallet,
   Bot,
+  Zap,
 } from "lucide-react";
 
 const NAV_ICON_BY_HREF: Record<string, LucideIcon> = {
@@ -25,6 +26,7 @@ const NAV_ICON_BY_HREF: Record<string, LucideIcon> = {
   "/warehouse": Package,
   "/clients": Users,
   "/directory": Settings,
+  "/clickmig": Zap,
 };
 
 export function sidebarNavIconForHref(href: string): LucideIcon | null {
