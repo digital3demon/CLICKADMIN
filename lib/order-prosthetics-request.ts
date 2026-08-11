@@ -13,3 +13,17 @@ export function isOrderProstheticsRequestTrigger(raw: string): boolean {
 export function stripOrderProstheticsRequestPrefix(raw: string): string | null {
   return stripOrderChatTriggerPrefixKeepFullMessage(raw, PREFIX);
 }
+
+/**
+ * Текст заявки для UI: без маркера «???» (в т.ч. если в БД остался префикс или отдельная строка).
+ */
+export function formatProstheticsRequestTextForDisplay(raw: string): string {
+  const stripped = stripOrderProstheticsRequestPrefix(raw);
+  const base = (stripped ?? raw).replace(/\uFEFF/g, "");
+  return base
+    .split("\n")
+    .map((line) => line.replace(/^\s*\?{3}\s*/u, "").trimEnd())
+    .join("\n")
+    .replace(/^\s*\n+/, "")
+    .trim();
+}

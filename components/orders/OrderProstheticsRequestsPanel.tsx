@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { PROSTHETICS_ARRIVED_STATUS_LABEL } from "@/lib/corrections-history";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatOrderChatSourceCaption } from "@/lib/order-chat-trigger-author";
+import { formatProstheticsRequestTextForDisplay } from "@/lib/order-prosthetics-request";
 
 export type OrderProstheticsRequestInitial = {
   id: string;
@@ -279,7 +280,7 @@ export function OrderProstheticsRequestsPanel({
           >
             <div className="min-w-0 flex-1">
               <p className="whitespace-pre-wrap text-[var(--text-body)]">
-                {c.text}
+                {formatProstheticsRequestTextForDisplay(c.text)}
               </p>
               <p className="mt-0.5 text-[0.65rem] text-[var(--text-muted)]">
                 {srcLabel(c)}
@@ -344,7 +345,7 @@ export function OrderProstheticsRequestsPanel({
                   key={c.id}
                   className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)]/60 px-2 py-1 text-xs text-[var(--text-secondary)]"
                 >
-                  <p className="whitespace-pre-wrap">{c.text}</p>
+                  <p className="whitespace-pre-wrap">{formatProstheticsRequestTextForDisplay(c.text)}</p>
                   <p className="mt-0.5 text-[0.6rem] text-[var(--text-muted)]">
                     {srcLabel(c)}
                   </p>

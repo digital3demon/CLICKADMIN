@@ -17,6 +17,7 @@ import type {
 import type { ProstheticsProgressStep } from "@/lib/prosthetics-in-transit-step";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
+import { formatProstheticsRequestTextForDisplay } from "@/lib/order-prosthetics-request";
 import { CorrectionsHistoryActionCard } from "@/components/orders/CorrectionsHistoryActionCard";
 import { LabTasksActionCard } from "@/components/orders/LabTasksActionCard";
 import { ProstheticsWarehouseEditPanel } from "@/components/orders/ProstheticsWarehouseEditPanel";
@@ -515,7 +516,7 @@ export function OrdersListHeaderActionCards({
                               </p>
                             ) : null}
                             <p className="mt-1 min-w-0 whitespace-pre-wrap break-words text-sm text-[var(--text-body)]">
-                              {row.text}
+                              {formatProstheticsRequestTextForDisplay(row.text)}
                             </p>
                           </div>
                           {canMarkArrived ? (

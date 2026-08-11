@@ -437,8 +437,41 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const lastArchiveSettingsSigRef = useRef("");
   /** Перед первым GET отдаём локальные карточки без наряда на сервер — иначе пустой ответ затрёт их. */
   const standalonePrimedRef = useRef(false);
+  /**
+   * Оптимистичные переносы колонок: пока Kaiten/БД догоняют, merge не должен
+   * откатывать карточку на старый `kaitenColumnTitle` из снимка.
+   */
+  const optimisticKaitenColumnMovesRef = useRef(
+    new Map<
+      string,
+      { columnTitle?: string; sortOrder: number; until: number }
+    >(),
+  );
   const router = useRouter();
   const pathname = usePathname() ?? "/kanban";
+
+  const applyOptimisticKaitenMovesToLinkedRows = useCallback(
+    (rows: KaitenLinkedOrderForKanban[]) => {
+      const now = Date.now();
+      const map = optimisticKaitenColumnMovesRef.current;
+      for (const [orderId, opt] of map) {
+        if (now >= opt.until) map.delete(orderId);
+      }
+      if (map.size === 0) return rows;
+      return rows.map((row) => {
+        const opt = map.get(row.id);
+        if (!opt) return row;
+        return {
+          ...row,
+          ...(opt.columnTitle?.trim()
+            ? { kaitenColumnTitle: opt.columnTitle.trim() }
+            : {}),
+          kaitenCardSortOrder: opt.sortOrder,
+        };
+      });
+    },
+    [],
+  );
 
   /** Наряды с сервера + локальные карточки без наряда (общие для тенанта). */
   const syncKanbanMirrorFromApi = useCallback(async () => {
@@ -540,7 +573,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       ]);
       if (!rLinked.ok) return;
       const jL = (await rLinked.json()) as { orders?: KaitenLinkedOrderForKanban[] };
-      const linkedRows = jL.orders ?? [];
+      const linkedRows = applyOptimisticKaitenMovesToLinkedRows(jL.orders ?? []);
       let standaloneRows: StandaloneRow[] = [];
       if (rStandalone.ok) {
         const jS = (await rStandalone.json()) as { rows?: StandaloneRow[] };
@@ -566,7 +599,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         }, 120);
       }
     }
-  }, [isDemo]);
+  }, [isDemo, applyOptimisticKaitenMovesToLinkedRows]);
 
   useEffect(() => {
     if (!appState || isDemo || !kanbanStateReady) return;
@@ -1241,6 +1274,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       kaitenTrackLane?: KaitenTrackLane;
       sortOrder: number;
     }) => {
+      /* UI уже обновлён локально — Kaiten в фоне; защищаем merge от отката. */
+      optimisticKaitenColumnMovesRef.current.set(args.orderId, {
+        columnTitle: args.columnTitle,
+        sortOrder: args.sortOrder,
+        until: Date.now() + 45_000,
+      });
       try {
         const body: Record<string, unknown> = { sortOrder: args.sortOrder };
         const col = args.columnTitle?.trim();
@@ -1256,6 +1295,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         });
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) {
+          optimisticKaitenColumnMovesRef.current.delete(args.orderId);
           showToast(
             data.error ??
               "Не удалось перенести карточку в Kaiten (проверьте название колонки на доске).",
@@ -1264,8 +1304,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           void syncKanbanMirrorFromApi();
           return;
         }
-        void syncKanbanMirrorFromApi();
+        /* Успех: не дёргаем полный mirror-sync — доска уже в нужном состоянии. */
+        optimisticKaitenColumnMovesRef.current.set(args.orderId, {
+          columnTitle: args.columnTitle,
+          sortOrder: args.sortOrder,
+          until: Date.now() + 12_000,
+        });
       } catch {
+        optimisticKaitenColumnMovesRef.current.delete(args.orderId);
         showToast("Сеть: колонка в Kaiten могла не обновиться", true);
         void syncKanbanMirrorFromApi();
       }
@@ -2382,11 +2428,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               onLinkedOrderMovedToKaitenMirror={
                 isDemo
                   ? undefined
-                  : (args) =>
-                      syncKaitenMirrorAfterKanbanMove({
+                  : (args) => {
+                      void syncKaitenMirrorAfterKanbanMove({
                         ...args,
                         kaitenTrackLane: kaitenLaneForKanbanBoardId(board.id),
-                      })
+                      });
+                    }
               }
               onCardColumnChanged={({ cardId, toColumnId }) => {
                 let productionTelegramCreates: Array<{
