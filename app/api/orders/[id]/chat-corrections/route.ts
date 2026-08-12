@@ -50,6 +50,8 @@ export async function GET(
 
   let liveRateLimited = false;
   let labMentionDbChanged = false;
+  let importedCorrections = 0;
+  let importedProsthetics = 0;
   if (order.kaitenCardId != null) {
     try {
       const live = await syncOrderChatCorrectionsFromKaitenLive(
@@ -60,6 +62,8 @@ export async function GET(
       );
       liveRateLimited = live.rateLimited;
       labMentionDbChanged = live.labMentionDbChanged;
+      importedCorrections = live.importedCorrections;
+      importedProsthetics = live.importedProsthetics;
     } catch (e) {
       console.error("[chat-corrections GET] live Kaiten sync", e);
     }
@@ -87,6 +91,8 @@ export async function GET(
     {
       corrections,
       labMentionDbChanged,
+      importedCorrections,
+      importedProsthetics,
       ...(liveRateLimited
         ? {
             rateLimited: true,

@@ -263,15 +263,6 @@ html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="b
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--status-red) 75%, transparent);
 }
 
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="attention"] {
-  background: color-mix(in srgb, #f59e0b 18%, var(--card-bg)) !important;
-  box-shadow: inset 3px 0 0 #f59e0b;
-}
-
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="attention"] > td {
-  background: color-mix(in srgb, #f59e0b 18%, var(--card-bg)) !important;
-}
-
 html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="prosthetics-pending"] {
   background: color-mix(in srgb, #0ea5e9 18%, var(--card-bg)) !important;
   box-shadow: inset 3px 0 0 #0ea5e9;
@@ -279,15 +270,6 @@ html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="p
 
 html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="prosthetics-pending"] > td {
   background: color-mix(in srgb, #0ea5e9 18%, var(--card-bg)) !important;
-}
-
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="prosthetics-ordered"] {
-  background: color-mix(in srgb, #10b981 16%, var(--card-bg)) !important;
-  box-shadow: inset 3px 0 0 #10b981;
-}
-
-html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="prosthetics-ordered"] > td {
-  background: color-mix(in srgb, #10b981 16%, var(--card-bg)) !important;
 }
 
 html[data-ui="harmony"] .orders-harmony-table-shell tbody tr[data-harmony-row="shipped"] {

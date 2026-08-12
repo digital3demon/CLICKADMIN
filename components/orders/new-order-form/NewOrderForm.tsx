@@ -311,7 +311,7 @@ export function NewOrderForm({
     }
     return workReceivedLocalFromSourceEmails(sourceEmails);
   });
-  const [labWholeDay, setLabWholeDay] = useState(true);
+  const [labWholeDay, setLabWholeDay] = useState(false);
   const [appointmentMode, setAppointmentMode] =
     useState<AppointmentTimeMode>("noReception");
   const [formOpenedAtIso] = useState(() => new Date().toISOString());

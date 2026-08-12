@@ -111,6 +111,7 @@ export function FinanceOfficeBankImportPanel({
     <section
       className={[
         "rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm",
+        compact ? "flex min-h-[3.25rem] flex-col" : "",
         rows.length > 0 ? "col-span-2 xl:col-span-2" : "",
         className,
       ]
@@ -120,7 +121,7 @@ export function FinanceOfficeBankImportPanel({
       <div
         className={
           compact
-            ? "rounded-lg bg-[var(--surface-subtle)] p-1.5"
+            ? "flex min-h-0 flex-1 flex-col rounded-lg bg-[var(--surface-subtle)] p-1"
             : "rounded-lg bg-[var(--surface-subtle)] p-2.5"
         }
         onDragOver={(e) => {
@@ -137,7 +138,7 @@ export function FinanceOfficeBankImportPanel({
         <div
           className={
             compact
-              ? "flex min-h-[3.25rem] flex-col items-center justify-center rounded-lg border border-dashed border-[var(--card-border)] px-2 py-1.5 text-center outline-none transition-colors focus-within:border-[var(--sidebar-blue)] focus-within:ring-2 focus-within:ring-[var(--sidebar-blue)]/25"
+              ? "flex min-h-[3.25rem] flex-1 flex-col items-center justify-center rounded-md border border-dashed border-[var(--card-border)] px-2 py-1 text-center outline-none transition-colors focus-within:border-[var(--sidebar-blue)] focus-within:ring-2 focus-within:ring-[var(--sidebar-blue)]/25"
               : "rounded-xl border-2 border-dashed border-[var(--card-border)] px-4 py-4 text-center outline-none transition-colors focus-within:border-[var(--sidebar-blue)] focus-within:ring-2 focus-within:ring-[var(--sidebar-blue)]/25"
           }
         >
@@ -164,11 +165,7 @@ export function FinanceOfficeBankImportPanel({
                 ? "Выбрать файлы · Ctrl+V"
                 : "Выбрать файлы · Ctrl+V"}
           </button>
-          {compact ? (
-            <p className="mt-0.5 text-[10px] leading-tight text-[var(--text-muted)]">
-              Перетащите или вставьте из буфера
-            </p>
-          ) : (
+          {compact ? null : (
             <p className="mt-2 text-xs leading-snug text-[var(--text-muted)]">
               Перетащите файл в рамку или сфокусируйте её (Tab) и вставьте из
               буфера
@@ -188,6 +185,10 @@ export function FinanceOfficeBankImportPanel({
                 Перечитать
               </button>
             </div>
+          ) : compact ? (
+            <p className="mt-0.5 text-[10px] leading-tight text-[var(--text-muted)]">
+              Перетащите или Ctrl+V
+            </p>
           ) : null}
         </div>
         {error ? (

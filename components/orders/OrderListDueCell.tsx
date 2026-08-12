@@ -173,7 +173,11 @@ export function OrderListDueCell({
         const res = await fetch(`/api/orders/${orderId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dueDate: nextIso }),
+          body: JSON.stringify({
+            dueDate: nextIso,
+            /** Список предлагает только слоты времени — в шапке Kaiten нужен HH:mm. */
+            kaitenAdminDueHasTime: nextIso != null,
+          }),
         });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(j.error ?? "Ошибка сохранения");

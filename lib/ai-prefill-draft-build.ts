@@ -117,7 +117,7 @@ export function emptyVirtualOrderDraftSnapshot(): OrderDraftSnapshot {
     labWorkStatus: LAB_WORK_STATUS_DEFAULT,
     workDueLocal: "",
     patientAppointmentLocal: "",
-    labWholeDay: true,
+    labWholeDay: false,
     appointmentWholeDay: true,
     workReceivedLocal: "",
     quickOrder: mergeQuickOrderFromSnapshot(),
@@ -226,7 +226,7 @@ export function buildVirtualOrderDraftFromPrediction(
     workDueLocal,
     patientAppointmentLocal,
     workReceivedLocal,
-    labWholeDay: workDueLocal.trim() ? wholeDayFromDueLocal(workDueLocal) : true,
+    labWholeDay: workDueLocal.trim() ? wholeDayFromDueLocal(workDueLocal) : false,
     appointmentWholeDay: patientAppointmentLocal.trim()
       ? wholeDayFromDueLocal(patientAppointmentLocal)
       : true,

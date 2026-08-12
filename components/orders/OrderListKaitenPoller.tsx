@@ -8,14 +8,25 @@ import { kaitenFastLivePollIntervalMs } from "@/lib/kaiten-rate-limit";
 const WINDOW = 10;
 /**
  * Live-импорт чата из Kaiten на широком списке (chat-corrections).
- * Было урезано до 2 против шторма RSC — из‑за этого тосты «Чат — …» ждали
- * cron или открытие карточки. Держим умеренно и крутим по окну.
+ * Ротация по всему `ids`, не только по текущему titles-бакету — иначе «!!!»/«???»
+ * могут ждать несколько минут, пока заказ снова попадёт в окно колонок.
  */
-const LIGHT_COMMENT_PULL_MAX = 6;
+const LIGHT_COMMENT_PULL_MAX = 8;
 /** Без поиска: live-синк всего видимого списка, если он не шире этого. */
 const FAST_LIVE_SYNC_MAX_DEFAULT = 8;
 /** С активным q: не больше N нарядов за проход, строго по одному (без параллели). */
 const FAST_LIVE_SYNC_MAX_SEARCH = 8;
+/** Обычный refresh списка (колонки/кликлаб) — не чаще. */
+const LIST_REFRESH_MIN_MS = 15_000;
+/** Импорт «!!!»/«???» — быстрее, иначе UI ждёт канбан. */
+const LIST_REFRESH_IMPORT_MIN_MS = 2_000;
+
+type ChatCorrectionsLivePayload = {
+  error?: string;
+  importedCorrections?: number;
+  importedProsthetics?: number;
+  labMentionDbChanged?: boolean;
+};
 
 function isRateLimited(res: Response, data: { error?: string }): boolean {
   if (res.status === 429) return true;
@@ -35,6 +46,14 @@ function parseRetryAfterMs(value: string | null): number {
   const dateMs = Date.parse(raw);
   if (Number.isFinite(dateMs)) return Math.max(0, Math.min(dateMs - Date.now(), 120_000));
   return 90_000;
+}
+
+function chatCorrectionsImported(data: ChatCorrectionsLivePayload): boolean {
+  return (
+    (data.importedCorrections ?? 0) > 0 ||
+    (data.importedProsthetics ?? 0) > 0 ||
+    data.labMentionDbChanged === true
+  );
 }
 
 /**
@@ -70,29 +89,44 @@ export function OrderListKaitenPoller({
   const fastInFlightRef = useRef(false);
   const fastSyncGenRef = useRef(0);
   const lastListRefreshAtRef = useRef(0);
-  const LIST_REFRESH_MIN_MS = 15_000;
 
-  const refreshListDebounced = useCallback(() => {
-    const now = Date.now();
-    if (now - lastListRefreshAtRef.current < LIST_REFRESH_MIN_MS) return;
-    lastListRefreshAtRef.current = now;
-    router.refresh();
-  }, [router]);
+  const refreshListDebounced = useCallback(
+    (opts?: { importHit?: boolean }) => {
+      const now = Date.now();
+      const minMs = opts?.importHit
+        ? LIST_REFRESH_IMPORT_MIN_MS
+        : LIST_REFRESH_MIN_MS;
+      if (now - lastListRefreshAtRef.current < minMs) return;
+      lastListRefreshAtRef.current = now;
+      router.refresh();
+    },
+    [router],
+  );
 
   /**
    * GET /chat-corrections → syncOrderChatCorrectionsFromKaitenLive (корректировки + протетика).
    * Запросы к CRM — по одному, чтобы на сервере не устроить всплеск kaitenListComments.
    */
-  const pullKaitenChatFeedLiveForVisible = useCallback(async (): Promise<boolean> => {
-    if (ids.length === 0 || ids.length > fastLiveMax) return false;
-    if (document.visibilityState !== "visible") return false;
-    if (Date.now() < fastBackoffRef.current || Date.now() < backoffRef.current) {
-      return false;
+  const pullKaitenChatFeedLiveForVisible = useCallback(async (): Promise<{
+    ok: boolean;
+    imported: boolean;
+  }> => {
+    if (ids.length === 0 || ids.length > fastLiveMax) {
+      return { ok: false, imported: false };
     }
-    if (fastInFlightRef.current || inFlightRef.current) return false;
+    if (document.visibilityState !== "visible") {
+      return { ok: false, imported: false };
+    }
+    if (Date.now() < fastBackoffRef.current || Date.now() < backoffRef.current) {
+      return { ok: false, imported: false };
+    }
+    if (fastInFlightRef.current || inFlightRef.current) {
+      return { ok: false, imported: false };
+    }
     fastInFlightRef.current = true;
     const gen = ++fastSyncGenRef.current;
     let rateLimited = false;
+    let imported = false;
     try {
       for (const orderId of ids) {
         if (gen !== fastSyncGenRef.current) break;
@@ -104,10 +138,14 @@ export function OrderListKaitenPoller({
           );
           if (res.status === 429) {
             rateLimited = true;
-            fastBackoffRef.current = Date.now() + parseRetryAfterMs(res.headers.get("Retry-After"));
+            fastBackoffRef.current =
+              Date.now() + parseRetryAfterMs(res.headers.get("Retry-After"));
             backoffRef.current = fastBackoffRef.current;
             break;
           }
+          if (!res.ok) continue;
+          const data = (await res.json().catch(() => ({}))) as ChatCorrectionsLivePayload;
+          if (chatCorrectionsImported(data)) imported = true;
         } catch {
           /* ignore */
         }
@@ -115,7 +153,10 @@ export function OrderListKaitenPoller({
     } finally {
       fastInFlightRef.current = false;
     }
-    return gen === fastSyncGenRef.current && !rateLimited;
+    return {
+      ok: gen === fastSyncGenRef.current && !rateLimited,
+      imported,
+    };
   }, [ids, fastLiveMax]);
 
   const tick = useCallback(async () => {
@@ -128,7 +169,7 @@ export function OrderListKaitenPoller({
     const n = ids.length;
     /**
      * Узкий список (≤ WINDOW): comments в titles-sync.
-     * Широкий: titles без comments + ротация live chat-corrections (см. LIGHT_COMMENT_PULL_MAX).
+     * Широкий: titles без comments + ротация live chat-corrections по всему списку.
      */
     const includeComments = n <= WINDOW;
 
@@ -164,12 +205,14 @@ export function OrderListKaitenPoller({
         fastBackoffRef.current = backoffRef.current;
         return;
       }
+
+      let lightImported = false;
       if (!includeComments && ids.length > fastLiveMax) {
-        const lightStart = lightCommentOffsetRef.current % batch.length;
+        const lightStart = lightCommentOffsetRef.current % n;
         const lightIds: string[] = [];
-        const lightTake = Math.min(LIGHT_COMMENT_PULL_MAX, batch.length);
+        const lightTake = Math.min(LIGHT_COMMENT_PULL_MAX, n);
         for (let i = 0; i < lightTake; i += 1) {
-          lightIds.push(batch[(lightStart + i) % batch.length]!);
+          lightIds.push(ids[(lightStart + i) % n]!);
         }
         lightCommentOffsetRef.current = lightStart + lightTake;
         for (const orderId of lightIds) {
@@ -185,6 +228,11 @@ export function OrderListKaitenPoller({
               fastBackoffRef.current = backoffRef.current;
               break;
             }
+            if (!ccRes.ok) continue;
+            const ccData = (await ccRes
+              .json()
+              .catch(() => ({}))) as ChatCorrectionsLivePayload;
+            if (chatCorrectionsImported(ccData)) lightImported = true;
           } catch {
             /* ignore */
           }
@@ -210,28 +258,38 @@ export function OrderListKaitenPoller({
         : "";
       const mentionChanged = mentionKey !== mentionStateRef.current;
       mentionStateRef.current = mentionKey;
+      const importHit =
+        lightImported ||
+        data.newCorrectionsImported === true ||
+        data.newProstheticsImported === true ||
+        data.kaitenLabMentionDbChanged === true;
       /* Не refresh от голого ok chat-corrections — иначе каждые ~12с шторм RSC. */
       if (
+        importHit ||
         (data.syncedCount ?? 0) > 0 ||
-        data.newCorrectionsImported ||
-        data.newProstheticsImported ||
-        data.kaitenLabMentionDbChanged === true ||
         mentionChanged
       ) {
-        refreshListDebounced();
+        refreshListDebounced({ importHit });
       }
     } catch {
       /* ignore */
     } finally {
       inFlightRef.current = false;
     }
-  }, [ids, refreshListDebounced, onSyncExtras, fastLiveMax, searchActive]);
+  }, [ids, refreshListDebounced, onSyncExtras, fastLiveMax]);
 
   const runFastLiveThenRefresh = useCallback(async () => {
     if (ids.length === 0 || ids.length > fastLiveMax) return;
-    /* Тянем inbox в фоне; полный router.refresh — только из tick при реальных флагах. */
-    await pullKaitenChatFeedLiveForVisible();
-  }, [ids.length, fastLiveMax, pullKaitenChatFeedLiveForVisible]);
+    const result = await pullKaitenChatFeedLiveForVisible();
+    if (result.imported) {
+      refreshListDebounced({ importHit: true });
+    }
+  }, [
+    ids.length,
+    fastLiveMax,
+    pullKaitenChatFeedLiveForVisible,
+    refreshListDebounced,
+  ]);
 
   /** Смена списка (поиск): один live-проход, тяжёлый tick — с паузой, без наложения на PATCH карточки. */
   useEffect(() => {
@@ -240,9 +298,11 @@ export function OrderListKaitenPoller({
     lightCommentOffsetRef.current = 0;
     let cancelled = false;
     void (async () => {
-      const ok = await pullKaitenChatFeedLiveForVisible();
+      const result = await pullKaitenChatFeedLiveForVisible();
       if (cancelled) return;
-      if (ok) refreshListDebounced();
+      if (result.ok || result.imported) {
+        refreshListDebounced({ importHit: result.imported });
+      }
       if (!cancelled) {
         window.setTimeout(() => {
           if (!cancelled) void tick();

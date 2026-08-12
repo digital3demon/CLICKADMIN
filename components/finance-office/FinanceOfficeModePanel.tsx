@@ -50,7 +50,7 @@ export function FinanceOfficeModePanel({
   const periodActive = mode === "period";
 
   return (
-    <div className="no-print flex h-full min-h-[3.25rem] min-w-0 items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-3 sm:py-2">
+    <div className="no-print flex h-full min-h-[3.25rem] min-w-0 items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-3">
       <div className="flex min-w-0 w-full flex-wrap items-center gap-x-1.5 gap-y-1.5">
         <Link
           href={actualHref}

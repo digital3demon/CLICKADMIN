@@ -45,6 +45,10 @@ import { pushKaitenCardTitleForOrderIfLinked } from "@/lib/kaiten-push-order-tit
 import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
 import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
 import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
+import {
+  findKaitenStopLaneId,
+  kaitenStopLaneIdFromEnv,
+} from "@/lib/kaiten-stop-lane";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 const TRACK_LANES: KaitenTrackLane[] = ["ORTHOPEDICS", "ORTHODONTICS", "TEST"];
@@ -79,6 +83,11 @@ type PatchBody = {
    */
   columnTitle?: string;
   laneId?: number | null;
+  /**
+   * CRM «В стоп»: перенести карточку на дорожку «СТОП» той же доски Kaiten
+   * (у ортопедии / ортодонтии — своя дорожка). Несовместимо с явным laneId.
+   */
+  moveToStop?: boolean;
   /** Заблокировать карточку в Kaiten (нужен blockReason) */
   blocked?: boolean;
   /** Текст причины; при blocked=true обязателен */
@@ -1271,6 +1280,21 @@ export async function PATCH(
     patch.description = d;
   }
 
+  if (body.moveToStop === true) {
+    if (body.laneId !== undefined) {
+      return NextResponse.json(
+        { error: "Нельзя одновременно moveToStop и laneId" },
+        { status: 400 },
+      );
+    }
+    if (body.kaitenTrackLane != null) {
+      return NextResponse.json(
+        { error: "Нельзя одновременно moveToStop и смену пространства" },
+        { status: 400 },
+      );
+    }
+  }
+
   if (body.kaitenTrackLane != null) {
     const lane = body.kaitenTrackLane;
     if (!TRACK_LANES.includes(lane)) {
@@ -1311,6 +1335,62 @@ export async function PATCH(
       return NextResponse.json({ error: "columnId" }, { status: 400 });
     }
     patch.column_id = effectiveColumnId;
+  }
+
+  if (body.moveToStop === true) {
+    const cardRes = await kaitenGetCard(auth, order.kaitenCardId);
+    if (!cardRes.ok || !cardRes.card) {
+      return NextResponse.json(
+        {
+          error: friendlyKaitenLoadError(
+            cardRes.status,
+            cardRes.error,
+            "Не удалось загрузить карточку Kaiten",
+          ),
+        },
+        { status: 502 },
+      );
+    }
+    const boardIdRaw = (cardRes.card as Record<string, unknown>).board_id;
+    const boardId = typeof boardIdRaw === "number" ? boardIdRaw : null;
+    if (boardId == null) {
+      return NextResponse.json(
+        { error: "В карточке Kaiten нет board_id" },
+        { status: 502 },
+      );
+    }
+    const trackHint = trackLaneForBoardId(
+      boardId,
+      cfg.boardByLane,
+      order.kaitenTrackLane,
+    );
+    let stopLaneId = kaitenStopLaneIdFromEnv(trackHint);
+    if (stopLaneId == null) {
+      const lanes = await kaitenListBoardLanes(auth, boardId);
+      if (!lanes.ok) {
+        return NextResponse.json(
+          {
+            error: friendlyKaitenLoadError(
+              lanes.status,
+              lanes.error,
+              "Не удалось получить дорожки доски Kaiten",
+            ),
+          },
+          { status: 502 },
+        );
+      }
+      stopLaneId = findKaitenStopLaneId(lanes.lanes);
+    }
+    if (stopLaneId == null) {
+      return NextResponse.json(
+        {
+          error:
+            "На доске Kaiten нет дорожки «СТОП». Добавьте lane с таким названием или задайте KAITEN_*_STOP_LANE_ID.",
+        },
+        { status: 400 },
+      );
+    }
+    patch.lane_id = stopLaneId;
   }
 
   if (body.laneId !== undefined) {

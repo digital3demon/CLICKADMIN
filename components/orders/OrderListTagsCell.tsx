@@ -27,11 +27,13 @@ import {
   LIST_TAG_INVOICE_PRINTED,
   LIST_TAG_KAITEN_BLOCKED,
   LIST_TAG_NO_EDO,
+  LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PAYMENT_EXPECTED,
   LIST_TAG_PAYMENT_PAID,
   LIST_TAG_PAYMENT_PARTIAL,
   LIST_TAG_PAYMENT_RECON,
   LIST_TAG_PAYMENT_RECON_PAID,
+  LIST_TAG_PROSTHETICS,
   LIST_TAG_URGENT_NO_COEF,
   listTagCustomLabel,
   listTagKaitenColumnTitle,
@@ -115,10 +117,7 @@ type Props = {
   /** Период по дате создания (URL `from` / `to`). */
   periodFrom?: string | null;
   periodTo?: string | null;
-  /**
-   * Флаги внимания / корректировок — для совместимости вызовов;
-   * визуал перенесён на цветную рамку строки списка.
-   */
+  /** Непринятые корректировки / расхождение счёта — пилюля в облаке. */
   orderAttentionWarning?: boolean;
   listPendingChatCorrections?: boolean;
   listCompositionMismatch?: boolean;
@@ -385,6 +384,9 @@ export function OrderListTagsCell({
   omitKaitenColumnTag = false,
   clinicId = null,
   doctorId = null,
+  orderAttentionWarning = false,
+  listPendingChatCorrections = false,
+  listCompositionMismatch = false,
 }: Props) {
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
@@ -971,6 +973,44 @@ export function OrderListTagsCell({
       });
     }
 
+    const showAttentionPill =
+      orderAttentionWarning === true ||
+      listPendingChatCorrections === true ||
+      listCompositionMismatch === true;
+    if (showAttentionPill) {
+      items.push({
+        key: "attention",
+        slot: "small",
+        node: (
+          <Link
+            prefetch={false}
+            href={href(LIST_TAG_ORDER_ATTENTION)}
+            title="Непринятые корректировки из чата («!!!») или расхождение суммы счёта с составом"
+            className={`rounded-full border border-amber-300 bg-amber-50 font-semibold text-amber-950 shadow-sm outline-none focus-visible:outline-none dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100 ${padTable}`}
+          >
+            коррект
+          </Link>
+        ),
+      });
+    }
+
+    if (prostheticsOrdered) {
+      items.push({
+        key: "prosthetics-ordered",
+        slot: "large",
+        node: (
+          <Link
+            prefetch={false}
+            href={href(LIST_TAG_PROSTHETICS)}
+            title="Показать наряды с отметкой «Протетика заказана»"
+            className={`rounded-full border border-emerald-300 bg-emerald-50 font-semibold text-emerald-950 shadow-sm outline-none focus-visible:outline-none dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100 ${padTable}`}
+          >
+            Протетика заказана
+          </Link>
+        ),
+      });
+    }
+
     if (!shipmentsFilterContext && !omitKaitenColumnTag) {
       items.push({
         key: "kaiten",
@@ -1233,6 +1273,10 @@ export function OrderListTagsCell({
     urgentCoefficient,
     omitKaitenColumnTag,
     filterListHref,
+    orderAttentionWarning,
+    listPendingChatCorrections,
+    listCompositionMismatch,
+    prostheticsOrdered,
   ]);
 
   const blockReasonHit =

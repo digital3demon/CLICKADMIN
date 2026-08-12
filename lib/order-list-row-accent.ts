@@ -1,21 +1,16 @@
 /**
- * Акцент строки списка нарядов вместо крупных пилюль
- * «корректировки / протетика».
+ * Акцент строки списка нарядов.
  *
- * Приоритет (выше перекрывает ниже): attention → prosthetics-pending → prosthetics-ordered.
+ * Голубая подсветка — только открытый запрос протетики («???»).
+ * Корректировки, «протетика заказана» и прочее — пилюли в облаке тегов.
  * Блокировка Kaiten обрабатывается отдельно вызывающим кодом.
  */
 
-export type OrderListRowAccentKind =
-  | "attention"
-  | "prosthetics-pending"
-  | "prosthetics-ordered";
+export type OrderListRowAccentKind = "prosthetics-pending";
 
 export type OrderListHarmonyRowState =
   | "blocked"
-  | "attention"
   | "prosthetics-pending"
-  | "prosthetics-ordered"
   | "shipped"
   | "default";
 
@@ -26,17 +21,10 @@ export function resolveOrderListRowAccentKind(opts: {
   listPendingProstheticsRequests?: boolean;
   prostheticsOrdered?: boolean;
 }): OrderListRowAccentKind | null {
-  const attention =
-    opts.listCompositionMismatch === true ||
-    opts.listPendingChatCorrections === true ||
-    opts.orderAttentionWarning === true;
-  if (attention) return "attention";
-
   const ordered = opts.prostheticsOrdered === true;
   if (!ordered && opts.listPendingProstheticsRequests === true) {
     return "prosthetics-pending";
   }
-  if (ordered) return "prosthetics-ordered";
   return null;
 }
 
@@ -47,25 +35,11 @@ export function resolveOrderListRowAccentKind(opts: {
 export function orderListRowAccentClass(
   kind: OrderListRowAccentKind | null | undefined,
 ): string {
-  if (kind === "attention") {
-    return [
-      "border-b-2 border-amber-500/55 border-l-[3px] border-l-amber-500",
-      "bg-amber-100/90 dark:border-amber-600/55 dark:border-l-amber-400 dark:bg-amber-950/55",
-      "[&>td]:bg-amber-100/90 dark:[&>td]:bg-amber-950/55",
-    ].join(" ");
-  }
   if (kind === "prosthetics-pending") {
     return [
       "border-b-2 border-sky-500/55 border-l-[3px] border-l-sky-500",
       "bg-sky-100/90 dark:border-sky-600/55 dark:border-l-sky-400 dark:bg-sky-950/55",
       "[&>td]:bg-sky-100/90 dark:[&>td]:bg-sky-950/55",
-    ].join(" ");
-  }
-  if (kind === "prosthetics-ordered") {
-    return [
-      "border-b-2 border-emerald-500/55 border-l-[3px] border-l-emerald-500",
-      "bg-emerald-100/85 dark:border-emerald-600/55 dark:border-l-emerald-400 dark:bg-emerald-950/50",
-      "[&>td]:bg-emerald-100/85 dark:[&>td]:bg-emerald-950/50",
     ].join(" ");
   }
   return "";
@@ -75,14 +49,8 @@ export function orderListRowAccentClass(
 export function orderListMobileCardAccentClass(
   kind: OrderListRowAccentKind | null | undefined,
 ): string {
-  if (kind === "attention") {
-    return "rounded-lg border-2 border-amber-400/90 bg-amber-100/90 dark:border-amber-500/80 dark:bg-amber-950/55";
-  }
   if (kind === "prosthetics-pending") {
     return "rounded-lg border-2 border-sky-400/90 bg-sky-100/90 dark:border-sky-500/80 dark:bg-sky-950/55";
-  }
-  if (kind === "prosthetics-ordered") {
-    return "rounded-lg border-2 border-emerald-400/90 bg-emerald-100/85 dark:border-emerald-500/80 dark:bg-emerald-950/50";
   }
   return "";
 }
@@ -93,9 +61,7 @@ export function resolveOrderListHarmonyRowState(opts: {
   accent: OrderListRowAccentKind | null;
 }): OrderListHarmonyRowState {
   if (opts.blocked) return "blocked";
-  if (opts.accent === "attention") return "attention";
   if (opts.accent === "prosthetics-pending") return "prosthetics-pending";
-  if (opts.accent === "prosthetics-ordered") return "prosthetics-ordered";
   if (opts.shipped) return "shipped";
   return "default";
 }

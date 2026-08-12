@@ -1551,6 +1551,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const found = findCardInAppState(appState, cardId);
     if (!found) return;
     const titleSnapshot = (found.card.title || "").trim() || "карточка";
+    const linkedOrderId = found.card.linkedOrderId?.trim() || "";
+    const kaitenCardId = found.card.kaitenCardId;
     setAppState((s) => {
       if (!s) return s;
       const next = structuredClone(s);
@@ -1565,9 +1567,48 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     });
     if (cardModalId === cardId) setCardModalId(null);
     showToast(`Карточка «${titleSnapshot}» перемещена в СТОП`);
+    if (
+      !isDemo &&
+      linkedOrderId &&
+      typeof kaitenCardId === "number" &&
+      Number.isFinite(kaitenCardId)
+    ) {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/orders/${linkedOrderId}/kaiten`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ moveToStop: true }),
+          });
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          if (!res.ok) {
+            showToast(
+              data.error ??
+                "В CRM карточка в СТОП, но в Kaiten дорожку «СТОП» обновить не удалось.",
+              true,
+            );
+          }
+        } catch {
+          showToast(
+            "В CRM карточка в СТОП, но сеть до Kaiten недоступна.",
+            true,
+          );
+        }
+      })();
+    }
   };
 
   const restoreStoppedCard = (stoppedId: string) => {
+    if (!appState) return;
+    const board = getActiveBoard(appState);
+    const stoppedRow = (board.stoppedCards || []).find(
+      (x) => x.id === stoppedId || x.card.id === stoppedId,
+    );
+    const linkedOrderId = stoppedRow?.card.linkedOrderId?.trim() || "";
+    const kaitenCardId = stoppedRow?.card.kaitenCardId;
+    const sourceColumnTitle = (stoppedRow?.sourceColumnTitle || "").trim();
+    const trackLane = kaitenLaneForKanbanBoardId(board.id) ?? "ORTHOPEDICS";
     setAppState((s) => {
       if (!s) return s;
       const next = structuredClone(s);
@@ -1578,6 +1619,40 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       return next;
     });
     showToast("Карточка возвращена из СТОП");
+    if (
+      !isDemo &&
+      linkedOrderId &&
+      typeof kaitenCardId === "number" &&
+      Number.isFinite(kaitenCardId) &&
+      sourceColumnTitle
+    ) {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/orders/${linkedOrderId}/kaiten`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              kaitenTrackLane: trackLane,
+              columnTitle: sourceColumnTitle,
+            }),
+          });
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          if (!res.ok) {
+            showToast(
+              data.error ??
+                "В CRM карточка возвращена, но колонку в Kaiten обновить не удалось.",
+              true,
+            );
+          }
+        } catch {
+          showToast(
+            "В CRM карточка возвращена, но сеть до Kaiten недоступна.",
+            true,
+          );
+        }
+      })();
+    }
   };
 
   const copyCardLink = (cardId: string) => {

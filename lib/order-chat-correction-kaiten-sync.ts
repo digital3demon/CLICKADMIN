@@ -4,6 +4,7 @@ import {
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
+import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import { getKaitenRestAuth, kaitenListComments, type KaitenAuth } from "@/lib/kaiten-rest";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
@@ -14,6 +15,25 @@ import {
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import { kaitenLogger } from "@/lib/server/logger";
+
+export type KaitenChatLiveSyncResult = {
+  synced: boolean;
+  rateLimited: boolean;
+  commentCount: number;
+  importedCorrections: number;
+  importedProsthetics: number;
+  labMentionDbChanged: boolean;
+  elapsedMs: number;
+};
+
+const EMPTY_LIVE_SYNC = {
+  synced: false,
+  rateLimited: false,
+  commentCount: 0,
+  importedCorrections: 0,
+  importedProsthetics: 0,
+  labMentionDbChanged: false,
+} as const;
 
 export type KaitenChatCommentSyncSource =
   | "live"
@@ -66,6 +86,34 @@ async function logNewCorrectionsFromComments(
   return imported;
 }
 
+async function countNewProstheticsFromComments(
+  prisma: PrismaClient,
+  orderId: string,
+  comments: ReturnType<typeof mapParsedKaitenCommentsForTriggerSync>,
+  prosthBefore: number,
+): Promise<number> {
+  const prosthAfter = await prisma.orderProstheticsRequest.count({
+    where: { orderId: orderId.trim(), resolvedAt: null, rejectedAt: null },
+  });
+  const imported = Math.max(0, prosthAfter - prosthBefore);
+  if (imported > 0) {
+    for (const c of comments) {
+      if (!isOrderProstheticsRequestTrigger(c.text)) continue;
+      kaitenLogger.info(
+        {
+          msg: "kaiten_prosthetics_created",
+          orderId: orderId.trim(),
+          kaitenCommentId: c.id,
+          textSnippet: textSnippet(c.text),
+          authorLabel: c.authorName ?? null,
+        },
+        "kaiten prosthetics imported",
+      );
+    }
+  }
+  return imported;
+}
+
 /**
  * Тянет комментарии карточки из Kaiten, зеркалит в CRM-канбан и синхронизирует «!!!» / «???» в БД.
  * UI читаeт ленту из kanban state; Kaiten — внешний источник (канбан ← Kaiten).
@@ -78,14 +126,7 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
     invalidateSnapshot?: boolean;
     source?: KaitenChatCommentSyncSource;
   },
-): Promise<{
-  synced: boolean;
-  rateLimited: boolean;
-  commentCount: number;
-  importedCorrections: number;
-  labMentionDbChanged: boolean;
-  elapsedMs: number;
-}> {
+): Promise<KaitenChatLiveSyncResult> {
   const startedAt = Date.now();
   const source = opts?.source ?? "live";
   const oid = orderId.trim();
@@ -101,18 +142,14 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
       { msg: "kaiten_list_comments_skip", orderId: oid, source, reason: "no_auth" },
       "kaiten list comments skipped",
     );
-    return {
-      synced: false,
-      rateLimited: false,
-      commentCount: 0,
-      importedCorrections: 0,
-      labMentionDbChanged: false,
-      elapsedMs: Date.now() - startedAt,
-    };
+    return { ...EMPTY_LIVE_SYNC, elapsedMs: Date.now() - startedAt };
   }
 
-  const [corrBefore, orderMeta] = await Promise.all([
+  const [corrBefore, prosthBefore, orderMeta] = await Promise.all([
     prisma.orderChatCorrection.count({
+      where: { orderId: oid, resolvedAt: null, rejectedAt: null },
+    }),
+    prisma.orderProstheticsRequest.count({
       where: { orderId: oid, resolvedAt: null, rejectedAt: null },
     }),
     prisma.order.findUnique({
@@ -137,16 +174,14 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
         rateLimited,
         commentCount: 0,
         importedCorrections: 0,
+        importedProsthetics: 0,
         elapsedMs: Date.now() - startedAt,
       },
       "kaiten list comments failed",
     );
     return {
-      synced: false,
+      ...EMPTY_LIVE_SYNC,
       rateLimited,
-      commentCount: 0,
-      importedCorrections: 0,
-      labMentionDbChanged: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -180,12 +215,10 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
     await syncOrderChatCorrectionsFromKaitenComments(prisma, oid, comments);
     await syncOrderProstheticsRequestsFromKaitenComments(prisma, oid, comments);
   }
-  const importedCorrections = await logNewCorrectionsFromComments(
-    prisma,
-    oid,
-    comments,
-    corrBefore,
-  );
+  const [importedCorrections, importedProsthetics] = await Promise.all([
+    logNewCorrectionsFromComments(prisma, oid, comments, corrBefore),
+    countNewProstheticsFromComments(prisma, oid, comments, prosthBefore),
+  ]);
   await touchKaitenChatSyncedAt(prisma, oid);
 
   if (opts?.invalidateSnapshot !== false) {
@@ -201,6 +234,7 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
       source,
       commentCount: comments.length,
       importedCorrections,
+      importedProsthetics,
       labMentionDbChanged,
       rateLimited: false,
       elapsedMs,
@@ -213,6 +247,7 @@ export async function syncOrderChatCorrectionsFromKaitenLive(
     rateLimited: false,
     commentCount: comments.length,
     importedCorrections,
+    importedProsthetics,
     labMentionDbChanged,
     elapsedMs,
   };

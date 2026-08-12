@@ -212,42 +212,41 @@ export default async function FinanceOfficePage({
     </div>
   );
   const financeOfficeHeader = (
-    <section>
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(11rem,13rem)_minmax(18rem,24rem)] xl:items-end">
-        <div className="min-w-0 space-y-3">
-          <div>
-            <h1
-              className={`${fontDisplay.className} text-xl font-semibold tracking-tight text-[var(--app-text)] lg:text-2xl`}
-            >
-              ФинОтдел
-            </h1>
-            <p className="mt-2 hidden max-w-4xl text-sm leading-snug text-[var(--text-secondary)] md:block">
-              Контроль просчёта, корректировок, заказа протетики и оплат.
-              Список без ограничения по этапу воронки (включая согласование и
-              ранние этапы).
-            </p>
-          </div>
-          <FinanceOfficeModePanel
-            mode={mode}
-            appliedFrom={fromRaw}
-            appliedTo={toRaw}
-            listTag={rawTagInvalid ? null : rawTag}
-            q={q}
-            listSummaryLine={listSummaryLine}
-          />
-          <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">
-            {searchControls}
-          </div>
-        </div>
+    <section className="space-y-3">
+      <div>
+        <h1
+          className={`${fontDisplay.className} text-xl font-semibold tracking-tight text-[var(--app-text)] lg:text-2xl`}
+        >
+          ФинОтдел
+        </h1>
+        <p className="mt-2 hidden max-w-4xl text-sm leading-snug text-[var(--text-secondary)] md:block">
+          Контроль просчёта, корректировок, заказа протетики и оплат.
+          Список без ограничения по этапу воронки (включая согласование и
+          ранние этапы).
+        </p>
+      </div>
+      {/* Одна высота: режим · корректировки · загрузка выписки */}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(11rem,13rem)_minmax(18rem,24rem)] xl:items-stretch">
+        <FinanceOfficeModePanel
+          mode={mode}
+          appliedFrom={fromRaw}
+          appliedTo={toRaw}
+          listTag={rawTagInvalid ? null : rawTag}
+          q={q}
+          listSummaryLine={listSummaryLine}
+        />
         <CorrectionsHistoryActionCard
           dense
-          className="w-full max-w-[13rem] justify-self-stretch xl:self-end"
+          className="h-full w-full max-w-[13rem] justify-self-stretch"
           initialPendingCount={correctionsPendingCount}
           canAcceptCorrections={canAcceptCorrections}
         />
-        <FinanceOfficeBankImportPanel className="w-full xl:self-end" />
+        <FinanceOfficeBankImportPanel compact className="h-full w-full" />
       </div>
-      <div className="mt-3 space-y-2">
+      <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">
+        {searchControls}
+      </div>
+      <div className="space-y-2">
         {rawTagInvalid ? (
           <p className="rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
             Параметр фильтра не распознан, показан общий список ФинОтдела.
