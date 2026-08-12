@@ -73,7 +73,7 @@ export function OrdersListTableRow({
   kaitenBlockReason?: string | null;
   kaitenFilterHref?: string | null;
   harmonyRowState?: OrderListHarmonyRowState;
-  /** Цветная рамка — только запрос протетики («???»). */
+  /** Цветная рамка: корректировки (янтарь) / запрос протетики (голубой). */
   rowAccent?: OrderListRowAccentKind | null;
   isLabOverdue?: boolean;
   mobileActionsNode?: ReactNode;

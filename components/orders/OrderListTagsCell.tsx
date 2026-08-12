@@ -27,7 +27,6 @@ import {
   LIST_TAG_INVOICE_PRINTED,
   LIST_TAG_KAITEN_BLOCKED,
   LIST_TAG_NO_EDO,
-  LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PAYMENT_EXPECTED,
   LIST_TAG_PAYMENT_PAID,
   LIST_TAG_PAYMENT_PARTIAL,
@@ -117,7 +116,7 @@ type Props = {
   /** Период по дате создания (URL `from` / `to`). */
   periodFrom?: string | null;
   periodTo?: string | null;
-  /** Непринятые корректировки / расхождение счёта — пилюля в облаке. */
+  /** Непринятые корректировки — окраска строки, не пилюля. */
   orderAttentionWarning?: boolean;
   listPendingChatCorrections?: boolean;
   listCompositionMismatch?: boolean;
@@ -384,9 +383,6 @@ export function OrderListTagsCell({
   omitKaitenColumnTag = false,
   clinicId = null,
   doctorId = null,
-  orderAttentionWarning = false,
-  listPendingChatCorrections = false,
-  listCompositionMismatch = false,
 }: Props) {
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
@@ -973,27 +969,6 @@ export function OrderListTagsCell({
       });
     }
 
-    const showAttentionPill =
-      orderAttentionWarning === true ||
-      listPendingChatCorrections === true ||
-      listCompositionMismatch === true;
-    if (showAttentionPill) {
-      items.push({
-        key: "attention",
-        slot: "small",
-        node: (
-          <Link
-            prefetch={false}
-            href={href(LIST_TAG_ORDER_ATTENTION)}
-            title="Непринятые корректировки из чата («!!!») или расхождение суммы счёта с составом"
-            className={`rounded-full border border-amber-300 bg-amber-50 font-semibold text-amber-950 shadow-sm outline-none focus-visible:outline-none dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100 ${padTable}`}
-          >
-            коррект
-          </Link>
-        ),
-      });
-    }
-
     if (prostheticsOrdered) {
       items.push({
         key: "prosthetics-ordered",
@@ -1273,9 +1248,6 @@ export function OrderListTagsCell({
     urgentCoefficient,
     omitKaitenColumnTag,
     filterListHref,
-    orderAttentionWarning,
-    listPendingChatCorrections,
-    listCompositionMismatch,
     prostheticsOrdered,
   ]);
 

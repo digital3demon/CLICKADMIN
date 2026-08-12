@@ -7,20 +7,20 @@ import {
 } from "@/lib/order-list-row-accent";
 
 describe("resolveOrderListRowAccentKind", () => {
-  it("корректировки не красят строку — только протетика pending", () => {
+  it("attention важнее протетики", () => {
     expect(
       resolveOrderListRowAccentKind({
         listPendingChatCorrections: true,
         listPendingProstheticsRequests: true,
         prostheticsOrdered: false,
       }),
-    ).toBe("prosthetics-pending");
+    ).toBe("attention");
   });
 
-  it("расхождение счёта — без акцента строки", () => {
+  it("расхождение счёта — attention", () => {
     expect(
       resolveOrderListRowAccentKind({ listCompositionMismatch: true }),
-    ).toBeNull();
+    ).toBe("attention");
   });
 
   it("ожидание протетики", () => {
@@ -47,7 +47,8 @@ describe("resolveOrderListRowAccentKind", () => {
 });
 
 describe("orderListRowAccentClass / harmony", () => {
-  it("классы только для pending", () => {
+  it("классы для attention и pending", () => {
+    expect(orderListRowAccentClass("attention")).toContain("amber");
     expect(orderListRowAccentClass("prosthetics-pending")).toContain("sky");
     expect(orderListRowAccentClass(null)).toBe("");
   });
@@ -57,7 +58,7 @@ describe("orderListRowAccentClass / harmony", () => {
       resolveOrderListHarmonyRowState({
         blocked: true,
         shipped: true,
-        accent: "prosthetics-pending",
+        accent: "attention",
       }),
     ).toBe("blocked");
   });
@@ -65,12 +66,11 @@ describe("orderListRowAccentClass / harmony", () => {
   it("merge: accent перекрывает shipped-тинт", () => {
     const cls = mergeOrderListRowClass({
       shipped: true,
-      accent: "prosthetics-pending",
+      accent: "attention",
       shippedClass: "shipped-base",
     });
     expect(cls).not.toContain("shipped-base");
-    expect(cls).toContain("sky");
-    expect(cls).toMatch(/bg-sky/);
+    expect(cls).toContain("amber");
   });
 
   it("merge без accent — shipped", () => {
