@@ -28,6 +28,7 @@ export async function GET(req: Request) {
   const fromYmd = parseYmdOrNull(url.searchParams.get("from"));
   const toYmd = parseYmdOrNull(url.searchParams.get("to"));
   const q = url.searchParams.get("q")?.trim() || "";
+  const listTag = url.searchParams.get("tag")?.trim() || "";
 
   if (mode === "period" && !toYmd) {
     return NextResponse.json(
@@ -51,6 +52,7 @@ export async function GET(req: Request) {
     mode,
     fromYmd,
     toYmd,
+    listTag: listTag || null,
   });
 
   return NextResponse.json(counts, {

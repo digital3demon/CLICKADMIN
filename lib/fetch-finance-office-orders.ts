@@ -1,7 +1,10 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { getClientsPrisma, getPricingPrisma } from "@/lib/get-domain-prisma";
 import {
+  financeOfficeChipCountScopeWhere,
+  financeOfficeChipDueWindowScopeWhere,
   financeOfficeScopeWhere,
+  financeOfficeTagOverridesCalculated,
 } from "@/lib/finance-office-list-scope";
 import {
   compareOrdersByEffectiveFinanceRecord,
@@ -120,29 +123,10 @@ export type FinanceOfficeOrderRow = Omit<
 export {
   financeOfficeListTagSkipsDueDateWindow,
   financeOfficeScopeWhere,
+  financeOfficeChipCountScopeWhere,
+  financeOfficeChipDueWindowScopeWhere,
+  financeOfficeTagOverridesCalculated,
 } from "@/lib/finance-office-list-scope";
-
-/**
- * Счётчики чипов — тот же scope, что и список (лаб-срок Актуальное/За период),
- * без принудительного «только непросчитанные», чтобы считать Просчитано/ЭДО и т.д.
- */
-export function financeOfficeChipCountScopeWhere(
-  tenantId: string,
-  opts: {
-    search?: string | null;
-    mode?: "actual" | "period" | null;
-    fromYmd?: string | null;
-    toYmd?: string | null;
-  } = {},
-): Prisma.OrderWhereInput {
-  return financeOfficeScopeWhere(tenantId, {
-    search: opts.search,
-    mode: opts.mode ?? "actual",
-    fromYmd: opts.fromYmd,
-    toYmd: opts.toYmd,
-    actualNotCalculatedOnly: false,
-  });
-}
 
 async function countFinanceOfficeEdoChips(
   db: PrismaClient,
@@ -225,6 +209,7 @@ export async function countFinanceOfficeQuickFilterChips(
     mode?: "actual" | "period" | null;
     fromYmd?: string | null;
     toYmd?: string | null;
+    listTag?: string | null;
   } = {},
 ): Promise<{
   attentionCount: number;
@@ -235,7 +220,10 @@ export async function countFinanceOfficeQuickFilterChips(
   noEdoCount: number;
   labMentionCount: number;
 }> {
+  // ЭДО / корректировки / протетика / чат — как текущий список (на Актуальном
+  // без тега = только непросчитанные). Просчитано/Не просчитано — по всему окну срока.
   const scope = financeOfficeChipCountScopeWhere(tenantId, opts);
+  const dueWindow = financeOfficeChipDueWindowScopeWhere(tenantId, opts);
   const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
   const inbox = (db as {
     orderChatInboxItem: {
@@ -296,10 +284,10 @@ export async function countFinanceOfficeQuickFilterChips(
         })
       : Promise.resolve([]),
     db.order.count({
-      where: { AND: [scope, { financeCalculated: false }] },
+      where: { AND: [dueWindow, { financeCalculated: false }] },
     }),
     db.order.count({
-      where: { AND: [scope, { financeCalculated: true }] },
+      where: { AND: [dueWindow, { financeCalculated: true }] },
     }),
     countFinanceOfficeEdoChips(db, scope),
     countOrdersWithPendingKaitenLabMentionForUser(
@@ -373,14 +361,7 @@ export async function fetchFinanceOfficeOrders(
 ): Promise<FinanceOfficeOrderRow[]> {
   const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
   const mode = opts.mode ?? "actual";
-  const tagOverridesCalculated =
-    parsedTag?.kind === "financeCalculated" ||
-    parsedTag?.kind === "financeNotCalculated" ||
-    parsedTag?.kind === "edo" ||
-    parsedTag?.kind === "noEdo" ||
-    parsedTag?.kind === "orderAttention" ||
-    parsedTag?.kind === "prostheticsPending" ||
-    parsedTag?.kind === "kaitenLabMention";
+  const tagOverridesCalculated = financeOfficeTagOverridesCalculated(opts.listTag);
   const parts: Prisma.OrderWhereInput[] = [
     financeOfficeScopeWhere(tenantId, {
       search: opts.search,

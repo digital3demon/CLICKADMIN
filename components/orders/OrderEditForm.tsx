@@ -3834,32 +3834,12 @@ export function OrderEditForm({
         >
           Печать наряда
         </OrderNarjadPrintTrigger>
-        {showKaitenExternalUi &&
-        (initial.kaitenCardUrl || kanbanCardUrl) ? (
-          <OrderKaitenQrModal
-            url={initial.kaitenCardUrl || kanbanCardUrl}
-            kanbanUrl={
-              initial.kaitenCardUrl && kanbanCardUrl
-                ? kanbanCardUrl
-                : null
-            }
-            labelFull={
-              initial.kaitenCardUrl
-                ? isDemoMode
-                  ? "QR канбана"
-                  : "QR Kaiten"
-                : "QR канбана"
-            }
-            variant={initial.kaitenCardUrl ? (isDemoMode ? "kanban" : "kaiten") : "kanban"}
-          />
-        ) : initial.kaitenCardId != null && !isDemoMode ? (
-          <span
-            className="shrink-0 whitespace-nowrap rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 sm:text-xs"
-            title="Карточка есть (id в CRM), но не задана веб-ссылка. Укажите KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE в .env"
-          >
-            Kaiten: URL
-          </span>
-        ) : null}
+        <OrderKaitenQrModal
+          orderId={initial.id}
+          kaitenUrl={showKaitenExternalUi ? initial.kaitenCardUrl : null}
+          kanbanUrl={kanbanCardUrl}
+          labelFull="QR витрины"
+        />
         {workSentNarjadActions}
         {!isOrderPageFramed && !previewMode ? (
           <div className="ms-auto flex shrink-0 justify-end">

@@ -302,10 +302,6 @@ export function ShipmentsOrdersTable({
                 !isDemo && o.kaitenCardId != null
                   ? getKaitenCardWebUrl(o.kaitenCardId)
                   : null;
-              const kaitenUrl =
-                isDemo && kanbanWebUrl
-                  ? kanbanWebUrl
-                  : kaitenWebUrl ?? kanbanWebUrl;
               const workSent = o.adminShippedOtpr;
               const clinicName = o.clinic?.name ?? "Частное лицо";
               const address = o.clinic?.address?.trim() || "";
@@ -355,27 +351,12 @@ export function ShipmentsOrdersTable({
                     title="Печать наряда (PDF) — диалог печати"
                   />
                   <OrderStickerPrintLink orderId={o.id} />
-                  {kaitenUrl ? (
-                    <OrderKaitenQrModal
-                      url={kaitenUrl}
-                      kanbanUrl={
-                        kaitenWebUrl && kanbanWebUrl ? kanbanWebUrl : null
-                      }
-                      compact
-                      variant={isDemo ? "kanban" : "kaiten"}
-                    />
-                  ) : o.kaitenCardId != null ? (
-                    <span
-                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
-                      title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
-                    >
-                      ⚠
-                    </span>
-                  ) : (
-                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-muted)] sm:h-6 sm:w-6">
-                      —
-                    </span>
-                  )}
+                  <OrderKaitenQrModal
+                    orderId={o.id}
+                    kaitenUrl={kaitenWebUrl}
+                    kanbanUrl={kanbanWebUrl}
+                    compact
+                  />
                 </>
               );
               const renderTagsCell = (opts?: { omitKaitenColumnTag?: boolean }) => (

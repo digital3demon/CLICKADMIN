@@ -27,6 +27,21 @@ describe("orderKaitenMirrorApiModuleForPath", () => {
     ).toBe("ORDERS");
   });
 
+  it("GET/POST /api/orders/:id/kanban-next-column → KANBAN_MOVE_COLUMNS", () => {
+    expect(
+      orderKaitenMirrorApiModuleForPath(
+        "/api/orders/ord-1/kanban-next-column",
+        "GET",
+      ),
+    ).toBe("KANBAN_MOVE_COLUMNS");
+    expect(
+      orderKaitenMirrorApiModuleForPath(
+        "/api/orders/ord-1/kanban-next-column",
+        "POST",
+      ),
+    ).toBe("KANBAN_MOVE_COLUMNS");
+  });
+
   it("вложенные kaiten/* не перехватываются", () => {
     expect(
       orderKaitenMirrorApiModuleForPath(

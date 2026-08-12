@@ -50,6 +50,20 @@ export async function canMarkWorkSentOnStickerHub(opts: {
   return canEditOrders(opts.session.role, access);
 }
 
+/** Перенос по колонкам с QR-витрины — модуль KANBAN_MOVE_COLUMNS. */
+export async function canMoveKanbanColumnsOnStickerHub(opts: {
+  session: SessionClaims | null;
+  stickerTenantId: string;
+}): Promise<boolean> {
+  const unlocked = await isStickerStaffSessionUnlocked(opts);
+  if (!unlocked || !opts.session) return false;
+  const access = await getEffectiveModuleAccess(
+    opts.stickerTenantId,
+    opts.session.role,
+  );
+  return access.KANBAN_MOVE_COLUMNS === true;
+}
+
 /**
  * Куда вести с публичной витрины стикера по кнопке «Для сотрудников»:
  * сессия своего тенанта + модули → наряд или канбан; иначе вход с возвратом на /staff или сам /staff.

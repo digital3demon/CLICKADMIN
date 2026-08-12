@@ -275,6 +275,7 @@ export default async function FinanceOfficePage({
             periodFrom={fromRaw}
             periodTo={toRaw}
             q={q}
+            listTag={rawTagInvalid ? null : rawTag}
           />
         ) : null}
         <FinanceOfficeOrdersTable

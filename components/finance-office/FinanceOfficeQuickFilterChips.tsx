@@ -43,12 +43,14 @@ export function FinanceOfficeQuickFilterChips({
   periodFrom,
   periodTo,
   q = "",
+  listTag = null,
 }: {
   activeFilter?: ParsedListTag | null;
   tab: string;
   periodFrom: string | null;
   periodTo: string | null;
   q?: string;
+  listTag?: string | null;
 }) {
   const [counts, setCounts] = useState<FinanceOfficeChipCounts | null>(null);
   const [countsLoading, setCountsLoading] = useState(true);
@@ -63,6 +65,8 @@ export function FinanceOfficeQuickFilterChips({
     if (periodTo) params.set("to", periodTo);
     const trimmedQ = q.trim();
     if (trimmedQ) params.set("q", trimmedQ);
+    const trimmedTag = (listTag || "").trim();
+    if (trimmedTag) params.set("tag", trimmedTag);
 
     void fetch(`/api/finance-office/chip-counts?${params.toString()}`, {
       credentials: "include",
@@ -108,7 +112,7 @@ export function FinanceOfficeQuickFilterChips({
     return () => {
       cancelled = true;
     };
-  }, [tab, periodFrom, periodTo, q]);
+  }, [tab, periodFrom, periodTo, q, listTag]);
 
   const {
     attentionCount,

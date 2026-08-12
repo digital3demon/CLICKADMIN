@@ -51,8 +51,13 @@ export function orderKaitenMirrorApiModuleForPath(
   method: string,
 ): AppModule | null {
   const t = orderIdApiTail(pathname);
-  if (!t || t.tail !== "kaiten") return null;
-  if (HTTP_READ_METHODS.has(method.toUpperCase())) return null;
+  if (!t) return null;
+  const http = method.toUpperCase();
+  if (t.tail === "kanban-next-column") {
+    return "KANBAN_MOVE_COLUMNS";
+  }
+  if (t.tail !== "kaiten") return null;
+  if (HTTP_READ_METHODS.has(http)) return null;
   return "KANBAN_MOVE_COLUMNS";
 }
 

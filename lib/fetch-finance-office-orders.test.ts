@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  financeOfficeChipCountScopeWhere,
   financeOfficeListTagSkipsDueDateWindow,
   financeOfficeScopeWhere,
 } from "@/lib/finance-office-list-scope";
@@ -84,5 +85,23 @@ describe("financeOfficeScopeWhere", () => {
     const json = JSON.stringify(w);
     expect(json).toContain("dueDate");
     expect(json).not.toContain("financeCalculated");
+  });
+});
+
+describe("financeOfficeChipCountScopeWhere", () => {
+  it("на Актуальном без тега совпадает со списком: только непросчитанные", () => {
+    const w = financeOfficeChipCountScopeWhere("t1", { mode: "actual" });
+    const json = JSON.stringify(w);
+    expect(json).toContain("financeCalculated");
+    expect(json).toContain("dueDate");
+  });
+
+  it("с тегом Просчитано снимает clamp и добавляет financeCalculated:true", () => {
+    const w = financeOfficeChipCountScopeWhere("t1", {
+      mode: "actual",
+      listTag: LIST_TAG_FINANCE_CALCULATED,
+    });
+    const json = JSON.stringify(w);
+    expect(json).toContain('"financeCalculated":true');
   });
 });

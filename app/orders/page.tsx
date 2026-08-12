@@ -933,7 +933,6 @@ export default async function OrdersPage({
                 const kanbanWebUrl = siteOrigin
                   ? `${siteOrigin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(o.id)}`
                   : null;
-                const kaitenUrl = kaitenWebUrl ?? kanbanWebUrl;
                 const workSent = o.adminShippedOtpr;
                 const admission = formatAdmission(o);
                 const blocked = o.kaitenBlocked === true;
@@ -1113,27 +1112,12 @@ export default async function OrdersPage({
                           />
                         ) : null}
                         <OrderStickerPrintLink orderId={o.id} />
-                        {kaitenUrl ? (
-                          <OrderKaitenQrModal
-                            url={kaitenUrl}
-                            kanbanUrl={
-                              kaitenWebUrl && kanbanWebUrl ? kanbanWebUrl : null
-                            }
-                            compact
-                            variant={
-                              o.kaitenCardId != null && !isDemo
-                                ? "kaiten"
-                                : "kanban"
-                            }
-                          />
-                        ) : o.kaitenCardId != null ? (
-                          <span
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400"
-                            title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
-                          >
-                            ⚠
-                          </span>
-                        ) : null}
+                        <OrderKaitenQrModal
+                          orderId={o.id}
+                          kaitenUrl={kaitenWebUrl}
+                          kanbanUrl={kanbanWebUrl}
+                          compact
+                        />
                       </div>
                     </>
                   }
@@ -1161,27 +1145,12 @@ export default async function OrdersPage({
                         />
                       ) : null}
                       <OrderStickerPrintLink orderId={o.id} />
-                      {kaitenUrl ? (
-                        <OrderKaitenQrModal
-                          url={kaitenUrl}
-                          kanbanUrl={
-                            kaitenWebUrl && kanbanWebUrl ? kanbanWebUrl : null
-                          }
-                          compact
-                          variant={o.kaitenCardId != null && !isDemo ? "kaiten" : "kanban"}
-                        />
-                      ) : o.kaitenCardId != null ? (
-                        <span
-                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xs text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6 sm:text-sm"
-                          title="Задайте KAITEN_WEB_ORIGIN или KAITEN_CARD_URL_TEMPLATE"
-                        >
-                          ⚠
-                        </span>
-                      ) : (
-                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-muted)] sm:h-6 sm:w-6">
-                          —
-                        </span>
-                      )}
+                      <OrderKaitenQrModal
+                        orderId={o.id}
+                        kaitenUrl={kaitenWebUrl}
+                        kanbanUrl={kanbanWebUrl}
+                        compact
+                      />
                     </div>
                   </td>
                   <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">

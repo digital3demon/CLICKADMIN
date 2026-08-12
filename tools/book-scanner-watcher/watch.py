@@ -855,7 +855,6 @@ class ScannerApp:
         self.var_key = tk.StringVar(value=s["crm_api_key"])
         self.var_autostart = tk.BooleanVar(value=autostart_on)
         self.var_status = tk.StringVar(value="Остановлено")
-        self.show_key = tk.BooleanVar(value=False)
 
         self._build()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -1025,14 +1024,6 @@ class ScannerApp:
         ).pack(anchor=tk.W)
         self.entry_key = ttk.Entry(box3, textvariable=self.var_key, show="•")
         self.entry_key.pack(fill=tk.X, pady=(8, 0))
-        ttk.Checkbutton(
-            box3,
-            text="Показать ключ",
-            variable=self.show_key,
-            command=lambda: self.entry_key.configure(
-                show="" if self.show_key.get() else "•"
-            ),
-        ).pack(anchor=tk.W, pady=(4, 0))
 
         box4 = ttk.LabelFrame(main, text="4. Автозапуск", padding=10)
         box4.pack(fill=tk.X, pady=6)

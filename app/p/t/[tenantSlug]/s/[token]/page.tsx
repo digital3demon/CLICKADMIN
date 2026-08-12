@@ -3,10 +3,15 @@ import { PublicStickerHubActions } from "@/components/sticker/PublicStickerHubAc
 import { PublicStickerOrderStatusPillsView } from "@/components/sticker/PublicStickerOrderStatusPills";
 import { PublicStickerReceivedPhotos } from "@/components/sticker/PublicStickerReceivedPhotos";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getLinkedOrderColumnNeighbor } from "@/lib/kanban/advance-linked-order-column.server";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { loadPublicStickerClientView } from "@/lib/load-public-sticker-client-view";
 import { orderPathById } from "@/lib/order-public-ref";
-import { isStickerStaffSessionUnlocked, canMarkWorkSentOnStickerHub } from "@/lib/sticker-public-employee-href";
+import {
+  canMarkWorkSentOnStickerHub,
+  canMoveKanbanColumnsOnStickerHub,
+  isStickerStaffSessionUnlocked,
+} from "@/lib/sticker-public-employee-href";
 import { resolveStickerOrderBySlugAndToken } from "@/lib/sticker-public-order-resolve";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +55,13 @@ export default async function StickerPublicHubPage({
     session,
     stickerTenantId: resolved.tenantId,
   });
+  const canMoveKanbanColumns = await canMoveKanbanColumnsOnStickerHub({
+    session,
+    stickerTenantId: resolved.tenantId,
+  });
+  const columnNeighbor = staffUnlocked
+    ? await getLinkedOrderColumnNeighbor(resolved.tenantId, resolved.orderId)
+    : null;
 
   return (
     <div className="min-h-screen bg-zinc-50 px-3 py-8 text-zinc-900">
@@ -96,9 +108,12 @@ export default async function StickerPublicHubPage({
           sourceEmailCount={data.sourceEmailCount}
           staffUnlocked={staffUnlocked}
           canMarkWorkSent={canMarkWorkSent}
+          canMoveKanbanColumns={canMoveKanbanColumns}
           orderHref={orderPathById(resolved.orderId)}
           kanbanHref={kanbanOrderDeepLinkPath(resolved.orderId)}
           workSent={data.workSent}
+          initialCurrentColumnTitle={columnNeighbor?.currentTitle ?? null}
+          initialNextColumnTitle={columnNeighbor?.nextTitle ?? null}
         />
       </div>
     </div>

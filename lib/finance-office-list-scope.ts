@@ -1,6 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import type { ParsedListTag } from "@/lib/order-list-tag-filter";
 import {
+  listTagWhere,
+  orderAttentionListSupersetWhere,
+  parseListTagParam,
+} from "@/lib/order-list-tag-filter";
+import {
   financeOfficeLabDueBeforeEndExclusive,
   financeOfficeLabDueInRange,
   financeOfficeActualEndExclusive,
@@ -81,4 +86,78 @@ export function financeOfficeListTagSkipsDueDateWindow(
   _parsed: ParsedListTag | null | undefined,
 ): boolean {
   return false;
+}
+
+/** Теги, при которых список Актуального не режется до «только непросчитанные». */
+export function financeOfficeTagOverridesCalculated(
+  listTag: string | null | undefined,
+): boolean {
+  const parsed = listTag?.trim() ? parseListTagParam(listTag) : null;
+  if (!parsed) return false;
+  return (
+    parsed.kind === "financeCalculated" ||
+    parsed.kind === "financeNotCalculated" ||
+    parsed.kind === "edo" ||
+    parsed.kind === "noEdo" ||
+    parsed.kind === "orderAttention" ||
+    parsed.kind === "prostheticsPending" ||
+    parsed.kind === "kaitenLabMention"
+  );
+}
+
+/**
+ * Scope пилюль ЭДО/корректировок/чата — как текущий список
+ * (на Актуальном без тега = только непросчитанные).
+ */
+export function financeOfficeChipCountScopeWhere(
+  tenantId: string,
+  opts: {
+    search?: string | null;
+    mode?: FinanceOfficeMode | null;
+    fromYmd?: string | null;
+    toYmd?: string | null;
+    listTag?: string | null;
+  } = {},
+): Prisma.OrderWhereInput {
+  const parsed = opts.listTag?.trim()
+    ? parseListTagParam(opts.listTag)
+    : null;
+  const parts: Prisma.OrderWhereInput[] = [
+    financeOfficeScopeWhere(tenantId, {
+      search: opts.search,
+      mode: opts.mode ?? "actual",
+      fromYmd: opts.fromYmd,
+      toYmd: opts.toYmd,
+      actualNotCalculatedOnly: !financeOfficeTagOverridesCalculated(
+        opts.listTag,
+      ),
+    }),
+  ];
+  if (parsed && parsed.kind !== "edo" && parsed.kind !== "noEdo") {
+    parts.push(
+      parsed.kind === "orderAttention"
+        ? orderAttentionListSupersetWhere()
+        : listTagWhere(parsed),
+    );
+  }
+  return parts.length === 1 ? parts[0]! : { AND: parts };
+}
+
+/** Окно лаб-срока без clamp «непросчитанные» — для пилюль Просчитано / Не просчитано. */
+export function financeOfficeChipDueWindowScopeWhere(
+  tenantId: string,
+  opts: {
+    search?: string | null;
+    mode?: FinanceOfficeMode | null;
+    fromYmd?: string | null;
+    toYmd?: string | null;
+  } = {},
+): Prisma.OrderWhereInput {
+  return financeOfficeScopeWhere(tenantId, {
+    search: opts.search,
+    mode: opts.mode ?? "actual",
+    fromYmd: opts.fromYmd,
+    toYmd: opts.toYmd,
+    actualNotCalculatedOnly: false,
+  });
 }

@@ -20,9 +20,12 @@ export function PublicStickerHubActions({
   sourceEmailCount,
   staffUnlocked,
   canMarkWorkSent: canMarkWorkSentInitial,
+  canMoveKanbanColumns: canMoveKanbanColumnsInitial,
   orderHref,
   kanbanHref,
   workSent: workSentInitial,
+  initialCurrentColumnTitle = null,
+  initialNextColumnTitle = null,
 }: {
   tenantSlug: string;
   token: string;
@@ -33,17 +36,30 @@ export function PublicStickerHubActions({
   staffUnlocked: boolean;
   /** OWNER или модуль ORDERS_EDIT — как PATCH наряда. */
   canMarkWorkSent: boolean;
+  /** Модуль KANBAN_MOVE_COLUMNS. */
+  canMoveKanbanColumns: boolean;
   orderHref: string;
   kanbanHref: string;
   workSent: boolean;
+  initialCurrentColumnTitle?: string | null;
+  initialNextColumnTitle?: string | null;
 }) {
   const [lettersOpen, setLettersOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [staffError, setStaffError] = useState<string | null>(null);
   const [workSent, setWorkSent] = useState(workSentInitial);
   const [canMarkWorkSent, setCanMarkWorkSent] = useState(canMarkWorkSentInitial);
+  const [canMoveKanbanColumns, setCanMoveKanbanColumns] = useState(
+    canMoveKanbanColumnsInitial,
+  );
   const [shipBusy, setShipBusy] = useState(false);
   const [shipMsg, setShipMsg] = useState<string | null>(null);
+  const [currentColumnTitle, setCurrentColumnTitle] = useState(
+    initialCurrentColumnTitle,
+  );
+  const [nextColumnTitle, setNextColumnTitle] = useState(initialNextColumnTitle);
+  const [advanceBusy, setAdvanceBusy] = useState(false);
+  const [advanceMsg, setAdvanceMsg] = useState<string | null>(null);
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
   const showLetters = sourceEmailCount > 0;
 
@@ -54,6 +70,15 @@ export function PublicStickerHubActions({
   useEffect(() => {
     setCanMarkWorkSent(canMarkWorkSentInitial);
   }, [canMarkWorkSentInitial]);
+
+  useEffect(() => {
+    setCanMoveKanbanColumns(canMoveKanbanColumnsInitial);
+  }, [canMoveKanbanColumnsInitial]);
+
+  useEffect(() => {
+    setCurrentColumnTitle(initialCurrentColumnTitle);
+    setNextColumnTitle(initialNextColumnTitle);
+  }, [initialCurrentColumnTitle, initialNextColumnTitle]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -74,9 +99,34 @@ export function PublicStickerHubActions({
     };
   }, [menuOpen]);
 
+  async function refreshColumnNeighbor() {
+    try {
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(orderId)}/kanban-next-column`,
+        { credentials: "include", cache: "no-store" },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        found?: boolean;
+        currentTitle?: string | null;
+        nextTitle?: string | null;
+      };
+      if (!res.ok) return;
+      if (data.found) {
+        setCurrentColumnTitle(data.currentTitle ?? null);
+        setNextColumnTitle(data.nextTitle ?? null);
+      } else {
+        setCurrentColumnTitle(null);
+        setNextColumnTitle(null);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function tryOpenStaffMenu() {
     setStaffError(null);
     setShipMsg(null);
+    setAdvanceMsg(null);
     if (menuOpen) {
       setMenuOpen(false);
       return;
@@ -111,10 +161,13 @@ export function PublicStickerHubActions({
         return;
       }
       const role = data?.user?.role;
+      const access = data?.user?.moduleAccess;
       if (role) {
-        setCanMarkWorkSent(canEditOrders(role, data?.user?.moduleAccess));
+        setCanMarkWorkSent(canEditOrders(role, access));
+        setCanMoveKanbanColumns(access?.KANBAN_MOVE_COLUMNS === true);
       }
       setMenuOpen(true);
+      void refreshColumnNeighbor();
     } catch {
       setMenuOpen(false);
       setStaffError("Не удалось проверить вход. Попробуйте ещё раз.");
@@ -165,6 +218,53 @@ export function PublicStickerHubActions({
       setShipBusy(false);
     }
   }
+
+  async function advanceKanbanColumn() {
+    if (advanceBusy || !canMoveKanbanColumns || !nextColumnTitle) return;
+    setAdvanceBusy(true);
+    setAdvanceMsg(null);
+    try {
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(orderId)}/kanban-next-column`,
+        { method: "POST", credentials: "include" },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        fromTitle?: string;
+        toTitle?: string;
+        kaitenError?: string | null;
+      };
+      if (res.status === 401) {
+        setMenuOpen(false);
+        setStaffError("Сессия истекла. Войдите в CRM и повторите.");
+        return;
+      }
+      if (res.status === 403) {
+        setCanMoveKanbanColumns(false);
+        setAdvanceMsg("Нет прав перемещать карточки по колонкам.");
+        return;
+      }
+      if (!res.ok) {
+        setAdvanceMsg(data.error ?? "Не удалось перенести карточку.");
+        return;
+      }
+      setAdvanceMsg(
+        data.kaitenError
+          ? `Этап: «${data.toTitle}» (CRM). ${data.kaitenError}`
+          : `Этап: «${data.toTitle}»`,
+      );
+      await refreshColumnNeighbor();
+    } catch {
+      setAdvanceMsg("Сеть недоступна. Попробуйте ещё раз.");
+    } finally {
+      setAdvanceBusy(false);
+    }
+  }
+
+  const advanceLabel =
+    currentColumnTitle && nextColumnTitle
+      ? `${currentColumnTitle} → ${nextColumnTitle}`
+      : null;
 
   return (
     <>
@@ -237,6 +337,31 @@ export function PublicStickerHubActions({
               >
                 Открыть канбан
               </Link>
+              {canMoveKanbanColumns && advanceLabel ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={advanceBusy}
+                  title={`Перенести карточку: ${advanceLabel}`}
+                  className={`${menuItemBase} border-t border-zinc-100 font-medium text-sky-950 hover:bg-sky-50`}
+                  onClick={() => void advanceKanbanColumn()}
+                >
+                  {advanceBusy ? "Перенос…" : advanceLabel}
+                </button>
+              ) : canMoveKanbanColumns && currentColumnTitle && !nextColumnTitle ? (
+                <p className="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
+                  Уже на последней колонке («{currentColumnTitle}»)
+                </p>
+              ) : canMoveKanbanColumns ? (
+                <p className="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
+                  Карточка в канбане не найдена
+                </p>
+              ) : null}
+              {advanceMsg ? (
+                <p className="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-600">
+                  {advanceMsg}
+                </p>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"
