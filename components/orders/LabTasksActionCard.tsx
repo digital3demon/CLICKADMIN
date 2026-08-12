@@ -113,44 +113,61 @@ export function LabTasksActionCard({
     };
   }, []);
 
-  const loadPending = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const res = await fetch(
-        `/api/lab-tasks?status=pending&kind=${encodeURIComponent(kindQ)}`,
-        {
-          credentials: "include",
-          cache: "no-store",
-        },
-      );
-      const j = (await res.json().catch(() => ({}))) as {
-        items?: LabTaskJson[];
-        pendingCount?: number;
-        canResolve?: boolean;
-        error?: string;
-      };
-      if (!res.ok) {
-        setErr(j.error ?? "Не удалось загрузить");
-        return;
-      }
-      setItems(Array.isArray(j.items) ? j.items : []);
-      if (typeof j.pendingCount === "number") setPendingCount(j.pendingCount);
-      if (typeof j.canResolve === "boolean") setCanResolveLive(j.canResolve);
-    } catch {
-      setErr("Сеть недоступна");
-    } finally {
-      setLoading(false);
-    }
-  }, [kindQ]);
-
   useEffect(() => {
     if (!open) {
       setConfirmDoneId(null);
       return;
     }
-    void loadPending();
-  }, [open, loadPending]);
+    const ac = new AbortController();
+    let timedOut = false;
+    const timer = window.setTimeout(() => {
+      timedOut = true;
+      ac.abort();
+    }, 15_000);
+    void (async () => {
+      setLoading(items.length === 0);
+      setErr(null);
+      try {
+        const res = await fetch(
+          `/api/lab-tasks?status=pending&kind=${encodeURIComponent(kindQ)}`,
+          {
+            credentials: "include",
+            cache: "no-store",
+            signal: ac.signal,
+          },
+        );
+        const j = (await res.json().catch(() => ({}))) as {
+          items?: LabTaskJson[];
+          pendingCount?: number;
+          canResolve?: boolean;
+          error?: string;
+        };
+        if (!res.ok) {
+          setErr(j.error ?? "Не удалось загрузить");
+          return;
+        }
+        setItems(Array.isArray(j.items) ? j.items : []);
+        if (typeof j.pendingCount === "number") setPendingCount(j.pendingCount);
+        if (typeof j.canResolve === "boolean") setCanResolveLive(j.canResolve);
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") {
+          if (timedOut) {
+            setErr("Превышено время ожидания — закройте и откройте снова");
+          }
+          return;
+        }
+        setErr("Сеть недоступна");
+      } finally {
+        setLoading(false);
+        window.clearTimeout(timer);
+      }
+    })();
+    return () => {
+      ac.abort();
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on open
+  }, [open, kindQ]);
 
   const addFiles = useCallback((list: FileList | File[]) => {
     const incoming = Array.from(list).filter((f) =>

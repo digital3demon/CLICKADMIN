@@ -35,6 +35,27 @@ export function orderAttachmentImageOutputName(fileName: string): string {
   return `${base}.jpg`;
 }
 
+/** Не даём UI зависнуть на «Загрузка…», если decode/toBlob не отвечает. */
+const NORMALIZE_STEP_TIMEOUT_MS = 12_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`${label}_TIMEOUT`));
+    }, ms);
+    promise.then(
+      (v) => {
+        window.clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        window.clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -58,8 +79,17 @@ export async function normalizeOrderAttachmentImage(file: File): Promise<File> {
 
   let bitmap: ImageBitmap;
   try {
-    bitmap = await createImageBitmap(file);
-  } catch {
+    bitmap = await withTimeout(
+      createImageBitmap(file),
+      NORMALIZE_STEP_TIMEOUT_MS,
+      "IMAGE_DECODE",
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg === "IMAGE_DECODE_TIMEOUT") {
+      // Браузер завис на decode — лучше отдать оригинал, чем крутить спиннер вечно.
+      return file;
+    }
     if (isHeicLikeOrderImage(file)) {
       throw new Error(
         "Формат HEIC не открывается в этом браузере. Сохраните фото как JPEG или вставьте скриншот.",
@@ -83,17 +113,31 @@ export async function normalizeOrderAttachmentImage(file: File): Promise<File> {
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
-  let quality = JPEG_QUALITY;
-  let blob = await canvasToJpegBlob(canvas, quality);
-  while (blob.size > TARGET_BYTES && quality > 0.4) {
-    quality -= 0.07;
-    blob = await canvasToJpegBlob(canvas, quality);
-  }
+  try {
+    let quality = JPEG_QUALITY;
+    let blob = await withTimeout(
+      canvasToJpegBlob(canvas, quality),
+      NORMALIZE_STEP_TIMEOUT_MS,
+      "IMAGE_ENCODE",
+    );
+    while (blob.size > TARGET_BYTES && quality > 0.4) {
+      quality -= 0.07;
+      blob = await withTimeout(
+        canvasToJpegBlob(canvas, quality),
+        NORMALIZE_STEP_TIMEOUT_MS,
+        "IMAGE_ENCODE",
+      );
+    }
 
-  return new File([blob], orderAttachmentImageOutputName(file.name), {
-    type: "image/jpeg",
-    lastModified: file.lastModified || Date.now(),
-  });
+    return new File([blob], orderAttachmentImageOutputName(file.name), {
+      type: "image/jpeg",
+      lastModified: file.lastModified || Date.now(),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg === "IMAGE_ENCODE_TIMEOUT") return file;
+    throw e;
+  }
 }
 
 export async function normalizeOrderAttachmentImages(files: File[]): Promise<File[]> {

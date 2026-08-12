@@ -1805,24 +1805,31 @@ export function NewOrderForm({
       setSaveError(CRM_UPLOAD_TOO_LARGE_MESSAGE);
       return;
     }
-    setPendingSourceAttachmentLoads((prev) =>
-      prev.some((item) => item.key === loadingKey)
-        ? prev
-        : [
-            ...prev,
-            {
-              key: loadingKey,
-              name: attachment.fileName || "attachment",
-              size: attachment.size,
-            },
-          ],
-    );
+    let alreadyLoading = false;
+    setPendingSourceAttachmentLoads((prev) => {
+      if (prev.some((item) => item.key === loadingKey)) {
+        alreadyLoading = true;
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          key: loadingKey,
+          name: attachment.fileName || "attachment",
+          size: attachment.size,
+        },
+      ];
+    });
+    if (alreadyLoading) return;
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), 60_000);
     try {
       await new Promise<void>((resolve) => {
         window.requestAnimationFrame(() => resolve());
       });
       const res = await fetch(`/api/mail/emails/${email.id}/attachments/${attachment.id}`, {
         cache: "no-store",
+        signal: ac.signal,
       });
       if (!res.ok) throw new Error("Не удалось скачать вложение из письма");
       const blob = await res.blob();
@@ -1835,8 +1842,15 @@ export function NewOrderForm({
         return [...prev, file];
       });
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Не удалось добавить вложение в заказ");
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setSaveError("Превышено время ожидания при скачивании вложения из письма");
+      } else {
+        setSaveError(
+          error instanceof Error ? error.message : "Не удалось добавить вложение в заказ",
+        );
+      }
     } finally {
+      window.clearTimeout(timer);
       setPendingSourceAttachmentLoads((prev) =>
         prev.filter((item) => item.key !== loadingKey),
       );

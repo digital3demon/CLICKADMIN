@@ -261,7 +261,9 @@ const RULES: Rule[] = [
   { prefix: "/api/construction-types", module: "ORDERS" },
   { prefix: "/api/materials", module: "ORDERS" },
   { prefix: "/api/order-attachments", module: "ORDERS" },
+  { prefix: "/api/lab-tasks", module: "ORDERS" },
   { prefix: "/api/kaiten", module: "ORDERS" },
+
   { prefix: "/api/order-notifications", module: "ORDERS" },
   { prefix: "/api/order-chat-corrections", module: "ORDERS" },
   { prefix: "/api/order-chat-messages", module: "ORDERS_CHAT" },
