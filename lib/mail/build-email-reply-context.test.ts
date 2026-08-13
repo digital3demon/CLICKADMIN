@@ -46,4 +46,12 @@ describe("substituteOrderNumberPlaceholders", () => {
     );
     expect(out).toBe("Наряд 2685-482 принят. Номер 2685-482.");
   });
+
+  it("заменяет уже подставленный preview-номер", () => {
+    const out = substituteOrderNumberPlaceholders(
+      "Наряд 2685-481 принят.",
+      "2685-482",
+    );
+    expect(out).toBe("Наряд 2685-482 принят.");
+  });
 });

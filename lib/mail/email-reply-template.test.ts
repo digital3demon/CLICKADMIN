@@ -106,4 +106,19 @@ describe("substituteOrderNumberPlaceholders", () => {
       substituteOrderNumberPlaceholders("№ {{orderNumber}}", "178"),
     ).toBe("№ 178");
   });
+
+  it("переписывает запечённый preview YYMM-NNN на фактический (кириллица вокруг)", () => {
+    const baked =
+      "Благодарим за заказ! Ваш заказ 2608-183\nВаш заказ 2608-183 принят!";
+    expect(substituteOrderNumberPlaceholders(baked, "2608-184")).toBe(
+      "Благодарим за заказ! Ваш заказ 2608-184\nВаш заказ 2608-184 принят!",
+    );
+  });
+
+  it("не трогает даты вида 30.08.26", () => {
+    const t = "Срок отгрузки 30.08.26, наряд 2608-183.";
+    expect(substituteOrderNumberPlaceholders(t, "2608-184")).toBe(
+      "Срок отгрузки 30.08.26, наряд 2608-184.",
+    );
+  });
 });

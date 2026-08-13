@@ -74,7 +74,15 @@ export function substituteOrderNumberPlaceholders(
 ): string {
   const num = orderNumber.trim();
   if (!num) return text;
-  return text.replace(/\{\{orderNumber\}\}/g, num);
+  // 1) Оставшиеся токены шаблона
+  let out = text.replace(/\{\{\s*orderNumber\s*\}\}/g, num);
+  // 2) Префлайт уже запекает preview (часто на 1 меньше при гонке create) —
+  //    любой YYMM-NNN в теме/теле заменяем на фактический номер из БД.
+  //    Не \b: word boundary ломается на кириллице («заказ 2608-183 принят»).
+  out = out.replace(/(?<![\dA-Za-z])(\d{4}-\d{3})(?![\dA-Za-z])/g, (m) =>
+    m === num ? m : num,
+  );
+  return out;
 }
 
 /** Реальный URL витрины вместо {{orderStatusUrl}} и preview-ссылки из префлайта. */
