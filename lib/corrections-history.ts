@@ -6,7 +6,8 @@ export type OrdersHistoryTab =
   | "corrections"
   | "prosthetics"
   | "tasks"
-  | "pickups";
+  | "pickups"
+  | "stock";
 
 export type CorrectionHistorySource = "KAITEN" | "DEMO_KANBAN";
 
@@ -52,6 +53,7 @@ export function parseOrdersHistoryTab(
   if (raw === "prosthetics") return "prosthetics";
   if (raw === "tasks") return "tasks";
   if (raw === "pickups") return "pickups";
+  if (raw === "stock") return "stock";
   return "changes";
 }
 
@@ -64,6 +66,7 @@ export function ordersHistoryHref(opts?: {
   if (opts?.tab === "prosthetics") p.set("tab", "prosthetics");
   if (opts?.tab === "tasks") p.set("tab", "tasks");
   if (opts?.tab === "pickups") p.set("tab", "pickups");
+  if (opts?.tab === "stock") p.set("tab", "stock");
   const q = normalizeRevisionsHistorySearchQuery(opts?.q);
   if (q) p.set("q", q);
   const qs = p.toString();

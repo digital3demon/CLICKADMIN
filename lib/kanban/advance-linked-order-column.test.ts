@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { peekLinkedOrderColumnNeighbor } from "@/lib/kanban/advance-linked-order-column";
+import {
+  findHandedToAdminsColumnIndex,
+  peekLinkedOrderColumnNeighbor,
+} from "@/lib/kanban/advance-linked-order-column";
 import type { KanbanAppState, KanbanBoard } from "@/lib/kanban/types";
 
 function boardWithColumns(
@@ -54,5 +57,34 @@ describe("peekLinkedOrderColumnNeighbor", () => {
     const n = peekLinkedOrderColumnNeighbor(state, "ord-1");
     expect(n?.isLast).toBe(true);
     expect(n?.nextTitle).toBeNull();
+  });
+});
+
+describe("findHandedToAdminsColumnIndex", () => {
+  it("matches by title", () => {
+    expect(
+      findHandedToAdminsColumnIndex([
+        { id: "a", title: "Производство" },
+        { id: "b", title: "Сдана админам" },
+      ]),
+    ).toBe(1);
+  });
+
+  it("matches by col_shipped suffix", () => {
+    expect(
+      findHandedToAdminsColumnIndex([
+        { id: "kanban_board_orthopedics_col_prod", title: "Производство" },
+        {
+          id: "kanban_board_orthopedics_col_shipped",
+          title: "Готово",
+        },
+      ]),
+    ).toBe(1);
+  });
+
+  it("returns -1 when missing", () => {
+    expect(
+      findHandedToAdminsColumnIndex([{ id: "a", title: "Производство" }]),
+    ).toBe(-1);
   });
 });

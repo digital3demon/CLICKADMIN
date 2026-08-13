@@ -15,11 +15,12 @@ describe("parseOrdersHistoryTab", () => {
     expect(parseOrdersHistoryTab("")).toBe("changes");
   });
 
-  it("corrections и prosthetics и tasks и pickups", () => {
+  it("corrections и prosthetics и tasks и pickups и stock", () => {
     expect(parseOrdersHistoryTab("corrections")).toBe("corrections");
     expect(parseOrdersHistoryTab("prosthetics")).toBe("prosthetics");
     expect(parseOrdersHistoryTab("tasks")).toBe("tasks");
     expect(parseOrdersHistoryTab("pickups")).toBe("pickups");
+    expect(parseOrdersHistoryTab("stock")).toBe("stock");
   });
 });
 
@@ -37,6 +38,9 @@ describe("ordersHistoryHref", () => {
     expect(
       ordersHistoryHref({ tab: "pickups", q: "склад" }),
     ).toBe("/orders/history?tab=pickups&q=%D1%81%D0%BA%D0%BB%D0%B0%D0%B4");
+    expect(
+      ordersHistoryHref({ tab: "stock", q: "циркон" }),
+    ).toBe("/orders/history?tab=stock&q=%D1%86%D0%B8%D1%80%D0%BA%D0%BE%D0%BD");
   });
 });
 

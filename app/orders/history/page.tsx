@@ -5,6 +5,7 @@ import { OrdersHistorySearch } from "@/components/orders/OrdersHistorySearch";
 import { OrdersHistoryTabNav } from "@/components/orders/OrdersHistoryTabNav";
 import { OrdersHistoryTable } from "@/components/orders/OrdersHistoryTable";
 import { OrdersProstheticsHistoryTable } from "@/components/orders/OrdersProstheticsHistoryTable";
+import { OrdersStockHistoryTable } from "@/components/orders/OrdersStockHistoryTable";
 import { OrdersTasksHistoryTable } from "@/components/orders/OrdersTasksHistoryTable";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
@@ -14,6 +15,8 @@ import {
   loadCorrectionsHistoryOnly,
   loadProstheticsHistoryOnly,
 } from "@/lib/corrections-history.server";
+import type { StockHistoryRow } from "@/lib/inventory/stock-history";
+import { loadStockHistory } from "@/lib/inventory/stock-history.server";
 import { loadLabTasks } from "@/lib/lab-tasks.server";
 import type { LabTaskJson } from "@/lib/lab-tasks";
 import { normalizeRevisionsHistorySearchQuery } from "@/lib/revisions-history";
@@ -43,6 +46,7 @@ export default async function OrdersHistoryPage({
   >;
   let tasksItems = [] as LabTaskJson[];
   let pickupsItems = [] as LabTaskJson[];
+  let stockItems = [] as StockHistoryRow[];
 
   try {
     if (tab === "changes") {
@@ -67,6 +71,8 @@ export default async function OrdersHistoryPage({
         limit: 150,
         q,
       });
+    } else if (tab === "stock") {
+      stockItems = await loadStockHistory({ q });
     }
   } catch (e) {
     console.error("[orders/history]", e);
@@ -81,7 +87,9 @@ export default async function OrdersHistoryPage({
           ? tasksItems.length
           : tab === "pickups"
             ? pickupsItems.length
-            : changesItems.length;
+            : tab === "stock"
+              ? stockItems.length
+              : changesItems.length;
   const limitReached = itemCount >= 150;
 
   const emptyMessage =
@@ -93,7 +101,9 @@ export default async function OrdersHistoryPage({
           ? "Журнал задач пуст."
           : tab === "pickups"
             ? "Журнал «Забрать из» пуст."
-            : "Журнал пуст. После сохранения нарядов и карточек клиентов здесь появятся записи.";
+            : tab === "stock"
+              ? "Журнал склада пуст. После прихода или расхода здесь появятся записи."
+              : "Журнал пуст. После сохранения нарядов и карточек клиентов здесь появятся записи.";
 
   const isLabNotesTab = tab === "tasks" || tab === "pickups";
   const labNotesItems = tab === "pickups" ? pickupsItems : tasksItems;
@@ -115,6 +125,8 @@ export default async function OrdersHistoryPage({
               <OrdersCorrectionsHistoryTable items={[]} />
             ) : tab === "prosthetics" ? (
               <OrdersProstheticsHistoryTable items={[]} />
+            ) : tab === "stock" ? (
+              <OrdersStockHistoryTable items={[]} />
             ) : isLabNotesTab ? (
               <OrdersTasksHistoryTable items={[]} />
             ) : (
@@ -140,6 +152,8 @@ export default async function OrdersHistoryPage({
                 items={prostheticsItems}
                 canMarkArrived={canMarkArrived}
               />
+            ) : tab === "stock" ? (
+              <OrdersStockHistoryTable items={stockItems} />
             ) : isLabNotesTab ? (
               <OrdersTasksHistoryTable items={labNotesItems} />
             ) : (

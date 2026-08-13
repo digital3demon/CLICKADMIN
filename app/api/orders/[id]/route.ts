@@ -23,7 +23,7 @@ import { ensureDoctorClinicLink } from "@/lib/ensure-doctor-clinic-link";
 import { ensureDoctorClinicLinkAfterOrderSave } from "@/lib/ensure-doctor-clinic-link-from-order";
 import { buildConstructionCreatesFromInput } from "@/lib/order-construction-input";
 import { applyOrderListAdminMemo } from "@/lib/order-list-admin-memo.server";
-import { isLabWorkStatus } from "@/lib/lab-work-status";
+import { isLabWorkStatus, LAB_WORK_STATUS_LABELS } from "@/lib/lab-work-status";
 import { parseUrgentSelection } from "@/lib/order-urgency";
 import { isOrderStatus } from "@/lib/order-status-labels";
 import {
@@ -35,6 +35,8 @@ import {
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import { runSelfCorrectionForOrderInBackground } from "@/lib/llm/self-correction";
 import { syncOrderProstheticsStockTx } from "@/lib/sync-order-prosthetics-stock";
+import { applyWorkSentKanbanSideEffects } from "@/lib/kanban/advance-linked-order-column.server";
+import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import {
   isOrderCorrectionTrack,
   ORDER_CORRECTION_TRACK_LABELS,
@@ -766,6 +768,11 @@ export async function PATCH(
     }
   }
 
+  const becameWorkSent =
+    body.adminShippedOtpr !== undefined &&
+    Boolean(body.adminShippedOtpr) &&
+    !existing.adminShippedOtpr;
+
   if (body.shippedDescription !== undefined) {
     const t =
       body.shippedDescription === null
@@ -1243,6 +1250,27 @@ export async function PATCH(
       await recordOrderRevision(orderId, { kind: "SAVE" });
     } catch (e) {
       console.error("[PATCH order] revision log", e);
+    }
+
+    if (becameWorkSent) {
+      try {
+        const actorLabel = userActivityDisplayLabel({
+          mentionHandle: null,
+          displayName: session?.name?.trim() || null,
+          email: session?.email || null,
+        });
+        await applyWorkSentKanbanSideEffects({
+          tenantId,
+          orderId,
+          actorUserId: session?.sub ?? null,
+          actorLabel,
+          request: req,
+        });
+        order.labWorkStatus = "TO_ADMINS";
+        order.kaitenColumnTitle = LAB_WORK_STATUS_LABELS.TO_ADMINS;
+      } catch (e) {
+        console.error("[PATCH order] work-sent kanban", orderId, e);
+      }
     }
 
     if (body.continuesFromOrderId !== undefined) {

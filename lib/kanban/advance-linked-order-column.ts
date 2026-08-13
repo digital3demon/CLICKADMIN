@@ -1,5 +1,6 @@
 import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
 import type { KanbanAppState } from "@/lib/kanban/types";
+import { isHandedToAdminsKaitenColumnTitle } from "@/lib/sticker-public-client-copy";
 
 export type LinkedOrderColumnNeighbor = {
   currentTitle: string;
@@ -18,8 +19,14 @@ export type AdvanceLinkedOrderColumnResult =
       toTitle: string;
       kaitenCardId: number | null;
       sortOrder: number;
+      /** Уже была в целевой колонке — канбан не меняли. */
+      alreadyThere?: boolean;
     }
-  | { ok: false; error: string; code?: "not_found" | "last" | "conflict" };
+  | {
+      ok: false;
+      error: string;
+      code?: "not_found" | "last" | "conflict" | "no_target";
+    };
 
 export function peekLinkedOrderColumnNeighbor(
   state: KanbanAppState,
@@ -45,4 +52,17 @@ export function peekLinkedOrderColumnNeighbor(
         ? kaitenRaw
         : null,
   };
+}
+
+/** Индекс колонки «Сдана админам» (title / idSuffix col_shipped). */
+export function findHandedToAdminsColumnIndex(
+  columns: Array<{ id?: string; title?: string | null }>,
+): number {
+  for (let i = 0; i < columns.length; i += 1) {
+    const col = columns[i]!;
+    const id = String(col.id ?? "");
+    if (id.endsWith("_col_shipped") || id === "col_shipped") return i;
+    if (isHandedToAdminsKaitenColumnTitle(col.title)) return i;
+  }
+  return -1;
 }

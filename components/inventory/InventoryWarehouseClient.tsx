@@ -611,6 +611,13 @@ export function InventoryWarehouseClient() {
         >
           Конфигурация → Склад
         </Link>
+        . Журнал движений:{" "}
+        <Link
+          href="/orders/history?tab=stock"
+          className="font-medium text-[var(--sidebar-blue)] hover:underline"
+        >
+          История → Склад
+        </Link>
         .
       </p>
 
