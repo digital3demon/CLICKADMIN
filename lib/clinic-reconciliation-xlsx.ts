@@ -14,11 +14,39 @@ const SUMMARY_FIRST = 1;
 const SUMMARY_CAPACITY = 13;
 const DATA_FIRST = 21;
 
-const YELLOW_FILL: ExcelJS.Fill = {
-  type: "pattern",
-  pattern: "solid",
-  fgColor: { argb: "FFFFFF00" },
-};
+/** Светло-серый (строки / поля значений). Новый объект на ячейку — exceljs шарит fill. */
+function valueFill(): ExcelJS.Fill {
+  return {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFF2F2F2" },
+  };
+}
+
+/** Тёмно-серый (шапки и подписи «к оплате»). */
+function headFill(): ExcelJS.Fill {
+  return {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF7A7A7A" },
+  };
+}
+
+function isLegacyColoredFill(fill: ExcelJS.Fill | undefined): boolean {
+  if (!fill || fill.type !== "pattern" || !fill.fgColor) return false;
+  const argb = (fill.fgColor as { argb?: string }).argb?.toUpperCase();
+  if (
+    argb === "FFFFFF00" ||
+    argb === "FF00FF00" ||
+    argb === "FFF0F0F0" ||
+    argb === "FFC8C8C8"
+  ) {
+    return true;
+  }
+  const theme = (fill.fgColor as { theme?: number }).theme;
+  // В шаблоне зелёная заливка была theme 7.
+  return theme === 7;
+}
 
 async function resolveTemplatePath(): Promise<string> {
   const candidates = [
@@ -47,16 +75,50 @@ async function loadTemplateWorkbook(): Promise<ExcelJS.Workbook> {
   return workbook;
 }
 
-function setYellowValue(
+function applyFill(cell: ExcelJS.Cell, fill: ExcelJS.Fill) {
+  // Клон style обязателен: exceljs шарит xf, иначе заливка шапки/строк сливается.
+  let base: ExcelJS.Style = {};
+  try {
+    base = JSON.parse(JSON.stringify(cell.style ?? {})) as ExcelJS.Style;
+  } catch {
+    base = { ...(cell.style ?? {}) };
+  }
+  cell.style = { ...base, fill };
+}
+
+function setValueCell(
   cell: ExcelJS.Cell,
   value: string | number | null | undefined,
 ) {
   cell.value = value ?? "";
-  cell.fill = YELLOW_FILL;
+  applyFill(cell, valueFill());
+}
+
+function recolorTemplateFills(sheet: ExcelJS.Worksheet) {
+  sheet.eachRow({ includeEmpty: true }, (row) => {
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      if (!isLegacyColoredFill(cell.fill)) return;
+      const argb = (cell.fill?.fgColor as { argb?: string } | undefined)?.argb
+        ?.toUpperCase();
+      const theme = (cell.fill?.fgColor as { theme?: number } | undefined)
+        ?.theme;
+      // Шапка (стр. 20) и «к оплате» / старый зелёный → тёмно-серый; остальное → светлый.
+      const isHead =
+        row.number === 20 ||
+        theme === 7 ||
+        argb === "FF00FF00" ||
+        argb === "FFC8C8C8";
+      if (isHead && row.number < DATA_FIRST) {
+        applyFill(cell, headFill());
+      } else {
+        applyFill(cell, valueFill());
+      }
+    });
+  });
 }
 
 /**
- * Выгрузка сверки: заполнение жёлтых ячеек шаблона (зелёные подписи не меняем).
+ * Выгрузка сверки: заполнение полей значений шаблона (подписи формы — серая шапка).
  */
 export async function buildClinicReconciliationXlsxBuffer(
   clinicId: string,
@@ -79,6 +141,14 @@ export async function buildClinicReconciliationXlsxBuffer(
     throw new Error("В шаблоне сверки нет листа");
   }
 
+  recolorTemplateFills(sheet);
+
+  /** Снимок ширин до splice — иначе после вставки строк границы «скачут». */
+  const lockedColWidths: Array<number | undefined> = [];
+  for (let c = 1; c <= 12; c++) {
+    lockedColWidths[c] = sheet.getColumn(c).width;
+  }
+
   const summary = payload.summary;
   let metaShift = 0;
   if (summary.length > SUMMARY_CAPACITY) {
@@ -93,10 +163,10 @@ export async function buildClinicReconciliationXlsxBuffer(
   for (let i = 0; i < summary.length; i++) {
     const row = sheet.getRow(SUMMARY_FIRST + i);
     const s = summary[i]!;
-    setYellowValue(row.getCell(6), s.label);
-    setYellowValue(row.getCell(7), s.quantity);
-    setYellowValue(row.getCell(8), s.unitRub);
-    setYellowValue(row.getCell(9), s.totalRub);
+    setValueCell(row.getCell(6), s.label);
+    setValueCell(row.getCell(7), s.quantity);
+    setValueCell(row.getCell(8), s.unitRub);
+    setValueCell(row.getCell(9), s.totalRub);
   }
   for (
     let r = SUMMARY_FIRST + summary.length;
@@ -105,7 +175,7 @@ export async function buildClinicReconciliationXlsxBuffer(
   ) {
     const row = sheet.getRow(r);
     for (const c of [6, 7, 8, 9]) {
-      setYellowValue(row.getCell(c), "");
+      setValueCell(row.getCell(c), "");
     }
   }
 
@@ -113,19 +183,19 @@ export async function buildClinicReconciliationXlsxBuffer(
   const dataFirstN = DATA_FIRST + metaShift;
 
   const meta = sheet.getRow(metaRowN);
-  setYellowValue(meta.getCell(1), payload.labLegalName);
-  setYellowValue(meta.getCell(4), payload.periodFromLabel);
-  setYellowValue(meta.getCell(5), payload.periodToLabel);
-  setYellowValue(meta.getCell(6), payload.clinicTitleLine);
-  setYellowValue(meta.getCell(7), payload.yellowRow.totalUnits);
-  setYellowValue(meta.getCell(9), payload.yellowRow.baseTotalRub);
-  setYellowValue(meta.getCell(10), payload.yellowRow.discountedTotalRub);
+  setValueCell(meta.getCell(1), payload.labLegalName);
+  setValueCell(meta.getCell(4), payload.periodFromLabel);
+  setValueCell(meta.getCell(5), payload.periodToLabel);
+  setValueCell(meta.getCell(6), payload.clinicTitleLine);
+  setValueCell(meta.getCell(7), payload.yellowRow.totalUnits);
+  setValueCell(meta.getCell(9), payload.yellowRow.baseTotalRub);
+  setValueCell(meta.getCell(10), payload.yellowRow.discountedTotalRub);
 
-  setYellowValue(
+  setValueCell(
     sheet.getRow(metaRowN + 1).getCell(10),
     payload.yellowRow.discountedTotalRub,
   );
-  setYellowValue(
+  setValueCell(
     sheet.getRow(metaRowN + 2).getCell(10),
     payload.yellowRow.vatRub,
   );
@@ -147,26 +217,28 @@ export async function buildClinicReconciliationXlsxBuffer(
     for (let c = 1; c <= 10; c++) {
       const cell = row.getCell(c);
       try {
-        cell.style = { ...sampleRow.getCell(c).style };
+        const sampleStyle = JSON.parse(
+          JSON.stringify(sampleRow.getCell(c).style ?? {}),
+        ) as ExcelJS.Style;
+        cell.style = { ...sampleStyle, fill: valueFill() };
       } catch {
-        /* ignore style copy */
+        applyFill(cell, valueFill());
       }
-      cell.fill = YELLOW_FILL;
     }
     if (line.showOrderColumns) {
-      setYellowValue(row.getCell(1), line.zashla);
-      setYellowValue(row.getCell(2), line.otpr === "—" ? "" : line.otpr);
-      setYellowValue(row.getCell(3), line.orderNumber);
-      setYellowValue(row.getCell(4), line.patient);
-      setYellowValue(row.getCell(5), line.doctor);
+      setValueCell(row.getCell(1), line.zashla);
+      setValueCell(row.getCell(2), line.otpr === "—" ? "" : line.otpr);
+      setValueCell(row.getCell(3), line.orderNumber);
+      setValueCell(row.getCell(4), line.patient);
+      setValueCell(row.getCell(5), line.doctor);
     } else {
-      for (const c of [1, 2, 3, 4, 5]) setYellowValue(row.getCell(c), "");
+      for (const c of [1, 2, 3, 4, 5]) setValueCell(row.getCell(c), "");
     }
-    setYellowValue(row.getCell(6), line.description);
-    setYellowValue(row.getCell(7), line.quantity);
-    setYellowValue(row.getCell(8), line.unitRub == null ? "" : line.unitRub);
-    setYellowValue(row.getCell(9), line.lineTotalRub);
-    setYellowValue(
+    setValueCell(row.getCell(6), line.description);
+    setValueCell(row.getCell(7), line.quantity);
+    setValueCell(row.getCell(8), line.unitRub == null ? "" : line.unitRub);
+    setValueCell(row.getCell(9), line.lineTotalRub);
+    setValueCell(
       row.getCell(10),
       line.discountPercent == null
         ? ""
@@ -177,8 +249,13 @@ export async function buildClinicReconciliationXlsxBuffer(
   for (let r = dataFirstN + detail.length; r < dataFirstN + templateDataRows; r++) {
     const row = sheet.getRow(r);
     for (let c = 1; c <= 10; c++) {
-      setYellowValue(row.getCell(c), "");
+      setValueCell(row.getCell(c), "");
     }
+  }
+
+  for (let c = 1; c <= 12; c++) {
+    const w = lockedColWidths[c];
+    if (w != null) sheet.getColumn(c).width = w;
   }
 
   const buf = await workbook.xlsx.writeBuffer();

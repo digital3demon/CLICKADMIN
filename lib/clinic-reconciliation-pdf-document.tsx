@@ -10,25 +10,43 @@ import type {
   ReconciliationPdfDetailLine,
 } from "@/lib/clinic-reconciliation-pdf-data";
 import { formatRubPdf } from "@/lib/clinic-reconciliation-pdf-format";
-import { groupReconciliationDetailRows } from "@/lib/clinic-reconciliation-math";
 import { ensureNotoSansPdfFonts } from "@/lib/pdf-noto-fonts";
 
-const YELLOW = "#FFFF00";
-const GREEN = "#00FF00";
+/** Строки данных / жёлтые поля значений — светло-серый. */
+const ROW_GRAY = "#F2F2F2";
+/** Шапки и зелёные подписи («к оплате») — тёмно-серый. */
+const HEAD_GRAY = "#7A7A7A";
 const BORDER = "#000000";
 const CELL_PAD = 2.5;
 
-const F = {
-  z: 8,
-  o: 7,
-  n: 10,
-  p: 14,
-  v: 14,
-  desc: 40,
-  q: 8,
-  price: 10,
-  total: 11,
-  disc: 11,
+/**
+ * Доли колонок основной таблицы (сумма = 100).
+ * Только width % — без вложенного flex: иначе границы «скачут» при переносе текста.
+ */
+const W = {
+  z: "6%",
+  o: "5.5%",
+  n: "7.5%",
+  p: "10.5%",
+  v: "10.5%",
+  desc: "30%",
+  q: "6%",
+  price: "7.5%",
+  total: "8.5%",
+  disc: "8%",
+} as const;
+
+/** Суммы соседних колонок для шапки метаданных / «к оплате». */
+const W_META = {
+  legal: "19%", // z+o+n
+  from: W.p,
+  to: W.v,
+  clinic: W.desc,
+  units: W.q,
+  blank: W.price,
+  base: W.total,
+  discTotal: W.disc,
+  paySpacer: "83.5%", // всё кроме total+disc
 } as const;
 
 const styles = StyleSheet.create({
@@ -55,7 +73,7 @@ const styles = StyleSheet.create({
   },
   summaryHead: {
     flexDirection: "row",
-    backgroundColor: YELLOW,
+    backgroundColor: HEAD_GRAY,
     borderBottomWidth: 1,
     borderColor: BORDER,
     minHeight: 17,
@@ -68,10 +86,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: 700,
     fontSize: 5.8,
+    color: "#000",
   },
   summaryRow: {
     flexDirection: "row",
-    backgroundColor: YELLOW,
+    backgroundColor: ROW_GRAY,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
     minHeight: 15,
@@ -83,24 +102,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     fontSize: 6.2,
   },
-  summaryLabel: { flex: 3.4 },
-  summaryQty: { flex: 0.7, textAlign: "right" },
-  summaryPrice: { flex: 1.1, textAlign: "right" },
+  summaryLabel: { width: "48%" },
+  summaryQty: { width: "14%", textAlign: "right" },
+  summaryPrice: { width: "19%", textAlign: "right" },
   summaryTotal: {
-    flex: 1.2,
+    width: "19%",
     textAlign: "right",
     borderRightWidth: 0,
   },
 
   mainWrap: {
+    width: "100%",
     borderWidth: 1,
     borderColor: BORDER,
   },
   metaRow: {
     flexDirection: "row",
+    width: "100%",
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-    backgroundColor: YELLOW,
+    backgroundColor: ROW_GRAY,
     minHeight: 20,
   },
   metaCell: {
@@ -111,27 +132,32 @@ const styles = StyleSheet.create({
     fontSize: 6.3,
     fontWeight: 700,
   },
-  mLegal: { flex: F.z + F.o + F.n, textAlign: "center" },
-  mFrom: { flex: F.p, textAlign: "center" },
-  mTo: { flex: F.v, textAlign: "center" },
-  mClinic: { flex: F.desc, textAlign: "center" },
-  mUnits: { flex: F.q, textAlign: "center" },
-  mBlank: { flex: F.price },
-  mBase: { flex: F.total, textAlign: "center" },
-  mDiscTotal: { flex: F.disc, textAlign: "center", borderRightWidth: 0 },
+  mLegal: { width: W_META.legal, textAlign: "center" },
+  mFrom: { width: W_META.from, textAlign: "center" },
+  mTo: { width: W_META.to, textAlign: "center" },
+  mClinic: { width: W_META.clinic, textAlign: "center" },
+  mUnits: { width: W_META.units, textAlign: "center" },
+  mBlank: { width: W_META.blank },
+  mBase: { width: W_META.base, textAlign: "center" },
+  mDiscTotal: {
+    width: W_META.discTotal,
+    textAlign: "center",
+    borderRightWidth: 0,
+  },
 
   payRow: {
     flexDirection: "row",
+    width: "100%",
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
     minHeight: 16,
   },
   paySpacer: {
-    flex: F.z + F.o + F.n + F.p + F.v + F.desc + F.q + F.price,
+    width: W_META.paySpacer,
   },
   payLabel: {
-    flex: F.total,
-    backgroundColor: GREEN,
+    width: W.total,
+    backgroundColor: HEAD_GRAY,
     padding: CELL_PAD,
     borderRightWidth: 1,
     borderRightColor: BORDER,
@@ -141,8 +167,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   payValue: {
-    flex: F.disc,
-    backgroundColor: YELLOW,
+    width: W.disc,
+    backgroundColor: ROW_GRAY,
     padding: CELL_PAD,
     fontWeight: 700,
     fontSize: 6.5,
@@ -152,7 +178,8 @@ const styles = StyleSheet.create({
 
   headRow: {
     flexDirection: "row",
-    backgroundColor: GREEN,
+    width: "100%",
+    backgroundColor: HEAD_GRAY,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
     minHeight: 22,
@@ -167,91 +194,45 @@ const styles = StyleSheet.create({
     fontSize: 5.9,
     lineHeight: 1.15,
   },
-  hZ: { flex: F.z },
-  hO: { flex: F.o },
-  hN: { flex: F.n },
-  hP: { flex: F.p },
-  hV: { flex: F.v },
-  hDesc: { flex: F.desc },
-  hQ: { flex: F.q },
-  hPrice: { flex: F.price },
-  hTotal: { flex: F.total },
-  hDisc: { flex: F.disc, borderRightWidth: 0 },
+  hZ: { width: W.z },
+  hO: { width: W.o },
+  hN: { width: W.n },
+  hP: { width: W.p },
+  hV: { width: W.v },
+  hDesc: { width: W.desc },
+  hQ: { width: W.q },
+  hPrice: { width: W.price },
+  hTotal: { width: W.total },
+  hDisc: { width: W.disc, borderRightWidth: 0 },
 
-  orderGroup: {
+  dataRow: {
     flexDirection: "row",
+    width: "100%",
     alignItems: "stretch",
-    backgroundColor: YELLOW,
+    backgroundColor: ROW_GRAY,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-  },
-  groupMetaCell: {
-    padding: 2,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    justifyContent: "center",
-  },
-  mZ: { flex: F.z },
-  mO: { flex: F.o },
-  mN: { flex: F.n },
-  mP: { flex: F.p },
-  mV: { flex: F.v },
-  metaTextRight: { fontSize: 6.5, textAlign: "right" },
-  metaTextCenter: { fontSize: 6.5, textAlign: "center" },
-  metaTextLeft: { fontSize: 6.5, textAlign: "left" },
-
-  linesBlock: {
-    flexDirection: "column",
-    flex: F.desc + F.q + F.price + F.total + F.disc,
-  },
-  innerLine: {
-    flexDirection: "row",
-    alignItems: "stretch",
     minHeight: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
   },
-  innerLineLast: {
-    borderBottomWidth: 0,
-  },
-  cDesc: {
-    flex: F.desc,
+  dCell: {
     padding: 2,
     borderRightWidth: 1,
     borderRightColor: BORDER,
-    fontSize: 6.5,
-    textAlign: "left",
+    justifyContent: "flex-start",
   },
-  cQ: {
-    flex: F.q,
-    padding: 2,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    fontSize: 6.5,
-    textAlign: "right",
-  },
-  cPrice: {
-    flex: F.price,
-    padding: 2,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    fontSize: 6.5,
-    textAlign: "right",
-  },
-  cTotal: {
-    flex: F.total,
-    padding: 2,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    fontSize: 6.5,
-    textAlign: "right",
-  },
-  cDisc: {
-    flex: F.disc,
-    padding: 2,
-    fontSize: 6.5,
-    textAlign: "right",
-  },
+  dZ: { width: W.z },
+  dO: { width: W.o },
+  dN: { width: W.n },
+  dP: { width: W.p },
+  dV: { width: W.v },
+  dDesc: { width: W.desc },
+  dQ: { width: W.q },
+  dPrice: { width: W.price },
+  dTotal: { width: W.total },
+  dDisc: { width: W.disc, borderRightWidth: 0 },
+  tRight: { fontSize: 6.5, textAlign: "right" },
+  tCenter: { fontSize: 6.5, textAlign: "center" },
+  tLeft: { fontSize: 6.5, textAlign: "left" },
 });
 
 function moneyOrDash(v: number | null): string {
@@ -259,56 +240,47 @@ function moneyOrDash(v: number | null): string {
   return formatRubPdf(v);
 }
 
-function OrderGroupBlock({
-  group,
-}: {
-  group: ReconciliationPdfDetailLine[];
-}) {
-  const first = group[0];
-  if (!first) return null;
-
+function DetailRow({ line }: { line: ReconciliationPdfDetailLine }) {
+  const showMeta = line.showOrderColumns;
   return (
-    <View style={styles.orderGroup}>
-      <View style={[styles.groupMetaCell, styles.mZ]}>
-        <Text style={styles.metaTextRight}>{first.zashla}</Text>
+    <View style={styles.dataRow} wrap={false}>
+      <View style={[styles.dCell, styles.dZ]}>
+        <Text style={styles.tRight}>{showMeta ? line.zashla : ""}</Text>
       </View>
-      <View style={[styles.groupMetaCell, styles.mO]}>
-        <Text style={styles.metaTextRight}>
-          {first.otpr === "—" ? "" : first.otpr}
+      <View style={[styles.dCell, styles.dO]}>
+        <Text style={styles.tRight}>
+          {showMeta && line.otpr !== "—" ? line.otpr : ""}
         </Text>
       </View>
-      <View style={[styles.groupMetaCell, styles.mN]}>
-        <Text style={styles.metaTextCenter}>{first.orderNumber}</Text>
+      <View style={[styles.dCell, styles.dN]}>
+        <Text style={styles.tCenter}>{showMeta ? line.orderNumber : ""}</Text>
       </View>
-      <View style={[styles.groupMetaCell, styles.mP]}>
-        <Text style={styles.metaTextLeft}>{first.patient}</Text>
+      <View style={[styles.dCell, styles.dP]}>
+        <Text style={styles.tLeft}>{showMeta ? line.patient : ""}</Text>
       </View>
-      <View style={[styles.groupMetaCell, styles.mV]}>
-        <Text style={styles.metaTextLeft}>{first.doctor}</Text>
+      <View style={[styles.dCell, styles.dV]}>
+        <Text style={styles.tLeft}>{showMeta ? line.doctor : ""}</Text>
       </View>
-
-      <View style={styles.linesBlock}>
-        {group.map((line, li) => (
-          <View
-            key={li}
-            style={[
-              styles.innerLine,
-              li === group.length - 1 ? styles.innerLineLast : {},
-            ]}
-          >
-            <Text style={styles.cDesc}>{line.description}</Text>
-            <Text style={styles.cQ}>
-              {String(line.quantity).replace(".", ",")}
-            </Text>
-            <Text style={styles.cPrice}>{moneyOrDash(line.unitRub)}</Text>
-            <Text style={styles.cTotal}>{formatRubPdf(line.lineTotalRub)}</Text>
-            <Text style={styles.cDisc}>
-              {line.discountPercent == null
-                ? ""
-                : `${String(line.discountPercent).replace(".", ",")}%`}
-            </Text>
-          </View>
-        ))}
+      <View style={[styles.dCell, styles.dDesc]}>
+        <Text style={styles.tLeft}>{line.description}</Text>
+      </View>
+      <View style={[styles.dCell, styles.dQ]}>
+        <Text style={styles.tRight}>
+          {String(line.quantity).replace(".", ",")}
+        </Text>
+      </View>
+      <View style={[styles.dCell, styles.dPrice]}>
+        <Text style={styles.tRight}>{moneyOrDash(line.unitRub)}</Text>
+      </View>
+      <View style={[styles.dCell, styles.dTotal]}>
+        <Text style={styles.tRight}>{formatRubPdf(line.lineTotalRub)}</Text>
+      </View>
+      <View style={[styles.dCell, styles.dDisc]}>
+        <Text style={styles.tRight}>
+          {line.discountPercent == null
+            ? ""
+            : `${String(line.discountPercent).replace(".", ",")}%`}
+        </Text>
       </View>
     </View>
   );
@@ -320,7 +292,6 @@ export function ClinicReconciliationPdfDocument({
   payload: ClinicReconciliationPdfPayload;
 }) {
   ensureNotoSansPdfFonts();
-  const groups = groupReconciliationDetailRows(payload.detail);
 
   return (
     <Document
@@ -436,8 +407,8 @@ export function ClinicReconciliationPdfDocument({
             <Text style={[styles.hCell, styles.hDisc]}>СКИДКА</Text>
           </View>
 
-          {groups.map((group, gi) => (
-            <OrderGroupBlock key={`g-${gi}`} group={group} />
+          {payload.detail.map((line, i) => (
+            <DetailRow key={`d-${i}`} line={line} />
           ))}
         </View>
       </Page>
