@@ -32,6 +32,7 @@ type RawTransit = {
   authorLabel: string | null;
   createdAt: Date;
   resolvedAt: Date;
+  orderedAt: Date | null;
   arrivedAt: Date | null;
   checkedAt: Date | null;
   completedAt: Date | null;
@@ -75,6 +76,7 @@ const transitDateSelect = {
   authorLabel: true,
   createdAt: true,
   resolvedAt: true,
+  orderedAt: true,
   arrivedAt: true,
   checkedAt: true,
   completedAt: true,
@@ -89,6 +91,7 @@ const transitDateSelectSlim = {
   authorLabel: true,
   createdAt: true,
   resolvedAt: true,
+  orderedAt: true,
   arrivedAt: true,
   checkedAt: true,
   completedAt: true,
@@ -127,6 +130,7 @@ function toRow(
   labelByItemId: Map<string, string>,
   slim: boolean,
 ): ProstheticsInTransitRow {
+  const orderedAt = isoOrNull(raw.orderedAt);
   const arrivedAt = isoOrNull(raw.arrivedAt);
   const checkedAt = isoOrNull(raw.checkedAt);
   const completedAt = isoOrNull(raw.completedAt);
@@ -137,11 +141,13 @@ function toRow(
     authorLabel: raw.authorLabel,
     createdAt: raw.createdAt.toISOString(),
     resolvedAt: raw.resolvedAt.toISOString(),
+    orderedAt,
     arrivedAt,
     checkedAt,
     completedAt,
     step: prostheticsInTransitStepFromDates({
       resolvedAt: raw.resolvedAt,
+      orderedAt: raw.orderedAt,
       arrivedAt: raw.arrivedAt,
       checkedAt: raw.checkedAt,
       completedAt: raw.completedAt,
@@ -217,6 +223,7 @@ export async function listProstheticsInTransit(
             authorLabel: string | null;
             createdAt: Date;
             resolvedAt: Date | null;
+            orderedAt: Date | null;
             arrivedAt: Date | null;
             checkedAt: Date | null;
             completedAt: Date | null;
@@ -240,6 +247,7 @@ export async function listProstheticsInTransit(
       authorLabel: row.authorLabel,
       createdAt: row.createdAt,
       resolvedAt: row.resolvedAt,
+      orderedAt: row.orderedAt ?? null,
       arrivedAt: row.arrivedAt ?? null,
       checkedAt: row.checkedAt ?? null,
       completedAt: row.completedAt ?? null,
@@ -260,6 +268,7 @@ export async function listProstheticsInTransit(
       authorLabel: row.authorLabel,
       createdAt: row.createdAt,
       resolvedAt: row.resolvedAt,
+      orderedAt: (row as { orderedAt?: Date | null }).orderedAt ?? null,
       arrivedAt: (row as { arrivedAt?: Date | null }).arrivedAt ?? null,
       checkedAt: (row as { checkedAt?: Date | null }).checkedAt ?? null,
       completedAt: (row as { completedAt?: Date | null }).completedAt ?? null,

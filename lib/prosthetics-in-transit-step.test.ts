@@ -5,10 +5,19 @@ import {
 } from "@/lib/prosthetics-in-transit-step";
 
 describe("prostheticsInTransitStepFromDates", () => {
-  it("ordered when only resolved", () => {
+  it("confirmed when only resolved", () => {
     expect(
       prostheticsInTransitStepFromDates({
         resolvedAt: "2026-08-01T10:00:00.000Z",
+      }),
+    ).toBe("confirmed");
+  });
+
+  it("ordered when orderedAt set", () => {
+    expect(
+      prostheticsInTransitStepFromDates({
+        resolvedAt: "2026-08-01T10:00:00.000Z",
+        orderedAt: "2026-08-01T11:00:00.000Z",
       }),
     ).toBe("ordered");
   });
@@ -17,6 +26,7 @@ describe("prostheticsInTransitStepFromDates", () => {
     expect(
       prostheticsInTransitStepFromDates({
         resolvedAt: "2026-08-01T10:00:00.000Z",
+        orderedAt: "2026-08-01T11:00:00.000Z",
         arrivedAt: "2026-08-02T10:00:00.000Z",
       }),
     ).toBe("arrived");
@@ -26,6 +36,7 @@ describe("prostheticsInTransitStepFromDates", () => {
     expect(
       prostheticsInTransitStepFromDates({
         resolvedAt: "2026-08-01T10:00:00.000Z",
+        orderedAt: "2026-08-01T11:00:00.000Z",
         arrivedAt: "2026-08-02T10:00:00.000Z",
         checkedAt: "2026-08-03T10:00:00.000Z",
       }),
@@ -36,6 +47,7 @@ describe("prostheticsInTransitStepFromDates", () => {
     expect(
       prostheticsInTransitStepFromDates({
         resolvedAt: "2026-08-01T10:00:00.000Z",
+        orderedAt: "2026-08-01T11:00:00.000Z",
         arrivedAt: "2026-08-02T10:00:00.000Z",
         checkedAt: "2026-08-03T10:00:00.000Z",
         completedAt: "2026-08-04T10:00:00.000Z",
@@ -45,12 +57,30 @@ describe("prostheticsInTransitStepFromDates", () => {
 });
 
 describe("canAdvanceProstheticsProgressStep", () => {
-  const ordered = {
+  const confirmed = {
     resolvedAt: "2026-08-01T10:00:00.000Z",
+    orderedAt: null,
     arrivedAt: null,
     checkedAt: null,
     completedAt: null,
   };
+
+  const ordered = {
+    ...confirmed,
+    orderedAt: "2026-08-01T11:00:00.000Z",
+  };
+
+  it("allows ordered from confirmed", () => {
+    expect(canAdvanceProstheticsProgressStep(confirmed, "ordered").ok).toBe(
+      true,
+    );
+  });
+
+  it("blocks arrived from confirmed", () => {
+    const r = canAdvanceProstheticsProgressStep(confirmed, "arrived");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/заказал/i);
+  });
 
   it("allows arrived from ordered", () => {
     expect(canAdvanceProstheticsProgressStep(ordered, "arrived").ok).toBe(true);
@@ -80,7 +110,7 @@ describe("canAdvanceProstheticsProgressStep", () => {
     );
   });
 
-  it("allows completed after checked (legacy: checked without completed)", () => {
+  it("allows completed after checked", () => {
     const checked = {
       ...ordered,
       arrivedAt: "2026-08-02T10:00:00.000Z",
@@ -98,6 +128,7 @@ describe("canAdvanceProstheticsProgressStep", () => {
     expect(
       prostheticsInTransitStepFromDates({
         resolvedAt: "2026-08-01T10:00:00.000Z",
+        orderedAt: "2026-08-01T11:00:00.000Z",
         arrivedAt: "2026-08-02T10:00:00.000Z",
         checkedAt: "2026-08-03T10:00:00.000Z",
         completedAt: "2026-08-03T10:00:00.000Z",
@@ -112,6 +143,7 @@ describe("canAdvanceProstheticsProgressStep", () => {
       checkedAt: "2026-08-03T10:00:00.000Z",
       completedAt: "2026-08-04T10:00:00.000Z",
     };
+    expect(canAdvanceProstheticsProgressStep(done, "ordered").ok).toBe(false);
     expect(canAdvanceProstheticsProgressStep(done, "arrived").ok).toBe(false);
     expect(canAdvanceProstheticsProgressStep(done, "checked").ok).toBe(false);
     expect(canAdvanceProstheticsProgressStep(done, "completed").ok).toBe(false);

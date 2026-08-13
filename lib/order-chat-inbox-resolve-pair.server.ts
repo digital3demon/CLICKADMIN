@@ -323,12 +323,13 @@ export async function reopenOrderProstheticsRequestPair(
 }
 
 type ArrivedPairRow = PairRow & {
+  orderedAt: Date | null;
   arrivedAt: Date | null;
 };
 
 /**
  * Отмечает «пришла» / снимает отметку у заявки протетики (inbox + legacy близнецы).
- * Только для уже принятых (resolved) и не отклонённых.
+ * Только после «Заказал» (orderedAt) и не отклонённых.
  */
 export async function setOrderProstheticsArrivedPair(
   db: PrismaClient,
@@ -345,6 +346,7 @@ export async function setOrderProstheticsArrivedPair(
       id: true,
       resolvedAt: true,
       rejectedAt: true,
+      orderedAt: true,
       arrivedAt: true,
       kaitenCommentId: true,
     },
@@ -356,6 +358,7 @@ export async function setOrderProstheticsArrivedPair(
       id: true,
       resolvedAt: true,
       rejectedAt: true,
+      orderedAt: true,
       arrivedAt: true,
       kaitenCommentId: true,
     },
@@ -372,7 +375,14 @@ export async function setOrderProstheticsArrivedPair(
     return {
       ok: false,
       status: 409,
-      error: "Сначала примите заявку (протетика в пути)",
+      error: "Сначала подтвердите заявку",
+    };
+  }
+  if (arrived && primary.orderedAt == null) {
+    return {
+      ok: false,
+      status: 409,
+      error: "Сначала отметьте «заказал»",
     };
   }
   if (arrived && primary.arrivedAt != null) {
@@ -442,6 +452,7 @@ export async function setOrderProstheticsArrivedPair(
 }
 
 type ProgressPairRow = PairRow & {
+  orderedAt: Date | null;
   arrivedAt: Date | null;
   checkedAt: Date | null;
   completedAt: Date | null;
@@ -451,6 +462,7 @@ const progressSelect = {
   id: true,
   resolvedAt: true,
   rejectedAt: true,
+  orderedAt: true,
   arrivedAt: true,
   checkedAt: true,
   completedAt: true,
@@ -458,7 +470,7 @@ const progressSelect = {
 } as const;
 
 /**
- * Продвигает степпер протетики (arrived / checked / completed) на inbox + legacy.
+ * Продвигает степпер протетики (ordered / arrived / checked / completed) на inbox + legacy.
  * arrived делегирует в setOrderProstheticsArrivedPair.
  */
 export async function advanceOrderProstheticsProgressPair(
@@ -495,6 +507,7 @@ export async function advanceOrderProstheticsProgressPair(
   const gate = canAdvanceProstheticsProgressStep(
     {
       resolvedAt: primary.resolvedAt,
+      orderedAt: primary.orderedAt,
       arrivedAt: primary.arrivedAt,
       checkedAt: primary.checkedAt,
       completedAt: primary.completedAt,
@@ -506,14 +519,19 @@ export async function advanceOrderProstheticsProgressPair(
   }
 
   const now = new Date();
-  /* Заказал → Пришла → Проверил → Готово — отдельные клики. */
+  /* Подтвердил → Заказал → Пришла → Проверил → Готово — отдельные клики. */
   const data =
-    step === "checked"
+    step === "ordered"
       ? {
-          checkedAt: now,
-          checkedByUserId: userId,
+          orderedAt: now,
+          orderedByUserId: userId,
         }
-      : { completedAt: now, completedByUserId: userId };
+      : step === "checked"
+        ? {
+            checkedAt: now,
+            checkedByUserId: userId,
+          }
+        : { completedAt: now, completedByUserId: userId };
 
   const kaitenCommentId =
     inboxRow?.kaitenCommentId ?? legacyRow?.kaitenCommentId ?? null;
@@ -524,16 +542,23 @@ export async function advanceOrderProstheticsProgressPair(
   if (legacyRow) legacyIds.add(legacyRow.id);
 
   const twinFilter =
-    step === "checked"
+    step === "ordered"
       ? {
-          arrivedAt: { not: null },
+          orderedAt: null,
+          arrivedAt: null,
           checkedAt: null,
           completedAt: null,
         }
-      : {
-          checkedAt: { not: null },
-          completedAt: null,
-        };
+      : step === "checked"
+        ? {
+            arrivedAt: { not: null },
+            checkedAt: null,
+            completedAt: null,
+          }
+        : {
+            checkedAt: { not: null },
+            completedAt: null,
+          };
 
   if (kaitenCommentId != null) {
     const twinInbox = (await (db as any).orderChatInboxItem.findMany({

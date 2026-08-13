@@ -1,19 +1,25 @@
 /**
- * Степпер «в пути»: Заказал → Пришла → Проверил → Готово.
- * Даты: resolvedAt / arrivedAt / checkedAt / completedAt.
+ * Степпер протетики:
+ * Подтвердил (resolvedAt) → Заказал (orderedAt) → Пришла → Проверил → Готово.
  * Каждый шаг — отдельный клик (Готово = completedAt).
  */
 
 export type ProstheticsInTransitStep =
+  | "confirmed"
   | "ordered"
   | "arrived"
   | "checked"
   | "done";
 
-export type ProstheticsProgressStep = "arrived" | "checked" | "completed";
+export type ProstheticsProgressStep =
+  | "ordered"
+  | "arrived"
+  | "checked"
+  | "completed";
 
 export type ProstheticsStepDates = {
   resolvedAt: Date | string | null;
+  orderedAt?: Date | string | null;
   arrivedAt?: Date | string | null;
   checkedAt?: Date | string | null;
   completedAt?: Date | string | null;
@@ -32,7 +38,8 @@ export function prostheticsInTransitStepFromDates(
   if (hasDate(dates.completedAt)) return "done";
   if (hasDate(dates.checkedAt)) return "checked";
   if (hasDate(dates.arrivedAt)) return "arrived";
-  return "ordered";
+  if (hasDate(dates.orderedAt)) return "ordered";
+  return "confirmed";
 }
 
 /**
@@ -44,7 +51,7 @@ export function canAdvanceProstheticsProgressStep(
   next: ProstheticsProgressStep,
 ): { ok: true } | { ok: false; error: string } {
   if (!hasDate(dates.resolvedAt)) {
-    return { ok: false, error: "Сначала примите заявку (протетика в пути)" };
+    return { ok: false, error: "Сначала подтвердите заявку" };
   }
   if (hasDate(dates.completedAt)) {
     return { ok: false, error: "Заявка уже закрыта" };
@@ -52,14 +59,31 @@ export function canAdvanceProstheticsProgressStep(
 
   const current = prostheticsInTransitStepFromDates(dates);
 
+  if (next === "ordered") {
+    if (current !== "confirmed") {
+      return {
+        ok: false,
+        error:
+          current === "ordered" ||
+          current === "arrived" ||
+          current === "checked"
+            ? "Уже отмечено «заказал»"
+            : "Нельзя отметить «заказал» на этом шаге",
+      };
+    }
+    return { ok: true };
+  }
+
   if (next === "arrived") {
     if (current !== "ordered") {
       return {
         ok: false,
         error:
-          current === "arrived" || current === "checked"
-            ? "Уже отмечено «пришла»"
-            : "Нельзя отметить «пришла» на этом шаге",
+          current === "confirmed"
+            ? "Сначала отметьте «заказал»"
+            : current === "arrived" || current === "checked"
+              ? "Уже отмечено «пришла»"
+              : "Нельзя отметить «пришла» на этом шаге",
       };
     }
     return { ok: true };
@@ -70,7 +94,7 @@ export function canAdvanceProstheticsProgressStep(
       return {
         ok: false,
         error:
-          current === "ordered"
+          current === "confirmed" || current === "ordered"
             ? "Сначала отметьте «пришла»"
             : current === "checked"
               ? "Уже отмечено «проверил»"
@@ -85,7 +109,9 @@ export function canAdvanceProstheticsProgressStep(
     return {
       ok: false,
       error:
-        current === "ordered" || current === "arrived"
+        current === "confirmed" ||
+        current === "ordered" ||
+        current === "arrived"
           ? "Сначала отметьте «проверил»"
           : "Нельзя закрыть заявку на этом шаге",
     };

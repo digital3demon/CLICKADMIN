@@ -13,12 +13,18 @@ import type { ProstheticsProgressStep } from "@/lib/prosthetics-in-transit-step"
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
-const REPLY_TEXT = "протетика пришла";
+const ORDERED_REPLY_TEXT = "протетика в пути";
+const ARRIVED_REPLY_TEXT = "протетика пришла";
 
 type Body = { step?: string };
 
 function parseStep(raw: unknown): ProstheticsProgressStep | null {
-  if (raw === "arrived" || raw === "checked" || raw === "completed") {
+  if (
+    raw === "ordered" ||
+    raw === "arrived" ||
+    raw === "checked" ||
+    raw === "completed"
+  ) {
     return raw;
   }
   return null;
@@ -54,7 +60,7 @@ export async function POST(
   const step = parseStep(body.step);
   if (!step) {
     return NextResponse.json(
-      { error: "Укажите step: arrived | checked | completed" },
+      { error: "Укажите step: ordered | arrived | checked | completed" },
       { status: 400 },
     );
   }
@@ -74,7 +80,7 @@ export async function POST(
     );
   }
 
-  if (step !== "arrived") {
+  if (step !== "ordered" && step !== "arrived") {
     return NextResponse.json({ ok: true, step });
   }
 
@@ -83,23 +89,28 @@ export async function POST(
     select: { id: true, kaitenCardId: true, prostheticsOrdered: true },
   });
   if (!order) {
-    await setOrderProstheticsArrivedPair(
-      prisma,
-      orderId,
-      requestId,
-      false,
-      session.sub,
-    );
+    if (step === "arrived") {
+      await setOrderProstheticsArrivedPair(
+        prisma,
+        orderId,
+        requestId,
+        false,
+        session.sub,
+      );
+    }
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
   }
 
-  /* Приход = протетика уже заказана/получена — отмечаем галочку на наряде. */
+  /* «Заказал» / приход — галочка «протетика заказана» на наряде. */
   if (!order.prostheticsOrdered) {
     await prisma.order.update({
       where: { id: order.id },
       data: { prostheticsOrdered: true },
     });
   }
+
+  const replyText =
+    step === "ordered" ? ORDERED_REPLY_TEXT : ARRIVED_REPLY_TEXT;
 
   if (order.kaitenCardId != null) {
     const auth = getKaitenRestAuth();
@@ -109,7 +120,7 @@ export async function POST(
         displayName: session.name?.trim() || null,
         email: session.email || null,
       });
-      const kaitenText = buildKaitenCommentTextWithCrmAuthor(label, REPLY_TEXT);
+      const kaitenText = buildKaitenCommentTextWithCrmAuthor(label, replyText);
       const res = await kaitenCreateComment(
         auth,
         order.kaitenCardId,
@@ -118,13 +129,15 @@ export async function POST(
         { burst: true },
       );
       if (!res.ok) {
-        await setOrderProstheticsArrivedPair(
-          prisma,
-          orderId,
-          requestId,
-          false,
-          session.sub,
-        );
+        if (step === "arrived") {
+          await setOrderProstheticsArrivedPair(
+            prisma,
+            orderId,
+            requestId,
+            false,
+            session.sub,
+          );
+        }
         return NextResponse.json(
           { error: res.error ?? "Не удалось отправить ответ в Kaiten" },
           { status: 502 },

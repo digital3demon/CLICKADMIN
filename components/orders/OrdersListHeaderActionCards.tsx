@@ -18,6 +18,7 @@ import type { ProstheticsProgressStep } from "@/lib/prosthetics-in-transit-step"
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { formatProstheticsRequestTextForDisplay } from "@/lib/order-prosthetics-request";
+import { printOrderSticker } from "@/lib/print-order-sticker";
 import { CorrectionsHistoryActionCard } from "@/components/orders/CorrectionsHistoryActionCard";
 import { LabTasksActionCard } from "@/components/orders/LabTasksActionCard";
 import { ProstheticsWarehouseEditPanel } from "@/components/orders/ProstheticsWarehouseEditPanel";
@@ -33,7 +34,7 @@ type UnifiedProstheticsRow = {
   orderNumber: string;
   patientName: string | null;
   doctorName: string | null;
-  /** null — ещё не принята («Принять» + «Отказать»). */
+  /** null — ещё не подтверждена («Подтвердил» + «Отказать»). */
   step: ProstheticsInTransitStep | null;
 };
 
@@ -43,12 +44,41 @@ function cardShell(isHarmony: boolean): string {
     : "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
 }
 
+/** Подпись следующей кнопки: Подтвердил → Заказал → Пришла → Проверил → Готово. */
 function primaryActionLabel(step: ProstheticsInTransitStep | null): string {
-  if (step == null) return "Принять";
-  if (step === "ordered") return "Заказал";
-  if (step === "arrived") return "Пришла";
-  /* checked → клик «Проверил» ставит Готово (completedAt). */
-  return "Проверил";
+  if (step == null) return "Подтвердил";
+  if (step === "confirmed") return "Заказал";
+  if (step === "ordered") return "Пришла";
+  if (step === "arrived") return "Проверил";
+  if (step === "checked") return "Готово";
+  return "Готово";
+}
+
+function primaryActionClass(step: ProstheticsInTransitStep | null): string {
+  const base =
+    "rounded-md border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide disabled:opacity-50";
+  if (step == null) {
+    /* Подтвердил — синий */
+    return `${base} border-sky-400/90 bg-sky-100 text-sky-950 hover:bg-sky-200 dark:border-sky-700/80 dark:bg-sky-950/50 dark:text-sky-100`;
+  }
+  if (step === "confirmed") {
+    /* Заказал — янтарный */
+    return `${base} border-amber-400/90 bg-amber-100 text-amber-950 hover:bg-amber-200 dark:border-amber-700/80 dark:bg-amber-950/50 dark:text-amber-100`;
+  }
+  if (step === "ordered") {
+    /* Пришла — фиолетовый */
+    return `${base} border-violet-400/90 bg-violet-100 text-violet-950 hover:bg-violet-200 dark:border-violet-700/80 dark:bg-violet-950/50 dark:text-violet-100`;
+  }
+  if (step === "arrived") {
+    /* Проверил — изумрудный */
+    return `${base} border-emerald-400/90 bg-emerald-100 text-emerald-950 hover:bg-emerald-200 dark:border-emerald-700/80 dark:bg-emerald-950/50 dark:text-emerald-100`;
+  }
+  /* Готово — лайм */
+  return `${base} border-lime-500/90 bg-lime-100 text-lime-950 hover:bg-lime-200 dark:border-lime-700/80 dark:bg-lime-950/50 dark:text-lime-100`;
+}
+
+function stickerActionClass(): string {
+  return "rounded-md border border-teal-400/90 bg-teal-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-teal-950 hover:bg-teal-200 disabled:opacity-50 dark:border-teal-700/80 dark:bg-teal-950/50 dark:text-teal-100";
 }
 
 function toUnifiedFromPending(row: ProstheticsToOrderRow): UnifiedProstheticsRow {
@@ -77,7 +107,7 @@ function toUnifiedFromTransit(row: ProstheticsInTransitRow): UnifiedProstheticsR
     orderNumber: row.orderNumber,
     patientName: row.patientName,
     doctorName: row.doctorName,
-    step: row.step ?? "ordered",
+    step: row.step ?? "confirmed",
   };
 }
 
@@ -228,7 +258,7 @@ export function OrdersListHeaderActionCards({
   );
 
   const advancePrimary = useCallback(
-    async (row: UnifiedProstheticsRow) => {
+    async (row: UnifiedProstheticsRow, opts?: { printSticker?: boolean }) => {
       if (!canMarkArrived) return;
       setBusyId(row.id);
       setErr(null);
@@ -252,14 +282,14 @@ export function OrdersListHeaderActionCards({
           );
           const j = (await res.json().catch(() => ({}))) as { error?: string };
           if (!res.ok) {
-            setErr(j.error ?? "Не удалось принять");
+            setErr(j.error ?? "Не удалось подтвердить");
             return;
           }
           const now = new Date().toISOString();
           setItems((prev) =>
             prev.map((x) =>
               x.id === row.id
-                ? { ...x, step: "ordered", resolvedAt: now }
+                ? { ...x, step: "confirmed", resolvedAt: now }
                 : x,
             ),
           );
@@ -270,7 +300,8 @@ export function OrdersListHeaderActionCards({
         }
 
         let progress: ProstheticsProgressStep | null = null;
-        if (row.step === "ordered") progress = "arrived";
+        if (row.step === "confirmed") progress = "ordered";
+        else if (row.step === "ordered") progress = "arrived";
         else if (row.step === "arrived") progress = "checked";
         else if (row.step === "checked") progress = "completed";
         if (!progress) return;
@@ -293,6 +324,12 @@ export function OrdersListHeaderActionCards({
         if (progress === "completed") {
           setItems((prev) => prev.filter((x) => x.id !== row.id));
           setInTransitCount((n) => Math.max(0, n - 1));
+        } else if (progress === "ordered") {
+          setItems((prev) =>
+            prev.map((x) =>
+              x.id === row.id ? { ...x, step: "ordered" } : x,
+            ),
+          );
         } else if (progress === "arrived") {
           setItems((prev) =>
             prev.map((x) =>
@@ -305,6 +342,9 @@ export function OrdersListHeaderActionCards({
               x.id === row.id ? { ...x, step: "checked" } : x,
             ),
           );
+          if (opts?.printSticker) {
+            printOrderSticker(row.orderId);
+          }
         }
         router.refresh();
       } catch {
@@ -510,7 +550,7 @@ export function OrdersListHeaderActionCards({
                             {whenLabel ? (
                               <p className="mt-0.5 text-sm text-[var(--text-secondary)]">
                                 <span className="font-medium text-[var(--text-muted)]">
-                                  Принята:{" "}
+                                  Подтверждена:{" "}
                                 </span>
                                 {whenLabel}
                               </p>
@@ -523,7 +563,7 @@ export function OrdersListHeaderActionCards({
                             <div className="flex shrink-0 flex-col items-stretch gap-1.5">
                               <button
                                 type="button"
-                                className="rounded-md border border-emerald-400/90 bg-emerald-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-950 hover:bg-emerald-200 disabled:opacity-50 dark:border-emerald-700/80 dark:bg-emerald-950/50 dark:text-emerald-100"
+                                className={primaryActionClass(row.step)}
                                 disabled={busy}
                                 title={primaryLabel}
                                 onClick={(e) => {
@@ -533,6 +573,22 @@ export function OrdersListHeaderActionCards({
                               >
                                 {busy ? "…" : primaryLabel}
                               </button>
+                              {row.step === "arrived" ? (
+                                <button
+                                  type="button"
+                                  className={stickerActionClass()}
+                                  disabled={busy}
+                                  title="Проверил и печать этикетки"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void advancePrimary(row, {
+                                      printSticker: true,
+                                    });
+                                  }}
+                                >
+                                  {busy ? "…" : "Проверил + этикетка"}
+                                </button>
+                              ) : null}
                               {pending ? (
                                 <button
                                   type="button"

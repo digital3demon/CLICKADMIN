@@ -25,6 +25,7 @@ export type ProstheticsToOrderRow = {
 };
 
 export type ProstheticsInTransitStep =
+  | "confirmed"
   | "ordered"
   | "arrived"
   | "checked"
@@ -37,6 +38,7 @@ export type ProstheticsInTransitRow = {
   authorLabel: string | null;
   createdAt: string;
   resolvedAt: string;
+  orderedAt: string | null;
   arrivedAt: string | null;
   checkedAt: string | null;
   completedAt: string | null;

@@ -292,7 +292,7 @@ export function OrderProstheticsRequestsPanel({
                   type="button"
                   disabled={busyId != null}
                   title="Занесено в наряд — в Kaiten уйдёт «протетика в пути»"
-                  aria-label="Принять заявку"
+                  aria-label="Подтвердить заявку"
                   className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
                   onClick={() => void accept(c.id)}
                 >
