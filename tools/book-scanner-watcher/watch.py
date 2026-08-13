@@ -307,6 +307,58 @@ def _qr_candidates(img: np.ndarray) -> list[np.ndarray]:
     return out
 
 
+def is_crm_useful_qr(text: str) -> bool:
+    """Hub-стикер / Kaiten / голый YYMM-NNN — то, что CRM умеет резолвить."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    low = t.lower()
+    if "/p/t/" in low and "/s/" in low:
+        return True
+    if "kaiten." in low:
+        return True
+    if re.fullmatch(r"\d{4}-\d{3}", t):
+        return True
+    if low.startswith("http://") or low.startswith("https://"):
+        return "(01)" not in t
+    return False
+
+
+def is_manufacturer_or_noise_barcode(text: str) -> bool:
+    """
+    DataMatrix/GS1 производителя (абатменты и т.п.) — не номер наряда.
+    Иначе resolve_upload_hints отдаёт GS1 как x-scanner-qr и пропускает OCR.
+    """
+    t = (text or "").strip()
+    if not t:
+        return True
+    if is_crm_useful_qr(t):
+        return False
+    # GS1 AI (01) GTIN…(10)LOT…(11)DATE
+    if t.startswith("(01)") or re.match(r"^01\d{13}", t):
+        return True
+    # LOT вида 250721-LB66 (не YYMM-NNN)
+    if re.fullmatch(r"\d{6}-[A-Za-z0-9]{2,}", t):
+        return True
+    if re.fullmatch(r"\d{12,}", t):
+        return True
+    return False
+
+
+def pick_preferred_barcode(texts: list[str]) -> str | None:
+    """Сначала CRM QR; GS1 производителя не возвращаем (пусть сработает OCR)."""
+    cleaned = [(t or "").strip() for t in texts if (t or "").strip()]
+    if not cleaned:
+        return None
+    for t in cleaned:
+        if is_crm_useful_qr(t):
+            return t
+    for t in cleaned:
+        if not is_manufacturer_or_noise_barcode(t):
+            return t
+    return None
+
+
 def _decode_qr_zxing(mat: np.ndarray) -> str | None:
     """zxing-cpp надёжнее OpenCV на фото нарядов (детект без decode)."""
     try:
@@ -321,11 +373,12 @@ def _decode_qr_zxing(mat: np.ndarray) -> str | None:
         results = zxingcpp.read_barcodes(rgb)
     except Exception:
         return None
+    texts: list[str] = []
     for r in results or []:
         text = (getattr(r, "text", None) or "").strip()
         if text:
-            return text
-    return None
+            texts.append(text)
+    return pick_preferred_barcode(texts)
 
 
 def decode_qr(path: Path) -> str | None:
@@ -357,7 +410,9 @@ def decode_qr(path: Path) -> str | None:
         except Exception:
             return None
         text = (data or "").strip()
-        return text or None
+        if not text:
+            return None
+        return pick_preferred_barcode([text])
 
     variants: list[np.ndarray] = []
     for c in candidates[:12]:
@@ -593,14 +648,26 @@ def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
 
 
 def resolve_upload_hints(path: Path) -> tuple[str | None, str | None]:
-    """QR, иначе локальный OCR → (qr_hint, force_order_number)."""
+    """
+    CRM-полезный QR → (qr, None).
+    DataMatrix/GS1 производителя игнорируем и идём в OCR номера наряда.
+    → (qr_hint | None, force_order_number | None).
+    """
     qr = decode_qr(path)
+    if qr and is_crm_useful_qr(qr):
+        return qr, None
+    if qr and is_manufacturer_or_noise_barcode(qr):
+        logging.info(
+            "product barcode ignored (OCR fallback): %s",
+            qr[:64],
+        )
+        qr = None
+    order_n, kaiten_url = local_ocr_hints(path)
+    # явный номер наряда надёжнее «левого» QR; URL из OCR — как qr hint
+    if order_n:
+        return (qr or kaiten_url), order_n
     if qr:
         return qr, None
-    order_n, kaiten_url = local_ocr_hints(path)
-    # приоритет: явный номер наряда (сервер без OCR); URL — как qr hint
-    if order_n:
-        return kaiten_url or qr, order_n
     if kaiten_url:
         return kaiten_url, None
     return None, None

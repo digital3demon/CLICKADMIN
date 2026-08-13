@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import unittest
 
-from watch import pick_kaiten_url_from_text, pick_order_number_from_text
+from watch import (
+    is_crm_useful_qr,
+    is_manufacturer_or_noise_barcode,
+    pick_kaiten_url_from_text,
+    pick_order_number_from_text,
+    pick_preferred_barcode,
+)
 
 
 class OrderParseTests(unittest.TestCase):
@@ -41,6 +47,24 @@ class OrderParseTests(unittest.TestCase):
             pick_kaiten_url_from_text(raw),
             "https://clicklab.kaiten.ru/68026387",
         )
+
+
+class BarcodePreferTests(unittest.TestCase):
+    def test_gs1_datamatrix_is_noise(self) -> None:
+        gs1 = "(01)08800028739713(10)250721-LB66(11)250721"
+        self.assertTrue(is_manufacturer_or_noise_barcode(gs1))
+        self.assertFalse(is_crm_useful_qr(gs1))
+        self.assertIsNone(pick_preferred_barcode([gs1]))
+
+    def test_hub_over_gs1(self) -> None:
+        gs1 = "(01)08800028739713(10)250721-LB66(11)250721"
+        hub = "https://click-lab.online/p/t/demo/s/tok_abc"
+        self.assertEqual(pick_preferred_barcode([gs1, hub]), hub)
+        self.assertEqual(pick_preferred_barcode([hub, gs1]), hub)
+
+    def test_lot_code_noise(self) -> None:
+        self.assertTrue(is_manufacturer_or_noise_barcode("250721-LB66"))
+        self.assertFalse(is_manufacturer_or_noise_barcode("2608-164"))
 
 
 if __name__ == "__main__":
