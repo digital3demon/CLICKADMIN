@@ -266,10 +266,44 @@ def _qr_candidates(img: np.ndarray) -> list[np.ndarray]:
     if h > 2:
         out.append(img[0 : h // 2, :])
         out.append(img[0 : max(1, int(h * 0.4)), :])
-    # QR часто справа сверху на наряде
+        out.append(img[h // 2 :, :])
+    # QR: наряд — справа сверху; этикетка отгрузки — справа на белом стикере
     if w > 4 and h > 4:
         out.append(img[0 : h // 2, w // 2 :])
         out.append(img[0 : max(1, int(h * 0.45)), max(0, int(w * 0.45)) :])
+        out.append(img[h // 2 :, w // 2 :])
+        out.append(img[:, w // 2 :])
+    # Крупные белые прямоугольники (этикетка) + правая треть
+    try:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, mask = cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)
+        mask = cv2.morphologyEx(
+            mask, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8)
+        )
+        cnts, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        boxes: list[tuple[int, int, int, int, int]] = []
+        for c in cnts:
+            x, y, bw, bh = cv2.boundingRect(c)
+            area = bw * bh
+            if area < (w * h) * 0.015:
+                continue
+            if bw < 50 or bh < 30:
+                continue
+            boxes.append((area, x, y, bw, bh))
+        boxes.sort(reverse=True)
+        for _area, x, y, bw, bh in boxes[:4]:
+            pad = 6
+            x0, y0 = max(0, x - pad), max(0, y - pad)
+            x1, y1 = min(w, x + bw + pad), min(h, y + bh + pad)
+            label = img[y0:y1, x0:x1]
+            out.append(label)
+            lw = label.shape[1]
+            if lw > 20:
+                out.append(label[:, lw * 55 // 100 :])
+    except Exception:
+        pass
     return out
 
 
@@ -301,12 +335,16 @@ def decode_qr(path: Path) -> str | None:
         return None
 
     candidates = _qr_candidates(img)
+    # Этикетка в кадре часто мелкая — сильнее апскейл
+    zxing_scales = (1.0, 1.5, 2.0, 3.0, 4.0)
     for c in candidates:
-        hit = _decode_qr_zxing(c)
-        if hit:
-            return hit
-        for sc in (1.5, 2.0):
-            scaled = cv2.resize(c, None, fx=sc, fy=sc, interpolation=cv2.INTER_CUBIC)
+        for sc in zxing_scales:
+            if sc == 1.0:
+                scaled = c
+            else:
+                scaled = cv2.resize(
+                    c, None, fx=sc, fy=sc, interpolation=cv2.INTER_CUBIC
+                )
             hit = _decode_qr_zxing(scaled)
             if hit:
                 return hit
@@ -322,7 +360,7 @@ def decode_qr(path: Path) -> str | None:
         return text or None
 
     variants: list[np.ndarray] = []
-    for c in candidates:
+    for c in candidates[:12]:
         variants.append(c)
         gray = cv2.cvtColor(c, cv2.COLOR_BGR2GRAY)
         variants.append(gray)
@@ -369,11 +407,10 @@ def clip_person(name: str | None, limit: int = 20) -> str:
 
 # ─── local OCR (в exe: номер наряда / Kaiten без серверного tesseract) ─────
 
-# После номера OCR часто клеит латиницу (2607-359KaMpaHOB) — режем только цифры.
-# \b не используем: кириллица до/после ломает word-boundary в JS/Python без \p{L}.
-_ORDER_OCR_RE = re.compile(
-    r"(?<![\dA-Za-z])(\d{4})\s*[-–—−]\s*(\d{3})(?!\d)"
-)
+# Стикер/наряд: OCR клеит мусор спереди (a2608-006, 832608-045) и сзади.
+# Без lookbehind по буквам; (?!\d) — не режем хвост более длинного числа.
+# Кандидаты ранжируем по YYMM (20–39 / 01–12), предпочтение более поздним.
+_ORDER_OCR_RE = re.compile(r"(\d{4})\s*[-–—−]\s*(\d{3})(?!\d)")
 # OCR путает .ru→.rw, https→ittps/ttps
 _KAITEN_OCR_RE = re.compile(
     r"(?:h?t?tps?://)?(?:[\w.-]+\.)?kaiten\.r[uw]/(?:card/)?(\d{4,})", re.I
@@ -421,32 +458,32 @@ def _ocr_text_from_bgr(img: np.ndarray) -> str:
 
 
 def pick_order_number_from_text(raw: str) -> str | None:
-    found: list[str] = []
+    found: list[tuple[int, int, str]] = []  # (score, index, num)
     seen: set[str] = set()
-    for m in _ORDER_OCR_RE.finditer(raw or ""):
+    text = raw or ""
+    for i, m in enumerate(_ORDER_OCR_RE.finditer(text)):
         num = f"{m.group(1)}-{m.group(2)}"
         if num in seen:
             continue
         seen.add(num)
-        found.append(num)
-    if not found:
-        return None
-    if len(found) == 1:
-        return found[0]
-    # предпочитаем разумный YYMM
-    best = found[0]
-    best_score = -1
-    for i, n in enumerate(found):
-        yymm, _, nn = n.partition("-")
-        score = 100 - i
+        yymm, _, _nn = num.partition("-")
+        score = i  # позже в тексте (стикер: «№ заказа» внизу) — выше
         if len(yymm) == 4:
-            yy, mm = int(yymm[:2]), int(yymm[2:])
+            try:
+                yy, mm = int(yymm[:2]), int(yymm[2:])
+            except ValueError:
+                yy, mm = -1, -1
             if 20 <= yy <= 39 and 1 <= mm <= 12:
                 score += 50
-        if score > best_score:
-            best_score = score
-            best = n
-    return best
+        # бонус за контекст «заказ» рядом (OCR часто искажает, но цифры есть)
+        window = text[max(0, m.start() - 24) : m.start()].lower()
+        if "zakaz" in window or "заказ" in window or "3aka3" in window or "n3ak" in window:
+            score += 20
+        found.append((score, i, num))
+    if not found:
+        return None
+    found.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return found[0][2]
 
 
 def pick_kaiten_url_from_text(raw: str) -> str | None:
@@ -473,20 +510,62 @@ def _ocr_mats_for_crop(crop: np.ndarray) -> list[np.ndarray]:
     return mats
 
 
+def _white_label_crops(img: np.ndarray) -> list[np.ndarray]:
+    """Белые прямоугольники этикетки (отгрузка) — приоритет для OCR."""
+    h, w = img.shape[:2]
+    out: list[np.ndarray] = []
+    try:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, mask = cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)
+        mask = cv2.morphologyEx(
+            mask, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8)
+        )
+        cnts, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        boxes: list[tuple[int, int, int, int, int]] = []
+        for c in cnts:
+            x, y, bw, bh = cv2.boundingRect(c)
+            area = bw * bh
+            if area < (w * h) * 0.015:
+                continue
+            if bw < 80 or bh < 40:
+                continue
+            # этикетка шире, чем высокая (или близко к квадрату)
+            if bw < bh * 0.7:
+                continue
+            boxes.append((area, x, y, bw, bh))
+        boxes.sort(reverse=True)
+        for _area, x, y, bw, bh in boxes[:3]:
+            pad = 4
+            x0, y0 = max(0, x - pad), max(0, y - pad)
+            x1, y1 = min(w, x + bw + pad), min(h, y + bh + pad)
+            out.append(img[y0:y1, x0:x1])
+    except Exception:
+        pass
+    return out
+
+
 def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
     """
-    Локальный OCR верхней части скана.
+    Локальный OCR: шапка наряда и белая этикетка отгрузки.
     Возвращает (номер_наряда YYMM-NNN | None, qr_hint URL | None).
     """
     img = imread_bgr(path)
     if img is None:
         return None, None
-    h = img.shape[0]
-    crops = [
-        img[0 : max(1, h * 2 // 5), :],
-        img[0 : max(1, h // 2), :],
-        img,
-    ]
+    h, w = img.shape[:2]
+    crops: list[np.ndarray] = []
+    crops.extend(_white_label_crops(img))
+    crops.extend(
+        [
+            img[0 : max(1, h * 2 // 5), :],
+            img[0 : max(1, h // 2), :],
+            img[h // 2 :, :],
+            img[:, w // 2 :] if w > 4 else img,
+            img,
+        ]
+    )
     t0 = time.time()
     blob_all = ""
     for crop in crops:
