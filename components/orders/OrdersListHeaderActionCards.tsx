@@ -379,7 +379,7 @@ export function OrdersListHeaderActionCards({
                   Заказать
                 </span>
                 <span
-                  className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
+                  className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
                   aria-label={`Заказать: ${toOrderCount}`}
                 >
                   {toOrderCount}
@@ -390,7 +390,7 @@ export function OrdersListHeaderActionCards({
                   В пути
                 </span>
                 <span
-                  className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
+                  className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-zinc-500 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white dark:bg-zinc-600"
                   aria-label={`В пути: ${inTransitCount}`}
                 >
                   {inTransitCount}
@@ -436,13 +436,13 @@ export function OrdersListHeaderActionCards({
                 <span>Заказы протетики</span>
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                   Заказать
-                  <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+                  <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
                     {toOrderCount}
                   </span>
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                   В пути
-                  <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-red-600/90 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+                  <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-zinc-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white dark:bg-zinc-600">
                     {inTransitCount}
                   </span>
                 </span>

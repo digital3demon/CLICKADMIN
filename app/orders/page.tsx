@@ -88,8 +88,9 @@ const ORDERS_FRAME_ROOT =
   "!px-2 !pb-6 !pt-4 sm:!px-3 sm:!pb-7 sm:!pt-5 md:!px-4 md:!pb-8 md:!pt-6 lg:!px-4 lg:!pb-9 lg:!pt-7";
 const ORDERS_TABLE_TH =
   "min-w-0 whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
+/** min-width всегда: иначе table-fixed + % колонок давит заголовки друг на друга. */
 const ORDERS_TABLE_CLASS =
-  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] md:min-w-[56rem] lg:min-w-0 lg:text-xs 2xl:text-[13px]";
+  "w-full min-w-[72rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] md:text-xs 2xl:text-[13px]";
 
 /** Поступление: дата прихода работы; без явной даты — как в наряде: дата занесения в CRM. */
 function formatAdmission(o: {
@@ -909,7 +910,7 @@ export default async function OrdersPage({
           </div>
         }
       >
-      <div className="orders-harmony-table-shell w-full min-w-0 overflow-x-auto overflow-y-visible xl:overflow-x-visible [-webkit-overflow-scrolling:touch] rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] print:max-w-none print:w-full">
+      <div className="orders-harmony-table-shell w-full min-w-0 overflow-x-auto overflow-y-visible [-webkit-overflow-scrolling:touch] rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] print:max-w-none print:w-full">
         <table className={ORDERS_TABLE_CLASS}>
           <OrdersTableColGroup />
           <thead className="sr-only">

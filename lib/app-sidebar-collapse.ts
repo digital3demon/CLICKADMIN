@@ -6,7 +6,8 @@ export const APP_SIDEBAR_AUTO_COLLAPSE_MAX_PX = 1400;
 
 export const APP_SIDEBAR_W_COLLAPSED = "3.75rem";
 
-export const APP_SHELL_DESKTOP_MIN_W = 1024;
+/** Совпадает с CSS-вариантом `shell-desktop` (globals.css). */
+export const APP_SHELL_DESKTOP_MIN_W = 1400;
 export const APP_SHELL_DESKTOP_MIN_H = 560;
 
 export type AppSidebarCollapsePref = "collapsed" | "expanded" | "auto";

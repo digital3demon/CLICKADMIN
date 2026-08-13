@@ -6,11 +6,13 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { ordersListPeriodDefaultDraft } from "@/lib/orders-list-period";
 import {
   normalizeOrdersSearchQuery,
@@ -24,7 +26,7 @@ import {
 import { moscowTodayYmd } from "@/lib/shipments-date-range";
 
 const TH =
-  "min-w-0 whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
+  "min-w-0 overflow-hidden whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
 
 type OpenKey = "lab" | "appt" | "otpr" | null;
 
@@ -113,6 +115,9 @@ function DateRangeFields({
   );
 }
 
+/**
+ * Панель в portal + fixed: sticky thead с overflow-x/y иначе обрезает absolute-dropdown.
+ */
 function FilterTh({
   label,
   title,
@@ -128,14 +133,44 @@ function FilterTh({
   onToggle: () => void;
   children: ReactNode;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+    const update = () => {
+      const el = buttonRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const left = Math.min(
+        Math.max(r.left + r.width / 2, 140),
+        window.innerWidth - 140,
+      );
+      setCoords({ top: r.bottom + 4, left });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
+
   return (
-    <th
-      className={`${TH} relative normal-case`}
-      title={title}
-      aria-sort={undefined}
-    >
+    <th className={`${TH} normal-case`} title={title}>
       <button
+        ref={buttonRef}
         type="button"
         className={[
           "inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 text-[9px] font-semibold uppercase leading-snug tracking-wide hover:bg-[var(--table-row-hover)] sm:text-[10px] md:text-xs",
@@ -158,16 +193,21 @@ function FilterTh({
           ▾
         </span>
       </button>
-      {open ? (
-        <div
-          ref={panelRef}
-          role="dialog"
-          className="absolute left-1/2 top-full z-[80] mt-1 w-max min-w-[14rem] max-w-[min(92vw,22rem)] -translate-x-1/2 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2.5 shadow-lg ring-1 ring-black/10 dark:ring-white/10"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {children}
-        </div>
-      ) : null}
+      {mounted && open && coords
+        ? createPortal(
+            <div
+              data-orders-col-filter-panel=""
+              role="dialog"
+              style={{ top: coords.top, left: coords.left }}
+              className="fixed z-[300] w-max min-w-[14rem] max-w-[min(92vw,22rem)] -translate-x-1/2 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2.5 shadow-lg ring-1 ring-black/10 dark:ring-white/10"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {children}
+            </div>,
+            document.body,
+          )
+        : null}
     </th>
   );
 }
@@ -229,6 +269,12 @@ export function OrdersListTableHeaderRow({
       const t = e.target;
       if (!(t instanceof Node)) return;
       if (rowRef.current?.contains(t)) return;
+      if (
+        t instanceof Element &&
+        t.closest("[data-orders-col-filter-panel]")
+      ) {
+        return;
+      }
       setOpen(null);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -385,7 +431,7 @@ export function OrdersListTableHeaderRow({
         className={TH}
         title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
       >
-        Поступление
+        Постп
       </th>
 
       <FilterTh

@@ -115,7 +115,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
         className={[
           "relative z-0 ml-0 min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-clip bg-[var(--app-bg)] pt-[env(safe-area-inset-top,0px)] pe-[env(safe-area-inset-right,0px)] transition-[margin-left,width,padding,opacity] duration-200 ease-out shell-desktop:z-auto shell-desktop:ml-[var(--app-sidebar-w)] shell-desktop:w-[calc(100%-var(--app-sidebar-w))] shell-desktop:max-w-none shell-desktop:ps-0 shell-desktop:pe-0 shell-desktop:pt-0 custom-scrollbar",
           mobileNavOpen
-            ? "max-lg:pointer-events-none max-lg:select-none max-lg:opacity-40 [@media(min-width:1024px)_and_(max-height:559px)]:pointer-events-none [@media(min-width:1024px)_and_(max-height:559px)]:select-none [@media(min-width:1024px)_and_(max-height:559px)]:opacity-40"
+            ? "max-[1399px]:pointer-events-none max-[1399px]:select-none max-[1399px]:opacity-40 [@media(min-width:1400px)_and_(max-height:559px)]:pointer-events-none [@media(min-width:1400px)_and_(max-height:559px)]:select-none [@media(min-width:1400px)_and_(max-height:559px)]:opacity-40"
             : "",
         ].join(" ")}
         aria-hidden={mobileNavOpen ? true : undefined}
@@ -170,9 +170,9 @@ type AppShellProps = {
 };
 
 /**
- * Десктоп (shell-desktop = ширина ≥1024px и высота ≥560px): колонка меню 1/7, контент 6/7.
- * Узкое окно (<1400px): меню само сворачивается в рельс; вручную — кнопка на краю.
- * Иначе — выезжающее меню и «гамбургер», как на телефоне (узкое окно или низкая высота).
+ * Десктоп (shell-desktop = ширина ≥1400px и высота ≥560px): колонка меню 1/7, контент 6/7.
+ * Уже — кнопка на краю сворачивает в рельс. Уже окно (<1400px) или низкая высота —
+ * выезжающее меню и «гамбургер», как на телефоне.
  */
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
