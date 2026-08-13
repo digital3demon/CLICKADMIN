@@ -1,4 +1,5 @@
 import { normalizeRevisionsHistorySearchQuery } from "@/lib/revisions-history";
+import { formatMoscowDateTime } from "@/lib/moscow-datetime-format";
 
 export type OrdersHistoryTab =
   | "changes"
@@ -70,13 +71,7 @@ export function ordersHistoryHref(opts?: {
 }
 
 export function formatRuDateTime(d: Date): string {
-  return d.toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatMoscowDateTime(d);
 }
 
 /** Статус решения: ожидает / принята / отклонена / пришла. */

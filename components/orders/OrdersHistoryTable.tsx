@@ -4,6 +4,7 @@ import {
   ORDER_REVISION_KIND_RU,
   type RevisionsHistoryItem,
 } from "@/lib/revisions-history";
+import { formatMoscowDateTime } from "@/lib/moscow-datetime-format";
 import { orderPathById } from "@/lib/order-public-ref";
 
 export function OrdersHistoryTable({ items }: { items: RevisionsHistoryItem[] }) {
@@ -48,13 +49,7 @@ export function OrdersHistoryTable({ items }: { items: RevisionsHistoryItem[] })
                 className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--table-row-hover)]"
               >
                 <td className="min-w-0 whitespace-nowrap px-2 py-2 text-[var(--text-strong)] sm:px-3 sm:py-2.5">
-                  {item.row.createdAt.toLocaleString("ru-RU", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {formatMoscowDateTime(item.row.createdAt)}
                 </td>
                 <td className="min-w-0 px-2 py-2 sm:px-3 sm:py-2.5 text-[var(--app-text)]">
                   <Link
@@ -105,13 +100,7 @@ export function OrdersHistoryTable({ items }: { items: RevisionsHistoryItem[] })
                 className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--table-row-hover)]"
               >
                 <td className="min-w-0 whitespace-nowrap px-2 py-2 text-[var(--text-strong)] sm:px-3 sm:py-2.5">
-                  {item.row.createdAt.toLocaleString("ru-RU", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {formatMoscowDateTime(item.row.createdAt)}
                 </td>
                 <td className="min-w-0 px-2 py-2 sm:px-3 sm:py-2.5 text-[var(--app-text)]">
                   {item.row.clinic ? (
