@@ -352,6 +352,9 @@ export async function syncOrderChatInboxFromKaitenComments(
     if (types.length === 0) continue;
 
     for (const type of types) {
+      // «???» в CRM — всегда Канбан (Kaiten→канбан→CRM); !!! / @лаб остаются KAITEN.
+      const rowSource =
+        type === "PROSTHETICS" ? ("DEMO_KANBAN" as const) : ("KAITEN" as const);
       if (crmDraftId) {
         const bound = await (db as any).orderChatInboxItem.updateMany({
           where: {
@@ -365,6 +368,7 @@ export async function syncOrderChatInboxFromKaitenComments(
             syncState: "SYNCED_EXTERNAL",
             text: c.text,
             authorLabel,
+            ...(type === "PROSTHETICS" ? { source: "DEMO_KANBAN" } : {}),
           },
         });
         if (bound.count > 0) {
@@ -381,7 +385,7 @@ export async function syncOrderChatInboxFromKaitenComments(
           tenantId,
           orderId,
           type,
-          source: "KAITEN",
+          source: rowSource,
           text: c.text,
           authorLabel,
           kaitenCommentId,
@@ -393,6 +397,7 @@ export async function syncOrderChatInboxFromKaitenComments(
           authorLabel,
           crmDraftId,
           syncState: "SYNCED_EXTERNAL",
+          ...(type === "PROSTHETICS" ? { source: "DEMO_KANBAN" } : {}),
         },
       });
       changed = true;

@@ -59,6 +59,44 @@ describe("fetchMergedOrderProstheticsRequests", () => {
     expect(rows[1]?.text).toBe("нужна коронка на 16");
   });
 
+  it("схлопывает pending DEMO+KAITEN с разным форматированием текста", async () => {
+    const db = {
+      orderProstheticsRequest: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "legacy-demo",
+            text: "Артикул: 01124 -1шт Артикул: 01460 -1шт 3D-ACR -1шт",
+            source: "DEMO_KANBAN",
+            authorLabel: "Roman",
+            createdAt: new Date("2026-08-13T08:17:00Z"),
+            resolvedAt: null,
+            rejectedAt: null,
+            arrivedAt: null,
+            kaitenCommentId: null,
+          },
+          {
+            id: "legacy-kaiten",
+            text: "Артикул: 01124 -1шт\nАртикул: 01460 -1шт\n3D-ACR -1шт",
+            source: "KAITEN",
+            authorLabel: "Roman",
+            createdAt: new Date("2026-08-13T08:15:00Z"),
+            resolvedAt: null,
+            rejectedAt: null,
+            arrivedAt: null,
+            kaitenCommentId: 55,
+          },
+        ]),
+      },
+      orderChatInboxItem: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    };
+
+    const rows = await fetchMergedOrderProstheticsRequests(db as never, "order-1");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe("legacy-demo");
+  });
+
   it("pending merge ignores legacy twin when inbox already resolved", async () => {
     const { orderIdsWithPendingMergedProsthetics } = await import(
       "./order-prosthetics-requests-read"

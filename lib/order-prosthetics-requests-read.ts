@@ -1,5 +1,8 @@
 import type { OrderChatCorrectionSource, PrismaClient } from "@prisma/client";
-import { stripOrderProstheticsRequestPrefix } from "@/lib/order-prosthetics-request";
+import {
+  normalizeProstheticsTwinKey,
+  stripOrderProstheticsRequestPrefix,
+} from "@/lib/order-prosthetics-request";
 import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
 
 export type OrderProstheticsRequestReadRow = {
@@ -33,8 +36,62 @@ function sortRequests(rows: OrderProstheticsRequestReadRow[]): OrderProstheticsR
   return [...rows].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
+function isPendingProsthetics(row: {
+  resolvedAt: Date | null;
+  rejectedAt: Date | null;
+}): boolean {
+  return row.resolvedAt == null && row.rejectedAt == null;
+}
+
 /**
- * Единое чтение заявок «???»: inbox + legacy, без дублей по kaitenCommentId.
+ * При дубле по тексту оставляем DEMO_KANBAN (путь Kaiten→канбан→CRM),
+ * иначе более новую. Старые строки source=KAITEN схлопываем в пользу канбана.
+ */
+export function preferPendingProstheticsTwin(
+  a: OrderProstheticsRequestReadRow,
+  b: OrderProstheticsRequestReadRow,
+): OrderProstheticsRequestReadRow {
+  if (a.source !== b.source) {
+    if (a.source === "DEMO_KANBAN") return a;
+    if (b.source === "DEMO_KANBAN") return b;
+  }
+  return a.createdAt.getTime() >= b.createdAt.getTime() ? a : b;
+}
+
+/**
+ * Схлопывает pending-пары с одинаковым текстом (в т.ч. legacy KAITEN + канбан),
+ * когда отличаются только переносы строк.
+ */
+export function collapsePendingProstheticsTextTwins(
+  rows: OrderProstheticsRequestReadRow[],
+): OrderProstheticsRequestReadRow[] {
+  const closed: OrderProstheticsRequestReadRow[] = [];
+  const pendingByText = new Map<string, OrderProstheticsRequestReadRow>();
+
+  for (const row of rows) {
+    if (!isPendingProsthetics(row)) {
+      closed.push(row);
+      continue;
+    }
+    const key = normalizeProstheticsTwinKey(displayText(row.text));
+    if (!key) {
+      closed.push(row);
+      continue;
+    }
+    const prev = pendingByText.get(key);
+    if (!prev) {
+      pendingByText.set(key, row);
+      continue;
+    }
+    pendingByText.set(key, preferPendingProstheticsTwin(prev, row));
+  }
+
+  return sortRequests([...closed, ...pendingByText.values()]);
+}
+
+/**
+ * Единое чтение заявок «???»: inbox + legacy, без дублей по kaitenCommentId
+ * и без pending-дублей Канбан↔Kaiten по тексту.
  */
 export async function fetchMergedOrderProstheticsRequests(
   db: PrismaClient,
@@ -102,7 +159,7 @@ export async function fetchMergedOrderProstheticsRequests(
     });
   }
 
-  return sortRequests(merged);
+  return collapsePendingProstheticsTextTwins(merged);
 }
 
 /** Наряды с незакрытыми заявками протетики после merge inbox+legacy. */

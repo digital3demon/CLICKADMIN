@@ -27,3 +27,12 @@ export function formatProstheticsRequestTextForDisplay(raw: string): string {
     .replace(/^\s*\n+/, "")
     .trim();
 }
+
+/** Ключ близнеца Канбан↔Kaiten: без учёта переносов/пробелов. */
+export function normalizeProstheticsTwinKey(raw: string): string {
+  return String(raw || "")
+    .replace(/\uFEFF/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}

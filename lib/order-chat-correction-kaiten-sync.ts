@@ -116,7 +116,7 @@ async function countNewProstheticsFromComments(
 
 /**
  * Тянет комментарии карточки из Kaiten, зеркалит в CRM-канбан и синхронизирует «!!!» / «???» в БД.
- * UI читаeт ленту из kanban state; Kaiten — внешний источник (канбан ← Kaiten).
+ * UI читает ленту из kanban state; путь «???»: Kaiten → канбан → CRM (DEMO_KANBAN).
  */
 export async function syncOrderChatCorrectionsFromKaitenLive(
   prisma: PrismaClient,

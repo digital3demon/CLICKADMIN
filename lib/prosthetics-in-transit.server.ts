@@ -4,6 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
 import { prostheticsFromDb } from "@/lib/order-prosthetics";
+import { normalizeProstheticsTwinKey } from "@/lib/order-prosthetics-request";
 import { getPricingPrismaClient } from "@/lib/prisma-pricing";
 import { prostheticsInTransitStepFromDates } from "@/lib/prosthetics-in-transit-step";
 import type {
@@ -369,8 +370,38 @@ export async function listProstheticsToOrder(
     merged.push(row);
   }
 
-  merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  const sliced = merged.slice(0, take);
+  // Один текст (часто отличаются только \\n) → одна карточка; legacy KAITEN уступает канбану
+  const collapsed: typeof merged = [];
+  const byTwin = new Map<string, (typeof merged)[number]>();
+  for (const row of merged) {
+    const key = normalizeProstheticsTwinKey(row.text);
+    if (!key) {
+      collapsed.push(row);
+      continue;
+    }
+    const prev = byTwin.get(key);
+    if (!prev) {
+      byTwin.set(key, row);
+      continue;
+    }
+    const prefer =
+      prev.source !== row.source
+        ? prev.source === "DEMO_KANBAN"
+          ? prev
+          : row.source === "DEMO_KANBAN"
+            ? row
+            : prev.createdAt.getTime() >= row.createdAt.getTime()
+              ? prev
+              : row
+        : prev.createdAt.getTime() >= row.createdAt.getTime()
+          ? prev
+          : row;
+    byTwin.set(key, prefer);
+  }
+  collapsed.push(...byTwin.values());
+
+  collapsed.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const sliced = collapsed.slice(0, take);
 
   if (slim) {
     return sliced.map((raw) => ({
