@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isRetryableAttachmentUploadHttpStatus,
+  formatAttachmentUploadHttpError,
   normalizeOrderAttachmentUploadQueue,
 } from "@/lib/order-attachment-upload-client";
 
@@ -17,6 +18,33 @@ describe("isRetryableAttachmentUploadHttpStatus", () => {
   });
 });
 
+describe("formatAttachmentUploadHttpError", () => {
+  it("joins route error+details", () => {
+    expect(
+      formatAttachmentUploadHttpError(
+        500,
+        { error: "Не удалось сохранить файл", details: "disk full" },
+        "",
+      ),
+    ).toBe("Не удалось сохранить файл: disk full");
+  });
+
+  it("uses Next message when error field missing", () => {
+    expect(
+      formatAttachmentUploadHttpError(
+        500,
+        { message: "Internal Server Error" },
+        '{"message":"Internal Server Error"}',
+      ),
+    ).toBe("Ошибка загрузки (500): Internal Server Error");
+  });
+
+  it("falls back to raw body snippet", () => {
+    expect(
+      formatAttachmentUploadHttpError(502, {}, "<html>bad gateway</html>"),
+    ).toBe("Ошибка загрузки (502): <html>bad gateway</html>");
+  });
+});
 describe("normalizeOrderAttachmentUploadQueue", () => {
   const max = 1024;
 

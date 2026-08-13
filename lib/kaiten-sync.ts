@@ -363,7 +363,12 @@ export async function syncAllUnpushedAttachmentsInBackground(
   const rows = await prisma.orderAttachment.findMany({
     where: {
       ...unpushedToKaitenWhere,
-      scope: { not: OrderAttachmentScope.PAYMENT_SLIP },
+      scope: {
+        notIn: [
+          OrderAttachmentScope.PAYMENT_SLIP,
+          OrderAttachmentScope.SCANNER,
+        ],
+      },
       order: { kaitenCardId: { not: null } },
     },
     select: {

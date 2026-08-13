@@ -4,6 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { extractInvoiceNumberFromPdfBuffer } from "@/lib/extract-invoice-number-from-pdf";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { ensureOrderAttachmentScopeScanner } from "@/lib/ensure-order-attachment-scope-scanner";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import {
@@ -192,8 +193,8 @@ async function sleepMs(ms: number): Promise<void> {
 }
 
 export async function GET(_req: Request, ctx: Ctx) {
-  const prisma = await getOrdersPrisma();
   try {
+    const prisma = await getOrdersPrisma();
     const { id: orderId } = await ctx.params;
     const session = await getSessionFromCookies();
     const tenantId = await orderTenantIdForSession(session);
@@ -223,7 +224,9 @@ export async function GET(_req: Request, ctx: Ctx) {
     });
     const invId = order.invoiceAttachmentId;
     const visible = rows.filter((r) => {
+      // Платёжки и сканы сканера — не в общем списке файлов наряда.
       if (r.scope === OrderAttachmentScope.PAYMENT_SLIP) return false;
+      if (r.scope === OrderAttachmentScope.SCANNER) return false;
       if (invId && r.id === invId) return false;
       return true;
     });
@@ -262,6 +265,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
     const parsed = await parseRawUpload(req, UPLOAD_BODY_TIMEOUT_MS);
     const prisma = await getOrdersPrisma();
+    await ensureOrderAttachmentScopeScanner(prisma);
     const session = await getSessionFromCookies();
     const tenantId = await orderTenantIdForSession(session);
     if (!session || !tenantId) {
@@ -410,7 +414,31 @@ export async function POST(req: Request, ctx: Ctx) {
             "S3 и диск недоступны, файл сохранён в базе CRM";
         }
       }
+    } else {
+      // Без S3 — сначала диск, чтобы не класть крупные BYTEA в Postgres (OOM/500).
+      try {
+        diskRelPath = await writeOrderAttachmentToDisk(
+          orderId,
+          attachmentId,
+          fileBuf,
+        );
+        dataForDb = Buffer.alloc(0);
+      } catch (diskErr) {
+        console.error("[attachments POST] disk write failed, storing in DB", diskErr);
+        diskRelPath = null;
+        dataForDb = fileBuf;
+        storageWarning = "Диск недоступен, файл сохранён в базе CRM";
+      }
     }
+
+    console.info("[attachments POST] store", {
+      orderId,
+      attachmentId,
+      size: fileSize,
+      s3: shouldUseS3Storage,
+      diskRelPath: diskRelPath ? "yes" : "no",
+      dbBytes: dataForDb.byteLength,
+    });
 
     const row = await withTransientWriteRetry(
       () =>
@@ -567,6 +595,9 @@ export async function POST(req: Request, ctx: Ctx) {
     const tooLarge = details.includes("FILE_TOO_LARGE");
     const emptyFile = details.includes("EMPTY_FILE");
     const emptyBody = details.includes("EMPTY_REQUEST_BODY");
+    const enumScope =
+      /invalid input value for enum/i.test(details) &&
+      /OrderAttachmentScope|SCANNER/i.test(details);
     return NextResponse.json(
       {
         error: bodyReadTimeout
@@ -579,7 +610,9 @@ export async function POST(req: Request, ctx: Ctx) {
                 ? "Пустое тело запроса"
                 : locked
                   ? "База данных занята, попробуйте через несколько секунд"
-                  : "Не удалось сохранить файл",
+                  : enumScope
+                    ? "Схема БД устарела (нет scope SCANNER). На сервере: npm run db:migrate:deploy"
+                    : "Не удалось сохранить файл",
         details: details.slice(0, 500),
       },
       {
@@ -589,7 +622,9 @@ export async function POST(req: Request, ctx: Ctx) {
             ? 400
             : locked
               ? 503
-              : 500,
+              : enumScope
+                ? 503
+                : 500,
       },
     );
   }

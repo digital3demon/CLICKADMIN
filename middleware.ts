@@ -308,6 +308,7 @@ export async function middleware(req: NextRequest) {
       }
     | null = null;
 
+  try {
   if (!session.demo) {
     const sid = session.sid?.trim();
     if (!sid) {
@@ -664,6 +665,22 @@ export async function middleware(req: NextRequest) {
         return redirectPublic(req, home);
       }
     }
+  }
+  } catch (e) {
+    console.error("[middleware] access gate", pathname, e);
+    if (pathname.startsWith("/api/")) {
+      const details = e instanceof Error ? e.message : String(e);
+      return securityHeaders(
+        NextResponse.json(
+          {
+            error: "Временная ошибка доступа",
+            details: details.slice(0, 500),
+          },
+          { status: 503 },
+        ),
+      );
+    }
+    return redirectPublic(req, "/orders");
   }
 
   return res;

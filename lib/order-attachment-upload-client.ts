@@ -30,6 +30,38 @@ export function isRetryableAttachmentUploadHttpStatus(status: number): boolean {
   );
 }
 
+/**
+ * Сообщение об ошибке загрузки из JSON ответа API или сырого тела (Next/nginx).
+ * Экспорт для тестов.
+ */
+export function formatAttachmentUploadHttpError(
+  status: number,
+  data: Record<string, unknown>,
+  rawText: string,
+): string {
+  const errStr =
+    typeof data.error === "string" && data.error.trim()
+      ? data.error.trim()
+      : "";
+  const detailsStr =
+    typeof data.details === "string" && data.details.trim()
+      ? data.details.trim()
+      : "";
+  const messageStr =
+    typeof data.message === "string" && data.message.trim()
+      ? data.message.trim()
+      : "";
+  if (errStr && detailsStr && /^не удалось сохранить файл$/i.test(errStr)) {
+    return `${errStr}: ${detailsStr}`;
+  }
+  if (errStr) return detailsStr ? `${errStr}: ${detailsStr}` : errStr;
+  if (detailsStr) return detailsStr;
+  if (messageStr) return `Ошибка загрузки (${status}): ${messageStr}`;
+  const snippet = rawText.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (snippet) return `Ошибка загрузки (${status}): ${snippet}`;
+  return `Ошибка загрузки (${status})`;
+}
+
 export type PostOrderAttachmentResult =
   | {
       ok: true;
@@ -139,22 +171,15 @@ export async function postOrderAttachmentWithRetries(
         signal: options?.signal,
       });
       let data: Record<string, unknown> = {};
+      let rawText = "";
       try {
-        const text = await res.text();
-        if (text.trim()) {
-          data = JSON.parse(text) as Record<string, unknown>;
+        rawText = await res.text();
+        if (rawText.trim()) {
+          data = JSON.parse(rawText) as Record<string, unknown>;
         }
       } catch {
         data = {};
       }
-      const errStr =
-        typeof data.error === "string" && data.error.trim()
-          ? data.error.trim()
-          : "";
-      const detailsStr =
-        typeof data.details === "string" && data.details.trim()
-          ? data.details.trim()
-          : "";
       if (res.ok) {
         const w =
           typeof data.warning === "string" && data.warning.trim()
@@ -175,11 +200,7 @@ export async function postOrderAttachmentWithRetries(
       if (res.status === 413) {
         return { ok: false, error: ORDER_ATTACHMENT_PAYLOAD_TOO_LARGE_MESSAGE };
       }
-      if (errStr && detailsStr && /^не удалось сохранить файл$/i.test(errStr)) {
-        lastError = `${errStr}: ${detailsStr}`;
-      } else {
-        lastError = errStr || detailsStr || `Ошибка загрузки (${res.status})`;
-      }
+      lastError = formatAttachmentUploadHttpError(res.status, data, rawText);
       if (!isRetryableAttachmentUploadHttpStatus(res.status)) {
         return { ok: false, error: lastError };
       }
