@@ -1,6 +1,10 @@
 "use client";
 
-import { normalizeOrdersSearchQuery, ordersListHref } from "@/lib/orders-list-query";
+import {
+  normalizeOrdersSearchQuery,
+  ordersListHref,
+  pickOrdersOtprHrefOpts,
+} from "@/lib/orders-list-query";
 import { pickOrdersShipmentHrefOpts } from "@/lib/orders-shipment-list-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -123,6 +127,7 @@ export function OrdersListSearch({
           from,
           to,
           ...pickOrdersShipmentHrefOpts(cur),
+          ...pickOrdersOtprHrefOpts(cur),
         }),
         { scroll: false },
       );
@@ -161,6 +166,7 @@ export function OrdersListSearch({
         from,
         to,
         ...pickOrdersShipmentHrefOpts(spRef.current),
+        ...pickOrdersOtprHrefOpts(spRef.current),
       }),
       { scroll: false },
     );

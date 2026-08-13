@@ -61,6 +61,7 @@ type PeriodLineRow = {
   doctorName: string;
   patientName: string | null;
   orderCreatedAt: string;
+  appointmentAt: string | null;
   workReceivedAt: string | null;
   approvedAt: string | null;
   sentAt: string | null;
@@ -562,10 +563,10 @@ export function FinancePanel({
           Период и сверка
         </h2>
         <p className="mt-2 text-sm text-[var(--text-secondary)]">
-          Укажите даты (календарные дни, UTC) и нажмите «Показать» — обновятся
-          суммы в блоке «Оборот» выше и таблица позиций ниже. Выгрузка в формате
-          образца — PDF; Excel — как раньше (в т.ч. лист «Исключено из сверки»,
-          если есть такие наряды).
+          Укажите даты записи пациента (календарные дни, МСК) и нажмите
+          «Показать» — обновятся суммы в блоке «Оборот» выше и таблица позиций
+          ниже. PDF и Excel — по одному шаблону сверки (зелёные подписи формы
+          сохраняются; значения подставляются в жёлтые поля).
         </p>
         {!canEditClients ? (
           <p className="mt-2 text-xs text-[var(--text-muted)]">
@@ -696,7 +697,7 @@ export function FinancePanel({
                     <th className="px-3 py-2">Клиника</th>
                     <th className="px-3 py-2">Доктор</th>
                     <th className="px-3 py-2">Пациент</th>
-                    <th className="px-3 py-2">Работа зашла</th>
+                    <th className="px-3 py-2">Дата записи</th>
                     <th className="px-3 py-2">Согласовано</th>
                     <th className="px-3 py-2">Отправка</th>
                     <th className="px-3 py-2">Позиция</th>
@@ -773,7 +774,9 @@ export function FinancePanel({
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
                           {formatDateOnlyRu(
-                            row.workReceivedAt ?? row.orderCreatedAt,
+                            row.appointmentAt ??
+                              row.workReceivedAt ??
+                              row.orderCreatedAt,
                           )}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">

@@ -13,6 +13,16 @@ import {
   ORDER_PAYMENT_RECON_UNPAID,
   ORDER_PAYMENT_SVERKA,
 } from "@/lib/order-clinic-client-fields";
+import { effectiveAppointmentDate } from "@/lib/orders-shipment-list-filter";
+import {
+  orderWhereReconciliationPeriod,
+  resolveReconciliationApprovedAt,
+} from "@/lib/clinic-reconciliation-period";
+
+export {
+  orderWhereReconciliationPeriod,
+  resolveReconciliationApprovedAt,
+} from "@/lib/clinic-reconciliation-period";
 
 export type ReconciliationRow = {
   orderId: string;
@@ -20,6 +30,8 @@ export type ReconciliationRow = {
   doctorName: string;
   patientName: string | null;
   orderCreatedAt: Date;
+  /** Дата записи пациента (appointmentDate ?? dueToAdminsAt). */
+  appointmentAt: Date | null;
   workReceivedAt: Date | null;
   approvedAt: Date | null;
   sentAt: Date | null;
@@ -66,25 +78,13 @@ async function loadOrderTimelineDates(
   });
 
   for (const order of orders) {
-    let approvedAt: Date | null = null;
     let sentAt: Date | null = null;
-    let prevLabWorkStatus: string | null = null;
     let prevShipped: boolean | null = null;
 
     for (const rev of order.revisions) {
       const snap = parseSnapshotV1(rev.snapshot);
       if (!snap) continue;
-      const currentLab = String(snap.order.labWorkStatus || "").trim();
       const currentShipped = Boolean(snap.order.adminShippedOtpr);
-
-      if (
-        approvedAt == null &&
-        prevLabWorkStatus === "APPROVAL" &&
-        currentLab !== "" &&
-        currentLab !== "APPROVAL"
-      ) {
-        approvedAt = rev.createdAt;
-      }
       if (
         sentAt == null &&
         prevShipped === false &&
@@ -92,14 +92,16 @@ async function loadOrderTimelineDates(
       ) {
         sentAt = rev.createdAt;
       }
-
-      prevLabWorkStatus = currentLab || prevLabWorkStatus;
       prevShipped = currentShipped;
     }
 
     if (sentAt == null && order.adminShippedOtpr) {
       sentAt = order.updatedAt;
     }
+
+    const approvedAt = resolveReconciliationApprovedAt({
+      revisions: order.revisions,
+    });
 
     out.set(order.id, { approvedAt, sentAt });
   }
@@ -223,9 +225,7 @@ export async function sumClinicConstructionTotals(
       order: {
         clinicId,
         archivedAt: null,
-        ...(range
-          ? { createdAt: { gte: range.from, lte: range.to } }
-          : {}),
+        ...(range ? orderWhereReconciliationPeriod(range) : {}),
       },
     },
     select: {
@@ -301,9 +301,7 @@ export async function sumDoctorConstructionTotals(
       order: {
         doctorId,
         archivedAt: null,
-        ...(range
-          ? { createdAt: { gte: range.from, lte: range.to } }
-          : {}),
+        ...(range ? orderWhereReconciliationPeriod(range) : {}),
       },
     },
     select: {
@@ -389,7 +387,7 @@ export async function fetchDoctorReconciliationRows(
       order: {
         doctorId,
         archivedAt: null,
-        createdAt: { gte: range.from, lte: range.to },
+        ...orderWhereReconciliationPeriod(range),
       },
     },
     orderBy: [{ order: { createdAt: "asc" } }, { sortOrder: "asc" }],
@@ -488,7 +486,7 @@ export async function fetchReconciliationRows(
       order: {
         clinicId,
         archivedAt: null,
-        createdAt: { gte: range.from, lte: range.to },
+        ...orderWhereReconciliationPeriod(range),
       },
     },
     orderBy: [{ order: { createdAt: "asc" } }, { sortOrder: "asc" }],
@@ -499,6 +497,8 @@ export async function fetchReconciliationRows(
           orderNumber: true,
           createdAt: true,
           workReceivedAt: true,
+          appointmentDate: true,
+          dueToAdminsAt: true,
           patientName: true,
           labWorkStatus: true,
           invoiceParsedTotalRub: true,
@@ -564,6 +564,10 @@ export async function fetchReconciliationRows(
       doctorName: l.order.doctor.fullName,
       patientName: l.order.patientName?.trim() || null,
       orderCreatedAt: l.order.createdAt,
+      appointmentAt: effectiveAppointmentDate({
+        appointmentDate: l.order.appointmentDate,
+        dueToAdminsAt: l.order.dueToAdminsAt,
+      }),
       workReceivedAt: l.order.workReceivedAt,
       approvedAt: timeline?.approvedAt ?? null,
       sentAt: timeline?.sentAt ?? null,
@@ -625,7 +629,6 @@ export async function listClinicReconciliationExcludedOrders(
     where: {
       clinicId,
       archivedAt: null,
-      createdAt: { gte: range.from, lte: range.to },
       excludeFromReconciliation: true,
       payment: {
         in: [
@@ -634,9 +637,14 @@ export async function listClinicReconciliationExcludedOrders(
           ORDER_PAYMENT_RECON_PAID,
         ],
       },
-      OR: [
-        { excludeFromReconciliationUntil: null },
-        { excludeFromReconciliationUntil: { gte: range.to } },
+      AND: [
+        orderWhereReconciliationPeriod(range),
+        {
+          OR: [
+            { excludeFromReconciliationUntil: null },
+            { excludeFromReconciliationUntil: { gte: range.to } },
+          ],
+        },
       ],
     },
     select: {

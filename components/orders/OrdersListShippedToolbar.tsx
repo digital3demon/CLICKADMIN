@@ -8,6 +8,11 @@ type Props = {
   listSearchQ: string;
   fromUrl: string | null;
   toUrl: string | null;
+  otprFromUrl?: string | null;
+  otprToUrl?: string | null;
+  ship?: "actual" | "period" | null;
+  shipFrom?: string | null;
+  shipTo?: string | null;
   onlyShippedActive: boolean;
   hideShippedActive: boolean;
 };
@@ -26,6 +31,11 @@ export function OrdersListShippedToolbar({
   listSearchQ,
   fromUrl,
   toUrl,
+  otprFromUrl = null,
+  otprToUrl = null,
+  ship = null,
+  shipFrom = null,
+  shipTo = null,
   onlyShippedActive,
   hideShippedActive,
 }: Props) {
@@ -33,13 +43,20 @@ export function OrdersListShippedToolbar({
   const from = fromUrl ?? undefined;
   const to = toUrl ?? undefined;
   const tag = rawTag ?? undefined;
+  const keep = {
+    otprFrom: otprFromUrl ?? undefined,
+    otprTo: otprToUrl ?? undefined,
+    ship: ship ?? undefined,
+    shipFrom: shipFrom ?? undefined,
+    shipTo: shipTo ?? undefined,
+  };
 
   let links: ReactNode;
   if (onlyShippedActive) {
     links = (
       <>
         <Link
-          href={ordersListHref({ limit: pageSize, tag, q, from, to })}
+          href={ordersListHref({ limit: pageSize, tag, q, from, to, ...keep })}
           className={linkNeutral}
         >
           Показать все наряды
@@ -52,6 +69,7 @@ export function OrdersListShippedToolbar({
             q,
             from,
             to,
+            ...keep,
           })}
           className={linkEmerald}
         >
@@ -63,7 +81,7 @@ export function OrdersListShippedToolbar({
     links = (
       <>
         <Link
-          href={ordersListHref({ limit: pageSize, tag, q, from, to })}
+          href={ordersListHref({ limit: pageSize, tag, q, from, to, ...keep })}
           className={linkNeutral}
         >
           Показать отгруженные
@@ -76,6 +94,7 @@ export function OrdersListShippedToolbar({
             q,
             from,
             to,
+            ...keep,
           })}
           className={linkSky}
         >
@@ -94,6 +113,7 @@ export function OrdersListShippedToolbar({
             q,
             from,
             to,
+            ...keep,
           })}
           className={linkEmerald}
         >
@@ -107,6 +127,7 @@ export function OrdersListShippedToolbar({
             q,
             from,
             to,
+            ...keep,
           })}
           className={linkSky}
         >

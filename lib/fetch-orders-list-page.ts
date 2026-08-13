@@ -30,6 +30,7 @@ export const ordersListPageSelect = {
   payment: true,
   paymentPartialRub: true,
   adminShippedOtpr: true,
+  adminShippedAt: true,
   kaitenCardId: true,
   kaitenChatHasLabMention: true,
   kaitenLabMentionSignalAt: true,
@@ -358,6 +359,8 @@ export async function fetchOrdersListPage(
     createdAtRange?: { start: Date; endExclusive: Date } | null | undefined;
     /** Период по лабораторному сроку (dueDate / колонка «ЛАБ»), МСК. */
     dueDateRange?: { start: Date; endExclusive: Date } | null | undefined;
+    /** Период по дате отправки (adminShippedAt / колонка «Отправка»), МСК. */
+    otprAtRange?: { start: Date; endExclusive: Date } | null | undefined;
     /** Для подсветки «Упоминания»: учитываем OrderKaitenLabMentionAck текущего пользователя. */
     ordersListForUserId?: string | null;
     viewerRole?: UserRole | null;
@@ -430,6 +433,14 @@ export async function fetchOrdersListPage(
       createdAt: {
         gte: opts.createdAtRange.start,
         lt: opts.createdAtRange.endExclusive,
+      },
+    });
+  }
+  if (opts.otprAtRange) {
+    parts.push({
+      adminShippedAt: {
+        gte: opts.otprAtRange.start,
+        lt: opts.otprAtRange.endExclusive,
       },
     });
   }

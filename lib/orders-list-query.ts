@@ -26,14 +26,18 @@ export function ordersListHref(opts: {
   onlyShipped?: boolean;
   /** Поиск по наряду, врачу, клинике, пациенту. */
   q?: string | null;
-  /** Дата создания наряда с (YYYY-MM-DD, МСК). */
+  /** Лабораторный срок с (YYYY-MM-DD, МСК), колонка «ЛАБ». */
   from?: string | null;
-  /** Дата создания наряда по (YYYY-MM-DD, МСК). */
+  /** Лабораторный срок по (YYYY-MM-DD, МСК), колонка «ЛАБ». */
   to?: string | null;
-  /** Режим отгрузок на странице заказов. */
+  /** Режим фильтра по записи на странице заказов. */
   ship?: OrdersListHrefShipmentOpts["ship"];
   shipFrom?: string | null;
   shipTo?: string | null;
+  /** Дата отправки (`adminShippedAt`) с (YYYY-MM-DD, МСК). */
+  otprFrom?: string | null;
+  /** Дата отправки (`adminShippedAt`) по (YYYY-MM-DD, МСК). */
+  otprTo?: string | null;
 }): string {
   const p = new URLSearchParams();
   if (
@@ -61,6 +65,22 @@ export function ordersListHref(opts: {
     shipFrom: opts.shipFrom,
     shipTo: opts.shipTo,
   });
+  const otprFrom = opts.otprFrom?.trim() || "";
+  const otprTo = opts.otprTo?.trim() || "";
+  if (otprFrom) p.set("otprFrom", otprFrom);
+  if (otprTo) p.set("otprTo", otprTo);
   const q = p.toString();
   return q ? `/orders?${q}` : "/orders";
+}
+
+/** Сохранить otprFrom/otprTo из текущего URL при навигации. */
+export function pickOrdersOtprHrefOpts(sp: {
+  get: (key: string) => string | null;
+}): { otprFrom?: string; otprTo?: string } {
+  const otprFrom = sp.get("otprFrom")?.trim() || undefined;
+  const otprTo = sp.get("otprTo")?.trim() || undefined;
+  return {
+    ...(otprFrom ? { otprFrom } : {}),
+    ...(otprTo ? { otprTo } : {}),
+  };
 }

@@ -128,8 +128,8 @@ export function DoctorFinancePanel({
           Период и сверка
         </h2>
         <p className="mt-2 text-sm text-[var(--text-secondary)]">
-          Укажите даты (календарные дни, UTC) и обновите обзор. Сверка выгружается
-          в Excel по текущему выбранному периоду на странице.
+          Укажите даты записи пациента (календарные дни, МСК) и обновите обзор.
+          Сверка выгружается в Excel по шаблону сверки за выбранный период.
         </p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">

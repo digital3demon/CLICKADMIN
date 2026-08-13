@@ -42,4 +42,11 @@ if (fs.existsSync(publicSrc)) {
   copyDirRecursive(publicSrc, publicDest);
 }
 
+const templatesSrc = path.join(root, "templates");
+const templatesDest = path.join(root, ".next", "standalone", "templates");
+if (fs.existsSync(templatesSrc)) {
+  copyDirRecursive(templatesSrc, templatesDest);
+  console.log("[copy-standalone-assets] OK → .next/standalone/templates");
+}
+
 console.log("[copy-standalone-assets] OK → .next/standalone/.next/static");

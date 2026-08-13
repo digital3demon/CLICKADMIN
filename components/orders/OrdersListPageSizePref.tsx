@@ -21,6 +21,8 @@ type Props = {
   ship?: OrdersListHrefShipmentOpts["ship"];
   shipFrom?: string | null;
   shipTo?: string | null;
+  otprFrom?: string | null;
+  otprTo?: string | null;
   /** Компактная строка рядом с «К началу списка» / «Следующие N». */
   paginationBar?: boolean;
 };
@@ -37,6 +39,8 @@ export function OrdersListPageSizePref({
   ship,
   shipFrom,
   shipTo,
+  otprFrom,
+  otprTo,
   paginationBar = false,
 }: Props) {
   const router = useRouter();
@@ -57,8 +61,22 @@ export function OrdersListPageSizePref({
         ship: ship ?? undefined,
         shipFrom: shipFrom ?? undefined,
         shipTo: shipTo ?? undefined,
+        otprFrom: otprFrom ?? undefined,
+        otprTo: otprTo ?? undefined,
       }),
-    [tag, hideShipped, onlyShipped, q, from, to, ship, shipFrom, shipTo],
+    [
+      tag,
+      hideShipped,
+      onlyShipped,
+      q,
+      from,
+      to,
+      ship,
+      shipFrom,
+      shipTo,
+      otprFrom,
+      otprTo,
+    ],
   );
 
   useEffect(() => {

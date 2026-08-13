@@ -90,6 +90,8 @@ import {
 } from "@/components/orders/OrderConstructionsEditor";
 import { OrderProstheticsBlock } from "@/components/orders/OrderProstheticsBlock";
 import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
+import { OrderSourceEmailsModal } from "@/components/orders/OrderSourceEmailsModal";
+import { IconMail } from "@/components/kanban/kanban-icons";
 import { OrderPaymentSlipsBlock } from "@/components/orders/OrderPaymentSlipsBlock";
 import { PrefixSearchCombobox } from "@/components/ui/PrefixSearchCombobox";
 import type { OrderProstheticsV1 } from "@/lib/order-prosthetics";
@@ -198,13 +200,13 @@ function OrderSecondaryTabsSpoiler({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <details
-      className="group min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] open:shadow-sm"
+      className="group min-w-0 overflow-hidden rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] open:shadow-sm"
       open={open}
       onToggle={(e) => {
         setOpen((e.currentTarget as HTMLDetailsElement).open);
       }}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 select-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 bg-[var(--surface-hover)] px-3 py-2.5 select-none hover:brightness-105 [&::-webkit-details-marker]:hidden">
         <span className="text-sm font-semibold text-[var(--text-strong)]">
           {title}
         </span>
@@ -681,6 +683,8 @@ export type OrderEditInitial = {
     rejectedAt: string | null;
     arrivedAt: string | null;
   }>;
+  /** Сколько писем привязано к наряду (кнопка почты в шапке) */
+  sourceEmailCount: number;
 };
 
 /** Вкладки документооборота / Канбан-Кайтен / истории (на странице наряда — над нижней панелью). */
@@ -726,7 +730,7 @@ export function OrderEditForm({
   /** Роль текущего пользователя (для раскладки «строка в буфер» на вкладке счёта). */
   viewerRole?: UserRole | null;
   kanbanCardUrl?: string | null;
-  /** Шапка модуля: этап работы, срочность, пилюли-индикаторы и «Сохранить». */
+  /** Шапка модуля: этап работы, срочность, пилюли-индикаторы. «Сохранить» — в тулбаре наряда. */
   orderPageFrame?: {
     title: string;
     /** Необязательный серый текст под заголовком (обычно не показываем). */
@@ -1000,6 +1004,7 @@ export function OrderEditForm({
   const [shipModalOpen, setShipModalOpen] = useState(false);
   const [shipModalMode, setShipModalMode] = useState<"mark" | "edit">("mark");
   const [shipModalDraft, setShipModalDraft] = useState("");
+  const [orderMailOpen, setOrderMailOpen] = useState(false);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [archiveErr, setArchiveErr] = useState<string | null>(null);
@@ -3840,9 +3845,20 @@ export function OrderEditForm({
           kanbanUrl={kanbanCardUrl}
           labelFull="QR витрины"
         />
+        {initial.sourceEmailCount > 0 ? (
+          <button
+            type="button"
+            title={`Письма наряда (${initial.sourceEmailCount})`}
+            aria-label="Письма наряда"
+            className="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-9 sm:px-2.5"
+            onClick={() => setOrderMailOpen(true)}
+          >
+            <IconMail className="h-4 w-4 sm:h-[1.1rem] sm:w-[1.1rem]" />
+          </button>
+        ) : null}
         {workSentNarjadActions}
-        {!isOrderPageFramed && !previewMode ? (
-          <div className="ms-auto flex shrink-0 justify-end">
+        {!previewMode ? (
+          <div className="hidden shrink-0 shell-desktop:block">
             {renderSaveButton()}
           </div>
         ) : null}
@@ -4061,6 +4077,13 @@ export function OrderEditForm({
         </div>
       </div>
     ) : null}
+    {orderMailOpen ? (
+      <OrderSourceEmailsModal
+        orderId={initial.id}
+        orderNumber={orderNumberDraft.trim() || initial.orderNumber}
+        onClose={() => setOrderMailOpen(false)}
+      />
+    ) : null}
     </>
   );
 
@@ -4115,11 +4138,6 @@ export function OrderEditForm({
           }
           description={orderPageFrame.description ?? undefined}
           titleAccessory={orderPageHeaderAccessory}
-          titleRowEnd={
-            !previewMode && canEditOrder ? (
-              <div className="hidden shell-desktop:block">{renderSaveButton()}</div>
-            ) : null
-          }
         >
           {formInner}
           {!previewMode ? (

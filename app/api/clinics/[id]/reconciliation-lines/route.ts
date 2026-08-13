@@ -43,6 +43,7 @@ export async function GET(
         doctorName: r.doctorName,
         patientName: r.patientName,
         orderCreatedAt: r.orderCreatedAt.toISOString(),
+        appointmentAt: r.appointmentAt?.toISOString() ?? null,
         workReceivedAt: r.workReceivedAt?.toISOString() ?? null,
         approvedAt: r.approvedAt?.toISOString() ?? null,
         sentAt: r.sentAt?.toISOString() ?? null,

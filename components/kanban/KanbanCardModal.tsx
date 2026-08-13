@@ -18,6 +18,7 @@ import {
 import {
   deleteOrderAttachmentById,
   fetchKanbanMirrorCommentsForOrder,
+  fetchOrderKaitenImagesForKanban,
   patchOrderKaitenCard,
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
@@ -421,23 +422,60 @@ export function KanbanCardModal({
       if (cancelled) return;
       if (document.visibilityState !== "visible" && !opts?.refresh) return;
       void (async () => {
-        const snap = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
-        if (cancelled || !snap.ok) return;
+        const [snap, kaitenImgs] = await Promise.all([
+          fetchKanbanMirrorCommentsForOrder(linkedOrderId),
+          fetchOrderKaitenImagesForKanban(linkedOrderId, {
+            refresh: opts?.refresh === true,
+          }),
+        ]);
+        if (cancelled) return;
         onApply((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
-          fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
+          if (kaitenImgs.ok) {
+            if (!fc.card.files) fc.card.files = [];
+            for (const img of kaitenImgs.images) {
+              const m = /\/kaiten\/files\/(\d+)/.exec(img.url);
+              const id = m ? `kt-file-${m[1]}` : `kt-img-${img.id}`;
+              if (fc.card.files.some((f) => f.id === id || f.dataUrl === img.url)) {
+                continue;
+              }
+              fc.card.files.push({
+                id,
+                name: img.name || "image.png",
+                mime: img.mime || "image/png",
+                size: 0,
+                dataUrl: img.url,
+                addedAt: new Date().toISOString(),
+                addedByUserId: "",
+              });
+            }
+            if (kaitenImgs.blocked === false && fc.card.blocked) {
+              performUnblock(fc.card, b, act);
+            } else if (kaitenImgs.blocked === true && !fc.card.blocked) {
+              fc.card.blocked = true;
+              fc.card.blockedAt = new Date().toISOString();
+            }
+          }
+          if (snap.ok) {
+            fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
+          } else if (kaitenImgs.ok && kaitenImgs.images.length > 0) {
+            fc.card.comments = withImagePlaceholders(
+              fc.card.comments || [],
+              fc.card,
+            );
+          }
         });
       })();
     };
-    load();
+    load({ refresh: true });
     const pollMs = kaitenClientPollIntervalMs();
     const iv = window.setInterval(() => load(), pollMs);
     return () => {
       cancelled = true;
       window.clearInterval(iv);
     };
-  }, [cardId, linkedOrderId, onApply]);
+  }, [cardId, linkedOrderId, onApply, act]);
 
   const adminMentionTag = useKanbanAdminMentionTag();
   const adminMentionUserIds = useMemo(
@@ -492,6 +530,11 @@ export function KanbanCardModal({
 
   const confirmBlock = () => {
     if (!canManageKanbanBlock) return;
+    const reasonForTg = (blockReasonDraft || "").trim();
+    const oid = card?.linkedOrderId?.trim() || "";
+    const hasKaiten =
+      card?.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
+    let blockedOk = false;
     onApply((b) => {
       const fc = findCard(b, cardId);
       if (!fc) return;
@@ -500,7 +543,7 @@ export function KanbanCardModal({
         toast("Укажите причину остановки работы", true);
         return;
       }
-      const reasonForTg = (blockReasonDraft || "").trim();
+      blockedOk = true;
       setBlockPopupOpen(false);
       setBlockReasonDraft("");
       if (!shouldSkipCrmKanbanTelegram(fc.card.kaitenCardId)) {
@@ -508,7 +551,6 @@ export function KanbanCardModal({
         const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleT);
         const who = escapeTelegramHtml((act || "Пользователь").trim());
         const reasonEsc = escapeTelegramHtml(reasonForTg.slice(0, 240));
-        const oid = fc.card.linkedOrderId?.trim();
         const { cardWord, orderWord } = oid
           ? cardOrderWordLinks(oid, cardId, board.id)
           : { cardWord: "", orderWord: "" };
@@ -531,6 +573,14 @@ export function KanbanCardModal({
         });
       }
     });
+    if (blockedOk && oid && hasKaiten) {
+      void patchOrderKaitenCard(oid, {
+        blocked: true,
+        blockReason: reasonForTg,
+      }).then((r) => {
+        if (!r.ok) toast(r.error, true);
+      });
+    }
   };
 
   const beginEditBlockReason = () => {
@@ -1341,11 +1391,19 @@ export function KanbanCardModal({
               className="shrink-0 self-center rounded-md bg-white/15 px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40"
               onClick={() => {
                 if (!canManageKanbanBlock) return;
+                const oid = card.linkedOrderId?.trim() || "";
+                const hasKaiten =
+                  card.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
                 onApply((b) => {
                   const fc = findCard(b, cardId);
                   if (!fc) return;
                   performUnblock(fc.card, b, act);
                 });
+                if (oid && hasKaiten) {
+                  void patchOrderKaitenCard(oid, { blocked: false }).then((r) => {
+                    if (!r.ok) toast(r.error, true);
+                  });
+                }
               }}
             >
               Снять блокировку
@@ -1488,6 +1546,10 @@ export function KanbanCardModal({
                   return;
                 }
                 if (blocked) {
+                  const oid = card.linkedOrderId?.trim() || "";
+                  const hasKaiten =
+                    card.kaitenCardId != null &&
+                    Number.isFinite(card.kaitenCardId);
                   onApply((b) => {
                     const fc = findCard(b, cardId);
                     if (!fc) return;
@@ -1496,16 +1558,16 @@ export function KanbanCardModal({
                       const t = (fc.card.title || "").trim() || "Без названия";
                       const linkHtml = kanbanCardLinkHtml(cardId, board.id, t);
                       const who = escapeTelegramHtml((act || "Пользователь").trim());
-                      const oid = fc.card.linkedOrderId?.trim();
-                      const { cardWord, orderWord } = oid
-                        ? cardOrderWordLinks(oid, cardId, board.id)
+                      const linkedOid = fc.card.linkedOrderId?.trim();
+                      const { cardWord, orderWord } = linkedOid
+                        ? cardOrderWordLinks(linkedOid, cardId, board.id)
                         : { cardWord: "", orderWord: "" };
                       postKanbanCrmTelegramNotify({
                         kaitenCardId: fc.card.kaitenCardId,
                         event: "tg_card_unblocked",
                         parseMode: "HTML",
                         lines: [`${who} снял(а) блокировку с ${linkHtml}`],
-                        ...(oid
+                        ...(linkedOid
                           ? {
                               linesAdmin: [
                                 `${who} снял(а) блокировку с ${cardWord} и ${orderWord}`,
@@ -1515,6 +1577,13 @@ export function KanbanCardModal({
                       });
                     }
                   });
+                  if (oid && hasKaiten) {
+                    void patchOrderKaitenCard(oid, { blocked: false }).then(
+                      (r) => {
+                        if (!r.ok) toast(r.error, true);
+                      },
+                    );
+                  }
                 } else openBlockPopup();
               }}
             >
@@ -3143,7 +3212,7 @@ function ChatPanel({
         <div className="flex min-w-0 items-stretch gap-1.5 sm:gap-2">
           <button
             type="button"
-            className="min-w-0 flex-1 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-2 text-[0.75rem] font-semibold text-amber-200 hover:bg-amber-400/20 disabled:opacity-40 sm:px-2.5 sm:py-2.5 sm:text-[0.8125rem]"
+            className="min-w-0 flex-1 rounded-md border border-amber-400/50 bg-amber-50 px-2 py-2 text-[0.75rem] font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-40 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200 dark:hover:bg-amber-400/20 sm:px-2.5 sm:py-2.5 sm:text-[0.8125rem]"
             disabled={!inp.trim()}
             title="Отправить как корректировку"
             onClick={() => {
@@ -3154,7 +3223,7 @@ function ChatPanel({
           </button>
           <button
             type="button"
-            className="min-w-0 flex-1 rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-2 text-[0.75rem] font-semibold text-sky-200 hover:bg-sky-400/20 disabled:opacity-40 sm:px-2.5 sm:py-2.5 sm:text-[0.8125rem]"
+            className="min-w-0 flex-1 rounded-md border border-sky-400/50 bg-sky-50 px-2 py-2 text-[0.75rem] font-semibold text-sky-900 hover:bg-sky-100 disabled:opacity-40 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-200 dark:hover:bg-sky-400/20 sm:px-2.5 sm:py-2.5 sm:text-[0.8125rem]"
             disabled={!inp.trim()}
             title="Отправить как заказ протетики"
             onClick={() => {

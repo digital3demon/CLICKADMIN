@@ -25,10 +25,26 @@ describe("kaitenBlockedMetaFromCard", () => {
     expect(m.blockedAtIso).toBe("2026-05-11T17:36:00.000Z");
   });
 
-  it("игнорирует released и берёт причину из неосвобождённых blockers", () => {
+  it("явный blocked:false снимает блок даже при «висячих» blockers", () => {
     const card = {
       blocked: false,
       block_reason: "устаревшее на карточке",
+      blockers: [
+        { released: true, reason: "снято", created: "2026-05-10T10:00:00.000Z" },
+        {
+          released: false,
+          reason: "устаревший хвост API",
+          updated: "2026-05-12T08:00:00.000Z",
+        },
+      ],
+    };
+    const m = kaitenBlockedMetaFromCard(card);
+    expect(m.blocked).toBe(false);
+    expect(m.reason).toBeNull();
+  });
+
+  it("без явного флага берёт причину из неосвобождённых blockers", () => {
+    const card = {
       blockers: [
         { released: true, reason: "снято", created: "2026-05-10T10:00:00.000Z" },
         {

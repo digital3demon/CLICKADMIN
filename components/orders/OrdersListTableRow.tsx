@@ -189,27 +189,27 @@ export function OrdersListTableRow({
               ) : null}
             </div>
 
-            {clinicName ? (
-              <div className="mb-0.5 truncate text-xs font-normal text-[var(--text-secondary)]">
-                {clinicName}
+            <div className="mb-2 space-y-0.5">
+              <div className="flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">
+                {patientName ? <span>{patientName}</span> : null}
+                {patientName && doctorName ? (
+                  <span className="text-[var(--text-muted)]">·</span>
+                ) : null}
+                {doctorName ? <span>{doctorName}</span> : null}
               </div>
-            ) : null}
-
-            {clinicAddress ? (
-              <div
-                className="mb-0.5 truncate text-xs text-[var(--text-secondary)]"
-                title={clinicAddress}
-              >
-                {clinicAddress}
-              </div>
-            ) : null}
-
-            <div className="mb-2 flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">
-              {doctorName ? <span>{doctorName}</span> : null}
-              {doctorName && patientName ? (
-                <span className="text-[var(--text-muted)]">·</span>
+              {clinicName ? (
+                <div className="truncate text-xs font-normal text-[var(--text-secondary)]">
+                  {clinicName}
+                </div>
               ) : null}
-              {patientName ? <span>{patientName}</span> : null}
+              {clinicAddress ? (
+                <div
+                  className="truncate text-xs text-[var(--text-secondary)]"
+                  title={clinicAddress}
+                >
+                  {clinicAddress}
+                </div>
+              ) : null}
             </div>
 
             {(mobileActionsNode || mobileDatesNode) ? (

@@ -307,6 +307,7 @@ export function MailList({
   onSelectAll,
   onClearSelection,
   onCreateOrder,
+  onAddToOrder,
   onMarkAllRead,
   onBulkAction,
   onEmailAction,
@@ -330,6 +331,7 @@ export function MailList({
   onSelectAll: () => void;
   onClearSelection: () => void;
   onCreateOrder: () => void;
+  onAddToOrder: () => void;
   onMarkAllRead: () => void;
   onBulkAction: (action: "read" | "unread" | "archive" | "trash" | "delete") => void;
   onEmailAction: (id: string, action: "archive" | "trash" | "flag" | "unflag" | "read" | "unread") => void;
@@ -422,6 +424,13 @@ export function MailList({
           <span className="mr-auto font-semibold text-[var(--sidebar-blue)]">Выбрано: {selectedCount}</span>
           <button className="rounded-lg bg-[var(--sidebar-blue)] px-3 py-1.5 font-semibold text-white hover:bg-[var(--sidebar-blue-hover)]" onClick={onCreateOrder}>
             Новый заказ
+          </button>
+          <button
+            type="button"
+            className="rounded-lg border border-[var(--sidebar-blue)]/50 bg-[var(--card-bg)] px-3 py-1.5 font-semibold text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+            onClick={onAddToOrder}
+          >
+            Добавить в заказ
           </button>
           <button className="rounded-lg bg-[var(--card-bg)] px-3 py-1.5 hover:bg-[var(--surface-hover)]" onClick={() => onBulkAction("read")}>
             Прочитано

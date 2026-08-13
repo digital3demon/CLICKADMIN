@@ -17,8 +17,8 @@ import { OrderPostingMonthBar } from "@/components/orders/OrderPostingMonthBar";
 import { OrdersListHeaderActionCards } from "@/components/orders/OrdersListHeaderActionCards";
 import { OrdersListShippedToolbar } from "@/components/orders/OrdersListShippedToolbar";
 import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePref";
-import { OrdersListFiltersRow } from "@/components/orders/OrdersListFiltersRow";
-import { OrdersListStickySearch } from "@/components/orders/OrdersListStickySearch";
+import { OrdersListSearch } from "@/components/orders/OrdersListSearch";
+import { OrdersListTableHeaderRow } from "@/components/orders/OrdersListTableHeaderRow";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
 import { OrdersListChrome } from "@/components/orders/OrdersListChrome";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
@@ -41,6 +41,7 @@ import {
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
 import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
+import { ordersListOtprPeriod } from "@/lib/orders-list-otpr-period";
 import {
   normalizeOrdersSearchQuery,
   ordersListHref,
@@ -121,90 +122,67 @@ function formatOrderCardDate(d: Date | null | undefined): string | undefined {
 function OrdersTableColGroup() {
   return (
     <colgroup>
-      <col className="max-md:hidden lg:w-[2.8%]" />
-      <col className="max-md:hidden lg:w-[6.5%]" />
-      <col className="lg:w-[6%]" />
-      <col className="lg:w-[11.5%]" />
-      <col className="lg:w-[11%]" />
-      <col className="lg:w-[8%]" />
-      <col className="lg:w-[7.5%]" />
+      <col className="max-md:hidden lg:w-[2.5%]" />
+      <col className="max-md:hidden lg:w-[5.5%]" />
       <col className="lg:w-[7%]" />
-      <col className="lg:w-[4.2%]" />
-      <col className="lg:w-[4.2%]" />
-      <col className="max-md:hidden lg:w-[6%]" />
-      <col className="lg:w-[4.8%]" />
-      <col className="lg:w-[14.5%]" />
+      <col className="lg:w-[5.5%]" />
+      <col className="lg:w-[7%]" />
+      <col className="lg:w-[7%]" />
+      <col className="lg:w-[9%]" />
+      <col className="lg:w-[9%]" />
+      <col className="lg:w-[5%]" />
+      <col className="lg:w-[5%]" />
+      <col className="lg:w-[5%]" />
+      <col className="max-md:hidden lg:w-[5.5%]" />
+      <col className="lg:w-[5.5%]" />
+      <col className="lg:w-[12.5%]" />
     </colgroup>
   );
 }
 
-function OrdersTableHeaderRow({ isDemo }: { isDemo: boolean }) {
+function OrdersTableHeader({
+  isDemo,
+  pageSize,
+  appliedFrom,
+  appliedTo,
+  shipMode,
+  appliedShipFrom,
+  appliedShipTo,
+  appliedOtprFrom,
+  appliedOtprTo,
+}: {
+  isDemo: boolean;
+  pageSize: number;
+  appliedFrom: string | null;
+  appliedTo: string | null;
+  shipMode: "actual" | "period" | null;
+  appliedShipFrom: string | null;
+  appliedShipTo: string | null;
+  appliedOtprFrom: string | null;
+  appliedOtprTo: string | null;
+}) {
   return (
-    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs">
-      <th
-        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
-        title="Чат карточки в Kaiten"
-      >
-        Чат
-      </th>
-      <th
-        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
-        aria-label={
-          isDemo
-            ? "Печать наряда, этикетки и QR на карточку канбана"
-            : "Печать наряда, этикетки и QR на карточку Kaiten"
-        }
-        title={
-          isDemo
-            ? "Печать наряда, этикетки и QR на карточку канбана"
-            : "Печать наряда, этикетки и QR на карточку Kaiten"
-        }
-      >
-        Печать
-      </th>
-      <th className={ORDERS_TABLE_TH} title="№ наряда">
-        № наряда
-      </th>
-      <th className={ORDERS_TABLE_TH} title="Клиника">
-        Клиника
-      </th>
-      <th className={ORDERS_TABLE_TH} title="Адрес клиники">
-        Адрес
-      </th>
-      <th className={ORDERS_TABLE_TH} title="Врач">
-        Врач
-      </th>
-      <th className={ORDERS_TABLE_TH} title="Пациент">
-        Пациент
-      </th>
-      <th
-        className={ORDERS_TABLE_TH}
-        title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
-      >
-        Поступление
-      </th>
-      <th className={ORDERS_TABLE_TH} title="Срок лабораторный">
-        ЛАБ
-      </th>
-      <th className={ORDERS_TABLE_TH} title="Запись: дата и время приёма пациента">
-        Запись
-      </th>
-      <th
-        className={`${ORDERS_TABLE_TH} max-md:hidden normal-case`}
-        title="Пометки смен (не уходят в наряд и Kaiten)"
-      >
-        Пометки
-      </th>
-      <th className={ORDERS_TABLE_TH} title="Отправка работы">
-        Отправка
-      </th>
-      <th
-        className={`${ORDERS_TABLE_TH} align-top normal-case`}
-        title="Теги: нажмите — фильтр списка; «+» — добавить свой тег к наряду"
-      >
-        Отметки
-      </th>
-    </tr>
+    <Suspense
+      fallback={
+        <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)]">
+          <th className={ORDERS_TABLE_TH} colSpan={14}>
+            …
+          </th>
+        </tr>
+      }
+    >
+      <OrdersListTableHeaderRow
+        isDemo={isDemo}
+        pageSize={pageSize}
+        appliedFrom={appliedFrom}
+        appliedTo={appliedTo}
+        shipMode={shipMode}
+        appliedShipFrom={appliedShipFrom}
+        appliedShipTo={appliedShipTo}
+        appliedOtprFrom={appliedOtprFrom}
+        appliedOtprTo={appliedOtprTo}
+      />
+    </Suspense>
   );
 }
 
@@ -223,6 +201,8 @@ export default async function OrdersPage({
     ship?: string;
     shipFrom?: string;
     shipTo?: string;
+    otprFrom?: string;
+    otprTo?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -331,6 +311,8 @@ export default async function OrdersPage({
   const listSearchQ = normalizeOrdersSearchQuery(sp.q);
   const fromUrl = sp.from?.trim() || null;
   const toUrl = sp.to?.trim() || null;
+  const otprFromUrl = sp.otprFrom?.trim() || null;
+  const otprToUrl = sp.otprTo?.trim() || null;
   const shipParsed = parseOrdersShipmentParams({
     ship: sp.ship,
     shipFrom: sp.shipFrom,
@@ -355,6 +337,19 @@ export default async function OrdersPage({
     !shipmentModeActive && periodParsed.mode === "range"
       ? `${periodParsed.fromYmd} — ${periodParsed.toYmd}`
       : null;
+  const otprParsed = ordersListOtprPeriod(otprFromUrl, otprToUrl);
+  const otprError = otprParsed.mode === "error" ? otprParsed.message : null;
+  const otprAtRange =
+    otprParsed.mode === "range"
+      ? {
+          start: otprParsed.start,
+          endExclusive: otprParsed.endExclusive,
+        }
+      : null;
+  const otprLabelActive =
+    otprParsed.mode === "range"
+      ? `${otprParsed.fromYmd} — ${otprParsed.toYmd}`
+      : null;
   const listHrefCommon = {
     tag: rawTag ?? undefined,
     hideShipped: hideShippedActive,
@@ -365,6 +360,8 @@ export default async function OrdersPage({
     ship: shipmentModeActive ? shipParsed.mode ?? undefined : undefined,
     shipFrom: shipmentModeActive ? shipFromUrl ?? undefined : undefined,
     shipTo: shipmentModeActive ? shipToUrl ?? undefined : undefined,
+    otprFrom: otprFromUrl ?? undefined,
+    otprTo: otprToUrl ?? undefined,
   };
   const baseCountParts: Prisma.OrderWhereInput[] = [
     { tenantId: tenantId ?? "__missing_tenant__" },
@@ -387,6 +384,14 @@ export default async function OrdersPage({
       dueDate: {
         gte: dueDateRange.start,
         lt: dueDateRange.endExclusive,
+      },
+    });
+  }
+  if (otprAtRange) {
+    baseCountParts.push({
+      adminShippedAt: {
+        gte: otprAtRange.start,
+        lt: otprAtRange.endExclusive,
       },
     });
   }
@@ -533,6 +538,7 @@ export default async function OrdersPage({
           onlyShipped: onlyShippedActive,
           search: listSearchQ || undefined,
           dueDateRange: dueDateRange ?? undefined,
+          otprAtRange: otprAtRange ?? undefined,
           ordersListForUserId: session?.sub ?? null,
           viewerRole: session?.role ?? null,
           viewerUserId: session?.sub ?? null,
@@ -589,12 +595,6 @@ export default async function OrdersPage({
     (alwaysShowOrderAttentionChips ||
       labMentionCount > 0 ||
       activeFilter?.kind === "kaitenLabMention");
-  const showOrdersQuickFilterChipsRow =
-    showCorrectionsChip ||
-    showProstheticsChip ||
-    showAdminChip ||
-    activeFilter != null;
-
   return (
     <ModuleFrame
       title="Заказы"
@@ -629,8 +629,13 @@ export default async function OrdersPage({
                 pageSize={pageSize}
                 rawTag={rawTag}
                 listSearchQ={listSearchQ}
-                fromUrl={fromUrl}
-                toUrl={toUrl}
+                fromUrl={shipmentModeActive ? null : fromUrl}
+                toUrl={shipmentModeActive ? null : toUrl}
+                otprFromUrl={otprFromUrl}
+                otprToUrl={otprToUrl}
+                ship={shipmentModeActive ? shipParsed.mode : null}
+                shipFrom={shipFromUrl}
+                shipTo={shipToUrl}
                 onlyShippedActive={onlyShippedActive}
                 hideShippedActive={hideShippedActive}
               />
@@ -677,10 +682,12 @@ export default async function OrdersPage({
             <Link
               href={ordersListHref({
                 limit: pageSize,
-                tag: rawTag ?? undefined,
-                hideShipped: hideShippedActive,
-                onlyShipped: onlyShippedActive,
-                q: listSearchQ || undefined,
+                ...listHrefCommon,
+                ship: undefined,
+                shipFrom: undefined,
+                shipTo: undefined,
+                from: fromUrl ?? undefined,
+                to: toUrl ?? undefined,
               })}
               className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
             >
@@ -690,7 +697,7 @@ export default async function OrdersPage({
         ) : null}
         {shipmentModeActive ? (
           <p className="text-sm text-[var(--text-secondary)]">
-            Режим записи: фильтр по лабораторному сроку (слева) не действует.
+            Режим записи: фильтр по лабораторному сроку (колонка «ЛАБ») не действует.
           </p>
         ) : null}
         {shipParsed.periodError ? (
@@ -698,51 +705,55 @@ export default async function OrdersPage({
             {shipParsed.periodError} Режим записи не применён.
           </div>
         ) : null}
+        {otprError ? (
+          <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            {otprError} Фильтр по дате отправки не применён.
+          </div>
+        ) : null}
+        {otprLabelActive ? (
+          <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/25 sm:px-4 sm:py-2.5 sm:text-base">
+            <span className="text-[var(--text-body)]">
+              Период отправки (МСК):{" "}
+              <strong className="font-mono text-[var(--text-strong)]">
+                {otprLabelActive}
+              </strong>
+            </span>
+            <Link
+              href={ordersListHref({
+                limit: pageSize,
+                ...listHrefCommon,
+                otprFrom: undefined,
+                otprTo: undefined,
+              })}
+              className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
+            >
+              Сбросить отправку
+            </Link>
+          </div>
+        ) : null}
         {shipmentListTruncated ? (
           <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
             Показаны первые 5000 неотгруженных нарядов по фильтру — уточните период или поиск.
           </div>
         ) : null}
-        <Suspense
-          fallback={
-            <div className="text-sm text-[var(--text-muted)]">Поиск…</div>
-          }
-        >
-          <div className="hidden md:block">
-            <OrdersListFiltersRow
-              pageSize={pageSize}
-              appliedFrom={fromUrl}
-              appliedTo={toUrl}
-              initialSearchQ={listSearchQ}
-              tag={rawTag ?? undefined}
-              hideShipped={hideShippedActive}
-              onlyShipped={onlyShippedActive}
-              appliedShipFrom={shipFromUrl}
-              appliedShipTo={shipToUrl}
-              shipMode={shipmentModeActive ? shipParsed.mode : null}
-              idSuffix="desktop"
-            />
-          </div>
-          <div className="md:hidden">
-            <OrdersListFiltersRow
-              pageSize={pageSize}
-              appliedFrom={fromUrl}
-              appliedTo={toUrl}
-              initialSearchQ={listSearchQ}
-              tag={rawTag ?? undefined}
-              hideShipped={hideShippedActive}
-              onlyShipped={onlyShippedActive}
-              showSearch={false}
-              appliedShipFrom={shipFromUrl}
-              appliedShipTo={shipToUrl}
-              shipMode={shipmentModeActive ? shipParsed.mode : null}
-              idSuffix="mobile"
-            />
-          </div>
-        </Suspense>
-        {showOrdersQuickFilterChipsRow ? (
-          <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
+            <Suspense
+              fallback={
+                <div className="h-8 w-[10rem] shrink-0 rounded-md bg-[var(--surface-subtle)]" />
+              }
+            >
+              <OrdersListSearch
+                initialValue={listSearchQ}
+                pageSize={pageSize}
+                tag={rawTag ?? undefined}
+                hideShipped={hideShippedActive}
+                onlyShipped={onlyShippedActive}
+                dense
+                className="min-w-0 max-w-[12rem] basis-[8rem] shrink grow sm:max-w-[14rem] sm:basis-[9rem]"
+                idSuffix="chips"
+              />
+            </Suspense>
           {showCorrectionsChip ? (
             <Link
               href={ordersListHref({
@@ -857,9 +868,8 @@ export default async function OrdersPage({
                 );
               })
             : null}
+          </div>
         </div>
-      </div>
-        ) : null}
         {rawTag && !activeFilter ? (
           <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
             Параметр <code className="font-mono">tag</code> в ссылке не распознан — показан полный список.
@@ -876,13 +886,6 @@ export default async function OrdersPage({
           </div>
         ) : null}
       </div>
-      <OrdersListStickySearch
-        initialSearchQ={listSearchQ}
-        pageSize={pageSize}
-        tag={rawTag ?? undefined}
-        hideShipped={hideShippedActive}
-        onlyShipped={onlyShippedActive}
-      />
       <OrdersListChrome
         className="w-full max-w-full min-w-0 self-start"
         toolbar={
@@ -890,7 +893,17 @@ export default async function OrdersPage({
             <table className={ORDERS_TABLE_CLASS} aria-hidden="true">
               <OrdersTableColGroup />
               <thead>
-                <OrdersTableHeaderRow isDemo={isDemo} />
+                <OrdersTableHeader
+                  isDemo={isDemo}
+                  pageSize={pageSize}
+                  appliedFrom={fromUrl}
+                  appliedTo={toUrl}
+                  shipMode={shipmentModeActive ? shipParsed.mode : null}
+                  appliedShipFrom={shipFromUrl}
+                  appliedShipTo={shipToUrl}
+                  appliedOtprFrom={otprFromUrl}
+                  appliedOtprTo={otprToUrl}
+                />
               </thead>
             </table>
           </div>
@@ -900,13 +913,23 @@ export default async function OrdersPage({
         <table className={ORDERS_TABLE_CLASS}>
           <OrdersTableColGroup />
           <thead className="sr-only">
-            <OrdersTableHeaderRow isDemo={isDemo} />
+            <OrdersTableHeader
+              isDemo={isDemo}
+              pageSize={pageSize}
+              appliedFrom={fromUrl}
+              appliedTo={toUrl}
+              shipMode={shipmentModeActive ? shipParsed.mode : null}
+              appliedShipFrom={shipFromUrl}
+              appliedShipTo={shipToUrl}
+              appliedOtprFrom={otprFromUrl}
+              appliedOtprTo={otprToUrl}
+            />
           </thead>
           <tbody>
             {orders.length === 0 ? (
               <tr>
                 <td
-                  colSpan={13}
+                  colSpan={14}
                   className="px-4 py-10 text-center text-sm text-[var(--text-muted)]"
                 >
                   {activeFilter
@@ -1048,7 +1071,11 @@ export default async function OrdersPage({
                   isLabOverdue={isLabOverdue}
                   tagsNode={tagsNode}
                   mobileShippedNode={
-                    <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                    <OrderShippedToggle
+                      orderId={o.id}
+                      shipped={workSent}
+                      shippedAtIso={o.adminShippedAt?.toISOString() ?? null}
+                    />
                   }
                   mobileDatesNode={
                     <div className="flex w-full max-w-[9.5rem] flex-col gap-0.5">
@@ -1154,14 +1181,7 @@ export default async function OrdersPage({
                     </div>
                   </td>
                   <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
-                    <div className="flex min-h-[2.5rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
-                      <Link
-                        href={orderPathById(o.id)}
-                        className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
-                        title={`${o.orderNumber} — открыть наряд`}
-                      >
-                        {o.orderNumber}
-                      </Link>
+                    <div className="flex min-h-[2.5rem] items-center justify-center">
                       <OrderListKaitenColumnTag
                         kaitenCardId={o.kaitenCardId}
                         demoKanbanColumn={o.demoKanbanColumn}
@@ -1173,6 +1193,36 @@ export default async function OrdersPage({
                         placement="underOrderNumber"
                       />
                     </div>
+                  </td>
+                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
+                    <div className="flex min-h-[2.5rem] items-center justify-center -translate-y-px">
+                      <Link
+                        href={orderPathById(o.id)}
+                        className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
+                        title={`${o.orderNumber} — открыть наряд`}
+                      >
+                        {o.orderNumber}
+                      </Link>
+                    </div>
+                  </td>
+                  <td
+                    className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5"
+                    title={o.patientName ?? undefined}
+                  >
+                    <span className="block hyphens-auto break-words text-center">
+                      {o.patientName
+                        ? personNameSurnameInitials(o.patientName)
+                        : "—"}
+                    </span>
+                  </td>
+                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
+                    <Link
+                      href={`/clients/doctors/${o.doctor.id}`}
+                      title={o.doctor.fullName}
+                      className="block break-words text-center text-[var(--sidebar-blue)] hover:underline sm:leading-snug"
+                    >
+                      {personNameSurnameInitials(o.doctor.fullName)}
+                    </Link>
                   </td>
                   <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
                     {o.clinic ? (
@@ -1200,25 +1250,6 @@ export default async function OrdersPage({
                     ) : (
                       <span className="block text-center text-[var(--text-muted)]">—</span>
                     )}
-                  </td>
-                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
-                    <Link
-                      href={`/clients/doctors/${o.doctor.id}`}
-                      title={o.doctor.fullName}
-                      className="block break-words text-center text-[var(--sidebar-blue)] hover:underline sm:leading-snug"
-                    >
-                      {personNameSurnameInitials(o.doctor.fullName)}
-                    </Link>
-                  </td>
-                  <td
-                    className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5"
-                    title={o.patientName ?? undefined}
-                  >
-                    <span className="block hyphens-auto break-words text-center">
-                      {o.patientName
-                        ? personNameSurnameInitials(o.patientName)
-                        : "—"}
-                    </span>
                   </td>
                   <td
                     className="min-w-0 whitespace-nowrap px-1 py-1 align-middle text-center text-[11px] font-light text-[var(--text-muted)] sm:px-1.5 sm:py-1.5 sm:text-xs"
@@ -1257,7 +1288,11 @@ export default async function OrdersPage({
                     data-shipped-cell
                     className="min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5"
                   >
-                    <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                    <OrderShippedToggle
+                      orderId={o.id}
+                      shipped={workSent}
+                      shippedAtIso={o.adminShippedAt?.toISOString() ?? null}
+                    />
                   </td>
                 </OrdersListTableRow>
               );
@@ -1308,6 +1343,8 @@ export default async function OrdersPage({
                 ship={shipmentModeActive ? shipParsed.mode ?? undefined : undefined}
                 shipFrom={shipFromUrl ?? undefined}
                 shipTo={shipToUrl ?? undefined}
+                otprFrom={otprFromUrl ?? undefined}
+                otprTo={otprToUrl ?? undefined}
               />
             </div>
           ) : null}

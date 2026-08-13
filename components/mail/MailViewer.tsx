@@ -28,12 +28,14 @@ export function MailViewer({
   loading,
   onAction,
   onCreateOrder,
+  onAddToOrder,
   onReply,
 }: {
   email: MailEmailDetail | null;
   loading: boolean;
   onAction: (action: "archive" | "trash" | "delete" | "unread" | "flag" | "unflag") => void;
   onCreateOrder: () => void;
+  onAddToOrder: () => void;
   onReply: (html: string, mode: "reply" | "replyAll" | "forward") => void;
 }) {
   const [quickReply, setQuickReply] = useState("");
@@ -100,6 +102,13 @@ export function MailViewer({
         </button>
         <button className="rounded-lg bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[var(--sidebar-blue-hover)]" onClick={onCreateOrder}>
           Новый заказ
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-[var(--sidebar-blue)]/50 bg-[var(--card-bg)] px-4 py-2 text-sm font-semibold text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--surface-hover)]"
+          onClick={onAddToOrder}
+        >
+          Добавить в заказ
         </button>
       </div>
 

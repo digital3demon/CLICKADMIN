@@ -162,6 +162,7 @@ export function buildVirtualOrderEditInitialFromPrediction(
     continuationFollowups: [],
     chatCorrections: [],
     prostheticsRequests: [],
+    sourceEmailCount: 0,
   };
 }
 

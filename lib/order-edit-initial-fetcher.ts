@@ -64,6 +64,7 @@ export async function fetchOrderEditInitial(
       prostheticsRequests: {
         orderBy: [{ resolvedAt: "asc" }, { createdAt: "asc" }],
       },
+      _count: { select: { sourceEmailLinks: true } },
     },
   });
 
@@ -311,6 +312,7 @@ export async function fetchOrderEditInitial(
       rejectedAt: c.rejectedAt?.toISOString() ?? null,
       arrivedAt: c.arrivedAt?.toISOString() ?? null,
     })),
+    sourceEmailCount: order._count.sourceEmailLinks,
   };
 
   return {

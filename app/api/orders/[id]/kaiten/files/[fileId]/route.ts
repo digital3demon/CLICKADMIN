@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { getKaitenRestAuth } from "@/lib/kaiten-rest";
+import { getKaitenRestAuth, kaitenListComments } from "@/lib/kaiten-rest";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
 function stringField(o: Record<string, unknown>, keys: readonly string[]): string | null {
@@ -34,6 +34,38 @@ function safeInlineFileName(name: string | null): string | null {
   return safe || null;
 }
 
+function fileMetaFromItem(
+  item: unknown,
+  fileId: number,
+  apiBase: string,
+): { url: string; name: string | null } | null {
+  if (item == null || typeof item !== "object" || Array.isArray(item)) return null;
+  const file = item as Record<string, unknown>;
+  if (numberField(file, ["id", "file_id", "attachment_id"]) !== fileId) return null;
+  const rawUrl = stringField(file, ["url", "download_url", "src"]);
+  if (!rawUrl) return null;
+  return {
+    url: resolveKaitenFileUrl(rawUrl, apiBase),
+    name: stringField(file, ["name", "file_name", "filename", "title"]),
+  };
+}
+
+function findFileInRecord(
+  record: Record<string, unknown>,
+  fileId: number,
+  apiBase: string,
+): { url: string; name: string | null } | null {
+  for (const key of ["files", "attachments", "attached_files", "uploads"] as const) {
+    const value = record[key];
+    if (!Array.isArray(value)) continue;
+    for (const item of value) {
+      const hit = fileMetaFromItem(item, fileId, apiBase);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
 async function fetchKaitenCardFileUrl(
   apiBase: string,
   token: string,
@@ -49,19 +81,18 @@ async function fetchKaitenCardFileUrl(
   if (!cardRes.ok) return null;
   const card = (await cardRes.json().catch(() => null)) as unknown;
   if (card == null || typeof card !== "object" || Array.isArray(card)) return null;
-  const files = (card as Record<string, unknown>).files;
-  if (!Array.isArray(files)) return null;
+  const fromCard = findFileInRecord(card as Record<string, unknown>, fileId, apiBase);
+  if (fromCard) return fromCard;
 
-  for (const item of files) {
-    if (item == null || typeof item !== "object" || Array.isArray(item)) continue;
-    const file = item as Record<string, unknown>;
-    if (numberField(file, ["id", "file_id", "attachment_id"]) !== fileId) continue;
-    const rawUrl = stringField(file, ["url", "download_url", "src"]);
-    if (!rawUrl) return null;
-    return {
-      url: resolveKaitenFileUrl(rawUrl, apiBase),
-      name: stringField(file, ["name", "file_name", "filename", "title"]),
-    };
+  /* Новые фото часто только во вложениях комментариев, не в card.files. */
+  const auth = getKaitenRestAuth();
+  if (!auth) return null;
+  const comments = await kaitenListComments(auth, cardId);
+  if (!comments.ok) return null;
+  for (const raw of comments.comments) {
+    if (raw == null || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const hit = findFileInRecord(raw as Record<string, unknown>, fileId, apiBase);
+    if (hit) return hit;
   }
   return null;
 }

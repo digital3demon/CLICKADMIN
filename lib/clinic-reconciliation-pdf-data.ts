@@ -8,6 +8,14 @@ import { formatDateDdMmYyMsk } from "@/lib/clinic-reconciliation-pdf-format";
 import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 import { orderLinesIncludedInReconciliationExport } from "@/lib/order-reconciliation-export";
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
+import { orderWhereReconciliationPeriod } from "@/lib/clinic-reconciliation-period";
+import { loadOrderSentAtByIds } from "@/lib/clinic-finance";
+import {
+  aggregateReconciliationSummaryWithoutDiscount,
+  defaultReconciliationLabLegalName,
+  modeNonEmptyLabel,
+  reconciliationVatIncluded5,
+} from "@/lib/clinic-reconciliation-math";
 
 export type ReconciliationPdfSummaryLine = {
   label: string;
@@ -31,7 +39,7 @@ export type ReconciliationPdfDetailLine = {
   /** Стоимость без скидки (цена * кол-во, с учетом срочности). */
   baseTotalRub: number;
   lineTotalRub: number;
-  /** Скидка в %; если нет — null (пустая ячейка в PDF). */
+  /** Скидка в %; если нет — null (пустая ячейка). */
   discountPercent: number | null;
 };
 
@@ -42,11 +50,15 @@ export type ClinicReconciliationPdfPayload = {
   periodToLabel: string;
   summary: ReconciliationPdfSummaryLine[];
   yellowRow: {
+    /** Суммарное кол-во единиц по строкам детализации. */
+    totalUnits: number;
     totalLineCount: number;
     /** Итого до скидок. */
     baseTotalRub: number;
-    /** Итого с учётом скидок. */
+    /** Итого с учётом скидок (= всего к оплате). */
     discountedTotalRub: number;
+    /** НДС 5% внутри цены. */
+    vatRub: number;
   };
   detail: ReconciliationPdfDetailLine[];
 };
@@ -82,14 +94,14 @@ function pdfConstructionLabel(input: {
 
 type DateRangeUtc = { from: Date; to: Date };
 
+/**
+ * Общий payload сверки (PDF + Excel по шаблону).
+ */
 export async function buildClinicReconciliationPdfPayload(
   clinicId: string,
   range: DateRangeUtc,
   selectedOrderIds?: string[] | null,
 ): Promise<ClinicReconciliationPdfPayload> {
-  const labLegalName =
-    process.env.RECONCILIATION_LAB_LEGAL_NAME?.trim() || "ООО «КЛИКЛаб»";
-
   const clinic = await (await getPrisma()).clinic.findUnique({
     where: { id: clinicId },
     select: {
@@ -102,8 +114,8 @@ export async function buildClinicReconciliationPdfPayload(
     throw new Error("Clinic not found");
   }
 
-  /** Жёлтая строка: как в Excel-образце — «ООО … ИНН …». */
-  const legal = cleanLegalFullName(clinic.legalFullName) || clinic.name.trim() || "—";
+  const legal =
+    cleanLegalFullName(clinic.legalFullName) || clinic.name.trim() || "—";
   const inn = clinic.inn?.trim();
   const clinicDisplay =
     clinic.name.trim() && clinic.name.trim() !== legal
@@ -126,7 +138,7 @@ export async function buildClinicReconciliationPdfPayload(
       ...(selectedList.length > 0 ? { orderId: { in: selectedList } } : {}),
       order: {
         clinicId,
-        createdAt: { gte: range.from, lte: range.to },
+        ...orderWhereReconciliationPeriod(range),
       },
     },
     orderBy: [{ order: { createdAt: "asc" } }, { sortOrder: "asc" }],
@@ -136,10 +148,11 @@ export async function buildClinicReconciliationPdfPayload(
           id: true,
           orderNumber: true,
           createdAt: true,
+          workReceivedAt: true,
           patientName: true,
-          dueDate: true,
           updatedAt: true,
           adminShippedOtpr: true,
+          legalEntity: true,
           isUrgent: true,
           urgentCoefficient: true,
           compositionDiscountPercent: true,
@@ -173,28 +186,6 @@ export async function buildClinicReconciliationPdfPayload(
     if (inc) includedRows.push(l);
   }
 
-  /** Ключ: одна строка сводки = подпись + «цена за ед.» (разные цены — разные строки). */
-  const summaryMap = new Map<
-    string,
-    { label: string; quantity: number; totalRub: number }
-  >();
-
-  function addSummary(
-    label: string,
-    quantity: number,
-    lineTotalRub: number,
-    unitPriceKey: string,
-  ) {
-    const key = `${label}\u0001${unitPriceKey}`;
-    const prev = summaryMap.get(key);
-    if (prev) {
-      prev.quantity += quantity;
-      prev.totalRub += lineTotalRub;
-    } else {
-      summaryMap.set(key, { label, quantity, totalRub: lineTotalRub });
-    }
-  }
-
   const orderIds = [...new Set(includedRows.map((r) => r.orderId))];
 
   const stockRows =
@@ -222,7 +213,10 @@ export async function buildClinicReconciliationPdfPayload(
     if (!oid) continue;
     const name = m.item.name.trim() || "Позиция склада";
     const qty = m.quantity;
-    const cost = m.totalCostRub != null && Number.isFinite(m.totalCostRub) ? m.totalCostRub : 0;
+    const cost =
+      m.totalCostRub != null && Number.isFinite(m.totalCostRub)
+        ? m.totalCostRub
+        : 0;
     const list = prostheticByOrder.get(oid) ?? [];
     const existing = list.find((x) => x.itemId === m.item.id);
     if (existing) {
@@ -238,68 +232,6 @@ export async function buildClinicReconciliationPdfPayload(
     }
     prostheticByOrder.set(oid, list);
   }
-
-  for (const l of includedRows) {
-    const q = l.quantity > 0 ? l.quantity : 1;
-    const mult = orderUrgentPriceMultiplier(
-      l.order.isUrgent,
-      l.order.urgentCoefficient,
-    );
-    const compLines = l.order.constructions.map((c) => ({
-      quantity: c.quantity,
-      unitPrice: c.unitPrice,
-      lineDiscountPercent: c.lineDiscountPercent,
-    }));
-    const lineTotal = lineAllocatedTotalRub(
-      {
-        quantity: l.quantity,
-        unitPrice: l.unitPrice,
-        lineDiscountPercent: l.lineDiscountPercent,
-      },
-      compLines,
-      l.order.compositionDiscountPercent,
-      mult,
-    );
-    const label = pdfConstructionLabel({
-      category: l.category,
-      constructionType: l.constructionType,
-      priceListItem: l.priceListItem,
-      material: l.material,
-      shade: l.shade,
-      teethFdi: l.teethFdi,
-      bridgeFromFdi: l.bridgeFromFdi,
-      bridgeToFdi: l.bridgeToFdi,
-      arch: l.arch,
-    });
-    const unitKey =
-      l.unitPrice != null && Number.isFinite(l.unitPrice)
-        ? String(Math.round(l.unitPrice * 100) / 100)
-        : "null";
-    addSummary(label, q, lineTotal, unitKey);
-  }
-
-  for (const [, plist] of prostheticByOrder) {
-    for (const p of plist) {
-      const unit =
-        p.qty > 0 ? Math.round((p.totalRub / p.qty) * 100) / 100 : 0;
-      addSummary(
-        p.name,
-        p.qty,
-        Math.round(p.totalRub * 100) / 100,
-        `stock:${p.itemId}:${unit}`,
-      );
-    }
-  }
-
-  const summaryList: ReconciliationPdfSummaryLine[] = [];
-  for (const v of summaryMap.values()) {
-    const qty = v.quantity;
-    const totalRub = Math.round(v.totalRub * 100) / 100;
-    const unitRub =
-      qty > 0 ? Math.round((totalRub / qty) * 100) / 100 : totalRub;
-    summaryList.push({ label: v.label, quantity: qty, unitRub, totalRub });
-  }
-  summaryList.sort((a, b) => a.label.localeCompare(b.label, "ru"));
 
   const byOrder = new Map<string, RowIn[]>();
   for (const l of includedRows) {
@@ -320,15 +252,22 @@ export async function buildClinicReconciliationPdfPayload(
       id: true,
       orderNumber: true,
       createdAt: true,
+      workReceivedAt: true,
       patientName: true,
-      dueDate: true,
       updatedAt: true,
       adminShippedOtpr: true,
+      legalEntity: true,
       isUrgent: true,
       urgentCoefficient: true,
       doctor: { select: { fullName: true } },
     },
   });
+
+  const sentAtById = await loadOrderSentAtByIds([...allOrderIds]);
+
+  const labLegalName =
+    modeNonEmptyLabel(ordersOrdered.map((o) => o.legalEntity)) ??
+    defaultReconciliationLabLegalName();
 
   const detail: ReconciliationPdfDetailLine[] = [];
 
@@ -337,12 +276,11 @@ export async function buildClinicReconciliationPdfPayload(
     const list = byOrder.get(oid) ?? [];
     if (!list.length && !(prostheticByOrder.get(oid)?.length)) continue;
     const ord0 = list[0]?.order ?? ord;
-    const zashla = formatDateDdMmYyMsk(ord0.createdAt);
-    let otpr = "—";
-    if (ord0.adminShippedOtpr) {
-      const shipDate = ord0.dueDate ?? ord0.updatedAt;
-      otpr = formatDateDdMmYyMsk(shipDate);
-    }
+    const zashla = formatDateDdMmYyMsk(
+      ord0.workReceivedAt ?? ord0.createdAt,
+    );
+    const sentAt = sentAtById.get(oid) ?? null;
+    const otpr = sentAt ? formatDateDdMmYyMsk(sentAt) : "—";
     const patient = ord0.patientName?.trim() || "—";
     const doctor = ord0.doctor.fullName.trim();
     const orderNumber = ord0.orderNumber;
@@ -431,38 +369,27 @@ export async function buildClinicReconciliationPdfPayload(
     }
   }
 
-  let discountedTotal = 0;
-  for (const l of includedRows) {
-    const mult = orderUrgentPriceMultiplier(
-      l.order.isUrgent,
-      l.order.urgentCoefficient,
-    );
-    const compLines = l.order.constructions.map((c) => ({
-      quantity: c.quantity,
-      unitPrice: c.unitPrice,
-      lineDiscountPercent: c.lineDiscountPercent,
-    }));
-    discountedTotal += lineAllocatedTotalRub(
-      {
-        quantity: l.quantity,
-        unitPrice: l.unitPrice,
-        lineDiscountPercent: l.lineDiscountPercent,
-      },
-      compLines,
-      l.order.compositionDiscountPercent,
-      mult,
-    );
-  }
-  for (const [, plist] of prostheticByOrder) {
-    for (const p of plist) {
-      discountedTotal += p.totalRub;
-    }
-  }
-  discountedTotal = Math.round(discountedTotal * 100) / 100;
+  const summaryList = aggregateReconciliationSummaryWithoutDiscount(
+    detail.map((d) => ({
+      label: d.description,
+      quantity: d.quantity,
+      unitRub: d.unitRub,
+      baseTotalRub: d.baseTotalRub,
+    })),
+  );
+
+  const discountedTotal =
+    Math.round(
+      detail.reduce((acc, line) => acc + line.lineTotalRub, 0) * 100,
+    ) / 100;
   const baseTotal =
     Math.round(
       detail.reduce((acc, line) => acc + line.baseTotalRub, 0) * 100,
     ) / 100;
+  const totalUnits =
+    Math.round(detail.reduce((acc, line) => acc + line.quantity, 0) * 100) /
+    100;
+  const vatRub = reconciliationVatIncluded5(discountedTotal);
 
   return {
     labLegalName,
@@ -471,9 +398,11 @@ export async function buildClinicReconciliationPdfPayload(
     periodToLabel,
     summary: summaryList,
     yellowRow: {
+      totalUnits,
       totalLineCount: detail.length,
       baseTotalRub: baseTotal,
       discountedTotalRub: discountedTotal,
+      vatRub,
     },
     detail,
   };

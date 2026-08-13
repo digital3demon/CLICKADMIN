@@ -114,7 +114,8 @@ export type KaitenBlockedMeta = {
 
 /**
  * Читает блокировку из ответа GET/PATCH `/cards/{id}` (Kaiten API v1).
- * Сначала активные записи в `blockers` (часто актуальнее, чем верхний `block_reason`).
+ * Явный `blocked: false` с Kaiten — всегда снятие (не воскрешаем из устаревших blockers[]).
+ * Если флага нет — смотрим активные `blockers`.
  */
 export function kaitenBlockedMetaFromCard(card: Record<string, unknown>): KaitenBlockedMeta {
   const rawBlocked =
@@ -122,14 +123,27 @@ export function kaitenBlockedMetaFromCard(card: Record<string, unknown>): Kaiten
     card.is_blocked ??
     card.blocked_state ??
     card.blocking;
-  let blocked =
+
+  const hasExplicitFlag = rawBlocked !== undefined && rawBlocked !== null;
+  const explicitFalse =
+    rawBlocked === false ||
+    rawBlocked === 0 ||
+    rawBlocked === "false" ||
+    rawBlocked === "0";
+  const explicitTrue =
     rawBlocked === true ||
     rawBlocked === 1 ||
     rawBlocked === "true" ||
     rawBlocked === "1";
 
+  /* Снятие в UI Kaiten часто оставляет «висячие» blockers — доверяем флагу. */
+  if (hasExplicitFlag && explicitFalse) {
+    return { blocked: false, reason: null, blockedAtIso: null };
+  }
+
   const blockers = unreleasedBlockers(card);
-  if (!blocked && blockers.length > 0) {
+  let blocked = explicitTrue;
+  if (!hasExplicitFlag && blockers.length > 0) {
     blocked = true;
   }
 

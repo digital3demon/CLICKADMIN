@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { MailComposer } from "@/components/mail/MailComposer";
+import { MailAddToOrderDialog } from "@/components/mail/MailAddToOrderDialog";
 import { MailHeader } from "@/components/mail/MailHeader";
 import { MailList } from "@/components/mail/MailList";
 import { MailSidebar } from "@/components/mail/MailSidebar";
@@ -306,6 +307,8 @@ export function MailLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mailListWidth, setMailListWidth] = useState(MAIL_LIST_DEFAULT_WIDTH);
   const [error, setError] = useState("");
+  const [addToOrderOpen, setAddToOrderOpen] = useState(false);
+  const [addToOrderEmailIds, setAddToOrderEmailIds] = useState<string[]>([]);
   const listQueryKeyRef = useRef("");
   const listHasRowsRef = useRef(initialMailState.hasCachedRows);
   const listLoadSeqRef = useRef(0);
@@ -976,6 +979,18 @@ export function MailLayout() {
     await createOrderFromEmailIds(ids);
   }
 
+  function openAddToOrder(ids: string[]) {
+    const unique = Array.from(
+      new Set(ids.map((id) => id.trim()).filter(Boolean)),
+    ).slice(0, 20);
+    if (unique.length === 0) {
+      setError("Выберите письма");
+      return;
+    }
+    setAddToOrderEmailIds(unique);
+    setAddToOrderOpen(true);
+  }
+
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
       <MailHeader
@@ -1124,6 +1139,13 @@ export function MailLayout() {
                 onSelectAll={() => setSelectedIds(new Set(emails.map((e) => e.id)))}
                 onClearSelection={() => setSelectedIds(new Set())}
                 onCreateOrder={() => void createOrderFromSelectedEmails()}
+                onAddToOrder={() =>
+                  openAddToOrder(
+                    emails
+                      .filter((email) => selectedIds.has(email.id))
+                      .map((email) => email.id),
+                  )
+                }
                 onMarkAllRead={() => void markAllRead()}
                 onBulkAction={(action) => void bulk(action)}
                 onEmailAction={(id, action) => void bulk(action, [id])}
@@ -1157,12 +1179,29 @@ export function MailLayout() {
                 loading={loadingDetail}
                 onAction={(action) => void bulk(action, activeEmailId ? [activeEmailId] : [])}
                 onCreateOrder={() => void createOrderFromEmailIds(activeEmailId ? [activeEmailId] : [])}
+                onAddToOrder={() =>
+                  openAddToOrder(activeEmailId ? [activeEmailId] : [])
+                }
                 onReply={(html, mode) => openReply(mode, html)}
               />
             </div>
           </div>
         </DndContext>
       )}
+
+      <MailAddToOrderDialog
+        open={addToOrderOpen}
+        emailIds={addToOrderEmailIds}
+        onClose={() => setAddToOrderOpen(false)}
+        onDone={({ orderNumber }) => {
+          setAddToOrderOpen(false);
+          setSelectedIds(new Set());
+          setError("");
+          setSyncStatus(`Письма добавлены в наряд ${orderNumber}`);
+          void loadEmails(null, false);
+          if (activeEmailId) void loadDetail(activeEmailId);
+        }}
+      />
 
       <MailComposer
         open={composerOpen}

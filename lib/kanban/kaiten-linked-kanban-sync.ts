@@ -187,6 +187,65 @@ export async function patchOrderKaitenCard(
   }
 }
 
+export type KaitenChatImageLite = {
+  id: string;
+  name: string;
+  url: string;
+  mime?: string | null;
+};
+
+/**
+ * Снимок Kaiten: cardImages + картинки из комментариев (для канбан-модалки).
+ */
+export async function fetchOrderKaitenImagesForKanban(
+  orderId: string,
+  opts?: { refresh?: boolean },
+): Promise<
+  | { ok: true; images: KaitenChatImageLite[]; blocked: boolean | null }
+  | { ok: false }
+> {
+  try {
+    const q = opts?.refresh ? "?refresh=1" : "";
+    const res = await fetch(`/api/orders/${orderId}/kaiten${q}`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      cardImages?: KaitenChatImageLite[];
+      comments?: Array<{ images?: KaitenChatImageLite[] }>;
+      card?: Record<string, unknown>;
+    };
+    if (!res.ok) return { ok: false };
+    const images: KaitenChatImageLite[] = [];
+    const seen = new Set<string>();
+    const push = (img: KaitenChatImageLite | undefined) => {
+      if (!img?.url) return;
+      const key = img.url;
+      if (seen.has(key)) return;
+      seen.add(key);
+      images.push({
+        id: String(img.id || key),
+        name: String(img.name || "image.png"),
+        url: img.url,
+        mime: img.mime ?? null,
+      });
+    };
+    for (const img of data.cardImages || []) push(img);
+    for (const c of data.comments || []) {
+      for (const img of c.images || []) push(img);
+    }
+    let blocked: boolean | null = null;
+    if (data.card && typeof data.card === "object") {
+      const raw = data.card.blocked ?? data.card.is_blocked;
+      if (raw === false || raw === 0 || raw === "false") blocked = false;
+      else if (raw === true || raw === 1 || raw === "true") blocked = true;
+    }
+    return { ok: true, images, blocked };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function uploadOrderAttachmentFromFile(
   orderId: string,
   file: File,
