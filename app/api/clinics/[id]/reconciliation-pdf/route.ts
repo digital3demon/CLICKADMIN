@@ -56,6 +56,7 @@ export async function GET(
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
+        "Cache-Control": "no-store",
         "Content-Disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(utfName)}`,
       },
     });

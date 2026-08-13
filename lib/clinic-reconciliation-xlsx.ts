@@ -28,13 +28,21 @@ function headFill(): ExcelJS.Fill {
   return {
     type: "pattern",
     pattern: "solid",
-    fgColor: { argb: "FF7A7A7A" },
+    fgColor: { argb: "FF5A5A5A" },
   };
 }
 
+function fillFg(
+  fill: ExcelJS.Fill | undefined,
+): { argb?: string; theme?: number } | undefined {
+  if (!fill || fill.type !== "pattern") return undefined;
+  return fill.fgColor as { argb?: string; theme?: number } | undefined;
+}
+
 function isLegacyColoredFill(fill: ExcelJS.Fill | undefined): boolean {
-  if (!fill || fill.type !== "pattern" || !fill.fgColor) return false;
-  const argb = (fill.fgColor as { argb?: string }).argb?.toUpperCase();
+  const fg = fillFg(fill);
+  if (!fg) return false;
+  const argb = fg.argb?.toUpperCase();
   if (
     argb === "FFFFFF00" ||
     argb === "FF00FF00" ||
@@ -43,15 +51,15 @@ function isLegacyColoredFill(fill: ExcelJS.Fill | undefined): boolean {
   ) {
     return true;
   }
-  const theme = (fill.fgColor as { theme?: number }).theme;
   // В шаблоне зелёная заливка была theme 7.
-  return theme === 7;
+  return fg.theme === 7;
 }
 
 async function resolveTemplatePath(): Promise<string> {
   const candidates = [
     path.join(process.cwd(), "templates", TEMPLATE_NAME),
     path.join(process.cwd(), "public", "templates", TEMPLATE_NAME),
+    path.join(process.cwd(), ".next", "standalone", "templates", TEMPLATE_NAME),
   ];
   for (const p of candidates) {
     try {
@@ -77,11 +85,11 @@ async function loadTemplateWorkbook(): Promise<ExcelJS.Workbook> {
 
 function applyFill(cell: ExcelJS.Cell, fill: ExcelJS.Fill) {
   // Клон style обязателен: exceljs шарит xf, иначе заливка шапки/строк сливается.
-  let base: ExcelJS.Style = {};
+  let base = {} as ExcelJS.Style;
   try {
     base = JSON.parse(JSON.stringify(cell.style ?? {})) as ExcelJS.Style;
   } catch {
-    base = { ...(cell.style ?? {}) };
+    base = { ...(cell.style ?? {}) } as ExcelJS.Style;
   }
   cell.style = { ...base, fill };
 }
@@ -94,20 +102,85 @@ function setValueCell(
   applyFill(cell, valueFill());
 }
 
+const THIN_BORDER: ExcelJS.Borders = {
+  top: { style: "thin", color: { argb: "FF000000" } },
+  left: { style: "thin", color: { argb: "FF000000" } },
+  bottom: { style: "thin", color: { argb: "FF000000" } },
+  right: { style: "thin", color: { argb: "FF000000" } },
+  diagonal: { up: false, down: false, style: "thin", color: { argb: "FF000000" } },
+};
+
+function paintCell(
+  cell: ExcelJS.Cell,
+  fill: ExcelJS.Fill,
+  extra?: Partial<ExcelJS.Style>,
+) {
+  applyFill(cell, fill);
+  cell.border = THIN_BORDER;
+  cell.alignment = {
+    wrapText: true,
+    vertical: "top",
+    ...(extra?.alignment ?? {}),
+  };
+}
+
+/** Палитра и сетка без оглядки на theme/жёлтый шаблона. */
+function applyPalette(sheet: ExcelJS.Worksheet, metaShift: number) {
+  const metaRowN = META_ROW + metaShift;
+  const headerRowN = metaRowN + 3;
+  const dataFirstN = DATA_FIRST + metaShift;
+
+  for (let r = SUMMARY_FIRST; r < SUMMARY_FIRST + SUMMARY_CAPACITY + metaShift; r++) {
+    for (const c of [6, 7, 8, 9]) {
+      paintCell(sheet.getRow(r).getCell(c), valueFill());
+    }
+  }
+
+  for (let c = 1; c <= 10; c++) {
+    paintCell(sheet.getRow(metaRowN).getCell(c), valueFill(), {
+      alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
+    });
+  }
+  paintCell(sheet.getRow(metaRowN + 1).getCell(9), headFill(), {
+    alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
+  });
+  paintCell(sheet.getRow(metaRowN + 2).getCell(9), headFill(), {
+    alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
+  });
+  paintCell(sheet.getRow(metaRowN + 1).getCell(10), valueFill(), {
+    alignment: { wrapText: true, vertical: "middle", horizontal: "right" },
+  });
+  paintCell(sheet.getRow(metaRowN + 2).getCell(10), valueFill(), {
+    alignment: { wrapText: true, vertical: "middle", horizontal: "right" },
+  });
+
+  for (let c = 1; c <= 10; c++) {
+    paintCell(sheet.getRow(headerRowN).getCell(c), headFill(), {
+      alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
+    });
+  }
+
+  for (let r = dataFirstN; r <= sheet.rowCount; r++) {
+    for (let c = 1; c <= 10; c++) {
+      paintCell(sheet.getRow(r).getCell(c), valueFill());
+    }
+  }
+}
+
 function recolorTemplateFills(sheet: ExcelJS.Worksheet) {
   sheet.eachRow({ includeEmpty: true }, (row) => {
     row.eachCell({ includeEmpty: true }, (cell) => {
       if (!isLegacyColoredFill(cell.fill)) return;
-      const argb = (cell.fill?.fgColor as { argb?: string } | undefined)?.argb
-        ?.toUpperCase();
-      const theme = (cell.fill?.fgColor as { theme?: number } | undefined)
-        ?.theme;
-      // Шапка (стр. 20) и «к оплате» / старый зелёный → тёмно-серый; остальное → светлый.
+      const fg = fillFg(cell.fill);
+      const argb = fg?.argb?.toUpperCase();
+      const theme = fg?.theme;
       const isHead =
         row.number === 20 ||
         theme === 7 ||
         argb === "FF00FF00" ||
-        argb === "FFC8C8C8";
+        argb === "FFC8C8C8" ||
+        argb === "FF7A7A7A" ||
+        argb === "FF5A5A5A";
       if (isHead && row.number < DATA_FIRST) {
         applyFill(cell, headFill());
       } else {
@@ -252,6 +325,8 @@ export async function buildClinicReconciliationXlsxBuffer(
       setValueCell(row.getCell(c), "");
     }
   }
+
+  applyPalette(sheet, metaShift);
 
   for (let c = 1; c <= 12; c++) {
     const w = lockedColWidths[c];

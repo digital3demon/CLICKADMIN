@@ -7,7 +7,11 @@ import {
   ORDER_PAYMENT_RECON_UNPAID,
   ORDER_PAYMENT_SVERKA,
 } from "@/lib/order-clinic-client-fields";
-/** Скачать автосверку (xlsx). */
+import {
+  buildClinicReconciliationXlsxBuffer,
+  parseRangeFromYmdStrings,
+} from "@/lib/clinic-reconciliation-xlsx";
+/** Скачать автосверку (xlsx). Сборка заново — иначе в БД лежит старый жёлто-зелёный файл. */
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -23,9 +27,12 @@ export async function GET(
       where: { id: id.trim() },
       select: {
         id: true,
+        clinicId: true,
         periodFromStr: true,
         periodToStr: true,
         xlsxBytes: true,
+        orderIdsJson: true,
+        clinic: { select: { name: true } },
       },
     });
     if (!row) {
@@ -36,20 +43,57 @@ export async function GET(
       /[^\w.\-]/g,
       "_",
     );
-    const raw = row.xlsxBytes;
-    const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
-    void prisma.clinicReconciliationSnapshot
-      .update({
-        where: { id: row.id },
-        data: { downloadedAt: new Date() },
-      })
-      .catch(() => {});
 
-    return new NextResponse(u8, {
+    let u8: Uint8Array;
+    const range = parseRangeFromYmdStrings(row.periodFromStr, row.periodToStr);
+    const orderIds =
+      Array.isArray(row.orderIdsJson) &&
+      row.orderIdsJson.every((x) => typeof x === "string")
+        ? (row.orderIdsJson as string[])
+        : [];
+    if (range) {
+      try {
+        const { buffer } = await buildClinicReconciliationXlsxBuffer(
+          row.clinicId,
+          row.clinic.name,
+          range,
+          orderIds,
+        );
+        u8 = new Uint8Array(buffer);
+        void prisma.clinicReconciliationSnapshot
+          .update({
+            where: { id: row.id },
+            data: { xlsxBytes: Buffer.from(buffer), downloadedAt: new Date() },
+          })
+          .catch(() => {});
+      } catch (regenErr) {
+        console.error("[GET reconciliation-snapshot] regen", regenErr);
+        const raw = row.xlsxBytes;
+        u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+        void prisma.clinicReconciliationSnapshot
+          .update({
+            where: { id: row.id },
+            data: { downloadedAt: new Date() },
+          })
+          .catch(() => {});
+      }
+    } else {
+      const raw = row.xlsxBytes;
+      u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+      void prisma.clinicReconciliationSnapshot
+        .update({
+          where: { id: row.id },
+          data: { downloadedAt: new Date() },
+        })
+        .catch(() => {});
+    }
+
+    return new NextResponse(Buffer.from(u8), {
       status: 200,
       headers: {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Cache-Control": "no-store",
         "Content-Disposition": `attachment; filename="${asciiName}"`,
       },
     });

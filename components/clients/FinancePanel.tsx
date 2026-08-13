@@ -493,7 +493,7 @@ export function FinancePanel({
     if (selectedOrderIds.length > 0) {
       q.set("orderIds", selectedOrderIds.join(","));
     }
-    return `/api/clinics/${clinicId}/reconciliation?${q.toString()}`;
+    return `/api/clinics/${clinicId}/reconciliation?${q.toString()}&v=2`;
   }, [clinicId, from, to, selectedOrderIds]);
 
   const pdfHref = useMemo(() => {
@@ -503,7 +503,7 @@ export function FinancePanel({
     if (selectedOrderIds.length > 0) {
       q.set("orderIds", selectedOrderIds.join(","));
     }
-    return `/api/clinics/${clinicId}/reconciliation-pdf?${q.toString()}`;
+    return `/api/clinics/${clinicId}/reconciliation-pdf?${q.toString()}&v=2`;
   }, [clinicId, from, to, selectedOrderIds]);
 
   return (

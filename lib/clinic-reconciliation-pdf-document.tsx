@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   Document,
   Page,
@@ -12,42 +13,25 @@ import type {
 import { formatRubPdf } from "@/lib/clinic-reconciliation-pdf-format";
 import { ensureNotoSansPdfFonts } from "@/lib/pdf-noto-fonts";
 
-/** Строки данных / жёлтые поля значений — светло-серый. */
-const ROW_GRAY = "#F2F2F2";
-/** Шапки и зелёные подписи («к оплате») — тёмно-серый. */
-const HEAD_GRAY = "#7A7A7A";
+/** Строки / поля значений. */
+const ROW_GRAY = "#F3F3F3";
+/** Шапки и «к оплате». */
+const HEAD_GRAY = "#5A5A5A";
 const BORDER = "#000000";
-const CELL_PAD = 2.5;
+const CELL_PAD = 2;
 
 /**
- * Доли колонок основной таблицы (сумма = 100).
- * Только width % — без вложенного flex: иначе границы «скачут» при переносе текста.
+ * A4 landscape = 842pt, paddingHorizontal 16 → 810pt на таблицу.
+ * Целые пункты, сумма ровно 810 — иначе Yoga округляет % и вертикали «скачут».
  */
-const W = {
-  z: "6%",
-  o: "5.5%",
-  n: "7.5%",
-  p: "10.5%",
-  v: "10.5%",
-  desc: "30%",
-  q: "6%",
-  price: "7.5%",
-  total: "8.5%",
-  disc: "8%",
-} as const;
+const PAGE_INNER = 810;
+const COL_W = [49, 45, 61, 85, 85, 243, 49, 61, 69, 63] as const;
 
-/** Суммы соседних колонок для шапки метаданных / «к оплате». */
-const W_META = {
-  legal: "19%", // z+o+n
-  from: W.p,
-  to: W.v,
-  clinic: W.desc,
-  units: W.q,
-  blank: W.price,
-  base: W.total,
-  discTotal: W.disc,
-  paySpacer: "83.5%", // всё кроме total+disc
-} as const;
+function span(from: number, to: number): number {
+  let s = 0;
+  for (let i = from; i <= to; i++) s += COL_W[i]!;
+  return s;
+}
 
 const styles = StyleSheet.create({
   page: {
@@ -59,230 +43,153 @@ const styles = StyleSheet.create({
     color: "#000",
     backgroundColor: "#fff",
   },
-
   topWrap: {
-    width: "100%",
+    width: PAGE_INNER,
     flexDirection: "row",
     justifyContent: "flex-end",
     marginBottom: 8,
   },
   summaryWrap: {
-    width: "42%",
+    width: 380,
     borderWidth: 1,
     borderColor: BORDER,
   },
-  summaryHead: {
+  row: {
     flexDirection: "row",
-    backgroundColor: HEAD_GRAY,
-    borderBottomWidth: 1,
-    borderColor: BORDER,
-    minHeight: 17,
-  },
-  summaryHeadCell: {
-    padding: CELL_PAD,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    justifyContent: "center",
-    textAlign: "center",
-    fontWeight: 700,
-    fontSize: 5.8,
-    color: "#000",
-  },
-  summaryRow: {
-    flexDirection: "row",
-    backgroundColor: ROW_GRAY,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    minHeight: 15,
-  },
-  summaryCell: {
-    padding: CELL_PAD,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    justifyContent: "center",
-    fontSize: 6.2,
-  },
-  summaryLabel: { width: "48%" },
-  summaryQty: { width: "14%", textAlign: "right" },
-  summaryPrice: { width: "19%", textAlign: "right" },
-  summaryTotal: {
-    width: "19%",
-    textAlign: "right",
-    borderRightWidth: 0,
-  },
-
-  mainWrap: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  metaRow: {
-    flexDirection: "row",
-    width: "100%",
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    backgroundColor: ROW_GRAY,
-    minHeight: 20,
-  },
-  metaCell: {
-    padding: CELL_PAD,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    justifyContent: "center",
-    fontSize: 6.3,
-    fontWeight: 700,
-  },
-  mLegal: { width: W_META.legal, textAlign: "center" },
-  mFrom: { width: W_META.from, textAlign: "center" },
-  mTo: { width: W_META.to, textAlign: "center" },
-  mClinic: { width: W_META.clinic, textAlign: "center" },
-  mUnits: { width: W_META.units, textAlign: "center" },
-  mBlank: { width: W_META.blank },
-  mBase: { width: W_META.base, textAlign: "center" },
-  mDiscTotal: {
-    width: W_META.discTotal,
-    textAlign: "center",
-    borderRightWidth: 0,
-  },
-
-  payRow: {
-    flexDirection: "row",
-    width: "100%",
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    minHeight: 16,
-  },
-  paySpacer: {
-    width: W_META.paySpacer,
-  },
-  payLabel: {
-    width: W.total,
-    backgroundColor: HEAD_GRAY,
-    padding: CELL_PAD,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    fontWeight: 700,
-    fontSize: 6.4,
-    textAlign: "center",
-    justifyContent: "center",
-  },
-  payValue: {
-    width: W.disc,
-    backgroundColor: ROW_GRAY,
-    padding: CELL_PAD,
-    fontWeight: 700,
-    fontSize: 6.5,
-    textAlign: "right",
-    justifyContent: "center",
-  },
-
-  headRow: {
-    flexDirection: "row",
-    width: "100%",
-    backgroundColor: HEAD_GRAY,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    minHeight: 22,
-  },
-  hCell: {
-    padding: 2,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    justifyContent: "center",
-    textAlign: "center",
-    fontWeight: 700,
-    fontSize: 5.9,
-    lineHeight: 1.15,
-  },
-  hZ: { width: W.z },
-  hO: { width: W.o },
-  hN: { width: W.n },
-  hP: { width: W.p },
-  hV: { width: W.v },
-  hDesc: { width: W.desc },
-  hQ: { width: W.q },
-  hPrice: { width: W.price },
-  hTotal: { width: W.total },
-  hDisc: { width: W.disc, borderRightWidth: 0 },
-
-  dataRow: {
-    flexDirection: "row",
-    width: "100%",
+    width: PAGE_INNER,
     alignItems: "stretch",
-    backgroundColor: ROW_GRAY,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    minHeight: 14,
   },
-  dCell: {
-    padding: 2,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
-    justifyContent: "flex-start",
+  mainWrap: {
+    width: PAGE_INNER,
+    borderWidth: 1,
+    borderColor: BORDER,
   },
-  dZ: { width: W.z },
-  dO: { width: W.o },
-  dN: { width: W.n },
-  dP: { width: W.p },
-  dV: { width: W.v },
-  dDesc: { width: W.desc },
-  dQ: { width: W.q },
-  dPrice: { width: W.price },
-  dTotal: { width: W.total },
-  dDisc: { width: W.disc, borderRightWidth: 0 },
-  tRight: { fontSize: 6.5, textAlign: "right" },
-  tCenter: { fontSize: 6.5, textAlign: "center" },
-  tLeft: { fontSize: 6.5, textAlign: "left" },
 });
+
+function PdfCell({
+  w,
+  last,
+  bg,
+  align,
+  bold,
+  size,
+  children,
+}: {
+  w: number;
+  last?: boolean;
+  bg?: string;
+  align?: "left" | "right" | "center";
+  bold?: boolean;
+  size?: number;
+  children?: string;
+}) {
+  return (
+    <View
+      style={{
+        width: w,
+        minWidth: w,
+        maxWidth: w,
+        flexGrow: 0,
+        flexShrink: 0,
+        flexBasis: w,
+        padding: CELL_PAD,
+        backgroundColor: bg,
+        borderRightWidth: last ? 0 : 1,
+        borderRightColor: BORDER,
+        justifyContent: "flex-start",
+      }}
+    >
+      <Text
+        style={{
+          fontSize: size ?? 6.5,
+          lineHeight: 1.15,
+          textAlign: align ?? "left",
+          fontWeight: bold ? 700 : 400,
+        }}
+      >
+        {children ?? ""}
+      </Text>
+    </View>
+  );
+}
+
+function GridRow({
+  bg,
+  lastRow,
+  minHeight,
+  children,
+}: {
+  bg?: string;
+  lastRow?: boolean;
+  minHeight?: number;
+  children: ReactNode;
+}) {
+  return (
+    <View
+      wrap={false}
+      style={[
+        styles.row,
+        {
+          backgroundColor: bg,
+          minHeight: minHeight ?? 14,
+          borderBottomWidth: lastRow ? 0 : 1,
+          borderBottomColor: BORDER,
+        },
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
 
 function moneyOrDash(v: number | null): string {
   if (v == null || !Number.isFinite(v)) return "—";
   return formatRubPdf(v);
 }
 
-function DetailRow({ line }: { line: ReconciliationPdfDetailLine }) {
+function DetailRow({
+  line,
+  last,
+}: {
+  line: ReconciliationPdfDetailLine;
+  last: boolean;
+}) {
   const showMeta = line.showOrderColumns;
   return (
-    <View style={styles.dataRow} wrap={false}>
-      <View style={[styles.dCell, styles.dZ]}>
-        <Text style={styles.tRight}>{showMeta ? line.zashla : ""}</Text>
-      </View>
-      <View style={[styles.dCell, styles.dO]}>
-        <Text style={styles.tRight}>
-          {showMeta && line.otpr !== "—" ? line.otpr : ""}
-        </Text>
-      </View>
-      <View style={[styles.dCell, styles.dN]}>
-        <Text style={styles.tCenter}>{showMeta ? line.orderNumber : ""}</Text>
-      </View>
-      <View style={[styles.dCell, styles.dP]}>
-        <Text style={styles.tLeft}>{showMeta ? line.patient : ""}</Text>
-      </View>
-      <View style={[styles.dCell, styles.dV]}>
-        <Text style={styles.tLeft}>{showMeta ? line.doctor : ""}</Text>
-      </View>
-      <View style={[styles.dCell, styles.dDesc]}>
-        <Text style={styles.tLeft}>{line.description}</Text>
-      </View>
-      <View style={[styles.dCell, styles.dQ]}>
-        <Text style={styles.tRight}>
-          {String(line.quantity).replace(".", ",")}
-        </Text>
-      </View>
-      <View style={[styles.dCell, styles.dPrice]}>
-        <Text style={styles.tRight}>{moneyOrDash(line.unitRub)}</Text>
-      </View>
-      <View style={[styles.dCell, styles.dTotal]}>
-        <Text style={styles.tRight}>{formatRubPdf(line.lineTotalRub)}</Text>
-      </View>
-      <View style={[styles.dCell, styles.dDisc]}>
-        <Text style={styles.tRight}>
-          {line.discountPercent == null
-            ? ""
-            : `${String(line.discountPercent).replace(".", ",")}%`}
-        </Text>
-      </View>
-    </View>
+    <GridRow bg={ROW_GRAY} lastRow={last} minHeight={14}>
+      <PdfCell w={COL_W[0]} align="right" bg={ROW_GRAY}>
+        {showMeta ? line.zashla : ""}
+      </PdfCell>
+      <PdfCell w={COL_W[1]} align="right" bg={ROW_GRAY}>
+        {showMeta && line.otpr !== "—" ? line.otpr : ""}
+      </PdfCell>
+      <PdfCell w={COL_W[2]} align="center" bg={ROW_GRAY}>
+        {showMeta ? line.orderNumber : ""}
+      </PdfCell>
+      <PdfCell w={COL_W[3]} align="left" bg={ROW_GRAY}>
+        {showMeta ? line.patient : ""}
+      </PdfCell>
+      <PdfCell w={COL_W[4]} align="left" bg={ROW_GRAY}>
+        {showMeta ? line.doctor : ""}
+      </PdfCell>
+      <PdfCell w={COL_W[5]} align="left" bg={ROW_GRAY}>
+        {line.description}
+      </PdfCell>
+      <PdfCell w={COL_W[6]} align="right" bg={ROW_GRAY}>
+        {String(line.quantity).replace(".", ",")}
+      </PdfCell>
+      <PdfCell w={COL_W[7]} align="right" bg={ROW_GRAY}>
+        {moneyOrDash(line.unitRub)}
+      </PdfCell>
+      <PdfCell w={COL_W[8]} align="right" bg={ROW_GRAY}>
+        {formatRubPdf(line.lineTotalRub)}
+      </PdfCell>
+      <PdfCell w={COL_W[9]} last align="right" bg={ROW_GRAY}>
+        {line.discountPercent == null
+          ? ""
+          : `${String(line.discountPercent).replace(".", ",")}%`}
+      </PdfCell>
+    </GridRow>
   );
 }
 
@@ -292,6 +199,7 @@ export function ClinicReconciliationPdfDocument({
   payload: ClinicReconciliationPdfPayload;
 }) {
   ensureNotoSansPdfFonts();
+  const summaryW = [180, 50, 75, 75] as const;
 
   return (
     <Document
@@ -302,113 +210,179 @@ export function ClinicReconciliationPdfDocument({
       <Page size="A4" orientation="landscape" style={styles.page}>
         <View style={styles.topWrap}>
           <View style={styles.summaryWrap}>
-            <View style={styles.summaryHead}>
-              <Text style={[styles.summaryHeadCell, styles.summaryLabel]}>
+            <View
+              wrap={false}
+              style={{
+                flexDirection: "row",
+                backgroundColor: HEAD_GRAY,
+                minHeight: 18,
+                borderBottomWidth: 1,
+                borderBottomColor: BORDER,
+              }}
+            >
+              <PdfCell w={summaryW[0]} bg={HEAD_GRAY} align="center" bold size={5.8}>
                 НАИМЕНОВАНИЕ ПОЗИЦИИ
-              </Text>
-              <Text style={[styles.summaryHeadCell, styles.summaryQty]}>
+              </PdfCell>
+              <PdfCell w={summaryW[1]} bg={HEAD_GRAY} align="center" bold size={5.8}>
                 КОЛ-ВО ЕДИНИЦ
-              </Text>
-              <Text style={[styles.summaryHeadCell, styles.summaryPrice]}>
+              </PdfCell>
+              <PdfCell w={summaryW[2]} bg={HEAD_GRAY} align="center" bold size={5.8}>
                 СТОИМОСТЬ ЕДИНИЦЫ БЕЗ СКИДОК
-              </Text>
-              <Text style={[styles.summaryHeadCell, styles.summaryTotal]}>
+              </PdfCell>
+              <PdfCell
+                w={summaryW[3]}
+                last
+                bg={HEAD_GRAY}
+                align="center"
+                bold
+                size={5.8}
+              >
                 СУММА ЕДИНИЦ БЕЗ СКИДОК
-              </Text>
+              </PdfCell>
             </View>
             {payload.summary.map((row, i) => (
               <View
                 key={`s-${i}`}
-                style={[
-                  styles.summaryRow,
-                  i === payload.summary.length - 1
-                    ? { borderBottomWidth: 0 }
-                    : {},
-                ]}
+                wrap={false}
+                style={{
+                  flexDirection: "row",
+                  backgroundColor: ROW_GRAY,
+                  minHeight: 15,
+                  borderBottomWidth:
+                    i === payload.summary.length - 1 ? 0 : 1,
+                  borderBottomColor: BORDER,
+                }}
               >
-                <Text style={[styles.summaryCell, styles.summaryLabel]}>
+                <PdfCell w={summaryW[0]} bg={ROW_GRAY} size={6.2}>
                   {row.label}
-                </Text>
-                <Text style={[styles.summaryCell, styles.summaryQty]}>
+                </PdfCell>
+                <PdfCell w={summaryW[1]} bg={ROW_GRAY} align="right" size={6.2}>
                   {String(row.quantity).replace(".", ",")}
-                </Text>
-                <Text style={[styles.summaryCell, styles.summaryPrice]}>
+                </PdfCell>
+                <PdfCell w={summaryW[2]} bg={ROW_GRAY} align="right" size={6.2}>
                   {formatRubPdf(row.unitRub)}
-                </Text>
-                <Text style={[styles.summaryCell, styles.summaryTotal]}>
+                </PdfCell>
+                <PdfCell
+                  w={summaryW[3]}
+                  last
+                  bg={ROW_GRAY}
+                  align="right"
+                  size={6.2}
+                >
                   {formatRubPdf(row.totalRub)}
-                </Text>
+                </PdfCell>
               </View>
             ))}
           </View>
         </View>
 
         <View style={styles.mainWrap}>
-          <View style={styles.metaRow}>
-            <Text style={[styles.metaCell, styles.mLegal]}>
+          <GridRow bg={ROW_GRAY} minHeight={20}>
+            <PdfCell w={span(0, 2)} bg={ROW_GRAY} align="center" bold>
               {payload.labLegalName}
-            </Text>
-            <Text style={[styles.metaCell, styles.mFrom]}>
+            </PdfCell>
+            <PdfCell w={COL_W[3]} bg={ROW_GRAY} align="center" bold>
               {payload.periodFromLabel}
-            </Text>
-            <Text style={[styles.metaCell, styles.mTo]}>
+            </PdfCell>
+            <PdfCell w={COL_W[4]} bg={ROW_GRAY} align="center" bold>
               {payload.periodToLabel}
-            </Text>
-            <Text style={[styles.metaCell, styles.mClinic]}>
+            </PdfCell>
+            <PdfCell w={COL_W[5]} bg={ROW_GRAY} align="center" bold>
               {payload.clinicTitleLine}
-            </Text>
-            <Text style={[styles.metaCell, styles.mUnits]}>
+            </PdfCell>
+            <PdfCell w={COL_W[6]} bg={ROW_GRAY} align="center" bold>
               {String(payload.yellowRow.totalUnits).replace(".", ",")}
-            </Text>
-            <Text style={[styles.metaCell, styles.mBlank]} />
-            <Text style={[styles.metaCell, styles.mBase]}>
+            </PdfCell>
+            <PdfCell w={COL_W[7]} bg={ROW_GRAY} />
+            <PdfCell w={COL_W[8]} bg={ROW_GRAY} align="center" bold>
               {formatRubPdf(payload.yellowRow.baseTotalRub)}
-            </Text>
-            <Text style={[styles.metaCell, styles.mDiscTotal]}>
+            </PdfCell>
+            <PdfCell w={COL_W[9]} last bg={ROW_GRAY} align="center" bold>
               {formatRubPdf(payload.yellowRow.discountedTotalRub)}
-            </Text>
-          </View>
+            </PdfCell>
+          </GridRow>
 
-          <View style={styles.payRow}>
-            <View style={styles.paySpacer} />
-            <Text style={styles.payLabel}>Всего к оплате:</Text>
-            <Text style={styles.payValue}>
+          <GridRow minHeight={16}>
+            <View
+              style={{
+                width: span(0, 7),
+                minWidth: span(0, 7),
+                maxWidth: span(0, 7),
+                flexGrow: 0,
+                flexShrink: 0,
+              }}
+            />
+            <PdfCell w={COL_W[8]} bg={HEAD_GRAY} align="center" bold size={6.4}>
+              Всего к оплате:
+            </PdfCell>
+            <PdfCell w={COL_W[9]} last bg={ROW_GRAY} align="right" bold>
               {formatRubPdf(payload.yellowRow.discountedTotalRub)}
-            </Text>
-          </View>
-          <View style={styles.payRow}>
-            <View style={styles.paySpacer} />
-            <Text style={styles.payLabel}>В т.ч.Сумма НДС 5%:</Text>
-            <Text style={styles.payValue}>
+            </PdfCell>
+          </GridRow>
+          <GridRow minHeight={16}>
+            <View
+              style={{
+                width: span(0, 7),
+                minWidth: span(0, 7),
+                maxWidth: span(0, 7),
+                flexGrow: 0,
+                flexShrink: 0,
+              }}
+            />
+            <PdfCell w={COL_W[8]} bg={HEAD_GRAY} align="center" bold size={6.4}>
+              В т.ч.Сумма НДС 5%:
+            </PdfCell>
+            <PdfCell w={COL_W[9]} last bg={ROW_GRAY} align="right" bold>
               {formatRubPdf(payload.yellowRow.vatRub)}
-            </Text>
-          </View>
+            </PdfCell>
+          </GridRow>
 
-          <View style={styles.headRow}>
-            <Text style={[styles.hCell, styles.hZ]}>
+          <GridRow bg={HEAD_GRAY} minHeight={24}>
+            <PdfCell w={COL_W[0]} bg={HEAD_GRAY} align="center" bold size={5.9}>
               Число когда зашла работа
-            </Text>
-            <Text style={[styles.hCell, styles.hO]}>
+            </PdfCell>
+            <PdfCell w={COL_W[1]} bg={HEAD_GRAY} align="center" bold size={5.9}>
               Число отправки работы
-            </Text>
-            <Text style={[styles.hCell, styles.hN]}>
+            </PdfCell>
+            <PdfCell w={COL_W[2]} bg={HEAD_GRAY} align="center" bold size={5.9}>
               {`Номер заказ-\nнаряда`}
-            </Text>
-            <Text style={[styles.hCell, styles.hP]}>Пациент</Text>
-            <Text style={[styles.hCell, styles.hV]}>Врач</Text>
-            <Text style={[styles.hCell, styles.hDesc]}>
+            </PdfCell>
+            <PdfCell w={COL_W[3]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+              Пациент
+            </PdfCell>
+            <PdfCell w={COL_W[4]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+              Врач
+            </PdfCell>
+            <PdfCell w={COL_W[5]} bg={HEAD_GRAY} align="center" bold size={5.9}>
               Выставлено(наименование позиции)
-            </Text>
-            <Text style={[styles.hCell, styles.hQ]}>Кол-во единиц</Text>
-            <Text style={[styles.hCell, styles.hPrice]}>Цена за единицу</Text>
-            <Text style={[styles.hCell, styles.hTotal]}>
+            </PdfCell>
+            <PdfCell w={COL_W[6]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+              Кол-во единиц
+            </PdfCell>
+            <PdfCell w={COL_W[7]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+              Цена за единицу
+            </PdfCell>
+            <PdfCell w={COL_W[8]} bg={HEAD_GRAY} align="center" bold size={5.9}>
               Стоим. (Сумма единиц)
-            </Text>
-            <Text style={[styles.hCell, styles.hDisc]}>СКИДКА</Text>
-          </View>
+            </PdfCell>
+            <PdfCell
+              w={COL_W[9]}
+              last
+              bg={HEAD_GRAY}
+              align="center"
+              bold
+              size={5.9}
+            >
+              СКИДКА
+            </PdfCell>
+          </GridRow>
 
           {payload.detail.map((line, i) => (
-            <DetailRow key={`d-${i}`} line={line} />
+            <DetailRow
+              key={`d-${i}`}
+              line={line}
+              last={i === payload.detail.length - 1}
+            />
           ))}
         </View>
       </Page>

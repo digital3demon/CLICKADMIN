@@ -42,6 +42,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/.prisma-cli-version ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/templates ./templates
 
 # Timeweb: без EXPOSE платформа слушает 8080; приложение читает PORT.
 EXPOSE 3000
