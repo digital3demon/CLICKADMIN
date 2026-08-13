@@ -30,3 +30,8 @@ data/templates/*.legacy.docx
 data/logs/
 # Дампы CRM (zip срезов для демо)
 data/crm-dumps/
+data/crm-dump-*.zip
+data/crm-dump-*.anonymized.zip
+data/demo-from-dump.json
+data/demo-from-dump.db
+data/demo-from-dump.db-*
