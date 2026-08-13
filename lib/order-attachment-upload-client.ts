@@ -58,6 +58,9 @@ export function formatAttachmentUploadHttpError(
   if (detailsStr) return detailsStr;
   if (messageStr) return `Ошибка загрузки (${status}): ${messageStr}`;
   const snippet = rawText.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (/^<!DOCTYPE html/i.test(snippet) || /^<html/i.test(snippet)) {
+    return `Ошибка загрузки (${status}): сбой сервера (HTML вместо JSON). Проверьте логи PM2 и лимит тела (Caddy/nginx), затем migrate deploy.`;
+  }
   if (snippet) return `Ошибка загрузки (${status}): ${snippet}`;
   return `Ошибка загрузки (${status})`;
 }

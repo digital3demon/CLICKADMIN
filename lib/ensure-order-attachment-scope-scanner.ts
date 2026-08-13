@@ -11,7 +11,9 @@ function isPostgresUrl(url: string | undefined): boolean {
 
 /**
  * Идемпотентно добавляет значение enum SCANNER для OrderAttachmentScope (Postgres).
- * Нужно, если код уже задеплоен, а `migrate deploy` на сервере ещё не прогоняли.
+ * Только для ручного/деплойного repair — НЕ вызывать на горячем пути upload
+ * (параллельный ALTER TYPE даёт 500/HTML от Next).
+ * Обычный путь: `npm run db:migrate:deploy` (миграция 20260809120000_...).
  */
 export async function ensureOrderAttachmentScopeScanner(
   prisma: PrismaClient,

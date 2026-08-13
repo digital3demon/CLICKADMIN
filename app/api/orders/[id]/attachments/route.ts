@@ -4,7 +4,6 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { extractInvoiceNumberFromPdfBuffer } from "@/lib/extract-invoice-number-from-pdf";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { ensureOrderAttachmentScopeScanner } from "@/lib/ensure-order-attachment-scope-scanner";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import {
@@ -265,7 +264,6 @@ export async function POST(req: Request, ctx: Ctx) {
 
     const parsed = await parseRawUpload(req, UPLOAD_BODY_TIMEOUT_MS);
     const prisma = await getOrdersPrisma();
-    await ensureOrderAttachmentScopeScanner(prisma);
     const session = await getSessionFromCookies();
     const tenantId = await orderTenantIdForSession(session);
     if (!session || !tenantId) {
@@ -407,15 +405,18 @@ export async function POST(req: Request, ctx: Ctx) {
           storageWarning =
             "S3 временно недоступен, файл сохранён на диск CRM";
         } catch (diskErr) {
-          console.error("[attachments POST] disk write fallback to DB", diskErr);
-          diskRelPath = null;
-          dataForDb = fileBuf;
-          storageWarning =
-            "S3 и диск недоступны, файл сохранён в базе CRM";
+          console.error("[attachments POST] disk write failed", diskErr);
+          return NextResponse.json(
+            {
+              error: "Не удалось сохранить файл в хранилище (S3 и диск)",
+              details: errorMessage(diskErr).slice(0, 500),
+            },
+            { status: 503 },
+          );
         }
       }
     } else {
-      // Без S3 — сначала диск, чтобы не класть крупные BYTEA в Postgres (OOM/500).
+      // Без S3 — только диск. BYTEA в Postgres на больших файлах даёт OOM → HTML 500.
       try {
         diskRelPath = await writeOrderAttachmentToDisk(
           orderId,
@@ -424,10 +425,15 @@ export async function POST(req: Request, ctx: Ctx) {
         );
         dataForDb = Buffer.alloc(0);
       } catch (diskErr) {
-        console.error("[attachments POST] disk write failed, storing in DB", diskErr);
-        diskRelPath = null;
-        dataForDb = fileBuf;
-        storageWarning = "Диск недоступен, файл сохранён в базе CRM";
+        console.error("[attachments POST] disk write failed", diskErr);
+        return NextResponse.json(
+          {
+            error:
+              "Не удалось сохранить файл на диск. Включите S3 или проверьте ORDER_ATTACHMENT_STORAGE_DIR / права записи.",
+            details: errorMessage(diskErr).slice(0, 500),
+          },
+          { status: 503 },
+        );
       }
     }
 

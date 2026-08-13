@@ -11,7 +11,6 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { ensureClinicPriceOverrideTable } from "@/lib/ensure-clinic-price-override-table";
 import { ensureClinicSourceDoctorColumn } from "@/lib/ensure-clinic-source-doctor-column";
 import { ensureOrderAttachmentDiskRelPathColumn } from "@/lib/ensure-order-attachment-disk-column";
-import { ensureOrderAttachmentScopeScanner } from "@/lib/ensure-order-attachment-scope-scanner";
 import { ensureSqlitePragmas } from "@/lib/ensure-sqlite-pragmas";
 import { getDemoPrisma } from "@/lib/prisma-demo";
 import { getDemoDatabaseUrl } from "@/lib/prisma-demo";
@@ -32,8 +31,6 @@ async function prepareClient(
     await ensureClinicPriceOverrideTable(client);
     await ensureClinicSourceDoctorColumn(client);
     await ensureOrderAttachmentDiskRelPathColumn(client);
-  } else {
-    await ensureOrderAttachmentScopeScanner(client);
   }
   return client;
 }

@@ -19,8 +19,6 @@ import {
   isImapConnectionError,
   listImapFolders,
   replaceImapClientIfNeeded,
-  setMessageSeen,
-  setMessageSeenOnClient,
   type ImapFetchedMessage,
   type ImapFolderInfo,
   type ImapMessageSummary,
@@ -657,29 +655,6 @@ async function refreshLabelCounters(
   await db.emailLabel.update({ where: { id: labelId }, data: { totalCount, unreadCount } });
 }
 
-async function applyExplicitRuleSeenOnServer(
-  account: EmailAccount,
-  folder: { imapName: string },
-  item: ImapFetchedMessage,
-  shouldMarkRead: boolean,
-  syncClient?: ImapFlow,
-): Promise<void> {
-  if (!shouldMarkRead || item.flags.has("\\Seen")) return;
-  try {
-    if (syncClient) {
-      await setMessageSeenOnClient(syncClient, folder.imapName, item.uid, true);
-    } else {
-      await setMessageSeen(account, folder.imapName, item.uid, true);
-    }
-    item.flags.add("\\Seen");
-  } catch (err) {
-    logger.warn(
-      { err, accountId: account.id, folder: folder.imapName, uid: item.uid },
-      "mail rule markRead could not update IMAP seen flag",
-    );
-  }
-}
-
 async function ensureFolderForLabel(
   db: PrismaClient,
   account: Pick<EmailAccount, "id" | "tenantId">,
@@ -831,7 +806,6 @@ export async function syncEmailAccount(
           },
           select: {
             id: true,
-            isRead: true,
             isFlagged: true,
             preview: true,
             textBody: true,
@@ -840,13 +814,9 @@ export async function syncEmailAccount(
           },
         });
         if (exists) {
-          const seenOnServer = item.flags.has("\\Seen");
+          // isRead в CRM локальный: \\Seen из Яндекс.Почты не подтягиваем.
           const flaggedOnServer = item.flags.has("\\Flagged");
           const data: Record<string, unknown> = {};
-          if (exists.isRead !== seenOnServer) {
-            data.isRead = seenOnServer;
-            data.readAt = seenOnServer ? item.internalDate ?? new Date() : null;
-          }
           if (exists.isFlagged !== flaggedOnServer) {
             data.isFlagged = flaggedOnServer;
           }
@@ -874,8 +844,9 @@ export async function syncEmailAccount(
                 folderId: folder.id,
                 uid: item.uid,
                 direction: folder.type === EmailFolderType.SENT ? "OUTBOUND" : "INBOUND",
-                isRead: item.flags.has("\\Seen"),
-                readAt: item.flags.has("\\Seen") ? item.internalDate ?? new Date() : null,
+                // Новое письмо в CRM всегда непрочитано — \\Seen Яндекса не копируем.
+                isRead: false,
+                readAt: null,
                 isFlagged: item.flags.has("\\Flagged"),
                 hasAttachments: false,
                 subject: "(письмо загружено без разбора)",
@@ -920,8 +891,8 @@ export async function syncEmailAccount(
           });
           if (sentFolder) targetFolderId = sentFolder.id;
         }
-        await applyExplicitRuleSeenOnServer(account, folder, item, ruleResult.isRead, client);
-        const isRead = item.flags.has("\\Seen") || ruleResult.isRead;
+        // Прочитанность в CRM — только явные действия в UI; \\Seen Яндекса и markRead правил не трогают isRead.
+        const isRead = false;
         const duplicateByMessageId = parsed.messageId
           ? await db.email.findFirst({
               where: {
@@ -933,7 +904,6 @@ export async function syncEmailAccount(
                 id: true,
                 folderId: true,
                 uid: true,
-                isRead: true,
                 isFlagged: true,
                 labelAssignments: { select: { labelId: true } },
               },
@@ -943,10 +913,6 @@ export async function syncEmailAccount(
           const duplicateData: Record<string, unknown> = {};
           if (duplicateByMessageId.folderId !== targetFolderId) duplicateData.folderId = targetFolderId;
           if (duplicateByMessageId.uid !== item.uid) duplicateData.uid = item.uid;
-          if (duplicateByMessageId.isRead !== isRead) {
-            duplicateData.isRead = isRead;
-            duplicateData.readAt = isRead ? item.internalDate ?? new Date() : null;
-          }
           if ((item.flags.has("\\Flagged") || ruleResult.isFlagged) && !duplicateByMessageId.isFlagged) {
             duplicateData.isFlagged = true;
           }

@@ -23,8 +23,6 @@ import {
   deleteMessage,
   moveMessage,
   setMessageFlagged,
-  setMessageSeen,
-  setMessagesSeen,
   testImapConnection,
 } from "@/lib/mail/imap-client";
 import { emailFolderListWhere } from "@/lib/mail/mail-folder-query";
@@ -1100,98 +1098,6 @@ export async function listEmails(
   };
 }
 
-async function setEmailSeenOnServerBestEffort(
-  db: PrismaClient,
-  tenantId: string,
-  email: {
-    uid: number | null;
-    direction: EmailDirection;
-    accountId: string;
-    account: {
-      email: string;
-      encryptedAppPassword: string | null;
-      imapHost: string;
-      imapPort: number;
-      imapSecure: boolean;
-    };
-    folder: { imapName: string; type: EmailFolderType } | null;
-  },
-  seen: boolean,
-): Promise<void> {
-  if (!email.uid || !email.account.encryptedAppPassword) return;
-  const paths = new Set<string>();
-  if (email.folder?.imapName) paths.add(email.folder.imapName);
-  if (email.direction === EmailDirection.INBOUND && email.folder?.type !== EmailFolderType.INBOX) {
-    const inbox = await db.emailFolder.findFirst({
-      where: { tenantId, accountId: email.accountId, type: EmailFolderType.INBOX },
-      select: { imapName: true },
-    });
-    if (inbox?.imapName) paths.add(inbox.imapName);
-  }
-  for (const path of paths) {
-    try {
-      await setMessageSeen(email.account, path, email.uid, seen);
-      return;
-    } catch {
-      // CRM folders can be classification-only while the original IMAP message
-      // still lives in INBOX. Try the next plausible server folder.
-    }
-  }
-}
-
-async function setEmailsSeenOnServerBestEffort(
-  db: PrismaClient,
-  tenantId: string,
-  emails: Array<{
-    uid: number | null;
-    direction: EmailDirection;
-    accountId: string;
-    account: {
-      id: string;
-      email: string;
-      encryptedAppPassword: string | null;
-      imapHost: string;
-      imapPort: number;
-      imapSecure: boolean;
-    };
-    folder: { imapName: string; type: EmailFolderType } | null;
-  }>,
-  seen: boolean,
-): Promise<void> {
-  const inboxByAccountId = new Map<string, string | null>();
-  const groups = new Map<string, { account: (typeof emails)[number]["account"]; path: string; uids: number[] }>();
-  for (const email of emails) {
-    if (!email.uid || !email.account.encryptedAppPassword) continue;
-    const paths = new Set<string>();
-    if (email.folder?.imapName) paths.add(email.folder.imapName);
-    if (email.direction === EmailDirection.INBOUND && email.folder?.type !== EmailFolderType.INBOX) {
-      if (!inboxByAccountId.has(email.accountId)) {
-        const inbox = await db.emailFolder.findFirst({
-          where: { tenantId, accountId: email.accountId, type: EmailFolderType.INBOX },
-          select: { imapName: true },
-        });
-        inboxByAccountId.set(email.accountId, inbox?.imapName ?? null);
-      }
-      const inboxPath = inboxByAccountId.get(email.accountId);
-      if (inboxPath) paths.add(inboxPath);
-    }
-    for (const path of paths) {
-      const key = `${email.account.id}:${path}`;
-      const group = groups.get(key) ?? { account: email.account, path, uids: [] };
-      group.uids.push(email.uid);
-      groups.set(key, group);
-    }
-  }
-  for (const group of groups.values()) {
-    try {
-      await setMessagesSeen(group.account, group.path, group.uids, seen);
-    } catch {
-      // DB state still records the explicit CRM action; later reconcile/sync can
-      // repair transient IMAP failures without blocking the operator.
-    }
-  }
-}
-
 export async function getEmailDetail(
   db: PrismaClient,
   tenantId: string,
@@ -1233,7 +1139,7 @@ export async function getEmailDetail(
       where: { id: email.id },
       data: { isRead: true, readAt: new Date() },
     });
-    void setEmailSeenOnServerBestEffort(db, tenantId, email, true);
+    // Не трогаем \\Seen на IMAP — прочитанность только в CRM.
     if (email.folderId) {
       await refreshFolderCounters(db, tenantId, email.folderId).catch(() => undefined);
     }
@@ -1306,19 +1212,6 @@ export async function bulkEmailAction(
   if (input.action === "markAllRead") {
     if (!input.accountId) throw new Error("EMAIL_ACCOUNT_NOT_FOUND");
     await requireUserEmailAccount(db, tenantId, userId, input.accountId, role);
-    const unreadEmails = await db.email.findMany({
-      where: {
-        tenantId,
-        accountId: input.accountId,
-        isRead: false,
-        account: userAccountWhere(tenantId, userId, role),
-      },
-      include: {
-        account: true,
-        folder: true,
-      },
-    });
-    await setEmailsSeenOnServerBestEffort(db, tenantId, unreadEmails, true);
     const res = await db.email.updateMany({
       where: {
         tenantId,
@@ -1413,11 +1306,11 @@ export async function bulkEmailAction(
   } else {
     for (const email of before) {
       if (input.action === "read" || input.action === "unread") {
-        await setEmailSeenOnServerBestEffort(db, tenantId, email, input.action === "read");
-      } else {
-        if (!email.uid || !email.folder?.imapName) continue;
-        await setMessageFlagged(email.account, email.folder.imapName, email.uid, input.action === "flag");
+        // isRead только в CRM — \\Seen на IMAP не меняем.
+        continue;
       }
+      if (!email.uid || !email.folder?.imapName) continue;
+      await setMessageFlagged(email.account, email.folder.imapName, email.uid, input.action === "flag");
     }
     const res = await db.email.updateMany({
       where: { tenantId, id: { in: ids }, account: accountAccessWhere },

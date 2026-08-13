@@ -42,7 +42,9 @@ describe("formatAttachmentUploadHttpError", () => {
   it("falls back to raw body snippet", () => {
     expect(
       formatAttachmentUploadHttpError(502, {}, "<html>bad gateway</html>"),
-    ).toBe("Ошибка загрузки (502): <html>bad gateway</html>");
+    ).toBe(
+      "Ошибка загрузки (502): сбой сервера (HTML вместо JSON). Проверьте логи PM2 и лимит тела (Caddy/nginx), затем migrate deploy.",
+    );
   });
 });
 describe("normalizeOrderAttachmentUploadQueue", () => {
