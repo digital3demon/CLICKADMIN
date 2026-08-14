@@ -728,6 +728,9 @@ export async function GET(
         where: { id: orderIdTrim },
         data: {
           kaitenColumnTitle: columnTitle,
+          ...(trackFromCard != null && trackFromCard !== order.kaitenTrackLane
+            ? { kaitenTrackLane: trackFromCard }
+            : {}),
           ...(mirrorFields.kaitenCardDescriptionMirror !== undefined
             ? { kaitenCardDescriptionMirror: mirrorFields.kaitenCardDescriptionMirror }
             : {}),

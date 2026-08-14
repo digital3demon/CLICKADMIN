@@ -17,8 +17,11 @@ import {
   kaitenGetCard,
   kaitenListBoardColumns,
   kaitenListCardMembers,
+  trackLaneForBoardId,
   type KaitenAuth,
 } from "@/lib/kaiten-rest";
+import { getKaitenEnvConfig } from "@/lib/kaiten-config";
+import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import { applyKaitenHeadFieldsToKanbanCard } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import {
@@ -101,7 +104,7 @@ export async function runKanbanMembersBackfillBatch(
   const orders = await db.order.findMany({
     where: membersBackfillOrderWhere(tenantId),
     orderBy: { id: "asc" },
-    select: { id: true, kaitenCardId: true },
+    select: { id: true, kaitenCardId: true, kaitenTrackLane: true },
     ...(afterOrderId ? { cursor: { id: afterOrderId }, skip: 1 } : {}),
     take: limit,
   });
@@ -141,6 +144,8 @@ export async function runKanbanMembersBackfillBatch(
     number,
     Array<{ id: number; title: string; name?: string }>
   >();
+  const cfg0 = getKaitenEnvConfig();
+  const cfg = cfg0 ? await withResolvedKaitenBoards(cfg0) : null;
 
   for (const order of orders) {
     if (order.kaitenCardId == null || !Number.isFinite(order.kaitenCardId)) {
@@ -224,10 +229,33 @@ export async function runKanbanMembersBackfillBatch(
         if (cols) {
           const columnTitle = kaitenColumnTitleFromBoard(head.card, cols);
           const sortOrder = sortOrderFromKaitenCard(head.card);
+          const inboundLane =
+            cfg != null
+              ? trackLaneForBoardId(
+                  boardId,
+                  cfg.boardByLane,
+                  order.kaitenTrackLane,
+                )
+              : null;
           positionChanged = applyKaitenPositionToKanbanState(state, order.id, {
             columnTitle,
             sortOrder,
+            trackLane: inboundLane,
           });
+          if (
+            inboundLane != null &&
+            inboundLane !== order.kaitenTrackLane
+          ) {
+            try {
+              await db.order.update({
+                where: { id: order.id },
+                data: { kaitenTrackLane: inboundLane },
+              });
+              positionChanged = true;
+            } catch {
+              /* колонка в снимке уже обновлена */
+            }
+          }
         }
       }
     }

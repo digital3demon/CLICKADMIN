@@ -7,7 +7,10 @@ import {
   kaitenGetCard,
   kaitenListBoardColumns,
   kaitenListComments,
+  trackLaneForBoardId,
 } from "@/lib/kaiten-rest";
+import { getKaitenEnvConfig } from "@/lib/kaiten-config";
+import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import {
   dedupeParsedKaitenComments,
   parseKaitenListComment,
@@ -30,7 +33,8 @@ const CARD_FETCH_CONCURRENCY_WITH_COMMENTS = 1;
 type BoardColumn = { id: number; title: string; name?: string };
 
 /**
- * Обновляет в БД `kaitenColumnTitle` по актуальной карточке Kaiten (для списков заказов / отгрузок).
+ * Обновляет в БД `kaitenColumnTitle` и `kaitenTrackLane` по актуальной карточке Kaiten
+ * (для списков заказов / отгрузок и зеркала канбана).
  * Карточки запрашиваются пачками; колонки доски кэшируются по `board_id`.
  *
  * `includeComments: false` — только карточка (быстро): без чата, без метки «упомянули лабораторию», без синка корректировок из комментариев.
@@ -71,6 +75,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
       id: true,
       kaitenCardId: true,
       kaitenColumnTitle: true,
+      kaitenTrackLane: true,
       isUrgent: true,
       kaitenCardSortOrder: true,
       kaitenCardDescriptionMirror: true,
@@ -86,6 +91,9 @@ export async function syncKaitenColumnTitlesForOrderIds(
   const withCards = rows.filter(
     (r): r is (typeof r & { kaitenCardId: number }) => r.kaitenCardId != null,
   );
+
+  const cfg0 = getKaitenEnvConfig();
+  const cfg = cfg0 ? await withResolvedKaitenBoards(cfg0) : null;
 
   const columnsCache = new Map<number, BoardColumn[]>();
 
@@ -231,7 +239,19 @@ export async function syncKaitenColumnTitlesForOrderIds(
         sortDb === undefined || sortDb === row.kaitenCardSortOrder;
       const urgentPatch = kaitenUrgentPatchFromCard(cardObj, row.isUrgent);
       const sameUrgent = urgentPatch.isUrgent === undefined;
-      if (sameTitle && sameDescription && sameBlock && sameSort && sameUrgent) {
+      const nextLane =
+        cfg != null
+          ? trackLaneForBoardId(boardId, cfg.boardByLane, row.kaitenTrackLane)
+          : null;
+      const sameLane = nextLane == null || nextLane === row.kaitenTrackLane;
+      if (
+        sameTitle &&
+        sameDescription &&
+        sameBlock &&
+        sameSort &&
+        sameUrgent &&
+        sameLane
+      ) {
         titles[row.id] = columnTitle;
         if (includeComments && clicklabByOrderId[row.id] === undefined) {
           clicklabByOrderId[row.id] = false;
@@ -257,6 +277,9 @@ export async function syncKaitenColumnTitlesForOrderIds(
             ...blockedAtData,
             ...(sortDb !== undefined ? { kaitenCardSortOrder: sortDb } : {}),
             ...urgentPatch,
+            ...(nextLane != null && nextLane !== row.kaitenTrackLane
+              ? { kaitenTrackLane: nextLane }
+              : {}),
           },
         });
       } catch {

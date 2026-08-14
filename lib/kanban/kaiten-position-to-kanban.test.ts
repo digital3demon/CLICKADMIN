@@ -4,6 +4,11 @@ import {
   applyKaitenPositionToKanbanState,
   resolveKanbanColumnByKaitenTitle,
 } from "@/lib/kanban/kaiten-position-to-kanban";
+import {
+  KANBAN_BOARD_ORTHODONTICS_ID,
+  KANBAN_BOARD_ORTHOPEDICS_ID,
+} from "@/lib/kanban/model";
+import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
 
 function card(partial: Partial<KanbanCard> & { id: string }): KanbanCard {
   return {
@@ -140,5 +145,39 @@ describe("applyKaitenPositionToKanbanState", () => {
         sortOrder: 5,
       }),
     ).toBe(false);
+  });
+
+  it("moves card to orthodontics board when Kaiten trackLane is ORTHODONTICS", () => {
+    const state = miniState();
+    state.boards[0]!.id = KANBAN_BOARD_ORTHOPEDICS_ID;
+    state.boards.push({
+      ...state.boards[0]!,
+      id: KANBAN_BOARD_ORTHODONTICS_ID,
+      title: "Ортодонтия",
+      columns: [
+        {
+          id: "odon-queue",
+          title: "К исполнению",
+          cards: [],
+        },
+        {
+          id: "odon-prod",
+          title: "Производство",
+          cards: [],
+        },
+      ],
+    });
+    const changed = applyKaitenPositionToKanbanState(state, "ord-b", {
+      columnTitle: "Производство",
+      sortOrder: 5,
+      trackLane: "ORTHODONTICS",
+    });
+    expect(changed).toBe(true);
+    const loc = findCardByLinkedOrderId(state, "ord-b")!;
+    expect(state.boards[loc.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+    expect(
+      state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!
+        .trackLane,
+    ).toBe("ORTHODONTICS");
   });
 });

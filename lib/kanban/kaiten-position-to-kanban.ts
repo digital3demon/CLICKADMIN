@@ -2,6 +2,10 @@ import type { KanbanAppState, KanbanBoard, KanbanCard, KanbanColumn } from "@/li
 import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
+import {
+  KANBAN_BOARD_ORTHODONTICS_ID,
+  KANBAN_BOARD_ORTHOPEDICS_ID,
+} from "@/lib/kanban/model";
 
 /** Колонка зеркала CRM по названию колонки Kaiten. */
 export function resolveKanbanColumnByKaitenTitle(
@@ -60,8 +64,26 @@ function sortLinkedCardsInColumn(col: KanbanColumn): void {
   col.cards = [...linked, ...nonLinked];
 }
 
+function normalizeInboundTrackLane(
+  raw: string | null | undefined,
+): "ORTHOPEDICS" | "ORTHODONTICS" | null {
+  const u = String(raw || "").trim().toUpperCase();
+  if (u === "ORTHODONTICS") return "ORTHODONTICS";
+  if (u === "ORTHOPEDICS") return "ORTHOPEDICS";
+  return null;
+}
+
+function boardIdForInboundTrackLane(
+  lane: "ORTHOPEDICS" | "ORTHODONTICS",
+): string {
+  return lane === "ORTHODONTICS"
+    ? KANBAN_BOARD_ORTHODONTICS_ID
+    : KANBAN_BOARD_ORTHOPEDICS_ID;
+}
+
 /**
  * Ставит linked-карточку в колонку и порядок как в Kaiten (только снимок канбана, не Order).
+ * `trackLane` — пространство Kaiten: перенос между «Ортопедия» / «Ортодонтия».
  */
 export function applyKaitenPositionToKanbanState(
   state: KanbanAppState,
@@ -69,6 +91,7 @@ export function applyKaitenPositionToKanbanState(
   opts: {
     columnTitle: string | null;
     sortOrder?: number | null;
+    trackLane?: string | null;
   },
 ): boolean {
   const loc = findCardByLinkedOrderId(state, orderId);
@@ -88,6 +111,29 @@ export function applyKaitenPositionToKanbanState(
   ) {
     card.kaitenCardSortOrder = opts.sortOrder;
     changed = true;
+  }
+
+  const inboundLane = normalizeInboundTrackLane(opts.trackLane);
+  if (inboundLane) {
+    const wantBoardId = boardIdForInboundTrackLane(inboundLane);
+    const targetBoard = state.boards.find((b) => b.id === wantBoardId);
+    if (targetBoard?.columns.length && targetBoard.id !== board.id) {
+      fromCol.cards = fromCol.cards.filter((c) => c.id !== card.id);
+      const toCol = resolveKanbanColumnByKaitenTitle(
+        targetBoard,
+        opts.columnTitle,
+      );
+      toCol.cards.unshift(card);
+      card.trackLane = inboundLane;
+      changed = true;
+      sortLinkedCardsInColumn(fromCol);
+      sortLinkedCardsInColumn(toCol);
+      return changed;
+    }
+    if (card.trackLane !== inboundLane) {
+      card.trackLane = inboundLane;
+      changed = true;
+    }
   }
 
   const toCol = resolveKanbanColumnByKaitenTitle(board, opts.columnTitle);

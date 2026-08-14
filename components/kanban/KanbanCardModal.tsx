@@ -200,6 +200,8 @@ type KanbanCardModalProps = {
   onMovePrevStage: (id: string) => void;
   onMoveNextStage: (id: string) => void;
   onMoveToColumn?: (cardId: string, targetColumnId: string) => void;
+  /** Боевой режим: перенос на доску ортопедия/ортодонтия + PATCH Kaiten. */
+  onChangeTrackLane?: (cardId: string, lane: string) => void;
   /** Копирует в буфер ссылку на карточку (как в меню на доске). */
   onCopyCardLink: (cardId: string) => void;
   /** Если задано — список дорожек вместо ортопедия/ортодонтия (демо: одна доска). */
@@ -252,6 +254,7 @@ export function KanbanCardModal({
   onMovePrevStage,
   onMoveNextStage,
   onMoveToColumn,
+  onChangeTrackLane,
   onCopyCardLink,
   trackLaneOptions,
   trackLaneFieldLabel,
@@ -1756,9 +1759,18 @@ export function KanbanCardModal({
                   <select
                     className={baseInput}
                     disabled={!canEditTrack}
+                    title={
+                      canEditTrack
+                        ? undefined
+                        : "Нет права менять положение на доске"
+                    }
                     value={card.trackLane || ""}
                     onChange={(e) => {
                       const v = e.target.value;
+                      if (onChangeTrackLane && cardId) {
+                        onChangeTrackLane(cardId, v);
+                        return;
+                      }
                       onApply((b) => {
                         const fc = findCard(b, cardId);
                         if (!fc) return;

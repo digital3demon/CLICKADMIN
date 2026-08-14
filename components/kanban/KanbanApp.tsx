@@ -73,6 +73,7 @@ import {
   applyAggregateCardDrag,
   type AggregateCardDragArgs,
 } from "@/lib/kanban/aggregate-card-drag";
+import { applyKanbanCardTrackLaneChange } from "@/lib/kanban/apply-card-track-lane";
 import { kanbanLinkedOrdersPullIntervalMs } from "@/lib/kanban-linked-pull-ms";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
@@ -458,7 +459,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const optimisticKaitenColumnMovesRef = useRef(
     new Map<
       string,
-      { columnTitle?: string; sortOrder: number; until: number }
+      {
+        columnTitle?: string;
+        sortOrder: number;
+        kaitenTrackLane?: KaitenTrackLane;
+        until: number;
+      }
     >(),
   );
   const router = useRouter();
@@ -479,6 +485,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           ...row,
           ...(opt.columnTitle?.trim()
             ? { kaitenColumnTitle: opt.columnTitle.trim() }
+            : {}),
+          ...(opt.kaitenTrackLane
+            ? { kaitenTrackLane: opt.kaitenTrackLane }
             : {}),
           kaitenCardSortOrder: opt.sortOrder,
         };
@@ -1358,6 +1367,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       optimisticKaitenColumnMovesRef.current.set(args.orderId, {
         columnTitle: args.columnTitle,
         sortOrder: args.sortOrder,
+        ...(args.kaitenTrackLane != null
+          ? { kaitenTrackLane: args.kaitenTrackLane }
+          : {}),
         until: Date.now() + 45_000,
       });
       try {
@@ -1388,6 +1400,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         optimisticKaitenColumnMovesRef.current.set(args.orderId, {
           columnTitle: args.columnTitle,
           sortOrder: args.sortOrder,
+          ...(args.kaitenTrackLane != null
+            ? { kaitenTrackLane: args.kaitenTrackLane }
+            : {}),
           until: Date.now() + 12_000,
         });
       } catch {
@@ -2122,6 +2137,66 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     [appState, activityActorLabel, isDemo, kanbanCardPerms.moveColumns, kanbanSessionUserId, showToast, syncKaitenMirrorAfterKanbanMove],
   );
 
+  const moveCardToTrackLane = useCallback(
+    (cardId: string, lane: string) => {
+      if (!kanbanCardPerms.editTrack) {
+        showToast("Нет права менять положение на доске", true);
+        return;
+      }
+      if (!appState) return;
+      const found = findCardInAppState(appState, cardId);
+      if (!found) return;
+      const cardSnapshot = found.card;
+      let moved: { columnTitle: string; sortOrder: number } | undefined;
+      setAppState((s) => {
+        if (!s) return s;
+        const next = structuredClone(s);
+        const sid = kanbanSessionUserId?.trim();
+        const activityUserId =
+          sid ||
+          getActiveBoard(s).users[0]?.id ||
+          s.boards.find((b) => !isKanbanAggregateBoardId(b.id))?.users[0]?.id ||
+          "";
+        const res = applyKanbanCardTrackLaneChange(next, cardId, lane, {
+          activityUserId,
+          activityActorLabel,
+        });
+        if (!res.ok) return s;
+        moved = { columnTitle: res.columnTitle, sortOrder: res.sortOrder };
+        return isDemo ? normalizeDemoKanbanAppState(next) : next;
+      });
+      if (!moved) return;
+      if (
+        !isDemo &&
+        cardSnapshot.linkedOrderId &&
+        typeof cardSnapshot.kaitenCardId === "number" &&
+        Number.isFinite(cardSnapshot.kaitenCardId)
+      ) {
+        const kaitenTrackLane: KaitenTrackLane =
+          lane === "ORTHODONTICS" ? "ORTHODONTICS" : "ORTHOPEDICS";
+        void syncKaitenMirrorAfterKanbanMove({
+          orderId: cardSnapshot.linkedOrderId,
+          kaitenCardId: cardSnapshot.kaitenCardId,
+          columnTitle: moved.columnTitle,
+          kaitenTrackLane,
+          sortOrder: moved.sortOrder,
+        });
+      }
+      showToast(
+        `Доска: «${lane === "ORTHODONTICS" ? "Ортодонтия" : "Ортопедия"}»`,
+      );
+    },
+    [
+      appState,
+      activityActorLabel,
+      isDemo,
+      kanbanCardPerms.editTrack,
+      kanbanSessionUserId,
+      showToast,
+      syncKaitenMirrorAfterKanbanMove,
+    ],
+  );
+
   const enrichProductionChecklistForChild = useCallback(async (boardId: string, childId: string) => {
     const cur = appStateRef.current;
     if (!cur) return;
@@ -2780,6 +2855,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 setCardModalId(id);
               }
             : undefined
+        }
+        onChangeTrackLane={
+          isDemo
+            ? undefined
+            : (id, lane) => {
+                moveCardToTrackLane(id, lane);
+                setCardModalId(id);
+              }
         }
         onCopyCardLink={copyCardLink}
         canMoveColumns={kanbanCardPerms.moveColumns}

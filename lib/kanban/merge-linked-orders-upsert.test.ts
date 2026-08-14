@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
 import {
   defaultAppState,
+  KANBAN_BOARD_ORTHODONTICS_ID,
+  KANBAN_BOARD_ORTHOPEDICS_ID,
   mergeKaitenLinkedOrdersIntoAppState,
 } from "@/lib/kanban/model";
 import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
@@ -80,5 +82,29 @@ describe("mergeKaitenLinkedOrdersIntoAppState upsertOnly", () => {
     );
     expect(findCardByLinkedOrderId(replaced, "order-a")).not.toBeNull();
     expect(findCardByLinkedOrderId(replaced, "order-b")).toBeNull();
+  });
+
+  it("moves card to orthodontics when order kaitenTrackLane changes", () => {
+    const base = defaultAppState();
+    const onOrtho = mergeKaitenLinkedOrdersIntoAppState(
+      base,
+      [sampleRow("order-a", { kaitenTrackLane: "ORTHOPEDICS", kaitenCardId: 1 })],
+      { mode: "upsertOnly" },
+    );
+    const loc1 = findCardByLinkedOrderId(onOrtho, "order-a")!;
+    expect(onOrtho.boards[loc1.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
+
+    const onOdon = mergeKaitenLinkedOrdersIntoAppState(
+      onOrtho,
+      [sampleRow("order-a", { kaitenTrackLane: "ORTHODONTICS", kaitenCardId: 1 })],
+      { mode: "upsertOnly" },
+    );
+    const loc2 = findCardByLinkedOrderId(onOdon, "order-a")!;
+    expect(onOdon.boards[loc2.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+    const moved =
+      onOdon.boards[loc2.boardIndex]!.columns[loc2.columnIndex]!.cards[
+        loc2.cardIndex
+      ]!;
+    expect(moved.trackLane).toBe("ORTHODONTICS");
   });
 });
