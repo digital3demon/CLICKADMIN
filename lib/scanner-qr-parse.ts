@@ -86,6 +86,42 @@ export function parseScannerQrPayload(raw: string): ParsedScannerQr {
   return { kind: "unknown" };
 }
 
+/** Hub / Kaiten / голый YYMM-NNN — то, что CRM умеет резолвить. */
+export function isCrmUsefulScannerQr(text: string): boolean {
+  const t = String(text ?? "").trim();
+  if (!t) return false;
+  const parsed = parseScannerQrPayload(t);
+  if (parsed.kind === "hub" || parsed.kind === "kaiten") return true;
+  if (/^\d{4}-\d{3}$/.test(t)) return true;
+  return false;
+}
+
+/**
+ * DataMatrix/GS1 производителя (абатмент Geo и т.п.) — не наряд.
+ * Пример с фото: (01)08800028717599(10)260429-LS80(11)260429
+ */
+export function isManufacturerOrNoiseBarcode(text: string): boolean {
+  const t = String(text ?? "").trim();
+  if (!t) return true;
+  if (isCrmUsefulScannerQr(t)) return false;
+  if (t.startsWith("(01)") || /^01\d{13}/.test(t)) return true;
+  if (/^\d{6}-[A-Za-z0-9]{2,}$/.test(t)) return true;
+  if (/^\d{12,}$/.test(t)) return true;
+  return false;
+}
+
+/** Среди нескольких QR на кадре берём витрину/Kaiten, не GS1. */
+export function pickPreferredScannerQr(texts: string[]): string | null {
+  const cleaned = texts.map((t) => String(t ?? "").trim()).filter(Boolean);
+  for (const t of cleaned) {
+    if (isCrmUsefulScannerQr(t)) return t;
+  }
+  for (const t of cleaned) {
+    if (!isManufacturerOrNoiseBarcode(t)) return t;
+  }
+  return null;
+}
+
 export type ScannerOrderResolveOk = {
   ok: true;
   orderId: string;

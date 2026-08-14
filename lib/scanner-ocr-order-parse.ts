@@ -14,14 +14,32 @@ const ORDER_NUM_IN_TEXT_RE =
 const KAITEN_URL_RE =
   /(?:https?:\/\/)?(?:[\w.-]+\.)?kaiten\.ru\/(?:card\/)?(\d{4,})/gi;
 
+function isPlausibleOrderYymm(yymm: string): boolean {
+  if (yymm.length !== 4) return false;
+  const yy = Number(yymm.slice(0, 2));
+  const mm = Number(yymm.slice(2, 4));
+  return yy >= 20 && yy <= 39 && mm >= 1 && mm <= 12;
+}
+
+/** LOT абатмента 260429-LS80 не должен стать «нарядом» 2604-291. */
+function isLotCodeCollision(text: string, yymm: string, start: number): boolean {
+  const around = text.slice(Math.max(0, start - 2), start + 16);
+  return new RegExp(
+    `${yymm}\\d{2}\\s*[-–—−]\\s*[A-Za-z]`,
+  ).test(around);
+}
+
 export function extractOrderNumbersFromOcrText(raw: string): string[] {
   const text = String(raw ?? "");
   if (!text.trim()) return [];
   const found: string[] = [];
   const seen = new Set<string>();
   for (const m of text.matchAll(ORDER_NUM_IN_TEXT_RE)) {
-    const num = `${m[1]}-${m[2]}`;
+    const yymm = m[1] ?? "";
+    const num = `${yymm}-${m[2]}`;
     if (!ORDER_NUMBER_PATTERN.test(num)) continue;
+    if (!isPlausibleOrderYymm(yymm)) continue;
+    if (isLotCodeCollision(text, yymm, m.index ?? 0)) continue;
     if (seen.has(num)) continue;
     seen.add(num);
     found.push(num);
@@ -43,9 +61,18 @@ export function pickBestOrderNumberFromOcr(raw: string): string | null {
     let score = 100 - index; // раньше в тексте — выше
     if (m) {
       const yymm = m[1] ?? "";
-      const yy = Number(yymm.slice(0, 2));
-      const mm = Number(yymm.slice(2, 4));
-      if (yy >= 20 && yy <= 39 && mm >= 1 && mm <= 12) score += 50;
+      if (isPlausibleOrderYymm(yymm)) score += 50;
+    }
+    const idx = raw.indexOf(n);
+    const window = raw.slice(Math.max(0, idx - 28), idx).toLowerCase();
+    // «№ заказа» на этикетке отгрузки (кириллица; OCR: n3ak / 3aka3)
+    if (
+      /заказ/.test(window) ||
+      /n3ak/.test(window) ||
+      /3aka3/.test(window) ||
+      /№\s*зак/.test(window)
+    ) {
+      score += 30;
     }
     return { n, score };
   });

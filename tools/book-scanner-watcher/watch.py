@@ -272,6 +272,7 @@ def _qr_candidates(img: np.ndarray) -> list[np.ndarray]:
         out.append(img[0 : h // 2, w // 2 :])
         out.append(img[0 : max(1, int(h * 0.45)), max(0, int(w * 0.45)) :])
         out.append(img[h // 2 :, w // 2 :])
+        out.append(img[int(h * 0.45) :, int(w * 0.45) :])
         out.append(img[:, w // 2 :])
     # Крупные белые прямоугольники (этикетка) + правая треть
     try:
@@ -287,13 +288,13 @@ def _qr_candidates(img: np.ndarray) -> list[np.ndarray]:
         for c in cnts:
             x, y, bw, bh = cv2.boundingRect(c)
             area = bw * bh
-            if area < (w * h) * 0.015:
+            if area < (w * h) * 0.004:
                 continue
             if bw < 50 or bh < 30:
                 continue
             boxes.append((area, x, y, bw, bh))
         boxes.sort(reverse=True)
-        for _area, x, y, bw, bh in boxes[:4]:
+        for _area, x, y, bw, bh in boxes[:6]:
             pad = 6
             x0, y0 = max(0, x - pad), max(0, y - pad)
             x1, y1 = min(w, x + bw + pad), min(h, y + bh + pad)
@@ -512,27 +513,45 @@ def _ocr_text_from_bgr(img: np.ndarray) -> str:
     return " ".join(parts)
 
 
+def _is_plausible_order_yymm(yymm: str) -> bool:
+    if len(yymm) != 4 or not yymm.isdigit():
+        return False
+    yy, mm = int(yymm[:2]), int(yymm[2:])
+    return 20 <= yy <= 39 and 1 <= mm <= 12
+
+
+def _is_lot_code_collision(text: str, yymm: str, start: int) -> bool:
+    """LOT абатмента 260429-LS80 не должен стать «нарядом» 2604-291."""
+    around = text[max(0, start - 2) : start + 16]
+    return bool(re.search(rf"{re.escape(yymm)}\d{{2}}\s*[-–—−]\s*[A-Za-z]", around))
+
+
+def _order_has_sticker_context(text: str, start: int) -> bool:
+    window = text[max(0, start - 28) : start].lower()
+    return any(
+        token in window
+        for token in ("zakaz", "заказ", "3aka3", "n3ak", "№ зак", "n зак")
+    )
+
+
 def pick_order_number_from_text(raw: str) -> str | None:
     found: list[tuple[int, int, str]] = []  # (score, index, num)
     seen: set[str] = set()
     text = raw or ""
     for i, m in enumerate(_ORDER_OCR_RE.finditer(text)):
-        num = f"{m.group(1)}-{m.group(2)}"
+        yymm = m.group(1)
+        num = f"{yymm}-{m.group(2)}"
         if num in seen:
             continue
+        if not _is_plausible_order_yymm(yymm):
+            continue
+        if _is_lot_code_collision(text, yymm, m.start()):
+            continue
         seen.add(num)
-        yymm, _, _nn = num.partition("-")
-        score = i  # позже в тексте (стикер: «№ заказа» внизу) — выше
-        if len(yymm) == 4:
-            try:
-                yy, mm = int(yymm[:2]), int(yymm[2:])
-            except ValueError:
-                yy, mm = -1, -1
-            if 20 <= yy <= 39 and 1 <= mm <= 12:
-                score += 50
-        # бонус за контекст «заказ» рядом (OCR часто искажает, но цифры есть)
-        window = text[max(0, m.start() - 24) : m.start()].lower()
-        if "zakaz" in window or "заказ" in window or "3aka3" in window or "n3ak" in window:
+        # позже в тексте (стикер: «№ заказа» внизу) — выше
+        score = i
+        score += 50
+        if _order_has_sticker_context(text, m.start()):
             score += 20
         found.append((score, i, num))
     if not found:
@@ -582,7 +601,7 @@ def _white_label_crops(img: np.ndarray) -> list[np.ndarray]:
         for c in cnts:
             x, y, bw, bh = cv2.boundingRect(c)
             area = bw * bh
-            if area < (w * h) * 0.015:
+            if area < (w * h) * 0.004:
                 continue
             if bw < 80 or bh < 40:
                 continue
@@ -591,7 +610,7 @@ def _white_label_crops(img: np.ndarray) -> list[np.ndarray]:
                 continue
             boxes.append((area, x, y, bw, bh))
         boxes.sort(reverse=True)
-        for _area, x, y, bw, bh in boxes[:3]:
+        for _area, x, y, bw, bh in boxes[:5]:
             pad = 4
             x0, y0 = max(0, x - pad), max(0, y - pad)
             x1, y1 = min(w, x + bw + pad), min(h, y + bh + pad)
@@ -611,6 +630,9 @@ def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
         return None, None
     h, w = img.shape[:2]
     crops: list[np.ndarray] = []
+    # Мелкая этикетка отгрузки часто справа снизу (крупная бирка производителя — слева)
+    if h > 4 and w > 4:
+        crops.append(img[int(h * 0.45) :, int(w * 0.45) :])
     crops.extend(_white_label_crops(img))
     crops.extend(
         [
@@ -629,7 +651,15 @@ def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
             blob_all += " " + text
             order_n = pick_order_number_from_text(blob_all)
             kaiten = pick_kaiten_url_from_text(blob_all)
-            if order_n or kaiten:
+            # Ранний выход только если номер с контекстом «заказ» — иначе
+            # крупная бирка Geo даёт ложный YYMM раньше мелкого стикера.
+            confident = False
+            if order_n:
+                idx = blob_all.find(order_n.replace("-", ""))
+                if idx < 0:
+                    idx = blob_all.find(order_n)
+                confident = idx >= 0 and _order_has_sticker_context(blob_all, idx)
+            if confident:
                 logging.info(
                     "local OCR %s → order=%s kaiten=%s (%.1fs)",
                     path.name,
@@ -638,6 +668,17 @@ def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
                     time.time() - t0,
                 )
                 return order_n, kaiten
+    order_n = pick_order_number_from_text(blob_all)
+    kaiten = pick_kaiten_url_from_text(blob_all)
+    if order_n or kaiten:
+        logging.info(
+            "local OCR %s → order=%s kaiten=%s (%.1fs)",
+            path.name,
+            order_n,
+            "yes" if kaiten else "no",
+            time.time() - t0,
+        )
+        return order_n, kaiten
     logging.info(
         "local OCR %s: no match (%.1fs, chars=%s)",
         path.name,

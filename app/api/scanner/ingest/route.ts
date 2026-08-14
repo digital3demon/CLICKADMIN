@@ -24,6 +24,7 @@ import {
   detectImageMagic,
   mimeForImageMagic,
 } from "@/lib/scanner-image-qr-decode";
+import { pickPreferredScannerQr } from "@/lib/scanner-qr-parse";
 import {
   resolveOrderFromOrderNumber,
   resolveOrderFromScannerQr,
@@ -294,9 +295,10 @@ export async function POST(req: Request) {
           hint = hintRaw;
         }
       }
-      const qrText = (qrFromImage || hint).trim();
+      const usefulQr =
+        pickPreferredScannerQr([qrFromImage, hint].filter(Boolean)) ?? "";
 
-      if (!qrText) {
+      if (!usefulQr) {
         console.info("[scanner/ingest]", {
           step: "client_hint_required",
           keyId: apiKey.keyId,
@@ -314,14 +316,25 @@ export async function POST(req: Request) {
         );
       }
 
-      resolved = await resolveOrderFromScannerQr(qrText, apiKey.tenantId);
+      resolved = await resolveOrderFromScannerQr(usefulQr, apiKey.tenantId);
       if (!resolved.ok) {
         console.info("[scanner/ingest]", {
           step: "qr_order_missing",
           keyId: apiKey.keyId,
+          reason: resolved.reason,
           decodeMs,
           ms: Date.now() - t0,
         });
+        if (resolved.reason === "unknown_qr") {
+          return NextResponse.json(
+            {
+              error: "client_hint_required",
+              detail:
+                "QR на фото не от наряда (часто этикетка производителя). Укажите номер вручную",
+            },
+            { status: 422 },
+          );
+        }
         return NextResponse.json(
           {
             error: "order_not_found",

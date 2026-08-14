@@ -32,6 +32,18 @@ describe("extractOrderNumbersFromOcrText", () => {
       ),
     ).toEqual(["2608-001"]);
   });
+
+  it("этикетка «№ заказа» с кириллицей до и после", () => {
+    const raw =
+      "Клиника Атрибут РЕМИ Пациент Калашникова Ю. № заказа: 2608-156 Доктор Невский";
+    expect(extractOrderNumbersFromOcrText(raw)).toEqual(["2608-156"]);
+  });
+
+  it("не берёт LOT абатмента 260429-LS80 как наряд", () => {
+    const geo =
+      "Geo Multibase Abutment GM-IFU-KR-03 2025.01.14 LL2-SURO30-H2 260429-LS80 (01)08800028717599(10)260429-LS80(11)260429";
+    expect(extractOrderNumbersFromOcrText(geo)).toEqual([]);
+  });
 });
 
 describe("pickBestOrderNumberFromOcr", () => {
@@ -41,6 +53,12 @@ describe("pickBestOrderNumberFromOcr", () => {
         "2607-390 Шаповалова А. Перчак\nв тексте случайно 1999-001",
       ),
     ).toBe("2607-390");
+  });
+
+  it("на фото с абатментом предпочитает «№ заказа»", () => {
+    const raw =
+      "Geo 260429-LS80 2026.04.29\nКлиника Атрибут РЕМИ\nПациент Калашникова Ю.\n№ заказа: 2608-156";
+    expect(pickBestOrderNumberFromOcr(raw)).toBe("2608-156");
   });
 });
 

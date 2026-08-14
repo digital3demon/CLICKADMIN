@@ -2,6 +2,7 @@ import "server-only";
 
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import jsQR from "jsqr";
+import { pickPreferredScannerQr } from "@/lib/scanner-qr-parse";
 
 const SCANNER_MAX_DECODE_EDGE = 2000;
 
@@ -107,38 +108,32 @@ export async function decodeQrFromImageBuffer(
   const full = createCanvas(w, h);
   const ctx = full.getContext("2d");
   ctx.drawImage(img, 0, 0, w, h);
-  const fullData = ctx.getImageData(0, 0, w, h);
-  const fromFull = decodeQrFromRgba(
-    fullData.data as unknown as Uint8ClampedArray,
-    w,
-    h,
-  );
-  if (fromFull) return fromFull;
 
-  // Верхняя половина — наряд/этикетка на книжных сканах
+  const found: string[] = [];
+  const pushCrop = (sx: number, sy: number, sw: number, sh: number) => {
+    const cw = Math.max(1, sw);
+    const ch = Math.max(1, sh);
+    const c = createCanvas(cw, ch);
+    const cctx = c.getContext("2d");
+    cctx.drawImage(full, sx, sy, cw, ch, 0, 0, cw, ch);
+    const data = cctx.getImageData(0, 0, cw, ch);
+    const text = decodeQrFromRgba(
+      data.data as unknown as Uint8ClampedArray,
+      cw,
+      ch,
+    );
+    if (text) found.push(text);
+  };
+
+  pushCrop(0, 0, w, h);
+  // Книжный скан: шапка сверху; фото отгрузки: этикетка часто справа снизу
   const topH = Math.max(1, Math.floor(h / 2));
-  const top = createCanvas(w, topH);
-  const tctx = top.getContext("2d");
-  tctx.drawImage(full, 0, 0, w, topH, 0, 0, w, topH);
-  const topData = tctx.getImageData(0, 0, w, topH);
-  const fromTop = decodeQrFromRgba(
-    topData.data as unknown as Uint8ClampedArray,
-    w,
-    topH,
-  );
-  if (fromTop) return fromTop;
-
-  // Правый верх (QR на печатном наряде обычно справа)
+  pushCrop(0, 0, w, topH);
+  pushCrop(0, topH, w, h - topH);
   const qx = Math.floor(w * 0.45);
   const qw = Math.max(1, w - qx);
-  const qh = Math.max(1, Math.floor(h * 0.45));
-  const corner = createCanvas(qw, qh);
-  const cctx = corner.getContext("2d");
-  cctx.drawImage(full, qx, 0, qw, qh, 0, 0, qw, qh);
-  const cornerData = cctx.getImageData(0, 0, qw, qh);
-  return decodeQrFromRgba(
-    cornerData.data as unknown as Uint8ClampedArray,
-    qw,
-    qh,
-  );
+  pushCrop(qx, 0, qw, Math.max(1, Math.floor(h * 0.45)));
+  pushCrop(qx, Math.floor(h * 0.45), qw, Math.max(1, h - Math.floor(h * 0.45)));
+
+  return pickPreferredScannerQr(found);
 }

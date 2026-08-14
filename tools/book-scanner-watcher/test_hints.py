@@ -66,6 +66,40 @@ class BarcodePreferTests(unittest.TestCase):
         self.assertTrue(is_manufacturer_or_noise_barcode("250721-LB66"))
         self.assertFalse(is_manufacturer_or_noise_barcode("2608-164"))
 
+    def test_geo_gs1_from_photo_is_noise(self) -> None:
+        gs1 = "(01)08800028717599(10)260429-LS80(11)260429"
+        self.assertTrue(is_manufacturer_or_noise_barcode(gs1))
+        self.assertIsNone(pick_preferred_barcode([gs1]))
+
+
+class GeoLabelVsStickerTests(unittest.TestCase):
+    def test_geo_label_text_does_not_yield_order(self) -> None:
+        geo = (
+            "Geo Multibase Abutment GM-IFU-KR-03 2025.01.14 "
+            "LL2-SURO30-H2 260429-LS80 "
+            "(01)08800028717599(10)260429-LS80(11)260429"
+        )
+        self.assertIsNone(pick_order_number_from_text(geo))
+
+    def test_sticker_order_with_cyrillic_around(self) -> None:
+        raw = (
+            "Клиника Атрибут РЕМИ Адрес Новочеркасский "
+            "Пациент Калашникова Ю. № заказа: 2608-156 Доктор Невский"
+        )
+        self.assertEqual(pick_order_number_from_text(raw), "2608-156")
+
+    def test_mixed_geo_then_sticker_prefers_order(self) -> None:
+        raw = (
+            "Geo 260429-LS80 2026.04.29 "
+            "Клиника Атрибут РЕМИ Пациент Калашникова Ю. "
+            "№ заказа: 2608-156"
+        )
+        self.assertEqual(pick_order_number_from_text(raw), "2608-156")
+
+    def test_invalid_month_from_date_ignored(self) -> None:
+        self.assertIsNone(pick_order_number_from_text("2025-011 Rev.03"))
+        self.assertIsNone(pick_order_number_from_text("2026-042 2026.04.29"))
+
 
 if __name__ == "__main__":
     unittest.main()
