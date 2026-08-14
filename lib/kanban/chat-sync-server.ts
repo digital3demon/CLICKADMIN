@@ -8,6 +8,7 @@ import {
   parseKanbanAppState,
   upsertKaitenCommentsToCard,
 } from "@/lib/kanban/chat-sync";
+import { saveKanbanOrderComments } from "@/lib/kanban/kanban-order-comments-store";
 
 function isTenantClientStateMissing(err: unknown): boolean {
   if (err == null || typeof err !== "object") return false;
@@ -50,6 +51,11 @@ export async function syncKaitenCommentsIntoKanbanState(input: {
 
     card.comments = merged.next;
     card.updatedAt = new Date().toISOString();
+    try {
+      await saveKanbanOrderComments(tenantId, orderId, merged.next);
+    } catch {
+      /* зеркало в kanbanAppStateV3 всё равно пишем */
+    }
     await corePrisma.tenantClientState.upsert({
       where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
       create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },

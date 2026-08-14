@@ -7,7 +7,6 @@ import type { CardComment, KanbanAppState } from "@/lib/kanban/types";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import {
   buildKaitenCommentTextWithCrmAuthor,
-  dedupeParsedKaitenComments,
   kaitenJsonIntId,
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
@@ -20,7 +19,7 @@ import {
   createOrderChatCorrectionIfNeeded,
 } from "@/lib/order-chat-correction-db";
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
-import { ingestKaitenCommentsForOrder, ingestCrmKanbanCommentForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
+import { ingestCrmKanbanCommentForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import {
   bindOrderChatInboxItemsByCrmDraft,
   markOrderChatInboxDraftSyncFailed,
@@ -29,11 +28,13 @@ import { advanceKaitenLabMentionWaterlineOnly } from "@/lib/order-kaiten-lab-men
 import {
   commentBodyDedupKey,
   compactCardComments,
-  upsertKaitenCommentsToCard,
 } from "@/lib/kanban/chat-sync";
-import { textIncludesAdminLabMention } from "@/lib/kaiten-comment-parse";
-import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
-import { isKanbanChatLocalOnlyRequest } from "@/lib/kanban/kanban-chat-local-query";
+import { resolveLinkedOrderKanbanDescription } from "@/lib/kanban/kaiten-linked-order";
+import {
+  loadKanbanOrderComments,
+  mergeKanbanOrderComments,
+  saveKanbanOrderComments,
+} from "@/lib/kanban/kanban-order-comments-store";
 import { normalizeProductionSettings } from "@/lib/kanban/production";
 import { notifyTelegramForKanbanChatMentions } from "@/lib/kanban-chat-mention-telegram.server";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
@@ -67,6 +68,10 @@ async function loadOrderChatHeader(orderId: string, tenantId: string) {
     select: {
       orderNumber: true,
       patientName: true,
+      clientOrderText: true,
+      notes: true,
+      kaitenCardId: true,
+      kaitenCardDescriptionMirror: true,
       doctor: { select: { fullName: true } },
     },
   });
@@ -77,6 +82,16 @@ async function loadOrderChatHeader(orderId: string, tenantId: string) {
       ? personNameSurnameInitials(row.patientName)
       : null,
     doctorName: personNameSurnameInitials(row.doctor.fullName) || null,
+    kaitenCardId: row.kaitenCardId,
+    description: resolveLinkedOrderKanbanDescription(
+      {
+        clientOrderText: row.clientOrderText,
+        notes: row.notes,
+        kaitenCardId: row.kaitenCardId,
+        kaitenCardDescriptionMirror: row.kaitenCardDescriptionMirror,
+      },
+      false,
+    ),
   };
 }
 
@@ -243,78 +258,6 @@ async function saveTenantKanbanStateWithRetry(
   return updated.count > 0;
 }
 
-type ParsedKaitenComment = NonNullable<ReturnType<typeof parseKaitenListComment>>;
-
-function kaitenIncomingForSync(parsed: ParsedKaitenComment[]) {
-  return parsed.map((c) => ({
-    id: c.id,
-    text: c.text,
-    created: c.created,
-    authorName: c.authorName,
-    parentId: c.parentId,
-    isCrm: c.isCrm === true,
-    crmDraftId: c.crmDraftId ?? null,
-  }));
-}
-
-function kaitenParsedToDisplayComments(parsed: ParsedKaitenComment[]): CardComment[] {
-  const merged = upsertKaitenCommentsToCard([], kaitenIncomingForSync(parsed));
-  return normalizeCardCommentsForApi(compactCardComments(merged.next));
-}
-
-async function importKaitenCommentsSideEffects(
-  orderId: string,
-  tenantId: string,
-  parsed: ParsedKaitenComment[],
-  kanbanAdminMentionTag: string | null | undefined,
-): Promise<void> {
-  const ordersPrisma = await getOrdersPrisma();
-  await ingestKaitenCommentsForOrder({
-    prisma: ordersPrisma,
-    tenantId,
-    orderId,
-    parsed,
-    kanbanAdminMentionTag,
-  });
-}
-
-async function loadKaitenCommentsFallbackForOrder(
-  tenantId: string,
-  orderId: string,
-): Promise<CardComment[] | null> {
-  const ordersPrisma = await getOrdersPrisma();
-  const order = await ordersPrisma.order.findFirst({
-    where: { id: orderId, tenantId },
-    select: {
-      kaitenCardId: true,
-      tenant: { select: { kanbanAdminMentionTag: true } },
-    },
-  });
-  if (order?.kaitenCardId == null || !Number.isFinite(order.kaitenCardId)) {
-    return null;
-  }
-  const auth = getKaitenRestAuth();
-  if (!auth) return null;
-  const list = await kaitenListComments(auth, order.kaitenCardId);
-  if (!list.ok) return null;
-  const parsed = dedupeParsedKaitenComments(
-    list.comments
-      .map(parseKaitenListComment)
-      .filter((x): x is ParsedKaitenComment => x != null),
-  );
-  try {
-    await importKaitenCommentsSideEffects(
-      orderId,
-      tenantId,
-      parsed,
-      order.tenant?.kanbanAdminMentionTag,
-    );
-  } catch (e) {
-    console.error("[kanban-chat GET] Kaiten fallback import", orderId, e);
-  }
-  return kaitenParsedToDisplayComments(parsed);
-}
-
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -332,143 +275,43 @@ export async function GET(
   if (!orderId) {
     return NextResponse.json({ error: "Не указан id" }, { status: 400 });
   }
-  const localOnly = isKanbanChatLocalOnlyRequest(new URL(req.url));
   const orderHeader = await loadOrderChatHeader(orderId, tenantId);
+  const storedComments = await loadKanbanOrderComments(tenantId, orderId);
   const statePayload = await loadTenantKanbanState(tenantId);
   const state = statePayload.state;
   if (!state) {
-    if (localOnly) {
-      return NextResponse.json({
-        ok: true,
-        mode: "kanban",
-        hasCard: false,
-        comments: [],
-        cardImages: [],
-        orderHeader,
-      });
-    }
-    const fallbackComments = await loadKaitenCommentsFallbackForOrder(tenantId, orderId);
     return NextResponse.json({
       ok: true,
-      mode: fallbackComments ? "kaiten-fallback" : "kanban",
+      mode: "kanban",
       hasCard: false,
-      comments: fallbackComments ?? [],
+      comments: normalizeCardCommentsForApi(storedComments),
       cardImages: [],
       orderHeader,
+      description: orderHeader?.description ?? "",
     });
   }
   const loc = findCardByLinkedOrderId(state, orderId);
   if (!loc) {
-    if (localOnly) {
-      return NextResponse.json({
-        ok: true,
-        mode: "kanban",
-        hasCard: false,
-        comments: [],
-        cardImages: [],
-        orderHeader,
-      });
-    }
-    const fallbackComments = await loadKaitenCommentsFallbackForOrder(tenantId, orderId);
     return NextResponse.json({
       ok: true,
-      mode: fallbackComments ? "kaiten-fallback" : "kanban",
+      mode: "kanban",
       hasCard: false,
-      comments: fallbackComments ?? [],
+      comments: normalizeCardCommentsForApi(storedComments),
       cardImages: [],
       orderHeader,
+      description: orderHeader?.description ?? "",
     });
   }
 
-  const ordersPrisma = await getOrdersPrisma();
-  const orderMeta = await ordersPrisma.order.findFirst({
-    where: { id: orderId, tenantId },
-    select: {
-      kaitenCardId: true,
-      tenant: { select: { kanbanAdminMentionTag: true } },
-    },
-  });
-
-  let workingState = state;
-  let workingUpdatedAt = statePayload.updatedAt;
-  let workingLoc = loc;
-  let card =
-    workingState.boards[workingLoc.boardIndex]!.columns[workingLoc.columnIndex]!
-      .cards[workingLoc.cardIndex]!;
-  const cardKaitenId =
-    card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)
-      ? (card.kaitenCardId as number)
-      : null;
-  const orderKaitenId =
-    orderMeta?.kaitenCardId != null && Number.isFinite(orderMeta.kaitenCardId)
-      ? orderMeta.kaitenCardId
-      : null;
-  /** Карточка CRM иногда без kaitenCardId — берём id с наряда. */
-  const resolvedKaitenId = cardKaitenId ?? orderKaitenId;
-  const linkedKaiten = resolvedKaitenId != null;
-
-  if (!localOnly && resolvedKaitenId != null) {
-    const auth = getKaitenRestAuth();
-    if (auth) {
-      const list = await kaitenListComments(auth, resolvedKaitenId);
-      if (list.ok) {
-        const parsed = dedupeParsedKaitenComments(
-          list.comments
-            .map(parseKaitenListComment)
-            .filter((x): x is NonNullable<typeof x> => x != null),
-        );
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          if (attempt > 0) {
-            const reloaded = await loadTenantKanbanState(tenantId);
-            if (!reloaded.state) break;
-            const relLoc = findCardByLinkedOrderId(reloaded.state, orderId);
-            if (!relLoc) break;
-            workingState = reloaded.state;
-            workingUpdatedAt = reloaded.updatedAt;
-            workingLoc = relLoc;
-            card =
-              workingState.boards[workingLoc.boardIndex]!.columns[
-                workingLoc.columnIndex
-              ]!.cards[workingLoc.cardIndex]!;
-          }
-          const merged = upsertKaitenCommentsToCard(
-            card.comments || [],
-            kaitenIncomingForSync(parsed),
-          );
-          const compacted = compactCardComments(merged.next);
-          const needPersist =
-            merged.changed ||
-            compacted.length !== (card.comments || []).length ||
-            (cardKaitenId == null && orderKaitenId != null);
-          if (!needPersist) break;
-          card.comments = compacted;
-          if (cardKaitenId == null && orderKaitenId != null) {
-            card.kaitenCardId = orderKaitenId;
-          }
-          card.updatedAt = nowIso();
-          const saved = await saveTenantKanbanStateWithRetry(
-            tenantId,
-            workingState,
-            workingUpdatedAt,
-          );
-          if (saved) break;
-        }
-        try {
-          await importKaitenCommentsSideEffects(
-            orderId,
-            tenantId,
-            parsed,
-            orderMeta?.tenant?.kanbanAdminMentionTag,
-          );
-        } catch (e) {
-          console.error("[kanban-chat GET] Kaiten trigger import", orderId, e);
-        }
-      }
-    }
-  }
+  const card =
+    state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
+  const linkedKaiten =
+    (card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)) ||
+    (orderHeader?.kaitenCardId != null &&
+      Number.isFinite(orderHeader.kaitenCardId));
 
   const comments = normalizeCardCommentsForApi(
-    compactCardComments(card.comments || []),
+    mergeKanbanOrderComments(card.comments || [], storedComments),
   );
   const cardImages = (card.files || [])
     .filter((f) => String(f.mime || "").toLowerCase().startsWith("image/"))
@@ -484,10 +327,11 @@ export async function GET(
     hasCard: true,
     comments,
     cardImages,
-    boardId: workingState.boards[workingLoc.boardIndex]!.id,
+    boardId: state.boards[loc.boardIndex]!.id,
     cardId: card.id,
     linkedKaiten,
     orderHeader,
+    description: orderHeader?.description ?? "",
   });
 }
 
@@ -582,6 +426,11 @@ export async function POST(
       card.updatedAt = nowIso();
       const saved = await saveTenantKanbanStateWithRetry(tenantId, next, loaded.updatedAt);
       if (!saved) continue;
+      try {
+        await saveKanbanOrderComments(tenantId, orderId, card.comments || []);
+      } catch (e) {
+        console.error("[kanban-chat POST] persist CRM comments", orderId, e);
+      }
       return NextResponse.json({ ok: true, comment: synced });
     }
     const authorLabel = userActivityDisplayLabel({
@@ -649,6 +498,11 @@ export async function POST(
 
     const saved = await saveTenantKanbanStateWithRetry(tenantId, next, loaded.updatedAt);
     if (!saved) continue;
+    try {
+      await saveKanbanOrderComments(tenantId, orderId, card.comments || []);
+    } catch (e) {
+      console.error("[kanban-chat POST] persist CRM comments", orderId, e);
+    }
 
     // Повтор того же текста (double-submit) — отдаём уже созданный комментарий без 2-го TG/inbox.
     if (!isNewComment) {
@@ -719,6 +573,11 @@ export async function POST(
       if (!savedAfterSync) {
         if (row.syncStatus === "synced") row.syncStatus = "failed";
         continue;
+      }
+      try {
+        await saveKanbanOrderComments(tenantId, orderId, card.comments || []);
+      } catch (e) {
+        console.error("[kanban-chat POST] persist CRM comments after sync", orderId, e);
       }
     }
 

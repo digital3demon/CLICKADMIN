@@ -22,27 +22,35 @@ type KaitenSnapshotComment = {
  * `displayUserId` — запасной userId для верстки; подпись берётся из `authorLabel`.
  */
 /**
- * Лента чата из CRM-канбана (GET /kanban-chat): сервер подмешивает Kaiten и пишет в tenant state.
+ * Лента и описание из CRM (GET /kanban-chat?local=1). Kaiten не ждём — он фоновое зеркало.
  */
 export async function fetchKanbanMirrorCommentsForOrder(
   orderId: string,
-): Promise<{ ok: true; comments: CardComment[] } | { ok: false }> {
+): Promise<
+  | { ok: true; comments: CardComment[]; description: string }
+  | { ok: false }
+> {
   try {
-    const res = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+    const res = await fetch(`/api/orders/${orderId}/kanban-chat?local=1`, {
       credentials: "include",
       cache: "no-store",
     });
     const data = (await res.json().catch(() => ({}))) as {
       hasCard?: boolean;
       comments?: CardComment[];
+      description?: string;
+      orderHeader?: { description?: string };
     };
     if (!res.ok || !Array.isArray(data.comments)) {
       return { ok: false };
     }
-    if (data.comments.length === 0 && data.hasCard !== true) {
-      return { ok: false };
-    }
-    return { ok: true, comments: data.comments };
+    const description =
+      typeof data.description === "string"
+        ? data.description
+        : typeof data.orderHeader?.description === "string"
+          ? data.orderHeader.description
+          : "";
+    return { ok: true, comments: data.comments, description };
   } catch {
     return { ok: false };
   }

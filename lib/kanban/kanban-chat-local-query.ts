@@ -1,6 +1,6 @@
 /**
  * GET /api/orders/:id/kanban-chat?local=1 (или sync=0):
- * только зеркало CRM-канбана, без live Kaiten sync/fallback.
+ * только CRM (наряд + persisted чат). Live Kaiten на GET больше не вызывается.
  */
 export function isKanbanChatLocalOnlyRequest(url: URL): boolean {
   const local = url.searchParams.get("local");

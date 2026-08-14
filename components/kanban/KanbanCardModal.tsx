@@ -18,7 +18,6 @@ import {
 import {
   deleteOrderAttachmentById,
   fetchKanbanMirrorCommentsForOrder,
-  fetchOrderKaitenImagesForKanban,
   patchOrderKaitenCard,
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
@@ -50,7 +49,6 @@ import {
 import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
-import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
   applyKanbanCardMembersOnBoard,
@@ -421,64 +419,22 @@ export function KanbanCardModal({
   useEffect(() => {
     if (!cardId || !linkedOrderId) return;
     let cancelled = false;
-    const load = (opts?: { refresh?: boolean }) => {
-      if (cancelled) return;
-      if (document.visibilityState !== "visible" && !opts?.refresh) return;
-      void (async () => {
-        const [snap, kaitenImgs] = await Promise.all([
-          fetchKanbanMirrorCommentsForOrder(linkedOrderId),
-          fetchOrderKaitenImagesForKanban(linkedOrderId, {
-            refresh: opts?.refresh === true,
-          }),
-        ]);
-        if (cancelled) return;
-        onApply((b) => {
-          const fc = findCard(b, cardId);
-          if (!fc) return;
-          if (kaitenImgs.ok) {
-            if (!fc.card.files) fc.card.files = [];
-            for (const img of kaitenImgs.images) {
-              const m = /\/kaiten\/files\/(\d+)/.exec(img.url);
-              const id = m ? `kt-file-${m[1]}` : `kt-img-${img.id}`;
-              if (fc.card.files.some((f) => f.id === id || f.dataUrl === img.url)) {
-                continue;
-              }
-              fc.card.files.push({
-                id,
-                name: img.name || "image.png",
-                mime: img.mime || "image/png",
-                size: 0,
-                dataUrl: img.url,
-                addedAt: new Date().toISOString(),
-                addedByUserId: "",
-              });
-            }
-            if (kaitenImgs.blocked === false && fc.card.blocked) {
-              performUnblock(fc.card, b, act);
-            } else if (kaitenImgs.blocked === true && !fc.card.blocked) {
-              fc.card.blocked = true;
-              fc.card.blockedAt = new Date().toISOString();
-            }
-          }
-          if (snap.ok) {
-            fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
-          } else if (kaitenImgs.ok && kaitenImgs.images.length > 0) {
-            fc.card.comments = withImagePlaceholders(
-              fc.card.comments || [],
-              fc.card,
-            );
-          }
-        });
-      })();
-    };
-    load({ refresh: true });
-    const pollMs = kaitenClientPollIntervalMs();
-    const iv = window.setInterval(() => load(), pollMs);
+    void (async () => {
+      const snap = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
+      if (cancelled || !snap.ok) return;
+      onApply((b) => {
+        const fc = findCard(b, cardId);
+        if (!fc) return;
+        fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
+        if (snap.description.trim() && !(fc.card.description || "").trim()) {
+          fc.card.description = snap.description;
+        }
+      });
+    })();
     return () => {
       cancelled = true;
-      window.clearInterval(iv);
     };
-  }, [cardId, linkedOrderId, onApply, act]);
+  }, [cardId, linkedOrderId, onApply]);
 
   const adminMentionTag = useKanbanAdminMentionTag();
   const adminMentionUserIds = useMemo(
