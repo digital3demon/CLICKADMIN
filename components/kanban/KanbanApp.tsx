@@ -45,6 +45,7 @@ import {
   withActiveBoard,
 } from "@/lib/kanban/model";
 import { applyKanbanLegacyStageDueClearMigration, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
 import {
   applyKanbanCardMembersOnBoard,
   notifyKanbanCardMemberChange,
@@ -88,6 +89,13 @@ import {
   extractKanbanArchiveSettings,
   KANBAN_ARCHIVE_SETTINGS_KEY,
 } from "@/lib/kanban/archive-settings-sync";
+import {
+  applyKanbanCardTypeLanes,
+  extractKanbanCardTypeLanes,
+  mergeCardTypeLaneSnapshots,
+  KANBAN_CARD_TYPE_LANES_KEY,
+  type KanbanCardTypeLanesSnapshot,
+} from "@/lib/kanban/card-type-lanes-sync";
 import {
   KANBAN_BOARD_UI_KEY,
   applyKanbanBoardUiState,
@@ -435,6 +443,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const childChecklistExpandInFlightRef = useRef<Set<string>>(new Set());
   const archiveSettingsReadyRef = useRef(false);
   const lastArchiveSettingsSigRef = useRef("");
+  const [cardTypeLanesReady, setCardTypeLanesReady] = useState(false);
+  const lastCardTypeLanesRef = useRef<KanbanCardTypeLanesSnapshot>({
+    version: 1,
+    types: [],
+  });
+  const lastCardTypeLanesSigRef = useRef("");
   /** Перед первым GET отдаём локальные карточки без наряда на сервер — иначе пустой ответ затрёт их. */
   const standalonePrimedRef = useRef(false);
   /**
@@ -658,7 +672,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           const remoteState = isDemo
             ? normalizeDemoKanbanAppState(remote as KanbanAppState)
             : (remote as KanbanAppState);
-          const merged = mergeKanbanStatePreservingLocalBoards(prev, remoteState);
+          const merged = applyKanbanCardTypeLanes(
+            mergeKanbanStatePreservingLocalBoards(prev, remoteState),
+            lastCardTypeLanesRef.current,
+          );
           const finalState = isDemo
             ? merged
             : applyKanbanLegacyStageDueClearMigration(merged).state;
@@ -740,6 +757,42 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo]);
 
   useEffect(() => {
+    if (isDemo) {
+      setCardTypeLanesReady(true);
+      return;
+    }
+    let cancelled = false;
+    const pullCardTypeLanes = async () => {
+      const remote = await readClientState<unknown>("tenant", KANBAN_CARD_TYPE_LANES_KEY);
+      if (cancelled) return;
+      const merged = mergeCardTypeLaneSnapshots(remote, lastCardTypeLanesRef.current);
+      lastCardTypeLanesRef.current = merged;
+      lastCardTypeLanesSigRef.current = JSON.stringify(merged);
+      if (merged.types.length > 0) {
+        setAppState((prev) => (prev ? applyKanbanCardTypeLanes(prev, merged) : prev));
+      }
+      setCardTypeLanesReady(true);
+    };
+    void pullCardTypeLanes();
+    const onVisibleOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      void pullCardTypeLanes();
+    };
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void pullCardTypeLanes();
+    }, 15_000);
+    document.addEventListener("visibilitychange", onVisibleOrFocus);
+    window.addEventListener("focus", onVisibleOrFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibleOrFocus);
+      window.removeEventListener("focus", onVisibleOrFocus);
+    };
+  }, [isDemo]);
+
+  useEffect(() => {
     if (!appState || !kanbanStateReady || kanbanPersistPausedRef.current) return;
     saveKanbanState(appState, isDemo);
     const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
@@ -805,6 +858,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           KANBAN_BOARD_UI_KEY,
           extractKanbanBoardUiState(cur),
         );
+        const lanes = mergeCardTypeLaneSnapshots(
+          extractKanbanCardTypeLanes(cur),
+          lastCardTypeLanesRef.current,
+        );
+        if (lanes.types.length > 0) {
+          void writeClientState("tenant", KANBAN_CARD_TYPE_LANES_KEY, lanes);
+        }
       }
     };
   }, [isDemo]);
@@ -817,6 +877,21 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     lastArchiveSettingsSigRef.current = sig;
     void writeClientState("tenant", KANBAN_ARCHIVE_SETTINGS_KEY, payload);
   }, [appState, isDemo, kanbanStateReady]);
+
+  useEffect(() => {
+    if (isDemo || !appState || !kanbanStateReady || !cardTypeLanesReady) {
+      return;
+    }
+    const payload = mergeCardTypeLaneSnapshots(
+      extractKanbanCardTypeLanes(appState),
+      lastCardTypeLanesRef.current,
+    );
+    const sig = JSON.stringify(payload);
+    if (sig === lastCardTypeLanesSigRef.current) return;
+    lastCardTypeLanesRef.current = payload;
+    lastCardTypeLanesSigRef.current = sig;
+    void writeClientState("tenant", KANBAN_CARD_TYPE_LANES_KEY, payload);
+  }, [appState, isDemo, kanbanStateReady, cardTypeLanesReady]);
 
   useEffect(() => {
     if (!appState || !kanbanStateReady) {
@@ -875,7 +950,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           if (!Array.isArray(rows) || rows.length === 0) return;
           setAppState((prev) => {
             if (!prev) return prev;
-            return applyKaitenApiCardTypesToMirrorBoards(prev, rows);
+            const next = applyKaitenApiCardTypesToMirrorBoards(prev, rows);
+            return applyKanbanCardTypeLanes(next, lastCardTypeLanesRef.current);
           });
         } catch {
           /* ignore */
@@ -1015,10 +1091,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [board]);
   const stoppedCards = useMemo(() => {
     if (!board) return [];
-    return [...(board.stoppedCards || [])].sort((a, b) =>
+    const q = (appState?.search || "").trim();
+    const rows = (board.stoppedCards || []).filter((row) =>
+      q ? kanbanCardMatchesSearch(row.card, q, board) : true,
+    );
+    return [...rows].sort((a, b) =>
       String(b.stoppedAt).localeCompare(String(a.stoppedAt)),
     );
-  }, [board]);
+  }, [board, appState?.search]);
 
   const onStopHoverMove = useCallback(
     (event: MouseEvent) => {
@@ -1225,9 +1305,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     if (!remote || typeof remote !== "object") return;
     setAppState((prev) => {
       if (!prev) return prev;
-      const merged = mergeKanbanStatePreservingLocalBoards(
-        prev,
-        remote as KanbanAppState,
+      const merged = applyKanbanCardTypeLanes(
+        mergeKanbanStatePreservingLocalBoards(prev, remote as KanbanAppState),
+        lastCardTypeLanesRef.current,
       );
       const finalState = applyKanbanLegacyStageDueClearMigration(merged).state;
       saveKanbanState(finalState, false);
@@ -2455,6 +2535,17 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               >
                 Показать скрытые наряды ({appState.hiddenLinkedOrderIds?.length})
               </button>
+            ) : null}
+            {appState.search.trim() ? (
+              <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">
+                Найдено{" "}
+                {(displayBoard?.columns ?? []).reduce(
+                  (n, c) => n + c.cards.length,
+                  0,
+                ) + stoppedCards.length}
+                {" · "}
+                пустые колонки скрыты
+              </span>
             ) : null}
             {dndLocked && (
               <span className="text-[0.75rem] text-amber-700 dark:text-amber-300">

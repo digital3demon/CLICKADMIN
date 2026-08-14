@@ -1,5 +1,5 @@
 /**
- * Привязка писем к существующему наряду (+ опционально комментарий в Kaiten / разблокировка).
+ * Привязка писем к существующему наряду (+ опционально комментарий в канбан / разблокировка).
  */
 import "server-only";
 
@@ -121,11 +121,11 @@ export async function linkEmailsToOrder(opts: {
   const comment = typeof opts.comment === "string" ? opts.comment.trim() : "";
   if (comment) {
     if (order.kaitenCardId == null) {
-      commentError = "Нет карточки Kaiten у наряда";
+      commentError = "Нет карточки канбана у наряда";
     } else {
       const auth = getKaitenRestAuth();
       if (!auth) {
-        commentError = "Kaiten не настроен";
+        commentError = "Канбан не настроен";
       } else {
         const label = userActivityDisplayLabel({
           mentionHandle: null,

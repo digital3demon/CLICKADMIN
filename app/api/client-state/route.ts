@@ -118,43 +118,62 @@ export async function PUT(req: Request) {
 
   try {
     const prisma = await getPrisma();
-    if (body.value === null) {
-      if (scope === "user") {
-        await prisma.userClientState.deleteMany({
-          where: { userId: session.sub, key },
-        });
-      } else {
-        await prisma.tenantClientState.deleteMany({
-          where: { tenantId, key },
-        });
+    const persist = async () => {
+      if (body.value === null) {
+        if (scope === "user") {
+          await prisma.userClientState.deleteMany({
+            where: { userId: session.sub, key },
+          });
+        } else {
+          await prisma.tenantClientState.deleteMany({
+            where: { tenantId, key },
+          });
+        }
+        return NextResponse.json({ ok: true, deleted: true });
       }
-      return NextResponse.json({ ok: true, deleted: true });
-    }
 
-    if (scope === "user") {
-      await prisma.userClientState.upsert({
-        where: { userId_key: { userId: session.sub, key } },
+      if (scope === "user") {
+        await prisma.userClientState.upsert({
+          where: { userId_key: { userId: session.sub, key } },
+          create: {
+            userId: session.sub,
+            tenantId,
+            key,
+            value: body.value as never,
+          },
+          update: { value: body.value as never, tenantId },
+        });
+        return NextResponse.json({ ok: true, scope, key });
+      }
+
+      await prisma.tenantClientState.upsert({
+        where: { tenantId_key: { tenantId, key } },
         create: {
-          userId: session.sub,
           tenantId,
           key,
           value: body.value as never,
         },
-        update: { value: body.value as never, tenantId },
+        update: { value: body.value as never },
       });
       return NextResponse.json({ ok: true, scope, key });
-    }
+    };
 
-    await prisma.tenantClientState.upsert({
-      where: { tenantId_key: { tenantId, key } },
-      create: {
-        tenantId,
-        key,
-        value: body.value as never,
-      },
-      update: { value: body.value as never },
-    });
-    return NextResponse.json({ ok: true, scope, key });
+    let lastErr: unknown;
+    for (let i = 0; i < 4; i += 1) {
+      try {
+        return await persist();
+      } catch (e) {
+        lastErr = e;
+        const msg = e instanceof Error ? e.message : String(e);
+        const transient =
+          /database is locked|sqlite_busy|deadlock|serialization failure|p2034|too many connections|connection/i.test(
+            msg,
+          );
+        if (!transient || i === 3) break;
+        await new Promise((r) => setTimeout(r, 40 * (i + 1)));
+      }
+    }
+    throw lastErr;
   } catch (e) {
     console.error("[client-state] PUT failed", { scope, key, err: e });
     return NextResponse.json(

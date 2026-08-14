@@ -34,6 +34,7 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 export const runtime = "nodejs";
+/** Auth здесь, не в middleware: matcher исключает этот путь, чтобы Next не буферил файл. */
 
 const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 /** Согласовано с `maxDuration` (5 мин) — крупные вложения до 1 ГБ. */

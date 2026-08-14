@@ -54,6 +54,19 @@ describe("resolvePreferredSpaceForCardType", () => {
     ).toBe("ORTHODONTICS");
   });
 
+  it("does not inherit orthodontics board just because types are mirrored there", () => {
+    expect(
+      resolvePreferredSpaceForCardType({
+        typeId: "cuid-splint",
+        typeName: "Сплинт",
+        defaultSpaceByCardType: {
+          "name:сплинт": "ORTHOPEDICS",
+        },
+        availableSpaces: both,
+      }),
+    ).toBe("ORTHOPEDICS");
+  });
+
   it("defaults to orthopedics when available", () => {
     expect(
       resolvePreferredSpaceForCardType({

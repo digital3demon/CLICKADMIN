@@ -72,6 +72,32 @@ describe("kanban production routing", () => {
     expect(state.search).toBe("013");
   });
 
+  it("keeps local card type space when remote snapshot dropped defaultTrackLane", () => {
+    const local = defaultAppState();
+    const remote = defaultAppState();
+    const localBoard = local.boards.find((b) => b.id === remote.boards[0]!.id)!;
+    const remoteBoard = remote.boards[0]!;
+    localBoard.cardTypes = [
+      {
+        id: "cuid-1",
+        name: "Сплинт",
+        color: "#3b82f6",
+        sortOrder: 90,
+        defaultTrackLane: "ORTHOPEDICS",
+      },
+    ];
+    remoteBoard.cardTypes = [
+      {
+        id: "cuid-1",
+        name: "Сплинт",
+        color: "#3b82f6",
+        sortOrder: 90,
+      },
+    ];
+    const merged = mergeKanbanStatePreservingLocalBoards(local, remote);
+    expect(merged.boards[0]!.cardTypes[0]!.defaultTrackLane).toBe("ORTHOPEDICS");
+  });
+
   it("does not drop local production cards when remote state has no production board", () => {
     const local = defaultAppState();
     const production = local.boards.find((b) => b.id === KANBAN_BOARD_PRODUCTION_ID);

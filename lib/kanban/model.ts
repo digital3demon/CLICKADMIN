@@ -22,6 +22,13 @@ import {
 import { applyKanbanLegacyStageDueClearMigration, getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
+import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
+import {
+  collectCardTypeDefaultLanes,
+  defaultTrackLaneForCardTypeName,
+  mergeCardTypeDefsKeepingLanes,
+  pickPreservedCardTypeLane,
+} from "@/lib/kanban/card-type-default-lane";
 
 export const STORAGE_KEY = "kanban-app-state-v3";
 export const STORAGE_KEY_LEGACY = "kanban-app-state-v2";
@@ -220,7 +227,7 @@ export function demoKanbanPriceCardTypes(): CardTypeDef[] {
 
 /** Цвета и порядок как в актуальном списке типов Kaiten. */
 export function kaitenCardTypes(): CardTypeDef[] {
-  return [
+  const rows: CardTypeDef[] = [
     { id: "kt_vrem", name: "Временные", sortOrder: 10, color: "#22c55e" },
     { id: "kt_mio", name: "МиоСплинт", sortOrder: 20, color: "#06b6d4" },
     { id: "kt_mod", name: "Модели", sortOrder: 30, color: "#92400e" },
@@ -233,6 +240,10 @@ export function kaitenCardTypes(): CardTypeDef[] {
     { id: "kt_splmrt", name: "Сплинт МРТ", sortOrder: 100, color: "#171717" },
     { id: "kt_hir", name: "Хирургия", sortOrder: 110, color: "#eab308" },
   ];
+  return rows.map((t) => ({
+    ...t,
+    defaultTrackLane: defaultTrackLaneForCardTypeName(t.name),
+  }));
 }
 
 export function cloneDefaultCardTypes(): CardTypeDef[] {
@@ -299,25 +310,28 @@ export function applyKaitenApiCardTypesToMirrorBoards(
   if (newTypes.length === 0) return next;
   const newIds = new Set(newTypes.map((t) => t.id));
   const mirrorIds = [KANBAN_BOARD_ORTHOPEDICS_ID, KANBAN_BOARD_ORTHODONTICS_ID];
+  const preserved = collectCardTypeDefaultLanes(
+    mirrorIds.flatMap((bid) => {
+      const b = next.boards.find((x) => x.id === bid);
+      return b?.cardTypes ?? [];
+    }),
+  );
   for (const bid of mirrorIds) {
     const b = next.boards.find((x) => x.id === bid);
     if (!b) continue;
     const oldTypes = b.cardTypes ? [...b.cardTypes] : [];
-    const oldDefaultLaneById = new Map(
-      oldTypes.map((t) => [t.id, (t.defaultTrackLane || "").trim() || undefined]),
-    );
     b.cardTypes = newTypes.map((t) => ({
       ...t,
-      defaultTrackLane: oldDefaultLaneById.get(t.id),
+      defaultTrackLane: pickPreservedCardTypeLane(t, preserved),
     }));
     for (const col of b.columns) {
       for (const c of col.cards) {
         if (!c.cardTypeId) continue;
         if (newIds.has(c.cardTypeId)) continue;
-        const oldT = oldTypes.find((t) => t.id === c.cardTypeId);
+        const oldT = oldTypes.find((x) => x.id === c.cardTypeId);
         const nameKey = (oldT?.name || "").trim().toLowerCase();
         const hit = nameKey
-          ? newTypes.find((t) => t.name.trim().toLowerCase() === nameKey)
+          ? newTypes.find((x) => x.name.trim().toLowerCase() === nameKey)
           : undefined;
         c.cardTypeId = hit?.id ?? "";
       }
@@ -352,7 +366,9 @@ export function normalizeBoardCardTypes(board: KanbanBoard) {
       if (!t.name || !String(t.name).trim()) {
         t.name = base?.name || "Тип";
       }
-      t.defaultTrackLane = String(t.defaultTrackLane || "").trim() || undefined;
+      t.defaultTrackLane =
+        String(t.defaultTrackLane || "").trim() ||
+        defaultTrackLaneForCardTypeName(t.name);
     }
     board.cardTypes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
     return;
@@ -377,7 +393,9 @@ export function normalizeBoardCardTypes(board: KanbanBoard) {
     }
     if (t.sortOrder == null) t.sortOrder = base?.sortOrder ?? 0;
     if (!t.name || !String(t.name).trim()) t.name = base?.name || "Тип";
-    t.defaultTrackLane = String(t.defaultTrackLane || "").trim() || undefined;
+    t.defaultTrackLane =
+      String(t.defaultTrackLane || "").trim() ||
+      defaultTrackLaneForCardTypeName(t.name);
   });
   board.cardTypes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 }
@@ -1294,7 +1312,7 @@ function slimCardFiles(card: KanbanCard, archiveLike: boolean, keep: number): vo
 /** Ужимает карточки перед записью в TenantClientState / UserClientState. */
 export function slimKanbanStateForClientState(
   state: KanbanAppState,
-  level: 0 | 1 | 2 = 0,
+  level: 0 | 1 | 2 | 3 = 0,
 ): KanbanAppState {
   const next = structuredClone(state);
 
@@ -1304,9 +1322,9 @@ export function slimKanbanStateForClientState(
   const descMax =
     level >= 2 ? 60 : level >= 1 ? 80 : PERSIST_DESC_MAX;
   const archiveKeep =
-    level >= 2 ? 10 : level >= 1 ? 20 : PERSIST_ARCHIVE_ROWS_KEEP;
+    level >= 3 ? 0 : level >= 2 ? 10 : level >= 1 ? 20 : PERSIST_ARCHIVE_ROWS_KEEP;
   const stoppedKeep =
-    level >= 2 ? 10 : level >= 1 ? 20 : PERSIST_STOPPED_ROWS_KEEP;
+    level >= 3 ? 0 : level >= 2 ? 10 : level >= 1 ? 20 : PERSIST_STOPPED_ROWS_KEEP;
   const dropSnapshots = level >= 1;
 
   const slimCard = (card: KanbanCard, archiveLike = false) => {
@@ -1397,7 +1415,7 @@ export function kanbanStateForPersistenceUnderLimit(
     : stripPersonalKanbanUiForTenant(state);
 
   let best = slimKanbanStateForClientState(base, 0);
-  for (const level of [0, 1, 2] as const) {
+  for (const level of [0, 1, 2, 3] as const) {
     const candidate =
       level === 0 ? best : slimKanbanStateForClientState(base, level);
     best = candidate;
@@ -1437,6 +1455,15 @@ export function mergeKanbanStatePreservingLocalBoards(
     merged.boards.push(structuredClone(localBoard));
     remoteById.add(localBoard.id);
     if (titleKey) remoteByTitle.add(titleKey);
+  }
+  const localBoardById = new Map(localState.boards.map((b) => [b.id, b]));
+  for (const board of merged.boards) {
+    const localBoard = localBoardById.get(board.id);
+    if (!localBoard?.cardTypes?.length || !board.cardTypes?.length) continue;
+    board.cardTypes = mergeCardTypeDefsKeepingLanes(
+      board.cardTypes,
+      localBoard.cardTypes,
+    );
   }
   const hasActiveBoard =
     merged.boards.some((b) => b.id === merged.activeBoardId) ||
@@ -1818,11 +1845,8 @@ export function buildKanbanDisplayView(
     canUserAccessBoard(b, sessionUserId || null, sessionUserRole),
   );
 
-  const textMatches = (card: KanbanCard) => {
-    const inTitle = (card.title || "").toLowerCase().includes(q);
-    const inDesc = (card.description || "").toLowerCase().includes(q);
-    return inTitle || inDesc;
-  };
+  const textMatches = (card: KanbanCard, home: KanbanBoard) =>
+    kanbanCardMatchesSearch(card, q, home);
 
   const passesFiltersWithoutSearchText = (card: KanbanCard, home: KanbanBoard) => {
     const st: KanbanAppState = { ...state, search: "" };
@@ -1867,7 +1891,7 @@ export function buildKanbanDisplayView(
           } else {
             if (!assignees.includes(uid)) continue;
           }
-          if (q && !textMatches(card)) continue;
+          if (q && !textMatches(card, home)) continue;
           if (!passesFiltersWithoutSearchText(card, home)) continue;
           seen.add(card.id);
           acc.push(card);
@@ -1875,6 +1899,9 @@ export function buildKanbanDisplayView(
         }
       }
       colView.cards = acc;
+    }
+    if (q) {
+      displayBoard.columns = displayBoard.columns.filter((c) => c.cards.length > 0);
     }
     return { displayBoard, cardHomeBoardId };
   }
@@ -1900,9 +1927,12 @@ export function buildKanbanDisplayView(
   const displayBoard = structuredClone(active);
   for (const colView of displayBoard.columns) {
     colView.cards = colView.cards.filter(
-      (card) => textMatches(card) && passesFiltersWithoutSearchText(card, active),
+      (card) =>
+        textMatches(card, active) &&
+        passesFiltersWithoutSearchText(card, active),
     );
   }
+  displayBoard.columns = displayBoard.columns.filter((c) => c.cards.length > 0);
 
   return { displayBoard, cardHomeBoardId };
 }
@@ -1922,12 +1952,8 @@ export function cardMatchesFilters(
   board: KanbanBoard,
   state: KanbanAppState,
 ): boolean {
-  const q = (state.search || "").trim().toLowerCase();
-  if (q) {
-    const inTitle = (card.title || "").toLowerCase().includes(q);
-    const inDesc = (card.description || "").toLowerCase().includes(q);
-    if (!inTitle && !inDesc) return false;
-  }
+  const q = (state.search || "").trim();
+  if (q && !kanbanCardMatchesSearch(card, q, board)) return false;
   const ft = state.filters.cardTypeId;
   if (ft) {
     if (String(card.cardTypeId || "") !== String(ft)) return false;

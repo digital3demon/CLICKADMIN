@@ -40,6 +40,9 @@ const nextConfig: NextConfig = {
   ],
   experimental: {
     optimizePackageImports: ["framer-motion", "recharts"],
+    /** Иначе Next 15 клонирует тело в middleware и режет ~10MB → HTML 500 на фото/STL. */
+    middlewareClientMaxBodySize: "1gb",
+    proxyClientMaxBodySize: "1gb",
   },
 };
 

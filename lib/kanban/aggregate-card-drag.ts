@@ -84,10 +84,9 @@ export function applyAggregateCardDrag(
   const [card] = fromCol.cards.splice(idx, 1);
   if (!card) return { ok: false };
 
-  let toHomeId = fromHomeId;
-  if (!drag.overIsColumn && drag.overCardId) {
-    toHomeId = cardHomeBoardId.get(drag.overCardId) ?? fromHomeId;
-  }
+  // Колонки «Мои» / «Ответственный» общие по названию. Бросок на чужую карточку
+  // не должен менять дорожку (ортодонтия → ортопедия) и уезжать в Kaiten.
+  const toHomeId = fromHomeId;
 
   const toHome = next.boards.find((b) => b.id === toHomeId);
   if (!toHome) {

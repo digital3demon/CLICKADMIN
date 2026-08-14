@@ -10,6 +10,15 @@ import {
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
 } from "@/lib/kanban/model";
+import {
+  defaultTrackLaneForCardTypeName,
+  isCardTypeTrackLane,
+  normalizeCardTypeNameKey,
+} from "@/lib/kanban/card-type-default-lane";
+import {
+  defaultSpaceByCardTypeFromLaneSnapshot,
+  KANBAN_CARD_TYPE_LANES_KEY,
+} from "@/lib/kanban/card-type-lanes-sync";
 export type KaitenSavePayload =
   | {
       kaitenDecideLater: true;
@@ -37,7 +46,7 @@ const SPACE_OPTIONS: {
 type UiCardType = { id: string; name: string; externalTypeId: number };
 
 function normalizeCardTypeName(value: unknown): string {
-  return String(value ?? "").trim().toLowerCase();
+  return normalizeCardTypeNameKey(value);
 }
 
 function normalizeHexColor(raw: unknown): string | null {
@@ -95,21 +104,15 @@ function defaultSpaceByCardTypeFromTenantKanbanState(
       const typeId = String((t as { id?: unknown }).id ?? "").trim();
       const typeName = normalizeCardTypeName((t as { name?: unknown }).name);
       const typeLane = String((t as { defaultTrackLane?: unknown }).defaultTrackLane ?? "").trim();
-      if (!typeId || (typeLane !== "ORTHOPEDICS" && typeLane !== "ORTHODONTICS" && typeLane !== "TEST")) {
+      if (isCardTypeTrackLane(typeLane)) {
+        if (typeId) out[typeId] = typeLane;
+        if (typeName) out[`name:${typeName}`] = typeLane;
         continue;
       }
-      out[typeId] = typeLane as KaitenTrackLane;
-      if (typeName) out[`name:${typeName}`] = typeLane as KaitenTrackLane;
-    }
-    // Типы без defaultTrackLane → пространство доски, на которой тип лежит.
-    // Ключ по имени обязателен: в префлайте id приходят из KaitenCardType (cuid),
-    // а в kanbanAppStateV3 — другие id типов CRM-доски.
-    for (const t of board.cardTypes) {
-      if (!t || typeof t !== "object" || Array.isArray(t)) continue;
-      const typeId = String((t as { id?: unknown }).id ?? "").trim();
-      const typeName = normalizeCardTypeName((t as { name?: unknown }).name);
-      if (typeId && !out[typeId]) out[typeId] = lane;
-      if (typeName && !out[`name:${typeName}`]) out[`name:${typeName}`] = lane;
+      const inferred = defaultTrackLaneForCardTypeName(typeName);
+      if (!inferred) continue;
+      if (typeId && !out[typeId]) out[typeId] = inferred;
+      if (typeName && !out[`name:${typeName}`]) out[`name:${typeName}`] = inferred;
     }
   }
   return out;
@@ -344,6 +347,10 @@ export function KaitenPreflightModal({
           "tenant",
           "kanbanAppStateV3",
         );
+        const tenantCardTypeLanesPromise = readClientState<unknown>(
+          "tenant",
+          KANBAN_CARD_TYPE_LANES_KEY,
+        );
         const res = await fetch("/api/kaiten-ui-options");
         const data = (await res.json()) as {
           cardTypes?: UiCardType[];
@@ -358,11 +365,17 @@ export function KaitenPreflightModal({
         setLaneAllowlist(
           Array.isArray(data.trackLanes) ? data.trackLanes : [],
         );
-        const tenantKanbanState = await tenantKanbanStatePromise;
+        const [tenantKanbanState, tenantCardTypeLanes] = await Promise.all([
+          tenantKanbanStatePromise,
+          tenantCardTypeLanesPromise,
+        ]);
         if (!cancelled) {
           const distribution = distributionLanesFromTenantKanbanState(tenantKanbanState);
           setDistributionLaneAllowlist(distribution);
-          const defaults = defaultSpaceByCardTypeFromTenantKanbanState(tenantKanbanState);
+          const defaults = {
+            ...defaultSpaceByCardTypeFromTenantKanbanState(tenantKanbanState),
+            ...defaultSpaceByCardTypeFromLaneSnapshot(tenantCardTypeLanes),
+          };
           setDefaultSpaceByCardType(defaults);
           setBoardLaneOptionsBySpace(
             boardLaneOptionsBySpaceFromTenantKanbanState(tenantKanbanState),
@@ -533,12 +546,12 @@ export function KaitenPreflightModal({
                 id="kaiten-preflight-title"
                 className="text-xl font-semibold text-[var(--app-text)]"
               >
-                Канбан и Kaiten
+                Канбан
               </h2>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                Сначала создаётся карточка в канбане CRM. Укажите вид работы и
-                тип карточки. «Решу позже» откладывает только Kaiten — канбан
-                всё равно появится. Дату записи задайте в форме наряда.
+                Сначала создаётся карточка в канбане. Укажите вид работы и
+                тип карточки. «Решу позже» откладывает только внешнюю карточку —
+                канбан всё равно появится. Дату записи задайте в форме наряда.
               </p>
               {loadError ? (
                 <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -683,7 +696,7 @@ export function KaitenPreflightModal({
               </legend>
                 {laneAllowlist !== null && laneAllowlist.length === 0 ? (
                   <p className="text-xs text-amber-800 dark:text-amber-200">
-                    В .env не задано ни одного пространства Kaiten (нужны
+                    В .env не задано ни одного пространства канбана (нужны
                     KAITEN_ORTHOPEDICS_* и/или KAITEN_ORTHODONTICS_* и при
                     необходимости KAITEN_TEST_* — board id и id колонки «в
                     работу»).
@@ -764,9 +777,9 @@ export function KaitenPreflightModal({
               }}
             />
             <span className="min-w-0 text-sm font-medium text-[var(--text-strong)]">
-              Решу позже (только Kaiten)
+              Решу позже (только канбан)
               <span className="mt-0.5 block text-xs font-normal text-[var(--text-muted)]">
-                Карточка в канбане CRM создаётся сразу; в Kaiten — когда решите
+                Карточка в канбане создаётся сразу; внешнюю — когда решите
                 создать или привязать.
               </span>
             </span>

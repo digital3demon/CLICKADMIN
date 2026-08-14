@@ -39,6 +39,13 @@ import {
   extractKanbanArchiveSettings,
   KANBAN_ARCHIVE_SETTINGS_KEY,
 } from "@/lib/kanban/archive-settings-sync";
+import {
+  applyKanbanCardTypeLanes,
+  extractKanbanCardTypeLanes,
+  mergeCardTypeLaneSnapshots,
+  KANBAN_CARD_TYPE_LANES_KEY,
+  type KanbanCardTypeLanesSnapshot,
+} from "@/lib/kanban/card-type-lanes-sync";
 
 const KanbanAutomationsForm = dynamic(
   () => import("@/components/kanban/KanbanAutomationsForm").then((m) => m.KanbanAutomationsForm),
@@ -117,8 +124,15 @@ export function DirectoryKanbanBoardsClient({
   const [pickExcludeUserId, setPickExcludeUserId] = useState("");
   const archiveSettingsReadyRef = useRef(false);
   const lastArchiveSettingsSigRef = useRef("");
+  const [cardTypeLanesReady, setCardTypeLanesReady] = useState(false);
+  const lastCardTypeLanesRef = useRef<KanbanCardTypeLanesSnapshot>({
+    version: 1,
+    types: [],
+  });
+  const lastCardTypeLanesSigRef = useRef("");
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const archiveSettingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardTypeLanesSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!kanbanStateReady) return;
@@ -150,7 +164,10 @@ export function DirectoryKanbanBoardsClient({
       if (cancelled) return;
       if (remote && typeof remote === "object") {
         const remoteState = remote as ReturnType<typeof loadKanbanStateForDirectory>;
-        const next = mergeKanbanStatePreservingLocalBoards(appState, remoteState);
+        const next = applyKanbanCardTypeLanes(
+          mergeKanbanStatePreservingLocalBoards(appState, remoteState),
+          lastCardTypeLanesRef.current,
+        );
         if (!isDemo) ensureProductionBoardInState(next);
         setAppState(next);
         saveKanbanState(next, isDemo);
@@ -199,6 +216,42 @@ export function DirectoryKanbanBoardsClient({
   }, [isDemo]);
 
   useEffect(() => {
+    if (isDemo) {
+      setCardTypeLanesReady(true);
+      return;
+    }
+    let cancelled = false;
+    const pullCardTypeLanes = async () => {
+      const remote = await readClientState<unknown>("tenant", KANBAN_CARD_TYPE_LANES_KEY);
+      if (cancelled) return;
+      const merged = mergeCardTypeLaneSnapshots(remote, lastCardTypeLanesRef.current);
+      lastCardTypeLanesRef.current = merged;
+      lastCardTypeLanesSigRef.current = JSON.stringify(merged);
+      if (merged.types.length > 0) {
+        setAppState((prev) => applyKanbanCardTypeLanes(prev, merged));
+      }
+      setCardTypeLanesReady(true);
+    };
+    void pullCardTypeLanes();
+    const onVisibleOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      void pullCardTypeLanes();
+    };
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void pullCardTypeLanes();
+    }, 15_000);
+    document.addEventListener("visibilitychange", onVisibleOrFocus);
+    window.addEventListener("focus", onVisibleOrFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibleOrFocus);
+      window.removeEventListener("focus", onVisibleOrFocus);
+    };
+  }, [isDemo]);
+
+  useEffect(() => {
     if (isDemo || !archiveSettingsReadyRef.current) return;
     const payload = extractKanbanArchiveSettings(appState);
     const sig = JSON.stringify(payload);
@@ -217,6 +270,30 @@ export function DirectoryKanbanBoardsClient({
       }
     };
   }, [appState, isDemo]);
+
+  useEffect(() => {
+    if (isDemo || !cardTypeLanesReady) return;
+    const payload = mergeCardTypeLaneSnapshots(
+      extractKanbanCardTypeLanes(appState),
+      lastCardTypeLanesRef.current,
+    );
+    const sig = JSON.stringify(payload);
+    if (sig === lastCardTypeLanesSigRef.current) return;
+    lastCardTypeLanesRef.current = payload;
+    lastCardTypeLanesSigRef.current = sig;
+    if (cardTypeLanesSaveTimerRef.current) {
+      clearTimeout(cardTypeLanesSaveTimerRef.current);
+    }
+    cardTypeLanesSaveTimerRef.current = setTimeout(() => {
+      cardTypeLanesSaveTimerRef.current = null;
+      void writeClientState("tenant", KANBAN_CARD_TYPE_LANES_KEY, payload);
+    }, 400);
+    return () => {
+      if (cardTypeLanesSaveTimerRef.current) {
+        clearTimeout(cardTypeLanesSaveTimerRef.current);
+      }
+    };
+  }, [appState, isDemo, cardTypeLanesReady]);
 
   useEffect(() => {
     if (isDemo) return;

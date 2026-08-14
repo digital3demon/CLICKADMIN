@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import type { UserRole } from "@prisma/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
+import { isKanbanAdminGroupRole } from "@/lib/kanban-admin-mention";
+import { sanitizeMentionToken } from "@/lib/kanban-comment-mentions";
 import { orderPathById } from "@/lib/order-public-ref";
 
 type OrderHit = {
@@ -39,6 +43,37 @@ export type MailAddToOrderDialogProps = {
   onDone: (info: { orderId: string; orderNumber: string }) => void;
 };
 
+type MentionUser = {
+  id: string;
+  displayName: string;
+  email: string;
+  mentionHandle: string | null;
+  role?: UserRole;
+};
+
+type MentionDraft = { start: number; end: number; query: string };
+
+type MentionOption = {
+  id: string;
+  label: string;
+  insertText: string;
+  searchText: string;
+};
+
+export function findMentionDraft(text: string, caretPos: number): MentionDraft | null {
+  const caret = Math.max(0, Math.min(caretPos, text.length));
+  const before = text.slice(0, caret);
+  const atPos = before.lastIndexOf("@");
+  if (atPos < 0) return null;
+  // Граница до @: не \b — кириллица иначе ломает «Всеволод@».
+  if (atPos > 0 && /[\p{L}\p{N}_]/u.test(before[atPos - 1] ?? "")) {
+    return null;
+  }
+  const token = before.slice(atPos + 1);
+  if (/\s/.test(token)) return null;
+  return { start: atPos, end: caret, query: token.toLowerCase() };
+}
+
 function orderLabel(o: OrderHit): string {
   const patient = (o.patientName ?? "").trim() || "—";
   const doctor = (o.doctorName ?? "").trim();
@@ -59,6 +94,11 @@ export function MailAddToOrderDialog({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [selected, setSelected] = useState<OrderHit | null>(null);
   const [comment, setComment] = useState("");
+  const [commentCaretPos, setCommentCaretPos] = useState(0);
+  const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const adminMentionTag = useKanbanAdminMentionTag();
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -72,10 +112,35 @@ export function MailAddToOrderDialog({
       setFetchError(null);
       setSelected(null);
       setComment("");
+      setCommentCaretPos(0);
+      setMentionIndex(0);
       setBusy(false);
       setSubmitError(null);
       return;
     }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/kanban/crm-users", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          users?: MentionUser[];
+        };
+        if (!res.ok || cancelled) return;
+        setMentionUsers(Array.isArray(data.users) ? data.users : []);
+      } catch {
+        if (!cancelled) setMentionUsers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   useEffect(() => {
@@ -131,6 +196,83 @@ export function MailAddToOrderDialog({
   const selectedId = selected?.id ?? null;
   const list = useMemo(() => hits, [hits]);
 
+  const adminMentionUserIds = useMemo(
+    () =>
+      mentionUsers
+        .filter((u) => u.role != null && isKanbanAdminGroupRole(u.role))
+        .map((u) => u.id),
+    [mentionUsers],
+  );
+  const mentionOptions = useMemo<MentionOption[]>(() => {
+    const synthetic: MentionOption[] =
+      adminMentionUserIds.length > 0 && adminMentionTag
+        ? [
+            {
+              id: "__kanban_lab_team__",
+              label: `Лаборатория (@${adminMentionTag})`,
+              insertText: `@${adminMentionTag}`,
+              searchText:
+                `лаборатория ${adminMentionTag} администратор`.toLowerCase(),
+            },
+          ]
+        : [];
+    const rest = mentionUsers
+      .filter((u) => !isKanbanAdminGroupRole(u.role))
+      .map((u) => {
+        const fallbackByEmail = sanitizeMentionToken(
+          (u.email || "").split("@")[0] || "",
+        );
+        const fallbackByName = sanitizeMentionToken(u.displayName || "");
+        const mentionToken =
+          sanitizeMentionToken(u.mentionHandle || "") ||
+          fallbackByEmail ||
+          fallbackByName;
+        if (!mentionToken) return null;
+        return {
+          id: u.id,
+          label: u.displayName,
+          insertText: `@${mentionToken}`,
+          searchText: `${u.displayName} ${u.email} ${mentionToken}`.toLowerCase(),
+        };
+      })
+      .filter((x): x is MentionOption => x != null);
+    return [...synthetic, ...rest];
+  }, [mentionUsers, adminMentionTag, adminMentionUserIds]);
+  const mentionDraft = useMemo(
+    () => findMentionDraft(comment, commentCaretPos),
+    [comment, commentCaretPos],
+  );
+  const mentionFiltered = useMemo(() => {
+    if (!mentionDraft) return [];
+    const q = mentionDraft.query.trim();
+    const base = q
+      ? mentionOptions.filter((x) => x.searchText.includes(q))
+      : mentionOptions;
+    return base.slice(0, 8);
+  }, [mentionDraft, mentionOptions]);
+  const applyMention = useCallback(
+    (option: MentionOption) => {
+      if (!mentionDraft) return;
+      const before = comment.slice(0, mentionDraft.start);
+      const after = comment.slice(mentionDraft.end);
+      const nextText = `${before}${option.insertText} ${after}`;
+      const nextCaret = before.length + option.insertText.length + 1;
+      setComment(nextText);
+      setCommentCaretPos(nextCaret);
+      setMentionIndex(0);
+      requestAnimationFrame(() => {
+        if (!commentTextareaRef.current) return;
+        commentTextareaRef.current.focus();
+        commentTextareaRef.current.setSelectionRange(nextCaret, nextCaret);
+      });
+    },
+    [comment, mentionDraft],
+  );
+
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionDraft?.start, mentionDraft?.query]);
+
   async function submit(unblock: boolean) {
     if (!selected || busy) return;
     setBusy(true);
@@ -144,7 +286,6 @@ export function MailAddToOrderDialog({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             emailIds,
-            comment: comment.trim() || undefined,
             unblock,
           }),
         },
@@ -159,7 +300,46 @@ export function MailAddToOrderDialog({
         setSubmitError(data.error ?? "Не удалось добавить письма");
         return;
       }
-      const warnings = [data.commentError, data.unblockError]
+      let commentError = data.commentError ?? null;
+      const trimmedComment = comment.trim();
+      if (trimmedComment) {
+        const chatText = `${trimmedComment}\n\nПривязано писем: ${emailIds.length}`;
+        try {
+          const chatRes = await fetch(
+            `/api/orders/${encodeURIComponent(selected.id)}/kanban-chat`,
+            {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: chatText }),
+            },
+          );
+          if (!chatRes.ok) {
+            const fallback = await fetch(
+              `/api/orders/${encodeURIComponent(selected.id)}/source-emails`,
+              {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  emailIds,
+                  comment: trimmedComment,
+                  unblock: false,
+                }),
+              },
+            );
+            const fallbackData = (await fallback.json().catch(() => ({}))) as {
+              commentError?: string | null;
+            };
+            commentError =
+              fallbackData.commentError ??
+              "Не удалось отправить комментарий в канбан";
+          }
+        } catch {
+          commentError = "Не удалось отправить комментарий в канбан";
+        }
+      }
+      const warnings = [commentError, data.unblockError]
         .filter(Boolean)
         .join("; ");
       if (warnings) {
@@ -203,7 +383,7 @@ export function MailAddToOrderDialog({
             </h2>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
               Писем: {emailIds.length}. Найдите наряд и при необходимости
-              оставьте комментарий в Kaiten.
+              оставьте комментарий в канбане.
             </p>
           </div>
           <button
@@ -298,14 +478,79 @@ export function MailAddToOrderDialog({
           )}
 
           <label className="block text-xs font-medium text-[var(--text-secondary)]">
-            Комментарий в Kaiten (необязательно)
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              rows={3}
-              placeholder="Текст уйдёт в карточку после добавления…"
-              className="mt-1 w-full resize-y rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)]"
-            />
+            Комментарий в канбане (необязательно)
+            <div className="relative mt-1">
+              {mentionFiltered.length > 0 ? (
+                <div className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-10 max-h-56 overflow-y-auto rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] p-1 shadow-xl">
+                  {mentionFiltered.map((option, idx) => (
+                    <button
+                      key={`${option.id}-${option.insertText}`}
+                      type="button"
+                      className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.78rem] ${
+                        idx === mentionIndex
+                          ? "bg-[var(--surface-subtle)] text-[var(--sidebar-blue)]"
+                          : "text-[var(--app-text)] hover:bg-[var(--surface-subtle)]"
+                      }`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        applyMention(option);
+                      }}
+                    >
+                      <span className="truncate">{option.label}</span>
+                      <span className="ml-3 shrink-0 text-[0.72rem] text-[var(--text-muted)]">
+                        {option.insertText}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <textarea
+                ref={commentTextareaRef}
+                value={comment}
+                onChange={(e) => {
+                  setComment(e.target.value);
+                  setCommentCaretPos(
+                    e.target.selectionStart ?? e.target.value.length,
+                  );
+                }}
+                onClick={(e) => {
+                  setCommentCaretPos(
+                    e.currentTarget.selectionStart ?? comment.length,
+                  );
+                }}
+                onSelect={(e) => {
+                  setCommentCaretPos(
+                    e.currentTarget.selectionStart ?? comment.length,
+                  );
+                }}
+                onKeyDown={(e) => {
+                  if (mentionFiltered.length === 0) return;
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setMentionIndex((v) => (v + 1) % mentionFiltered.length);
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setMentionIndex((v) =>
+                      v <= 0 ? mentionFiltered.length - 1 : v - 1,
+                    );
+                    return;
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    applyMention(
+                      mentionFiltered[
+                        Math.min(mentionIndex, mentionFiltered.length - 1)
+                      ]!,
+                    );
+                  }
+                }}
+                rows={3}
+                placeholder="Текст уйдёт в карточку после добавления. @ — отметить коллегу"
+                className="w-full resize-y rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)]"
+              />
+            </div>
           </label>
 
           {submitError ? (
@@ -337,7 +582,7 @@ export function MailAddToOrderDialog({
               type="button"
               className="rounded-lg border border-emerald-500/60 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-40 dark:border-emerald-700/70 dark:bg-emerald-950/40 dark:text-emerald-100"
               disabled={!canSubmit}
-              title="Привязать письма и снять блокировку в Kaiten"
+              title="Привязать письма и снять блокировку в канбане"
               onClick={() => void submit(true)}
             >
               {busy ? "…" : "Добавить и разблокировать"}

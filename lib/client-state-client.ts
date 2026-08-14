@@ -28,7 +28,10 @@ type WriteSlot = {
 
 const slots = new Map<string, WriteSlot>();
 
+/** Только 413 / локальный oversized — повтор того же тела бесполезен. */
 const COOLDOWN_HARD_MS = 5 * 60_000;
+/** 500/400 часто транзиент (лок БД, обрезка прокси) — не глушим сохранение на 5 минут. */
+const COOLDOWN_TRANSIENT_MS = 20_000;
 const COOLDOWN_NETWORK_MS = 60_000;
 const WARN_EVERY_MS = 5 * 60_000;
 
@@ -129,14 +132,21 @@ async function flushWrite(
       slot.skipUntil = 0;
       return true;
     }
-    if (res.status === 413 || res.status === 400 || res.status === 500) {
+    if (res.status === 413) {
       slot.skipUntil = Date.now() + COOLDOWN_HARD_MS;
-      // Сбрасываем очередь — иначе после cooldown снова упрёмся в тот же oversized.
       slot.hasQueued = false;
       slot.queued = undefined;
       warnOnce(
         slot,
-        `[client-state] PUT ${scope}/${key} → HTTP ${res.status} (cooldown ${COOLDOWN_HARD_MS / 1000}s, no retry spam)`,
+        `[client-state] PUT ${scope}/${key} → HTTP 413 (cooldown ${COOLDOWN_HARD_MS / 1000}s, no retry spam)`,
+      );
+      return false;
+    }
+    if (res.status === 400 || res.status === 500) {
+      slot.skipUntil = Date.now() + COOLDOWN_TRANSIENT_MS;
+      warnOnce(
+        slot,
+        `[client-state] PUT ${scope}/${key} → HTTP ${res.status} (retry in ${COOLDOWN_TRANSIENT_MS / 1000}s)`,
       );
       return false;
     }

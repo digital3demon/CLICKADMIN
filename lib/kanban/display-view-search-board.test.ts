@@ -65,4 +65,37 @@ describe("buildKanbanDisplayView · search on board", () => {
     expect(ids).not.toContain("foreign-hit");
     expect(cardHomeBoardId.get("local-hit")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
   });
+
+  it("прячет пустые колонки, чтобы попадание в «Сдана админам» было видно", () => {
+    const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
+    const shipped = ortho.columns.find((c) => c.title === "Сдана админам")!;
+    shipped.cards.push(
+      createCard({
+        id: "orlov",
+        title: "2608-119 Орлов Ю. Енькова А.А. Временные 13.08",
+        linkedOrderId: "o-orlov",
+      }),
+    );
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [ortho],
+      activeBoardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+      search: "орлов",
+      viewMode: "board",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+    });
+    expect(displayBoard.columns.map((c) => c.title)).toEqual(["Сдана админам"]);
+    expect(displayBoard.columns[0]!.cards.map((c) => c.id)).toEqual(["orlov"]);
+  });
 });

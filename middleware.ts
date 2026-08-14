@@ -689,7 +689,8 @@ export async function middleware(req: NextRequest) {
 export const config = {
   /** Node runtime: Edge middleware could verify JWT with empty/wrong AUTH_SECRET if .env appeared only after `next build`. */
   runtime: "nodejs",
+  /** POST вложений не гоняем через middleware: Next клонирует тело и на больших файлах отдаёт HTML 500. */
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/orders/[^/]+/attachments(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
