@@ -46,6 +46,9 @@ const SPACE_OPTIONS: {
 type UiCardType = { id: string; name: string; externalTypeId: number };
 
 function normalizeCardTypeName(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
   return normalizeCardTypeNameKey(value);
 }
 
