@@ -12,7 +12,6 @@ import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
   kaitenOrderToHarmonyTone,
   resolveListPillClass,
-  type HarmonyPillTone,
 } from "@/lib/harmony-list-pill";
 
 function kanbanColumnLabelForNoKaitenPill(
@@ -36,59 +35,49 @@ function kanbanColumnLabelForNoKaitenPill(
 const STOP_PILL_CLASSIC =
   "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-red-500/90 bg-red-600 text-center font-bold uppercase tracking-wide text-white shadow-sm dark:border-red-400/70 dark:bg-red-700";
 
-const BOARD_PILL_CLASSIC_ORTHO =
-  "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-neutral-400/80 bg-neutral-200 text-center font-semibold uppercase tracking-wide text-neutral-900 dark:border-neutral-400/70 dark:bg-neutral-600 dark:text-neutral-50";
+const BOARD_LABEL_BASE =
+  "inline-flex min-w-0 max-w-full items-center truncate text-center font-medium uppercase tracking-wide";
 
-const BOARD_PILL_CLASSIC_ODON =
-  "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-slate-400/80 bg-slate-200 text-center font-semibold uppercase tracking-wide text-slate-900 dark:border-slate-400/70 dark:bg-slate-600 dark:text-slate-50";
+/** Ортопедия — тёплый светло-серый, без обёртки. */
+const BOARD_LABEL_ORTHO = `${BOARD_LABEL_BASE} text-stone-400 dark:text-stone-400`;
 
-const BOARD_PILL_CLASSIC_TEST =
-  "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-amber-400/70 bg-amber-100 text-center font-semibold uppercase tracking-wide text-amber-950 dark:border-amber-500/60 dark:bg-amber-900/75 dark:text-amber-50";
+/** Ортодонтия — холодный светло-серый, без обёртки. */
+const BOARD_LABEL_ODON = `${BOARD_LABEL_BASE} text-slate-400 dark:text-slate-400`;
 
-function boardLaneTone(label: string): HarmonyPillTone {
-  if (label === "Ортодонтия") return "slate";
-  if (label === "Тест") return "yellow";
-  return "stone";
-}
+const BOARD_LABEL_TEST = `${BOARD_LABEL_BASE} text-amber-500/80 dark:text-amber-400/75`;
 
-function boardLaneClassicClass(label: string): string {
-  if (label === "Ортодонтия") return BOARD_PILL_CLASSIC_ODON;
-  if (label === "Тест") return BOARD_PILL_CLASSIC_TEST;
-  return BOARD_PILL_CLASSIC_ORTHO;
+function boardLaneLabelClass(label: string): string {
+  if (label === "Ортодонтия") return BOARD_LABEL_ODON;
+  if (label === "Тест") return BOARD_LABEL_TEST;
+  return BOARD_LABEL_ORTHO;
 }
 
 function boardLanePill(
   label: string,
-  isHarmony: boolean,
   underOrder: boolean,
   href: string | null,
 ) {
   const padClass = underOrder
-    ? "px-2 py-px text-[10px] leading-tight sm:px-2.5 sm:text-[11px]"
-    : "px-1.5 py-px text-[9px] leading-tight";
-  const tone = boardLaneTone(label);
-  const pill = (
+    ? "px-0.5 py-px text-[10px] leading-tight sm:text-[11px]"
+    : "px-0.5 py-px text-[9px] leading-tight";
+  const text = (
     <span
-      className={
-        isHarmony
-          ? `${resolveListPillClass(true, "", tone)} ${padClass}`
-          : `${boardLaneClassicClass(label)} ${padClass}`
-      }
+      className={`${boardLaneLabelClass(label)} ${padClass}`}
       title={href ? `Показать наряды: ${label}` : `Доска: ${label}`}
     >
       <span className="truncate">{label}</span>
     </span>
   );
-  if (!href) return pill;
+  if (!href) return text;
   return (
     <Link
       prefetch={false}
       href={href}
       data-row-click-ignore
       title={`Показать наряды: ${label}`}
-      className="inline-flex min-w-0 max-w-full text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none"
+      className="inline-flex min-w-0 max-w-full text-inherit no-underline outline-none transition-opacity hover:opacity-80 focus-visible:outline-none"
     >
-      {pill}
+      {text}
     </Link>
   );
 }
@@ -104,7 +93,7 @@ function wrapStatusAndBoard(
     <span className="flex w-full min-w-0 flex-col items-center justify-center gap-0.5 -translate-y-0.5">
       {statusNode}
       {boardLabel
-        ? boardLanePill(boardLabel, isHarmony, underOrder, boardFilterHref)
+        ? boardLanePill(boardLabel, underOrder, boardFilterHref)
         : null}
     </span>
   );
