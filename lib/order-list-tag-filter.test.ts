@@ -3,6 +3,7 @@ import {
   humanListTagLabel,
   listTagKaitenColumnTitle,
   listTagKaitenTrackLane,
+  listTagKaitenTrackLaneOrNull,
   listTagParamsEqual,
   listTagUrgentCoefficient,
   listTagWhere,
@@ -73,6 +74,8 @@ describe("kaiten track lane tag", () => {
     });
     expect(parseKaitenTrackLaneValue("тест")).toBe(null);
     expect(parseKaitenTrackLaneValue("TEST")).toBe("TEST");
+    expect(listTagKaitenTrackLaneOrNull("ORTHOPEDICS")).toBe("lane:ORTHOPEDICS");
+    expect(listTagKaitenTrackLaneOrNull("ортопедия")).toBe(null);
     expect(humanListTagLabel({ kind: "kaitenTrackLane", lane: "ORTHOPEDICS" })).toBe(
       "Ортопедия",
     );

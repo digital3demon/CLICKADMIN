@@ -14,10 +14,6 @@ import {
   resolveListPillClass,
   type HarmonyPillTone,
 } from "@/lib/harmony-list-pill";
-import {
-  listTagKaitenTrackLane,
-  parseKaitenTrackLaneValue,
-} from "@/lib/order-list-tag-filter";
 
 function kanbanColumnLabelForNoKaitenPill(
   demoKanbanColumn: string | null | undefined,
@@ -126,8 +122,8 @@ type Props = {
   kaitenBlockReason?: string | null;
   /** Ссылка фильтра по колонке Kaiten; без неё — только пилюля. */
   filterHref?: string | null;
-  /** Строит ссылку фильтра по ключу `tag=` — пилюля доски работает как фильтр. */
-  makeTagHref?: ((tag: string) => string) | null;
+  /** Ссылка фильтра по доске (ортопедия / ортодонтия); без неё — только пилюля. */
+  boardFilterHref?: string | null;
   /** Компактная пилюля под номером наряда (отгрузки). */
   placement?: "tags" | "underOrderNumber";
 };
@@ -141,15 +137,12 @@ export function OrderListKaitenColumnTag({
   kaitenBlocked = false,
   kaitenBlockReason = null,
   filterHref = null,
-  makeTagHref = null,
+  boardFilterHref = null,
   placement = "tags",
 }: Props) {
   const isHarmony = useUiDesign() === "harmony";
   const underOrder = placement === "underOrderNumber";
   const boardLabel = kaitenTrackLaneListLabel(kaitenTrackLane);
-  const laneKey = parseKaitenTrackLaneValue(kaitenTrackLane);
-  const boardFilterHref =
-    laneKey && makeTagHref ? makeTagHref(listTagKaitenTrackLane(laneKey)) : null;
   // Под №: чуть крупнее и с запасом по бокам (раньше text-[9–10px]/px-1.5 было «впритык»).
   const padClass = underOrder
     ? "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:text-[12px]"

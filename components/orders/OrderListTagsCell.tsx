@@ -36,6 +36,7 @@ import {
   LIST_TAG_URGENT_NO_COEF,
   listTagCustomLabel,
   listTagKaitenColumnTitle,
+  listTagKaitenTrackLaneOrNull,
   listTagUrgentCoefficient,
 } from "@/lib/order-list-tag-filter";
 import {
@@ -393,6 +394,7 @@ export function OrderListTagsCell({
     kaitenColTrimmed.length > 0
       ? listTagKaitenColumnTitle(kaitenColTrimmed)
       : null;
+  const kaitenLaneFilterKey = listTagKaitenTrackLaneOrNull(kaitenTrackLane);
 
   const [addOpen, setAddOpen] = useState(false);
   const [newLabel, setNewLabel] = useState("");
@@ -1008,7 +1010,9 @@ export function OrderListTagsCell({
                   ? href(kaitenFilterKey)
                   : null
             }
-            makeTagHref={href}
+            boardFilterHref={
+              kaitenLaneFilterKey ? href(kaitenLaneFilterKey) : null
+            }
           />
         ),
       });

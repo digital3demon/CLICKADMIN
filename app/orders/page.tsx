@@ -37,6 +37,7 @@ import {
   relatedOrdersListTagQuickFilters,
   listTagParamsEqual,
   listTagKaitenColumnTitle,
+  listTagKaitenTrackLaneOrNull,
   LIST_TAG_KAITEN_BLOCKED,
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
@@ -364,12 +365,6 @@ export default async function OrdersPage({
     otprFrom: otprFromUrl ?? undefined,
     otprTo: otprToUrl ?? undefined,
   };
-  const makeOrdersTagHref = (tag: string) =>
-    ordersListHref({
-      limit: pageSize,
-      ...listHrefCommon,
-      tag,
-    });
   const baseCountParts: Prisma.OrderWhereInput[] = [
     { tenantId: tenantId ?? "__missing_tenant__" },
     { archivedAt: null },
@@ -988,6 +983,14 @@ export default async function OrdersPage({
                         tag: listTagKaitenColumnTitle(kaitenColTrimmed),
                       })
                     : null;
+                const laneTag = listTagKaitenTrackLaneOrNull(o.kaitenTrackLane);
+                const boardFilterHref = laneTag
+                  ? ordersListHref({
+                      limit: pageSize,
+                      ...listHrefCommon,
+                      tag: laneTag,
+                    })
+                  : null;
                 const rowAccent = resolveOrderListRowAccentKind({
                   listPendingChatCorrections: o.listPendingChatCorrections,
                   listCompositionMismatch: o.listCompositionMismatch,
@@ -1077,7 +1080,7 @@ export default async function OrdersPage({
                   kaitenBlocked={blocked}
                   kaitenBlockReason={o.kaitenBlockReason}
                   kaitenFilterHref={kaitenStatusFilterHref}
-                  makeTagHref={makeOrdersTagHref}
+                  boardFilterHref={boardFilterHref}
                   isLabOverdue={isLabOverdue}
                   tagsNode={tagsNode}
                   mobileShippedNode={
@@ -1201,7 +1204,7 @@ export default async function OrdersPage({
                         kaitenBlocked={blocked}
                         kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
-                        makeTagHref={makeOrdersTagHref}
+                        boardFilterHref={boardFilterHref}
                         placement="underOrderNumber"
                       />
                     </div>

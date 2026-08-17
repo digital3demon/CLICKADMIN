@@ -18,7 +18,11 @@ import { clampOrdersPageSize } from "@/lib/orders-list-cursor";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { orderPathById } from "@/lib/order-public-ref";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
-import { listTagKaitenColumnTitle, LIST_TAG_KAITEN_BLOCKED } from "@/lib/order-list-tag-filter";
+import {
+  listTagKaitenColumnTitle,
+  listTagKaitenTrackLaneOrNull,
+  LIST_TAG_KAITEN_BLOCKED,
+} from "@/lib/order-list-tag-filter";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
 import {
   mergeOrderListRowClass,
@@ -223,13 +227,6 @@ export function ShipmentsOrdersTable({
 
   const mirrorScrollId = "shipments-table-mirror-scroll";
   const bodyScrollId = "shipments-table-body-scroll";
-  const makeShipmentsTagHref = (tag: string) =>
-    shipmentsListHref({
-      tab: shipmentsTagFilterContext?.tab ?? "today",
-      tag,
-      from: shipmentsTagFilterContext?.periodFrom ?? undefined,
-      to: shipmentsTagFilterContext?.periodTo ?? undefined,
-    });
 
   return (
     <div className="w-full min-w-0">
@@ -349,7 +346,16 @@ export function ShipmentsOrdersTable({
                       from: shipmentsTagFilterContext?.periodFrom ?? undefined,
                       to: shipmentsTagFilterContext?.periodTo ?? undefined,
                     })
-                  : null;
+                    : null;
+              const laneTag = listTagKaitenTrackLaneOrNull(o.kaitenTrackLane);
+              const boardFilterHref = laneTag
+                ? shipmentsListHref({
+                    tab: shipmentsTagFilterContext?.tab ?? "today",
+                    tag: laneTag,
+                    from: shipmentsTagFilterContext?.periodFrom ?? undefined,
+                    to: shipmentsTagFilterContext?.periodTo ?? undefined,
+                  })
+                : null;
               const renderPrintActions = () => (
                 <>
                   <OrderNarjadPrintTrigger
@@ -440,7 +446,7 @@ export function ShipmentsOrdersTable({
                         kaitenBlocked={blocked}
                         kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
-                        makeTagHref={makeShipmentsTagHref}
+                        boardFilterHref={boardFilterHref}
                         placement="underOrderNumber"
                       />
                     </div>
@@ -571,7 +577,7 @@ export function ShipmentsOrdersTable({
                             kaitenBlocked={blocked}
                             kaitenBlockReason={o.kaitenBlockReason}
                             filterHref={kaitenStatusFilterHref}
-                            makeTagHref={makeShipmentsTagHref}
+                            boardFilterHref={boardFilterHref}
                             placement="underOrderNumber"
                           />
                         </div>

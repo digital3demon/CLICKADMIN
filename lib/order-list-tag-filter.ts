@@ -137,6 +137,14 @@ export function listTagKaitenTrackLane(lane: ListTagKaitenTrackLane): string {
   return `lane:${lane}`;
 }
 
+/** `tag=` для доски или `null`, если дорожка неизвестна. */
+export function listTagKaitenTrackLaneOrNull(
+  lane: string | null | undefined,
+): string | null {
+  const key = parseKaitenTrackLaneValue(lane);
+  return key ? listTagKaitenTrackLane(key) : null;
+}
+
 /** Фильтр срочных с конкретным коэффициентом (как в карточке «×1.2»). */
 export function listTagUrgentCoefficient(coef: number): string {
   if (!Number.isFinite(coef) || coef <= 0) return LIST_TAG_URGENT;

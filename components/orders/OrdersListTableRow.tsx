@@ -48,7 +48,7 @@ export function OrdersListTableRow({
   kaitenBlocked = false,
   kaitenBlockReason = null,
   kaitenFilterHref = null,
-  makeTagHref = null,
+  boardFilterHref = null,
   harmonyRowState = "default",
   rowAccent = null,
   isLabOverdue = false,
@@ -75,7 +75,7 @@ export function OrdersListTableRow({
   kaitenBlocked?: boolean;
   kaitenBlockReason?: string | null;
   kaitenFilterHref?: string | null;
-  makeTagHref?: ((tag: string) => string) | null;
+  boardFilterHref?: string | null;
   harmonyRowState?: OrderListHarmonyRowState;
   /** Цветная рамка: корректировки (янтарь) / запрос протетики (голубой). */
   rowAccent?: OrderListRowAccentKind | null;
@@ -180,7 +180,7 @@ export function OrdersListTableRow({
                   kaitenBlocked={kaitenBlocked}
                   kaitenBlockReason={kaitenBlockReason}
                   filterHref={kaitenFilterHref}
-                  makeTagHref={makeTagHref}
+                  boardFilterHref={boardFilterHref}
                   placement="underOrderNumber"
                 />
               </div>

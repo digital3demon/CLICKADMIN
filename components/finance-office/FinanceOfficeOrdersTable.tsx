@@ -27,7 +27,11 @@ import {
   resolveOrderListRowAccentKind,
 } from "@/lib/order-list-row-accent";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
-import { listTagKaitenColumnTitle, LIST_TAG_KAITEN_BLOCKED } from "@/lib/order-list-tag-filter";
+import {
+  listTagKaitenColumnTitle,
+  listTagKaitenTrackLaneOrNull,
+  LIST_TAG_KAITEN_BLOCKED,
+} from "@/lib/order-list-tag-filter";
 
 function targetInsideInteractive(target: EventTarget | null) {
   if (target == null || !(target instanceof Node)) return false;
@@ -124,14 +128,6 @@ export function FinanceOfficeOrdersTable({
   toolbar?: ReactNode;
 }) {
   const router = useRouter();
-  const makeFinanceTagHref = (tag: string) =>
-    financeOfficeListHref({
-      tab,
-      tag,
-      from: periodFrom ?? undefined,
-      to: periodTo ?? undefined,
-      q: (q ?? "").trim() || undefined,
-    });
   const { user } = useSessionUser();
   const canSeeAdminIndicators = canSeeOrderNotificationKind(
     "admin",
@@ -267,6 +263,16 @@ export function FinanceOfficeOrdersTable({
                       q: (q ?? "").trim() || undefined,
                     })
                   : null;
+              const laneTag = listTagKaitenTrackLaneOrNull(o.kaitenTrackLane);
+              const boardFilterHref = laneTag
+                ? financeOfficeListHref({
+                    tab,
+                    tag: laneTag,
+                    from: periodFrom ?? undefined,
+                    to: periodTo ?? undefined,
+                    q: (q ?? "").trim() || undefined,
+                  })
+                : null;
               const rowAccent = resolveOrderListRowAccentKind({
                 listPendingChatCorrections: o.listPendingChatCorrections,
                 listCompositionMismatch: o.listCompositionMismatch,
@@ -372,7 +378,7 @@ export function FinanceOfficeOrdersTable({
                         kaitenBlocked={blocked}
                         kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
-                        makeTagHref={makeFinanceTagHref}
+                        boardFilterHref={boardFilterHref}
                         placement="underOrderNumber"
                       />
                     </div>
@@ -473,7 +479,7 @@ export function FinanceOfficeOrdersTable({
                           kaitenBlocked={blocked}
                           kaitenBlockReason={o.kaitenBlockReason}
                           filterHref={kaitenStatusFilterHref}
-                          makeTagHref={makeFinanceTagHref}
+                          boardFilterHref={boardFilterHref}
                           placement="underOrderNumber"
                         />
                         <div
