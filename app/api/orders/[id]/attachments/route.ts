@@ -30,6 +30,8 @@ import {
   CRM_UPLOAD_MAX_BYTES,
   CRM_UPLOAD_TOO_LARGE_MESSAGE,
 } from "@/lib/crm-upload-limits";
+import { isOrderWorkAttachment } from "@/lib/order-work-attachments";
+import { importMissingKaitenFilesForOrder } from "@/lib/kaiten-files-import";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -209,6 +211,11 @@ export async function GET(_req: Request, ctx: Ctx) {
     if (!order) {
       return NextResponse.json({ error: "Заказ не найден" }, { status: 404 });
     }
+    try {
+      await importMissingKaitenFilesForOrder(orderId, { prisma, limit: 6 });
+    } catch (e) {
+      console.warn("[attachments GET] kaiten file import", e);
+    }
     const rows = await prisma.orderAttachment.findMany({
       where: { orderId },
       orderBy: { createdAt: "desc" },
@@ -223,13 +230,7 @@ export async function GET(_req: Request, ctx: Ctx) {
       },
     });
     const invId = order.invoiceAttachmentId;
-    const visible = rows.filter((r) => {
-      // Платёжки и сканы сканера — не в общем списке файлов наряда.
-      if (r.scope === OrderAttachmentScope.PAYMENT_SLIP) return false;
-      if (r.scope === OrderAttachmentScope.SCANNER) return false;
-      if (invId && r.id === invId) return false;
-      return true;
-    });
+    const visible = rows.filter((r) => isOrderWorkAttachment(r, invId));
     return NextResponse.json(visible);
   } catch (e) {
     console.error("[attachments GET]", e);

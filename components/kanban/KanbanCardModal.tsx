@@ -72,7 +72,8 @@ import {
   userNameById,
 } from "@/lib/kanban/model";
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { kanbanCardDescriptionNeedsCollapse } from "@/lib/kanban/kanban-card-desc-collapse";
 import { createPortal } from "react-dom";
 import { DeadlineTomorrowHint } from "./DeadlineTomorrowHint";
 import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
@@ -283,7 +284,12 @@ export function KanbanCardModal({
   const [pickerMode, setPickerMode] = useState<null | "assign" | "part">(null);
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
-  const [descExpanded, setDescExpanded] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(true);
+  const [descCanCollapse, setDescCanCollapse] = useState(false);
+  const descUserOverrideRef = useRef(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const descBoxRef = useRef<HTMLDivElement>(null);
+  const descMeasureRef = useRef<HTMLDivElement>(null);
   const [placementFieldsOpen, setPlacementFieldsOpen] = useState(false);
   const [fileViewer, setFileViewer] = useState<
     | null
@@ -344,7 +350,9 @@ export function KanbanCardModal({
     setManualRouteOpen(false);
     setManualRoutePendingFiles([]);
     setManualRouteRows([]);
-    setDescExpanded(false);
+    descUserOverrideRef.current = false;
+    setDescExpanded(true);
+    setDescCanCollapse(false);
     setPlacementFieldsOpen(false);
   }, [cardId]);
 
@@ -359,6 +367,37 @@ export function KanbanCardModal({
   useEffect(() => {
     if (card) setDescDraft(card.description || "");
   }, [cardId, card?.description]);
+
+  const recomputeDescCollapse = useCallback(() => {
+    if (descUserOverrideRef.current) return;
+    const overlay = overlayRef.current;
+    const measure = descMeasureRef.current;
+    const box = descBoxRef.current;
+    if (!overlay || !descDraft.trim() || !measure) {
+      setDescCanCollapse(false);
+      setDescExpanded(true);
+      return;
+    }
+    const currentH = box?.offsetHeight ?? 80;
+    const fullH = Math.max(measure.scrollHeight, 100);
+    const heightIfExpanded = overlay.scrollHeight - currentH + fullH;
+    const needs = kanbanCardDescriptionNeedsCollapse(
+      heightIfExpanded,
+      overlay.clientHeight,
+    );
+    setDescCanCollapse(needs);
+    setDescExpanded(!needs);
+  }, [descDraft]);
+
+  useLayoutEffect(() => {
+    recomputeDescCollapse();
+  }, [recomputeDescCollapse, cardId, card?.files?.length]);
+
+  useEffect(() => {
+    const onResize = () => recomputeDescCollapse();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [recomputeDescCollapse]);
 
   const linkedOrderId = card?.linkedOrderId;
   const kaitenCardIdForChat = card?.kaitenCardId;
@@ -1115,6 +1154,7 @@ export function KanbanCardModal({
 
   return (
     <div
+      ref={overlayRef}
       className="kanban-root fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/55 p-4 py-6"
       role="dialog"
       aria-modal
@@ -1941,27 +1981,41 @@ export function KanbanCardModal({
                   <div className="text-[0.625rem] font-medium uppercase tracking-wide text-sky-800/90 dark:text-sky-300/90">
                     Описание и детали заказа
                   </div>
-                  {descDraft.trim() ? (
+                  {descDraft.trim() && descCanCollapse ? (
                     <button
                       type="button"
                       className="shrink-0 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-border)]"
-                      onClick={() => setDescExpanded((v) => !v)}
+                      onClick={() => {
+                        descUserOverrideRef.current = true;
+                        setDescExpanded((v) => !v);
+                      }}
                       aria-expanded={descExpanded}
                     >
                       {descExpanded ? "Свернуть описание" : "Развернуть описание"}
                     </button>
-                  ) : (
+                  ) : descDraft.trim() ? null : (
                     <button
                       type="button"
                       className="shrink-0 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
-                      onClick={() => setDescExpanded(true)}
+                      onClick={() => {
+                        descUserOverrideRef.current = true;
+                        setDescExpanded(true);
+                      }}
                     >
                       Добавить описание
                     </button>
                   )}
                 </div>
                 <div className="grid min-h-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] sm:items-start">
-                  <div className="min-w-0">
+                  <div className="relative min-w-0">
+                    <div
+                      ref={descMeasureRef}
+                      className={`${baseInput} pointer-events-none invisible absolute left-0 right-0 top-0 min-h-[100px] whitespace-pre-wrap break-words sm:min-h-[120px]`}
+                      aria-hidden
+                    >
+                      {descDraft}
+                    </div>
+                    <div ref={descBoxRef}>
                     {descExpanded ? (
                       <LinkifiedTextarea
                         className={baseInput}
@@ -2037,6 +2091,7 @@ export function KanbanCardModal({
                         </span>
                       </div>
                     )}
+                    </div>
                   </div>
                   <aside
                     className="flex min-h-[100px] flex-col rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] p-1.5 sm:min-h-[120px]"

@@ -1,18 +1,17 @@
 /**
- * Рабочие вложения наряда — один канон для заказа, чата, канбана и Kaiten.
- * Без счёта, платёжки и сканов книжного сканера.
+ * Рабочие вложения наряда — заказ, чат, канбан.
+ * Сканы книжного сканера здесь видны; в Kaiten их не пушим (sticker hub).
+ * Без счёта и платёжки.
  */
 import { OrderAttachmentScope } from "@prisma/client";
-import { isOrderAttachmentEligibleForKaitenPush } from "@/lib/kaiten-attachment-eligibility";
 
 export function isOrderWorkAttachment(
   row: { id: string; scope: OrderAttachmentScope },
   invoiceAttachmentId: string | null,
 ): boolean {
-  return isOrderAttachmentEligibleForKaitenPush({
-    ...row,
-    order: { invoiceAttachmentId },
-  });
+  if (row.scope === OrderAttachmentScope.PAYMENT_SLIP) return false;
+  if (invoiceAttachmentId && row.id === invoiceAttachmentId) return false;
+  return true;
 }
 
 export type OrderWorkAttachmentRow = {

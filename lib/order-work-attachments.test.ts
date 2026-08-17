@@ -7,7 +7,7 @@ import {
 } from "@/lib/order-work-attachments";
 
 describe("isOrderWorkAttachment", () => {
-  it("прячет счёт, платёжку и скан сканера", () => {
+  it("прячет счёт и платёжку, скан сканера оставляет", () => {
     expect(
       isOrderWorkAttachment(
         { id: "inv", scope: OrderAttachmentScope.GENERAL },
@@ -25,7 +25,7 @@ describe("isOrderWorkAttachment", () => {
         { id: "s", scope: OrderAttachmentScope.SCANNER },
         null,
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isOrderWorkAttachment(
         { id: "ok", scope: OrderAttachmentScope.GENERAL },

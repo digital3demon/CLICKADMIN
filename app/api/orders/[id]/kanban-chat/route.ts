@@ -44,6 +44,7 @@ import {
   orderWorkAttachmentToChatImage,
 } from "@/lib/order-work-attachments";
 import { isCardFileImage } from "@/lib/kanban/card-files";
+import { importMissingKaitenFilesForOrder } from "@/lib/kaiten-files-import";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
@@ -326,6 +327,11 @@ export async function GET(
   }
   const orderHeader = await loadOrderChatHeader(orderId, tenantId);
   const storedComments = await loadKanbanOrderComments(tenantId, orderId);
+  try {
+    await importMissingKaitenFilesForOrder(orderId, { limit: 6 });
+  } catch (e) {
+    console.warn("[kanban-chat GET] kaiten file import", e);
+  }
   const workImages = await loadOrderWorkChatImages(orderId, tenantId);
   const statePayload = await loadTenantKanbanState(tenantId);
   const state = statePayload.state;

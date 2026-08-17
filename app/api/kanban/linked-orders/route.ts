@@ -12,6 +12,7 @@ import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-inges
 import { getKaitenRestAuth } from "@/lib/kaiten-rest";
 import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-column-titles";
 import { isOrderWorkAttachment } from "@/lib/order-work-attachments";
+import { importMissingKaitenFilesForOrder } from "@/lib/kaiten-files-import";
 
 export const dynamic = "force-dynamic";
 
@@ -264,6 +265,20 @@ export async function GET(request: Request) {
         }
       } catch (e) {
         console.error("[kanban/linked-orders] description mirror sync", e);
+      }
+    })();
+
+    void (async () => {
+      try {
+        const pullIds = rows
+          .filter((o) => o.kaitenCardId != null)
+          .map((o) => o.id)
+          .slice(0, 3);
+        for (const id of pullIds) {
+          await importMissingKaitenFilesForOrder(id, { prisma: ordersPrisma, limit: 4 });
+        }
+      } catch (e) {
+        console.error("[kanban/linked-orders] kaiten file import", e);
       }
     })();
 
