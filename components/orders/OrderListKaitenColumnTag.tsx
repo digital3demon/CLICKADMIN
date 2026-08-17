@@ -58,8 +58,8 @@ function boardLanePill(
   href: string | null,
 ) {
   const padClass = underOrder
-    ? "px-0.5 py-px text-[10px] leading-tight sm:text-[11px]"
-    : "px-0.5 py-px text-[9px] leading-tight";
+    ? "px-0.5 py-px text-[9px] leading-tight sm:text-[10px]"
+    : "px-0.5 py-px text-[8px] leading-tight";
   const text = (
     <span
       className={`${boardLaneLabelClass(label)} ${padClass}`}
@@ -90,7 +90,7 @@ function wrapStatusAndBoard(
   boardFilterHref: string | null,
 ) {
   return (
-    <span className="flex w-full min-w-0 flex-col items-center justify-center gap-0.5 -translate-y-0.5">
+    <span className="flex w-full min-w-0 flex-col items-center justify-center gap-1.5 -translate-y-0.5">
       {statusNode}
       {boardLabel
         ? boardLanePill(boardLabel, underOrder, boardFilterHref)
