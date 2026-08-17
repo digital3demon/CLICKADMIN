@@ -114,8 +114,9 @@ function findKaitenFileIdOnCard(
     const id = typeof o.id === "number" && Number.isFinite(o.id) ? o.id : null;
     if (name === fileName && id != null) matches.push(id);
   }
-  if (matches.length === 0) return null;
-  return Math.max(...matches);
+  /* Несколько image.png — не угадываем «тот же» файл по имени. */
+  if (matches.length !== 1) return null;
+  return matches[0] ?? null;
 }
 
 export type OrderAttachmentKaitenHint = {
@@ -225,21 +226,6 @@ export async function pushAttachmentToKaiten(
   });
   if (!att) {
     throw new Error("Вложение не найдено");
-  }
-
-  const cardRes = await kaitenGetCard(auth, order.kaitenCardId);
-  if (cardRes.ok && cardRes.card) {
-    const existingOnCard = findKaitenFileIdOnCard(cardRes.card, att.fileName);
-    if (existingOnCard != null) {
-      await prisma.orderAttachment.update({
-        where: { id: attachmentId },
-        data: {
-          uploadedToKaitenAt: new Date(),
-          kaitenFileId: existingOnCard,
-        },
-      });
-      return;
-    }
   }
 
   const bytes = await readOrderAttachmentBytes(att);
@@ -411,6 +397,32 @@ export async function syncAllUnpushedAttachmentsInBackground(
   return { attempted: eligible.length, pushed, failed, rateLimited };
 }
 
+/** Два вложения с одним kaitenFileId — лишние снова выгружаем (баг image.png). */
+export async function clearDuplicateKaitenFileIdClaims(
+  orderId: string,
+  db?: PrismaClient,
+): Promise<number> {
+  const prisma = db ?? (await getOrdersPrisma());
+  const rows = await prisma.orderAttachment.findMany({
+    where: { orderId, kaitenFileId: { not: null } },
+    select: { id: true, kaitenFileId: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const seen = new Set<number>();
+  const clearIds: string[] = [];
+  for (const r of rows) {
+    if (r.kaitenFileId == null) continue;
+    if (seen.has(r.kaitenFileId)) clearIds.push(r.id);
+    else seen.add(r.kaitenFileId);
+  }
+  if (clearIds.length === 0) return 0;
+  await prisma.orderAttachment.updateMany({
+    where: { id: { in: clearIds } },
+    data: { uploadedToKaitenAt: null, kaitenFileId: null },
+  });
+  return clearIds.length;
+}
+
 export async function syncUnpushedOrderAttachmentsToKaiten(
   orderId: string,
   db?: PrismaClient,
@@ -421,6 +433,8 @@ export async function syncUnpushedOrderAttachmentsToKaiten(
     select: { kaitenCardId: true },
   });
   if (!order?.kaitenCardId) return;
+
+  await clearDuplicateKaitenFileIdClaims(orderId, prisma);
 
   const rows = await prisma.orderAttachment.findMany({
     where: { orderId, ...unpushedToKaitenWhere },

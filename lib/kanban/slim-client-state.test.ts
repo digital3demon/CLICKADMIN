@@ -231,6 +231,52 @@ describe("slimKanbanStateForClientState", () => {
     expect(stop.files).toEqual([]);
   });
 
+  it("keeps all order-attachment files on linked cards (no flicker)", () => {
+    const base = structuredClone(defaultAppState()) as KanbanAppState;
+    const ortho = base.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;
+    ortho.columns[0]!.cards = [
+      {
+        id: "linked-files",
+        title: "2608-214 Лихачева",
+        description: "",
+        cardTypeId: "",
+        assignees: [],
+        participants: [],
+        dueDate: "",
+        urgent: false,
+        checklist: [],
+        files: Array.from({ length: 8 }, (_, j) => ({
+          id: `oa-att${j}`,
+          name: "image.png",
+          mime: "image/png",
+          size: 1000 + j,
+          dataUrl: `/api/orders/ord1/attachments/att${j}`,
+          addedAt: "2026-08-17T09:50:00.000Z",
+          addedByUserId: "u1",
+          orderAttachmentId: `att${j}`,
+        })),
+        comments: [],
+        activity: [],
+        blocked: false,
+        blockReason: "",
+        blockedByUserId: "",
+        blockedAt: "",
+        createdByUserId: "u1",
+        lastMovedAt: null,
+        trackLane: "",
+        linkedOrderId: "ord1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    const slim = slimKanbanStateForClientState(base);
+    const card = slim.boards
+      .find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!
+      .columns[0]!.cards[0]!;
+    expect(card.files).toHaveLength(8);
+    expect(card.files.every((f) => f.name === "image.png")).toBe(true);
+  });
+
   it("clears description for linked-order cards (rehydrated from Order)", () => {
     const base = structuredClone(defaultAppState()) as KanbanAppState;
     const ortho = base.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;

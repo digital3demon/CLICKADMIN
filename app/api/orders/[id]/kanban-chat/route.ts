@@ -39,6 +39,11 @@ import { normalizeProductionSettings } from "@/lib/kanban/production";
 import { notifyTelegramForKanbanChatMentions } from "@/lib/kanban-chat-mention-telegram.server";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { getSiteOrigin } from "@/lib/site-origin-server";
+import {
+  isOrderWorkAttachment,
+  orderWorkAttachmentToChatImage,
+} from "@/lib/order-work-attachments";
+import { isCardFileImage } from "@/lib/kanban/card-files";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
@@ -59,6 +64,50 @@ type CardLocation = {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+async function loadOrderWorkChatImages(orderId: string, tenantId: string) {
+  const ordersPrisma = await getOrdersPrisma();
+  const order = await ordersPrisma.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: {
+      invoiceAttachmentId: true,
+      attachments: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          fileName: true,
+          mimeType: true,
+          size: true,
+          createdAt: true,
+          scope: true,
+        },
+      },
+    },
+  });
+  if (!order) return [];
+  return order.attachments
+    .filter((a) => isOrderWorkAttachment(a, order.invoiceAttachmentId))
+    .map((a) => orderWorkAttachmentToChatImage(orderId, a))
+    .filter((x): x is NonNullable<typeof x> => x != null);
+}
+
+function mergeCardImagesWithOrderWork(
+  cardFiles: Array<{ id: string; name: string; mime?: string; dataUrl?: string }>,
+  fromOrder: Array<{ id: string; name: string; url: string; mime: string | null }>,
+) {
+  const seen = new Set(fromOrder.map((x) => x.id));
+  const extra = cardFiles
+    .filter((f) => isCardFileImage({ mime: f.mime || "", name: f.name }))
+    .filter((f) => !seen.has(f.id) && !seen.has(`oa-${f.id}`))
+    .map((f) => ({
+      id: f.id,
+      name: f.name,
+      url: f.dataUrl || "",
+      mime: f.mime ?? null,
+    }))
+    .filter((x) => Boolean(x.url));
+  return [...fromOrder, ...extra];
 }
 
 async function loadOrderChatHeader(orderId: string, tenantId: string) {
@@ -277,6 +326,7 @@ export async function GET(
   }
   const orderHeader = await loadOrderChatHeader(orderId, tenantId);
   const storedComments = await loadKanbanOrderComments(tenantId, orderId);
+  const workImages = await loadOrderWorkChatImages(orderId, tenantId);
   const statePayload = await loadTenantKanbanState(tenantId);
   const state = statePayload.state;
   if (!state) {
@@ -285,7 +335,7 @@ export async function GET(
       mode: "kanban",
       hasCard: false,
       comments: normalizeCardCommentsForApi(storedComments),
-      cardImages: [],
+      cardImages: workImages,
       orderHeader,
       description: orderHeader?.description ?? "",
     });
@@ -297,7 +347,7 @@ export async function GET(
       mode: "kanban",
       hasCard: false,
       comments: normalizeCardCommentsForApi(storedComments),
-      cardImages: [],
+      cardImages: workImages,
       orderHeader,
       description: orderHeader?.description ?? "",
     });
@@ -313,14 +363,7 @@ export async function GET(
   const comments = normalizeCardCommentsForApi(
     mergeKanbanOrderComments(card.comments || [], storedComments),
   );
-  const cardImages = (card.files || [])
-    .filter((f) => String(f.mime || "").toLowerCase().startsWith("image/"))
-    .map((f) => ({
-      id: f.id,
-      name: f.name,
-      url: f.dataUrl,
-      mime: f.mime ?? null,
-    }));
+  const cardImages = mergeCardImagesWithOrderWork(card.files || [], workImages);
   return NextResponse.json({
     ok: true,
     mode: "kanban",

@@ -17,6 +17,7 @@ import {
 import type { KanbanAppState } from "@/lib/kanban/types";
 import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
 import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
+import { isOrderWorkAttachment } from "@/lib/order-work-attachments";
 
 export const KANBAN_ENSURE_STATE_KEY = "kanbanAppStateV3" as const;
 
@@ -157,6 +158,7 @@ async function buildLinkedOrderRow(
           mimeType: true,
           size: true,
           createdAt: true,
+          scope: true,
         },
       },
       constructions: {
@@ -193,9 +195,7 @@ async function buildLinkedOrderRow(
   ]);
 
   const invId = o.invoiceAttachmentId;
-  const attRows = invId
-    ? o.attachments.filter((a) => a.id !== invId)
-    : o.attachments;
+  const attRows = o.attachments.filter((a) => isOrderWorkAttachment(a, invId));
 
   return {
     id: o.id,

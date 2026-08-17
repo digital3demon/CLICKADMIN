@@ -1294,19 +1294,31 @@ function slimProductionSnapshots(
     }));
 }
 
+function stripInlineFileDataUrl(f: CardFile): CardFile {
+  const d = f.dataUrl || "";
+  if (d.startsWith("data:")) {
+    return { ...f, dataUrl: "" };
+  }
+  return f;
+}
+
 function slimCardFiles(card: KanbanCard, archiveLike: boolean, keep: number): void {
   if (!Array.isArray(card.files) || card.files.length === 0) return;
-  if (archiveLike || keep <= 0) {
+  /* Вложения наряда — короткие URL. Их нельзя резать: persist/poll иначе мерцает. */
+  const orderFiles = (card.files || [])
+    .filter((f) => Boolean(f.orderAttachmentId))
+    .map(stripInlineFileDataUrl);
+  const localFiles = (card.files || []).filter((f) => !f.orderAttachmentId);
+  if (archiveLike) {
     card.files = [];
     return;
   }
-  card.files = card.files.slice(-keep).map((f) => {
-    const d = f.dataUrl || "";
-    if (d.startsWith("data:")) {
-      return { ...f, dataUrl: "" };
-    }
-    return f;
-  });
+  if (keep <= 0) {
+    card.files = card.linkedOrderId ? orderFiles : [];
+    return;
+  }
+  const slimLocal = localFiles.slice(-keep).map(stripInlineFileDataUrl);
+  card.files = [...orderFiles, ...slimLocal];
 }
 
 /** Ужимает карточки перед записью в TenantClientState / UserClientState. */
@@ -1825,8 +1837,8 @@ export function findCardInAppState(
 }
 
 /**
- * Вид доски для рендера: поиск только по активной доске; виртуальные «Мои» / «Ответственный»
- * по-прежнему собирают карточки со всех доступных дорожек.
+ * Вид доски для рендера: при поиске — все доступные доски (как раньше);
+ * виртуальные «Мои» / «Ответственный» тоже собирают карточки со всех дорожек.
  * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
  */
 export function buildKanbanDisplayView(
@@ -1923,14 +1935,41 @@ export function buildKanbanDisplayView(
     return { displayBoard: active, cardHomeBoardId };
   }
 
-  /* Поиск на обычной доске — только эта доска (не подмешиваем «чужие» дорожки). */
+  /* Поиск — все доступные доски, колонки как у текущей (общие этапы зеркал). */
   const displayBoard = structuredClone(active);
+  const extraColumns: KanbanColumn[] = [];
+  const seenColTitles = new Set(
+    displayBoard.columns.map((c) => c.title.trim().toLowerCase()),
+  );
+  for (const home of accessibleBoards) {
+    for (const col of home.columns) {
+      const key = col.title.trim().toLowerCase();
+      if (seenColTitles.has(key)) continue;
+      seenColTitles.add(key);
+      extraColumns.push(structuredClone({ ...col, cards: [] }));
+    }
+  }
+  displayBoard.columns.push(...extraColumns);
+
   for (const colView of displayBoard.columns) {
-    colView.cards = colView.cards.filter(
-      (card) =>
-        textMatches(card, active) &&
-        passesFiltersWithoutSearchText(card, active),
-    );
+    const acc: KanbanCard[] = [];
+    const seen = new Set<string>();
+    const titleNorm = colView.title.trim().toLowerCase();
+    for (const home of accessibleBoards) {
+      const colO = home.columns.find(
+        (c) => c.title.trim().toLowerCase() === titleNorm,
+      );
+      if (!colO) continue;
+      for (const card of colO.cards) {
+        if (seen.has(card.id)) continue;
+        if (!textMatches(card, home)) continue;
+        if (!passesFiltersWithoutSearchText(card, home)) continue;
+        seen.add(card.id);
+        acc.push(card);
+        cardHomeBoardId.set(card.id, home.id);
+      }
+    }
+    colView.cards = acc;
   }
   displayBoard.columns = displayBoard.columns.filter((c) => c.cards.length > 0);
 
@@ -2358,44 +2397,59 @@ function syncChatImageCommentsWithImageFiles(card: KanbanCard): void {
   card.comments = nextComments;
 }
 
-function mergeOrderAttachmentsIntoLinkedCard(
+/**
+ * Сливает вложения наряда в card.files.
+ * Не схлопывает по имени: несколько «image.png» — разные id.
+ */
+export function mergeOrderAttachmentsIntoLinkedCard(
   card: KanbanCard,
   orderId: string,
   row: KaitenLinkedOrderForKanban,
 ): void {
   const list = row.attachments;
   if (list === undefined) return;
-  // На пустом list API иногда отдаёт промежуточный снимок:
-  // если уже были order-attachment файлы, не сбрасываем их до следующего непустого ответа.
   const existingOrderFiles = (card.files || []).filter((f) => Boolean(f.orderAttachmentId));
   if (list.length === 0 && existingOrderFiles.length > 0) {
     syncChatImageCommentsWithImageFiles(card);
     return;
   }
   const fromOrder = cardFilesFromOrderAttachments(orderId, list);
-  const orderIds = new Set(list.map((a) => a.id));
-  const orderImageNames = new Set(
-    list
-      .filter((a) =>
-        cardFileLooksLikeImageForChat({
-          mime: a.mimeType || "application/octet-stream",
-          name: a.fileName,
-        }),
-      )
-      .map((a) => a.fileName.trim().toLowerCase()),
+  const incomingIds = new Set(list.map((a) => a.id));
+  const existingOaIds = new Set(
+    existingOrderFiles
+      .map((f) => f.orderAttachmentId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const incomingIsPartialSubset =
+    list.length > 0 &&
+    existingOrderFiles.length > list.length &&
+    [...incomingIds].every((id) => existingOaIds.has(id));
+  const orderFiles = incomingIsPartialSubset
+    ? existingOrderFiles.map((f) => {
+        const fresh = fromOrder.find((x) => x.orderAttachmentId === f.orderAttachmentId);
+        return fresh ?? f;
+      })
+    : fromOrder;
+  const orderIdSet = new Set(
+    orderFiles
+      .map((f) => f.orderAttachmentId)
+      .filter((id): id is string => Boolean(id)),
   );
   const kanbanOnly = (card.files || []).filter((f) => {
-    if (f.orderAttachmentId && orderIds.has(f.orderAttachmentId)) return false;
-    if (
-      !f.orderAttachmentId &&
-      cardFileLooksLikeImageForChat(f) &&
-      orderImageNames.has((f.name || "").trim().toLowerCase())
-    ) {
-      return false;
+    if (f.orderAttachmentId) return false;
+    if (f.id.startsWith("oa-") && orderIdSet.has(f.id.slice(3))) return false;
+    const isData = (f.dataUrl || "").startsWith("data:");
+    if (isData && cardFileLooksLikeImageForChat(f)) {
+      const leftoverUpload = orderFiles.some(
+        (o) =>
+          (o.name || "").trim().toLowerCase() === (f.name || "").trim().toLowerCase() &&
+          o.size === f.size,
+      );
+      if (leftoverUpload) return false;
     }
     return true;
   });
-  card.files = [...fromOrder, ...kanbanOnly];
+  card.files = [...orderFiles, ...kanbanOnly];
   syncChatImageCommentsWithImageFiles(card);
 }
 

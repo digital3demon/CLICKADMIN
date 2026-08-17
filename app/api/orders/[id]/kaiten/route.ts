@@ -664,9 +664,10 @@ export async function GET(
     })
     .filter((x): x is NonNullable<typeof x> => x != null);
   const comments = dedupeParsedKaitenComments(parsedComments);
-  const cardImages = dedupeKaitenImages(
-    kaitenImagesFromRecord(cardObj, orderIdTrim, null),
-  );
+  const cardImages = dedupeKaitenImages([
+    ...kaitenImagesFromRecord(cardObj, orderIdTrim, null),
+    ...comments.flatMap((c) => c.images || []),
+  ]);
   const columnTitle = kaitenColumnTitleFromBoard(cardObj, cols.columns);
   const blockMeta = kaitenBlockedMetaFromCard(cardObj);
   const kBlocked = blockMeta.blocked;

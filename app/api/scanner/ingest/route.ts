@@ -296,7 +296,9 @@ export async function POST(req: Request) {
         }
       }
       const usefulQr =
-        pickPreferredScannerQr([qrFromImage, hint].filter(Boolean)) ?? "";
+        pickPreferredScannerQr(
+          [qrFromImage, hint].filter((value): value is string => Boolean(value)),
+        ) ?? "";
 
       if (!usefulQr) {
         console.info("[scanner/ingest]", {

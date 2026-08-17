@@ -11,6 +11,7 @@ import { kaitenCommentsForSyncFromSnapshotPayload } from "@/lib/order-chat-corre
 import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import { getKaitenRestAuth } from "@/lib/kaiten-rest";
 import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-column-titles";
+import { isOrderWorkAttachment } from "@/lib/order-work-attachments";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,7 @@ const LINKED_ORDER_SELECT = {
       mimeType: true,
       size: true,
       createdAt: true,
+      scope: true,
     },
   },
   constructions: {
@@ -179,16 +181,15 @@ export async function GET(request: Request) {
 
     const orders: KaitenLinkedOrderForKanban[] = rows.map((o) => {
       const invId = o.invoiceAttachmentId;
-      const attRows = invId
-        ? o.attachments.filter((a) => a.id !== invId)
-        : o.attachments;
-      const attachments = attRows.map((a) => ({
-        id: a.id,
-        fileName: a.fileName,
-        mimeType: a.mimeType,
-        size: a.size,
-        createdAt: a.createdAt.toISOString(),
-      }));
+      const attachments = o.attachments
+        .filter((a) => isOrderWorkAttachment(a, invId))
+        .map((a) => ({
+          id: a.id,
+          fileName: a.fileName,
+          mimeType: a.mimeType,
+          size: a.size,
+          createdAt: a.createdAt.toISOString(),
+        }));
       return {
         id: o.id,
         orderNumber: o.orderNumber,

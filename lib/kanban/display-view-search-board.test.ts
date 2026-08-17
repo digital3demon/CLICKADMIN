@@ -19,7 +19,7 @@ function mirrorBoard(id: string, title: string): KanbanBoard {
 }
 
 describe("buildKanbanDisplayView · search on board", () => {
-  it("does not pull matching cards from other boards", () => {
+  it("при поиске подмешивает попадания с других доступных досок", () => {
     const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
     const odon = mirrorBoard(KANBAN_BOARD_ORTHODONTICS_ID, "Ортодонтия");
     const approvalOrtho = ortho.columns.find((c) => c.title === "Согласование")!;
@@ -62,8 +62,52 @@ describe("buildKanbanDisplayView · search on board", () => {
     });
     const ids = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
     expect(ids).toContain("local-hit");
-    expect(ids).not.toContain("foreign-hit");
+    expect(ids).toContain("foreign-hit");
     expect(cardHomeBoardId.get("local-hit")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
+    expect(cardHomeBoardId.get("foreign-hit")).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+  });
+
+  it("цифровой 214 не тянет карточку только с датой 14.08", () => {
+    const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
+    const odon = mirrorBoard(KANBAN_BOARD_ORTHODONTICS_ID, "Ортодонтия");
+    const queueOdon = odon.columns.find((c) => c.title === "К исполнению")!;
+    const shippedOdon = odon.columns.find((c) => c.title === "Сдана админам")!;
+    queueOdon.cards.push(
+      createCard({
+        id: "hit-214",
+        title: "2608-214 Лихачева М. Амирханова ап.Шварца 27.08 09:00",
+        linkedOrderId: "o-hit",
+      }),
+    );
+    shippedOdon.cards.push(
+      createCard({
+        id: "miss-14",
+        title: "2607-392 Сторожук Д. Ерунова О.В. Сплинт МРТ 14.08",
+        linkedOrderId: "order_cuid_214_hidden",
+      }),
+    );
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [ortho, odon],
+      activeBoardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+      search: "214",
+      viewMode: "board",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard, cardHomeBoardId } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+    });
+    const ids = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(ids).toEqual(["hit-214"]);
+    expect(cardHomeBoardId.get("hit-214")).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
   });
 
   it("прячет пустые колонки, чтобы попадание в «Сдана админам» было видно", () => {

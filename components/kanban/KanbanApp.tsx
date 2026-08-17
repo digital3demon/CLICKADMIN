@@ -1099,15 +1099,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     );
   }, [board]);
   const stoppedCards = useMemo(() => {
-    if (!board) return [];
-    const q = (appState?.search || "").trim();
-    const rows = (board.stoppedCards || []).filter((row) =>
-      q ? kanbanCardMatchesSearch(row.card, q, board) : true,
-    );
-    return [...rows].sort((a, b) =>
+    if (!board || !appState) return [];
+    const q = (appState.search || "").trim();
+    const sources = q ? visibleBoards : [board];
+    const seen = new Set<string>();
+    const rows: KanbanStoppedCard[] = [];
+    for (const home of sources) {
+      for (const row of home.stoppedCards || []) {
+        if (seen.has(row.card.id)) continue;
+        if (q && !kanbanCardMatchesSearch(row.card, q, home)) continue;
+        seen.add(row.card.id);
+        rows.push(row);
+      }
+    }
+    return rows.sort((a, b) =>
       String(b.stoppedAt).localeCompare(String(a.stoppedAt)),
     );
-  }, [board, appState?.search]);
+  }, [board, appState, visibleBoards]);
 
   const onStopHoverMove = useCallback(
     (event: MouseEvent) => {
@@ -1696,18 +1704,21 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   const restoreStoppedCard = (stoppedId: string) => {
     if (!appState) return;
-    const board = getActiveBoard(appState);
-    const stoppedRow = (board.stoppedCards || []).find(
+    const home =
+      appState.boards.find((b) =>
+        (b.stoppedCards || []).some((x) => x.id === stoppedId || x.card.id === stoppedId),
+      ) ?? getActiveBoard(appState);
+    const stoppedRow = (home.stoppedCards || []).find(
       (x) => x.id === stoppedId || x.card.id === stoppedId,
     );
     const linkedOrderId = stoppedRow?.card.linkedOrderId?.trim() || "";
     const kaitenCardId = stoppedRow?.card.kaitenCardId;
     const sourceColumnTitle = (stoppedRow?.sourceColumnTitle || "").trim();
-    const trackLane = kaitenLaneForKanbanBoardId(board.id) ?? "ORTHOPEDICS";
+    const trackLane = kaitenLaneForKanbanBoardId(home.id) ?? "ORTHOPEDICS";
     setAppState((s) => {
       if (!s) return s;
       const next = structuredClone(s);
-      const b = getActiveBoard(next);
+      const b = next.boards.find((x) => x.id === home.id) ?? getActiveBoard(next);
       const ok = restoreStoppedCardOnBoard(b, stoppedId);
       if (!ok) return s;
       syncProductionChecklistSnapshotsAcrossBoards(next.boards);

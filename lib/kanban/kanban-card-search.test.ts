@@ -70,6 +70,29 @@ describe("kanbanCardMatchesSearch", () => {
     expect(kanbanCardMatchesSearch(card, "орлов")).toBe(true);
   });
 
+  it("цифровой запрос 214 не цепляет дату 14.08 и кириллицу вокруг", () => {
+    const miss = createCard({
+      id: "c-date",
+      title: "2607-392 Сторожук Д. Ерунова О.В. Сплинт МРТ 14.08",
+    });
+    const hit = createCard({
+      id: "c-num",
+      title: "2608-214 Лихачева М. Амирханова ап.Шварца 27.08 09:00",
+    });
+    expect(kanbanCardMatchesSearch(miss, "214")).toBe(false);
+    expect(kanbanCardMatchesSearch(hit, "214")).toBe(true);
+    expect(kanbanCardMatchesSearch(hit, "2608-214")).toBe(true);
+  });
+
+  it("не ищет по внутреннему id наряда", () => {
+    const card = createCard({
+      id: "c-id",
+      title: "2607-392 Сторожук Д. Ерунова О.В. Сплинт МРТ 14.08",
+      linkedOrderId: "order_cuid_214_hidden",
+    });
+    expect(kanbanCardMatchesSearch(card, "214")).toBe(false);
+  });
+
   it("учитывает тип карточки", () => {
     const card = createCard({
       id: "c4",

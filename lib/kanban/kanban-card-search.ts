@@ -44,6 +44,7 @@ export function kanbanCardSearchHaystack(
   const files = (card.files || []).map((f) => f.name || "").join(" ");
   const activity = (card.activity || []).map((a) => a.text || "").join(" ");
   const checklist = (card.checklist || []).map((i) => i.text || "").join(" ");
+  /* linkedOrderId / cuid не в стоге: «214» не должно цеплять случайный фрагмент id. */
   return [
     card.title,
     card.description,
@@ -52,11 +53,22 @@ export function kanbanCardSearchHaystack(
     files,
     activity,
     checklist,
-    card.linkedOrderId,
     card.continuesFromOrderNumber,
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/** Цифровые прогоны: «214» ≠ «14» в дате 14.08 и ≠ фрагмент cuid. */
+export function haystackDigitRuns(folded: string): string[] {
+  return String(folded || "").match(/\d+/g) ?? [];
+}
+
+function tokenMatchesHaystack(token: string, hay: string): boolean {
+  if (/^\d+$/.test(token)) {
+    return haystackDigitRuns(hay).includes(token);
+  }
+  return hay.includes(token);
 }
 
 export function kanbanCardMatchesSearch(
@@ -67,5 +79,5 @@ export function kanbanCardMatchesSearch(
   const tokens = kanbanSearchTokens(query);
   if (tokens.length === 0) return true;
   const hay = foldKanbanSearchText(kanbanCardSearchHaystack(card, board));
-  return tokens.every((t) => hay.includes(t));
+  return tokens.every((t) => tokenMatchesHaystack(t, hay));
 }
