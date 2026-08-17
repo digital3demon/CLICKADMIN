@@ -18,7 +18,8 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# generate + next build + standalone assets; migrate — на старте контейнера
+# generate из локального prisma (npm ci), без npx и binaries.prisma.sh
+# migrate — на старте контейнера
 RUN npm run build:platform
 
 FROM node:22-slim AS runner

@@ -2,8 +2,8 @@
  * `prisma migrate deploy` для текущего datasource.
  * Сначала `prisma generate` (кроме SQLite без WASM — см. ensurePrismaGenerateBeforeStuckScript),
  * затем авто-resolve зависшей миграции, затем deploy.
- * Важно: вызываем `npx prisma@<версия>`, а не `npx prisma` — иначе npx подтянет Prisma 7+,
- * где datasource `url` в schema.prisma убран (P1012), а проект на Prisma 6.
+ * Сначала локальный `node_modules/prisma` (движки уже после npm ci).
+ * Fallback: `npx prisma@<версия>` — не голый `npx prisma`, иначе уедет Prisma 7+ (P1012).
  */
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -80,7 +80,24 @@ const prismaVer = resolvePrismaVersion();
 const prismaSpec = `prisma@${prismaVer}`;
 const isWin = process.platform === "win32";
 
+function resolveLocalPrismaCliJs() {
+  const fromEnv = String(process.env.PRISMA_CLI_JS || "").trim();
+  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv;
+  const js = path.join(bundleRoot, "node_modules", "prisma", "build", "index.js");
+  if (fs.existsSync(js)) return js;
+  return null;
+}
+
 function runPrisma(args, options = {}) {
+  const localJs = resolveLocalPrismaCliJs();
+  if (localJs) {
+    return spawnSync(process.execPath, [localJs, ...args], {
+      cwd: bundleRoot,
+      env: process.env,
+      shell: false,
+      ...options,
+    });
+  }
   return spawnSync("npx", ["-y", prismaSpec, ...args], {
     cwd: bundleRoot,
     env: process.env,
