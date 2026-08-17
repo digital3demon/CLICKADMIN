@@ -1,5 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
-import { kaitenBlockedMetaFromCard } from "@/lib/kaiten-card-block";
+import {
+  kaitenBlockedMetaFromCard,
+  shouldKeepCrmBlockOverKaiten,
+} from "@/lib/kaiten-card-block";
 import { kaitenColumnTitleFromBoard } from "@/lib/kaiten-column-title";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import {
@@ -82,6 +85,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
       kaitenBlocked: true,
       kaitenBlockReason: true,
       kaitenBlockedAt: true,
+      kaitenSyncedAt: true,
       kaitenChatHasLabMention: true,
       tenantId: true,
       tenant: { select: { kanbanAdminMentionTag: true } },
@@ -231,10 +235,18 @@ export async function syncKaitenColumnTitlesForOrderIds(
         (blockedAtNext != null &&
           row.kaitenBlockedAt != null &&
           blockedAtNext.getTime() === row.kaitenBlockedAt.getTime());
+      const keepCrmBlock = shouldKeepCrmBlockOverKaiten({
+        crmBlocked: row.kaitenBlocked,
+        crmReason: row.kaitenBlockReason,
+        crmSyncedAt: row.kaitenSyncedAt,
+        kaitenBlocked: blocked,
+        kaitenReason: reasonDb,
+      });
       const sameBlock =
-        blocked === row.kaitenBlocked &&
-        (reasonDb ?? "") === (row.kaitenBlockReason ?? "") &&
-        sameBlockedAt;
+        keepCrmBlock ||
+        (blocked === row.kaitenBlocked &&
+          (reasonDb ?? "") === (row.kaitenBlockReason ?? "") &&
+          sameBlockedAt);
       const sameSort =
         sortDb === undefined || sortDb === row.kaitenCardSortOrder;
       const urgentPatch = kaitenUrgentPatchFromCard(cardObj, row.isUrgent);
@@ -260,11 +272,13 @@ export async function syncKaitenColumnTitlesForOrderIds(
       }
       try {
         const blockedAtData =
-          !blocked
-            ? { kaitenBlockedAt: null as Date | null }
-            : blockedAtNext != null
-              ? { kaitenBlockedAt: blockedAtNext }
-              : {};
+          keepCrmBlock
+            ? {}
+            : !blocked
+              ? { kaitenBlockedAt: null as Date | null }
+              : blockedAtNext != null
+                ? { kaitenBlockedAt: blockedAtNext }
+                : {};
         await db.order.update({
           where: { id: row.id },
           data: {
@@ -272,8 +286,12 @@ export async function syncKaitenColumnTitlesForOrderIds(
             kaitenSyncError: null,
             kaitenColumnTitle: columnTitle,
             ...(descMirror != null ? { kaitenCardDescriptionMirror: descMirror } : {}),
-            kaitenBlocked: blocked,
-            kaitenBlockReason: reasonDb,
+            ...(keepCrmBlock
+              ? {}
+              : {
+                  kaitenBlocked: blocked,
+                  kaitenBlockReason: reasonDb,
+                }),
             ...blockedAtData,
             ...(sortDb !== undefined ? { kaitenCardSortOrder: sortDb } : {}),
             ...urgentPatch,

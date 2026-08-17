@@ -182,3 +182,38 @@ export function normalizeKaitenBlockReasonInput(raw: unknown): string | null {
   const s = String(raw).trim().slice(0, MAX_BLOCK_REASON_LEN);
   return s.length > 0 ? s : null;
 }
+
+const CRM_BLOCK_FRESH_MS = 45_000;
+
+/**
+ * Свежая запись блока в CRM (канбан только что сохранил) не должна
+ * откатиться фоновым pull из Kaiten, пока API ещё отдаёт старую причину.
+ */
+export function shouldKeepCrmBlockOverKaiten(opts: {
+  crmBlocked: boolean;
+  crmReason: string | null | undefined;
+  crmSyncedAt: Date | string | null | undefined;
+  kaitenBlocked: boolean;
+  kaitenReason: string | null | undefined;
+  nowMs?: number;
+  freshMs?: number;
+}): boolean {
+  const crmReason = (opts.crmReason ?? "").trim();
+  const kaitenReason = (opts.kaitenReason ?? "").trim();
+  if (
+    opts.crmBlocked === opts.kaitenBlocked &&
+    crmReason === kaitenReason
+  ) {
+    return false;
+  }
+  const syncedRaw = opts.crmSyncedAt;
+  const syncedMs =
+    syncedRaw instanceof Date
+      ? syncedRaw.getTime()
+      : typeof syncedRaw === "string" && syncedRaw.trim()
+        ? Date.parse(syncedRaw)
+        : Number.NaN;
+  if (!Number.isFinite(syncedMs)) return false;
+  const now = opts.nowMs ?? Date.now();
+  return now - syncedMs < (opts.freshMs ?? CRM_BLOCK_FRESH_MS);
+}

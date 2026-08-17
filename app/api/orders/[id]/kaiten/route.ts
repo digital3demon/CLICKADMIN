@@ -162,10 +162,11 @@ function blockFieldsForPrismaAfterPatch(
     };
   }
   const meta = kaitenBlockedMetaFromCard(card);
+  const requested = normalizeKaitenBlockReasonInput(body.blockReason);
   if (meta.blocked) {
     return {
       kaitenBlocked: true,
-      kaitenBlockReason: meta.reason,
+      kaitenBlockReason: requested ?? meta.reason,
       kaitenBlockedAt: meta.blockedAtIso
         ? new Date(meta.blockedAtIso)
         : new Date(),
@@ -1440,14 +1441,30 @@ export async function PATCH(
   let blockTouched = false;
   if (typeof body.blocked === "boolean") {
     blockTouched = true;
+    const optimisticReason = body.blocked
+      ? normalizeKaitenBlockReasonInput(body.blockReason)
+      : null;
+    if (body.blocked && !optimisticReason) {
+      return NextResponse.json(
+        { error: "Укажите причину блокировки (blockReason)" },
+        { status: 400 },
+      );
+    }
+    try {
+      await ordersPrisma.order.update({
+        where: { id: order.id },
+        data: {
+          kaitenBlocked: body.blocked,
+          kaitenBlockReason: body.blocked ? optimisticReason : null,
+          kaitenBlockedAt: body.blocked ? new Date() : null,
+          kaitenSyncedAt: new Date(),
+        },
+      });
+    } catch (e) {
+      console.error("[kaiten PATCH] optimistic block prisma", e);
+    }
     if (body.blocked) {
-      const reason = normalizeKaitenBlockReasonInput(body.blockReason);
-      if (!reason) {
-        return NextResponse.json(
-          { error: "Укажите причину блокировки (blockReason)" },
-          { status: 400 },
-        );
-      }
+      const reason = optimisticReason!;
       const post = await kaitenPostCardBlocker(auth, order.kaitenCardId, reason);
       if (!post.ok) {
         patch.blocked = true;

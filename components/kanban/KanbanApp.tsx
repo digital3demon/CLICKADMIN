@@ -44,6 +44,7 @@ import {
   mergeKanbanStatePreservingLocalBoards,
   withActiveBoard,
 } from "@/lib/kanban/model";
+import { applyOptimisticKaitenBlocksToLinkedRows } from "@/lib/kanban/optimistic-kaiten-block";
 import { applyKanbanLegacyStageDueClearMigration, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
 import {
@@ -508,7 +509,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         const r = await fetch("/api/kanban/linked-orders", { credentials: "include" });
         if (!r.ok) return;
         const j = (await r.json()) as { orders?: KaitenLinkedOrderForKanban[] };
-        const rows = j.orders ?? [];
+        const rows = applyOptimisticKaitenBlocksToLinkedRows(j.orders ?? []);
         setAppState((prev) => {
           if (!prev) return prev;
           const base = normalizeDemoKanbanAppState(prev);
@@ -596,7 +597,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       ]);
       if (!rLinked.ok) return;
       const jL = (await rLinked.json()) as { orders?: KaitenLinkedOrderForKanban[] };
-      const linkedRows = applyOptimisticKaitenMovesToLinkedRows(jL.orders ?? []);
+      const linkedRows = applyOptimisticKaitenBlocksToLinkedRows(
+        applyOptimisticKaitenMovesToLinkedRows(jL.orders ?? []),
+      );
       let standaloneRows: StandaloneRow[] = [];
       if (rStandalone.ok) {
         const jS = (await rStandalone.json()) as { rows?: StandaloneRow[] };

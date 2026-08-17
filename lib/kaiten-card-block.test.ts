@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { kaitenBlockedMetaFromCard } from "@/lib/kaiten-card-block";
+import {
+  kaitenBlockedMetaFromCard,
+  shouldKeepCrmBlockOverKaiten,
+} from "@/lib/kaiten-card-block";
 
 describe("kaitenBlockedMetaFromCard", () => {
   it("prefers активный blocker по времени, не верхний block_reason", () => {
@@ -69,5 +72,35 @@ describe("kaitenBlockedMetaFromCard", () => {
     const m = kaitenBlockedMetaFromCard(card);
     expect(m.reason).toBe("ждём клиента");
     expect(m.blockedAtIso).toBe("2026-05-01T15:30:00.000Z");
+  });
+});
+
+describe("shouldKeepCrmBlockOverKaiten", () => {
+  it("holds fresh CRM reason against stale Kaiten (кириллица)", () => {
+    const now = Date.parse("2026-08-17T17:02:30.000Z");
+    expect(
+      shouldKeepCrmBlockOverKaiten({
+        crmBlocked: true,
+        crmReason: "Не те данные от Анискиной",
+        crmSyncedAt: "2026-08-17T17:02:00.000Z",
+        kaitenBlocked: true,
+        kaitenReason: "старая причина",
+        nowMs: now,
+      }),
+    ).toBe(true);
+  });
+
+  it("lets old CRM yield to Kaiten after the fresh window", () => {
+    const now = Date.parse("2026-08-17T17:10:00.000Z");
+    expect(
+      shouldKeepCrmBlockOverKaiten({
+        crmBlocked: true,
+        crmReason: "новая",
+        crmSyncedAt: "2026-08-17T17:02:00.000Z",
+        kaitenBlocked: true,
+        kaitenReason: "старая",
+        nowMs: now,
+      }),
+    ).toBe(false);
   });
 });

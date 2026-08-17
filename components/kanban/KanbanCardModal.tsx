@@ -22,6 +22,11 @@ import {
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import {
+  forgetOptimisticKaitenBlock,
+  OPTIMISTIC_KAITEN_BLOCK_SHORT_TTL_MS,
+  rememberOptimisticKaitenBlock,
+} from "@/lib/kanban/optimistic-kaiten-block";
+import {
   formatKanbanChatMessageDisplay,
   kanbanChatMessageLabelClass,
   kanbanChatMessageShellClass,
@@ -526,6 +531,34 @@ export function KanbanCardModal({
     setBlockPopupOpen(true);
   };
 
+  const persistLinkedOrderBlock = (
+    orderId: string,
+    body: { blocked: boolean; blockReason?: string },
+    blockedAt?: string | null,
+  ) => {
+    rememberOptimisticKaitenBlock(orderId, {
+      blocked: body.blocked,
+      blockReason: body.blockReason ?? "",
+      blockedAt: blockedAt ?? null,
+    });
+    void patchOrderKaitenCard(orderId, body).then((r) => {
+      if (!r.ok) {
+        forgetOptimisticKaitenBlock(orderId);
+        toast(r.error, true);
+        return;
+      }
+      rememberOptimisticKaitenBlock(
+        orderId,
+        {
+          blocked: body.blocked,
+          blockReason: body.blockReason ?? "",
+          blockedAt: blockedAt ?? null,
+        },
+        OPTIMISTIC_KAITEN_BLOCK_SHORT_TTL_MS,
+      );
+    });
+  };
+
   const confirmBlock = () => {
     if (!canManageKanbanBlock) return;
     const reasonForTg = (blockReasonDraft || "").trim();
@@ -572,12 +605,10 @@ export function KanbanCardModal({
       }
     });
     if (blockedOk && oid && hasKaiten) {
-      void patchOrderKaitenCard(oid, {
-        blocked: true,
-        blockReason: reasonForTg,
-      }).then((r) => {
-        if (!r.ok) toast(r.error, true);
-      });
+      persistLinkedOrderBlock(
+        oid,
+        { blocked: true, blockReason: reasonForTg },
+      );
     }
   };
 
@@ -617,6 +648,16 @@ export function KanbanCardModal({
       setBlockReasonEditing(false);
       setBlockReasonEditDraft("");
     });
+    const oid = card?.linkedOrderId?.trim() || "";
+    const hasKaiten =
+      card?.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
+    if (oid && hasKaiten) {
+      persistLinkedOrderBlock(
+        oid,
+        { blocked: true, blockReason: next },
+        card?.blockedAt ?? null,
+      );
+    }
   };
 
   const savePicker = (userIds: string[]) => {
@@ -1399,9 +1440,7 @@ export function KanbanCardModal({
                   performUnblock(fc.card, b, act);
                 });
                 if (oid && hasKaiten) {
-                  void patchOrderKaitenCard(oid, { blocked: false }).then((r) => {
-                    if (!r.ok) toast(r.error, true);
-                  });
+                  persistLinkedOrderBlock(oid, { blocked: false });
                 }
               }}
             >
@@ -1577,11 +1616,7 @@ export function KanbanCardModal({
                     }
                   });
                   if (oid && hasKaiten) {
-                    void patchOrderKaitenCard(oid, { blocked: false }).then(
-                      (r) => {
-                        if (!r.ok) toast(r.error, true);
-                      },
-                    );
+                    persistLinkedOrderBlock(oid, { blocked: false });
                   }
                 } else openBlockPopup();
               }}
