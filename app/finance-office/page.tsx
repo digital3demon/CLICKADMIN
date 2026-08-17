@@ -79,6 +79,7 @@ function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[
     invoiceEdoSigned: o.invoiceEdoSigned,
     prostheticsOrdered: o.prostheticsOrdered,
     listAdminMemo: o.listAdminMemo ?? null,
+    listTechMemo: o.listTechMemo ?? null,
     listCustomTags: o.listCustomTags,
     listCompositionMismatch: o.listCompositionMismatch,
     listPendingChatCorrections: o.listPendingChatCorrections,

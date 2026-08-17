@@ -8,7 +8,10 @@ import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
-import { OrderListAdminMemoCell } from "@/components/orders/OrderListAdminMemoCell";
+import {
+  OrderListAdminMemoCell,
+  OrderListTechMemoCell,
+} from "@/components/orders/OrderListAdminMemoCell";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderStickerPrintLink } from "@/components/orders/OrderStickerPrintLink";
 import { OrdersListKaitenChatShell } from "@/components/orders/OrdersListKaitenChatShell";
@@ -54,7 +57,11 @@ import {
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
-import { canAcceptOrderChatCorrections, canSeeOrderNotificationKind } from "@/lib/auth/permissions";
+import {
+  canAcceptOrderChatCorrections,
+  canEditOrderListTechMemo,
+  canSeeOrderNotificationKind,
+} from "@/lib/auth/permissions";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import {
   loadProstheticsInTransitForTenant,
@@ -586,6 +593,9 @@ export default async function OrdersPage({
   }
 
   const alwaysShowOrderAttentionChips = session?.role === "FINANCIAL_MANAGER";
+  const canEditTechMemo = session?.role
+    ? canEditOrderListTechMemo(session.role)
+    : false;
   const showCorrectionsChip =
     canSeeCorrectionsChip &&
     (alwaysShowOrderAttentionChips || attentionCount > 0);
@@ -1272,7 +1282,7 @@ export default async function OrdersPage({
                   >
                     {admission.short}
                   </td>
-                  <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-0.5 py-1 align-middle text-[var(--text-secondary)] sm:px-1 sm:py-1.5">
+                  <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
                     <OrderListDueCell
                       orderId={o.id}
                       dueIso={o.dueDate?.toISOString() ?? null}
@@ -1280,7 +1290,7 @@ export default async function OrdersPage({
                       labHmSlots={labDueHmSlots}
                     />
                   </td>
-                  <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-0.5 py-1 align-middle text-[var(--text-secondary)] sm:px-1 sm:py-1.5">
+                  <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
                     <OrderListDueCell
                       variant="appointment"
                       orderId={o.id}
@@ -1293,10 +1303,17 @@ export default async function OrdersPage({
                       appointmentHasTime={o.dueToAdminsHasTime !== false}
                     />
                   </td>
-                  <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-1 sm:py-1.5">
+                  <td className="max-md:hidden min-w-0 w-[4.75rem] max-w-[4.75rem] px-1.5 py-1 align-middle sm:px-2 sm:py-1.5">
                     <OrderListAdminMemoCell
                       orderId={o.id}
                       initialMemo={o.listAdminMemo ?? null}
+                    />
+                  </td>
+                  <td className="max-md:hidden min-w-0 w-[4.75rem] max-w-[4.75rem] px-1.5 py-1 align-middle sm:px-2 sm:py-1.5">
+                    <OrderListTechMemoCell
+                      orderId={o.id}
+                      initialMemo={o.listTechMemo ?? null}
+                      canEdit={canEditTechMemo}
                     />
                   </td>
                   <td

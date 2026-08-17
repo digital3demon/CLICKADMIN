@@ -222,6 +222,19 @@ export function canAcceptOrderChatCorrections(role: UserRole): boolean {
   return ORDER_CHAT_CORRECTION_ACCEPT_ROLES.includes(role);
 }
 
+const ORDER_LIST_TECH_MEMO_ROLES: readonly UserRole[] = [
+  "OWNER",
+  "ADMINISTRATOR",
+  "SENIOR_ADMINISTRATOR",
+  "SENIOR_TECHNICIAN",
+  "MANAGER",
+];
+
+/** Колонка «ПТ» (пометки техники) в списках нарядов. */
+export function canEditOrderListTechMemo(role: UserRole): boolean {
+  return ORDER_LIST_TECH_MEMO_ROLES.includes(role);
+}
+
 /** Скрытие строки «Оплаты» в сайдбаре после «прочитано». */
 export function canDismissSidebarRecentPaidItems(
   role: UserRole,

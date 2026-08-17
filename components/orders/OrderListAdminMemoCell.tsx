@@ -57,15 +57,58 @@ function clampPopoverPosition(rect: DOMRect) {
   return { left, top };
 }
 
+type ShiftMemoTone = "amber" | "teal";
+
+const TONE: Record<
+  ShiftMemoTone,
+  {
+    triggerFilled: string;
+    triggerEmpty: string;
+    preview: string;
+    textarea: string;
+  }
+> = {
+  amber: {
+    triggerFilled:
+      "text-amber-700 dark:text-amber-300/90 border-amber-300/70 bg-amber-50/40 dark:border-amber-700/50 dark:bg-amber-950/25",
+    triggerEmpty:
+      "text-amber-700 dark:text-amber-300/90 border-transparent hover:border-amber-300/40 hover:bg-amber-50/20 dark:hover:border-amber-800/40 dark:hover:bg-amber-950/15",
+    preview: "font-medium text-amber-800 dark:text-amber-200",
+    textarea:
+      "border-amber-300/70 bg-amber-50/30 text-amber-900 focus:border-amber-400 focus:ring-amber-400/50 dark:border-amber-700/50 dark:bg-amber-950/20 dark:text-amber-100",
+  },
+  teal: {
+    triggerFilled:
+      "text-teal-700 dark:text-teal-300 border-teal-400/80 bg-teal-50/50 dark:border-teal-700/70 dark:bg-teal-950/40",
+    triggerEmpty:
+      "text-teal-700 dark:text-teal-400 border-transparent hover:border-teal-400/50 hover:bg-teal-50/25 dark:hover:border-teal-700/50 dark:hover:bg-teal-950/25",
+    preview: "font-medium text-teal-800 dark:text-teal-200",
+    textarea:
+      "border-teal-400/80 bg-teal-50/40 text-teal-950 focus:border-teal-500 focus:ring-teal-400/50 dark:border-teal-700/60 dark:bg-teal-950/30 dark:text-teal-100",
+  },
+};
+
 /**
  * Пометка смен в строке списка: hover — превью, клик — закреплённая всплывашка с редактированием и историей.
  */
-export function OrderListAdminMemoCell({
+function OrderListShiftMemoCell({
   orderId,
   initialMemo,
+  apiSegment,
+  title,
+  ariaLabel,
+  emptyTitle,
+  tone,
+  canEdit = true,
 }: {
   orderId: string;
   initialMemo: string | null;
+  apiSegment: "list-admin-memo" | "list-tech-memo";
+  title: string;
+  ariaLabel: string;
+  emptyTitle: string;
+  tone: ShiftMemoTone;
+  canEdit?: boolean;
 }) {
   const router = useRouter();
   const titleId = useId();
@@ -107,7 +150,7 @@ export function OrderListAdminMemoCell({
     setHistoryLoading(true);
     setHistoryErr(null);
     try {
-      const res = await fetch(`/api/orders/${orderId}/list-admin-memo`, {
+      const res = await fetch(`/api/orders/${orderId}/${apiSegment}`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -125,9 +168,10 @@ export function OrderListAdminMemoCell({
     } finally {
       setHistoryLoading(false);
     }
-  }, [orderId]);
+  }, [apiSegment, orderId]);
 
   const openEditor = useCallback(() => {
+    if (!canEdit) return;
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     setDraft(savedMemo);
@@ -136,7 +180,7 @@ export function OrderListAdminMemoCell({
     setPopoverPos(clampPopoverPosition(rect));
     setOpen(true);
     setHoverPreview(null);
-  }, [savedMemo]);
+  }, [canEdit, savedMemo]);
 
   const closeEditor = useCallback(() => {
     setOpen(false);
@@ -169,7 +213,7 @@ export function OrderListAdminMemoCell({
       setSaving(true);
       setErr(null);
       try {
-        const res = await fetch(`/api/orders/${orderId}/list-admin-memo`, {
+        const res = await fetch(`/api/orders/${orderId}/${apiSegment}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: nextRaw }),
@@ -195,7 +239,7 @@ export function OrderListAdminMemoCell({
         setSaving(false);
       }
     },
-    [closeEditor, orderId, router],
+    [apiSegment, closeEditor, orderId, router],
   );
 
   const onSave = useCallback(() => {
@@ -231,7 +275,7 @@ export function OrderListAdminMemoCell({
   return (
     <>
       <div
-        className="group/memo relative mx-auto w-full max-w-[7.5rem]"
+        className="group/memo relative mx-auto w-full max-w-[5.25rem]"
         onMouseMove={onMemoHoverMove}
         onMouseLeave={() => setHoverPreview(null)}
       >
@@ -240,18 +284,18 @@ export function OrderListAdminMemoCell({
           type="button"
           className={[
             "block w-full rounded-md border px-1 py-0.5 text-center text-[10px] font-semibold leading-snug outline-none transition-[border-color,background-color,box-shadow] sm:text-[11px]",
-            "text-amber-700 dark:text-amber-300/90",
-            hasText || open
-              ? "border-amber-300/70 bg-amber-50/40 dark:border-amber-700/50 dark:bg-amber-950/25"
-              : "border-transparent hover:border-amber-300/40 hover:bg-amber-50/20 dark:hover:border-amber-800/40 dark:hover:bg-amber-950/15",
+            hasText || open ? TONE[tone].triggerFilled : TONE[tone].triggerEmpty,
             saving ? "opacity-60" : "",
+            canEdit ? "" : "cursor-default",
           ].join(" ")}
           title={
             !hasText && !open
-              ? "Пометка смен (до 100 символов). Не уходит в наряд и Kaiten."
-              : undefined
+              ? emptyTitle
+              : !canEdit
+                ? title
+                : undefined
           }
-          aria-label="Пометка смен"
+          aria-label={ariaLabel}
           aria-expanded={open}
           onClick={(e) => {
             e.stopPropagation();
@@ -263,10 +307,12 @@ export function OrderListAdminMemoCell({
             <span className="line-clamp-2 whitespace-pre-wrap break-words">
               {memoText}
             </span>
-          ) : (
+          ) : canEdit ? (
             <span className="text-[var(--text-muted)] opacity-0 group-hover/memo:opacity-60">
               +
             </span>
+          ) : (
+            <span className="text-[var(--text-muted)]">—</span>
           )}
         </button>
         {err && !open ? (
@@ -283,7 +329,7 @@ export function OrderListAdminMemoCell({
               style={{ left: previewPos.left, top: previewPos.top }}
               role="tooltip"
             >
-              <p className="whitespace-pre-wrap break-words font-medium text-amber-800 dark:text-amber-200">
+              <p className={`whitespace-pre-wrap break-words ${TONE[tone].preview}`}>
                 {memoText}
               </p>
             </div>,
@@ -306,7 +352,7 @@ export function OrderListAdminMemoCell({
                 id={titleId}
                 className="text-xs font-semibold text-[var(--text-secondary)]"
               >
-                Пометка смен
+                {title}
               </p>
               <textarea
                 rows={4}
@@ -314,7 +360,7 @@ export function OrderListAdminMemoCell({
                 value={draft}
                 disabled={saving}
                 autoFocus
-                className="mt-2 block w-full resize-none rounded-md border border-amber-300/70 bg-amber-50/30 px-2 py-1.5 text-xs font-medium leading-snug text-amber-900 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/50 dark:border-amber-700/50 dark:bg-amber-950/20 dark:text-amber-100"
+                className={`mt-2 block w-full resize-none rounded-md border px-2 py-1.5 text-xs font-medium leading-snug outline-none focus:ring-1 ${TONE[tone].textarea}`}
                 onChange={(e) => {
                   setErr(null);
                   setDraft(e.target.value.slice(0, ORDER_LIST_ADMIN_MEMO_MAX_LEN));
@@ -391,5 +437,48 @@ export function OrderListAdminMemoCell({
           )
         : null}
     </>
+  );
+}
+
+export function OrderListAdminMemoCell({
+  orderId,
+  initialMemo,
+}: {
+  orderId: string;
+  initialMemo: string | null;
+}) {
+  return (
+    <OrderListShiftMemoCell
+      orderId={orderId}
+      initialMemo={initialMemo}
+      apiSegment="list-admin-memo"
+      title="ПА · пометки админов"
+      ariaLabel="Пометки админов"
+      emptyTitle="ПА — пометки админов (до 100 символов). Не уходит в наряд и Kaiten."
+      tone="amber"
+    />
+  );
+}
+
+export function OrderListTechMemoCell({
+  orderId,
+  initialMemo,
+  canEdit = true,
+}: {
+  orderId: string;
+  initialMemo: string | null;
+  canEdit?: boolean;
+}) {
+  return (
+    <OrderListShiftMemoCell
+      orderId={orderId}
+      initialMemo={initialMemo}
+      apiSegment="list-tech-memo"
+      title="ПТ · пометки техники"
+      ariaLabel="Пометки техники"
+      emptyTitle="ПТ — пометки техники (до 100 символов). Не уходит в наряд и Kaiten."
+      tone="teal"
+      canEdit={canEdit}
+    />
   );
 }

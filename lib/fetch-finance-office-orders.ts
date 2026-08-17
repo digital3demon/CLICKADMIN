@@ -64,6 +64,7 @@ const financeOfficeOrderSelect = {
   clinicId: true,
   doctorId: true,
   listAdminMemo: true,
+  listTechMemo: true,
   constructions: {
     orderBy: { sortOrder: "asc" as const },
     select: {

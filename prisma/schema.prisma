@@ -840,6 +840,7 @@ model User {
   labTasksCreated                  LabTask[]                  @relation("LabTaskAuthor")
   labTasksResolved                 LabTask[]                  @relation("LabTaskResolvedBy")
   orderListAdminMemoEvents         OrderListAdminMemoEvent[]
+  orderListTechMemoEvents          OrderListTechMemoEvent[]
   orderKaitenLabMentionAcks        OrderKaitenLabMentionAck[]
   testOrdersOwned                  Order[]                    @relation("TestOrderOwner")
   tenantsWithKaitenDisabled        Tenant[]                   @relation("TenantKaitenDisabledBy")
@@ -1376,6 +1377,9 @@ model Order {
   /// Пометка смен в списках (Заказы / ФинОтдел); не в карточку наряда и не в Kaiten/канбан. До 100 символов.
   listAdminMemo                      String?
   listAdminMemoEvents                OrderListAdminMemoEvent[]
+  /// Пометки техники (ПТ) в списках; не в наряд и не в Kaiten. До 100 символов.
+  listTechMemo                       String?
+  listTechMemoEvents                 OrderListTechMemoEvent[]
   /// Текст заказа от клиента (копируют из переписки); в описание карточки Kaiten вместе с комментарием от админов
   clientOrderText                    String?
   /// Отмечена срочность (в т.ч. без коэффициента)
@@ -1617,6 +1621,21 @@ model OrderListAdminMemoEvent {
   order       Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   action      OrderListAdminMemoAction
   /// Текст при SET; при CLEAR — null
+  text        String?
+  userId      String?
+  user        User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  authorLabel String?
+  createdAt   DateTime                 @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+/// Журнал пометок техники (ПТ) в списках.
+model OrderListTechMemoEvent {
+  id          String                   @id @default(cuid())
+  orderId     String
+  order       Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  action      OrderListAdminMemoAction
   text        String?
   userId      String?
   user        User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)

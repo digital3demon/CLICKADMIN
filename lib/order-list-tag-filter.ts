@@ -55,7 +55,7 @@ export const LIST_TAG_INVOICE = "invoice";
 export const LIST_TAG_INVOICE_PRINTED = "invoice-printed";
 /** Жёлтый треугольник: непринятые корректировки «!!!» или расхождение суммы счёта с составом */
 export const LIST_TAG_ORDER_ATTENTION = "order-attention";
-/** Непустая пометка смен в колонке «Пометки» (`Order.listAdminMemo`) */
+/** Непустая пометка смен в колонке «ПА» (`Order.listAdminMemo`) */
 export const LIST_TAG_ADMIN_MEMO = "admin-memo";
 /** В чате Kaiten есть @упоминание тега лаборатории (кэш в Order.kaitenChatHasLabMention). */
 export const LIST_TAG_KAITEN_LAB_MENTION = "kaiten-lab-mention";
@@ -369,7 +369,7 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
     case "orderAttention":
       return "Внимание: корректировки или расхождение сумм";
     case "adminMemo":
-      return "Пометки";
+      return "ПА";
     case "kaitenLabMention":
       return "ЧАТ: упоминание лаборатории (@…)";
     case "paymentExpected":

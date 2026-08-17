@@ -52,6 +52,7 @@ export const ordersListPageSelect = {
   createdAt: true,
   dueDate: true,
   listAdminMemo: true,
+  listTechMemo: true,
   invoiceParsedTotalRub: true,
   clinicId: true,
   doctorId: true,
