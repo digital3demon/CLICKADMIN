@@ -1017,6 +1017,7 @@ export default async function OrdersPage({
                     demoKanbanColumn={o.demoKanbanColumn}
                     demoCardTypeName={o.kaitenCardType?.name ?? null}
                     kaitenColumnTitle={o.kaitenColumnTitle}
+                    kaitenTrackLane={o.kaitenTrackLane}
                     prostheticsOrdered={o.prostheticsOrdered}
                     listPendingProstheticsRequests={
                       o.listPendingProstheticsRequests
@@ -1063,6 +1064,7 @@ export default async function OrdersPage({
                   labDate={labDateFormatted}
                   appointmentDate={appointmentDateFormatted}
                   kaitenColumnTitle={o.kaitenColumnTitle}
+                  kaitenTrackLane={o.kaitenTrackLane}
                   demoKanbanColumn={o.demoKanbanColumn}
                   demoCardTypeName={o.kaitenCardType?.name ?? null}
                   kaitenCardId={o.kaitenCardId}
@@ -1188,6 +1190,7 @@ export default async function OrdersPage({
                         demoKanbanColumn={o.demoKanbanColumn}
                         demoCardTypeName={o.kaitenCardType?.name ?? null}
                         kaitenColumnTitle={o.kaitenColumnTitle}
+                        kaitenTrackLane={o.kaitenTrackLane}
                         kaitenBlocked={blocked}
                         kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}

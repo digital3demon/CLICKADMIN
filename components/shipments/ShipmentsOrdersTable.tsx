@@ -373,6 +373,7 @@ export function ShipmentsOrdersTable({
                   demoKanbanColumn={o.demoKanbanColumn}
                   demoCardTypeName={o.kaitenCardType?.name ?? null}
                   kaitenColumnTitle={o.kaitenColumnTitle}
+                  kaitenTrackLane={o.kaitenTrackLane}
                   prostheticsOrdered={o.prostheticsOrdered}
                   listPendingProstheticsRequests={
                     o.listPendingProstheticsRequests
@@ -428,6 +429,7 @@ export function ShipmentsOrdersTable({
                         demoKanbanColumn={o.demoKanbanColumn}
                         demoCardTypeName={o.kaitenCardType?.name ?? null}
                         kaitenColumnTitle={o.kaitenColumnTitle}
+                        kaitenTrackLane={o.kaitenTrackLane}
                         kaitenBlocked={blocked}
                         kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
@@ -557,6 +559,7 @@ export function ShipmentsOrdersTable({
                             demoKanbanColumn={o.demoKanbanColumn}
                             demoCardTypeName={o.kaitenCardType?.name ?? null}
                             kaitenColumnTitle={o.kaitenColumnTitle}
+                            kaitenTrackLane={o.kaitenTrackLane}
                             kaitenBlocked={blocked}
                             kaitenBlockReason={o.kaitenBlockReason}
                             filterHref={kaitenStatusFilterHref}

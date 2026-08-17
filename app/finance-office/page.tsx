@@ -57,6 +57,7 @@ function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[
     dueToAdminsAt: o.dueToAdminsAt?.toISOString() ?? null,
     kaitenCardId: o.kaitenCardId,
     kaitenColumnTitle: o.kaitenColumnTitle,
+    kaitenTrackLane: o.kaitenTrackLane,
     demoKanbanColumn: o.demoKanbanColumn,
     kaitenCardType: o.kaitenCardType,
     clinic: o.clinic,

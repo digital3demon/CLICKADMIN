@@ -37,6 +37,7 @@ export const ordersListPageSelect = {
   demoKanbanColumn: true,
   kaitenCardType: { select: { id: true, name: true } },
   kaitenColumnTitle: true,
+  kaitenTrackLane: true,
   kaitenBlocked: true,
   kaitenBlockReason: true,
   labWorkStatus: true,

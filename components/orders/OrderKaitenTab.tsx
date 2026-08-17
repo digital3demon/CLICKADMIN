@@ -1062,11 +1062,8 @@ export function OrderKaitenTab({
         <div className={KAITEN_TAB_GRID_CLASS}>
           <div className={`order-2 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>
             <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-              Блокировка карточки
+              Блокировка
             </h3>
-            <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
-              Работает в канбане и во внешней карточке.
-            </p>
             {blockError ? (
               <p className="mt-2 text-xs text-red-600 dark:text-red-400">{blockError}</p>
             ) : null}
@@ -1088,7 +1085,7 @@ export function OrderKaitenTab({
                   onClick={() => void setNoCardBlockState(false)}
                   className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50"
                 >
-                  {blockBusy ? "Запрос…" : "Разблокировать карточку"}
+                  {blockBusy ? "Запрос…" : "Разблокировать"}
                 </button>
               </div>
             ) : (
@@ -1108,7 +1105,7 @@ export function OrderKaitenTab({
                   }
                   className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-600 disabled:opacity-50"
                 >
-                  {blockBusy ? "Запрос…" : "Заблокировать карточку"}
+                  {blockBusy ? "Запрос…" : "Заблокировать"}
                 </button>
               </div>
             )}
@@ -1315,27 +1312,6 @@ export function OrderKaitenTab({
     );
   }
 
-  if (loading) {
-    return (
-      <p className="text-sm text-[var(--text-muted)]">Загрузка Kaiten…</p>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-        <p>{loadError}</p>
-        <button
-          type="button"
-          className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-50 dark:hover:bg-amber-900/40"
-          onClick={() => void load({ refresh: true })}
-        >
-          Повторить (без кэша)
-        </button>
-      </div>
-    );
-  }
-
   const comments = snap?.comments ?? [];
   const cardImages = snap?.cardImages ?? [];
   const roots = comments.filter((c) => c.parentId == null);
@@ -1432,27 +1408,39 @@ export function OrderKaitenTab({
         kaitenCardUrl={kaitenCardUrl}
         kanbanCardUrlFallback={kanbanCardUrl}
       />
-      <p className="text-xs text-[var(--text-muted)]">
-        Приоритет — карточка в канбане CRM. Данные Kaiten подтягиваются и
-        сохраняются при «Сохранить в Kaiten» и отправке сообщений.{" "}
-        <button
-          type="button"
-          className="font-medium text-[var(--sidebar-blue)] hover:underline"
-          onClick={() => void load({ refresh: true })}
-        >
-          Обновить из Kaiten
-        </button>
-      </p>
+      {loading ? (
+        <p className="text-xs text-[var(--text-muted)]">
+          Карточка канбана уже на экране, данные доски подгружаются…
+        </p>
+      ) : loadError ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+          <p>{loadError}</p>
+          <button
+            type="button"
+            className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-50 dark:hover:bg-amber-900/40"
+            onClick={() => void load({ refresh: true })}
+          >
+            Повторить
+          </button>
+        </div>
+      ) : (
+        <p className="text-xs text-[var(--text-muted)]">
+          Приоритет — карточка в канбане CRM. Сохранение и чат уходят на доску.{" "}
+          <button
+            type="button"
+            className="font-medium text-[var(--sidebar-blue)] hover:underline"
+            onClick={() => void load({ refresh: true })}
+          >
+            Обновить с доски
+          </button>
+        </p>
+      )}
 
       <div className={KAITEN_TAB_GRID_CLASS}>
       <div className={`order-2 ${KAITEN_TAB_SIDE_PANEL_CLASS}`}>
         <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-          Блокировка (как в Kaiten)
+          Блокировка
         </h3>
-        <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
-          Состояние синхронизируется с карточкой: можно заблокировать здесь или в Kaiten
-          — в списке заказов строка подсветится красным.
-        </p>
         {blockError ? (
           <p className="mt-2 text-xs text-red-600 dark:text-red-400">{blockError}</p>
         ) : null}
@@ -1467,8 +1455,7 @@ export function OrderKaitenTab({
               </p>
             ) : (
               <p className="text-xs text-[var(--text-muted)]">
-                Текст причины в ответе API пуст — откройте карточку в Kaiten, чтобы
-                увидеть формулировку.
+                Причина не указана.
               </p>
             )}
             <button
@@ -1477,7 +1464,7 @@ export function OrderKaitenTab({
               onClick={() => void setBlockedInKaiten(false)}
               className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50"
             >
-              {blockBusy ? "Запрос…" : "Разблокировать в Kaiten"}
+              {blockBusy ? "Запрос…" : "Разблокировать"}
             </button>
           </div>
         ) : (
@@ -1498,7 +1485,7 @@ export function OrderKaitenTab({
               onClick={() => void setBlockedInKaiten(true, blockReasonDraft)}
               className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-600 disabled:opacity-50"
             >
-              {blockBusy ? "Запрос…" : "Заблокировать в Kaiten"}
+              {blockBusy ? "Запрос…" : "Заблокировать"}
             </button>
           </div>
         )}
@@ -1543,7 +1530,7 @@ export function OrderKaitenTab({
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-body)] sm:col-span-2">
             Заголовок карточки
             <span className="text-[10px] font-normal text-[var(--text-muted)]">
-              Полный текст в Kaiten. При смене вида работы пересчитывается автоматически.
+              Полный текст шапки. При смене вида работы пересчитывается автоматически.
             </span>
             <input
               className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
@@ -1565,8 +1552,14 @@ export function OrderKaitenTab({
                 setSpaceDirty(true);
               }}
             >
-              <option value="">— как в Kaiten —</option>
-              {(snap?.spaces ?? []).map((s) => (
+              <option value="">—</option>
+              {(snap?.spaces?.length
+                ? snap.spaces
+                : KAITEN_LANES.map((lane) => ({
+                    lane,
+                    label: KAITEN_LANE_LABEL[lane],
+                  }))
+              ).map((s) => (
                 <option key={s.lane} value={s.lane}>
                   {s.label}
                 </option>
@@ -1619,7 +1612,7 @@ export function OrderKaitenTab({
           onClick={() => void saveCard()}
           className="mt-3 rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
         >
-          {saving ? "Сохранение…" : "Сохранить в Kaiten"}
+          {saving ? "Сохранение…" : "Сохранить"}
         </button>
       </div>
 
@@ -1629,7 +1622,9 @@ export function OrderKaitenTab({
         </h3>
         <ul className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto lg:max-h-none max-h-[min(50vh,28rem)]">
           {roots.length === 0 ? (
-            <li className="text-sm text-[var(--text-muted)]">Сообщений пока нет.</li>
+            <li className="text-sm text-[var(--text-muted)]">
+              {loading ? "Подгружаем чат…" : "Сообщений пока нет."}
+            </li>
           ) : (
             roots.map((c) => (
               <li

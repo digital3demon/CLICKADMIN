@@ -77,6 +77,7 @@ const shipmentOrderSelect = {
   kaitenLabMentionSignalAt: true,
   demoKanbanColumn: true,
   kaitenColumnTitle: true,
+  kaitenTrackLane: true,
   prostheticsOrdered: true,
   invoicePrinted: true,
   invoicePaperDocs: true,

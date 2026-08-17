@@ -71,3 +71,14 @@ export function kaitenStatusDisplay(o: {
   if (o.kaitenCardId != null) return "—";
   return "Нет в Kaiten";
 }
+
+/** Подпись доски под статусом в списке нарядов (ортопедия / ортодонтия / тест). */
+export function kaitenTrackLaneListLabel(
+  lane: string | null | undefined,
+): string | null {
+  const u = String(lane || "").trim().toUpperCase();
+  if (u === "ORTHODONTICS") return "Ортодонтия";
+  if (u === "ORTHOPEDICS") return "Ортопедия";
+  if (u === "TEST") return "Тест";
+  return null;
+}

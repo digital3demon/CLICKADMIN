@@ -41,6 +41,7 @@ export function OrdersListTableRow({
   labDate,
   appointmentDate,
   kaitenColumnTitle,
+  kaitenTrackLane = null,
   demoKanbanColumn,
   demoCardTypeName,
   kaitenCardId = null,
@@ -66,6 +67,7 @@ export function OrdersListTableRow({
   labDate?: string;
   appointmentDate?: string;
   kaitenColumnTitle?: string | null;
+  kaitenTrackLane?: string | null;
   demoKanbanColumn?: string | null;
   demoCardTypeName?: string | null;
   kaitenCardId?: number | null;
@@ -172,6 +174,7 @@ export function OrdersListTableRow({
                   demoKanbanColumn={demoKanbanColumn}
                   demoCardTypeName={demoCardTypeName}
                   kaitenColumnTitle={kaitenColumnTitle ?? null}
+                  kaitenTrackLane={kaitenTrackLane}
                   kaitenBlocked={kaitenBlocked}
                   kaitenBlockReason={kaitenBlockReason}
                   filterHref={kaitenFilterHref}

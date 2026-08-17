@@ -52,6 +52,7 @@ export type FinanceOfficeOrderTableRow = {
   dueToAdminsAt: string | null;
   kaitenCardId: number | null;
   kaitenColumnTitle: string | null;
+  kaitenTrackLane: string | null;
   demoKanbanColumn: string | null;
   kaitenCardType: { name: string } | null;
   clinic: { id: string; name: string; address: string | null } | null;
@@ -286,6 +287,7 @@ export function FinanceOfficeOrdersTable({
                   demoKanbanColumn={o.demoKanbanColumn}
                   demoCardTypeName={o.kaitenCardType?.name ?? null}
                   kaitenColumnTitle={o.kaitenColumnTitle}
+                  kaitenTrackLane={o.kaitenTrackLane}
                   prostheticsOrdered={o.prostheticsOrdered}
                   listPendingProstheticsRequests={o.listPendingProstheticsRequests}
                   invoicePrinted={o.invoicePrinted}
@@ -358,6 +360,7 @@ export function FinanceOfficeOrdersTable({
                         demoKanbanColumn={o.demoKanbanColumn}
                         demoCardTypeName={o.kaitenCardType?.name ?? null}
                         kaitenColumnTitle={o.kaitenColumnTitle}
+                        kaitenTrackLane={o.kaitenTrackLane}
                         kaitenBlocked={blocked}
                         kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
@@ -457,6 +460,7 @@ export function FinanceOfficeOrdersTable({
                           demoKanbanColumn={o.demoKanbanColumn}
                           demoCardTypeName={o.kaitenCardType?.name ?? null}
                           kaitenColumnTitle={o.kaitenColumnTitle}
+                          kaitenTrackLane={o.kaitenTrackLane}
                           kaitenBlocked={blocked}
                           kaitenBlockReason={o.kaitenBlockReason}
                           filterHref={kaitenStatusFilterHref}

@@ -42,6 +42,7 @@ const financeOfficeOrderSelect = {
   labWorkStatus: true,
   kaitenCardId: true,
   kaitenColumnTitle: true,
+  kaitenTrackLane: true,
   demoKanbanColumn: true,
   kaitenCardType: { select: { name: true } },
   prostheticsOrdered: true,

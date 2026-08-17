@@ -84,6 +84,7 @@ type Props = {
   demoKanbanColumn?: string | null;
   demoCardTypeName?: string | null;
   kaitenColumnTitle: string | null;
+  kaitenTrackLane?: string | null;
   prostheticsOrdered: boolean;
   /**
    * Открытые заявки «???» по протетике — оставляем в API для совместимости;
@@ -358,6 +359,7 @@ export function OrderListTagsCell({
   demoKanbanColumn,
   demoCardTypeName,
   kaitenColumnTitle,
+  kaitenTrackLane = null,
   prostheticsOrdered,
   invoicePrinted = false,
   hasInvoiceAttachment,
@@ -996,6 +998,7 @@ export function OrderListTagsCell({
             demoKanbanColumn={demoKanbanColumn}
             demoCardTypeName={demoCardTypeName}
             kaitenColumnTitle={kaitenColumnTitle}
+            kaitenTrackLane={kaitenTrackLane}
             kaitenBlocked={kaitenBlocked}
             kaitenBlockReason={kaitenBlockReason}
             filterHref={
@@ -1231,6 +1234,7 @@ export function OrderListTagsCell({
     demoKanbanColumn,
     demoCardTypeName,
     kaitenColumnTitle,
+    kaitenTrackLane,
     shipmentsFilterContext,
     pageSize,
     hideShipped,
