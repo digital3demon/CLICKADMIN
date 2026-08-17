@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  humanListTagLabel,
   listTagKaitenColumnTitle,
+  listTagKaitenTrackLane,
   listTagParamsEqual,
   listTagUrgentCoefficient,
   listTagWhere,
+  parseKaitenTrackLaneValue,
   parseListTagParam,
+  relatedOrdersListTagQuickFilters,
   LIST_TAG_PROSTHETICS_PENDING,
 } from "@/lib/order-list-tag-filter";
 
@@ -54,6 +58,45 @@ describe("parseListTagParam / urgent", () => {
 
   it("parses admin-memo (колонка Пометки)", () => {
     expect(parseListTagParam("admin-memo")).toEqual({ kind: "adminMemo" });
+  });
+});
+
+describe("kaiten track lane tag", () => {
+  it("parses lane keys and maps cyrillic labels", () => {
+    expect(parseListTagParam("lane:ORTHOPEDICS")).toEqual({
+      kind: "kaitenTrackLane",
+      lane: "ORTHOPEDICS",
+    });
+    expect(parseListTagParam("lane:orthodontics")).toEqual({
+      kind: "kaitenTrackLane",
+      lane: "ORTHODONTICS",
+    });
+    expect(parseKaitenTrackLaneValue("тест")).toBe(null);
+    expect(parseKaitenTrackLaneValue("TEST")).toBe("TEST");
+    expect(humanListTagLabel({ kind: "kaitenTrackLane", lane: "ORTHOPEDICS" })).toBe(
+      "Ортопедия",
+    );
+    expect(humanListTagLabel({ kind: "kaitenTrackLane", lane: "ORTHODONTICS" })).toBe(
+      "Ортодонтия",
+    );
+  });
+
+  it("filters by kaitenTrackLane and keeps cyrillic labels in related chips", () => {
+    const parsed = parseListTagParam(listTagKaitenTrackLane("ORTHODONTICS"));
+    expect(parsed?.kind).toBe("kaitenTrackLane");
+    if (parsed?.kind !== "kaitenTrackLane") return;
+    expect(listTagWhere(parsed)).toEqual({ kaitenTrackLane: "ORTHODONTICS" });
+    const labels = relatedOrdersListTagQuickFilters(parsed).map((x) => x.label);
+    expect(labels).toContain("Ортопедия");
+    expect(labels).toContain("Ортодонтия");
+    expect(labels).toContain("Тест");
+  });
+
+  it("listTagParamsEqual distinguishes boards", () => {
+    const a = parseListTagParam("lane:ORTHOPEDICS");
+    const b = parseListTagParam("lane:ORTHODONTICS");
+    expect(a && b && listTagParamsEqual(a, b)).toBe(false);
+    expect(a && listTagParamsEqual(a, a)).toBe(true);
   });
 });
 

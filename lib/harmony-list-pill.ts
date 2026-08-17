@@ -22,6 +22,7 @@ export type HarmonyPillTone =
   | "gray"
   | "redSolid"
   | "stone"
+  | "slate"
   | "violet"
   | "teal"
   | "cyan"

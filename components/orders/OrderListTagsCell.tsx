@@ -1008,6 +1008,7 @@ export function OrderListTagsCell({
                   ? href(kaitenFilterKey)
                   : null
             }
+            makeTagHref={href}
           />
         ),
       });

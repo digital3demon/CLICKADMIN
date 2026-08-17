@@ -12,7 +12,12 @@ import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
   kaitenOrderToHarmonyTone,
   resolveListPillClass,
+  type HarmonyPillTone,
 } from "@/lib/harmony-list-pill";
+import {
+  listTagKaitenTrackLane,
+  parseKaitenTrackLaneValue,
+} from "@/lib/order-list-tag-filter";
 
 function kanbanColumnLabelForNoKaitenPill(
   demoKanbanColumn: string | null | undefined,
@@ -35,30 +40,60 @@ function kanbanColumnLabelForNoKaitenPill(
 const STOP_PILL_CLASSIC =
   "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-red-500/90 bg-red-600 text-center font-bold uppercase tracking-wide text-white shadow-sm dark:border-red-400/70 dark:bg-red-700";
 
-const BOARD_PILL_CLASSIC =
-  "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-[var(--card-border)] bg-[var(--app-bg)] text-center font-semibold uppercase tracking-wide text-[var(--text-muted)]";
+const BOARD_PILL_CLASSIC_ORTHO =
+  "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-neutral-400/80 bg-neutral-200 text-center font-semibold uppercase tracking-wide text-neutral-900 dark:border-neutral-400/70 dark:bg-neutral-600 dark:text-neutral-50";
+
+const BOARD_PILL_CLASSIC_ODON =
+  "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-slate-400/80 bg-slate-200 text-center font-semibold uppercase tracking-wide text-slate-900 dark:border-slate-400/70 dark:bg-slate-600 dark:text-slate-50";
+
+const BOARD_PILL_CLASSIC_TEST =
+  "inline-flex min-w-0 max-w-full items-center truncate rounded-full border border-amber-400/70 bg-amber-100 text-center font-semibold uppercase tracking-wide text-amber-950 dark:border-amber-500/60 dark:bg-amber-900/75 dark:text-amber-50";
+
+function boardLaneTone(label: string): HarmonyPillTone {
+  if (label === "Ортодонтия") return "slate";
+  if (label === "Тест") return "yellow";
+  return "stone";
+}
+
+function boardLaneClassicClass(label: string): string {
+  if (label === "Ортодонтия") return BOARD_PILL_CLASSIC_ODON;
+  if (label === "Тест") return BOARD_PILL_CLASSIC_TEST;
+  return BOARD_PILL_CLASSIC_ORTHO;
+}
 
 function boardLanePill(
   label: string,
   isHarmony: boolean,
   underOrder: boolean,
+  href: string | null,
 ) {
   const padClass = underOrder
     ? "px-2 py-px text-[10px] leading-tight sm:px-2.5 sm:text-[11px]"
     : "px-1.5 py-px text-[9px] leading-tight";
-  const tone =
-    label === "Ортодонтия" ? "violet" : label === "Тест" ? "yellow" : "stone";
-  return (
+  const tone = boardLaneTone(label);
+  const pill = (
     <span
       className={
         isHarmony
           ? `${resolveListPillClass(true, "", tone)} ${padClass}`
-          : `${BOARD_PILL_CLASSIC} ${padClass}`
+          : `${boardLaneClassicClass(label)} ${padClass}`
       }
-      title={`Доска: ${label}`}
+      title={href ? `Показать наряды: ${label}` : `Доска: ${label}`}
     >
       <span className="truncate">{label}</span>
     </span>
+  );
+  if (!href) return pill;
+  return (
+    <Link
+      prefetch={false}
+      href={href}
+      data-row-click-ignore
+      title={`Показать наряды: ${label}`}
+      className="inline-flex min-w-0 max-w-full text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none"
+    >
+      {pill}
+    </Link>
   );
 }
 
@@ -67,11 +102,14 @@ function wrapStatusAndBoard(
   boardLabel: string | null,
   isHarmony: boolean,
   underOrder: boolean,
+  boardFilterHref: string | null,
 ) {
   return (
     <span className="flex w-full min-w-0 flex-col items-center justify-center gap-0.5 -translate-y-0.5">
       {statusNode}
-      {boardLabel ? boardLanePill(boardLabel, isHarmony, underOrder) : null}
+      {boardLabel
+        ? boardLanePill(boardLabel, isHarmony, underOrder, boardFilterHref)
+        : null}
     </span>
   );
 }
@@ -88,6 +126,8 @@ type Props = {
   kaitenBlockReason?: string | null;
   /** Ссылка фильтра по колонке Kaiten; без неё — только пилюля. */
   filterHref?: string | null;
+  /** Строит ссылку фильтра по ключу `tag=` — пилюля доски работает как фильтр. */
+  makeTagHref?: ((tag: string) => string) | null;
   /** Компактная пилюля под номером наряда (отгрузки). */
   placement?: "tags" | "underOrderNumber";
 };
@@ -101,11 +141,15 @@ export function OrderListKaitenColumnTag({
   kaitenBlocked = false,
   kaitenBlockReason = null,
   filterHref = null,
+  makeTagHref = null,
   placement = "tags",
 }: Props) {
   const isHarmony = useUiDesign() === "harmony";
   const underOrder = placement === "underOrderNumber";
   const boardLabel = kaitenTrackLaneListLabel(kaitenTrackLane);
+  const laneKey = parseKaitenTrackLaneValue(kaitenTrackLane);
+  const boardFilterHref =
+    laneKey && makeTagHref ? makeTagHref(listTagKaitenTrackLane(laneKey)) : null;
   // Под №: чуть крупнее и с запасом по бокам (раньше text-[9–10px]/px-1.5 было «впритык»).
   const padClass = underOrder
     ? "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:text-[12px]"
@@ -144,6 +188,7 @@ export function OrderListKaitenColumnTag({
       boardLabel,
       isHarmony,
       underOrder,
+      boardFilterHref,
     );
   }
   return wrapStatusAndBoard(
@@ -153,6 +198,7 @@ export function OrderListKaitenColumnTag({
     boardLabel,
     isHarmony,
     underOrder,
+    boardFilterHref,
   );
 }
 
@@ -221,6 +267,7 @@ export function OrderListKaitenColumnTag({
       boardLabel,
       isHarmony,
       underOrder,
+      boardFilterHref,
     );
   }
 
@@ -234,5 +281,6 @@ export function OrderListKaitenColumnTag({
     boardLabel,
     isHarmony,
     underOrder,
+    boardFilterHref,
   );
 }

@@ -15,6 +15,28 @@ import {
   ORDER_PAYMENT_EXPECTED,
   ORDER_PAYMENT_NOT_PAID,
 } from "@/lib/order-clinic-client-fields";
+import { kaitenTrackLaneListLabel } from "@/lib/kaiten-column-title";
+
+/** Доска Kaiten в списке нарядов (`Order.kaitenTrackLane`). */
+export type ListTagKaitenTrackLane =
+  | "ORTHOPEDICS"
+  | "ORTHODONTICS"
+  | "TEST";
+
+const KAITEN_TRACK_LANE_VALUES: readonly ListTagKaitenTrackLane[] = [
+  "ORTHOPEDICS",
+  "ORTHODONTICS",
+  "TEST",
+];
+
+export function parseKaitenTrackLaneValue(
+  raw: string | null | undefined,
+): ListTagKaitenTrackLane | null {
+  const u = String(raw || "").trim().toUpperCase();
+  return KAITEN_TRACK_LANE_VALUES.includes(u as ListTagKaitenTrackLane)
+    ? (u as ListTagKaitenTrackLane)
+    : null;
+}
 
 /** Системные ключи в query `tag=` */
 export const LIST_TAG_PROSTHETICS = "prosthetics";
@@ -77,6 +99,8 @@ export type ParsedListTag =
   | { kind: "lab"; status: LabWorkStatus }
   /** Колонка доски Kaiten (точное совпадение `Order.kaitenColumnTitle`). */
   | { kind: "kaitenColumn"; title: string }
+  /** Доска Kaiten: ортопедия / ортодонтия / тест (`Order.kaitenTrackLane`). */
+  | { kind: "kaitenTrackLane"; lane: ListTagKaitenTrackLane }
   | { kind: "prosthetics" }
   | { kind: "prostheticsPending" }
   | { kind: "otpr" }
@@ -106,6 +130,11 @@ const KAITEN_COLUMN_TAG_MAX_LEN = 500;
 export function listTagKaitenColumnTitle(title: string): string {
   const s = title.trim();
   return `k:${encodeURIComponent(s)}`;
+}
+
+/** Ключ query `tag=` для фильтра по доске (ортопедия / ортодонтия / тест). */
+export function listTagKaitenTrackLane(lane: ListTagKaitenTrackLane): string {
+  return `lane:${lane}`;
 }
 
 /** Фильтр срочных с конкретным коэффициентом (как в карточке «×1.2»). */
@@ -160,6 +189,12 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
     }
   }
 
+  if (t.startsWith("lane:")) {
+    const lane = parseKaitenTrackLaneValue(t.slice(5));
+    if (!lane) return null;
+    return { kind: "kaitenTrackLane", lane };
+  }
+
   if (t.startsWith("s:")) {
     const v = t.slice(2);
     if (isOrderStatus(v)) return { kind: "order", status: v };
@@ -198,6 +233,8 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
       return { labWorkStatus: parsed.status };
     case "kaitenColumn":
       return { kaitenColumnTitle: parsed.title };
+    case "kaitenTrackLane":
+      return { kaitenTrackLane: parsed.lane };
     case "prosthetics":
       return { prostheticsOrdered: true };
     case "prostheticsPending":
@@ -296,6 +333,8 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
       return LAB_WORK_STATUS_LABELS[parsed.status];
     case "kaitenColumn":
       return parsed.title;
+    case "kaitenTrackLane":
+      return kaitenTrackLaneListLabel(parsed.lane) ?? parsed.lane;
     case "prosthetics":
       return "Протетика заказана";
     case "prostheticsPending":
@@ -356,6 +395,9 @@ export function listTagParamsEqual(a: ParsedListTag, b: ParsedListTag): boolean 
   if (a.kind === "kaitenColumn" && b.kind === "kaitenColumn") {
     return a.title.trim() === b.title.trim();
   }
+  if (a.kind === "kaitenTrackLane" && b.kind === "kaitenTrackLane") {
+    return a.lane === b.lane;
+  }
   if (a.kind === "urgent" && b.kind === "urgent") {
     if (a.filter !== b.filter) return false;
     if (a.filter === "coef" && b.filter === "coef") return a.coef === b.coef;
@@ -408,6 +450,11 @@ export function relatedOrdersListTagQuickFilters(
         tag: listTagKaitenColumnTitle(title),
       }));
     }
+    case "kaitenTrackLane":
+      return KAITEN_TRACK_LANE_VALUES.map((lane) => ({
+        label: kaitenTrackLaneListLabel(lane) ?? lane,
+        tag: listTagKaitenTrackLane(lane),
+      }));
     case "urgent": {
       const fromDb = ctx.urgentCoefficientsInDb ?? [];
       const merged = Array.from(

@@ -223,6 +223,13 @@ export function ShipmentsOrdersTable({
 
   const mirrorScrollId = "shipments-table-mirror-scroll";
   const bodyScrollId = "shipments-table-body-scroll";
+  const makeShipmentsTagHref = (tag: string) =>
+    shipmentsListHref({
+      tab: shipmentsTagFilterContext?.tab ?? "today",
+      tag,
+      from: shipmentsTagFilterContext?.periodFrom ?? undefined,
+      to: shipmentsTagFilterContext?.periodTo ?? undefined,
+    });
 
   return (
     <div className="w-full min-w-0">
@@ -433,6 +440,7 @@ export function ShipmentsOrdersTable({
                         kaitenBlocked={blocked}
                         kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
+                        makeTagHref={makeShipmentsTagHref}
                         placement="underOrderNumber"
                       />
                     </div>
@@ -563,6 +571,7 @@ export function ShipmentsOrdersTable({
                             kaitenBlocked={blocked}
                             kaitenBlockReason={o.kaitenBlockReason}
                             filterHref={kaitenStatusFilterHref}
+                            makeTagHref={makeShipmentsTagHref}
                             placement="underOrderNumber"
                           />
                         </div>

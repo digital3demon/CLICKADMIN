@@ -124,6 +124,14 @@ export function FinanceOfficeOrdersTable({
   toolbar?: ReactNode;
 }) {
   const router = useRouter();
+  const makeFinanceTagHref = (tag: string) =>
+    financeOfficeListHref({
+      tab,
+      tag,
+      from: periodFrom ?? undefined,
+      to: periodTo ?? undefined,
+      q: (q ?? "").trim() || undefined,
+    });
   const { user } = useSessionUser();
   const canSeeAdminIndicators = canSeeOrderNotificationKind(
     "admin",
@@ -364,6 +372,7 @@ export function FinanceOfficeOrdersTable({
                         kaitenBlocked={blocked}
                         kaitenBlockReason={o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
+                        makeTagHref={makeFinanceTagHref}
                         placement="underOrderNumber"
                       />
                     </div>
@@ -464,6 +473,7 @@ export function FinanceOfficeOrdersTable({
                           kaitenBlocked={blocked}
                           kaitenBlockReason={o.kaitenBlockReason}
                           filterHref={kaitenStatusFilterHref}
+                          makeTagHref={makeFinanceTagHref}
                           placement="underOrderNumber"
                         />
                         <div

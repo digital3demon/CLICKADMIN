@@ -184,6 +184,12 @@ html[data-ui="harmony"] .harmony-status-pill--stone {
   border: 1px solid color-mix(in srgb, var(--text-muted) 24%, transparent);
 }
 
+html[data-ui="harmony"] .harmony-status-pill--slate {
+  background: color-mix(in srgb, #64748b 18%, var(--card-bg));
+  color: var(--text-body);
+  border: 1px solid color-mix(in srgb, #64748b 28%, transparent);
+}
+
 html[data-ui="harmony"] .harmony-status-pill--violet {
   background: color-mix(in srgb, #7c3aed 11%, var(--card-bg));
   color: color-mix(in srgb, #6d28d9 72%, var(--text-body));
