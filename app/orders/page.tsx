@@ -137,13 +137,14 @@ function OrdersTableColGroup() {
       <col className="lg:w-[5.5%]" />
       <col className="lg:w-[7%]" />
       <col className="lg:w-[7%]" />
-      <col className="lg:w-[9%]" />
-      <col className="lg:w-[9%]" />
+      <col className="lg:w-[8.5%]" />
+      <col className="lg:w-[8.5%]" />
       <col className="lg:w-[5%]" />
       <col className="lg:w-[5%]" />
       <col className="lg:w-[5%]" />
-      <col className="max-md:hidden lg:w-[5.5%]" />
-      <col className="lg:w-[5.5%]" />
+      <col className="max-md:hidden lg:w-[4.25%]" />
+      <col className="max-md:hidden lg:w-[4.25%]" />
+      <col className="lg:w-[4.5%]" />
       <col className="lg:w-[12.5%]" />
     </colgroup>
   );
@@ -1303,13 +1304,13 @@ export default async function OrdersPage({
                       appointmentHasTime={o.dueToAdminsHasTime !== false}
                     />
                   </td>
-                  <td className="max-md:hidden min-w-0 w-[4.75rem] max-w-[4.75rem] px-1.5 py-1 align-middle sm:px-2 sm:py-1.5">
+                  <td className="max-md:hidden min-w-0 w-[4.25rem] max-w-[4.25rem] px-1 py-1 align-middle sm:px-1 sm:py-1.5">
                     <OrderListAdminMemoCell
                       orderId={o.id}
                       initialMemo={o.listAdminMemo ?? null}
                     />
                   </td>
-                  <td className="max-md:hidden min-w-0 w-[4.75rem] max-w-[4.75rem] px-1.5 py-1 align-middle sm:px-2 sm:py-1.5">
+                  <td className="max-md:hidden min-w-0 w-[4.25rem] max-w-[4.25rem] px-1 py-1 align-middle sm:px-1 sm:py-1.5">
                     <OrderListTechMemoCell
                       orderId={o.id}
                       initialMemo={o.listTechMemo ?? null}
@@ -1318,7 +1319,7 @@ export default async function OrdersPage({
                   </td>
                   <td
                     data-shipped-cell
-                    className="min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5"
+                    className="min-w-0 w-[4.5rem] max-w-[4.5rem] px-1 py-1 align-middle text-center sm:px-1 sm:py-1.5"
                   >
                     <OrderShippedToggle
                       orderId={o.id}

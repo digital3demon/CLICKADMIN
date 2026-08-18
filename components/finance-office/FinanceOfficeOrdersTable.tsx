@@ -212,13 +212,13 @@ export function FinanceOfficeOrdersTable({
                 </div>
               </th>
               <th
-                className="w-[4.75rem] px-1.5 py-2 text-center normal-case max-xl:hidden"
+                className="w-[4.25rem] px-1 py-2 text-center normal-case max-xl:hidden"
                 title="ПА — пометки админов (не уходят в наряд и Kaiten)"
               >
                 ПА
               </th>
               <th
-                className="w-[4.75rem] px-1.5 py-2 text-center normal-case text-teal-700 max-xl:hidden dark:text-teal-400"
+                className="w-[4.25rem] px-1 py-2 text-center normal-case max-xl:hidden"
                 title="ПТ — пометки техники (не уходят в наряд и Kaiten)"
               >
                 ПТ
@@ -359,13 +359,13 @@ export function FinanceOfficeOrdersTable({
                       aria-label={`Выбрать наряд ${o.orderNumber}`}
                     />
                   </td>
-                  <td className="max-xl:hidden w-[4.75rem] px-1.5 py-1.5 text-center align-middle">
+                  <td className="max-xl:hidden w-[4.25rem] px-1 py-1.5 text-center align-middle">
                     <OrderListAdminMemoCell
                       orderId={o.id}
                       initialMemo={o.listAdminMemo}
                     />
                   </td>
-                  <td className="max-xl:hidden w-[4.75rem] px-1.5 py-1.5 text-center align-middle">
+                  <td className="max-xl:hidden w-[4.25rem] px-1 py-1.5 text-center align-middle">
                     <OrderListTechMemoCell
                       orderId={o.id}
                       initialMemo={o.listTechMemo}

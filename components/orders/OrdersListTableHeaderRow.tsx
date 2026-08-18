@@ -547,13 +547,13 @@ export function OrdersListTableHeaderRow({
       </FilterTh>
 
       <th
-        className={`${TH} w-[4.75rem] max-w-[4.75rem] px-1.5 max-md:hidden normal-case sm:px-2`}
+        className={`${TH} w-[4.25rem] max-w-[4.25rem] px-1 max-md:hidden normal-case`}
         title="ПА — пометки админов (не уходят в наряд и Kaiten)"
       >
         ПА
       </th>
       <th
-        className={`${TH} w-[4.75rem] max-w-[4.75rem] px-1.5 max-md:hidden normal-case text-teal-700 sm:px-2 dark:text-teal-400`}
+        className={`${TH} w-[4.25rem] max-w-[4.25rem] px-1 max-md:hidden normal-case`}
         title="ПТ — пометки техники (не уходят в наряд и Kaiten)"
       >
         ПТ
