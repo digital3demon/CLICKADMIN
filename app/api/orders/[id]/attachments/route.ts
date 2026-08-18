@@ -17,6 +17,7 @@ import {
 } from "@/lib/invoice-number-extract";
 import {
   removeAttachmentFromKaitenIfAny,
+  syncUnpushedOrderAttachmentsToKaiten,
 } from "@/lib/kaiten-sync";
 import {
   deleteOrderAttachmentFile,
@@ -231,6 +232,11 @@ export async function GET(_req: Request, ctx: Ctx) {
     });
     const invId = order.invoiceAttachmentId;
     const visible = rows.filter((r) => isOrderWorkAttachment(r, invId));
+    if (visible.some((r) => r.uploadedToKaitenAt == null)) {
+      void syncUnpushedOrderAttachmentsToKaiten(orderId, prisma).catch((e) => {
+        console.warn("[attachments GET] kaiten push leftover", e);
+      });
+    }
     return NextResponse.json(visible);
   } catch (e) {
     console.error("[attachments GET]", e);

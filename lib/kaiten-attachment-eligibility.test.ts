@@ -5,7 +5,7 @@ import { isOrderAttachmentEligibleForKaitenPush } from "@/lib/kaiten-attachment-
 describe("isOrderAttachmentEligibleForKaitenPush", () => {
   const order = { invoiceAttachmentId: "inv-1" };
 
-  it("blocks payment slip and scanner", () => {
+  it("blocks payment slip, allows scanner", () => {
     expect(
       isOrderAttachmentEligibleForKaitenPush({
         id: "a1",
@@ -19,7 +19,7 @@ describe("isOrderAttachmentEligibleForKaitenPush", () => {
         scope: OrderAttachmentScope.SCANNER,
         order,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("blocks invoice attachment id", () => {

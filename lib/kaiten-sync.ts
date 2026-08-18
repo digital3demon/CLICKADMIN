@@ -350,10 +350,7 @@ export async function syncAllUnpushedAttachmentsInBackground(
     where: {
       ...unpushedToKaitenWhere,
       scope: {
-        notIn: [
-          OrderAttachmentScope.PAYMENT_SLIP,
-          OrderAttachmentScope.SCANNER,
-        ],
+        notIn: [OrderAttachmentScope.PAYMENT_SLIP],
       },
       order: { kaitenCardId: { not: null } },
     },

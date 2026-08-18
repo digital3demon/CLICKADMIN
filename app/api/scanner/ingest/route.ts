@@ -8,11 +8,11 @@
  * - auth: Bearer TenantApiKey + scope scanner.ingest (без user-session);
  * - заказ: x-scanner-order-number или QR (пиксели / x-scanner-qr); без серверного OCR;
  * - успех = OrderAttachment (CRM-канбан подтянет через linked-orders);
- * - тихий фоновый sync в Kaiten при наличии карточки — не критерий успеха.
+ * - тихий push в Kaiten (ждёт карточку) — не критерий успеха ingest.
  */
 import { OrderAttachmentScope } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
+import { pushAttachmentToKaitenWithCardWait } from "@/lib/kaiten-sync";
 import {
   isOrderAttachmentS3Enabled,
   newOrderAttachmentId,
@@ -414,11 +414,16 @@ export async function POST(req: Request) {
     );
 
     // CRM-канбан берёт файлы из OrderAttachment через linked-orders.
-    // Kaiten — тихий побочный sync, не критерий успеха.
+    // Kaiten — тихий побочный push (карта может появиться чуть позже).
     try {
-      await syncUnpushedOrderAttachmentsToKaiten(resolved.orderId, ordersDb);
+      await pushAttachmentToKaitenWithCardWait(
+        resolved.orderId,
+        row.id,
+        ordersDb,
+        { maxWaitMs: 20_000 },
+      );
     } catch (e) {
-      console.warn("[scanner/ingest] kaiten sync failed", e);
+      console.warn("[scanner/ingest] kaiten push failed", e);
     }
 
     console.info("[scanner/ingest]", {
