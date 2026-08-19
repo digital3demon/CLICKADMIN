@@ -87,6 +87,7 @@ const shipmentOrderSelect = {
   payment: true,
   paymentPartialRub: true,
   adminShippedOtpr: true,
+  adminShippedAt: true,
   kaitenBlocked: true,
   kaitenBlockReason: true,
   isUrgent: true,

@@ -546,7 +546,11 @@ export function ShipmentsOrdersTable({
                     data-shipped-cell
                     className="min-w-0 px-1 py-1 text-center align-middle sm:px-1.5 sm:py-1.5 print:hidden"
                   >
-                    <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                    <OrderShippedToggle
+                      orderId={o.id}
+                      shipped={workSent}
+                      shippedAtIso={o.adminShippedAt?.toISOString() ?? null}
+                    />
                   </td>
                   <td className="min-w-0 max-w-0 overflow-hidden px-1 py-1 align-top sm:px-1.5 sm:py-1.5 print:px-1.5">
                     <div className="min-w-0 max-w-full overflow-hidden">
@@ -650,7 +654,11 @@ export function ShipmentsOrdersTable({
                           {renderPrintActions()}
                         </div>
                         <div className="min-h-[44px] flex-1 rounded-lg bg-[var(--surface-subtle)] px-2 py-1">
-                          <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                          <OrderShippedToggle
+                            orderId={o.id}
+                            shipped={workSent}
+                            shippedAtIso={o.adminShippedAt?.toISOString() ?? null}
+                          />
                         </div>
                       </div>
 
