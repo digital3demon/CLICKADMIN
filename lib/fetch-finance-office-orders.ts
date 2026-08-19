@@ -56,6 +56,7 @@ const financeOfficeOrderSelect = {
   payment: true,
   paymentPartialRub: true,
   adminShippedOtpr: true,
+  adminShippedAt: true,
   financeCalculated: true,
   kaitenBlocked: true,
   kaitenBlockReason: true,

@@ -73,6 +73,8 @@ export type FinanceOfficeOrderTableRow = {
   payment: string | null;
   paymentPartialRub: number | null;
   adminShippedOtpr: boolean;
+  /** ISO `adminShippedAt` — дата/время отметки «Отправка». */
+  adminShippedAt: string | null;
   financeCalculated: boolean;
   clinicWorksWithEdo: boolean;
   kaitenBlocked: boolean;
@@ -474,7 +476,11 @@ export function FinanceOfficeOrdersTable({
                     data-shipped-cell
                     className="w-[4.5rem] px-1 py-2 text-center align-middle"
                   >
-                    <OrderShippedToggle orderId={o.id} shipped={workSent} />
+                    <OrderShippedToggle
+                      orderId={o.id}
+                      shipped={workSent}
+                      shippedAtIso={o.adminShippedAt}
+                    />
                   </td>
                   <td className="w-[15.5rem] max-w-[15.5rem] px-1.5 py-2 text-left align-top">
                     {renderTagsCell()}
@@ -551,6 +557,7 @@ export function FinanceOfficeOrdersTable({
                             <OrderShippedToggle
                               orderId={o.id}
                               shipped={workSent}
+                              shippedAtIso={o.adminShippedAt}
                             />
                           </div>
                         </div>
