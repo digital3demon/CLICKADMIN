@@ -490,7 +490,7 @@ function EditFormInlineLabeledRow({
 }
 
 const invoiceCopyChipClass =
-  "flex max-w-full min-w-0 items-center gap-2 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-left shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 disabled:cursor-default disabled:hover:border-[var(--input-border)] disabled:hover:bg-[var(--card-bg)]";
+  "inline-flex w-fit max-w-full items-center gap-1.5 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 disabled:cursor-default disabled:hover:border-[var(--input-border)] disabled:hover:bg-[var(--card-bg)]";
 
 function InvoiceCopyChip({
   label,
@@ -3397,18 +3397,16 @@ export function OrderEditForm({
               Скопировать все
             </button>
           </div>
-          <div className="mt-3 flex min-w-0 flex-wrap items-start gap-x-3 gap-y-2">
-            <div className="flex min-w-0 flex-1 basis-[min(100%,18rem)] flex-col gap-0.5 lg:max-w-xl">
-              <button
-                type="button"
-                onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
-                title="Нажмите — скопировать в буфер обмена"
-                className="max-w-full min-w-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
-              >
-                {invoiceCopyClipboardText}
-              </button>
-            </div>
-            <div className="flex min-w-0 flex-1 basis-[min(100%,16rem)] flex-col gap-1">
+          <div className="mt-3 flex w-fit max-w-full flex-wrap items-start gap-2">
+            <button
+              type="button"
+              onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
+              title="Нажмите — скопировать в буфер обмена"
+              className="w-fit max-w-full truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+            >
+              {invoiceCopyClipboardText}
+            </button>
+            <div className="flex w-fit max-w-full flex-col items-stretch gap-1">
               <InvoiceCopyChip
                 label="Юрлицо"
                 value={clientLegalNameForCopy}
