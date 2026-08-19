@@ -23,7 +23,7 @@ type Props = {
   shipTo?: string | null;
   otprFrom?: string | null;
   otprTo?: string | null;
-  /** Компактная строка рядом с «К началу списка» / «Следующие N». */
+  /** Компактная строка рядом с номерами страниц. */
   paginationBar?: boolean;
 };
 

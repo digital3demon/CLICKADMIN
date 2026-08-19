@@ -20,7 +20,7 @@ import { OrderPostingMonthBar } from "@/components/orders/OrderPostingMonthBar";
 import { OrdersListHeaderActionCards } from "@/components/orders/OrdersListHeaderActionCards";
 import { OrdersListShippedToolbar } from "@/components/orders/OrdersListShippedToolbar";
 import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePref";
-import { OrdersListPagerLink } from "@/components/orders/OrdersListPagerLink";
+import { OrdersListPagination } from "@/components/orders/OrdersListPagination";
 import { OrdersListSearch } from "@/components/orders/OrdersListSearch";
 import { OrdersListTableHeaderRow } from "@/components/orders/OrdersListTableHeaderRow";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
@@ -50,6 +50,7 @@ import { ordersListOtprPeriod } from "@/lib/orders-list-otpr-period";
 import {
   normalizeOrdersSearchQuery,
   ordersListHref,
+  parseOrdersListPage,
 } from "@/lib/orders-list-query";
 import {
   ordersShipmentModeLabel,
@@ -202,6 +203,7 @@ export default async function OrdersPage({
 }: {
   searchParams: Promise<{
     cursor?: string;
+    page?: string;
     limit?: string;
     tag?: string;
     hideShipped?: string;
@@ -312,6 +314,7 @@ export default async function OrdersPage({
     }
   }
   const pageSize = resolveOrdersPageSize(sp.limit, userOrdersListPageSize);
+  const listPageNum = parseOrdersListPage(sp.page);
   const rawTag = sp.tag?.trim() ? sp.tag.trim() : null;
   const activeFilter = rawTag ? parseListTagParam(rawTag) : null;
   const onlyShippedActive =
@@ -375,14 +378,15 @@ export default async function OrdersPage({
     otprTo: otprToUrl ?? undefined,
   };
 
-  /** Список — сразу, параллельно со счётчиками шапки (иначе «Следующие N» ждёт чипы). */
+  /** Список — сразу, параллельно со счётчиками шапки (иначе пагинация ждёт чипы). */
   const listPageWork = !tenantId
     ? Promise.reject(new Error("tenant_context_required"))
     : shipmentModeActive && shipParsed.mode
       ? Promise.all([
           fetchOrdersShipmentListPage(ordersPrisma, {
             tenantId,
-            cursor: sp.cursor,
+            cursor: null,
+            page: listPageNum,
             pageSize,
             shipmentMode: shipParsed.mode,
             shipFrom: shipParsed.shipFrom,
@@ -402,7 +406,8 @@ export default async function OrdersPage({
       : Promise.all([
           fetchOrdersListPage(ordersPrisma, {
             tenantId,
-            cursor: sp.cursor,
+            cursor: null,
+            page: listPageNum,
             pageSize,
             tag: activeFilter ? rawTag : undefined,
             hideShipped: hideShippedActive,
@@ -557,13 +562,17 @@ export default async function OrdersPage({
   let orders: Awaited<
     ReturnType<typeof fetchOrdersListPage>
   >["orders"];
-  let nextCursor: string | null = null;
+  let listPage = listPageNum;
+  let listTotalCount: number | null = null;
+  let listHasMore = false;
   let shipmentListTruncated = false;
   let labDueHmSlots: string[] = [];
   try {
     const result = await listPageWork;
     orders = result.page.orders;
-    nextCursor = result.page.nextCursor;
+    listPage = result.page.page;
+    listTotalCount = result.page.totalCount;
+    listHasMore = result.page.hasMore;
     labDueHmSlots = result.slots;
     if (result.kind === "ship") {
       shipmentListTruncated = result.page.truncated;
@@ -1343,55 +1352,36 @@ export default async function OrdersPage({
           </tbody>
         </table>
       </div>
-      {sp.cursor || nextCursor ? (
-        <div className="no-print flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {sp.cursor ? (
-              <OrdersListPagerLink
-                href={ordersListHref({
-                  limit: pageSize,
-                  ...listHrefCommon,
-                })}
-                className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)] sm:text-base"
-              >
-                К началу списка
-              </OrdersListPagerLink>
-            ) : null}
-            {nextCursor ? (
-              <OrdersListPagerLink
-                href={ordersListHref({
-                  limit: pageSize,
-                  cursor: nextCursor,
-                  ...listHrefCommon,
-                })}
-                className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-4 py-2 text-sm font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-base"
-              >
-                Следующие {pageSize}
-              </OrdersListPagerLink>
-            ) : null}
-          </div>
-          {session?.sub && !isSingleUserPortable() ? (
-            <div className="min-w-0 sm:ml-auto sm:max-w-[min(100%,28rem)]">
-              <OrdersListPageSizePref
-                paginationBar
-                savedInProfile={userOrdersListPageSize}
-                effectivePageSize={pageSize}
-                tag={rawTag ?? undefined}
-                hideShipped={hideShippedActive}
-                onlyShipped={onlyShippedActive}
-                q={listSearchQ || undefined}
-                from={fromUrl ?? undefined}
-                to={toUrl ?? undefined}
-                ship={shipmentModeActive ? shipParsed.mode ?? undefined : undefined}
-                shipFrom={shipFromUrl ?? undefined}
-                shipTo={shipToUrl ?? undefined}
-                otprFrom={otprFromUrl ?? undefined}
-                otprTo={otprToUrl ?? undefined}
-              />
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      <OrdersListPagination
+        totalCount={listTotalCount}
+        pageSize={pageSize}
+        currentPage={listPage}
+        hasMore={listHasMore}
+        hrefOpts={{
+          limit: pageSize,
+          ...listHrefCommon,
+        }}
+        pageSizeControl={
+          session?.sub && !isSingleUserPortable() ? (
+            <OrdersListPageSizePref
+              paginationBar
+              savedInProfile={userOrdersListPageSize}
+              effectivePageSize={pageSize}
+              tag={rawTag ?? undefined}
+              hideShipped={hideShippedActive}
+              onlyShipped={onlyShippedActive}
+              q={listSearchQ || undefined}
+              from={fromUrl ?? undefined}
+              to={toUrl ?? undefined}
+              ship={shipmentModeActive ? shipParsed.mode ?? undefined : undefined}
+              shipFrom={shipFromUrl ?? undefined}
+              shipTo={shipToUrl ?? undefined}
+              otprFrom={otprFromUrl ?? undefined}
+              otprTo={otprToUrl ?? undefined}
+            />
+          ) : null
+        }
+      />
       </OrdersListChrome>
       </div>
       </OrdersListKaitenChatShell>

@@ -123,21 +123,42 @@ async function hydrateKaitenLabMentionForOrdersList(
   return hydrateOrderKaitenLabMentionHighlight(db, userId, rows);
 }
 
-async function fetchOrdersListPageAttentionFiltered(
+type OrdersListInMemoryPageOpts = {
+  pageSize: number;
+  /** Сколько совпадений пропустить с начала списка (offset). При курсоре — 0. */
+  skip: number;
+  cursorDec: { c: string; i: string } | null;
+};
+
+type OrdersListInMemoryPageResult = {
+  orders: OrderListPageRow[];
+  nextCursor: string | null;
+  /** null — скан не дошёл до конца, последнюю страницу не рисуем. */
+  totalCount: number | null;
+  hasMore: boolean;
+};
+
+/**
+ * Фильтры, которые нельзя выразить одним WHERE (внимание / упоминания в чате):
+ * сканируем батчами, собираем совпадения, режем skip/take.
+ */
+async function collectMatchingOrdersListPage(
   db: PrismaClient,
   baseParts: Prisma.OrderWhereInput[],
-  dec: { c: string; i: string } | null,
-  take: number,
-  pageSize: number,
-): Promise<{ orders: OrderListPageRow[]; nextCursor: string | null }> {
-  const batchSize = Math.max(80, take * 4);
-  let seek: { c: Date; i: string } | null = dec
-    ? { c: new Date(dec.c), i: dec.i }
+  opts: OrdersListInMemoryPageOpts,
+  matchRow: (row: OrderListPageRow) => boolean,
+  mapBatch?: (rows: OrderListPageRow[]) => Promise<OrderListPageRow[]>,
+): Promise<OrdersListInMemoryPageResult> {
+  const { pageSize, skip, cursorDec } = opts;
+  const need = skip + pageSize + 1;
+  const batchSize = Math.max(80, Math.min(500, pageSize * 4));
+  let seek: { c: Date; i: string } | null = cursorDec
+    ? { c: new Date(cursorDec.c), i: cursorDec.i }
     : null;
   const collected: OrderListPageRow[] = [];
   let lastBatchFull = false;
 
-  for (let iter = 0; iter < 50 && collected.length < take; iter++) {
+  for (let iter = 0; iter < 120 && collected.length < need; iter++) {
     const cursorPart: Prisma.OrderWhereInput = seek
       ? {
           OR: [
@@ -163,11 +184,12 @@ async function fetchOrdersListPageAttentionFiltered(
     if (rows.length === 0) break;
     lastBatchFull = rows.length === batchSize;
 
-    for (const o of rows) {
-      const row = toOrderListPageRow(o);
-      if (row.listPendingChatCorrections || row.listCompositionMismatch) {
+    let mapped = rows.map((o) => toOrderListPageRow(o));
+    if (mapBatch) mapped = await mapBatch(mapped);
+    for (const row of mapped) {
+      if (matchRow(row)) {
         collected.push(row);
-        if (collected.length >= take) break;
+        if (collected.length >= need) break;
       }
     }
 
@@ -176,90 +198,46 @@ async function fetchOrdersListPageAttentionFiltered(
     if (!lastBatchFull) break;
   }
 
-  const hasMore =
-    collected.length > pageSize ||
-    (collected.length === pageSize && lastBatchFull);
-
-  const page = collected.slice(0, pageSize);
+  const hasMore = collected.length > skip + pageSize;
+  const page = collected.slice(skip, skip + pageSize);
   const lastOut = page[page.length - 1];
   const nextCursor =
     hasMore && lastOut
       ? encodeOrdersListCursor(lastOut.createdAt, lastOut.id)
       : null;
+  const scanExhausted = !lastBatchFull;
+  const totalCount =
+    cursorDec != null ? null : scanExhausted ? collected.length : null;
 
-  return { orders: page, nextCursor };
+  return { orders: page, nextCursor, totalCount, hasMore };
+}
+
+async function fetchOrdersListPageAttentionFiltered(
+  db: PrismaClient,
+  baseParts: Prisma.OrderWhereInput[],
+  pageOpts: OrdersListInMemoryPageOpts,
+): Promise<OrdersListInMemoryPageResult> {
+  return collectMatchingOrdersListPage(
+    db,
+    baseParts,
+    pageOpts,
+    (row) => row.listPendingChatCorrections || row.listCompositionMismatch,
+  );
 }
 
 async function fetchOrdersListPageLabMentionFiltered(
   db: PrismaClient,
   baseParts: Prisma.OrderWhereInput[],
-  dec: { c: string; i: string } | null,
-  take: number,
-  pageSize: number,
+  pageOpts: OrdersListInMemoryPageOpts,
   userId: string | null | undefined,
-): Promise<{ orders: OrderListPageRow[]; nextCursor: string | null }> {
-  const batchSize = Math.max(80, take * 4);
-  let seek: { c: Date; i: string } | null = dec
-    ? { c: new Date(dec.c), i: dec.i }
-    : null;
-  const collected: OrderListPageRow[] = [];
-  let lastBatchFull = false;
-
-  for (let iter = 0; iter < 50 && collected.length < take; iter++) {
-    const cursorPart: Prisma.OrderWhereInput = seek
-      ? {
-          OR: [
-            { createdAt: { lt: seek.c } },
-            {
-              AND: [{ createdAt: seek.c }, { id: { lt: seek.i } }],
-            },
-          ],
-        }
-      : {};
-
-    const batchParts = [...baseParts, cursorPart];
-    const where: Prisma.OrderWhereInput =
-      batchParts.length === 1 ? batchParts[0]! : { AND: batchParts };
-
-    const rows = await db.order.findMany({
-      where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: batchSize,
-      select: ordersListPageSelect,
-    });
-
-    if (rows.length === 0) break;
-    lastBatchFull = rows.length === batchSize;
-
-    const hydrated = await hydrateKaitenLabMentionForOrdersList(
-      db,
-      userId ?? null,
-      rows.map((o) => toOrderListPageRow(o)),
-    );
-    for (const row of hydrated) {
-      if (row.listKaitenLabMentionHighlight) {
-        collected.push(row);
-        if (collected.length >= take) break;
-      }
-    }
-
-    const lastRow = rows[rows.length - 1]!;
-    seek = { c: lastRow.createdAt, i: lastRow.id };
-    if (!lastBatchFull) break;
-  }
-
-  const hasMore =
-    collected.length > pageSize ||
-    (collected.length === pageSize && lastBatchFull);
-
-  const page = collected.slice(0, pageSize);
-  const lastOut = page[page.length - 1];
-  const nextCursor =
-    hasMore && lastOut
-      ? encodeOrdersListCursor(lastOut.createdAt, lastOut.id)
-      : null;
-
-  return { orders: page, nextCursor };
+): Promise<OrdersListInMemoryPageResult> {
+  return collectMatchingOrdersListPage(
+    db,
+    baseParts,
+    pageOpts,
+    (row) => row.listKaitenLabMentionHighlight,
+    (rows) => hydrateKaitenLabMentionForOrdersList(db, userId ?? null, rows),
+  );
 }
 
 export async function ordersSearchWhere(
@@ -342,12 +320,23 @@ async function hydrateContractors(
   });
 }
 
+export type FetchOrdersListPageResult = {
+  orders: OrderListPageRow[];
+  nextCursor: string | null;
+  /** null — неизвестно (курсор или неполный in-memory скан). */
+  totalCount: number | null;
+  page: number;
+  hasMore: boolean;
+};
+
 export async function fetchOrdersListPage(
   db: PrismaClient,
   opts: {
     /** Изоляция SaaS: только наряды этой организации */
     tenantId: string;
     cursor: string | null | undefined;
+    /** 1-based. Если задан — offset (`skip`), курсор игнорируется. */
+    page?: number | null;
     pageSize: number;
     /** Сырой query `tag` (как в URL, будет декодирован). */
     tag?: string | null | undefined;
@@ -368,12 +357,14 @@ export async function fetchOrdersListPage(
     viewerRole?: UserRole | null;
     viewerUserId?: string | null;
   },
-): Promise<{
-  orders: OrderListPageRow[];
-  nextCursor: string | null;
-}> {
-  const dec = decodeOrdersListCursor(opts.cursor ?? undefined);
-  const take = opts.pageSize + 1;
+): Promise<FetchOrdersListPageResult> {
+  const cursorDec = decodeOrdersListCursor(opts.cursor ?? undefined);
+  const useOffset = opts.page != null || !cursorDec;
+  const pageNum = useOffset
+    ? Math.max(1, Math.floor(opts.page ?? 1))
+    : 1;
+  const skip = useOffset ? (pageNum - 1) * opts.pageSize : 0;
+  const dec = useOffset ? null : cursorDec;
 
   const tagDecoded =
     opts.tag != null && String(opts.tag).trim()
@@ -381,19 +372,11 @@ export async function fetchOrdersListPage(
       : null;
   const parsedTag = parseListTagParam(tagDecoded);
 
-  const cursorWhere: Prisma.OrderWhereInput = dec
-    ? {
-        OR: [
-          { createdAt: { lt: new Date(dec.c) } },
-          {
-            AND: [
-              { createdAt: new Date(dec.c) },
-              { id: { lt: dec.i } },
-            ],
-          },
-        ],
-      }
-    : {};
+  const inMemoryPageOpts: OrdersListInMemoryPageOpts = {
+    pageSize: opts.pageSize,
+    skip,
+    cursorDec: dec,
+  };
 
   const parts: Prisma.OrderWhereInput[] = [
     { tenantId: opts.tenantId },
@@ -451,12 +434,11 @@ export async function fetchOrdersListPage(
     const attention = await fetchOrdersListPageAttentionFiltered(
       db,
       parts,
-      dec,
-      take,
-      opts.pageSize,
+      inMemoryPageOpts,
     );
     return {
       ...attention,
+      page: pageNum,
       orders: await hydrateListPendingProstheticsFromInbox(
         db,
         await hydrateListPendingChatCorrectionsFromInbox(
@@ -474,40 +456,24 @@ export async function fetchOrdersListPage(
     const mentions = await fetchOrdersListPageLabMentionFiltered(
       db,
       parts,
-      dec,
-      take,
-      opts.pageSize,
+      inMemoryPageOpts,
       opts.ordersListForUserId ?? null,
     );
     return {
       ...mentions,
+      page: pageNum,
       orders: await hydrateContractors(mentions.orders),
     };
   }
 
-  if (dec) parts.push(cursorWhere);
   const where: Prisma.OrderWhereInput =
     parts.length === 0 ? {} : parts.length === 1 ? parts[0]! : { AND: parts };
 
-  const rows = await db.order.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take,
-    select: ordersListPageSelect,
-  });
-
-  const hasMore = rows.length > opts.pageSize;
-  const page = hasMore ? rows.slice(0, opts.pageSize) : rows;
-  const last = page[page.length - 1];
-  const nextCursor =
-    hasMore && last
-      ? encodeOrdersListCursor(last.createdAt, last.id)
-      : null;
-
-  const orders = await hydrateContractors(page.map((o) => toOrderListPageRow(o)));
-
-  return {
-    orders: await hydrateListPendingProstheticsFromInbox(
+  async function hydratePageRows(
+    raw: OrderListPageRowRaw[],
+  ): Promise<OrderListPageRow[]> {
+    const orders = await hydrateContractors(raw.map((o) => toOrderListPageRow(o)));
+    return hydrateListPendingProstheticsFromInbox(
       db,
       await hydrateListPendingChatCorrectionsFromInbox(
         db,
@@ -517,7 +483,87 @@ export async function fetchOrdersListPage(
           orders,
         ),
       ),
-    ),
+    );
+  }
+
+  if (useOffset) {
+    let page = pageNum;
+    let skipNow = skip;
+    let [rows, totalCount] = await Promise.all([
+      db.order.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: skipNow,
+        take: opts.pageSize,
+        select: ordersListPageSelect,
+      }),
+      db.order.count({ where }),
+    ]);
+    if (totalCount > 0 && skipNow >= totalCount) {
+      page = Math.max(1, Math.ceil(totalCount / opts.pageSize));
+      skipNow = (page - 1) * opts.pageSize;
+      rows = await db.order.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: skipNow,
+        take: opts.pageSize,
+        select: ordersListPageSelect,
+      });
+    }
+    const hasMore = skipNow + rows.length < totalCount;
+    const last = rows[rows.length - 1];
+    const nextCursor =
+      hasMore && last
+        ? encodeOrdersListCursor(last.createdAt, last.id)
+        : null;
+    return {
+      orders: await hydratePageRows(rows),
+      nextCursor,
+      totalCount,
+      page,
+      hasMore,
+    };
+  }
+
+  const take = opts.pageSize + 1;
+  const cursorWhere: Prisma.OrderWhereInput = dec
+    ? {
+        OR: [
+          { createdAt: { lt: new Date(dec.c) } },
+          {
+            AND: [{ createdAt: new Date(dec.c) }, { id: { lt: dec.i } }],
+          },
+        ],
+      }
+    : {};
+  const cursorParts = dec ? [...parts, cursorWhere] : parts;
+  const cursorListWhere: Prisma.OrderWhereInput =
+    cursorParts.length === 0
+      ? {}
+      : cursorParts.length === 1
+        ? cursorParts[0]!
+        : { AND: cursorParts };
+
+  const rows = await db.order.findMany({
+    where: cursorListWhere,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take,
+    select: ordersListPageSelect,
+  });
+
+  const hasMore = rows.length > opts.pageSize;
+  const pageRows = hasMore ? rows.slice(0, opts.pageSize) : rows;
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? encodeOrdersListCursor(last.createdAt, last.id)
+      : null;
+
+  return {
+    orders: await hydratePageRows(pageRows),
     nextCursor,
+    totalCount: null,
+    page: 1,
+    hasMore,
   };
 }

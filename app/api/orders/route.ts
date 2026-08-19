@@ -9,7 +9,7 @@ import { normalizeKaitenBlockReasonInput } from "@/lib/kaiten-card-block";
 import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
 import { clampOrdersPageSize } from "@/lib/orders-list-cursor";
 import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
-import { normalizeOrdersSearchQuery } from "@/lib/orders-list-query";
+import { normalizeOrdersSearchQuery, parseOrdersListPage } from "@/lib/orders-list-query";
 import { withApiTiming } from "@/lib/server/api-timing";
 import { logger } from "@/lib/server/logger";
 import { pushKaitenHeadForContinuationParents } from "@/lib/kaiten-push-order-title";
@@ -28,7 +28,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 
-/** Ответ: { orders, nextCursor }. Параметры: limit (1–200, по умолчанию 80), cursor (base64url). */
+/** Ответ: { orders, nextCursor, totalCount, page, hasMore }. Параметры: limit, page, cursor. */
 export async function GET(req: Request) {
   const prisma = await getOrdersPrisma();
   return withApiTiming({ method: "GET", path: "/api/orders" }, async () => {
@@ -40,7 +40,12 @@ export async function GET(req: Request) {
       const tenantId = await requireSessionTenantId(s);
       const url = new URL(req.url);
       const pageSize = clampOrdersPageSize(url.searchParams.get("limit"));
-      const cursor = url.searchParams.get("cursor");
+      const pageRaw = url.searchParams.get("page");
+      const page =
+        pageRaw != null && pageRaw.trim() !== ""
+          ? parseOrdersListPage(pageRaw)
+          : undefined;
+      const cursor = page != null ? null : url.searchParams.get("cursor");
       const tag = url.searchParams.get("tag");
       const onlyShipped =
         url.searchParams.get("onlyShipped") === "1" ||
@@ -57,9 +62,16 @@ export async function GET(req: Request) {
         period.mode === "range"
           ? { start: period.start, endExclusive: period.endExclusive }
           : undefined;
-      const { orders, nextCursor } = await fetchOrdersListPage(prisma, {
+      const {
+        orders,
+        nextCursor,
+        totalCount,
+        page: pageOut,
+        hasMore,
+      } = await fetchOrdersListPage(prisma, {
         tenantId,
         cursor,
+        page,
         pageSize,
         tag,
         hideShipped: hideShipped || undefined,
@@ -70,7 +82,13 @@ export async function GET(req: Request) {
         viewerRole: s.role,
         viewerUserId: s.sub,
       });
-      return NextResponse.json({ orders, nextCursor });
+      return NextResponse.json({
+        orders,
+        nextCursor,
+        totalCount,
+        page: pageOut,
+        hasMore,
+      });
     } catch (e) {
       logger.error({ err: e, msg: "orders_list_failed" }, "GET /api/orders");
       return NextResponse.json(
