@@ -328,108 +328,279 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       });
     }
 
-    const clinics = await Promise.all([
-      tx.clinic.create({
-        data: {
-          tenantId: DEFAULT_TENANT_ID,
-          name: "Демо — стоматология «Импульс»",
-          address: "г. Москва, ул. Примерная, д. 10",
-          isActive: true,
-          phone: "+74951110010",
-        },
-      }),
-      tx.clinic.create({
-        data: {
-          tenantId: DEFAULT_TENANT_ID,
-          name: "Демо — клиника «Дент-Профи»",
-          address: "г. Москва, пр-т Демонстрационный, д. 22",
-          isActive: true,
-          phone: "+74952220022",
-        },
-      }),
-    ]);
+    const clinicSeeds = [
+      {
+        name: "Демо — стоматология «Импульс»",
+        address: "г. Москва, ул. Примерная, д. 10",
+        phone: "+74951110010",
+      },
+      {
+        name: "Демо — клиника «Дент-Профи»",
+        address: "г. Москва, пр-т Демонстрационный, д. 22",
+        phone: "+74952220022",
+      },
+      {
+        name: "Демо — «Улыбка Плюс»",
+        address: "г. Москва, ул. Садовая, д. 5",
+        phone: "+74953330033",
+      },
+      {
+        name: "Демо — «Белый Жемчуг»",
+        address: "г. Химки, ул. Ленина, д. 14",
+        phone: "+74957770077",
+      },
+      {
+        name: "Демо — «Ортодент»",
+        address: "г. Москва, ул. Тверская, д. 8",
+        phone: "+74954440044",
+      },
+      {
+        name: "Демо — «Стомалайн»",
+        address: "г. Мытищи, пр-т Мира, д. 31",
+        phone: "+74955550055",
+      },
+      {
+        name: "Демо — «Дентал Сити»",
+        address: "г. Москва, ул. Новый Арбат, д. 15",
+        phone: "+74956660066",
+      },
+      {
+        name: "Демо — «КронаМед»",
+        address: "г. Королёв, ул. Гагарина, д. 3",
+        phone: "+74958880088",
+      },
+      {
+        name: "Демо — «Апекс»",
+        address: "г. Москва, Ленинградский пр-т, д. 40",
+        phone: "+74959990099",
+      },
+      {
+        name: "Демо — «Формула Улыбки»",
+        address: "г. Одинцово, ул. Молодёжная, д. 2",
+        phone: "+74951231212",
+      },
+    ] as const;
 
-    const doctors = await Promise.all([
-      tx.doctor.create({
-        data: {
-          tenantId: DEFAULT_TENANT_ID,
-          fullName: "Соколова Мария Петровна",
-          lastName: "Соколова",
-          firstName: "Мария",
-          patronymic: "Петровна",
-          specialty: "Ортопед",
-          city: "Москва",
-          acceptsPrivatePractice: false,
-        },
+    const clinics = await Promise.all(
+      clinicSeeds.map((c) =>
+        tx.clinic.create({
+          data: {
+            tenantId: DEFAULT_TENANT_ID,
+            name: c.name,
+            address: c.address,
+            isActive: true,
+            phone: c.phone,
+          },
+        }),
+      ),
+    );
+
+    const doctorSeeds = [
+      {
+        lastName: "Соколова",
+        firstName: "Мария",
+        patronymic: "Петровна",
+        specialty: "Ортопед",
+        private: false,
+      },
+      {
+        lastName: "Кузнецов",
+        firstName: "Андрей",
+        patronymic: "Викторович",
+        specialty: "Хирург",
+        private: false,
+      },
+      {
+        lastName: "Новикова",
+        firstName: "Елена",
+        patronymic: "Сергеевна",
+        specialty: "Терапевт",
+        private: false,
+      },
+      {
+        lastName: "Волков",
+        firstName: "Дмитрий",
+        patronymic: "Олегович",
+        specialty: "Ортопед",
+        private: false,
+      },
+      {
+        lastName: "Лебедев",
+        firstName: "Игорь",
+        patronymic: "Николаевич",
+        specialty: "Ортопед",
+        private: true,
+      },
+      {
+        lastName: "Морозова",
+        firstName: "Анна",
+        patronymic: "Игоревна",
+        specialty: "Ортодонт",
+        private: false,
+      },
+      {
+        lastName: "Павлов",
+        firstName: "Сергей",
+        patronymic: "Алексеевич",
+        specialty: "Хирург",
+        private: false,
+      },
+      {
+        lastName: "Фёдорова",
+        firstName: "Ольга",
+        patronymic: "Владимировна",
+        specialty: "Ортопед",
+        private: false,
+      },
+      {
+        lastName: "Смирнов",
+        firstName: "Павел",
+        patronymic: "Романович",
+        specialty: "Терапевт",
+        private: false,
+      },
+      {
+        lastName: "Козлова",
+        firstName: "Наталья",
+        patronymic: "Дмитриевна",
+        specialty: "Ортопед",
+        private: true,
+      },
+      {
+        lastName: "Орлов",
+        firstName: "Кирилл",
+        patronymic: "Сергеевич",
+        specialty: "Хирург",
+        private: false,
+      },
+      {
+        lastName: "Белова",
+        firstName: "Ирина",
+        patronymic: "Андреевна",
+        specialty: "Ортодонт",
+        private: false,
+      },
+      {
+        lastName: "Громов",
+        firstName: "Максим",
+        patronymic: "Ильич",
+        specialty: "Ортопед",
+        private: false,
+      },
+      {
+        lastName: "Тарасова",
+        firstName: "Юлия",
+        patronymic: "Олеговна",
+        specialty: "Терапевт",
+        private: false,
+      },
+      {
+        lastName: "Егоров",
+        firstName: "Артём",
+        patronymic: "Павлович",
+        specialty: "Ортопед",
+        private: false,
+      },
+      {
+        lastName: "Зайцева",
+        firstName: "Дарья",
+        patronymic: "Николаевна",
+        specialty: "Хирург",
+        private: false,
+      },
+      {
+        lastName: "Никитин",
+        firstName: "Роман",
+        patronymic: "Евгеньевич",
+        specialty: "Ортопед",
+        private: true,
+      },
+      {
+        lastName: "Савельева",
+        firstName: "Виктория",
+        patronymic: "Сергеевна",
+        specialty: "Ортодонт",
+        private: false,
+      },
+      {
+        lastName: "Макаров",
+        firstName: "Денис",
+        patronymic: "Александрович",
+        specialty: "Терапевт",
+        private: false,
+      },
+      {
+        lastName: "Полякова",
+        firstName: "Алина",
+        patronymic: "Михайловна",
+        specialty: "Ортопед",
+        private: false,
+      },
+    ] as const;
+
+    const doctors = await Promise.all(
+      doctorSeeds.map((d) => {
+        const fullName = `${d.lastName} ${d.firstName} ${d.patronymic}`;
+        return tx.doctor.create({
+          data: {
+            tenantId: DEFAULT_TENANT_ID,
+            fullName,
+            lastName: d.lastName,
+            firstName: d.firstName,
+            patronymic: d.patronymic,
+            specialty: d.specialty,
+            city: "Москва",
+            acceptsPrivatePractice: d.private,
+          },
+        });
       }),
-      tx.doctor.create({
-        data: {
-          tenantId: DEFAULT_TENANT_ID,
-          fullName: "Кузнецов Андрей Викторович",
-          lastName: "Кузнецов",
-          firstName: "Андрей",
-          patronymic: "Викторович",
-          specialty: "Хирург",
-          city: "Москва",
-          acceptsPrivatePractice: false,
-        },
-      }),
-      tx.doctor.create({
-        data: {
-          tenantId: DEFAULT_TENANT_ID,
-          fullName: "Новикова Елена Сергеевна",
-          lastName: "Новикова",
-          firstName: "Елена",
-          patronymic: "Сергеевна",
-          specialty: "Терапевт",
-          city: "Москва",
-          acceptsPrivatePractice: false,
-        },
-      }),
-      tx.doctor.create({
-        data: {
-          tenantId: DEFAULT_TENANT_ID,
-          fullName: "Волков Дмитрий Олегович",
-          lastName: "Волков",
-          firstName: "Дмитрий",
-          patronymic: "Олегович",
-          specialty: "Ортопед",
-          city: "Москва",
-          acceptsPrivatePractice: false,
-        },
-      }),
-      tx.doctor.create({
-        data: {
-          tenantId: DEFAULT_TENANT_ID,
-          fullName: "Лебедев Игорь Николаевич",
-          lastName: "Лебедев",
-          firstName: "Игорь",
-          patronymic: "Николаевич",
-          specialty: "Ортопед",
-          city: "Москва",
-          acceptsPrivatePractice: true,
-        },
-      }),
-    ]);
+    );
 
     const [d0, d1, d2, d3, d4] = doctors;
     const [clinicImpuls, clinicDentProfi] = clinics;
-    const links: Array<{ doctorId: string; clinicId: string }> = [
-      { doctorId: d0.id, clinicId: clinicImpuls.id },
-      { doctorId: d1.id, clinicId: clinicImpuls.id },
-      { doctorId: d2.id, clinicId: clinicImpuls.id },
-      { doctorId: d3.id, clinicId: clinicDentProfi.id },
-      { doctorId: d4.id, clinicId: clinicDentProfi.id },
-    ];
+    const links: Array<{ doctorId: string; clinicId: string }> = [];
+    for (let di = 0; di < doctors.length; di++) {
+      const doc = doctors[di]!;
+      if (doctorSeeds[di]?.private && di >= 4) {
+        // частная практика — без обязательной клиники, но части даём 1 клинику для удобства
+        if (di % 3 === 0) {
+          links.push({
+            doctorId: doc.id,
+            clinicId: clinics[di % clinics.length]!.id,
+          });
+        }
+        continue;
+      }
+      links.push({
+        doctorId: doc.id,
+        clinicId: clinics[di % clinics.length]!.id,
+      });
+      if (di % 4 === 0) {
+        links.push({
+          doctorId: doc.id,
+          clinicId: clinics[(di + 3) % clinics.length]!.id,
+        });
+      }
+    }
     for (const row of links) {
       await tx.doctorOnClinic.create({ data: row });
     }
 
     const orderSeeds = [
-      { i: 1, doctor: d0, clinic: clinicImpuls, col: DemoKanbanColumn.NEW },
-      { i: 2, doctor: d1, clinic: clinicImpuls, col: DemoKanbanColumn.IN_PROGRESS },
-      { i: 3, doctor: d3, clinic: clinicDentProfi, col: DemoKanbanColumn.IN_PROGRESS },
-      { i: 4, doctor: d4, clinic: null, col: DemoKanbanColumn.DONE },
+      { i: 1, doctor: d0!, clinic: clinicImpuls!, col: DemoKanbanColumn.NEW },
+      {
+        i: 2,
+        doctor: d1!,
+        clinic: clinicImpuls!,
+        col: DemoKanbanColumn.IN_PROGRESS,
+      },
+      {
+        i: 3,
+        doctor: d3!,
+        clinic: clinicDentProfi!,
+        col: DemoKanbanColumn.IN_PROGRESS,
+      },
+      { i: 4, doctor: d4!, clinic: null, col: DemoKanbanColumn.DONE },
     ] as const;
 
     const patientNames = [
