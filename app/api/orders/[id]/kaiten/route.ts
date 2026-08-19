@@ -44,6 +44,8 @@ import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { pushKaitenCardTitleForOrderIfLinked } from "@/lib/kaiten-push-order-title";
 import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
 import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
+import { kaitenDueDatePatchFromYmd } from "@/lib/kanban/kaiten-head-to-kanban-card";
+import { normalizeKanbanStageDueDate } from "@/lib/kanban/kanban-stage-due";
 import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
 import {
   findKaitenStopLaneId,
@@ -101,6 +103,8 @@ type PatchBody = {
   kaitenCardTypeId?: string | null;
   /** Человекочитаемое имя типа (fallback при несовпадении id между канбаном и БД CRM). */
   kaitenCardTypeName?: string | null;
+  /** Срок карточки канбана → Kaiten `due_date` (YYYY-MM-DD). Не лаб-срок и не дата записи. */
+  stageDueDate?: string | null;
 };
 
 function normalizeKaitenTypeName(raw: string): string {
@@ -1410,6 +1414,17 @@ export async function PATCH(
 
   if (typeof body.sortOrder === "number" && Number.isFinite(body.sortOrder)) {
     patch.sort_order = body.sortOrder;
+  }
+
+  if (body.stageDueDate !== undefined) {
+    const raw = body.stageDueDate == null ? "" : String(body.stageDueDate).trim();
+    const ymd = normalizeKanbanStageDueDate(raw);
+    if (ymd && !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+      return NextResponse.json({ error: "Некорректный срок карточки" }, { status: 400 });
+    }
+    const duePatch = kaitenDueDatePatchFromYmd(ymd);
+    patch.due_date = duePatch.due_date;
+    patch.due_date_time_present = duePatch.due_date_time_present;
   }
 
   let resolvedKaitenCardTypeId: string | null | undefined;

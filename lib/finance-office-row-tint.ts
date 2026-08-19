@@ -1,17 +1,32 @@
 /**
  * Тинт строки ФинОтдела: не «отгружено».
- * Зелёный — просчитано, синий — счёт выставлен, градиент — оба.
+ * Зелёный — просчитано, синий — есть счёт (как пилюля в отметках), градиент — оба.
  * Янтарный/голубой акцент внимания из order-list-row-accent важнее.
+ *
+ * Счёт: галка «выставлен», номер в поле или загруженный файл — иначе пилюля есть, а строка серая.
  */
 
 export type FinanceOfficeRowTintKind = "calculated" | "invoiced" | "both" | null;
 
+export function orderHasFinanceInvoice(opts: {
+  invoiceIssued?: boolean;
+  invoiceNumber?: string | null;
+  invoiceAttachmentId?: string | null;
+}): boolean {
+  if (opts.invoiceIssued === true) return true;
+  if ((opts.invoiceNumber ?? "").trim()) return true;
+  if ((opts.invoiceAttachmentId ?? "").trim()) return true;
+  return false;
+}
+
 export function resolveFinanceOfficeRowTintKind(opts: {
   financeCalculated: boolean;
-  invoiceIssued: boolean;
+  invoiceIssued?: boolean;
+  invoiceNumber?: string | null;
+  invoiceAttachmentId?: string | null;
 }): FinanceOfficeRowTintKind {
   const calc = opts.financeCalculated === true;
-  const inv = opts.invoiceIssued === true;
+  const inv = orderHasFinanceInvoice(opts);
   if (calc && inv) return "both";
   if (calc) return "calculated";
   if (inv) return "invoiced";
@@ -22,7 +37,8 @@ const IDLE =
   "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
 
 /**
- * Фон на tr и td — sticky-ячейки иначе перекрывают тинт.
+ * Фон на tr. Градиент только у строки: на td он начинался заново в каждой ячейке.
+ * Sticky-колонки слева (max-xl) красятся стартом градиента в таблице, не здесь.
  */
 export function financeOfficeRowTintClass(
   kind: FinanceOfficeRowTintKind,
@@ -32,8 +48,7 @@ export function financeOfficeRowTintClass(
       "border-b border-[var(--card-border)]",
       "bg-gradient-to-r from-emerald-100/90 to-sky-200/85",
       "dark:from-emerald-950/55 dark:to-sky-950/50",
-      "[&>td]:bg-gradient-to-r [&>td]:from-emerald-100/90 [&>td]:to-sky-200/85",
-      "dark:[&>td]:from-emerald-950/55 dark:[&>td]:to-sky-950/50",
+      "[&>td]:bg-transparent dark:[&>td]:bg-transparent",
       "transition-colors hover:brightness-[1.03]",
     ].join(" ");
   }

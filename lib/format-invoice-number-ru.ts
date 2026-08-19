@@ -104,7 +104,7 @@ export function extractInvoiceDigitsFromCaption(
 }
 
 /**
- * Пилюля списка: «СЧТ №1320 от 9.07.2026». Без номера — «СЧЕТ».
+ * Пилюля списка: «СЧЕТ №1320 от 9.07.2026». Без номера — «СЧЕТ».
  * Месяц словами из поля наряда не пишем в пилюлю (канон БД не меняем).
  */
 export function formatInvoiceListPillLabel(
@@ -115,15 +115,15 @@ export function formatInvoiceListPillLabel(
 
   const digitsOnly = /^\s*№?\s*(\d{1,12})\s*$/u.exec(raw);
   if (digitsOnly) {
-    return `СЧТ №${digitsOnly[1]}`;
+    return `СЧЕТ №${digitsOnly[1]}`;
   }
 
   const digits = extractInvoiceDigitsFromCaption(raw);
   const ymd = extractYmdAfterOtFromNormalizedText(normalizeChunk(raw));
   if (digits && ymd) {
-    return `СЧТ №${digits} от ${formatInvoiceNumericDateRu(ymd)}`;
+    return `СЧЕТ №${digits} от ${formatInvoiceNumericDateRu(ymd)}`;
   }
-  if (digits) return `СЧТ №${digits}`;
+  if (digits) return `СЧЕТ №${digits}`;
   return "СЧЕТ";
 }
 

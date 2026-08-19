@@ -1832,8 +1832,61 @@ export function findCardInAppState(
         card: stopped.card,
       };
     }
+    const archived = (b.archivedCards || []).find((x) => x.card.id === cardId);
+    if (archived) {
+      return {
+        board: b,
+        col: {
+          id: archived.sourceColumnId || "archive",
+          title: archived.sourceColumnTitle || "Архив",
+          cards: (b.archivedCards || []).map((x) => x.card),
+        },
+        card: archived.card,
+      };
+    }
   }
   return null;
+}
+
+/**
+ * При поиске — карточки из архива всех доступных досок (колонка = откуда ушли).
+ * Иначе «079» не находит наряд, который уже автоархивирован из «Сдана админам».
+ */
+function appendArchivedSearchHits(args: {
+  displayBoard: KanbanBoard;
+  homes: KanbanBoard[];
+  cardHomeBoardId: Map<string, string>;
+  textMatches: (card: KanbanCard, home: KanbanBoard) => boolean;
+  passesFilters: (card: KanbanCard, home: KanbanBoard) => boolean;
+  extraKeep?: (card: KanbanCard) => boolean;
+}): void {
+  const seen = new Set(
+    args.displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id)),
+  );
+  for (const home of args.homes) {
+    for (const row of home.archivedCards || []) {
+      const card = row.card;
+      if (!card || seen.has(card.id)) continue;
+      if (args.extraKeep && !args.extraKeep(card)) continue;
+      if (!args.textMatches(card, home)) continue;
+      if (!args.passesFilters(card, home)) continue;
+      const titleNorm = (row.sourceColumnTitle || "Архив").trim().toLowerCase();
+      let colView = args.displayBoard.columns.find(
+        (c) => c.title.trim().toLowerCase() === titleNorm,
+      );
+      if (!colView) {
+        colView = {
+          id: `search-arch-${home.id}-${titleNorm || "archive"}`,
+          title: row.sourceColumnTitle?.trim() || "Архив",
+          cards: [],
+        };
+        args.displayBoard.columns.push(colView);
+      }
+      seen.add(card.id);
+      colView.cards.push(card);
+      args.cardHomeBoardId.set(card.id, home.id);
+    }
+  }
 }
 
 /**
@@ -1913,6 +1966,31 @@ export function buildKanbanDisplayView(
       colView.cards = acc;
     }
     if (q) {
+      appendArchivedSearchHits({
+        displayBoard,
+        homes: listKanbanAggregateSourceBoards(state).filter((b) =>
+          canUserAccessBoard(b, uid || null, sessionUserRole),
+        ),
+        cardHomeBoardId,
+        textMatches,
+        passesFilters: passesFiltersWithoutSearchText,
+        extraKeep: (card) => {
+          if (!uid) return false;
+          const assignees = card.assignees || [];
+          const participants = card.participants || [];
+          const linked = Boolean(card.linkedOrderId?.trim());
+          if (agg === "my") {
+            const inParts = participants.includes(uid);
+            const inAssign = assignees.includes(uid);
+            const ownLocal =
+              !linked &&
+              Boolean(card.createdByUserId?.trim()) &&
+              card.createdByUserId === uid;
+            return inParts || inAssign || ownLocal;
+          }
+          return assignees.includes(uid);
+        },
+      });
       displayBoard.columns = displayBoard.columns.filter((c) => c.cards.length > 0);
     }
     return { displayBoard, cardHomeBoardId };
@@ -1971,6 +2049,13 @@ export function buildKanbanDisplayView(
     }
     colView.cards = acc;
   }
+  appendArchivedSearchHits({
+    displayBoard,
+    homes: accessibleBoards,
+    cardHomeBoardId,
+    textMatches,
+    passesFilters: passesFiltersWithoutSearchText,
+  });
   displayBoard.columns = displayBoard.columns.filter((c) => c.cards.length > 0);
 
   return { displayBoard, cardHomeBoardId };
@@ -2053,6 +2138,35 @@ function removeLinkedOrderCardFromBoard(board: KanbanBoard, orderId: string): vo
   for (const col of board.columns) {
     col.cards = col.cards.filter((c) => c.linkedOrderId !== orderId);
   }
+}
+
+/** Убрать linked-карточки нарядов, которых больше нет (архив / отмена / чужой тест). */
+export function removeLinkedOrderCardsFromAppState(
+  state: KanbanAppState,
+  orderIds: string[],
+): KanbanAppState {
+  const gone = new Set(
+    orderIds.map((id) => String(id || "").trim()).filter(Boolean),
+  );
+  if (gone.size === 0) return state;
+  const next = structuredClone(state);
+  for (const b of next.boards) {
+    for (const col of b.columns) {
+      col.cards = col.cards.filter(
+        (c) => !c.linkedOrderId || !gone.has(c.linkedOrderId),
+      );
+    }
+    b.archivedCards = (b.archivedCards || []).filter(
+      (row) => !row.card.linkedOrderId || !gone.has(row.card.linkedOrderId),
+    );
+    b.stoppedCards = (b.stoppedCards || []).filter(
+      (row) => !row.card.linkedOrderId || !gone.has(row.card.linkedOrderId),
+    );
+  }
+  if (Array.isArray(next.hiddenLinkedOrderIds) && next.hiddenLinkedOrderIds.length > 0) {
+    next.hiddenLinkedOrderIds = next.hiddenLinkedOrderIds.filter((id) => !gone.has(id));
+  }
+  return next;
 }
 
 function normalizeKaitenTrackLaneForBoard(raw: string | null | undefined): string {

@@ -97,7 +97,7 @@ type Props = {
   invoicePrinted?: boolean;
   /** Загружен файл счёта (вкладка «Документооборот») */
   hasInvoiceAttachment: boolean;
-  /** Номер счёта из наряда — в ФинОтделе пилюля «СЧТ №… от D.MM.YYYY». */
+  /** Номер счёта из наряда — в ФинОтделе пилюля «СЧЕТ №… от D.MM.YYYY». */
   invoiceNumber?: string | null;
   /** ID файла счёта; нужен для печати из быстрого действия. */
   invoiceAttachmentId?: string | null;

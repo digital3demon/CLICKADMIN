@@ -5,8 +5,10 @@ import {
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
   mergeKaitenLinkedOrdersIntoAppState,
+  removeLinkedOrderCardsFromAppState,
 } from "@/lib/kanban/model";
 import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
+import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 
 function sampleRow(
   id: string,
@@ -107,5 +109,56 @@ describe("mergeKaitenLinkedOrdersIntoAppState upsertOnly", () => {
         loc2.cardIndex
       ]!;
     expect(moved.trackLane).toBe("ORTHODONTICS");
+  });
+
+  it("лаб-срок и дата записи не становятся сроком карточки", () => {
+    const merged = mergeKaitenLinkedOrdersIntoAppState(
+      defaultAppState(),
+      [
+        sampleRow("order-a", {
+          dueDate: "2026-08-01T09:00:00.000Z",
+          appointmentDate: "2026-08-10T10:00:00.000Z",
+        }),
+      ],
+      { mode: "upsertOnly" },
+    );
+    const loc = findCardByLinkedOrderId(merged, "order-a")!;
+    const card =
+      merged.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[
+        loc.cardIndex
+      ]!;
+    expect(getKanbanStageDue(card)).toBe("");
+    setKanbanStageDue(card, "2026-09-15");
+    const again = mergeKaitenLinkedOrdersIntoAppState(
+      merged,
+      [
+        sampleRow("order-a", {
+          dueDate: "2026-08-01T09:00:00.000Z",
+          appointmentDate: "2026-08-10T10:00:00.000Z",
+          patientName: "Пациент кириллица",
+        }),
+      ],
+      { mode: "upsertOnly" },
+    );
+    const loc2 = findCardByLinkedOrderId(again, "order-a")!;
+    const card2 =
+      again.boards[loc2.boardIndex]!.columns[loc2.columnIndex]!.cards[
+        loc2.cardIndex
+      ]!;
+    expect(getKanbanStageDue(card2)).toBe("2026-09-15");
+    expect(card2.title).toContain("01.08");
+  });
+});
+
+describe("removeLinkedOrderCardsFromAppState", () => {
+  it("снимает карточку удалённого наряда", () => {
+    const withTwo = mergeKaitenLinkedOrdersIntoAppState(
+      defaultAppState(),
+      [sampleRow("order-a"), sampleRow("order-b")],
+      { mode: "upsertOnly" },
+    );
+    const pruned = removeLinkedOrderCardsFromAppState(withTwo, ["order-b"]);
+    expect(findCardByLinkedOrderId(pruned, "order-a")).not.toBeNull();
+    expect(findCardByLinkedOrderId(pruned, "order-b")).toBeNull();
   });
 });

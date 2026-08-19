@@ -66,7 +66,15 @@ export function haystackDigitRuns(folded: string): string[] {
 
 function tokenMatchesHaystack(token: string, hay: string): boolean {
   if (/^\d+$/.test(token)) {
-    return haystackDigitRuns(hay).includes(token);
+    const runs = haystackDigitRuns(hay);
+    if (runs.includes(token)) return true;
+    /* «079» в «2606079» без дефиса. Короче 3 не суффиксим: «14» ≠ «214». */
+    if (token.length >= 3) {
+      return runs.some(
+        (run) => run.length > token.length && run.endsWith(token),
+      );
+    }
+    return false;
   }
   return hay.includes(token);
 }

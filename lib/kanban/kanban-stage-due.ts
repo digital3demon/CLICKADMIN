@@ -1,7 +1,8 @@
 /**
- * Этапный срок карточки канбана (поле «Срок» в UI).
+ * Этапный срок карточки канбана (поле «Срок» в UI) = Kaiten `due_date`.
  *
- * НЕ путать с лабораторным сроком наряда (`Order.dueDate`, Kaiten due, дата в заголовке).
+ * НЕ лабораторный срок наряда (`Order.dueDate`, в заголовке карточки).
+ * НЕ дата записи пациента (`Order.appointmentDate`).
  * Миграции и очистка здесь меняют только `KanbanCard` внутри kanbanAppStateV3 / standalone payload.
  */
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";

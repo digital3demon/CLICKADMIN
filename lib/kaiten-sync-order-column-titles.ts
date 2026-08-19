@@ -24,6 +24,7 @@ import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
 import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
+import { ymdFromKaitenDueDate } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import { kaitenLogger } from "@/lib/server/logger";
 
@@ -49,6 +50,8 @@ export async function syncKaitenColumnTitlesForOrderIds(
   opts?: { includeComments?: boolean },
 ): Promise<{
   titles: Record<string, string | null>;
+  /** YYYY-MM-DD или null, только если в ответе Kaiten было поле due_date. */
+  stageDueByOrderId: Record<string, string | null>;
   syncedCount: number;
   errorCount: number;
   /** Есть ли в комментариях упоминание тега лаборатории (Tenant.kanbanAdminMentionTag; подсветка «чат» в списке). */
@@ -63,6 +66,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
     MAX_IDS,
   );
   const titles: Record<string, string | null> = {};
+  const stageDueByOrderId: Record<string, string | null> = {};
   const clicklabByOrderId: Record<string, boolean> = {};
   let syncedCount = 0;
   let errorCount = 0;
@@ -199,6 +203,9 @@ export async function syncKaitenColumnTitlesForOrderIds(
         continue;
       }
       const cardObj = cardRes.card as Record<string, unknown>;
+      if ("due_date" in cardObj) {
+        stageDueByOrderId[row.id] = ymdFromKaitenDueDate(cardObj.due_date);
+      }
       const boardIdRaw = cardObj.board_id;
       const boardId = typeof boardIdRaw === "number" ? boardIdRaw : null;
       if (boardId == null) {
@@ -329,6 +336,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
 
   return {
     titles,
+    stageDueByOrderId,
     syncedCount,
     errorCount,
     clicklabByOrderId,

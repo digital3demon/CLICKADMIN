@@ -84,6 +84,20 @@ describe("kanbanCardMatchesSearch", () => {
     expect(kanbanCardMatchesSearch(hit, "2608-214")).toBe(true);
   });
 
+  it("цифровой 079 находит суффикс номера наряда, кириллица вокруг", () => {
+    const hyphen = createCard({
+      id: "c-079",
+      title: "2605-079 Тетеркина В. Династия 12.05 09:00",
+    });
+    const glued = createCard({
+      id: "c-079g",
+      title: "наряд 2606079 Кюлян Э.Н. коррекция",
+    });
+    expect(kanbanCardMatchesSearch(hyphen, "079")).toBe(true);
+    expect(kanbanCardMatchesSearch(glued, "079")).toBe(true);
+    expect(kanbanCardMatchesSearch(hyphen, "14")).toBe(false);
+  });
+
   it("не ищет по внутреннему id наряда", () => {
     const card = createCard({
       id: "c-id",

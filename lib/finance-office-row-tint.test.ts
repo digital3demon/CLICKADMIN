@@ -32,6 +32,23 @@ describe("resolveFinanceOfficeRowTintKind", () => {
     ).toBe("invoiced");
   });
 
+  it("номер счёта без галки «выставлен» — тоже синий", () => {
+    expect(
+      resolveFinanceOfficeRowTintKind({
+        financeCalculated: false,
+        invoiceIssued: false,
+        invoiceNumber: "СЧЕТ №183 от 8.05.2026",
+      }),
+    ).toBe("invoiced");
+    expect(
+      resolveFinanceOfficeRowTintKind({
+        financeCalculated: false,
+        invoiceIssued: false,
+        invoiceAttachmentId: "att_1",
+      }),
+    ).toBe("invoiced");
+  });
+
   it("ничего — без тинта", () => {
     expect(
       resolveFinanceOfficeRowTintKind({
@@ -43,10 +60,11 @@ describe("resolveFinanceOfficeRowTintKind", () => {
 });
 
 describe("financeOfficeRowTintClass", () => {
-  it("both — градиент на td", () => {
+  it("both — один градиент на строке, не на каждой ячейке", () => {
     const cls = financeOfficeRowTintClass("both");
     expect(cls).toContain("bg-gradient-to-r");
-    expect(cls).toContain("[&>td]:bg-gradient-to-r");
+    expect(cls).toContain("[&>td]:bg-transparent");
+    expect(cls).not.toContain("[&>td]:bg-gradient-to-r");
     expect(cls).toContain("from-emerald");
     expect(cls).toContain("to-sky");
   });

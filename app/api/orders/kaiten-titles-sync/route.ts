@@ -38,6 +38,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       titles: {},
+      stageDueByOrderId: {},
       syncedCount: 0,
       errorCount: 0,
       clicklabByOrderId: {},
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
     });
     const {
       titles,
+      stageDueByOrderId,
       syncedCount,
       errorCount,
       clicklabByOrderId,
@@ -91,6 +93,7 @@ export async function POST(req: Request) {
     const payload = {
       ok: !rateLimited,
       titles,
+      stageDueByOrderId,
       syncedCount,
       errorCount,
       clicklabByOrderId,

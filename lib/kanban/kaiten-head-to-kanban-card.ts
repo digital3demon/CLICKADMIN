@@ -1,15 +1,56 @@
+/**
+ * Срок карточки канбана ↔ Kaiten `due_date`.
+ * Не лабораторный срок наряда (`Order.dueDate`) и не дата записи (`appointmentDate`).
+ * Календарный день — Europe/Moscow: UTC-полуночь часто сдвигает YYYY-MM-DD накануне.
+ */
+import { formatYmdInMsk } from "@/lib/msk-calendar";
+import type { KanbanAppState } from "@/lib/kanban/types";
 import {
+  forEachKanbanCardInState,
   getKanbanStageDue,
+  normalizeKanbanStageDueDate,
   setKanbanStageDue,
 } from "@/lib/kanban/kanban-stage-due";
+import { shouldSkipInboundKanbanStageDue } from "@/lib/kanban/optimistic-kaiten-stage-due";
 
-/** due_date из Kaiten → YYYY-MM-DD для срока этапа на карточке канбана. */
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** due_date из Kaiten → YYYY-MM-DD (календарь МСК). */
 export function ymdFromKaitenDueDate(raw: unknown): string | null {
   if (raw == null || raw === false) return null;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const ms = raw > 0 && raw < 1e12 ? raw * 1000 : raw;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : formatYmdInMsk(d);
+  }
   const s = String(raw).trim();
   if (!s) return null;
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  return m?.[1] ?? null;
+  if (YMD_RE.test(s)) return s;
+  if (/^\d{10,13}$/.test(s)) {
+    const n = Number(s);
+    if (!Number.isFinite(n)) return null;
+    const ms = n < 1e12 ? n * 1000 : n;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : formatYmdInMsk(d);
+  }
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return formatYmdInMsk(d);
+}
+
+/** PATCH Kaiten: дата без времени (`due_date_time_present: false`), стена МСК. */
+export function kaitenDueDatePatchFromYmd(ymd: string | null | undefined): {
+  due_date: string | null;
+  due_date_time_present: boolean;
+} {
+  const n = normalizeKanbanStageDueDate(ymd);
+  if (!n || !YMD_RE.test(n)) {
+    return { due_date: null, due_date_time_present: false };
+  }
+  return {
+    due_date: `${n}T00:00:00.000+03:00`,
+    due_date_time_present: false,
+  };
 }
 
 type KanbanHeadTarget = {
@@ -32,12 +73,37 @@ export function applyKaitenHeadFieldsToKanbanCard(
     }
   }
   if ("due_date" in kaitenCard) {
-    const ymd = ymdFromKaitenDueDate(kaitenCard.due_date);
-    const next = ymd ?? "";
-    if (getKanbanStageDue(card as never) !== next) {
-      setKanbanStageDue(card as never, next);
-      changed = true;
+    const raw = kaitenCard.due_date;
+    const empty = raw == null || raw === false || String(raw).trim() === "";
+    const ymd = empty ? null : ymdFromKaitenDueDate(raw);
+    if (!empty && ymd == null) {
+      /* нераспознанный формат — не затираем срок в CRM */
+    } else {
+      const next = ymd ?? "";
+      if (getKanbanStageDue(card as never) !== next) {
+        setKanbanStageDue(card as never, next);
+        changed = true;
+      }
     }
   }
+  return changed;
+}
+
+/** Срок этапа с зеркала Kaiten (`null` = сброс, ключа нет = не трогать). */
+export function applyKaitenStageDueByOrderId(
+  state: KanbanAppState,
+  byOrderId: Readonly<Record<string, string | null>>,
+): boolean {
+  let changed = false;
+  forEachKanbanCardInState(state, (card) => {
+    const oid = card.linkedOrderId?.trim() || "";
+    if (!oid || !Object.prototype.hasOwnProperty.call(byOrderId, oid)) return;
+    const next = byOrderId[oid] ?? "";
+    if (shouldSkipInboundKanbanStageDue(oid, next)) return;
+    if (getKanbanStageDue(card) !== next) {
+      setKanbanStageDue(card, next);
+      changed = true;
+    }
+  });
   return changed;
 }

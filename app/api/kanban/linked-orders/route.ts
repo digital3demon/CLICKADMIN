@@ -13,6 +13,7 @@ import { getKaitenRestAuth } from "@/lib/kaiten-rest";
 import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-column-titles";
 import { isOrderWorkAttachment } from "@/lib/order-work-attachments";
 import { importMissingKaitenFilesForOrder } from "@/lib/kaiten-files-import";
+import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,7 @@ function parseLinkedOrderIdsParam(raw: string | null): string[] {
     if (!id || seen.has(id)) continue;
     seen.add(id);
     out.push(id);
-    if (out.length >= 80) break;
+    if (out.length >= 250) break;
   }
   return out;
 }
@@ -108,9 +109,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const boardOrderIds = parseLinkedOrderIdsParam(
-      new URL(request.url).searchParams.get("ids"),
-    );
+    const url = new URL(request.url);
+    const boardOrderIds = parseLinkedOrderIdsParam(url.searchParams.get("ids"));
+    const searchQ = url.searchParams.get("q")?.replace(/\s+/g, " ").trim() ?? "";
     const [ordersPrisma, clientsPrisma, pricingPrisma] = await Promise.all([
       getOrdersPrisma(),
       getClientsPrisma(),
@@ -121,10 +122,19 @@ export async function GET(request: Request) {
       tenantId,
       archivedAt: null,
       status: { not: OrderStatus.CANCELLED },
-      OR: [
-        { kaitenDecideLater: false },
-        { createKanbanWithoutKaiten: true },
-        { kaitenCardId: { not: null } },
+      isTestOrder: false,
+      AND: [
+        orderTestVisibilityWhere({
+          viewerRole: session.role,
+          viewerUserId: session.sub,
+        }),
+        {
+          OR: [
+            { kaitenDecideLater: false },
+            { createKanbanWithoutKaiten: true },
+            { kaitenCardId: { not: null } },
+          ],
+        },
       ],
     };
     const recentRows = await ordersPrisma.order.findMany({
@@ -142,7 +152,32 @@ export async function GET(request: Request) {
             select: LINKED_ORDER_SELECT,
           })
         : [];
-    const rows = [...boardExtraRows, ...recentRows];
+    /* Поиск канбана: не только последние 200 — как шапка CRM, contains по номеру. */
+    const searchExtraRows =
+      searchQ.length >= 2
+        ? await ordersPrisma.order.findMany({
+            where: {
+              ...linkedOrdersWhere,
+              OR: [
+                { orderNumber: { contains: searchQ, mode: "insensitive" } },
+                { patientName: { contains: searchQ, mode: "insensitive" } },
+                { doctor: { fullName: { contains: searchQ, mode: "insensitive" } } },
+                { clinic: { name: { contains: searchQ, mode: "insensitive" } } },
+              ],
+            },
+            orderBy: { createdAt: "desc" },
+            take: 80,
+            select: LINKED_ORDER_SELECT,
+          })
+        : [];
+    const seenRowIds = new Set<string>();
+    const rows = [...searchExtraRows, ...boardExtraRows, ...recentRows].filter(
+      (r) => {
+        if (seenRowIds.has(r.id)) return false;
+        seenRowIds.add(r.id);
+        return true;
+      },
+    );
     const doctorIds = Array.from(new Set(rows.map((x) => x.doctorId)));
     const cardTypeIds = Array.from(
       new Set(rows.map((x) => x.kaitenCardTypeId).filter(Boolean)),
@@ -308,7 +343,10 @@ export async function GET(request: Request) {
       }
     })();
 
-    return NextResponse.json({ orders });
+    return NextResponse.json({
+      orders,
+      goneIds: boardOrderIds.filter((id) => !seenRowIds.has(id)),
+    });
   } catch (e) {
     console.error("[kanban/linked-orders]", e);
     return NextResponse.json({ error: "Не удалось загрузить наряды" }, { status: 500 });

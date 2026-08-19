@@ -27,6 +27,10 @@ import {
   rememberOptimisticKaitenBlock,
 } from "@/lib/kanban/optimistic-kaiten-block";
 import {
+  forgetOptimisticKanbanStageDue,
+  rememberOptimisticKanbanStageDue,
+} from "@/lib/kanban/optimistic-kaiten-stage-due";
+import {
   formatKanbanChatMessageDisplay,
   kanbanChatMessageLabelClass,
   kanbanChatMessageShellClass,
@@ -1947,6 +1951,7 @@ export function KanbanCardModal({
                     className={`${baseInput} max-w-[12rem]`}
                     disabled={!canEditDueDate}
                     value={stageDue}
+                    title="Срок карточки канбана (Kaiten). Не лабораторный срок и не дата записи."
                     onChange={(e) => {
                       const v = e.target.value;
                       onApply((b) => {
@@ -1955,13 +1960,28 @@ export function KanbanCardModal({
                         setKanbanStageDue(fc.card, v);
                         pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
                       });
+                      const oid = card.linkedOrderId?.trim() || "";
+                      if (
+                        oid &&
+                        card.kaitenCardId != null &&
+                        Number.isFinite(card.kaitenCardId)
+                      ) {
+                        rememberOptimisticKanbanStageDue(oid, v);
+                        void patchOrderKaitenCard(oid, { stageDueDate: v || null }).then(
+                          (r) => {
+                            if (!r.ok) {
+                              forgetOptimisticKanbanStageDue(oid);
+                              toast(r.error, true);
+                            }
+                          },
+                        );
+                      }
                       if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
                         const titleLine = (card.title || "").trim() || "Без названия";
                         const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
                         const duePart = v
                           ? `новый срок ${escapeTelegramHtml(v)}`
                           : "срок сброшен";
-                        const oid = card.linkedOrderId?.trim();
                         const { cardWord, orderWord } = oid
                           ? cardOrderWordLinks(oid, cardId, board.id)
                           : { cardWord: "", orderWord: "" };

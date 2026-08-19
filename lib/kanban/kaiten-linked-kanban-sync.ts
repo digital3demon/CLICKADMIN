@@ -136,7 +136,8 @@ export async function postOrderKaitenComment(
 }
 
 /**
- * Лабораторный срок из канбана → PATCH наряда → push шапки в Kaiten (через KAITEN_HEAD_PATCH_FIELDS).
+ * Лабораторный срок наряда из канбана → PATCH `/api/orders/:id` (Order.dueDate).
+ * Не пишет Kaiten `due_date` (срок карточки канбана) и не трогает дату записи.
  */
 export async function patchOrderHeadFromKanban(
   orderId: string,

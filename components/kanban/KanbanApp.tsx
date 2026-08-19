@@ -28,6 +28,7 @@ import {
   KANBAN_KAITEN_CARD_TYPES_SYNCED_EVENT,
   loadKanbanState,
   mergeKaitenLinkedOrdersIntoAppState,
+  removeLinkedOrderCardsFromAppState,
   normalizeDemoKanbanAppState,
   demoTrackLanes,
   pushActivity,
@@ -46,6 +47,12 @@ import {
 } from "@/lib/kanban/model";
 import { applyOptimisticKaitenBlocksToLinkedRows } from "@/lib/kanban/optimistic-kaiten-block";
 import { applyKanbanLegacyStageDueClearMigration, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import { applyKaitenStageDueByOrderId } from "@/lib/kanban/kaiten-head-to-kanban-card";
+import {
+  forgetOptimisticKanbanStageDue,
+  rememberOptimisticKanbanStageDue,
+} from "@/lib/kanban/optimistic-kaiten-stage-due";
+import { patchOrderKaitenCard } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
 import {
   applyKanbanCardMembersOnBoard,
@@ -196,18 +203,46 @@ function parseKaitenRetryAfterMs(value: string | null): number {
 function collectAllLinkedOrderIdsOnBoards(state: KanbanAppState): string[] {
   const ids: string[] = [];
   const seen = new Set<string>();
+  const push = (oidRaw: string | undefined) => {
+    const oid = String(oidRaw || "").trim();
+    if (!oid || seen.has(oid)) return;
+    seen.add(oid);
+    ids.push(oid);
+  };
   for (const b of state.boards ?? []) {
     for (const col of b.columns ?? []) {
-      for (const c of col.cards ?? []) {
-        const oid = String(c.linkedOrderId || "").trim();
-        if (!oid || seen.has(oid)) continue;
-        seen.add(oid);
-        ids.push(oid);
-        if (ids.length >= 80) return ids;
-      }
+      for (const c of col.cards ?? []) push(c.linkedOrderId);
     }
+    for (const row of b.stoppedCards ?? []) push(row.card.linkedOrderId);
+    for (const row of b.archivedCards ?? []) push(row.card.linkedOrderId);
   }
   return ids;
+}
+
+const LINKED_ORDERS_IDS_CAP = 250;
+
+function takeLinkedOrderIdsBatch(
+  ids: string[],
+  offsetRef: { current: number },
+  max = LINKED_ORDERS_IDS_CAP,
+): string[] {
+  if (ids.length <= max) return ids;
+  const start = offsetRef.current % ids.length;
+  const picked: string[] = [];
+  for (let i = 0; i < max; i += 1) {
+    picked.push(ids[(start + i) % ids.length]!);
+  }
+  offsetRef.current = (start + max) % ids.length;
+  return picked;
+}
+
+function linkedOrdersApiUrl(boardIds: string[], search: string): string {
+  const p = new URLSearchParams();
+  if (boardIds.length > 0) p.set("ids", boardIds.join(","));
+  const q = search.trim();
+  if (q.length >= 2) p.set("q", q);
+  const qs = p.toString();
+  return qs ? `/api/kanban/linked-orders?${qs}` : "/api/kanban/linked-orders";
 }
 
 /**
@@ -448,6 +483,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const mirrorSyncInFlightRef = useRef(false);
   const mirrorSyncQueuedRef = useRef(false);
   const titlesSyncOffsetRef = useRef(0);
+  const linkedOrdersIdsOffsetRef = useRef(0);
   const titlesSyncBackoffRef = useRef(0);
   const titlesSyncLastAtRef = useRef(0);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -518,18 +554,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     mirrorSyncInFlightRef.current = true;
     try {
       if (isDemo) {
-        const r = await fetch("/api/kanban/linked-orders", { credentials: "include" });
+        const q = (appStateRef.current?.search || "").trim();
+        const r = await fetch(linkedOrdersApiUrl([], q), { credentials: "include" });
         if (!r.ok) return;
-        const j = (await r.json()) as { orders?: KaitenLinkedOrderForKanban[] };
+        const j = (await r.json()) as {
+          orders?: KaitenLinkedOrderForKanban[];
+          goneIds?: string[];
+        };
         const rows = applyOptimisticKaitenBlocksToLinkedRows(j.orders ?? []);
         setLinkedAppointmentByOrderId(linkedOrdersToAppointmentMap(rows));
         setAppState((prev) => {
           if (!prev) return prev;
           const base = normalizeDemoKanbanAppState(prev);
-          const merged = mergeKaitenLinkedOrdersIntoAppState(base, rows, {
+          let merged = mergeKaitenLinkedOrdersIntoAppState(base, rows, {
             demo: true,
             mode: "upsertOnly",
           });
+          merged = removeLinkedOrderCardsFromAppState(merged, j.goneIds ?? []);
           return normalizeDemoKanbanAppState(merged);
         });
         return;
@@ -555,6 +596,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
        * колонок из Kaiten шёл лишь со списка заказов → доска отставала.
        * Перед merge подтягиваем пачку позиций с активной дорожки.
        */
+      let inboundStageDue: Record<string, string | null> = {};
       const curForTitles = appStateRef.current;
       const titlesMinGapMs = Math.max(8_000, kaitenClientPollIntervalMs() - 2_000);
       if (
@@ -590,6 +632,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               titlesSyncBackoffRef.current =
                 Date.now() +
                 parseKaitenRetryAfterMs(tsRes.headers.get("Retry-After"));
+            } else if (tsRes.ok) {
+              const tsJson = (await tsRes.json()) as {
+                stageDueByOrderId?: Record<string, string | null>;
+              };
+              if (
+                tsJson.stageDueByOrderId &&
+                typeof tsJson.stageDueByOrderId === "object"
+              ) {
+                inboundStageDue = tsJson.stageDueByOrderId;
+              }
             }
           } catch {
             /* offline — всё равно тянем БД-снимок */
@@ -598,18 +650,24 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       }
 
       const boardIds = appStateRef.current
-        ? collectAllLinkedOrderIdsOnBoards(appStateRef.current)
+        ? takeLinkedOrderIdsBatch(
+            collectAllLinkedOrderIdsOnBoards(appStateRef.current),
+            linkedOrdersIdsOffsetRef,
+          )
         : [];
-      const linkedOrdersUrl =
-        boardIds.length > 0
-          ? `/api/kanban/linked-orders?ids=${encodeURIComponent(boardIds.join(","))}`
-          : "/api/kanban/linked-orders";
+      const linkedOrdersUrl = linkedOrdersApiUrl(
+        boardIds,
+        appStateRef.current?.search || "",
+      );
       const [rLinked, rStandalone] = await Promise.all([
         fetch(linkedOrdersUrl, { credentials: "include" }),
         fetch("/api/kanban/standalone-cards", { credentials: "include" }),
       ]);
       if (!rLinked.ok) return;
-      const jL = (await rLinked.json()) as { orders?: KaitenLinkedOrderForKanban[] };
+      const jL = (await rLinked.json()) as {
+        orders?: KaitenLinkedOrderForKanban[];
+        goneIds?: string[];
+      };
       const linkedRows = applyOptimisticKaitenBlocksToLinkedRows(
         applyOptimisticKaitenMovesToLinkedRows(jL.orders ?? []),
       );
@@ -625,7 +683,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           demo: false,
           mode: "upsertOnly",
         });
+        next = removeLinkedOrderCardsFromAppState(next, jL.goneIds ?? []);
         next = applyStandaloneRowsFromServer(next, standaloneRows);
+        if (Object.keys(inboundStageDue).length > 0) {
+          applyKaitenStageDueByOrderId(next, inboundStageDue);
+        }
         return next;
       });
     } catch {
@@ -950,6 +1012,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   useEffect(() => {
     if (!kanbanStateReady) return;
+    const q = (appState?.search || "").trim();
+    if (q.length < 2) return;
+    const t = window.setTimeout(() => {
+      void syncKanbanMirrorFromApi();
+    }, 280);
+    return () => window.clearTimeout(t);
+  }, [appState?.search, kanbanStateReady, syncKanbanMirrorFromApi]);
+
+  useEffect(() => {
+    if (!kanbanStateReady) return;
     const onOrderArchived = () => {
       void syncKanbanMirrorFromApi();
     };
@@ -1262,6 +1334,20 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         return next;
       });
       const card = loc.card;
+      const oid = card.linkedOrderId?.trim() || "";
+      if (
+        oid &&
+        card.kaitenCardId != null &&
+        Number.isFinite(card.kaitenCardId)
+      ) {
+        rememberOptimisticKanbanStageDue(oid, ymd);
+        void patchOrderKaitenCard(oid, { stageDueDate: ymd || null }).then((r) => {
+          if (!r.ok) {
+            forgetOptimisticKanbanStageDue(oid);
+            showToast(r.error, true);
+          }
+        });
+      }
       if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
         const boardId = homeBoardId || loc.board.id;
         const titleLine = (card.title || "").trim() || "Без названия";
@@ -1272,7 +1358,6 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         const duePart = ymd
           ? `новый срок ${escapeTelegramHtml(ymd)}`
           : "срок сброшен";
-        const oid = card.linkedOrderId?.trim();
         const origin = typeof window !== "undefined" ? window.location.origin : "";
         postKanbanTelegramNotify({
           kaitenCardId: card.kaitenCardId,

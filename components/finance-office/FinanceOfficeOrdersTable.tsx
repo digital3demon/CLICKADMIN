@@ -303,6 +303,8 @@ export function FinanceOfficeOrdersTable({
               const financeTint = resolveFinanceOfficeRowTintKind({
                 financeCalculated: o.financeCalculated,
                 invoiceIssued: o.invoiceIssued,
+                invoiceNumber: o.invoiceNumber,
+                invoiceAttachmentId: o.invoiceAttachmentId,
               });
               const rowClass = mergeOrderListRowClass({
                 shipped: false,
@@ -316,7 +318,7 @@ export function FinanceOfficeOrdersTable({
               const stickyCellBg = rowAccent
                 ? "max-xl:bg-[var(--card-bg)]"
                 : financeTint === "both"
-                  ? "max-xl:bg-gradient-to-r max-xl:from-emerald-100/90 max-xl:to-sky-200/85 dark:max-xl:from-emerald-950/55 dark:max-xl:to-sky-950/50"
+                  ? "max-xl:bg-emerald-100/90 dark:max-xl:bg-emerald-950/55"
                   : financeTint === "calculated"
                     ? "max-xl:bg-emerald-100/90 dark:max-xl:bg-emerald-950/50"
                     : financeTint === "invoiced"

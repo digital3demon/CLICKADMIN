@@ -300,8 +300,8 @@ export async function syncNewOrderToKaiten(
       body.lane_id = laneId;
     }
 
-    // Срок лабораторный (dueDate) только в title — в поле due_date карточки Kaiten не передаём.
-    // Флаг «срочно» в Kaiten — поле asap (см. developers.kaiten.ru).
+    // Лаб-срок и дата записи в due_date Kaiten не передаём — там только срок карточки канбана.
+    // Лаб-срок (Order.dueDate) только в title. Флаг «срочно» — asap.
 
     const created = await kaitenCreateCard(auth, body, { burst: true });
     if (!created.ok) {

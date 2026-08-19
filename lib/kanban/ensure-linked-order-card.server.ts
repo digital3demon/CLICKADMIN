@@ -142,6 +142,7 @@ async function buildLinkedOrderRow(
       invoiceAttachmentId: true,
       status: true,
       archivedAt: true,
+      isTestOrder: true,
       _count: { select: { sourceEmailLinks: true } },
       continuesFromOrder: {
         select: { id: true, orderNumber: true, kaitenCardId: true },
@@ -174,6 +175,7 @@ async function buildLinkedOrderRow(
   if (o.archivedAt != null || o.status === OrderStatus.CANCELLED) {
     return null;
   }
+  if (o.isTestOrder) return null;
 
   const priceListItemId = o.constructions[0]?.priceListItemId ?? null;
   const [doctor, cardType, priceItem] = await Promise.all([
