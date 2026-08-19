@@ -162,7 +162,7 @@ async function writeSidebarOrderToServer(order: string[]): Promise<boolean> {
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const { user, ready: sessionReady } = useSessionUser();
+  const { user, ready: sessionReady, isDemo } = useSessionUser();
   const role = user?.role ?? null;
   const moduleAccess = user?.moduleAccess ?? null;
   const [orderHrefs, setOrderHrefs] = useState<string[]>(DEFAULT_HREF_ORDER);
@@ -174,9 +174,8 @@ export function SidebarNav() {
     if (!sessionReady || role == null) {
       return baseNavItems;
     }
-    const hideClickMig = Boolean(user?.demo);
     const filterDemo = (items: typeof baseNavItems) =>
-      hideClickMig ? items.filter((i) => i.href !== "/clickmig") : items;
+      isDemo ? items.filter((i) => i.href !== "/clickmig") : items;
 
     if (moduleAccess) {
       const a = moduleAccess as Record<AppModule, boolean>;
@@ -209,7 +208,7 @@ export function SidebarNav() {
       return filterDemo(baseNavItems.filter((i) => i.href !== "/analytics"));
     }
     return filterDemo([...baseNavItems]);
-  }, [role, moduleAccess, sessionReady, user?.demo]);
+  }, [role, moduleAccess, sessionReady, isDemo]);
 
   const mailNavVisible = useMemo(
     () => navItems.some((item) => item.href === "/mail"),
