@@ -1,5 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { parseMentionUserIdsFromText } from "@/lib/kanban-comment-mentions";
+import {
+  findMentionDraft,
+  parseMentionUserIdsFromText,
+} from "@/lib/kanban-comment-mentions";
+
+describe("findMentionDraft", () => {
+  it("ловит @ после кириллицы с пробелом", () => {
+    const text = "Всеволод @ро";
+    expect(findMentionDraft(text, text.length)).toEqual({
+      start: 9,
+      end: text.length,
+      query: "ро",
+    });
+  });
+
+  it("открывает список сразу после @ (пустой query)", () => {
+    const text = "оттиск пришел и накуска!!! @";
+    expect(findMentionDraft(text, text.length)).toEqual({
+      start: text.lastIndexOf("@"),
+      end: text.length,
+      query: "",
+    });
+  });
+
+  it("не считает упоминанием склеенный токен до @", () => {
+    expect(findMentionDraft("Всеволод@ро", 11)).toBeNull();
+  });
+});
 
 describe("parseMentionUserIdsFromText", () => {
   it("резолвит латинский handle и кириллицу вокруг", () => {

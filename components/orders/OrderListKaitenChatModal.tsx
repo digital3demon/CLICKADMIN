@@ -4,13 +4,22 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
+  useRef,
   useState,
   type ClipboardEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import type { KaitenTrackLane } from "@prisma/client";
+import type { KaitenTrackLane, UserRole } from "@prisma/client";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
+import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
 import { canAckOrderChatLabMention, canSendKanbanChatPtMemo } from "@/lib/auth/permissions";
+import { isKanbanAdminGroupRole } from "@/lib/kanban-admin-mention";
+import {
+  findMentionDraft,
+  sanitizeMentionToken,
+} from "@/lib/kanban-comment-mentions";
+import { DEFAULT_PRODUCTION_MENTION_TAG } from "@/lib/kanban-production-mention-tag";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { OrderFilesPanel } from "@/components/orders/OrderFilesPanel";
 import {
@@ -50,6 +59,21 @@ type ChatImage = {
 };
 
 type ChatAction = "comment" | "correction" | "prosthetics" | "pt";
+
+type MentionUser = {
+  id: string;
+  displayName: string;
+  email: string;
+  mentionHandle: string | null;
+  role?: UserRole;
+};
+
+type MentionOption = {
+  id: string;
+  label: string;
+  insertText: string;
+  searchText: string;
+};
 
 type KaitenSnapshot = {
   configured: boolean;
@@ -172,6 +196,11 @@ export function OrderListKaitenChatModal({
   const [titlePatient, setTitlePatient] = useState<string | null>(null);
   const [titleDoctor, setTitleDoctor] = useState<string | null>(null);
   const [titleOrderNumber, setTitleOrderNumber] = useState(orderNumber);
+  const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [commentCaretPos, setCommentCaretPos] = useState(0);
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const adminMentionTag = useKanbanAdminMentionTag();
 
   useEffect(() => {
     if (!open) return;
@@ -179,6 +208,29 @@ export function OrderListKaitenChatModal({
     setTitleDoctor(doctorName?.trim() || null);
     setTitleOrderNumber(orderNumber);
   }, [open, orderNumber, patientName, doctorName]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/kanban/crm-users", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          users?: MentionUser[];
+        };
+        if (!res.ok || cancelled) return;
+        setMentionUsers(Array.isArray(data.users) ? data.users : []);
+      } catch {
+        if (!cancelled) setMentionUsers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   const chatTitle = formatOrderListChatModalTitle(
     titleOrderNumber,
@@ -386,6 +438,8 @@ export function OrderListKaitenChatModal({
           }
           await load();
           setNewText("");
+          setCommentCaretPos(0);
+          setMentionIndex(0);
           setReplyToId(null);
           return;
         }
@@ -414,6 +468,8 @@ export function OrderListKaitenChatModal({
           : prev,
       );
       setNewText("");
+      setCommentCaretPos(0);
+      setMentionIndex(0);
       setReplyToId(null);
     } catch {
       setPostError("Сеть недоступна");
@@ -469,6 +525,88 @@ export function OrderListKaitenChatModal({
     },
     [loadError, loading, uploading, uploadFiles],
   );
+
+  const adminMentionUserIds = useMemo(
+    () =>
+      mentionUsers
+        .filter((u) => u.role != null && isKanbanAdminGroupRole(u.role))
+        .map((u) => u.id),
+    [mentionUsers],
+  );
+  const mentionOptions = useMemo<MentionOption[]>(() => {
+    const productionTag = DEFAULT_PRODUCTION_MENTION_TAG;
+    const synthetic: MentionOption[] = [
+      {
+        id: "__kanban_production_team__",
+        label: `Производство (@${productionTag})`,
+        insertText: `@${productionTag}`,
+        searchText: `производство ${productionTag} производственный цех`.toLowerCase(),
+      },
+    ];
+    if (adminMentionUserIds.length > 0 && adminMentionTag) {
+      synthetic.push({
+        id: "__kanban_lab_team__",
+        label: `Лаборатория (@${adminMentionTag})`,
+        insertText: `@${adminMentionTag}`,
+        searchText: `лаборатория ${adminMentionTag} администратор`.toLowerCase(),
+      });
+    }
+    const rest = mentionUsers
+      .filter((u) => !isKanbanAdminGroupRole(u.role))
+      .map((u) => {
+        const fallbackByEmail = sanitizeMentionToken(
+          (u.email || "").split("@")[0] || "",
+        );
+        const fallbackByName = sanitizeMentionToken(u.displayName || "");
+        const mentionToken =
+          sanitizeMentionToken(u.mentionHandle || "") ||
+          fallbackByEmail ||
+          fallbackByName;
+        if (!mentionToken) return null;
+        return {
+          id: u.id,
+          label: u.displayName,
+          insertText: `@${mentionToken}`,
+          searchText: `${u.displayName} ${u.email} ${mentionToken}`.toLowerCase(),
+        };
+      })
+      .filter((x): x is MentionOption => x != null);
+    return [...synthetic, ...rest];
+  }, [mentionUsers, adminMentionTag, adminMentionUserIds]);
+  const mentionDraft = useMemo(
+    () => findMentionDraft(newText, commentCaretPos),
+    [newText, commentCaretPos],
+  );
+  const mentionFiltered = useMemo(() => {
+    if (!mentionDraft) return [];
+    const q = mentionDraft.query.trim();
+    const base = q
+      ? mentionOptions.filter((x) => x.searchText.includes(q))
+      : mentionOptions;
+    return base.slice(0, 8);
+  }, [mentionDraft, mentionOptions]);
+  const applyMention = useCallback(
+    (option: MentionOption) => {
+      if (!mentionDraft) return;
+      const before = newText.slice(0, mentionDraft.start);
+      const after = newText.slice(mentionDraft.end);
+      const nextText = `${before}${option.insertText} ${after}`;
+      const nextCaret = before.length + option.insertText.length + 1;
+      setNewText(nextText);
+      setCommentCaretPos(nextCaret);
+      setMentionIndex(0);
+      requestAnimationFrame(() => {
+        if (!commentTextareaRef.current) return;
+        commentTextareaRef.current.focus();
+        commentTextareaRef.current.setSelectionRange(nextCaret, nextCaret);
+      });
+    },
+    [newText, mentionDraft],
+  );
+
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionDraft?.start, mentionDraft?.query]);
 
   const comments = snap?.comments ?? [];
 
@@ -724,14 +862,74 @@ export function OrderListKaitenChatModal({
               </button>
             </p>
           ) : null}
-          <textarea
-            className="min-h-[72px] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
-            placeholder="Новое сообщение…"
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            onPaste={onPasteIntoMessage}
-            disabled={loading || !!loadError || uploading}
-          />
+          <div className="relative">
+            {mentionFiltered.length > 0 ? (
+              <div className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-20 max-h-56 overflow-y-auto rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] p-1 shadow-xl">
+                {mentionFiltered.map((option, idx) => (
+                  <button
+                    key={`${option.id}-${option.insertText}`}
+                    type="button"
+                    className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.78rem] ${
+                      idx === mentionIndex
+                        ? "bg-[var(--surface-subtle)] text-[var(--sidebar-blue)]"
+                        : "text-[var(--app-text)] hover:bg-[var(--surface-subtle)]"
+                    }`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      applyMention(option);
+                    }}
+                  >
+                    <span className="truncate">{option.label}</span>
+                    <span className="ml-3 shrink-0 text-[0.72rem] text-[var(--text-muted)]">
+                      {option.insertText}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <textarea
+              ref={commentTextareaRef}
+              className="min-h-[72px] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
+              placeholder="Новое сообщение… @имя"
+              value={newText}
+              onChange={(e) => {
+                setNewText(e.target.value);
+                setCommentCaretPos(e.target.selectionStart ?? e.target.value.length);
+              }}
+              onClick={(e) => {
+                setCommentCaretPos(e.currentTarget.selectionStart ?? newText.length);
+              }}
+              onSelect={(e) => {
+                setCommentCaretPos(e.currentTarget.selectionStart ?? newText.length);
+              }}
+              onKeyDown={(e) => {
+                if (mentionFiltered.length > 0) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setMentionIndex((v) => (v + 1) % mentionFiltered.length);
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setMentionIndex((v) =>
+                      v <= 0 ? mentionFiltered.length - 1 : v - 1,
+                    );
+                    return;
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    applyMention(
+                      mentionFiltered[
+                        Math.min(mentionIndex, mentionFiltered.length - 1)
+                      ],
+                    );
+                  }
+                }
+              }}
+              onPaste={onPasteIntoMessage}
+              disabled={loading || !!loadError || uploading}
+            />
+          </div>
           {postError ? (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{postError}</p>
           ) : null}

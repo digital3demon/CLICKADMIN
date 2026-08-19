@@ -11,6 +11,25 @@ export type KanbanMentionLookupUser = {
   displayName?: string | null;
 };
 
+export type ChatMentionDraft = { start: number; end: number; query: string };
+
+/**
+ * Черновик @упоминания у каретки (выпадающий список в чате).
+ * Граница до @: не `\b` — кириллица иначе ломает «Всеволод@» и ловит «Всеволод @ро».
+ */
+export function findMentionDraft(text: string, caretPos: number): ChatMentionDraft | null {
+  const caret = Math.max(0, Math.min(caretPos, text.length));
+  const before = text.slice(0, caret);
+  const atPos = before.lastIndexOf("@");
+  if (atPos < 0) return null;
+  if (atPos > 0 && /[\p{L}\p{N}_]/u.test(before[atPos - 1] ?? "")) {
+    return null;
+  }
+  const token = before.slice(atPos + 1);
+  if (/\s/.test(token)) return null;
+  return { start: atPos, end: caret, query: token.toLowerCase() };
+}
+
 /** Как в ChatPanel: безопасный токен для @упоминания. */
 export function sanitizeMentionToken(raw: string): string {
   return raw

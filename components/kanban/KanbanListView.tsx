@@ -27,9 +27,16 @@ import { useKanbanCardHoverPreview } from "./KanbanCardHoverPreview";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 
-/** Колонка названия ≤ ~60 символов (ch), дальше перенос; остальные — max-content. */
-const LIST_GRID =
-  "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:grid-cols-[minmax(0,60ch)_max-content_max-content_max-content_max-content_max-content] sm:items-start sm:justify-items-start sm:gap-x-2 sm:gap-y-0";
+/**
+ * Desktop: одна сетка на шапку + все строки (`auto` = max по столбцу).
+ * Отдельные grid с max-content у шапки и у каждой карточки расходятся:
+ * подписи короче ячеек («К исполнению», дата, Срочно) — заголовки уезжают влево.
+ */
+const LIST_TABLE =
+  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto_auto] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
+
+/** Mobile: своя сетка. Desktop: `contents` — ячейки входят в subgrid карточки. */
+const LIST_ROW_INNER = "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:contents";
 
 function IconChevronRight(props: { className?: string }) {
   return (
@@ -266,7 +273,11 @@ function ListStageDueCell({
         disabled={!canEditDueDate || !onDueChange}
         value={stageDue}
         onChange={(e) => onDueChange?.(e.target.value)}
-        title={canEditDueDate ? "Срок этапа (канбан)" : "Нет прав менять срок"}
+        title={
+          canEditDueDate
+            ? "Срок карточки канбана (Kaiten). Не лабораторный срок и не дата записи."
+            : "Нет прав менять срок карточки"
+        }
         className={`${
           compact
             ? "h-6 w-[6.5rem] min-w-0 px-1 py-0 text-[0.65rem] font-semibold"
@@ -531,10 +542,12 @@ export function KanbanListView({
             Сброс сортировки
           </button>
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className={LIST_TABLE}>
         <div
-          className={`mb-1.5 max-sm:hidden shrink-0 border-b border-[var(--kanban-border)] pb-1 ${LIST_GRID} text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)]`}
+          className="sticky top-0 z-10 hidden border-b border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] pb-1 text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:border-l-[3px] sm:border-l-transparent sm:border-r sm:border-r-transparent"
         >
-          <div className="min-w-0">
+          <div className="min-w-0 sm:px-2">
             <SortHeaderButton
               label="Название"
               sortKey="title"
@@ -542,7 +555,7 @@ export function KanbanListView({
               onSortChange={onSortChange}
             />
           </div>
-          <div className="hidden min-w-0 sm:block">
+          <div className="min-w-0 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5">
             <SortHeaderButton
               label="Колонка"
               sortKey="column"
@@ -550,7 +563,7 @@ export function KanbanListView({
               onSortChange={onSortChange}
             />
           </div>
-          <div className="hidden min-w-0 sm:block">
+          <div className="min-w-0 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5">
             <SortHeaderButton
               label="Срок"
               sortKey="due"
@@ -558,10 +571,13 @@ export function KanbanListView({
               onSortChange={onSortChange}
             />
           </div>
-          <div className="hidden min-w-0 px-0.5 sm:block" title="Срочно для следующего отдела">
+          <div
+            className="min-w-0 sm:border-l sm:border-[var(--kanban-border)] sm:px-1"
+            title="Срочно для следующего отдела"
+          >
             Срочно
           </div>
-          <div className="hidden min-w-0 sm:block">
+          <div className="min-w-0 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5">
             <SortHeaderButton
               label="Ответственный"
               sortKey="assignee"
@@ -569,7 +585,7 @@ export function KanbanListView({
               onSortChange={onSortChange}
             />
           </div>
-          <div className="hidden min-w-0 sm:block">
+          <div className="min-w-0 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5">
             <SortHeaderButton
               label="Участники"
               sortKey="participants"
@@ -578,9 +594,8 @@ export function KanbanListView({
             />
           </div>
         </div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto sm:space-y-1.5">
         {rows.length === 0 ? (
-          <p className="text-[0.875rem] text-[var(--kanban-text-muted)]">
+          <p className="text-[0.875rem] text-[var(--kanban-text-muted)] sm:col-span-full">
             Нет карточек по текущим фильтрам и поиску.
           </p>
         ) : (
@@ -605,9 +620,9 @@ export function KanbanListView({
             const initials = (ct?.name || "?").trim().slice(0, 1).toUpperCase();
 
             return (
-              <div key={card.id} className="relative w-full">
                 <article
-                  className="relative w-full overflow-x-hidden overflow-y-visible rounded-md border-y border-r border-black/[0.1] border-l-[3px] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1]"
+                  key={card.id}
+                  className="relative w-full min-w-0 cursor-pointer overflow-x-hidden overflow-y-visible rounded-md border-y border-r border-black/[0.1] border-l-[3px] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:items-start sm:overflow-x-visible"
                   style={{ borderLeftColor: accent }}
                   role="button"
                   tabIndex={0}
@@ -621,7 +636,7 @@ export function KanbanListView({
                     }
                   }}
                 >
-                  <div className={`${LIST_GRID} cursor-pointer sm:px-0 sm:py-0.5`}>
+                  <div className={LIST_ROW_INNER}>
                     {/* Mobile: тип (слово на боку) | контент; Срочно сверху */}
                     <div className="flex min-w-0 sm:contents">
                       <div
@@ -648,7 +663,7 @@ export function KanbanListView({
                         </span>
                       </div>
                       <div className="min-w-0 flex-1 py-1 pl-1 pr-1.5 sm:contents sm:p-0">
-                        <div className="flex min-w-0 items-start gap-1 sm:items-start sm:gap-1.5 sm:px-2 sm:py-1.5">
+                        <div className="flex min-w-0 items-start gap-1 sm:min-w-0 sm:items-start sm:gap-1.5 sm:px-2 sm:py-1.5">
                           <span
                             className="mt-0.5 hidden h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.58rem] font-bold text-white sm:mt-0.5 sm:flex"
                             style={{ background: accent }}
@@ -825,10 +840,7 @@ export function KanbanListView({
                         </div>
                       </div>
                     </div>
-                    <div
-                      className="hidden min-h-[2rem] sm:flex sm:items-start sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5"
-                      style={{ width: `${longestColumnTitleCh + 2}ch` }}
-                    >
+                    <div className="hidden min-h-[2rem] sm:flex sm:min-w-0 sm:items-start sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
                       <span className="min-w-0 flex-1 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]">
                         {columnTitle}
                       </span>
@@ -900,10 +912,10 @@ export function KanbanListView({
                     </div>
                   </div>
                 </article>
-              </div>
             );
           })
         )}
+        </div>
         </div>
       </div>
       {picker && onUpdateCardMembers ? (

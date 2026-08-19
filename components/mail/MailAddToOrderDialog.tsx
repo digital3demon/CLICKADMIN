@@ -4,8 +4,13 @@ import type { UserRole } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
 import { isKanbanAdminGroupRole } from "@/lib/kanban-admin-mention";
-import { sanitizeMentionToken } from "@/lib/kanban-comment-mentions";
+import {
+  findMentionDraft,
+  sanitizeMentionToken,
+} from "@/lib/kanban-comment-mentions";
 import { orderPathById } from "@/lib/order-public-ref";
+
+export { findMentionDraft };
 
 type OrderHit = {
   id: string;
@@ -51,28 +56,12 @@ type MentionUser = {
   role?: UserRole;
 };
 
-type MentionDraft = { start: number; end: number; query: string };
-
 type MentionOption = {
   id: string;
   label: string;
   insertText: string;
   searchText: string;
 };
-
-export function findMentionDraft(text: string, caretPos: number): MentionDraft | null {
-  const caret = Math.max(0, Math.min(caretPos, text.length));
-  const before = text.slice(0, caret);
-  const atPos = before.lastIndexOf("@");
-  if (atPos < 0) return null;
-  // Граница до @: не \b — кириллица иначе ломает «Всеволод@».
-  if (atPos > 0 && /[\p{L}\p{N}_]/u.test(before[atPos - 1] ?? "")) {
-    return null;
-  }
-  const token = before.slice(atPos + 1);
-  if (/\s/.test(token)) return null;
-  return { start: atPos, end: caret, query: token.toLowerCase() };
-}
 
 function orderLabel(o: OrderHit): string {
   const patient = (o.patientName ?? "").trim() || "—";
