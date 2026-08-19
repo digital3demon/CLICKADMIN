@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import {
   ConstructionCategory,
   DemoKanbanColumn,
@@ -93,6 +94,67 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         isActive: true,
       },
     });
+
+    /** Общий bcrypt для «есть пароль» в списке; вход в демо — по коду, не по этим учёткам. */
+    const demoStaffPasswordHash = bcrypt.hashSync("demo-staff-not-used", 10);
+    const staffSeeds: Array<{
+      id: string;
+      email: string;
+      displayName: string;
+      role: (typeof UserRole)[keyof typeof UserRole];
+    }> = [
+      {
+        id: "cm_demo_user_admin_v1",
+        email: "admin@demo.crm",
+        displayName: "Пользователь · Администратор",
+        role: UserRole.ADMINISTRATOR,
+      },
+      {
+        id: "cm_demo_user_senior_admin_v1",
+        email: "senior-admin@demo.crm",
+        displayName: "Пользователь · Старший админ",
+        role: UserRole.SENIOR_ADMINISTRATOR,
+      },
+      {
+        id: "cm_demo_user_tech_v1",
+        email: "tech@demo.crm",
+        displayName: "Пользователь · Техник",
+        role: UserRole.SENIOR_TECHNICIAN,
+      },
+      {
+        id: "cm_demo_user_prod_v1",
+        email: "production@demo.crm",
+        displayName: "Пользователь · Производство",
+        role: UserRole.PRODUCTION,
+      },
+      {
+        id: "cm_demo_user_manager_v1",
+        email: "manager@demo.crm",
+        displayName: "Пользователь · Менеджер",
+        role: UserRole.MANAGER,
+      },
+      {
+        id: "cm_demo_user_accountant_v1",
+        email: "accountant@demo.crm",
+        displayName: "Пользователь · Бухгалтер",
+        role: UserRole.ACCOUNTANT,
+      },
+    ];
+    for (let si = 0; si < staffSeeds.length; si++) {
+      const u = staffSeeds[si]!;
+      await tx.user.create({
+        data: {
+          id: u.id,
+          tenantId: DEFAULT_TENANT_ID,
+          email: u.email,
+          displayName: u.displayName,
+          role: u.role,
+          passwordHash: demoStaffPasswordHash,
+          isActive: true,
+          lastLoginAt: hoursAgo(12 + si),
+        },
+      });
+    }
 
     const couriers = await Promise.all([
       tx.courier.create({
