@@ -90,7 +90,7 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
-        {session?.role === "OWNER" && !session.demo && !isCrmStandaloneDemo() ? (
+        {session?.role === "OWNER" && !session?.demo && !isCrmStandaloneDemo() ? (
           <Link
             href="/directory/demo-access"
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
@@ -139,7 +139,7 @@ export default async function DirectoryHubPage() {
               Дамп CRM
             </h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              {session.demo
+              {session?.demo
                 ? "Срез демо-данных за месяц в zip (наряды, пользователи, клиники, прайс, картинки). Только чтение демо-БД."
                 : "Срез за месяц в zip: наряды, пользователи, доступы, клиники, прайс и картинки вложений (без PDF). Только чтение; для демо обезличивается отдельно."}
             </p>
