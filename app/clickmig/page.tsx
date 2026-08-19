@@ -1,10 +1,15 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { ClickMigModuleClient } from "@/components/clickmig/ClickMigModuleClient";
+import { getSessionFromCookies } from "@/lib/auth/session-server";
 
 export const dynamic = "force-dynamic";
 
-export default function ClickMigPage() {
+export default async function ClickMigPage() {
+  const session = await getSessionFromCookies();
+  if (session?.demo) redirect("/orders");
+
   return (
     <ModuleFrame
       title="КликМиг"

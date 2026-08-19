@@ -17,8 +17,8 @@ function isOwnerSession(session: {
 }
 
 /**
- * OWNER (в т.ч. в демо): сырой дамп CRM за календарный месяц → сразу скачивание zip.
- * В хранилище не пишем. Только чтение БД текущей сессии (прод или демо).
+ * OWNER (не демо): сырой дамп CRM за календарный месяц → сразу скачивание zip.
+ * В хранилище не пишем. Только чтение рабочей БД.
  * Обезличивание — отдельно после выгрузки.
  */
 export async function POST(req: Request) {
@@ -28,6 +28,12 @@ export async function POST(req: Request) {
   }
   if (!isOwnerSession(session)) {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+  }
+  if (session.demo) {
+    return NextResponse.json(
+      { error: "Дамп недоступен в демо-режиме" },
+      { status: 403 },
+    );
   }
 
   const body = (await req.json().catch(() => null)) as {

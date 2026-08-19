@@ -174,28 +174,42 @@ export function SidebarNav() {
     if (!sessionReady || role == null) {
       return baseNavItems;
     }
+    const hideClickMig = Boolean(user?.demo);
+    const filterDemo = (items: typeof baseNavItems) =>
+      hideClickMig ? items.filter((i) => i.href !== "/clickmig") : items;
+
     if (moduleAccess) {
       const a = moduleAccess as Record<AppModule, boolean>;
       if (isKanbanOnlyUser(role, a)) {
-        return baseNavItems.filter(
-          (i) => i.href === "/kanban" || (i.href === "/payroll" && a.PAYROLL === true),
+        return filterDemo(
+          baseNavItems.filter(
+            (i) =>
+              i.href === "/kanban" ||
+              (i.href === "/payroll" && a.PAYROLL === true),
+          ),
         );
       }
-      return baseNavItems.filter((i) => {
-        if (i.href === "/directory") {
-          return hasDirectorySidebarAccess(a);
-        }
-        return a[i.module] === true;
-      });
+      return filterDemo(
+        baseNavItems.filter((i) => {
+          if (i.href === "/directory") {
+            return hasDirectorySidebarAccess(a);
+          }
+          return a[i.module] === true;
+        }),
+      );
     }
     if (isKanbanOnlyUser(role)) {
-      return baseNavItems.filter((i) => i.href === "/kanban" || i.href === "/payroll");
+      return filterDemo(
+        baseNavItems.filter(
+          (i) => i.href === "/kanban" || i.href === "/payroll",
+        ),
+      );
     }
     if (!canAccessFinancialAnalytics(role)) {
-      return baseNavItems.filter((i) => i.href !== "/analytics");
+      return filterDemo(baseNavItems.filter((i) => i.href !== "/analytics"));
     }
-    return [...baseNavItems];
-  }, [role, moduleAccess, sessionReady]);
+    return filterDemo([...baseNavItems]);
+  }, [role, moduleAccess, sessionReady, user?.demo]);
 
   const mailNavVisible = useMemo(
     () => navItems.some((item) => item.href === "/mail"),

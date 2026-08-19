@@ -45,7 +45,7 @@ export default async function DirectoryHubPage() {
     ));
   const showPrint = a?.CONFIG_PRINT === true;
   const showAppearance = a?.CONFIG_APPEARANCE === true;
-  const showClickMig = a?.CONFIG_CLICKMIG === true;
+  const showClickMig = a?.CONFIG_CLICKMIG === true && !session?.demo;
   const showAccessMatrix =
     session?.role === "OWNER" && !isSingleUserPortable();
 
@@ -130,7 +130,8 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
-        {(session?.actualRole ?? session?.role) === "OWNER" ? (
+        {(session?.actualRole ?? session?.role) === "OWNER" &&
+        !session?.demo ? (
           <Link
             href="/directory/crm-dump"
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
@@ -139,9 +140,9 @@ export default async function DirectoryHubPage() {
               Дамп CRM
             </h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              {session?.demo
-                ? "Срез демо-данных за месяц в zip (наряды, пользователи, клиники, прайс, картинки). Только чтение демо-БД."
-                : "Срез за месяц в zip: наряды, пользователи, доступы, клиники, прайс и картинки вложений (без PDF). Только чтение; для демо обезличивается отдельно."}
+              Срез за месяц в zip: наряды, пользователи, доступы, клиники,
+              прайс и картинки вложений (без PDF). Только чтение; для демо
+              обезличивается отдельно.
             </p>
           </Link>
         ) : null}
