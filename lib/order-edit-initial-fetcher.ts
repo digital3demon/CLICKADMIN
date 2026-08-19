@@ -157,9 +157,10 @@ export async function fetchOrderEditInitial(
     : [];
 
   const siteOrigin = await getSiteOrigin();
+  const kanbanPath = kanbanOrderDeepLinkPath(order.id);
   const kanbanAbs = siteOrigin
-    ? `${siteOrigin.replace(/\/$/, "")}${kanbanOrderDeepLinkPath(order.id)}`
-    : null;
+    ? `${siteOrigin.replace(/\/$/, "")}${kanbanPath}`
+    : kanbanPath;
 
   const invParsed = invoiceParsedSnapshotForOrderEdit(order);
 

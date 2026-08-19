@@ -7,6 +7,7 @@ import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-m
 import { isKanbanAdminGroupRole } from "@/lib/kanban-admin-mention";
 import type { KaitenTrackLane } from "@prisma/client";
 import { kaitenBlockStateFromCard } from "@/lib/kaiten-card-block";
+import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import {
   dedupeParsedKaitenComments,
   parseKaitenListComment,
@@ -193,12 +194,16 @@ function BoardPresenceStatusBar({
     }
   };
 
-  const kanbanHas = presence?.kanban.hasCard === true;
+  const kanbanMissing = presence != null && presence.kanban.hasCard !== true;
+  const kanbanHas = !kanbanMissing;
   const kaitenHas =
     presence?.kaiten.hasCard === true ||
     (kaitenCardId != null && Number.isFinite(kaitenCardId));
+  /** Ссылка на канбан CRM известна сразу: id карточки = наряд, это та же система. */
   const kanbanUrl =
-    presence?.kanban.url ?? kanbanCardUrlFallback ?? null;
+    presence?.kanban.url ??
+    kanbanCardUrlFallback ??
+    kanbanOrderDeepLinkPath(orderId);
   const kaitenUrl = presence?.kaiten.url ?? kaitenCardUrl ?? null;
 
   return (
@@ -213,7 +218,7 @@ function BoardPresenceStatusBar({
                 : "font-medium text-amber-800 dark:text-amber-200"
             }
           >
-            {presence == null && !err ? "…" : kanbanHas ? "есть" : "нет"}
+            {kanbanHas ? "есть" : "нет"}
           </span>
           {kanbanHas && kanbanUrl ? (
             <a
