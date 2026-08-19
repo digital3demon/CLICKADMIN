@@ -1275,6 +1275,7 @@ export function OrderListTagsCell({
     removeTag,
     urgentCoefficient,
     omitKaitenColumnTag,
+    isDemoMode,
     filterListHref,
     prostheticsOrdered,
   ]);
