@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { canEditOrders } from "@/lib/auth/permissions";
+import { canLinkEmailsToOrder } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { fetchOrderSourceEmails } from "@/lib/mail/order-source-emails";
 import { linkEmailsToOrder } from "@/lib/mail/link-emails-to-order.server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
+import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 
 export const dynamic = "force-dynamic";
 
@@ -51,12 +52,13 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
-  if (!canEditOrders(session.role)) {
-    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
-  }
   const tenantId = await orderTenantIdForSession(session);
   if (!tenantId) {
     return NextResponse.json({ error: "Тенант не найден" }, { status: 403 });
+  }
+  const moduleAccess = await getEffectiveModuleAccess(tenantId, session.role);
+  if (!canLinkEmailsToOrder(session.role, moduleAccess)) {
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
   const { id: orderId } = await params;
   if (!orderId?.trim()) {

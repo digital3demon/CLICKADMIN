@@ -104,6 +104,15 @@ export function canEditOrders(
   return false;
 }
 
+/** Привязка писем к наряду из почты: правка заказа или модуль «Почта». */
+export function canLinkEmailsToOrder(
+  role: UserRole,
+  moduleAccess?: Partial<Record<AppModule, boolean>> | null,
+): boolean {
+  if (canEditOrders(role, moduleAccess)) return true;
+  return moduleAccess?.MAIL === true;
+}
+
 /** Чат наряда в списках заказов, отгрузок и ФинОтдела (пакет ORDERS / просмотр). */
 export function canAccessOrderChat(
   role: UserRole,
