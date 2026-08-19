@@ -13,8 +13,9 @@ import { resolvePrismaSchemaPath } from "@/lib/prisma-schema-path";
 
 /**
  * Полностью пересоздаёт файл демо-БД и заполняет сидом (после выхода из демо или при первом старте).
- * `db push` с `--force-reset`: старый demo.db мог остаться со схемой без обязательных колонок —
- * без сброса Prisma не может добавить `warehouseId`, `priceListId` и т.п. к существующим строкам.
+ * `db push --force-reset --skip-generate`: на PaaS после push Prisma иначе
+ * запускает `npm i @prisma/client` (generate) и падает (exit 243 / read-only).
+ * Клиент уже собран на этапе build.
  */
 export async function resetAndSeedDemoDatabase(): Promise<void> {
   assertDemoDatabaseDistinctFromMain();
@@ -48,6 +49,7 @@ function resolvePrismaDbPushSpawn(schemaPath: string): {
     "push",
     "--accept-data-loss",
     "--force-reset",
+    "--skip-generate",
     `--schema=${schemaPath}`,
   ] as const;
   const fromEnv = process.env.PRISMA_CLI_JS?.trim();
