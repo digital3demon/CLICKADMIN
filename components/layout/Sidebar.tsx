@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, useCallback } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   canAccessSidebarPayments,
   isKanbanOnlyUser,
@@ -41,6 +41,30 @@ const WorkdaySunMoon = dynamic(
   },
 );
 
+function SidebarSessionAvatar({
+  uploadedAt,
+  presetId,
+}: {
+  uploadedAt: string | null;
+  presetId: string | null;
+}) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    setBroken(false);
+  }, [uploadedAt]);
+  if (uploadedAt && !broken) {
+    return (
+      <img
+        src={`/api/me/avatar?t=${encodeURIComponent(uploadedAt)}`}
+        alt=""
+        className="h-full w-full object-cover"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+  return <span aria-hidden>{profileAvatarEmoji(presetId)}</span>;
+}
+
 export function Sidebar() {
   const uiDesign = useUiDesign();
   const isHarmony = uiDesign === "harmony";
@@ -48,7 +72,7 @@ export function Sidebar() {
   const router = useRouter();
   const { open: openNewOrder, canOpen, canCreate, createAccessReady } =
     useNewOrderPanel();
-  const { user: sessionUser, isDemo, singleUser: singleUserMode, refresh } =
+  const { user: sessionUser, isDemo, singleUser: singleUserMode } =
     useSessionUser();
   const isActualOwner = sessionUser?.actualRole === "OWNER";
   const isEffectiveKanbanOnly =
@@ -280,18 +304,10 @@ export function Sidebar() {
                 }
                 aria-label="Настройка профиля"
               >
-                {sessionUser.avatarCustomUploadedAt ? (
-                  <img
-                    src={`/api/me/avatar?t=${encodeURIComponent(sessionUser.avatarCustomUploadedAt)}`}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    onError={() => {
-                      void refresh();
-                    }}
-                  />
-                ) : (
-                  <span aria-hidden>{profileAvatarEmoji(sessionUser.avatarPresetId)}</span>
-                )}
+                <SidebarSessionAvatar
+                  uploadedAt={sessionUser.avatarCustomUploadedAt}
+                  presetId={sessionUser.avatarPresetId}
+                />
               </Link>
               {railCollapsed ? null : (
                 <div className="min-w-0 flex-1 leading-tight">

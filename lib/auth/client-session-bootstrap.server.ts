@@ -68,19 +68,33 @@ export async function getClientSessionBootstrap(): Promise<ClientSessionBootstra
   ]);
 
   let kanbanAdminMentionTag: string | null = null;
-  if (tid) {
-    try {
-      const db = await getPrisma();
-      const tenantRow = await db.tenant.findUnique({
-        where: { id: tid },
-        select: { kanbanAdminMentionTag: true },
-      });
-      kanbanAdminMentionTag = tenantRow?.kanbanAdminMentionTag?.trim()
-        ? normalizeKanbanAdminMentionTag(tenantRow.kanbanAdminMentionTag)
-        : null;
-    } catch {
-      kanbanAdminMentionTag = null;
-    }
+  let avatarPresetId: string | null = null;
+  let avatarCustomUploadedAt: string | null = null;
+  try {
+    const db = await getPrisma();
+    const [tenantRow, userRow] = await Promise.all([
+      tid
+        ? db.tenant.findUnique({
+            where: { id: tid },
+            select: { kanbanAdminMentionTag: true },
+          })
+        : Promise.resolve(null),
+      db.user.findUnique({
+        where: { id: s.sub },
+        select: {
+          avatarPresetId: true,
+          avatarCustomUploadedAt: true,
+        },
+      }),
+    ]);
+    kanbanAdminMentionTag = tenantRow?.kanbanAdminMentionTag?.trim()
+      ? normalizeKanbanAdminMentionTag(tenantRow.kanbanAdminMentionTag)
+      : null;
+    avatarPresetId = userRow?.avatarPresetId ?? null;
+    avatarCustomUploadedAt =
+      userRow?.avatarCustomUploadedAt?.toISOString() ?? null;
+  } catch {
+    kanbanAdminMentionTag = null;
   }
 
   return {
@@ -93,8 +107,8 @@ export async function getClientSessionBootstrap(): Promise<ClientSessionBootstra
       displayName: s.name,
       role: s.role,
       actualRole: s.actualRole ?? s.role,
-      avatarPresetId: null,
-      avatarCustomUploadedAt: null,
+      avatarPresetId,
+      avatarCustomUploadedAt,
       moduleAccess: moduleAccessForResponse(mod) as Partial<
         Record<AppModule, boolean>
       >,
