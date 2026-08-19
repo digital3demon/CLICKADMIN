@@ -52,6 +52,7 @@ export function OrdersListTableRow({
   harmonyRowState = "default",
   rowAccent = null,
   isLabOverdue = false,
+  isDemoMode = false,
   mobileActionsNode,
   mobileShippedNode,
   mobileDatesNode,
@@ -80,6 +81,7 @@ export function OrdersListTableRow({
   /** Цветная рамка: корректировки (янтарь) / запрос протетики (голубой). */
   rowAccent?: OrderListRowAccentKind | null;
   isLabOverdue?: boolean;
+  isDemoMode?: boolean;
   mobileActionsNode?: ReactNode;
   /** Галочка отгрузки — в шапке рядом с № / статусом. */
   mobileShippedNode?: ReactNode;
@@ -182,6 +184,7 @@ export function OrdersListTableRow({
                   filterHref={kaitenFilterHref}
                   boardFilterHref={boardFilterHref}
                   placement="underOrderNumber"
+                  isDemoMode={isDemoMode}
                 />
               </div>
               {mobileShippedNode ? (

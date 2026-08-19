@@ -147,6 +147,8 @@ type Props = {
   doctorId?: string | null;
   /** На mobile пилюля колонки Kaiten уже под № наряда — не дублировать в облаке тегов. */
   omitKaitenColumnTag?: boolean;
+  /** Демо: без брендинга Kaiten в пилюле статуса. */
+  isDemoMode?: boolean;
 };
 
 const padTable =
@@ -388,6 +390,7 @@ export function OrderListTagsCell({
   financeCalculated = null,
   clinicWorksWithEdo = null,
   omitKaitenColumnTag = false,
+  isDemoMode = false,
   clinicId = null,
   doctorId = null,
 }: Props) {
@@ -1017,6 +1020,7 @@ export function OrderListTagsCell({
             boardFilterHref={
               kaitenLaneFilterKey ? href(kaitenLaneFilterKey) : null
             }
+            isDemoMode={isDemoMode}
           />
         ),
       });

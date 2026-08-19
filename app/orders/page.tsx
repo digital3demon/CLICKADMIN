@@ -1080,6 +1080,7 @@ export default async function OrdersPage({
                     periodFrom={fromUrl}
                     periodTo={toUrl}
                     omitKaitenColumnTag={opts?.omitKaitenColumnTag}
+                    isDemoMode={isDemo}
                   />
                 );
                 const tagsNode = renderTagsNode({ omitKaitenColumnTag: true });
@@ -1101,15 +1102,16 @@ export default async function OrdersPage({
                   }
                   labDate={labDateFormatted}
                   appointmentDate={appointmentDateFormatted}
-                  kaitenColumnTitle={o.kaitenColumnTitle}
-                  kaitenTrackLane={o.kaitenTrackLane}
+                  kaitenColumnTitle={isDemo ? null : o.kaitenColumnTitle}
+                  kaitenTrackLane={isDemo ? null : o.kaitenTrackLane}
                   demoKanbanColumn={o.demoKanbanColumn}
                   demoCardTypeName={o.kaitenCardType?.name ?? null}
-                  kaitenCardId={o.kaitenCardId}
-                  kaitenBlocked={blocked}
-                  kaitenBlockReason={o.kaitenBlockReason}
-                  kaitenFilterHref={kaitenStatusFilterHref}
-                  boardFilterHref={boardFilterHref}
+                  kaitenCardId={isDemo ? null : o.kaitenCardId}
+                  kaitenBlocked={isDemo ? false : blocked}
+                  kaitenBlockReason={isDemo ? null : o.kaitenBlockReason}
+                  kaitenFilterHref={isDemo ? null : kaitenStatusFilterHref}
+                  boardFilterHref={isDemo ? null : boardFilterHref}
+                  isDemoMode={isDemo}
                   isLabOverdue={isLabOverdue}
                   tagsNode={tagsNode}
                   mobileShippedNode={

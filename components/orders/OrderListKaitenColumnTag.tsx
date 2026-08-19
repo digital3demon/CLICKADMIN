@@ -115,6 +115,8 @@ type Props = {
   boardFilterHref?: string | null;
   /** Компактная пилюля под номером наряда (отгрузки). */
   placement?: "tags" | "underOrderNumber";
+  /** Демо: без брендинга Kaiten — только статус канбана. */
+  isDemoMode?: boolean;
 };
 
 export function OrderListKaitenColumnTag({
@@ -128,10 +130,13 @@ export function OrderListKaitenColumnTag({
   filterHref = null,
   boardFilterHref = null,
   placement = "tags",
+  isDemoMode = false,
 }: Props) {
   const isHarmony = useUiDesign() === "harmony";
   const underOrder = placement === "underOrderNumber";
-  const boardLabel = kaitenTrackLaneListLabel(kaitenTrackLane);
+  const boardLabel = isDemoMode
+    ? null
+    : kaitenTrackLaneListLabel(kaitenTrackLane);
   // Под №: чуть крупнее и с запасом по бокам (раньше text-[9–10px]/px-1.5 было «впритык»).
   const padClass = underOrder
     ? "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:text-[12px]"
@@ -141,7 +146,7 @@ export function OrderListKaitenColumnTag({
     ? "flex w-full min-w-0 justify-center"
     : "inline-flex min-w-0 max-w-full items-center truncate text-left";
 
-  if (kaitenBlocked) {
+  if (kaitenBlocked && !isDemoMode) {
     const reason = String(kaitenBlockReason || "").trim();
     const stopTitle = reason
       ? `СТОП: ${reason}`
@@ -185,17 +190,27 @@ export function OrderListKaitenColumnTag({
 }
 
   const kaitenLabel = kaitenStatusDisplay({
-    kaitenColumnTitle,
-    kaitenCardId,
+    kaitenColumnTitle: isDemoMode ? null : kaitenColumnTitle,
+    kaitenCardId: isDemoMode ? null : kaitenCardId,
     demoKanbanColumn,
     demoCardTypeName,
   });
-  const hasKaitenColumnLabel = String(kaitenColumnTitle || "").trim().length > 0;
-  const showNoKaitenPill = !hasKaitenColumnLabel && kaitenCardId == null;
+  const hasKaitenColumnLabel =
+    !isDemoMode && String(kaitenColumnTitle || "").trim().length > 0;
+  const showNoKaitenPill =
+    !isDemoMode && !hasKaitenColumnLabel && kaitenCardId == null;
+  const demoKanbanStatus = isDemoMode
+    ? kanbanColumnLabelForNoKaitenPill(demoKanbanColumn, demoCardTypeName) ??
+      kaitenLabel
+    : null;
   const noKaitenKanbanStatus = showNoKaitenPill
     ? kanbanColumnLabelForNoKaitenPill(demoKanbanColumn, demoCardTypeName)
     : null;
-  const kaitenColTrimmed = kaitenColumnTitle?.trim() ?? "";
+  const effectiveFilterHref = isDemoMode ? null : filterHref;
+  const effectiveBoardFilterHref = isDemoMode ? null : boardFilterHref;
+  const kaitenColTrimmed = isDemoMode
+    ? ""
+    : (kaitenColumnTitle?.trim() ?? "");
   const kaitenPillClass = getKaitenColumnPillClassFromOrder({
     kaitenColumnTitle: kaitenColTrimmed || null,
     demoKanbanColumn,
@@ -205,14 +220,24 @@ export function OrderListKaitenColumnTag({
     demoKanbanColumn,
   });
   const kaitenStatusPillClass = (classicRounded: string) => {
-    const tone = noKaitenKanbanStatus ? "gray" : kaitenHarmonyTone;
+    const tone =
+      noKaitenKanbanStatus || demoKanbanStatus ? "gray" : kaitenHarmonyTone;
     return isHarmony
       ? `${resolveListPillClass(true, "", tone)} ${padClass}`
       : `${classicRounded} ${padClass}`;
   };
 
   const pill =
-    noKaitenKanbanStatus ? (
+    demoKanbanStatus ? (
+      <span
+        className={kaitenStatusPillClass(
+          `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-center font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
+        )}
+        title={demoKanbanStatus}
+      >
+        <span className="truncate">{demoKanbanStatus}</span>
+      </span>
+    ) : noKaitenKanbanStatus ? (
       <span
         className={kaitenStatusPillClass(
           `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-center font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
@@ -237,10 +262,10 @@ export function OrderListKaitenColumnTag({
       </span>
     );
 
-  if (filterHref) {
+  if (effectiveFilterHref) {
     return wrapStatusAndBoard(
       <Link prefetch={false}
-        href={filterHref}
+        href={effectiveFilterHref}
         title="Показать наряды в этой колонке Kaiten"
         className={`${wrapClass} text-inherit no-underline outline-none transition-opacity hover:opacity-90 focus-visible:outline-none`}
       >
@@ -249,13 +274,17 @@ export function OrderListKaitenColumnTag({
       boardLabel,
       isHarmony,
       underOrder,
-      boardFilterHref,
+      effectiveBoardFilterHref,
     );
   }
 
   return wrapStatusAndBoard(
     <span
-      title="Колонка доски Kaiten (обновляется в фоне на списке заказов)"
+      title={
+        isDemoMode
+          ? "Статус карточки в канбане"
+          : "Колонка доски Kaiten (обновляется в фоне на списке заказов)"
+      }
       className={wrapClass}
     >
       {pill}
@@ -263,6 +292,6 @@ export function OrderListKaitenColumnTag({
     boardLabel,
     isHarmony,
     underOrder,
-    boardFilterHref,
+    effectiveBoardFilterHref,
   );
 }

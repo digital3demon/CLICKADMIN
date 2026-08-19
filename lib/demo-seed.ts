@@ -2,7 +2,6 @@ import type { PrismaClient } from "@prisma/client";
 import {
   ConstructionCategory,
   DemoKanbanColumn,
-  KaitenTrackLane,
   LabWorkStatus,
   OrderStatus,
   UserRole,
@@ -394,7 +393,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           appointmentDate: dueAdm,
           demoKanbanColumn: col,
           kaitenCardTypeId: kt.id,
-          kaitenTrackLane: KaitenTrackLane.ORTHOPEDICS,
+          kaitenTrackLane: null,
           kaitenDecideLater: false,
           prosthetics: prostheticsToJson(emptyProsthetics()),
           courierPickupId: courierPick.id,
