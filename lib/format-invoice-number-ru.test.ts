@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildInvoiceCaptionRuFromDocumentText,
   buildInvoiceCaptionRuFromFileName,
+  formatInvoiceListPillLabel,
   normalizeInvoiceNumberFieldRu,
 } from "./format-invoice-number-ru";
 
@@ -57,5 +58,42 @@ describe("invoice caption RU", () => {
   it("normalize: пусто — null", () => {
     expect(normalizeInvoiceNumberFieldRu("")).toBeNull();
     expect(normalizeInvoiceNumberFieldRu("  ")).toBeNull();
+  });
+});
+
+describe("formatInvoiceListPillLabel", () => {
+  it("пусто — СЧЕТ", () => {
+    expect(formatInvoiceListPillLabel(null)).toBe("СЧЕТ");
+    expect(formatInvoiceListPillLabel("")).toBe("СЧЕТ");
+    expect(formatInvoiceListPillLabel("  ")).toBe("СЧЕТ");
+  });
+
+  it("только цифры — без даты", () => {
+    expect(formatInvoiceListPillLabel("1320")).toBe("СЧТ №1320");
+    expect(formatInvoiceListPillLabel("№376")).toBe("СЧТ №376");
+  });
+
+  it("канон БД: месяц словами → цифры в пилюле", () => {
+    expect(formatInvoiceListPillLabel("№1320 от 9 июля 2026")).toBe(
+      "СЧТ №1320 от 9.07.2026",
+    );
+  });
+
+  it("кириллица до и после «от»", () => {
+    expect(
+      formatInvoiceListPillLabel("счёт перед №1320 от 9 июля 2026 после"),
+    ).toBe("СЧТ №1320 от 9.07.2026");
+  });
+
+  it("дата уже точками", () => {
+    expect(formatInvoiceListPillLabel("№376 от 10.02.2026")).toBe(
+      "СЧТ №376 от 10.02.2026",
+    );
+  });
+
+  it("импорт банка без знака №", () => {
+    expect(formatInvoiceListPillLabel("Счет 777 от 10.02.2026")).toBe(
+      "СЧТ №777 от 10.02.2026",
+    );
   });
 });

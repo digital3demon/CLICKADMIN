@@ -24,12 +24,16 @@ import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
-import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
 import {
   mergeOrderListRowClass,
   orderListMobileCardAccentClass,
   resolveOrderListRowAccentKind,
 } from "@/lib/order-list-row-accent";
+import {
+  financeOfficeMobileCardTintClass,
+  financeOfficeRowTintClass,
+  resolveFinanceOfficeRowTintKind,
+} from "@/lib/finance-office-row-tint";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import {
   listTagKaitenColumnTitle,
@@ -76,6 +80,8 @@ export type FinanceOfficeOrderTableRow = {
   isUrgent: boolean;
   urgentCoefficient: number | null;
   invoiceAttachmentId: string | null;
+  invoiceIssued: boolean;
+  invoiceNumber: string | null;
   invoicePrinted: boolean;
   invoicePaperDocs: boolean;
   invoiceSentToEdo: boolean;
@@ -243,7 +249,7 @@ export function FinanceOfficeOrdersTable({
               <th className="w-[11rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Реквизиты</th>
               <th className="w-[7rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Наше юрлицо</th>
               <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
-              <th className="w-[12rem] px-1.5 py-2 text-center normal-case">Отметки</th>
+              <th className="w-[15.5rem] px-1.5 py-2 text-center normal-case">Отметки</th>
             </tr>
           </thead>
           <tbody>
@@ -294,14 +300,28 @@ export function FinanceOfficeOrdersTable({
                   o.listPendingProstheticsRequests,
                 prostheticsOrdered: o.prostheticsOrdered,
               });
-              const rowClass = mergeOrderListRowClass({
-                shipped: workSent,
-                accent: rowAccent,
-                shippedClass: ORDER_SHIPPED_ROW_CLASS,
-                idleClass:
-                  "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]",
+              const financeTint = resolveFinanceOfficeRowTintKind({
+                financeCalculated: o.financeCalculated,
+                invoiceIssued: o.invoiceIssued,
               });
-              const mobileCardAccent = orderListMobileCardAccentClass(rowAccent);
+              const rowClass = mergeOrderListRowClass({
+                shipped: false,
+                accent: rowAccent,
+                shippedClass: "",
+                idleClass: financeOfficeRowTintClass(financeTint),
+              });
+              const mobileCardAccent =
+                orderListMobileCardAccentClass(rowAccent) ||
+                financeOfficeMobileCardTintClass(financeTint);
+              const stickyCellBg = rowAccent
+                ? "max-xl:bg-[var(--card-bg)]"
+                : financeTint === "both"
+                  ? "max-xl:bg-gradient-to-r max-xl:from-emerald-100/90 max-xl:to-sky-200/85 dark:max-xl:from-emerald-950/55 dark:max-xl:to-sky-950/50"
+                  : financeTint === "calculated"
+                    ? "max-xl:bg-emerald-100/90 dark:max-xl:bg-emerald-950/50"
+                    : financeTint === "invoiced"
+                      ? "max-xl:bg-sky-100/90 dark:max-xl:bg-sky-950/50"
+                      : "max-xl:bg-[var(--card-bg)]";
               const renderTagsCell = () => (
                 <OrderListTagsCell
                   orderId={o.id}
@@ -320,6 +340,7 @@ export function FinanceOfficeOrdersTable({
                   listPendingProstheticsRequests={o.listPendingProstheticsRequests}
                   invoicePrinted={o.invoicePrinted}
                   hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                  invoiceNumber={o.invoiceNumber}
                   invoiceAttachmentId={o.invoiceAttachmentId}
                   invoicePaperDocs={o.invoicePaperDocs}
                   invoiceSentToEdo={o.invoiceSentToEdo}
@@ -343,7 +364,7 @@ export function FinanceOfficeOrdersTable({
               return (
                 <Fragment key={o.id}>
                 <tr className={`hidden shell-desktop:table-row ${rowClass}`}>
-                  <td className="w-[7.5rem] px-2 py-2 text-center max-xl:sticky max-xl:left-0 max-xl:z-20 max-xl:bg-[var(--card-bg)] max-xl:shadow-[1px_0_0_var(--card-border)]">
+                  <td className={`w-[7.5rem] px-2 py-2 text-center max-xl:sticky max-xl:left-0 max-xl:z-20 ${stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}>
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-[var(--input-border)]"
@@ -381,7 +402,7 @@ export function FinanceOfficeOrdersTable({
                       canSeeAdminIndicators && o.listKaitenLabMentionHighlight
                     }
                   />
-                  <td className="whitespace-nowrap px-2 py-2 text-center font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 max-xl:bg-[var(--card-bg)] max-xl:shadow-[1px_0_0_var(--card-border)]">
+                  <td className={`whitespace-nowrap px-2 py-2 text-center font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 ${stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}>
                     <div className="flex min-h-[2.5rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
                       <Link
                         href={orderPathById(o.id)}
@@ -453,7 +474,7 @@ export function FinanceOfficeOrdersTable({
                   >
                     <OrderShippedToggle orderId={o.id} shipped={workSent} />
                   </td>
-                  <td className="w-[12rem] max-w-[12rem] px-1.5 py-2 text-left align-top">
+                  <td className="w-[15.5rem] max-w-[15.5rem] px-1.5 py-2 text-left align-top">
                     {renderTagsCell()}
                   </td>
                 </tr>

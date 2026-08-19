@@ -47,6 +47,8 @@ const financeOfficeOrderSelect = {
   kaitenCardType: { select: { name: true } },
   prostheticsOrdered: true,
   invoiceAttachmentId: true,
+  invoiceIssued: true,
+  invoiceNumber: true,
   invoicePrinted: true,
   invoicePaperDocs: true,
   invoiceSentToEdo: true,

@@ -47,6 +47,7 @@ import {
 } from "@/lib/order-list-quick-tag-suggestions";
 import { ordersListHref } from "@/lib/orders-list-query";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
+import { formatInvoiceListPillLabel } from "@/lib/format-invoice-number-ru";
 import { shipmentsListHref } from "@/lib/shipments-list-query";
 import {
   isReconciliationPaymentStatus,
@@ -96,6 +97,8 @@ type Props = {
   invoicePrinted?: boolean;
   /** Загружен файл счёта (вкладка «Документооборот») */
   hasInvoiceAttachment: boolean;
+  /** Номер счёта из наряда — в ФинОтделе пилюля «СЧТ №… от D.MM.YYYY». */
+  invoiceNumber?: string | null;
   /** ID файла счёта; нужен для печати из быстрого действия. */
   invoiceAttachmentId?: string | null;
   /** Бумажные документы распечатаны (`invoicePaperDocs`). */
@@ -364,6 +367,7 @@ export function OrderListTagsCell({
   prostheticsOrdered,
   invoicePrinted = false,
   hasInvoiceAttachment,
+  invoiceNumber = null,
   invoiceAttachmentId = null,
   invoicePaperDocs = false,
   invoiceSentToEdo = false,
@@ -1090,17 +1094,27 @@ export function OrderListTagsCell({
       });
     }
 
-    if (hasInvoiceAttachment) {
+    if (hasInvoiceAttachment || (financeOfficeFilterContext && (invoiceNumber ?? "").trim())) {
+      const invoicePillLabel = financeOfficeFilterContext
+        ? formatInvoiceListPillLabel(invoiceNumber)
+        : "СЧЕТ";
+      const invoicePillLong = invoicePillLabel !== "СЧЕТ";
       items.push({
         key: "inv",
-        slot: "small",
+        slot: invoicePillLong ? "large" : "small",
         node: (
           <Link prefetch={false}
             href={href(LIST_TAG_INVOICE)}
-            title="Показать наряды с загруженным счётом"
-            className={`rounded-full border border-sky-300 bg-sky-50 font-semibold tracking-wide text-sky-950 shadow-sm outline-none focus-visible:outline-none dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-100 ${padTable}`}
+            title={
+              invoicePillLong
+                ? invoicePillLabel
+                : "Показать наряды с загруженным счётом"
+            }
+            className={`rounded-full border border-sky-300 bg-sky-50 font-semibold text-sky-950 shadow-sm outline-none focus-visible:outline-none dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-100 ${padTable}${
+              invoicePillLong ? " whitespace-nowrap tracking-normal" : " tracking-wide"
+            }`}
           >
-            СЧЕТ
+            {invoicePillLabel}
           </Link>
         ),
       });
@@ -1227,6 +1241,7 @@ export function OrderListTagsCell({
     clinicWorksWithEdo,
     financeOfficeFilterContext,
     hasInvoiceAttachment,
+    invoiceNumber,
     invoicePrinted,
     invoicePaperDocs,
     invoiceSentToEdo,

@@ -1,6 +1,7 @@
 /**
  * Подпись счёта в стиле «№376 от 10 февраля 2026» (месяц в родительном падеже).
  * Дата по умолчанию — сегодня по календарю Europe/Moscow.
+ * Канон в БД / поле наряда — месяц словами; пилюля списка ФинОтдела — дата цифрами.
  */
 
 import {
@@ -80,6 +81,50 @@ export function formatInvoiceCaptionRu(
   ymd: InvoiceYmd,
 ): string {
   return `№${invoiceDigits} от ${ymd.d} ${MONTHS_GEN[ymd.m0]!} ${ymd.y}`;
+}
+
+/** День без ведущего нуля, месяц с нулём: «9.07.2026». */
+export function formatInvoiceNumericDateRu(ymd: InvoiceYmd): string {
+  const mm = String(ymd.m0 + 1).padStart(2, "0");
+  return `${ymd.d}.${mm}.${ymd.y}`;
+}
+
+/**
+ * Цифры номера из подписи («№1320 …» или «Счет 777 от …»).
+ * Граница перед «от» — lookahead по пробелу, не JS `\b` (кириллица не «слово»).
+ */
+export function extractInvoiceDigitsFromCaption(
+  raw: string,
+): string | null {
+  const withSign = /№\s*(\d{1,12})/u.exec(raw);
+  if (withSign) return withSign[1]!;
+  const beforeOt = /(\d{1,12})(?=\s+от(?:\s|$))/u.exec(raw);
+  if (beforeOt) return beforeOt[1]!;
+  return null;
+}
+
+/**
+ * Пилюля списка: «СЧТ №1320 от 9.07.2026». Без номера — «СЧЕТ».
+ * Месяц словами из поля наряда не пишем в пилюлю (канон БД не меняем).
+ */
+export function formatInvoiceListPillLabel(
+  invoiceNumber: string | null | undefined,
+): string {
+  const raw = (invoiceNumber ?? "").trim();
+  if (!raw) return "СЧЕТ";
+
+  const digitsOnly = /^\s*№?\s*(\d{1,12})\s*$/u.exec(raw);
+  if (digitsOnly) {
+    return `СЧТ №${digitsOnly[1]}`;
+  }
+
+  const digits = extractInvoiceDigitsFromCaption(raw);
+  const ymd = extractYmdAfterOtFromNormalizedText(normalizeChunk(raw));
+  if (digits && ymd) {
+    return `СЧТ №${digits} от ${formatInvoiceNumericDateRu(ymd)}`;
+  }
+  if (digits) return `СЧТ №${digits}`;
+  return "СЧЕТ";
 }
 
 /**
