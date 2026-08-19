@@ -29,11 +29,11 @@ import { readClientState, writeClientState } from "@/lib/client-state-client";
 
 /**
  * Desktop: одна сетка на шапку + все строки (`auto` = max по столбцу).
- * Отдельные grid с max-content у шапки и у каждой карточки расходятся:
- * подписи короче ячеек («К исполнению», дата, Срочно) — заголовки уезжают влево.
+ * Название — не 1fr: иначе пустота между текстом и «Колонка».
+ * Хвост `1fr` забирает лишнюю ширину, карточка остаётся на всю строку.
  */
 const LIST_TABLE =
-  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto_auto] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
+  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,60ch)_auto_auto_auto_auto_auto_minmax(0,1fr)] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
 
 /** Mobile: своя сетка. Desktop: `contents` — ячейки входят в subgrid карточки. */
 const LIST_ROW_INNER = "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:contents";
