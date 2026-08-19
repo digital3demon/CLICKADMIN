@@ -28,6 +28,7 @@ export function LoginPageClient() {
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPwd, setLoginPwd] = useState("");
+  const [demoCode, setDemoCode] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +88,8 @@ export function LoginPageClient() {
       const res = await fetch("/api/demo/start", {
         method: "POST",
         credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: demoCode }),
       });
       const j = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -112,7 +115,7 @@ export function LoginPageClient() {
     } finally {
       setBusy(false);
     }
-  }, [router]);
+  }, [demoCode, router]);
 
   const bootstrap = useCallback(async () => {
     setError(null);
@@ -326,13 +329,24 @@ export function LoginPageClient() {
             Демо-режим
           </h2>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Отдельная база данных: наряды, клиенты и склад не пересекаются с вашей
-            рабочей CRM. При выходе из демо данные сбрасываются к исходному сиду.
-            Вход — как условный владелец (без почты и пароля).
+            Общее демо без организаций. Вход по одноразовому коду от владельца:
+            один код — одна машина. Без почты и пароля.
           </p>
+          <label className="mt-4 block text-sm font-medium text-[var(--app-text)]">
+            Код доступа
+            <input
+              className={inputClass}
+              value={demoCode}
+              onChange={(e) => setDemoCode(e.target.value)}
+              autoComplete="one-time-code"
+              placeholder="Например A1B2C3D4E5"
+              maxLength={24}
+              spellCheck={false}
+            />
+          </label>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !demoCode.trim()}
             onClick={() => void startDemo()}
             className="mt-4 w-full rounded-md border border-sky-500/40 bg-white px-3 py-2.5 text-sm font-semibold text-sky-900 shadow-sm hover:bg-sky-50 disabled:opacity-50 dark:bg-sky-950/40 dark:text-sky-50 dark:hover:bg-sky-900/50"
           >

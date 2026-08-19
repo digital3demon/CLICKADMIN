@@ -55,4 +55,19 @@ if (ns < 1) {
   process.exit(1);
 }
 
+const schemaStandalone = path.join(
+  cwd,
+  ".next",
+  "standalone",
+  "prisma",
+  "schema.prisma",
+);
+if (!fs.existsSync(schemaStandalone)) {
+  console.error(
+    "[verify-standalone] Нет .next/standalone/prisma/schema.prisma — демо на App Platform не сможет сделать db push.",
+    "\nЗапустите: node scripts/copy-standalone-assets.cjs",
+  );
+  process.exit(1);
+}
+
 console.log("[verify-standalone] OK:", serverJs, `(chunks: ${n}, standalone: ${ns})`);

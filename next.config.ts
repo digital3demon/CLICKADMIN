@@ -22,7 +22,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   /** Windows-сборка: в архив явно кладём нативный canvas под Linux (pdf-parse / pdfjs). */
   outputFileTracingIncludes: {
-    "/*": ["./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*"],
+    "/*": [
+      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
+      "./prisma/schema.prisma",
+      "./prisma/migrations/**/*",
+    ],
   },
   serverExternalPackages: [
     "@prisma/client",

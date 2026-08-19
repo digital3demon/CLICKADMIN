@@ -2472,3 +2472,27 @@ model TenantApiKey {
   @@index([tenantId])
   @@index([prefix])
 }
+
+/// Одноразовый код входа в общее демо (без тенанта). Один код = один вход / одна машина.
+model DemoAccessCode {
+  id              String    @id @default(cuid())
+  /// Заметка владельца («Иван», «выставка») — не секрет
+  label           String?
+  /// bcrypt от plaintext кода
+  codeHash        String
+  /// Первые символы кода для поиска при входе
+  prefix          String
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  revokedAt       DateTime?
+  /// Момент первого (и единственного) успешного входа
+  consumedAt      DateTime?
+  /// sid из JWT демо-сессии — повторный вход с другой машины отклоняется
+  boundSid        String?
+  boundUserAgent  String?
+  boundIpAddress  String?
+
+  @@index([prefix])
+  @@index([createdAt])
+  @@index([consumedAt])
+}

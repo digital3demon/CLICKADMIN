@@ -49,4 +49,25 @@ if (fs.existsSync(templatesSrc)) {
   console.log("[copy-standalone-assets] OK → .next/standalone/templates");
 }
 
+/** Демо на PaaS: `prisma db push` из runtime — схема должна быть рядом со standalone. */
+const prismaSrc = path.join(root, "prisma");
+const prismaDest = path.join(root, ".next", "standalone", "prisma");
+if (fs.existsSync(path.join(prismaSrc, "schema.prisma"))) {
+  fs.mkdirSync(prismaDest, { recursive: true });
+  fs.copyFileSync(
+    path.join(prismaSrc, "schema.prisma"),
+    path.join(prismaDest, "schema.prisma"),
+  );
+  const migSrc = path.join(prismaSrc, "migrations");
+  const migDest = path.join(prismaDest, "migrations");
+  if (fs.existsSync(migSrc)) {
+    copyDirRecursive(migSrc, migDest);
+  }
+  console.log("[copy-standalone-assets] OK → .next/standalone/prisma/schema.prisma");
+} else {
+  console.warn(
+    "[copy-standalone-assets] Нет prisma/schema.prisma — демо db push на PaaS упадёт.",
+  );
+}
+
 console.log("[copy-standalone-assets] OK → .next/standalone/.next/static");

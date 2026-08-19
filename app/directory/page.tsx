@@ -90,6 +90,20 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
+        {session?.role === "OWNER" && !session.demo && !isCrmStandaloneDemo() ? (
+          <Link
+            href="/directory/demo-access"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">
+              Доступ к демо
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Одноразовые коды для общего демо: один код — один вход на одну
+              машину. Текст кода показывается только при создании.
+            </p>
+          </Link>
+        ) : null}
         {session?.role === "OWNER" ? (
           <Link
             href="/directory/telegram"

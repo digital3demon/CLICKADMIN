@@ -9,6 +9,7 @@ import {
 } from "@/lib/prisma-demo";
 import { unlinkDemoSqliteFiles } from "@/lib/demo-db-path";
 import { seedDemoDatabase } from "@/lib/demo-seed";
+import { resolvePrismaSchemaPath } from "@/lib/prisma-schema-path";
 
 /**
  * Полностью пересоздаёт файл демо-БД и заполняет сидом (после выхода из демо или при первом старте).
@@ -34,12 +35,18 @@ export async function resetAndSeedDemoDatabase(): Promise<void> {
  * Надёжнее: тот же Node, что крутит приложение, + `prisma/build/index.js` из `node_modules`.
  * При необходимости: `PRISMA_CLI_JS=/abs/path/to/prisma/build/index.js` в .env.
  */
-function resolvePrismaDbPushSpawn(): {
+function resolvePrismaDbPushSpawn(schemaPath: string): {
   command: string;
   args: string[];
   shell: boolean;
 } {
-  const pushArgs = ["db", "push", "--accept-data-loss", "--force-reset"] as const;
+  const pushArgs = [
+    "db",
+    "push",
+    "--accept-data-loss",
+    "--force-reset",
+    `--schema=${schemaPath}`,
+  ] as const;
   const fromEnv = process.env.PRISMA_CLI_JS?.trim();
   if (fromEnv && existsSync(fromEnv)) {
     return {
@@ -48,31 +55,49 @@ function resolvePrismaDbPushSpawn(): {
       shell: false,
     };
   }
-  const prismaJs = path.join(
-    process.cwd(),
-    "node_modules",
-    "prisma",
-    "build",
-    "index.js",
-  );
-  if (existsSync(prismaJs)) {
-    return {
-      command: process.execPath,
-      args: [prismaJs, ...pushArgs],
-      shell: false,
-    };
+  const prismaJsCandidates = [
+    path.join(process.cwd(), "node_modules", "prisma", "build", "index.js"),
+    path.join(
+      process.cwd(),
+      ".next",
+      "standalone",
+      "node_modules",
+      "prisma",
+      "build",
+      "index.js",
+    ),
+  ];
+  for (const prismaJs of prismaJsCandidates) {
+    if (existsSync(prismaJs)) {
+      return {
+        command: process.execPath,
+        args: [prismaJs, ...pushArgs],
+        shell: false,
+      };
+    }
   }
   const isWin = process.platform === "win32";
   return {
     command: "npx",
-    args: ["prisma", ...pushArgs],
+    args: ["-y", "prisma@6.19.3", ...pushArgs],
     shell: isWin,
   };
 }
 
 function runPrismaDbPush(databaseUrl: string): Promise<void> {
+  const schemaPath = resolvePrismaSchemaPath();
+  if (!schemaPath) {
+    return Promise.reject(
+      new Error(
+        "Не найден prisma/schema.prisma (нужен для демо-БД). " +
+          "На App Platform схема должна копироваться в standalone при build:platform. " +
+          "Либо задайте PRISMA_SCHEMA_PATH.",
+      ),
+    );
+  }
+
   return new Promise((resolve, reject) => {
-    const { command, args, shell } = resolvePrismaDbPushSpawn();
+    const { command, args, shell } = resolvePrismaDbPushSpawn(schemaPath);
     const child = spawn(command, args, {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"],
