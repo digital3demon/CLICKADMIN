@@ -490,7 +490,7 @@ function EditFormInlineLabeledRow({
 }
 
 const invoiceCopyChipClass =
-  "inline-flex w-fit max-w-full items-center gap-1.5 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 disabled:cursor-default disabled:hover:border-[var(--input-border)] disabled:hover:bg-[var(--card-bg)]";
+  "inline-flex w-fit shrink-0 items-center gap-1.5 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 disabled:cursor-default disabled:hover:border-[var(--input-border)] disabled:hover:bg-[var(--card-bg)]";
 
 function InvoiceCopyChip({
   label,
@@ -3397,33 +3397,31 @@ export function OrderEditForm({
               Скопировать все
             </button>
           </div>
-          <div className="mt-3 flex w-fit max-w-full flex-wrap items-start gap-2">
+          <div className="mt-3 flex w-fit max-w-full flex-nowrap items-center gap-2 overflow-x-auto">
             <button
               type="button"
               onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
               title="Нажмите — скопировать в буфер обмена"
-              className="w-fit max-w-full truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+              className="w-fit shrink-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
             >
               {invoiceCopyClipboardText}
             </button>
-            <div className="flex w-fit max-w-full flex-col items-stretch gap-1">
-              <InvoiceCopyChip
-                label="Юрлицо"
-                value={clientLegalNameForCopy}
-                onCopy={(t) => void copyInvoiceBlockText(t)}
-              />
-              <InvoiceCopyChip
-                label="ИНН"
-                value={clientInnForCopy}
-                onCopy={(t) => void copyInvoiceBlockText(t)}
-              />
-            </div>
-            {invoiceCopyToast ? (
-              <span className="basis-full text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                {invoiceCopyToast}
-              </span>
-            ) : null}
+            <InvoiceCopyChip
+              label="Юрлицо"
+              value={clientLegalNameForCopy}
+              onCopy={(t) => void copyInvoiceBlockText(t)}
+            />
+            <InvoiceCopyChip
+              label="ИНН"
+              value={clientInnForCopy}
+              onCopy={(t) => void copyInvoiceBlockText(t)}
+            />
           </div>
+          {invoiceCopyToast ? (
+            <p className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+              {invoiceCopyToast}
+            </p>
+          ) : null}
           <fieldset
             disabled={!canEditOrder}
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
