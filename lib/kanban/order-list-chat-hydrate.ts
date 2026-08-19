@@ -1,5 +1,5 @@
 /**
- * Если GET /kanban-chat (live, как на доске) вернул пустую ленту —
+ * Если GET /kanban-chat?local=1 вернул пустую ленту —
  * догрузить /kaiten/chat по Order.kaitenCardId.
  */
 export function needsOrderListKaitenChatFallback(opts: {

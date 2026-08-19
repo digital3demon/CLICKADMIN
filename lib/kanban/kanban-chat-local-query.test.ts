@@ -39,3 +39,16 @@ describe("isKanbanChatLocalOnlyRequest", () => {
     ).toBe(false);
   });
 });
+
+describe("kanban-chat GET чтит local=1", () => {
+  it("роут вызывает isKanbanChatLocalOnlyRequest", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(
+      join(process.cwd(), "app/api/orders/[id]/kanban-chat/route.ts"),
+      "utf8",
+    );
+    expect(src).toContain("isKanbanChatLocalOnlyRequest");
+    expect(src).toContain("if (localOnly)");
+  });
+});

@@ -18,6 +18,7 @@ function sampleRow(
     patientName: "Пациент",
     doctorFullName: "Врач",
     dueDate: null,
+    appointmentDate: null,
     dueToAdminsAt: null,
     kaitenAdminDueHasTime: true,
     kaitenCardTitleLabel: null,

@@ -77,6 +77,12 @@ import {
 import { applyKanbanCardTrackLaneChange } from "@/lib/kanban/apply-card-track-lane";
 import { kanbanLinkedOrdersPullIntervalMs } from "@/lib/kanban-linked-pull-ms";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
+import { canUseKanbanActualAppointmentFilter } from "@/lib/auth/permissions";
+import {
+  applyKanbanActualAppointmentView,
+  linkedOrdersToAppointmentMap,
+  type KanbanLinkedAppointmentSnap,
+} from "@/lib/kanban/kanban-actual-appointment";
 import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
 import { kanbanCardIdFromSearchParams } from "@/lib/kanban-order-card-url";
 import { canUserManageKanbanBlockForCard } from "@/lib/kanban-block-permissions";
@@ -404,6 +410,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const [moveTargetBoardId, setMoveTargetBoardId] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [stopOpen, setStopOpen] = useState(false);
+  const [actualAppointmentBoardId, setActualAppointmentBoardId] = useState<
+    string | null
+  >(null);
+  const [linkedAppointmentByOrderId, setLinkedAppointmentByOrderId] = useState<
+    Map<string, KanbanLinkedAppointmentSnap>
+  >(() => new Map());
   const [stopHoverPreview, setStopHoverPreview] = useState<{
     x: number;
     y: number;
@@ -510,6 +522,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         if (!r.ok) return;
         const j = (await r.json()) as { orders?: KaitenLinkedOrderForKanban[] };
         const rows = applyOptimisticKaitenBlocksToLinkedRows(j.orders ?? []);
+        setLinkedAppointmentByOrderId(linkedOrdersToAppointmentMap(rows));
         setAppState((prev) => {
           if (!prev) return prev;
           const base = normalizeDemoKanbanAppState(prev);
@@ -600,6 +613,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       const linkedRows = applyOptimisticKaitenBlocksToLinkedRows(
         applyOptimisticKaitenMovesToLinkedRows(jL.orders ?? []),
       );
+      setLinkedAppointmentByOrderId(linkedOrdersToAppointmentMap(linkedRows));
       let standaloneRows: StandaloneRow[] = [];
       if (rStandalone.ok) {
         const jS = (await rStandalone.json()) as { rows?: StandaloneRow[] };
@@ -1062,6 +1076,22 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const displayBoard = searchView?.displayBoard ?? null;
   const cardHomeBoardId = searchView?.cardHomeBoardId;
 
+  const actualFilterAvailable =
+    board != null &&
+    !isKanbanAggregateBoardId(board.id) &&
+    kanbanSessionRole != null &&
+    canUseKanbanActualAppointmentFilter(kanbanSessionRole);
+  const actualOn =
+    actualFilterAvailable && actualAppointmentBoardId === board?.id;
+  const viewBoard = useMemo(() => {
+    if (!displayBoard) return null;
+    if (!actualOn) return displayBoard;
+    return applyKanbanActualAppointmentView(
+      displayBoard,
+      linkedAppointmentByOrderId,
+    );
+  }, [displayBoard, actualOn, linkedAppointmentByOrderId]);
+
   const resolveCardHomeBoard = useCallback(
     (c: KanbanCard) => {
       if (!appState || !board) {
@@ -1519,7 +1549,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const dndLockedByPerms = Boolean(appState && !kanbanCardPerms.moveColumns);
   const dndLockedByFilters = Boolean(
     appState &&
-      (appState.search.trim() || countActiveKanbanFilters(appState.filters) > 0),
+      (appState.search.trim() ||
+        countActiveKanbanFilters(appState.filters) > 0 ||
+        actualOn),
   );
   const dndLocked = dndLockedByPerms || dndLockedByFilters;
 
@@ -2368,7 +2400,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     [],
   );
 
-  if (!appState || !board || !displayBoard) {
+  if (!appState || !board || !viewBoard) {
     return (
       <div className="flex h-[calc(100dvh)] min-h-0 w-full flex-col items-center justify-center overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text-muted)]">
         <span className="text-[0.95rem]">Загрузка доски…</span>
@@ -2521,6 +2553,25 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               patchApp={patchApp}
               showToast={showToast}
             />
+            {actualFilterAvailable ? (
+              <button
+                type="button"
+                className={`inline-flex h-9 shrink-0 items-center justify-center rounded-md border px-2 text-[0.68rem] font-semibold shadow-sm transition-[transform,box-shadow,background-color,border-color,color] duration-100 hover:brightness-[0.98] dark:hover:brightness-110 sm:px-3 sm:text-[0.8125rem] ${
+                  actualOn
+                    ? "border-white/70 bg-white text-black ring-2 ring-white/70"
+                    : "border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)]"
+                }`}
+                title="Карточки с датой записи как в заказах: сегодня … +2 рабочих дня (МСК). Только эта доска."
+                aria-pressed={actualOn}
+                onClick={() =>
+                  setActualAppointmentBoardId((cur) =>
+                    cur === board.id ? null : board.id,
+                  )
+                }
+              >
+                Актуальное
+              </button>
+            ) : null}
             {!isDemo &&
             (kanbanCardPerms.manageAssignees || kanbanCardPerms.manageParticipants) ? (
               <KanbanMembersBackfillButton
@@ -2628,19 +2679,25 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             {appState.search.trim() ? (
               <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">
                 Найдено{" "}
-                {(displayBoard?.columns ?? []).reduce(
+                {(viewBoard?.columns ?? []).reduce(
                   (n, c) => n + c.cards.length,
                   0,
                 ) + stoppedCards.length}
                 {" · "}
                 пустые колонки скрыты
               </span>
+            ) : actualOn ? (
+              <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">
+                Актуальное: дата записи сегодня … +2 раб. дня (МСК)
+              </span>
             ) : null}
             {dndLocked && (
               <span className="text-[0.75rem] text-amber-700 dark:text-amber-300">
                 {dndLockedByPerms
                   ? "Перетаскивание карточек отключено: нет права «перемещать по колонкам»"
-                  : "Перетаскивание карточек отключено при поиске/фильтрах"}
+                  : actualOn
+                    ? "Перетаскивание карточек отключено в режиме «Актуальное»"
+                    : "Перетаскивание карточек отключено при поиске/фильтрах"}
               </span>
             )}
           </div>
@@ -2655,7 +2712,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           ) : appState.viewMode === "board" ? (
             <BoardCanvas
               appState={appState}
-              board={displayBoard}
+              board={viewBoard}
               resolveCardHomeBoard={resolveCardHomeBoard}
               activityActorLabel={activityActorLabel}
               sessionUserId={kanbanSessionUserId}
@@ -2799,7 +2856,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           ) : appState.viewMode === "calendar" ? (
             <KanbanCalendar
               appState={appState}
-              board={displayBoard}
+              board={viewBoard}
               resolveCardHomeBoard={resolveCardHomeBoard}
               onOpenCard={openKanbanCard}
               onPrevMonth={() =>
@@ -2828,7 +2885,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           ) : (
             <KanbanListView
               appState={appState}
-              board={displayBoard}
+              board={viewBoard}
               cardHomeBoardId={cardHomeBoardId}
               onOpenCard={openKanbanCard}
               onAdvanceCardColumn={

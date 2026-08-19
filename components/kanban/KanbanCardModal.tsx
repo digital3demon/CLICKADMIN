@@ -110,10 +110,11 @@ import {
 } from "@/lib/kanban-mention-telegram-html";
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
+import { canSendKanbanChatPtMemo } from "@/lib/auth/permissions";
 import { LinkifiedPlainText } from "@/components/ui/LinkifiedPlainText";
 import { LinkifiedTextarea } from "@/components/ui/LinkifiedTextarea";
 
-type ChatAction = "comment" | "correction" | "prosthetics";
+type ChatAction = "comment" | "correction" | "prosthetics" | "pt";
 
 function columnMatchesStage(columnTitle: string, stageTitle: string): boolean {
   const col = String(columnTitle || "").trim().toLowerCase();
@@ -803,7 +804,7 @@ export function KanbanCardModal({
       orderId: string,
     ): Promise<boolean> => {
       try {
-        const getRes = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+        const getRes = await fetch(`/api/orders/${orderId}/kanban-chat?local=1`, {
           credentials: "include",
           cache: "no-store",
         });
@@ -827,7 +828,9 @@ export function KanbanCardModal({
 
     if (
       card.linkedOrderId &&
-      (requestedAction === "correction" || requestedAction === "prosthetics")
+      (requestedAction === "correction" ||
+        requestedAction === "prosthetics" ||
+        requestedAction === "pt")
     ) {
       try {
         const postRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
@@ -2452,6 +2455,11 @@ export function KanbanCardModal({
                   adminMentionUserIds={adminMentionUserIds}
                   productionMentionTag={productionMentionTagResolved}
                   productionUserIds={productionUserIds}
+                  canSendPt={
+                    sessionUserRole != null &&
+                    canSendKanbanChatPtMemo(sessionUserRole) &&
+                    Boolean(card.linkedOrderId)
+                  }
                   onSend={sendComment}
                   onFilesDropped={attachFilesFromChat}
                   onOpenAttachment={openAttachment}
@@ -2579,6 +2587,7 @@ function KanbanAttachmentImg({
       className={className}
       onError={onError}
       decoding="async"
+      loading="lazy"
     />
   );
 }
@@ -2843,6 +2852,7 @@ function ChatPanel({
   adminMentionUserIds,
   productionMentionTag,
   productionUserIds,
+  canSendPt = false,
   onSend,
   onFilesDropped,
   onOpenAttachment,
@@ -2854,6 +2864,8 @@ function ChatPanel({
   /** Нормализованный токен (напр. clickpr) для подстановки @ в текст. */
   productionMentionTag: string;
   productionUserIds: readonly string[];
+  /** Кнопка «ПТ»: старший техник, админ, руководитель, владелец; наряд привязан. */
+  canSendPt?: boolean;
   onSend: (
     t: string,
     action?: ChatAction,
@@ -3290,6 +3302,19 @@ function ChatPanel({
           >
             Заказ протетики
           </button>
+          {canSendPt ? (
+            <button
+              type="button"
+              className="w-11 shrink-0 rounded-md border border-violet-400/50 bg-violet-50 px-1.5 py-2 text-[0.75rem] font-semibold text-violet-900 hover:bg-violet-100 disabled:opacity-40 dark:border-violet-400/40 dark:bg-violet-400/10 dark:text-violet-200 dark:hover:bg-violet-400/20 sm:w-12 sm:py-2.5 sm:text-[0.8125rem]"
+              disabled={!inp.trim()}
+              title="Отправить в чат и в колонку ПТ в заказах"
+              onClick={() => {
+                void submitMessage("pt");
+              }}
+            >
+              ПТ
+            </button>
+          ) : null}
           <button
             type="button"
             className="flex w-11 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-2 text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:w-12 sm:py-2.5"

@@ -14,6 +14,7 @@ function row(
     patientName: "Лихачева",
     doctorFullName: "Амирханова",
     dueDate: null,
+    appointmentDate: null,
     dueToAdminsAt: null,
     kaitenAdminDueHasTime: true,
     kaitenCardTitleLabel: null,

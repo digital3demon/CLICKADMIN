@@ -10,7 +10,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { KaitenTrackLane } from "@prisma/client";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
-import { canAckOrderChatLabMention } from "@/lib/auth/permissions";
+import { canAckOrderChatLabMention, canSendKanbanChatPtMemo } from "@/lib/auth/permissions";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { OrderFilesPanel } from "@/components/orders/OrderFilesPanel";
 import {
@@ -49,7 +49,7 @@ type ChatImage = {
   mime: string | null;
 };
 
-type ChatAction = "comment" | "correction" | "prosthetics";
+type ChatAction = "comment" | "correction" | "prosthetics" | "pt";
 
 type KaitenSnapshot = {
   configured: boolean;
@@ -207,8 +207,8 @@ export function OrderListKaitenChatModal({
     setLoadError(null);
     setChatMode("kanban");
     try {
-      // Как карточка на доске: без local=1 — сервер подмешивает Kaiten в зеркало CRM.
-      const chatRes = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+      // Как карточка на доске: local=1 — без Kaiten и без полного JSON канбана.
+      const chatRes = await fetch(`/api/orders/${orderId}/kanban-chat?local=1`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -365,7 +365,9 @@ export function OrderListKaitenChatModal({
               ? `!!! ${t}`
               : action === "prosthetics"
                 ? `??? ${t}`
-                : t;
+                : action === "pt"
+                  ? `ПТ: ${t}`
+                  : t;
           const fb = await fetch(`/api/orders/${orderId}/kaiten/comments`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -769,7 +771,11 @@ export function OrderListKaitenChatModal({
           >
             {posting ? "Отправка…" : isKanbanMode ? "Отправить" : "Отправить в Kaiten"}
           </button>
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className={`mt-2 grid grid-cols-1 gap-2 ${
+            user != null && canSendKanbanChatPtMemo(user.role)
+              ? "sm:grid-cols-3"
+              : "sm:grid-cols-2"
+          }`}>
             <button
               type="button"
               disabled={posting || !newText.trim() || loading || !!loadError || uploading}
@@ -786,6 +792,17 @@ export function OrderListKaitenChatModal({
             >
               Заказ протетики
             </button>
+            {user != null && canSendKanbanChatPtMemo(user.role) ? (
+              <button
+                type="button"
+                disabled={posting || !newText.trim() || loading || !!loadError || uploading}
+                onClick={() => void sendComment("pt")}
+                className="rounded-md border border-violet-400/50 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-900 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-400/40 dark:bg-violet-400/10 dark:text-violet-200 dark:hover:bg-violet-400/20"
+                title="Отправить в чат и в колонку ПТ в заказах"
+              >
+                ПТ
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

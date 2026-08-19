@@ -244,6 +244,25 @@ export function canEditOrderListTechMemo(role: UserRole): boolean {
   return ORDER_LIST_TECH_MEMO_ROLES.includes(role);
 }
 
+/** Кнопка «ПТ» в чате канбана и «Актуальное» на доске. */
+const KANBAN_PT_AND_ACTUAL_ROLES: readonly UserRole[] = [
+  "OWNER",
+  "ADMINISTRATOR",
+  "SENIOR_ADMINISTRATOR",
+  "MANAGER",
+  "SENIOR_TECHNICIAN",
+];
+
+/** Кнопка «ПТ» в чате канбана: комментарий + пометка в заказах. */
+export function canSendKanbanChatPtMemo(role: UserRole): boolean {
+  return KANBAN_PT_AND_ACTUAL_ROLES.includes(role);
+}
+
+/** Кнопка «Актуальное» на конкретной доске канбана (дата записи, как в заказах). */
+export function canUseKanbanActualAppointmentFilter(role: UserRole): boolean {
+  return KANBAN_PT_AND_ACTUAL_ROLES.includes(role);
+}
+
 /** Скрытие строки «Оплаты» в сайдбаре после «прочитано». */
 export function canDismissSidebarRecentPaidItems(
   role: UserRole,

@@ -19,6 +19,13 @@ describe("formatKanbanChatMessageDisplay", () => {
     expect(d.body).toBe("мост на 36");
   });
 
+  it("снимает «ПТ:» и показывает тип пометки техники", () => {
+    const d = formatKanbanChatMessageDisplay("шапка\nПТ: коронка 21\nхвост");
+    expect(d.kind).toBe("pt");
+    expect(d.label).toBe("ПТ");
+    expect(d.body).toBe("шапка\nкоронка 21\nхвост");
+  });
+
   it("обычный комментарий без префикса", () => {
     const d = formatKanbanChatMessageDisplay("@ClickLab тест");
     expect(d.kind).toBe("plain");

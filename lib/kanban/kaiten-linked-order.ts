@@ -6,6 +6,8 @@ export type KaitenLinkedOrderForKanban = {
   doctorFullName: string;
   /** Полный ISO срока лабораторного (для шапки карточки); первая часть — календарная дата для бейджа. */
   dueDate: string | null;
+  /** Дата записи пациента (как в списке заказов «Актуальное»). */
+  appointmentDate: string | null;
   dueToAdminsAt: string | null;
   kaitenAdminDueHasTime: boolean | null;
   kaitenCardTitleLabel: string | null;

@@ -1,3 +1,11 @@
+/**
+ * GET /api/orders/:id/kanban-chat
+ *
+ * Источник ленты: tenantClientState `kanbanCommentsV1:{orderId}` + шапка наряда.
+ * Timezone: даты комментариев как ISO из хранилища (не нормализуем).
+ * `?local=1` / `sync=0`: без Kaiten и без полного kanbanAppStateV3.
+ * Без local: после ответа ещё тянем файлы Kaiten и JSON доски (чат из списка нарядов).
+ */
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
@@ -19,6 +27,12 @@ import {
   createOrderChatCorrectionIfNeeded,
 } from "@/lib/order-chat-correction-db";
 import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
+import {
+  formatOrderChatPtMemoMessage,
+  techMemoTextFromPtChatBody,
+} from "@/lib/order-chat-pt-memo";
+import { applyOrderListTechMemo } from "@/lib/order-list-tech-memo.server";
+import { canSendKanbanChatPtMemo } from "@/lib/auth/permissions";
 import { ingestCrmKanbanCommentForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import {
   bindOrderChatInboxItemsByCrmDraft,
@@ -45,10 +59,11 @@ import {
 } from "@/lib/order-work-attachments";
 import { isCardFileImage } from "@/lib/kanban/card-files";
 import { importMissingKaitenFilesForOrder } from "@/lib/kaiten-files-import";
+import { isKanbanChatLocalOnlyRequest } from "@/lib/kanban/kanban-chat-local-query";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
-type ChatAction = "comment" | "correction" | "prosthetics";
+type ChatAction = "comment" | "correction" | "prosthetics" | "pt";
 
 type PostBody = {
   text?: string;
@@ -67,30 +82,90 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-async function loadOrderWorkChatImages(orderId: string, tenantId: string) {
-  const ordersPrisma = await getOrdersPrisma();
-  const order = await ordersPrisma.order.findFirst({
-    where: { id: orderId, tenantId },
+const ORDER_CHAT_BUNDLE_SELECT = {
+  orderNumber: true,
+  patientName: true,
+  clientOrderText: true,
+  notes: true,
+  kaitenCardId: true,
+  kaitenCardDescriptionMirror: true,
+  invoiceAttachmentId: true,
+  doctor: { select: { fullName: true } },
+  attachments: {
+    orderBy: { createdAt: "desc" as const },
     select: {
-      invoiceAttachmentId: true,
-      attachments: {
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          fileName: true,
-          mimeType: true,
-          size: true,
-          createdAt: true,
-          scope: true,
-        },
-      },
+      id: true,
+      fileName: true,
+      mimeType: true,
+      size: true,
+      createdAt: true,
+      scope: true,
     },
-  });
-  if (!order) return [];
+  },
+} as const;
+
+function workImagesFromOrderRow(
+  orderId: string,
+  order: {
+    invoiceAttachmentId: string | null;
+    attachments: Array<{
+      id: string;
+      fileName: string;
+      mimeType: string | null;
+      size: number;
+      createdAt: Date;
+      scope: import("@prisma/client").OrderAttachmentScope;
+    }>;
+  },
+) {
   return order.attachments
     .filter((a) => isOrderWorkAttachment(a, order.invoiceAttachmentId))
     .map((a) => orderWorkAttachmentToChatImage(orderId, a))
     .filter((x): x is NonNullable<typeof x> => x != null);
+}
+
+function orderHeaderFromRow(
+  row: {
+    orderNumber: string;
+    patientName: string | null;
+    clientOrderText: string | null;
+    notes: string | null;
+    kaitenCardId: number | null;
+    kaitenCardDescriptionMirror: string | null;
+    doctor: { fullName: string };
+  },
+) {
+  return {
+    orderNumber: row.orderNumber,
+    patientName: row.patientName
+      ? personNameSurnameInitials(row.patientName)
+      : null,
+    doctorName: personNameSurnameInitials(row.doctor.fullName) || null,
+    kaitenCardId: row.kaitenCardId,
+    description: resolveLinkedOrderKanbanDescription(
+      {
+        clientOrderText: row.clientOrderText,
+        notes: row.notes,
+        kaitenCardId: row.kaitenCardId,
+        kaitenCardDescriptionMirror: row.kaitenCardDescriptionMirror,
+      },
+      false,
+    ),
+  };
+}
+
+/** Шапка наряда + превью файлов одним запросом (без blob). */
+async function loadOrderChatBundle(orderId: string, tenantId: string) {
+  const ordersPrisma = await getOrdersPrisma();
+  const row = await ordersPrisma.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: ORDER_CHAT_BUNDLE_SELECT,
+  });
+  if (!row) return { orderHeader: null, workImages: [] as ReturnType<typeof workImagesFromOrderRow> };
+  return {
+    orderHeader: orderHeaderFromRow(row),
+    workImages: workImagesFromOrderRow(orderId, row),
+  };
 }
 
 function mergeCardImagesWithOrderWork(
@@ -111,39 +186,6 @@ function mergeCardImagesWithOrderWork(
   return [...fromOrder, ...extra];
 }
 
-async function loadOrderChatHeader(orderId: string, tenantId: string) {
-  const ordersPrisma = await getOrdersPrisma();
-  const row = await ordersPrisma.order.findFirst({
-    where: { id: orderId, tenantId },
-    select: {
-      orderNumber: true,
-      patientName: true,
-      clientOrderText: true,
-      notes: true,
-      kaitenCardId: true,
-      kaitenCardDescriptionMirror: true,
-      doctor: { select: { fullName: true } },
-    },
-  });
-  if (!row) return null;
-  return {
-    orderNumber: row.orderNumber,
-    patientName: row.patientName
-      ? personNameSurnameInitials(row.patientName)
-      : null,
-    doctorName: personNameSurnameInitials(row.doctor.fullName) || null,
-    kaitenCardId: row.kaitenCardId,
-    description: resolveLinkedOrderKanbanDescription(
-      {
-        clientOrderText: row.clientOrderText,
-        notes: row.notes,
-        kaitenCardId: row.kaitenCardId,
-        kaitenCardDescriptionMirror: row.kaitenCardDescriptionMirror,
-      },
-      false,
-    ),
-  };
-}
 
 function newCommentId(): string {
   return `cm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -325,14 +367,48 @@ export async function GET(
   if (!orderId) {
     return NextResponse.json({ error: "Не указан id" }, { status: 400 });
   }
-  const orderHeader = await loadOrderChatHeader(orderId, tenantId);
-  const storedComments = await loadKanbanOrderComments(tenantId, orderId);
+  /**
+   * Карточка доски: `?local=1` — только CRM (чат + шапка). Без Kaiten и без
+   * полного tenant JSON канбана (~сотни КБ), иначе модалка висит секундами.
+   */
+  const localOnly = isKanbanChatLocalOnlyRequest(new URL(req.url));
+  const t0 = Date.now();
+  const [{ orderHeader, workImages: bundleImages }, storedComments] =
+    await Promise.all([
+      loadOrderChatBundle(orderId, tenantId),
+      loadKanbanOrderComments(tenantId, orderId),
+    ]);
+  let workImages = bundleImages;
+
+  if (localOnly) {
+    const comments = normalizeCardCommentsForApi(storedComments);
+    console.info("[kanban-chat GET]", {
+      orderId,
+      local: true,
+      comments: comments.length,
+      ms: Date.now() - t0,
+    });
+    return NextResponse.json({
+      ok: true,
+      mode: "kanban",
+      hasCard: Boolean(orderHeader),
+      comments,
+      cardImages: workImages,
+      linkedKaiten:
+        orderHeader?.kaitenCardId != null &&
+        Number.isFinite(orderHeader.kaitenCardId),
+      orderHeader,
+      description: orderHeader?.description ?? "",
+    });
+  }
+
   try {
     await importMissingKaitenFilesForOrder(orderId, { limit: 6 });
+    const afterImport = await loadOrderChatBundle(orderId, tenantId);
+    workImages = afterImport.workImages;
   } catch (e) {
     console.warn("[kanban-chat GET] kaiten file import", e);
   }
-  const workImages = await loadOrderWorkChatImages(orderId, tenantId);
   const statePayload = await loadTenantKanbanState(tenantId);
   const state = statePayload.state;
   if (!state) {
@@ -407,9 +483,18 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
-  const action: ChatAction = body.action === "correction" || body.action === "prosthetics"
-    ? body.action
-    : "comment";
+  const action: ChatAction =
+    body.action === "correction" ||
+    body.action === "prosthetics" ||
+    body.action === "pt"
+      ? body.action
+      : "comment";
+  if (action === "pt" && !canSendKanbanChatPtMemo(session.role)) {
+    return NextResponse.json(
+      { error: "Кнопка «ПТ» недоступна для этой роли" },
+      { status: 403 },
+    );
+  }
   const retryCommentId = String(body.retryCommentId || "").trim() || null;
   const text = String(body.text || "").trim();
   if (!retryCommentId && !text) {
@@ -420,7 +505,9 @@ export async function POST(
       ? `!!! ${text}`
       : action === "prosthetics"
         ? `??? ${text}`
-        : text;
+        : action === "pt"
+          ? formatOrderChatPtMemoMessage(text)
+          : text;
 
   const ordersPrisma = await getOrdersPrisma();
   const order = await ordersPrisma.order.findFirst({
@@ -542,6 +629,34 @@ export async function POST(
           "DEMO_KANBAN",
           { authorLabel },
         );
+      } else if (action === "pt") {
+        const memoText = techMemoTextFromPtChatBody(messageText);
+        if (memoText) {
+          try {
+            await applyOrderListTechMemo(ordersPrisma, {
+              orderId: order.id,
+              tenantId,
+              userId: session.sub,
+              text: memoText,
+            });
+          } catch (e) {
+            const code = e instanceof Error ? e.message : "";
+            if (code === "ORDER_NOT_FOUND") {
+              return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+            }
+            if (code === "USER_NOT_FOUND") {
+              return NextResponse.json(
+                { error: "Пользователь не найден" },
+                { status: 403 },
+              );
+            }
+            console.error("[kanban-chat POST] PT memo", orderId, e);
+            return NextResponse.json(
+              { error: "Не удалось записать пометку ПТ" },
+              { status: 500 },
+            );
+          }
+        }
       }
     }
 
