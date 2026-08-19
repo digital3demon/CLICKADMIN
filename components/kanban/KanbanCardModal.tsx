@@ -115,6 +115,7 @@ import {
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 import { canSendKanbanChatPtMemo } from "@/lib/auth/permissions";
+import { formatOrderChatPtMemoMessage } from "@/lib/order-chat-pt-memo";
 import { LinkifiedPlainText } from "@/components/ui/LinkifiedPlainText";
 import { LinkifiedTextarea } from "@/components/ui/LinkifiedTextarea";
 
@@ -830,44 +831,32 @@ export function KanbanCardModal({
       return true;
     };
 
-    if (
-      card.linkedOrderId &&
-      (requestedAction === "correction" ||
-        requestedAction === "prosthetics" ||
-        requestedAction === "pt")
-    ) {
-      try {
-        const postRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: trimmed,
-            action: requestedAction,
-            ...(replyParentId ? { parentId: replyParentId } : {}),
-          }),
+    const postLinkedOrderChat = async (
+      action: ChatAction,
+      bodyText: string,
+    ): Promise<boolean> => {
+      const optimisticId = generateId("cm");
+      const createdAt = new Date().toISOString();
+      const authorLabel =
+        crmById.get(actor)?.displayName?.trim() ||
+        userNameById(board, actor) ||
+        "CRM";
+      onApply((b) => {
+        const fc = findCard(b, cardId);
+        if (!fc) return;
+        fc.card.comments = fc.card.comments || [];
+        fc.card.comments.push({
+          id: optimisticId,
+          userId: actor,
+          text: bodyText,
+          createdAt,
+          parentId: replyParentId,
+          authorLabel,
+          source: "CRM",
+          syncStatus: "pending",
         });
-        const postData = (await postRes.json().catch(() => ({}))) as { error?: string };
-        if (!postRes.ok) {
-          toast(postData.error ?? "Не удалось отправить сообщение в CRM-канбан", true);
-          return false;
-        }
-        return refreshCommentsAfterKanbanChatPost(card.linkedOrderId);
-      } catch {
-        toast("Сеть недоступна", true);
-        return false;
-      }
-    }
-
-    if (card.linkedOrderId) {
-      let action: ChatAction = requestedAction;
-      if (action === "comment") {
-        action = isOrderChatCorrectionTrigger(trimmed)
-          ? "correction"
-          : isOrderProstheticsRequestTrigger(trimmed)
-            ? "prosthetics"
-            : "comment";
-      }
+        pushActivity(fc.card, "Комментарий", actor, b, act);
+      });
       try {
         const postRes = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
           method: "POST",
@@ -879,17 +868,77 @@ export function KanbanCardModal({
             ...(replyParentId ? { parentId: replyParentId } : {}),
           }),
         });
-        const postData = (await postRes.json().catch(() => ({}))) as { error?: string };
+        const postData = (await postRes.json().catch(() => ({}))) as {
+          error?: string;
+          comment?: CardComment;
+        };
         if (!postRes.ok) {
+          onApply((b) => {
+            const fc = findCard(b, cardId);
+            if (!fc) return;
+            fc.card.comments = (fc.card.comments || []).filter(
+              (c) => c.id !== optimisticId,
+            );
+          });
           toast(postData.error ?? "Не удалось отправить сообщение в CRM-канбан", true);
           return false;
         }
-        // Успешный POST уже шлёт mention TG на сервере — не падаем в локальный fireMentionTelegram.
-        return refreshCommentsAfterKanbanChatPost(card.linkedOrderId);
+        if (postData.comment && postData.comment.id !== optimisticId) {
+          onApply((b) => {
+            const fc = findCard(b, cardId);
+            if (!fc) return;
+            fc.card.comments = (fc.card.comments || []).map((c) =>
+              c.id === optimisticId ? { ...postData.comment!, parentId: replyParentId } : c,
+            );
+          });
+        }
+        return true;
       } catch {
+        onApply((b) => {
+          const fc = findCard(b, cardId);
+          if (!fc) return;
+          fc.card.comments = (fc.card.comments || []).filter(
+            (c) => c.id !== optimisticId,
+          );
+        });
         toast("Сеть недоступна", true);
         return false;
       }
+    };
+
+    if (
+      card.linkedOrderId &&
+      (requestedAction === "correction" ||
+        requestedAction === "prosthetics" ||
+        requestedAction === "pt")
+    ) {
+      const bodyText =
+        requestedAction === "correction"
+          ? `!!! ${trimmed}`
+          : requestedAction === "prosthetics"
+            ? `??? ${trimmed}`
+            : formatOrderChatPtMemoMessage(trimmed);
+      return postLinkedOrderChat(requestedAction, bodyText);
+    }
+
+    if (card.linkedOrderId) {
+      let action: ChatAction = requestedAction;
+      if (action === "comment") {
+        action = isOrderChatCorrectionTrigger(trimmed)
+          ? "correction"
+          : isOrderProstheticsRequestTrigger(trimmed)
+            ? "prosthetics"
+            : "comment";
+      }
+      const bodyText =
+        action === "correction"
+          ? `!!! ${trimmed}`
+          : action === "prosthetics"
+            ? `??? ${trimmed}`
+            : action === "pt"
+              ? formatOrderChatPtMemoMessage(trimmed)
+              : trimmed;
+      return postLinkedOrderChat(action, bodyText);
     }
 
     onApply((b) => {
@@ -3004,12 +3053,15 @@ function ChatPanel({
   const submitMessage = async (action: ChatAction = "comment") => {
     const v = inp.trim();
     if (!v) return;
-    const ok = await Promise.resolve(onSend(v, action, replyTo?.id ?? null));
-    if (ok) {
-      setInp("");
-      setCaretPos(0);
-      setMentionIndex(0);
-      setReplyTo(null);
+    const parent = replyTo?.id ?? null;
+    setInp("");
+    setCaretPos(0);
+    setMentionIndex(0);
+    setReplyTo(null);
+    const ok = await Promise.resolve(onSend(v, action, parent));
+    if (!ok) {
+      setInp(v);
+      setCaretPos(v.length);
     }
   };
 

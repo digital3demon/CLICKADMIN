@@ -52,3 +52,16 @@ describe("kanban-chat GET чтит local=1", () => {
     expect(src).toContain("if (localOnly)");
   });
 });
+
+describe("kanban-chat POST не ждёт Kaiten", () => {
+  it("новый комментарий уходит в after(finishKanbanChatPostBackground)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(
+      join(process.cwd(), "app/api/orders/[id]/kanban-chat/route.ts"),
+      "utf8",
+    );
+    expect(src).toContain("finishKanbanChatPostBackground");
+    expect(src).toMatch(/after\(\(\) =>\s*\n\s*finishKanbanChatPostBackground/s);
+  });
+});

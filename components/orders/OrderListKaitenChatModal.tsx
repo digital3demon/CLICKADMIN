@@ -393,6 +393,11 @@ export function OrderListKaitenChatModal({
   const sendComment = async (action: ChatAction = "comment") => {
     const t = newText.trim();
     if (!t) return;
+    const replyId = replyToId;
+    setNewText("");
+    setCommentCaretPos(0);
+    setMentionIndex(0);
+    setReplyToId(null);
     setPosting(true);
     setPostError(null);
     try {
@@ -403,12 +408,12 @@ export function OrderListKaitenChatModal({
         body: JSON.stringify({
           text: t,
           action,
-          parentId: replyToId != null ? String(replyToId) : null,
+          parentId: replyId != null ? String(replyId) : null,
         }),
       });
       const data = (await res.json()) as {
         error?: string;
-        comment?: Record<string, unknown>;
+        comment?: KanbanChatCommentPayload;
       };
       if (!res.ok) {
         if (chatMode !== "kanban") {
@@ -426,53 +431,33 @@ export function OrderListKaitenChatModal({
             body: JSON.stringify({
               text: kaitenText,
               parentCommentId:
-                replyToId != null && Number.isFinite(Number(replyToId))
-                  ? Number(replyToId)
+                replyId != null && Number.isFinite(Number(replyId))
+                  ? Number(replyId)
                   : null,
             }),
           });
           const fbData = (await fb.json().catch(() => ({}))) as { error?: string };
           if (!fb.ok) {
             setPostError(fbData.error ?? data.error ?? "Не отправлено");
+            setNewText(t);
             return;
           }
           await load();
-          setNewText("");
-          setCommentCaretPos(0);
-          setMentionIndex(0);
-          setReplyToId(null);
           return;
         }
         setPostError(data.error ?? "Не отправлено");
+        setNewText(t);
         return;
       }
-      const refreshed = await fetch(`/api/orders/${orderId}/kanban-chat?local=1`, {
-        credentials: "include",
-        cache: "no-store",
-      });
-      const refreshedData = (await refreshed.json().catch(() => ({}))) as {
-        comments?: KanbanChatCommentPayload[];
-        cardImages?: ChatImage[];
-      };
-      setSnap((prev) =>
-        prev
-          ? {
-              ...prev,
-              comments: Array.isArray(refreshedData.comments)
-                ? normalizeKanbanChatComments(refreshedData.comments)
-                : prev.comments,
-              cardImages: Array.isArray(refreshedData.cardImages)
-                ? refreshedData.cardImages
-                : prev.cardImages,
-            }
-          : prev,
-      );
-      setNewText("");
-      setCommentCaretPos(0);
-      setMentionIndex(0);
-      setReplyToId(null);
+      if (data.comment) {
+        const row = normalizeKanbanChatComment(data.comment);
+        setSnap((prev) =>
+          prev ? { ...prev, comments: [...prev.comments, row] } : prev,
+        );
+      }
     } catch {
       setPostError("Сеть недоступна");
+      setNewText(t);
     } finally {
       setPosting(false);
     }

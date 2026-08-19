@@ -5,8 +5,9 @@
  * Timezone: даты комментариев как ISO из хранилища (не нормализуем).
  * `?local=1` / `sync=0`: без Kaiten и без полного kanbanAppStateV3.
  * Без local: после ответа ещё тянем файлы Kaiten и JSON доски (чат из списка нарядов).
+ * POST: пишем CRM (лента `kanbanCommentsV1`) и сразу отвечаем; Kaiten + TG — `after()`.
  */
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
@@ -41,7 +42,6 @@ import {
 import { advanceKaitenLabMentionWaterlineOnly } from "@/lib/order-kaiten-lab-mention-db";
 import {
   commentBodyDedupKey,
-  compactCardComments,
 } from "@/lib/kanban/chat-sync";
 import { resolveLinkedOrderKanbanDescription } from "@/lib/kanban/kaiten-linked-order";
 import {
@@ -460,6 +460,119 @@ export async function GET(
   });
 }
 
+/** Kaiten + Telegram после ответа клиенту: чат CRM не ждёт внешние API. */
+async function finishKanbanChatPostBackground(opts: {
+  tenantId: string;
+  orderId: string;
+  orderNumber: string;
+  kaitenCardId: number | null;
+  row: CardComment;
+  inboxDraftId: string;
+  sessionDemo: boolean;
+  actorUserId: string;
+  messageText: string;
+  siteOrigin: string | null;
+}): Promise<void> {
+  const ordersPrisma = await getOrdersPrisma();
+  let row = opts.row;
+  if (!String(row.externalCommentId || "").trim() && row.source === "CRM") {
+    row = await syncCrmCommentToKaiten(
+      { kaitenCardId: opts.kaitenCardId },
+      row,
+    );
+    try {
+      const stored = await loadKanbanOrderComments(opts.tenantId, opts.orderId);
+      const merged = mergeKanbanOrderComments(
+        stored.map((c) =>
+          String(c.id || "").trim() === String(row.id || "").trim() ? row : c,
+        ),
+        [row],
+      );
+      await saveKanbanOrderComments(opts.tenantId, opts.orderId, merged);
+    } catch (e) {
+      console.error("[kanban-chat POST] background comments save", opts.orderId, e);
+    }
+    const externalId = kaitenJsonIntId(row.externalCommentId);
+    if (externalId != null) {
+      try {
+        await bindOrderChatInboxItemsByCrmDraft(ordersPrisma, {
+          orderId: opts.orderId,
+          crmDraftId: opts.inboxDraftId,
+          kaitenCommentId: externalId,
+        });
+        await advanceKaitenLabMentionWaterlineOnly(
+          ordersPrisma,
+          opts.orderId,
+          externalId,
+        );
+      } catch (e) {
+        console.error(
+          "[kanban-chat POST] inbox bind/waterline by draft failed",
+          opts.orderId,
+          e,
+        );
+      }
+    } else if (row.syncStatus === "failed") {
+      try {
+        await markOrderChatInboxDraftSyncFailed(ordersPrisma, {
+          orderId: opts.orderId,
+          crmDraftId: opts.inboxDraftId,
+        });
+      } catch (e) {
+        console.error("[kanban-chat POST] inbox mark failed failed", opts.orderId, e);
+      }
+    }
+    try {
+      const loaded = await loadTenantKanbanState(opts.tenantId);
+      const loc = loaded.state
+        ? findCardByLinkedOrderId(loaded.state, opts.orderId)
+        : null;
+      if (loaded.state && loc) {
+        const next = structuredClone(loaded.state);
+        const card =
+          next.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[
+            loc.cardIndex
+          ]!;
+        card.comments = mergeKanbanOrderComments(card.comments || [], [row]);
+        card.updatedAt = nowIso();
+        await saveTenantKanbanStateWithRetry(
+          opts.tenantId,
+          next,
+          loaded.updatedAt,
+        );
+      }
+    } catch (e) {
+      console.error("[kanban-chat POST] background state merge", opts.orderId, e);
+    }
+  }
+
+  try {
+    let productionMentionTag: string | undefined;
+    const loaded = await loadTenantKanbanState(opts.tenantId);
+    const loc = loaded.state
+      ? findCardByLinkedOrderId(loaded.state, opts.orderId)
+      : null;
+    if (loaded.state && loc) {
+      productionMentionTag = normalizeProductionSettings(
+        loaded.state.boards[loc.boardIndex]!,
+      ).productionMentionTag;
+    }
+    await notifyTelegramForKanbanChatMentions({
+      sessionDemo: opts.sessionDemo,
+      actorUserId: opts.actorUserId,
+      tenantId: opts.tenantId,
+      orderId: opts.orderId,
+      orderNumber: opts.orderNumber,
+      kaitenCardId: opts.kaitenCardId,
+      text: opts.messageText,
+      siteOrigin: opts.siteOrigin,
+      productionMentionTag,
+    });
+  } catch (e) {
+    console.error("[kanban-chat POST] mention tg", opts.orderId, e);
+  }
+}
+
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -526,20 +639,20 @@ export async function POST(
   const draftCommentId = retryCommentId || newCommentId();
   const textBodyKey = commentBodyDedupKey(messageText);
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const loaded = await loadTenantKanbanState(tenantId);
-    const state = loaded.state;
-    if (!state) {
-      return NextResponse.json({ error: "Канбан не инициализирован" }, { status: 404 });
-    }
-    const loc = findCardByLinkedOrderId(state, orderId);
-    if (!loc) {
-      return NextResponse.json({ error: "Карточка канбана не найдена" }, { status: 404 });
-    }
-    const next = structuredClone(state);
-    const card =
-      next.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
-    if (retryCommentId) {
+  if (retryCommentId) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const loaded = await loadTenantKanbanState(tenantId);
+      const state = loaded.state;
+      if (!state) {
+        return NextResponse.json({ error: "Канбан не инициализирован" }, { status: 404 });
+      }
+      const loc = findCardByLinkedOrderId(state, orderId);
+      if (!loc) {
+        return NextResponse.json({ error: "Карточка канбана не найдена" }, { status: 404 });
+      }
+      const next = structuredClone(state);
+      const card =
+        next.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
       const existingIndex = (card.comments || []).findIndex(
         (c) => String(c.id || "").trim() === retryCommentId,
       );
@@ -569,21 +682,26 @@ export async function POST(
       }
       return NextResponse.json({ ok: true, comment: synced });
     }
-    const authorLabel = userActivityDisplayLabel({
-      mentionHandle: null,
-      displayName: session.name?.trim() || null,
-      email: session.email || null,
-    });
-    const parentId = String(body.parentId || "").trim() || null;
-    const parent = parentId
-      ? (card.comments || []).find((c) => String(c.id || "").trim() === parentId)
-      : null;
-    let row = (card.comments || []).find((c) => String(c.id || "").trim() === draftCommentId);
-    if (!row && textBodyKey) {
-      // Недавний такой же CRM-комментарий (в т.ч. уже synced) — не плодим дубль при double-submit.
-      const recentMs = 120_000;
-      const nowMs = Date.now();
-      row = (card.comments || []).find((c) => {
+    return NextResponse.json(
+      { error: "Не удалось сохранить комментарий из-за конкурентного обновления" },
+      { status: 409 },
+    );
+  }
+
+  const storedComments = await loadKanbanOrderComments(tenantId, orderId);
+  const authorLabel = userActivityDisplayLabel({
+    mentionHandle: null,
+    displayName: session.name?.trim() || null,
+    email: session.email || null,
+  });
+  const parentId = String(body.parentId || "").trim() || null;
+  const parent = parentId
+    ? storedComments.find((c) => String(c.id || "").trim() === parentId)
+    : null;
+  const recentMs = 120_000;
+  const nowMs = Date.now();
+  const dup = textBodyKey
+    ? storedComments.find((c) => {
         if (c.source !== "CRM" || c.userId !== session.sub) return false;
         if (commentBodyDedupKey(c.text) !== textBodyKey) return false;
         const cParent = String(c.parentId || "").trim() || null;
@@ -591,183 +709,122 @@ export async function POST(
         const created = Date.parse(String(c.createdAt || ""));
         if (!Number.isFinite(created) || nowMs - created > recentMs) return false;
         return true;
-      });
-    }
-    const createdAt = row?.createdAt || nowIso();
-    const isNewComment = !row;
-    if (!row) {
-      row = normalizeCardComment({
-        id: draftCommentId,
-        userId: session.sub,
-        text: messageText,
-        createdAt,
-        parentId,
-        authorLabel,
-        source: "CRM",
-        syncStatus:
-          card.kaitenCardId != null && Number.isFinite(card.kaitenCardId) ? "pending" : "local",
-        syncedAt: null,
-        externalCommentId: null,
-        externalParentId: parent?.externalCommentId ?? null,
-      });
-      card.comments = [...(card.comments || []), row];
-      card.updatedAt = createdAt;
-
-      if (action === "correction") {
-        await createOrderChatCorrectionIfNeeded(
-          ordersPrisma,
-          order.id,
-          messageText,
-          "DEMO_KANBAN",
-          { authorLabel },
-        );
-      } else if (action === "prosthetics") {
-        await createOrderProstheticsRequestIfNeeded(
-          ordersPrisma,
-          order.id,
-          messageText,
-          "DEMO_KANBAN",
-          { authorLabel },
-        );
-      } else if (action === "pt") {
-        const memoText = techMemoTextFromPtChatBody(messageText);
-        if (memoText) {
-          try {
-            await applyOrderListTechMemo(ordersPrisma, {
-              orderId: order.id,
-              tenantId,
-              userId: session.sub,
-              text: memoText,
-            });
-          } catch (e) {
-            const code = e instanceof Error ? e.message : "";
-            if (code === "ORDER_NOT_FOUND") {
-              return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
-            }
-            if (code === "USER_NOT_FOUND") {
-              return NextResponse.json(
-                { error: "Пользователь не найден" },
-                { status: 403 },
-              );
-            }
-            console.error("[kanban-chat POST] PT memo", orderId, e);
-            return NextResponse.json(
-              { error: "Не удалось записать пометку ПТ" },
-              { status: 500 },
-            );
-          }
-        }
-      }
-    }
-
-    const saved = await saveTenantKanbanStateWithRetry(tenantId, next, loaded.updatedAt);
-    if (!saved) continue;
-    try {
-      await saveKanbanOrderComments(tenantId, orderId, card.comments || []);
-    } catch (e) {
-      console.error("[kanban-chat POST] persist CRM comments", orderId, e);
-    }
-
-    // Повтор того же текста (double-submit) — отдаём уже созданный комментарий без 2-го TG/inbox.
-    if (!isNewComment) {
-      return NextResponse.json({ ok: true, comment: row });
-    }
-
-    const inboxDraftId = String(row.id || "").trim() || draftCommentId;
-    const labTag = order.tenant?.kanbanAdminMentionTag;
-    try {
-      await ingestCrmKanbanCommentForOrder({
-        prisma: ordersPrisma,
-        tenantId,
-        orderId: order.id,
-        commentText: messageText,
-        authorLabel,
-        kanbanAdminMentionTag: labTag,
-        crmDraftId: inboxDraftId,
-        syncState:
-          card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)
-            ? "PENDING_EXTERNAL"
-            : "LOCAL_ONLY",
-      });
-    } catch (e) {
-      console.error("[kanban-chat POST] CRM lab mention ingest", orderId, e);
-    }
-
-    if (!String(row.externalCommentId || "").trim() && row.source === "CRM") {
-      const synced = await syncCrmCommentToKaiten(card, row);
-      Object.assign(row, synced);
-      card.updatedAt = nowIso();
-      card.comments = compactCardComments(card.comments || []);
-      const externalId = kaitenJsonIntId(row.externalCommentId);
-      if (externalId != null) {
-        try {
-          await bindOrderChatInboxItemsByCrmDraft(ordersPrisma, {
-            orderId: order.id,
-            crmDraftId: inboxDraftId,
-            kaitenCommentId: externalId,
-          });
-          await advanceKaitenLabMentionWaterlineOnly(
-            ordersPrisma,
-            order.id,
-            externalId,
-          );
-        } catch (e) {
-          console.error(
-            "[kanban-chat POST] inbox bind/waterline by draft failed",
-            orderId,
-            e,
-          );
-        }
-      } else if (row.syncStatus === "failed") {
-        try {
-          await markOrderChatInboxDraftSyncFailed(ordersPrisma, {
-            orderId: order.id,
-            crmDraftId: inboxDraftId,
-          });
-        } catch (e) {
-          console.error("[kanban-chat POST] inbox mark failed failed", orderId, e);
-        }
-      }
-      const loadedAfterSave = await loadTenantKanbanState(tenantId);
-      const savedAfterSync = await saveTenantKanbanStateWithRetry(
-        tenantId,
-        next,
-        loadedAfterSave.updatedAt,
-      );
-      if (!savedAfterSync) {
-        if (row.syncStatus === "synced") row.syncStatus = "failed";
-        continue;
-      }
-      try {
-        await saveKanbanOrderComments(tenantId, orderId, card.comments || []);
-      } catch (e) {
-        console.error("[kanban-chat POST] persist CRM comments after sync", orderId, e);
-      }
-    }
-
-    const board = next.boards[loc.boardIndex]!;
-    const siteOrigin = await getSiteOrigin();
-    try {
-      await notifyTelegramForKanbanChatMentions({
-        sessionDemo: Boolean(session.demo),
-        actorUserId: session.sub,
-        tenantId,
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        kaitenCardId: order.kaitenCardId,
-        text: messageText,
-        siteOrigin,
-        productionMentionTag: normalizeProductionSettings(board).productionMentionTag,
-      });
-    } catch (e) {
-      console.error("[kanban-chat POST] mention tg", orderId, e);
-    }
-
-    return NextResponse.json({ ok: true, comment: row });
+      })
+    : undefined;
+  if (dup) {
+    return NextResponse.json({ ok: true, comment: dup });
   }
 
-  return NextResponse.json(
-    { error: "Не удалось сохранить комментарий из-за конкурентного обновления" },
-    { status: 409 },
+  const createdAt = nowIso();
+  const row = normalizeCardComment({
+    id: draftCommentId,
+    userId: session.sub,
+    text: messageText,
+    createdAt,
+    parentId,
+    authorLabel,
+    source: "CRM",
+    syncStatus:
+      order.kaitenCardId != null && Number.isFinite(order.kaitenCardId)
+        ? "pending"
+        : "local",
+    syncedAt: null,
+    externalCommentId: null,
+    externalParentId: parent?.externalCommentId ?? null,
+  });
+  try {
+    await saveKanbanOrderComments(tenantId, orderId, [...storedComments, row]);
+  } catch (e) {
+    console.error("[kanban-chat POST] persist CRM comments", orderId, e);
+    return NextResponse.json(
+      { error: "Не удалось сохранить комментарий" },
+      { status: 500 },
+    );
+  }
+
+  if (action === "correction") {
+    await createOrderChatCorrectionIfNeeded(
+      ordersPrisma,
+      order.id,
+      messageText,
+      "DEMO_KANBAN",
+      { authorLabel },
+    );
+  } else if (action === "prosthetics") {
+    await createOrderProstheticsRequestIfNeeded(
+      ordersPrisma,
+      order.id,
+      messageText,
+      "DEMO_KANBAN",
+      { authorLabel },
+    );
+  } else if (action === "pt") {
+    const memoText = techMemoTextFromPtChatBody(messageText);
+    if (memoText) {
+      try {
+        await applyOrderListTechMemo(ordersPrisma, {
+          orderId: order.id,
+          tenantId,
+          userId: session.sub,
+          text: memoText,
+        });
+      } catch (e) {
+        const code = e instanceof Error ? e.message : "";
+        if (code === "ORDER_NOT_FOUND") {
+          return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+        }
+        if (code === "USER_NOT_FOUND") {
+          return NextResponse.json(
+            { error: "Пользователь не найден" },
+            { status: 403 },
+          );
+        }
+        console.error("[kanban-chat POST] PT memo", orderId, e);
+        return NextResponse.json(
+          { error: "Не удалось записать пометку ПТ" },
+          { status: 500 },
+        );
+      }
+    }
+  }
+
+  const inboxDraftId = String(row.id || "").trim() || draftCommentId;
+  const labTag = order.tenant?.kanbanAdminMentionTag;
+  try {
+    await ingestCrmKanbanCommentForOrder({
+      prisma: ordersPrisma,
+      tenantId,
+      orderId: order.id,
+      commentText: messageText,
+      authorLabel,
+      kanbanAdminMentionTag: labTag,
+      crmDraftId: inboxDraftId,
+      syncState:
+        order.kaitenCardId != null && Number.isFinite(order.kaitenCardId)
+          ? "PENDING_EXTERNAL"
+          : "LOCAL_ONLY",
+    });
+  } catch (e) {
+    console.error("[kanban-chat POST] CRM lab mention ingest", orderId, e);
+  }
+
+  const siteOrigin = await getSiteOrigin();
+  after(() =>
+    finishKanbanChatPostBackground({
+      tenantId,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      kaitenCardId: order.kaitenCardId,
+      row,
+      inboxDraftId,
+      sessionDemo: Boolean(session.demo),
+      actorUserId: session.sub,
+      messageText,
+      siteOrigin,
+    }).catch((e) => {
+      console.error("[kanban-chat POST] background", orderId, e);
+    }),
   );
+
+  return NextResponse.json({ ok: true, comment: row });
 }
