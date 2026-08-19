@@ -246,6 +246,91 @@ type KanbanCardModalProps = {
 const KANBAN_BLOCK_PERM_HINT =
   "Блокировку могут менять ответственные и участники карточки или администратор";
 
+function KanbanCardPeopleGroup({
+  layout,
+  label,
+  userIds,
+  variant,
+  board,
+  canManage,
+  enableTitle,
+  disableTitle,
+  onOpen,
+}: {
+  layout: "toolbar" | "stack";
+  label: string;
+  userIds: string[];
+  variant: "assignee" | "participant";
+  board: KanbanBoard;
+  canManage: boolean;
+  enableTitle: string;
+  disableTitle: string;
+  onOpen: () => void;
+}) {
+  const plus = (
+    <span
+      className={
+        layout === "stack"
+          ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
+          : "mt-1 inline-flex h-[14px] w-[14px] items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
+      }
+      aria-hidden
+    >
+      <IconPlus className={layout === "stack" ? "h-3.5 w-3.5" : "h-[8px] w-[8px]"} />
+    </span>
+  );
+  const avatars = userIds.map((uid) => (
+    <span key={uid} className="pointer-events-none shrink-0">
+      <KanbanPersonAvatar
+        userId={uid}
+        homeBoard={board}
+        variant={variant}
+        size="listSm"
+        nameCaption
+        titleSuffix=""
+      />
+    </span>
+  ));
+
+  if (layout === "stack") {
+    return (
+      <button
+        type="button"
+        disabled={!canManage}
+        title={canManage ? enableTitle : disableTitle}
+        className="flex w-full min-w-0 items-center gap-2 rounded-md px-0.5 py-1 text-left hover:bg-[var(--kaiten-modal-control)] disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={onOpen}
+      >
+        <span className="w-12 shrink-0 text-[0.58rem] font-medium uppercase leading-none tracking-wide text-[var(--kaiten-modal-muted)]">
+          {label}
+        </span>
+        <div className="flex min-h-8 min-w-0 flex-1 items-start gap-1 overflow-x-auto">
+          {avatars}
+        </div>
+        {plus}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={!canManage}
+      title={canManage ? enableTitle : disableTitle}
+      className="flex shrink-0 flex-col items-center gap-1 rounded-md px-1 py-0.5 text-left hover:bg-[var(--kaiten-modal-control)] disabled:cursor-not-allowed disabled:opacity-50"
+      onClick={onOpen}
+    >
+      <span className="text-[0.58rem] font-medium uppercase leading-none tracking-wide text-[var(--kaiten-modal-muted)]">
+        {label}
+      </span>
+      <div className="flex items-start gap-1">
+        {avatars}
+        {plus}
+      </div>
+    </button>
+  );
+}
+
 type ManualRouteDraftRow = {
   fileIndex: number;
   fileName: string;
@@ -1701,78 +1786,30 @@ export function KanbanCardModal({
             >
               <IconArrowRight className="h-3.5 w-3.5 sm:h-[1.05rem] sm:w-[1.05rem]" />
             </button>
-            <div className="mx-0.5 h-5 w-px shrink-0 bg-[var(--kaiten-modal-border)] sm:mx-1 sm:h-6" aria-hidden />
-            <div className="flex min-w-0 shrink items-center gap-1.5 overflow-x-auto sm:gap-2">
-              <button
-                type="button"
-                disabled={!canManageAssignees}
-                title={
-                  canManageAssignees
-                    ? "Ответственные — нажмите, чтобы изменить"
-                    : "Нет прав менять ответственных"
-                }
-                className="flex shrink-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-0.5 text-left hover:bg-[var(--kaiten-modal-control)] disabled:cursor-not-allowed disabled:opacity-50 sm:gap-1 sm:px-1"
-                onClick={() => setPickerMode("assign")}
-              >
-                <span className="text-[0.5rem] font-medium uppercase leading-none tracking-wide text-[var(--kaiten-modal-muted)] sm:text-[0.58rem]">
-                  Отв.
-                </span>
-                <div className="flex items-start gap-0.5 sm:gap-1">
-                  {(card.assignees || []).map((uid) => (
-                    <span key={uid} className="pointer-events-none">
-                      <KanbanPersonAvatar
-                        userId={uid}
-                        homeBoard={board}
-                        variant="assignee"
-                        size="listSm"
-                        nameCaption
-                        titleSuffix=""
-                      />
-                    </span>
-                  ))}
-                  <span
-                    className="mt-1 inline-flex h-[14px] w-[14px] items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
-                    aria-hidden
-                  >
-                    <IconPlus className="h-[8px] w-[8px]" />
-                  </span>
-                </div>
-              </button>
-              <button
-                type="button"
-                disabled={!canManageParticipants}
-                title={
-                  canManageParticipants
-                    ? "Участники — нажмите, чтобы изменить"
-                    : "Нет прав менять участников"
-                }
-                className="flex shrink-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-0.5 text-left hover:bg-[var(--kaiten-modal-control)] disabled:cursor-not-allowed disabled:opacity-50 sm:gap-1 sm:px-1"
-                onClick={() => setPickerMode("part")}
-              >
-                <span className="text-[0.5rem] font-medium uppercase leading-none tracking-wide text-[var(--kaiten-modal-muted)] sm:text-[0.58rem]">
-                  Участн.
-                </span>
-                <div className="flex items-start gap-0.5 sm:gap-1">
-                  {(card.participants || []).map((uid) => (
-                    <span key={uid} className="pointer-events-none">
-                      <KanbanPersonAvatar
-                        userId={uid}
-                        homeBoard={board}
-                        variant="participant"
-                        size="listSm"
-                        nameCaption
-                        titleSuffix=""
-                      />
-                    </span>
-                  ))}
-                  <span
-                    className="mt-1 inline-flex h-[14px] w-[14px] items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
-                    aria-hidden
-                  >
-                    <IconPlus className="h-[8px] w-[8px]" />
-                  </span>
-                </div>
-              </button>
+            <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-[var(--kaiten-modal-border)] sm:mx-1 sm:block" aria-hidden />
+            <div className="hidden min-w-0 shrink items-center gap-2 overflow-x-auto sm:flex">
+              <KanbanCardPeopleGroup
+                layout="toolbar"
+                label="Отв."
+                userIds={card.assignees || []}
+                variant="assignee"
+                board={board}
+                canManage={canManageAssignees}
+                enableTitle="Ответственные — нажмите, чтобы изменить"
+                disableTitle="Нет прав менять ответственных"
+                onOpen={() => setPickerMode("assign")}
+              />
+              <KanbanCardPeopleGroup
+                layout="toolbar"
+                label="Участн."
+                userIds={card.participants || []}
+                variant="participant"
+                board={board}
+                canManage={canManageParticipants}
+                enableTitle="Участники — нажмите, чтобы изменить"
+                disableTitle="Нет прав менять участников"
+                onOpen={() => setPickerMode("part")}
+              />
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
               {showOrderMailButton && card?.linkedOrderId ? (
@@ -1796,6 +1833,30 @@ export function KanbanCardModal({
                 <IconLink className="h-3.5 w-3.5 shrink-0 sm:h-[1.05rem] sm:w-[1.05rem]" />
               </button>
             </div>
+          </div>
+          <div className="flex flex-col gap-0.5 border-b border-[var(--kaiten-modal-border)] px-2 py-1.5 sm:hidden">
+            <KanbanCardPeopleGroup
+              layout="stack"
+              label="Отв."
+              userIds={card.assignees || []}
+              variant="assignee"
+              board={board}
+              canManage={canManageAssignees}
+              enableTitle="Ответственные — нажмите, чтобы изменить"
+              disableTitle="Нет прав менять ответственных"
+              onOpen={() => setPickerMode("assign")}
+            />
+            <KanbanCardPeopleGroup
+              layout="stack"
+              label="Участн."
+              userIds={card.participants || []}
+              variant="participant"
+              board={board}
+              canManage={canManageParticipants}
+              enableTitle="Участники — нажмите, чтобы изменить"
+              disableTitle="Нет прав менять участников"
+              onOpen={() => setPickerMode("part")}
+            />
           </div>
           {card.kaitenMembersSyncWarning ? (
             <p className="border-b border-[var(--kaiten-modal-border)] px-3 py-1.5 text-[0.65rem] leading-snug text-amber-700 dark:text-amber-300">
