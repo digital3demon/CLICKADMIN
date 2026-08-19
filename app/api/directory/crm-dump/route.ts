@@ -3,7 +3,6 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { buildCrmMonthDumpZip } from "@/lib/crm-dump/build-month-dump";
 import { parseMonthKey } from "@/lib/crm-dump/month-bounds";
-import { storeCrmDumpZip } from "@/lib/crm-dump/store";
 import { getPrisma } from "@/lib/get-prisma";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +17,9 @@ function isOwnerSession(session: {
 }
 
 /**
- * OWNER: сырой дамп CRM за календарный месяц → zip (download + запись в storage).
- * Только чтение БД. Обезличивание — отдельно после выгрузки.
+ * OWNER (в т.ч. в демо): сырой дамп CRM за календарный месяц → сразу скачивание zip.
+ * В хранилище не пишем. Только чтение БД текущей сессии (прод или демо).
+ * Обезличивание — отдельно после выгрузки.
  */
 export async function POST(req: Request) {
   const session = await getSessionFromCookies();
@@ -28,12 +28,6 @@ export async function POST(req: Request) {
   }
   if (!isOwnerSession(session)) {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
-  }
-  if (session.demo) {
-    return NextResponse.json(
-      { error: "Дамп недоступен в демо-режиме" },
-      { status: 403 },
-    );
   }
 
   const body = (await req.json().catch(() => null)) as {
@@ -60,13 +54,6 @@ export async function POST(req: Request) {
       monthKey,
     });
 
-    const stored = await storeCrmDumpZip({
-      tenantId,
-      monthKey: built.meta.month,
-      fileName: built.fileName,
-      zipBytes: built.zipBytes,
-    });
-
     return new NextResponse(new Uint8Array(built.zipBytes), {
       status: 200,
       headers: {
@@ -77,8 +64,6 @@ export async function POST(req: Request) {
         "X-Crm-Dump-Orders": String(built.meta.orderCount),
         "X-Crm-Dump-Users": String(built.meta.userCount),
         "X-Crm-Dump-Images": String(built.meta.imageAttachmentCount),
-        "X-Crm-Dump-Storage": stored.storage,
-        "X-Crm-Dump-Storage-Path": encodeURIComponent(stored.keyOrPath),
       },
     });
   } catch (e) {
