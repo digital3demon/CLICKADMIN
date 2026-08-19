@@ -21,9 +21,12 @@ export async function resetAndSeedDemoDatabase(): Promise<void> {
   await disconnectDemoPrisma();
   /** На Windows файл SQLite иногда остаётся залоченным сразу после $disconnect. */
   await new Promise((r) => setTimeout(r, 400));
-  unlinkDemoSqliteFiles();
 
   const url = getDemoDatabaseUrl();
+  if (url.trim().toLowerCase().startsWith("file:")) {
+    unlinkDemoSqliteFiles();
+  }
+
   await runPrismaDbPush(url);
 
   const db = getDemoPrisma();
