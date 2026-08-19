@@ -466,7 +466,7 @@ export function ProfileSettingsForm({
         <div className="min-w-0 text-sm text-[var(--text-secondary)]">
           <div className="font-medium text-[var(--app-text)]">Аватар в интерфейсе</div>
           <p className="mt-1 text-xs text-[var(--text-muted)]">
-            Кружок в меню и в профиле. Можно загрузить своё фото (JPEG, PNG или WebP, до ~600 КБ).
+            Кружок в меню и в профиле. Можно загрузить своё фото (JPEG, PNG или WebP).
           </p>
         </div>
       </div>

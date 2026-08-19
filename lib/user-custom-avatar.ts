@@ -3,8 +3,6 @@ import "server-only";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const MAX_BYTES = 600_000;
-
 export type CustomAvatarMime = "image/jpeg" | "image/png" | "image/webp";
 
 function detectMime(buf: Buffer): CustomAvatarMime | null {
@@ -50,9 +48,6 @@ export async function ensureAvatarDir(demo: boolean): Promise<void> {
 }
 
 export function validateAvatarBuffer(buf: Buffer): { mime: CustomAvatarMime } | { error: string } {
-  if (buf.length > MAX_BYTES) {
-    return { error: `Файл слишком большой (макс. ${Math.round(MAX_BYTES / 1000)} КБ).` };
-  }
   const mime = detectMime(buf);
   if (!mime) return { error: "Допустимы только JPEG, PNG или WebP." };
   return { mime };
