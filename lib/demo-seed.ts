@@ -227,15 +227,24 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       data: { id: "default", activePriceListId: demoPriceList.id },
     });
 
-    /** Названия позиций — в канбане демо типы карточек: `demoKanbanPriceCardTypes()` в `lib/kanban/model.ts`. */
+    /** Ровно 12 демо-позиций (не полный рабочий прайс). */
+    const demoPriceRows = [
+      { code: "DM01", name: "Позиция · диагностика", priceRub: 2100, leadWorkingDays: 1 },
+      { code: "DM02", name: "Позиция · временная коронка", priceRub: 3900, leadWorkingDays: 2 },
+      { code: "DM03", name: "Позиция · коронка Zr", priceRub: 16200, leadWorkingDays: 8 },
+      { code: "DM04", name: "Позиция · коронка МК", priceRub: 11800, leadWorkingDays: 7 },
+      { code: "DM05", name: "Позиция · вкладка", priceRub: 7400, leadWorkingDays: 5 },
+      { code: "DM06", name: "Позиция · винир", priceRub: 14500, leadWorkingDays: 9 },
+      { code: "DM07", name: "Позиция · абатмент", priceRub: 5200, leadWorkingDays: 4 },
+      { code: "DM08", name: "Позиция · мост 3 ед.", priceRub: 33600, leadWorkingDays: 12 },
+      { code: "DM09", name: "Позиция · съёмный частичный", priceRub: 24800, leadWorkingDays: 14 },
+      { code: "DM10", name: "Позиция · каппа", priceRub: 6100, leadWorkingDays: 3 },
+      { code: "DM11", name: "Позиция · ретейнер", priceRub: 4300, leadWorkingDays: 4 },
+      { code: "DM12", name: "Позиция · индивидуальная ложка", priceRub: 2800, leadWorkingDays: 2 },
+    ] as const;
+
     const priceItems = await Promise.all(
-      [
-        { code: "D1001", name: "Диагностика и план", priceRub: 2500, leadWorkingDays: 1 },
-        { code: "D1002", name: "Временная коронка", priceRub: 4200, leadWorkingDays: 3 },
-        { code: "D1003", name: "Коронка МК", priceRub: 12000, leadWorkingDays: 7 },
-        { code: "D1004", name: "Коронка Zr", priceRub: 18500, leadWorkingDays: 10 },
-        { code: "D1005", name: "Съёмный протез", priceRub: 28000, leadWorkingDays: 14 },
-      ].map((row, i) =>
+      demoPriceRows.map((row, i) =>
         tx.priceListItem.create({
           data: {
             priceListId: demoPriceList.id,
@@ -649,9 +658,9 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
             create: [
               {
                 category: ConstructionCategory.PRICE_LIST,
-                priceListItemId: priceItems[ix % 5]!.id,
+                priceListItemId: priceItems[ix % priceItems.length]!.id,
                 quantity: 1,
-                unitPrice: priceItems[ix % 5]!.priceRub,
+                unitPrice: priceItems[ix % priceItems.length]!.priceRub,
                 sortOrder: 0,
               },
             ],
