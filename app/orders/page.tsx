@@ -20,6 +20,7 @@ import { OrderPostingMonthBar } from "@/components/orders/OrderPostingMonthBar";
 import { OrdersListHeaderActionCards } from "@/components/orders/OrdersListHeaderActionCards";
 import { OrdersListShippedToolbar } from "@/components/orders/OrdersListShippedToolbar";
 import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePref";
+import { OrdersListPagerLink } from "@/components/orders/OrdersListPagerLink";
 import { OrdersListSearch } from "@/components/orders/OrdersListSearch";
 import { OrdersListTableHeaderRow } from "@/components/orders/OrdersListTableHeaderRow";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
@@ -373,6 +374,53 @@ export default async function OrdersPage({
     otprFrom: otprFromUrl ?? undefined,
     otprTo: otprToUrl ?? undefined,
   };
+
+  /** Список — сразу, параллельно со счётчиками шапки (иначе «Следующие N» ждёт чипы). */
+  const listPageWork = !tenantId
+    ? Promise.reject(new Error("tenant_context_required"))
+    : shipmentModeActive && shipParsed.mode
+      ? Promise.all([
+          fetchOrdersShipmentListPage(ordersPrisma, {
+            tenantId,
+            cursor: sp.cursor,
+            pageSize,
+            shipmentMode: shipParsed.mode,
+            shipFrom: shipParsed.shipFrom,
+            shipTo: shipParsed.shipTo,
+            tag: activeFilter ? rawTag : undefined,
+            search: listSearchQ || undefined,
+            ordersListForUserId: session?.sub ?? null,
+            viewerRole: session?.role ?? null,
+            viewerUserId: session?.sub ?? null,
+          }),
+          getLabDueHmSlotsForTenant(tenantId),
+        ]).then(([page, slots]) => ({
+          kind: "ship" as const,
+          page,
+          slots,
+        }))
+      : Promise.all([
+          fetchOrdersListPage(ordersPrisma, {
+            tenantId,
+            cursor: sp.cursor,
+            pageSize,
+            tag: activeFilter ? rawTag : undefined,
+            hideShipped: hideShippedActive,
+            onlyShipped: onlyShippedActive,
+            search: listSearchQ || undefined,
+            dueDateRange: dueDateRange ?? undefined,
+            otprAtRange: otprAtRange ?? undefined,
+            ordersListForUserId: session?.sub ?? null,
+            viewerRole: session?.role ?? null,
+            viewerUserId: session?.sub ?? null,
+          }),
+          getLabDueHmSlotsForTenant(tenantId),
+        ]).then(([page, slots]) => ({
+          kind: "list" as const,
+          page,
+          slots,
+        }));
+
   const baseCountParts: Prisma.OrderWhereInput[] = [
     { tenantId: tenantId ?? "__missing_tenant__" },
     { archivedAt: null },
@@ -513,51 +561,12 @@ export default async function OrdersPage({
   let shipmentListTruncated = false;
   let labDueHmSlots: string[] = [];
   try {
-    if (!tenantId) {
-      throw new Error("tenant_context_required");
-    }
-    if (shipmentModeActive && shipParsed.mode) {
-      const [page, slots] = await Promise.all([
-        fetchOrdersShipmentListPage(ordersPrisma, {
-          tenantId,
-          cursor: sp.cursor,
-          pageSize,
-          shipmentMode: shipParsed.mode,
-          shipFrom: shipParsed.shipFrom,
-          shipTo: shipParsed.shipTo,
-          tag: activeFilter ? rawTag : undefined,
-          search: listSearchQ || undefined,
-          ordersListForUserId: session?.sub ?? null,
-          viewerRole: session?.role ?? null,
-          viewerUserId: session?.sub ?? null,
-        }),
-        getLabDueHmSlotsForTenant(tenantId),
-      ]);
-      orders = page.orders;
-      nextCursor = page.nextCursor;
-      shipmentListTruncated = page.truncated;
-      labDueHmSlots = slots;
-    } else {
-      const [page, slots] = await Promise.all([
-        fetchOrdersListPage(ordersPrisma, {
-          tenantId,
-          cursor: sp.cursor,
-          pageSize,
-          tag: activeFilter ? rawTag : undefined,
-          hideShipped: hideShippedActive,
-          onlyShipped: onlyShippedActive,
-          search: listSearchQ || undefined,
-          dueDateRange: dueDateRange ?? undefined,
-          otprAtRange: otprAtRange ?? undefined,
-          ordersListForUserId: session?.sub ?? null,
-          viewerRole: session?.role ?? null,
-          viewerUserId: session?.sub ?? null,
-        }),
-        getLabDueHmSlotsForTenant(tenantId),
-      ]);
-      orders = page.orders;
-      nextCursor = page.nextCursor;
-      labDueHmSlots = slots;
+    const result = await listPageWork;
+    orders = result.page.orders;
+    nextCursor = result.page.nextCursor;
+    labDueHmSlots = result.slots;
+    if (result.kind === "ship") {
+      shipmentListTruncated = result.page.truncated;
     }
   } catch (e) {
     console.error("[orders page] prisma", e);
@@ -1338,7 +1347,7 @@ export default async function OrdersPage({
         <div className="no-print flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2">
           <div className="flex flex-wrap items-center gap-2">
             {sp.cursor ? (
-              <Link
+              <OrdersListPagerLink
                 href={ordersListHref({
                   limit: pageSize,
                   ...listHrefCommon,
@@ -1346,10 +1355,10 @@ export default async function OrdersPage({
                 className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-2 text-sm text-[var(--text-body)] hover:bg-[var(--surface-hover)] sm:text-base"
               >
                 К началу списка
-              </Link>
+              </OrdersListPagerLink>
             ) : null}
             {nextCursor ? (
-              <Link
+              <OrdersListPagerLink
                 href={ordersListHref({
                   limit: pageSize,
                   cursor: nextCursor,
@@ -1358,7 +1367,7 @@ export default async function OrdersPage({
                 className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-4 py-2 text-sm font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-base"
               >
                 Следующие {pageSize}
-              </Link>
+              </OrdersListPagerLink>
             ) : null}
           </div>
           {session?.sub && !isSingleUserPortable() ? (
