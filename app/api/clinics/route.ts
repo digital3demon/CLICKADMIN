@@ -150,6 +150,7 @@ const clinicListSelect = {
   address: true,
   isActive: true,
   legalFullName: true,
+  inn: true,
   billingLegalForm: true,
   orderPriceListKind: true,
   worksWithReconciliation: true,
@@ -172,6 +173,7 @@ export async function GET() {
       address: string | null;
       isActive: boolean;
       legalFullName: string | null;
+      inn: string | null;
       billingLegalForm: "IP" | "OOO" | null;
       orderPriceListKind: "MAIN" | "CUSTOM" | null;
       worksWithReconciliation: boolean;
@@ -205,6 +207,7 @@ export async function GET() {
       rows = minimal.map((c) => ({
         ...c,
         legalFullName: null,
+        inn: null,
         billingLegalForm: null,
         orderPriceListKind: null,
         worksWithReconciliation: false,
@@ -272,6 +275,7 @@ export async function GET() {
       address: c.address,
       isActive: c.isActive,
       legalFullName: c.legalFullName,
+      inn: c.inn,
       billingLegalForm: c.billingLegalForm,
       orderPriceListKind: c.orderPriceListKind,
       worksWithReconciliation: c.worksWithReconciliation,

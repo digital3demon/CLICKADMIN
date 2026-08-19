@@ -14,6 +14,7 @@ import {
 } from "react";
 import type { UserRole } from "@prisma/client";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
+import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 import {
   isoToDatetimeLocal,
   localDateTimeToIso,
@@ -488,6 +489,48 @@ function EditFormInlineLabeledRow({
   );
 }
 
+const invoiceCopyChipClass =
+  "flex max-w-full min-w-0 items-center gap-2 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-left shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 disabled:cursor-default disabled:hover:border-[var(--input-border)] disabled:hover:bg-[var(--card-bg)]";
+
+function InvoiceCopyChip({
+  label,
+  value,
+  onCopy,
+}: {
+  label: string;
+  value: string | null;
+  onCopy: (text: string) => void;
+}) {
+  const text = (value ?? "").trim();
+  const empty = !text;
+  return (
+    <button
+      type="button"
+      disabled={empty}
+      onClick={() => {
+        if (!empty) onCopy(text);
+      }}
+      title={
+        empty
+          ? `${label} не указано в карточке клиента`
+          : "Нажмите — скопировать в буфер обмена"
+      }
+      className={invoiceCopyChipClass}
+    >
+      <span className="shrink-0 text-[8px] font-bold uppercase leading-tight tracking-wide text-[var(--text-muted)] sm:text-[9px]">
+        {label}
+      </span>
+      <span
+        className={`min-w-0 truncate font-mono text-xs font-semibold sm:text-sm ${
+          empty ? "text-[var(--text-muted)]" : "text-[var(--text-strong)]"
+        }`}
+      >
+        {empty ? "—" : text}
+      </span>
+    </button>
+  );
+}
+
 type DoctorRow = {
   id: string;
   fullName: string;
@@ -501,6 +544,7 @@ type ClinicRow = {
   address?: string | null;
   isActive?: boolean;
   legalFullName?: string | null;
+  inn?: string | null;
   billingLegalForm?: "IP" | "OOO" | null;
   orderPriceListKind?: "MAIN" | "CUSTOM" | null;
   worksWithReconciliation?: boolean;
@@ -1526,17 +1570,37 @@ export function OrderEditForm({
     selectedDoctor,
   ]);
 
+  const clientLegalNameForCopy = useMemo(
+    () => cleanLegalFullName(effectiveFinanceClinic?.legalFullName) ?? null,
+    [effectiveFinanceClinic],
+  );
+  const clientInnForCopy = useMemo(() => {
+    const inn = (effectiveFinanceClinic?.inn ?? "").trim();
+    return inn || null;
+  }, [effectiveFinanceClinic]);
+
+  const invoiceCopyAllClipboardText = useMemo(
+    () =>
+      [invoiceCopyClipboardText, clientLegalNameForCopy, clientInnForCopy]
+        .map((s) => (s ?? "").trim())
+        .filter(Boolean)
+        .join(" "),
+    [invoiceCopyClipboardText, clientLegalNameForCopy, clientInnForCopy],
+  );
+
   const [invoiceCopyToast, setInvoiceCopyToast] = useState<string | null>(null);
-  const copyInvoiceLabelToClipboard = useCallback(async () => {
+  const copyInvoiceBlockText = useCallback(async (text: string) => {
+    const t = text.trim();
+    if (!t) return;
     try {
-      await navigator.clipboard.writeText(invoiceCopyClipboardText);
+      await navigator.clipboard.writeText(t);
       setInvoiceCopyToast("Скопировано");
       window.setTimeout(() => setInvoiceCopyToast(null), 2000);
     } catch {
       setInvoiceCopyToast("Не удалось скопировать");
       window.setTimeout(() => setInvoiceCopyToast(null), 2500);
     }
-  }, [invoiceCopyClipboardText]);
+  }, []);
 
   const copyLockedFieldToClipboard = useCallback(async (text: string) => {
     const t = text.trim();
@@ -3320,25 +3384,47 @@ export function OrderEditForm({
       </div>
       {activeTab === "Документооборот" ? (
         <div className={editColWrap}>
-          <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-            Счёт, ЭДО и документы
-          </h2>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+              Счёт, ЭДО и документы
+            </h2>
+            <button
+              type="button"
+              onClick={() => void copyInvoiceBlockText(invoiceCopyAllClipboardText)}
+              title="Скопировать номер, юрлицо и ИНН"
+              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+            >
+              Скопировать все
+            </button>
+          </div>
           <div className="mt-3 flex min-w-0 flex-wrap items-start gap-x-3 gap-y-2">
-            <div className="flex min-w-0 flex-1 basis-full flex-col gap-0.5 sm:basis-[min(100%,22rem)] sm:flex-1 lg:max-w-xl">
+            <div className="flex min-w-0 flex-1 basis-[min(100%,18rem)] flex-col gap-0.5 lg:max-w-xl">
               <button
                 type="button"
-                onClick={() => void copyInvoiceLabelToClipboard()}
+                onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
                 title="Нажмите — скопировать в буфер обмена"
                 className="max-w-full min-w-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
               >
                 {invoiceCopyClipboardText}
               </button>
-              {invoiceCopyToast ? (
-                <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                  {invoiceCopyToast}
-                </span>
-              ) : null}
             </div>
+            <div className="flex min-w-0 flex-1 basis-[min(100%,16rem)] flex-col gap-1">
+              <InvoiceCopyChip
+                label="Юрлицо"
+                value={clientLegalNameForCopy}
+                onCopy={(t) => void copyInvoiceBlockText(t)}
+              />
+              <InvoiceCopyChip
+                label="ИНН"
+                value={clientInnForCopy}
+                onCopy={(t) => void copyInvoiceBlockText(t)}
+              />
+            </div>
+            {invoiceCopyToast ? (
+              <span className="basis-full text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                {invoiceCopyToast}
+              </span>
+            ) : null}
           </div>
           <fieldset
             disabled={!canEditOrder}
