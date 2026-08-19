@@ -796,6 +796,10 @@ model User {
   passwordHash              String?
   /// Bcrypt одноразового кода приглашения; null после установки пароля
   inviteCodeHash            String?
+  /// Bcrypt одноразового кода сброса пароля (владелец генерирует в «Пользователи»)
+  passwordResetCodeHash     String?
+  /// До какого момента код сброса действует
+  passwordResetExpiresAt    DateTime?
   /// false — вход запрещён (сессия сбрасывается при следующей загрузке)
   isActive                  Boolean           @default(true)
   createdAt                 DateTime          @default(now())

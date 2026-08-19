@@ -307,6 +307,16 @@ export function LoginPageClient() {
           >
             {busy ? "Вход…" : "Войти"}
           </button>
+          <Link
+            href={
+              loginEmail.trim()
+                ? `/login/forgot?email=${encodeURIComponent(loginEmail.trim())}`
+                : "/login/forgot"
+            }
+            className="mt-3 flex w-full items-center justify-center rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] py-2.5 text-sm font-semibold text-[var(--text-strong)] hover:bg-[var(--surface-subtle)]"
+          >
+            Забыл пароль
+          </Link>
         </section>
       ) : null}
 

@@ -25,6 +25,8 @@ export async function GET() {
       isActive: true,
       passwordHash: true,
       inviteCodeHash: true,
+      passwordResetCodeHash: true,
+      passwordResetExpiresAt: true,
       telegramId: true,
     },
   });
@@ -39,6 +41,12 @@ export async function GET() {
     lastLoginAt: u.lastLoginAt,
     isActive: u.isActive,
     pendingActivation: !u.passwordHash && u.inviteCodeHash != null,
+    pendingPasswordReset:
+      u.passwordHash != null &&
+      u.passwordResetCodeHash != null &&
+      u.passwordResetExpiresAt != null &&
+      u.passwordResetExpiresAt.getTime() > Date.now(),
+    hasPassword: u.passwordHash != null,
     awaitingTelegram:
       !u.passwordHash &&
       u.inviteCodeHash == null &&

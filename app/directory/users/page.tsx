@@ -33,6 +33,8 @@ export default async function DirectoryUsersPage() {
       isActive: true,
       passwordHash: true,
       inviteCodeHash: true,
+      passwordResetCodeHash: true,
+      passwordResetExpiresAt: true,
       telegramId: true,
     },
   });
@@ -48,6 +50,12 @@ export default async function DirectoryUsersPage() {
     lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     isActive: u.isActive,
     pendingActivation: !u.passwordHash && u.inviteCodeHash != null,
+    pendingPasswordReset:
+      u.passwordHash != null &&
+      u.passwordResetCodeHash != null &&
+      u.passwordResetExpiresAt != null &&
+      u.passwordResetExpiresAt.getTime() > Date.now(),
+    hasPassword: u.passwordHash != null,
     awaitingTelegram:
       !u.passwordHash &&
       u.inviteCodeHash == null &&
@@ -58,7 +66,7 @@ export default async function DirectoryUsersPage() {
   return (
     <ModuleFrame
       title="Пользователи"
-      description="Приглашение по телефону: сотрудник на /login вводит тот же номер и входит через Telegram. Классическое приглашение по почте — код и /login/activate. Отключение — в таблице. Смена роли у уже созданных пользователей — только владелец, через подтверждение в окне «Смена роли»."
+      description="Приглашение по телефону: сотрудник на /login вводит тот же номер и входит через Telegram. Классическое приглашение по почте — код и /login/activate. Забыл пароль: владелец генерирует код в таблице, сотрудник вводит его на входе. Отключение — в таблице. Смена роли у уже созданных пользователей — только владелец, через подтверждение в окне «Смена роли»."
     >
       <UsersDirectoryClient
         initialUsers={initialUsers}

@@ -24,6 +24,8 @@ export type UserDirectoryRow = {
   lastLoginAt: string | null;
   isActive: boolean;
   pendingActivation: boolean;
+  pendingPasswordReset: boolean;
+  hasPassword: boolean;
   awaitingTelegram: boolean;
 };
 
@@ -48,6 +50,7 @@ function formatDate(iso: string | null): string {
 function statusLabel(u: UserDirectoryRow): string {
   if (!u.isActive) return "Отключён";
   if (u.pendingActivation) return "Ожидает кода";
+  if (u.pendingPasswordReset) return "Ожидает сброса пароля";
   if (u.awaitingTelegram) return "Нет привязки Telegram";
   return "Активен";
 }
@@ -80,6 +83,14 @@ export function UsersDirectoryClient({
   } | null>(null);
   const [rolePick, setRolePick] = useState<UserRole>("ADMINISTRATOR");
   const [trackPick, setTrackPick] = useState<PayrollUserTrack>("DIGITAL");
+  const [resetBusyId, setResetBusyId] = useState<string | null>(null);
+  const [resetCodeModal, setResetCodeModal] = useState<{
+    displayName: string;
+    email: string;
+    resetCode: string;
+    expiresAt: string;
+    hint: string;
+  } | null>(null);
 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -96,6 +107,8 @@ export function UsersDirectoryClient({
         ...u,
         phone: u.phone ?? null,
         awaitingTelegram: Boolean(u.awaitingTelegram),
+        pendingPasswordReset: Boolean(u.pendingPasswordReset),
+        hasPassword: Boolean(u.hasPassword),
         createdAt:
           typeof u.createdAt === "string"
             ? u.createdAt
@@ -191,6 +204,54 @@ export function UsersDirectoryClient({
       }
       setOkMsg(isActive ? "Пользователь включён" : "Пользователь отключён");
       await reload();
+    },
+    [reload],
+  );
+
+  const generateResetCode = useCallback(
+    async (u: UserDirectoryRow) => {
+      if (
+        !window.confirm(
+          `Сгенерировать код сброса пароля для «${u.displayName}»?\n\nПредыдущий код (если был) перестанет действовать. Новый код покажется один раз — передайте сотруднику лично или в мессенджере.`,
+        )
+      ) {
+        return;
+      }
+      setError(null);
+      setOkMsg(null);
+      setResetBusyId(u.id);
+      try {
+        const res = await fetch(`/api/users/${encodeURIComponent(u.id)}/reset-code`, {
+          method: "POST",
+          credentials: "include",
+        });
+        const j = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          resetCode?: string;
+          expiresAt?: string;
+          hint?: string;
+        };
+        if (!res.ok) {
+          setError(j.error ?? "Не удалось сгенерировать код");
+          return;
+        }
+        if (!j.resetCode) {
+          setError("Сервер не вернул код");
+          return;
+        }
+        setResetCodeModal({
+          displayName: u.displayName,
+          email: u.email,
+          resetCode: j.resetCode,
+          expiresAt: j.expiresAt ?? "",
+          hint: j.hint ?? "",
+        });
+        await reload();
+      } catch {
+        setError("Сеть или сервер недоступны");
+      } finally {
+        setResetBusyId(null);
+      }
     },
     [reload],
   );
@@ -299,6 +360,7 @@ export function UsersDirectoryClient({
               <th className="px-4 py-3 font-medium">Последний вход</th>
               <th className="px-4 py-3 font-medium">Профиль</th>
               <th className="px-4 py-3 font-medium">Доступ</th>
+              <th className="px-4 py-3 font-medium">Сброс пароля</th>
               <th className="px-4 py-3 font-medium">Удаление</th>
             </tr>
           </thead>
@@ -379,6 +441,22 @@ export function UsersDirectoryClient({
                     >
                       Включить
                     </button>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {canChangeUserRoles && u.hasPassword && u.isActive ? (
+                    <button
+                      type="button"
+                      disabled={resetBusyId === u.id}
+                      className="rounded border border-[var(--input-border)] px-2 py-1 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
+                      onClick={() => void generateResetCode(u)}
+                    >
+                      {resetBusyId === u.id
+                        ? "Генерация…"
+                        : "Сгенерировать новый код"}
+                    </button>
+                  ) : (
+                    <span className="text-[var(--text-muted)]">—</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
@@ -510,6 +588,72 @@ export function UsersDirectoryClient({
                 className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
               >
                 {roleBusyId === roleModal.id ? "Сохранение…" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {resetCodeModal ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onClick={() => setResetCodeModal(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-lg"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-code-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2
+              id="reset-code-title"
+              className="text-lg font-semibold text-[var(--app-text)]"
+            >
+              Код сброса пароля
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Для{" "}
+              <span className="font-medium text-[var(--app-text)]">
+                {resetCodeModal.displayName}
+              </span>
+              {resetCodeModal.email ? ` (${resetCodeModal.email})` : ""}.
+              Сотрудник нажимает «Забыл пароль» на входе и вводит этот код.
+            </p>
+            <p className="mt-4 select-all rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-3 text-center font-mono text-lg tracking-widest text-[var(--app-text)]">
+              {resetCodeModal.resetCode.replace(/(.{2})/g, "$1 ").trim()}
+            </p>
+            {resetCodeModal.expiresAt ? (
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                Действует до{" "}
+                {formatDate(resetCodeModal.expiresAt)}
+              </p>
+            ) : null}
+            {resetCodeModal.hint ? (
+              <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                {resetCodeModal.hint}
+              </p>
+            ) : null}
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard
+                    ?.writeText(resetCodeModal.resetCode)
+                    .then(() => setOkMsg("Код скопирован"))
+                    .catch(() => setError("Не удалось скопировать"));
+                }}
+                className="rounded-md border border-[var(--card-border)] px-4 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-muted)]"
+              >
+                Копировать
+              </button>
+              <button
+                type="button"
+                onClick={() => setResetCodeModal(null)}
+                className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
+              >
+                Закрыть
               </button>
             </div>
           </div>
