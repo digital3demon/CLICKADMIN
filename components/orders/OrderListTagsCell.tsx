@@ -244,13 +244,6 @@ type MissingTagAction =
       id: string;
       title: string;
       subtitle?: string;
-      kind: "invoicePrint";
-      attachmentId: string;
-    }
-  | {
-      id: string;
-      title: string;
-      subtitle?: string;
       kind: "payment";
       payment: string;
     }
@@ -419,6 +412,13 @@ export function OrderListTagsCell({
     null,
   );
   const [depositAmount, setDepositAmount] = useState("");
+  const [localInvoiceAttachmentId, setLocalInvoiceAttachmentId] = useState<
+    string | null
+  >(invoiceAttachmentId);
+
+  useEffect(() => {
+    setLocalInvoiceAttachmentId(invoiceAttachmentId);
+  }, [invoiceAttachmentId]);
 
   const closeAdd = useCallback(() => {
     setAddOpen(false);
@@ -695,16 +695,6 @@ export function OrderListTagsCell({
       });
     }
 
-    if (!invoicePrinted && invoiceAttachmentId) {
-      actions.push({
-        id: "invoice-print",
-        title: "Печать счёта",
-        subtitle: "Откроет печать файла и затем отметит «Счёт распечатан»",
-        kind: "invoicePrint",
-        attachmentId: invoiceAttachmentId,
-      });
-    }
-
     const docFlags: Array<{
       id: string;
       title: string;
@@ -789,8 +779,6 @@ export function OrderListTagsCell({
     currentPayment,
     clinicId,
     doctorId,
-    invoiceAttachmentId,
-    invoicePrinted,
     invoicePaperDocs,
     invoiceSentToEdo,
     invoiceEdoSigned,
@@ -802,55 +790,73 @@ export function OrderListTagsCell({
   ]);
 
   const printInvoiceAndMark = useCallback(
-    async (attachmentId: string) => {
-      const attId = attachmentId.trim();
-      if (!attId) return;
+    async (attachmentId: string | null) => {
+      const attId = (
+        attachmentId ||
+        localInvoiceAttachmentId ||
+        ""
+      ).trim();
+      if (!attId) {
+        setErr("Сначала загрузите PDF счёта в блок ниже");
+        return;
+      }
       setErr(null);
+      setBusy(true);
       const printUrl = `/api/orders/${orderId}/attachments/${attId}?inline=1`;
 
-      await new Promise<void>((resolve) => {
-        const iframe = document.createElement("iframe");
-        let done = false;
-        let fallbackTimer: number | null = null;
-        const cleanup = () => {
-          if (done) return;
-          done = true;
-          if (fallbackTimer) window.clearTimeout(fallbackTimer);
-          window.setTimeout(() => iframe.remove(), 1_000);
-          resolve();
-        };
-        iframe.style.position = "fixed";
-        iframe.style.right = "0";
-        iframe.style.bottom = "0";
-        iframe.style.width = "1px";
-        iframe.style.height = "1px";
-        iframe.style.opacity = "0";
-        iframe.style.pointerEvents = "none";
-        iframe.onload = () => {
-          const win = iframe.contentWindow;
-          if (!win) {
-            window.open(printUrl, "_blank", "noopener,noreferrer");
-            cleanup();
-            return;
-          }
-          win.addEventListener("afterprint", cleanup, { once: true });
-          window.addEventListener("afterprint", cleanup, { once: true });
-          fallbackTimer = window.setTimeout(cleanup, 2_000);
-          try {
-            win.focus();
-            win.print();
-          } catch {
-            window.open(printUrl, "_blank", "noopener,noreferrer");
-            cleanup();
-          }
-        };
-        iframe.src = printUrl;
-        document.body.appendChild(iframe);
-      });
-
-      await applyQuickPatch({ invoicePrinted: true });
+      let printed = false;
+      try {
+        printed = await new Promise<boolean>((resolve) => {
+          const iframe = document.createElement("iframe");
+          let settled = false;
+          let fallbackTimer: number | null = null;
+          const settle = (ok: boolean) => {
+            if (settled) return;
+            settled = true;
+            if (fallbackTimer) window.clearTimeout(fallbackTimer);
+            window.setTimeout(() => iframe.remove(), 1_000);
+            resolve(ok);
+          };
+          iframe.style.position = "fixed";
+          iframe.style.right = "0";
+          iframe.style.bottom = "0";
+          iframe.style.width = "1px";
+          iframe.style.height = "1px";
+          iframe.style.opacity = "0";
+          iframe.style.pointerEvents = "none";
+          iframe.onload = () => {
+            const win = iframe.contentWindow;
+            if (!win) {
+              window.open(printUrl, "_blank", "noopener,noreferrer");
+              settle(true);
+              return;
+            }
+            const onAfter = () => settle(true);
+            win.addEventListener("afterprint", onAfter, { once: true });
+            window.addEventListener("afterprint", onAfter, { once: true });
+            fallbackTimer = window.setTimeout(() => settle(false), 180_000);
+            try {
+              win.focus();
+              win.print();
+            } catch {
+              window.open(printUrl, "_blank", "noopener,noreferrer");
+              settle(true);
+            }
+          };
+          iframe.onerror = () => settle(false);
+          iframe.src = printUrl;
+          document.body.appendChild(iframe);
+        });
+        if (!printed) {
+          setErr("Печать счёта не завершена — отметка не поставлена");
+          return;
+        }
+        await applyQuickPatch({ invoicePrinted: true });
+      } finally {
+        setBusy(false);
+      }
     },
-    [applyQuickPatch, orderId],
+    [applyQuickPatch, localInvoiceAttachmentId, orderId],
   );
 
   const onMissingTagAction = useCallback(
@@ -859,10 +865,6 @@ export function OrderListTagsCell({
         void applyQuickPatch(action.patch, {
           keepAddOpen: action.keepAddOpen === true,
         });
-        return;
-      }
-      if (action.kind === "invoicePrint") {
-        void printInvoiceAndMark(action.attachmentId);
         return;
       }
       if (action.kind === "payment") {
@@ -897,7 +899,7 @@ export function OrderListTagsCell({
       setBlockReasonDraft("");
       setErr(null);
     },
-    [applyPaymentPatch, applyQuickPatch, clinicId, paymentPartialRub, printInvoiceAndMark, submitAdd],
+    [applyPaymentPatch, applyQuickPatch, clinicId, paymentPartialRub, submitAdd],
   );
 
   const filterListHref = useCallback(
@@ -1507,7 +1509,17 @@ export function OrderListTagsCell({
             ) : null}
             <OrderPaymentModalAccountingUpload
               orderId={orderId}
-              onSaved={() => router.refresh()}
+              invoiceAttachmentId={localInvoiceAttachmentId}
+              printBusy={busy}
+              onPrintInvoice={() =>
+                void printInvoiceAndMark(localInvoiceAttachmentId)
+              }
+              onSaved={(meta) => {
+                if (meta?.kind === "invoice" && meta.id) {
+                  setLocalInvoiceAttachmentId(meta.id);
+                }
+                router.refresh();
+              }}
             />
             {err ? (
               <p className="mt-2 text-sm text-red-600 dark:text-red-400">{err}</p>

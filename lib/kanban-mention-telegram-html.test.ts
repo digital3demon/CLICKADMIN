@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildKanbanMentionInCommentTelegramHtmlLine,
   extractOrderNumberLabelFromKanbanCardTitle,
+  telegramMentionCommentQuote,
 } from "@/lib/kanban-mention-telegram-html";
 
 vi.mock("@/lib/kaiten-card-web-url", () => ({
@@ -25,6 +26,24 @@ describe("extractOrderNumberLabelFromKanbanCardTitle", () => {
   });
 });
 
+describe("telegramMentionCommentQuote", () => {
+  it("кириллица до и после @тега — цитата целиком", () => {
+    expect(
+      telegramMentionCommentQuote("проверка @ilia тегнул и написал"),
+    ).toBe("проверка @ilia тегнул и написал");
+  });
+
+  it("только @тег — без цитаты", () => {
+    expect(telegramMentionCommentQuote("@ilia")).toBeNull();
+    expect(telegramMentionCommentQuote("  @clicklab  ")).toBeNull();
+  });
+
+  it("пустой ввод", () => {
+    expect(telegramMentionCommentQuote("")).toBeNull();
+    expect(telegramMentionCommentQuote("   \n  ")).toBeNull();
+  });
+});
+
 describe("buildKanbanMentionInCommentTelegramHtmlLine", () => {
   it("заказ + карточка: номер наряда и ссылка на Kaiten", () => {
     const line = buildKanbanMentionInCommentTelegramHtmlLine({
@@ -44,6 +63,7 @@ describe("buildKanbanMentionInCommentTelegramHtmlLine", () => {
     expect(line).toContain(
       '<a href="https://kaiten.example/card/999">карточке</a>',
     );
+    expect(line).not.toContain("«");
   });
 
   it("без наряда — только карточка (канбан)", () => {
@@ -56,5 +76,20 @@ describe("buildKanbanMentionInCommentTelegramHtmlLine", () => {
     expect(line).toBe(
       "Анна упомянул вас в <a href=\"https://crm.example/kanban?card=c1\">карточке</a>",
     );
+  });
+
+  it("кириллица в тексте комментария — цитата под заголовком, HTML экранирован", () => {
+    const line = buildKanbanMentionInCommentTelegramHtmlLine({
+      actorDisplayName: "Илья",
+      actorMentionHandle: "ilia",
+      linkedOrderId: "ord1",
+      orderNumberLabel: "2608-243",
+      kaitenCardId: 999,
+      kanbanCardAbsoluteUrl: "https://crm.example/kanban?card=x",
+      orderPageAbsoluteUrl: "https://crm.example/orders/ord1",
+      commentText: "@ilia тегнул и написал <срочно>",
+    });
+    expect(line).toContain("Илья (@ilia) упомянул вас в заказе");
+    expect(line).toContain("\n\n«@ilia тегнул и написал &lt;срочно&gt;»");
   });
 });

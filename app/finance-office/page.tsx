@@ -4,6 +4,8 @@ import {
   FinanceOfficeOrdersTable,
   type FinanceOfficeOrderTableRow,
 } from "@/components/finance-office/FinanceOfficeOrdersTable";
+import { FinanceOfficeSelectionProvider } from "@/components/finance-office/finance-office-selection";
+import { FinanceOfficePrintInvoicesButton } from "@/components/finance-office/FinanceOfficePrintInvoicesButton";
 import { FinanceOfficeBankImportPanel } from "@/components/finance-office/FinanceOfficeBankImportPanel";
 import { FinanceOfficeQuickFilterChips } from "@/components/finance-office/FinanceOfficeQuickFilterChips";
 import { FinanceOfficeModePanel } from "@/components/finance-office/FinanceOfficeModePanel";
@@ -167,6 +169,11 @@ export default async function FinanceOfficePage({
   if (rawTag && !rawTagInvalid) exportParams.set("tag", rawTag);
   if (q) exportParams.set("q", q);
   const exportHref = `/api/finance-office/export?${exportParams.toString()}`;
+  const tableOrders =
+    error || !shouldFetch ? [] : orders.map(serializeOrder);
+  const orderIdsWithInvoice = tableOrders
+    .filter((o) => o.invoiceAttachmentId)
+    .map((o) => o.id);
   const searchControls = (
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
       <form
@@ -199,6 +206,9 @@ export default async function FinanceOfficePage({
         >
           Выгрузить
         </a>
+        <FinanceOfficePrintInvoicesButton
+          orderIdsWithInvoice={orderIdsWithInvoice}
+        />
         {rawTag || q ? (
           <Link
             href={financeOfficeListHref({
@@ -269,6 +279,7 @@ export default async function FinanceOfficePage({
       title="ФинОтдел"
       rootClassName={`[&_.module-frame-header]:hidden ${FINANCE_OFFICE_FRAME_ROOT}`}
     >
+      <FinanceOfficeSelectionProvider>
       <div className={FINANCE_OFFICE_LIST_STACK}>
         {financeOfficeHeader}
         {shouldFetch && !error ? (
@@ -282,14 +293,16 @@ export default async function FinanceOfficePage({
           />
         ) : null}
         <FinanceOfficeOrdersTable
-          orders={error || !shouldFetch ? [] : orders.map(serializeOrder)}
+          orders={tableOrders}
           activeTag={tagLabel}
           tab={mode}
           periodFrom={fromRaw}
           periodTo={toRaw}
           q={q}
+          exportHref={exportHref}
         />
       </div>
+      </FinanceOfficeSelectionProvider>
     </ModuleFrame>
   );
 }

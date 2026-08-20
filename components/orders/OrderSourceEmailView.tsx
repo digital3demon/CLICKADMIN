@@ -33,12 +33,18 @@ export function OrderSourceEmailView({
   index,
   compact = false,
   usedByAi = false,
+  fillHeight = false,
+  hideReplyStatus = false,
 }: {
   email: OrderSourceEmailRow;
   index?: number;
   compact?: boolean;
   /** Письмо использовано ИИ для предсказания (Diff Viewer). */
   usedByAi?: boolean;
+  /** Карточка заполняет высоту колонки; тело письма крутится внутри. */
+  fillHeight?: boolean;
+  /** В канбане бейдж автоответа не нужен. */
+  hideReplyStatus?: boolean;
 }) {
   return (
     <article
@@ -46,9 +52,11 @@ export function OrderSourceEmailView({
         usedByAi
           ? "border-[var(--sidebar-blue)]/50 ring-1 ring-[var(--sidebar-blue)]/25"
           : "border-[var(--card-border)]"
-      } ${compact ? "p-3" : "p-4"}`}
+      } ${compact ? "p-3" : "p-4"} ${
+        fillHeight ? "flex h-full min-h-0 flex-col" : ""
+      }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           {index != null ? (
             <div className="text-[0.68rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
@@ -83,25 +91,33 @@ export function OrderSourceEmailView({
           <time className="text-[0.68rem] font-medium text-[var(--text-muted)]">
             {formatSourceEmailDate(email)}
           </time>
-          {email.isReplyTarget ? (
+          {email.isReplyTarget && !hideReplyStatus ? (
             <span className="rounded-full border border-emerald-400/50 bg-emerald-500/10 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
               {email.autoReplySentAt ? "Автоответ отправлен" : "Ответ по шаблону"}
             </span>
           ) : null}
         </div>
       </div>
-      <p className="mt-2 text-xs font-medium text-[var(--text-secondary)]">
+      <p className="mt-2 shrink-0 text-xs font-medium text-[var(--text-secondary)]">
         {senderLabel(email)}
       </p>
       <p
         className={`mt-3 overflow-y-auto whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)] ${
-          compact ? "max-h-48" : "max-h-72"
+          fillHeight
+            ? "min-h-0 flex-1"
+            : compact
+              ? "max-h-48"
+              : "max-h-72"
         }`}
       >
         <LinkifiedPlainText text={email.textBody ?? ""} />
       </p>
       {email.attachments.length > 0 ? (
-        <div className="mt-3 space-y-1.5">
+        <div
+          className={`mt-3 space-y-1.5 ${
+            fillHeight ? "max-h-28 shrink-0 overflow-y-auto" : ""
+          }`}
+        >
           <div className="text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             Вложения
           </div>

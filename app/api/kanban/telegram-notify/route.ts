@@ -50,6 +50,9 @@ function parseMentionContextPayload(
     kaitenCardId = Number(m.kaitenCardId);
   }
 
+  const commentText =
+    typeof m.commentText === "string" ? m.commentText : "";
+
   return {
     actorDisplayName,
     actorMentionHandle: actorMentionHandle || null,
@@ -58,6 +61,7 @@ function parseMentionContextPayload(
     kaitenCardId,
     kanbanCardAbsoluteUrl,
     orderPageAbsoluteUrl: orderPageAbsoluteUrl || null,
+    commentText: commentText || null,
   };
 }
 

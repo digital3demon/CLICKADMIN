@@ -57,6 +57,8 @@ export function FinanceOfficeBankImportPanel({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const previewGenRef = useRef(0);
   const [files, setFiles] = useState<File[]>([]);
   const [mode, setMode] = useState<"bank" | "invoices" | null>(null);
   const [bankRows, setBankRows] = useState<BankPreviewRow[]>([]);
@@ -67,7 +69,8 @@ export function FinanceOfficeBankImportPanel({
   const [invoiceResults, setInvoiceResults] = useState<
     FinanceInvoiceImportApplyResult[]
   >([]);
-  const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invoiceResultOpen, setInvoiceResultOpen] = useState(false);
   const [pdfPreview, setPdfPreview] = useState<{
@@ -84,12 +87,24 @@ export function FinanceOfficeBankImportPanel({
   >({});
   const lastInvoiceRowsRef = useRef<FinanceInvoiceImportPreviewRow[]>([]);
 
+  const busy = reading || saving;
   const hasRows = bankRows.length > 0;
   const invoicePreviewOpen = invoiceRows.length > 0 && !invoiceResultOpen;
   const savingInvoiceKey =
-    busy && saveProgress?.phase === "attach"
+    saving && saveProgress?.phase === "attach"
       ? (invoiceRows.find((r) => r.apply && !saveByKey[r.key])?.key ?? null)
       : null;
+
+  const abortPreview = () => {
+    previewAbortRef.current?.abort();
+    previewAbortRef.current = null;
+    previewGenRef.current += 1;
+    setReading(false);
+  };
+
+  const clearFileInput = () => {
+    if (inputRef.current) inputRef.current.value = "";
+  };
 
   const patchBankRow = (idx: number, patch: Partial<BankPreviewRow>) => {
     setBankRows((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
@@ -106,42 +121,41 @@ export function FinanceOfficeBankImportPanel({
     setInvoiceResults([]);
   };
 
-  const previewBank = async (file: File) => {
+  const previewBank = async (file: File, signal: AbortSignal) => {
     const form = new FormData();
     form.set("file", file);
     const res = await fetch("/api/finance-office/bank-import/preview", {
       method: "POST",
       body: form,
+      signal,
     });
     const data = (await res.json().catch(() => ({}))) as {
       rows?: BankPreviewRow[];
       error?: string;
     };
     if (!res.ok) throw new Error(data.error || "Не удалось прочитать выгрузку");
-    setBankRows(Array.isArray(data.rows) ? data.rows : []);
-    setInvoiceRows([]);
-    setMode("bank");
+    return Array.isArray(data.rows) ? data.rows : [];
   };
 
-  const previewInvoices = async (pack: File[]) => {
+  const previewInvoices = async (pack: File[], signal: AbortSignal) => {
     const form = new FormData();
     for (const f of pack) form.append("files", f);
     const res = await fetch("/api/finance-office/invoice-import/preview", {
       method: "POST",
       body: form,
+      signal,
     });
     const data = (await res.json().catch(() => ({}))) as {
       rows?: FinanceInvoiceImportPreviewRow[];
       error?: string;
     };
     if (!res.ok) throw new Error(data.error || "Не удалось прочитать счета");
-    setInvoiceRows(Array.isArray(data.rows) ? data.rows : []);
-    setBankRows([]);
-    setMode("invoices");
+    return Array.isArray(data.rows) ? data.rows : [];
   };
 
   const onFiles = (list: FileList | File[] | null) => {
     const next = list ? Array.from(list).filter((f) => f.size > 0) : [];
+    abortPreview();
     setFiles(next);
     setBankRows([]);
     setInvoiceRows([]);
@@ -159,25 +173,41 @@ export function FinanceOfficeBankImportPanel({
       pack.map((f) => ({ name: f.name, type: f.type })),
     );
     if (kind.kind === "mixed") {
+      setInvoiceRows([]);
       setError("Оплаты (Excel) и счета (PDF/архив) загружайте отдельно");
       return;
     }
     if (kind.kind === "unknown") {
+      setInvoiceRows([]);
       setError("Поддерживаются Excel оплат или PDF / ZIP / RAR / 7z счетов");
       return;
     }
-    setBusy(true);
+    previewAbortRef.current?.abort();
+    const ac = new AbortController();
+    previewAbortRef.current = ac;
+    const gen = ++previewGenRef.current;
+    setReading(true);
     setError(null);
     try {
       if (kind.kind === "bank") {
-        await previewBank(pack[0]!);
+        const rows = await previewBank(pack[0]!, ac.signal);
+        if (gen !== previewGenRef.current) return;
+        setBankRows(rows);
+        setInvoiceRows([]);
+        setMode("bank");
       } else {
-        await previewInvoices(pack);
+        const rows = await previewInvoices(pack, ac.signal);
+        if (gen !== previewGenRef.current) return;
+        setInvoiceRows(rows);
+        setBankRows([]);
+        setMode("invoices");
       }
     } catch (e) {
+      if (ac.signal.aborted || gen !== previewGenRef.current) return;
+      setInvoiceRows([]);
       setError(e instanceof Error ? e.message : "Ошибка чтения файла");
     } finally {
-      setBusy(false);
+      if (gen === previewGenRef.current) setReading(false);
     }
   };
 
@@ -234,7 +264,7 @@ export function FinanceOfficeBankImportPanel({
   };
 
   const apply = async () => {
-    setBusy(true);
+    setSaving(true);
     setError(null);
     setBankResults([]);
     setInvoiceResults([]);
@@ -245,7 +275,7 @@ export function FinanceOfficeBankImportPanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
     } finally {
-      setBusy(false);
+      setSaving(false);
       setSaveProgress(null);
     }
   };
@@ -279,8 +309,34 @@ export function FinanceOfficeBankImportPanel({
   };
 
   const closeInvoicePreview = () => {
+    if (saving) return;
+    abortPreview();
     setInvoiceRows([]);
+    setError(null);
+    setFiles([]);
+    setMode(null);
+    clearFileInput();
     closePdfPreview();
+  };
+
+  const openFilePicker = () => {
+    if (saving) return;
+    abortPreview();
+    inputRef.current?.click();
+  };
+
+  const pickAnotherInvoiceFile = () => {
+    if (saving) return;
+    abortPreview();
+    setInvoiceRows([]);
+    setInvoiceResults([]);
+    setInvoiceResultOpen(false);
+    setError(null);
+    setFiles([]);
+    setMode(null);
+    clearFileInput();
+    closePdfPreview();
+    window.setTimeout(() => inputRef.current?.click(), 180);
   };
 
   const retryInvoiceImport = () => {
@@ -327,6 +383,12 @@ export function FinanceOfficeBankImportPanel({
     return () => {
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("drop", onDrop);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      previewAbortRef.current?.abort();
     };
   }, []);
 
@@ -384,15 +446,15 @@ export function FinanceOfficeBankImportPanel({
           />
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
+            onClick={openFilePicker}
             className={
               compact
                 ? "rounded-md bg-[var(--sidebar-blue)] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50 sm:text-xs"
                 : "rounded-lg bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
             }
-            disabled={busy}
+            disabled={saving}
           >
-            {busy
+            {reading
               ? mode === "invoices"
                 ? "Читаю счета…"
                 : "Читаю файл…"
@@ -411,12 +473,22 @@ export function FinanceOfficeBankImportPanel({
               </span>
               <button
                 type="button"
-                disabled={busy}
+                disabled={reading || saving}
                 onClick={() => void runPreview(files)}
                 className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
               >
                 Перечитать
               </button>
+              {error ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={pickAnotherInvoiceFile}
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
+                >
+                  Выбрать другой файл
+                </button>
+              ) : null}
             </div>
           ) : compact ? (
             <p className="mt-0.5 text-[10px] leading-tight text-[var(--text-muted)]">
@@ -574,8 +646,8 @@ export function FinanceOfficeBankImportPanel({
           files.length > 1 ? `${files.length} файла` : files[0]?.name
         }
         size="wide"
-        closeOnEscape={!pdfPreview && !busy}
-        closeOnBackdrop={!pdfPreview && !busy}
+        closeOnEscape={!pdfPreview && !saving}
+        closeOnBackdrop={!pdfPreview && !saving}
         footer={
           <div className="flex w-full min-w-0 flex-col gap-2">
             {busy && saveProgress ? (
@@ -609,11 +681,19 @@ export function FinanceOfficeBankImportPanel({
             <div className="flex flex-wrap justify-end gap-2">
             <button
               type="button"
-              disabled={busy}
+              disabled={saving}
               onClick={closeInvoicePreview}
               className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
             >
               Закрыть
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={pickAnotherInvoiceFile}
+              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
+            >
+              Другой файл
             </button>
             <button
               type="button"

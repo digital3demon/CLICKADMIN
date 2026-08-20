@@ -902,6 +902,7 @@ export function KanbanCardModal({
         orderPageAbsoluteUrl: oid
           ? `${origin}/orders/${encodeURIComponent(oid)}`
           : null,
+        commentText: trimmed,
       };
 
       const prodTargets = hasProductionTag
@@ -2676,6 +2677,7 @@ export function KanbanCardModal({
         <OrderSourceEmailsModal
           orderId={card.linkedOrderId}
           orderNumber={extractOrderNumberLabelFromKanbanCardTitle(card.title)}
+          hideReplyStatus
           onClose={() => setOrderMailOpen(false)}
         />
       ) : null}

@@ -51,6 +51,8 @@ export function PublicStickerSourceEmailsModal({
     };
   }, [tenantSlug, token]);
 
+  const many = emails.length > 1;
+
   return (
     <div
       className="fixed inset-0 z-[100] flex items-end justify-center bg-zinc-900/45 p-3 sm:items-center sm:p-4"
@@ -60,7 +62,12 @@ export function PublicStickerSourceEmailsModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[min(92dvh,880px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl"
+        className={[
+          "flex w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl",
+          many
+            ? "h-[min(92dvh,880px)] max-w-[min(96vw,88rem)]"
+            : "max-h-[min(92dvh,880px)] max-w-lg",
+        ].join(" ")}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-5 py-4">
@@ -80,7 +87,12 @@ export function PublicStickerSourceEmailsModal({
             Закрыть
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-50/80 px-4 py-4">
+        <div
+          className={[
+            "min-h-0 flex-1 bg-zinc-50/80 px-4 py-4",
+            many ? "overflow-x-auto overflow-y-hidden" : "overflow-y-auto",
+          ].join(" ")}
+        >
           {loading ? (
             <p className="text-sm text-zinc-500">Загрузка писем…</p>
           ) : error ? (
@@ -89,16 +101,20 @@ export function PublicStickerSourceEmailsModal({
             <p className="text-sm text-zinc-500">
               К этому наряду не привязано писем.
             </p>
-          ) : (
-            <div className="space-y-3">
+          ) : many ? (
+            <div className="flex h-full snap-x snap-mandatory gap-3">
               {emails.map((email, index) => (
                 <div
                   key={email.id}
-                  className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+                  className="flex h-full w-[min(28rem,calc(100vw-3.5rem))] shrink-0 snap-start flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
                 >
-                  <OrderSourceEmailView email={email} index={index} />
+                  <OrderSourceEmailView email={email} index={index} fillHeight />
                 </div>
               ))}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+              <OrderSourceEmailView email={emails[0]!} index={0} />
             </div>
           )}
         </div>

@@ -120,6 +120,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
     kaitenCardId: opts.kaitenCardId ?? null,
     kanbanCardAbsoluteUrl,
     orderPageAbsoluteUrl,
+    commentText: opts.text,
   };
   const line = buildKanbanMentionInCommentTelegramHtmlLine(mentionCtx);
 

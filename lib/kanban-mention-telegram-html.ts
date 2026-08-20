@@ -1,5 +1,11 @@
+/**
+ * HTML для TG: кто упомянул + ссылки на наряд/карточку + цитата текста комментария.
+ * commentText — как ввёл пользователь; в HTML только escapeTelegramHtml.
+ */
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
+
+const TELEGRAM_MENTION_COMMENT_MAX = 800;
 
 /** Контекст для сборки HTML одной строки уведомления об @упоминании в чате. */
 export type KanbanMentionTelegramContext = {
@@ -13,7 +19,29 @@ export type KanbanMentionTelegramContext = {
   kanbanCardAbsoluteUrl: string;
   /** Абсолютная ссылка на страницу наряда в CRM; нужна при наличии linkedOrderId. */
   orderPageAbsoluteUrl?: string | null;
+  /** Текст комментария (с @тегами); в TG показываем цитату, если есть слова кроме упоминаний. */
+  commentText?: string | null;
 };
+
+/**
+ * Цитата для TG: схлопывает пробелы, режет длину.
+ * Пусто, если в тексте только @токены — заголовок «упомянул вас» уже это говорит.
+ * Не `\b`: кириллица не word-char; токен как в kanban-comment-mentions.
+ */
+export function telegramMentionCommentQuote(
+  text: string,
+  max = TELEGRAM_MENTION_COMMENT_MAX,
+): string | null {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (!collapsed) return null;
+  const withoutMentions = collapsed
+    .replace(/@[\p{L}\p{N}._-]+/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!withoutMentions) return null;
+  if (collapsed.length <= max) return collapsed;
+  return `${collapsed.slice(0, Math.max(1, max - 1))}…`;
+}
 
 function actorWhoLine(ctx: KanbanMentionTelegramContext): string {
   const name = escapeTelegramHtml(
@@ -46,14 +74,16 @@ export function buildKanbanMentionInCommentTelegramHtmlLine(
 
   const oid = (ctx.linkedOrderId || "").trim();
   const orderUrl = (ctx.orderPageAbsoluteUrl || "").trim();
-  if (oid && orderUrl) {
-    const numRaw = (ctx.orderNumberLabel || "").trim();
-    const label = numRaw || oid.slice(0, 12);
-    const orderLink = telegramHtmlLink(orderUrl, label);
-    return `${who} упомянул вас в заказе ${orderLink} и в ${cardLink}`;
-  }
-
-  return `${who} упомянул вас в ${cardLink}`;
+  const head =
+    oid && orderUrl
+      ? `${who} упомянул вас в заказе ${telegramHtmlLink(
+          orderUrl,
+          (ctx.orderNumberLabel || "").trim() || oid.slice(0, 12),
+        )} и в ${cardLink}`
+      : `${who} упомянул вас в ${cardLink}`;
+  const quote = telegramMentionCommentQuote(ctx.commentText ?? "");
+  if (!quote) return head;
+  return `${head}\n\n«${escapeTelegramHtml(quote)}»`;
 }
 
 /** Первая строка заголовка карточки до пробела — обычно номер наряда в зеркале Kaiten. */

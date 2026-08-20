@@ -23,7 +23,7 @@ type Props = {
   disabled?: boolean;
   className?: string;
   idleLabel: string;
-  onUploaded?: () => void | Promise<void>;
+  onUploaded?: (meta?: { id: string }) => void | Promise<void>;
   onHint?: (msg: string | null) => void;
 };
 
@@ -125,7 +125,7 @@ export function OrderAccountingFileDropZone({
                 ? "Платёжка сохранена."
                 : `Сохранено платёжек: ${uploaded}.`,
           );
-          await Promise.resolve(onUploaded?.());
+          await Promise.resolve(onUploaded?.({ id: j.id }));
         }
       } catch (e) {
         const aborted =

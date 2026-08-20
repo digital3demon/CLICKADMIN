@@ -8,10 +8,12 @@ export function OrderSourceEmailsModal({
   orderId,
   orderNumber,
   onClose,
+  hideReplyStatus = false,
 }: {
   orderId: string;
   orderNumber?: string | null;
   onClose: () => void;
+  hideReplyStatus?: boolean;
 }) {
   const [emails, setEmails] = useState<OrderSourceEmailRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +45,8 @@ export function OrderSourceEmailsModal({
     };
   }, [orderId]);
 
+  const many = emails.length > 1;
+
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4"
@@ -52,7 +56,12 @@ export function OrderSourceEmailsModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[min(90dvh,820px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
+        className={[
+          "flex w-full flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl",
+          many
+            ? "h-[min(90dvh,820px)] max-w-[min(96vw,88rem)]"
+            : "max-h-[min(90dvh,820px)] max-w-2xl",
+        ].join(" ")}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
@@ -74,7 +83,12 @@ export function OrderSourceEmailsModal({
             Закрыть
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div
+          className={[
+            "min-h-0 flex-1 p-4",
+            many ? "overflow-x-auto overflow-y-hidden" : "overflow-y-auto",
+          ].join(" ")}
+        >
           {loading ? (
             <p className="text-sm text-[var(--text-secondary)]">Загрузка писем…</p>
           ) : error ? (
@@ -83,12 +97,28 @@ export function OrderSourceEmailsModal({
             <p className="text-sm text-[var(--text-secondary)]">
               К этому наряду не привязано писем.
             </p>
-          ) : (
-            <div className="space-y-3">
+          ) : many ? (
+            <div className="flex h-full snap-x snap-mandatory gap-3">
               {emails.map((email, index) => (
-                <OrderSourceEmailView key={email.id} email={email} index={index} />
+                <div
+                  key={email.id}
+                  className="flex h-full w-[min(28rem,calc(100vw-3.5rem))] shrink-0 snap-start flex-col"
+                >
+                  <OrderSourceEmailView
+                    email={email}
+                    index={index}
+                    fillHeight
+                    hideReplyStatus={hideReplyStatus}
+                  />
+                </div>
               ))}
             </div>
+          ) : (
+            <OrderSourceEmailView
+              email={emails[0]!}
+              index={0}
+              hideReplyStatus={hideReplyStatus}
+            />
           )}
         </div>
       </div>

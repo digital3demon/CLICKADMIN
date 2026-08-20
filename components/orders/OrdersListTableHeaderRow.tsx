@@ -477,7 +477,7 @@ export function OrdersListTableHeaderRow({
             fromTitle="Лабораторный срок с (МСК), включительно"
             toTitle="Лабораторный срок по (МСК), включительно"
           />
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-nowrap items-center gap-1.5">
             <button
               type="button"
               className={dayPresetBtn(labIsToday)}
@@ -494,15 +494,13 @@ export function OrdersListTableHeaderRow({
             >
               Завтра
             </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
             <button type="button" className={showBtn} onClick={applyLab}>
               Показать
             </button>
             {labActive ? (
               <button
                 type="button"
-                className="h-8 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 text-[11px] font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                className="h-8 shrink-0 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 text-[11px] font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
                 onClick={() => {
                   router.push(
                     ordersListHref({
