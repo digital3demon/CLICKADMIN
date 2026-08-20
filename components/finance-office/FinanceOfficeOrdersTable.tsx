@@ -12,11 +12,6 @@ import {
 import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
-import {
-  OrderListAdminMemoCell,
-  OrderListTechMemoCell,
-} from "@/components/orders/OrderListAdminMemoCell";
-import { canEditOrderListTechMemo } from "@/lib/auth/permissions";
 import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
@@ -89,8 +84,6 @@ export type FinanceOfficeOrderTableRow = {
   invoiceSentToEdo: boolean;
   invoiceEdoSigned: boolean;
   prostheticsOrdered: boolean;
-  listAdminMemo: string | null;
-  listTechMemo: string | null;
   listCustomTags: Array<{ id: string; label: string }>;
   listCompositionMismatch: boolean;
   listPendingChatCorrections: boolean;
@@ -147,9 +140,6 @@ export function FinanceOfficeOrdersTable({
     user?.role,
     user?.moduleAccess,
   );
-  const canEditTechMemo = user?.role
-    ? canEditOrderListTechMemo(user.role)
-    : false;
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const visibleIds = useMemo(() => orders.map((o) => o.id), [orders]);
   const allVisibleSelected =
@@ -218,18 +208,6 @@ export function FinanceOfficeOrdersTable({
                   </button>
                   <span>Выбрать</span>
                 </div>
-              </th>
-              <th
-                className="w-[4.25rem] px-1 py-2 text-center normal-case max-xl:hidden"
-                title="ПА — пометки админов (не уходят в наряд и Kaiten)"
-              >
-                ПА
-              </th>
-              <th
-                className="w-[4.25rem] px-1 py-2 text-center normal-case max-xl:hidden"
-                title="ПТ — пометки техники (не уходят в наряд и Kaiten)"
-              >
-                ПТ
               </th>
               <th className="w-10 px-1 py-2 text-center normal-case max-xl:hidden">Чат</th>
               <th className="px-2 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
@@ -378,19 +356,6 @@ export function FinanceOfficeOrdersTable({
                         })
                       }
                       aria-label={`Выбрать наряд ${o.orderNumber}`}
-                    />
-                  </td>
-                  <td className="max-xl:hidden w-[4.25rem] px-1 py-1.5 text-center align-middle">
-                    <OrderListAdminMemoCell
-                      orderId={o.id}
-                      initialMemo={o.listAdminMemo}
-                    />
-                  </td>
-                  <td className="max-xl:hidden w-[4.25rem] px-1 py-1.5 text-center align-middle">
-                    <OrderListTechMemoCell
-                      orderId={o.id}
-                      initialMemo={o.listTechMemo}
-                      canEdit={canEditTechMemo}
                     />
                   </td>
                   <OrderListOrderChatCell
@@ -556,24 +521,6 @@ export function FinanceOfficeOrdersTable({
                               shippedAtIso={o.adminShippedAt}
                             />
                           </div>
-                        </div>
-                      </div>
-
-                      <div
-                        className="mb-1 max-w-full"
-                        data-row-click-ignore
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-start gap-2">
-                          <OrderListAdminMemoCell
-                            orderId={o.id}
-                            initialMemo={o.listAdminMemo}
-                          />
-                          <OrderListTechMemoCell
-                            orderId={o.id}
-                            initialMemo={o.listTechMemo}
-                            canEdit={canEditTechMemo}
-                          />
                         </div>
                       </div>
 
