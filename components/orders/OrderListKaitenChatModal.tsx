@@ -259,7 +259,7 @@ export function OrderListKaitenChatModal({
     setLoadError(null);
     setChatMode("kanban");
     try {
-      // Как карточка на доске: local=1 — без Kaiten и без полного JSON канбана.
+      // Как карточка на доске: local=1 — без полного JSON канбана.
       const chatRes = await fetch(`/api/orders/${orderId}/kanban-chat?local=1`, {
         credentials: "include",
         cache: "no-store",

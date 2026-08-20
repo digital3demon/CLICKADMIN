@@ -22,7 +22,8 @@ type KaitenSnapshotComment = {
  * `displayUserId` — запасной userId для верстки; подпись берётся из `authorLabel`.
  */
 /**
- * Лента и описание из CRM (GET /kanban-chat?local=1). Kaiten не ждём — он фоновое зеркало.
+ * Лента и описание из CRM (GET /kanban-chat?local=1).
+ * Если зеркало пустое, сервер один раз подтягивает комментарии Kaiten.
  */
 export async function fetchKanbanMirrorCommentsForOrder(
   orderId: string,

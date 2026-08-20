@@ -11,6 +11,7 @@ import {
 
 export {
   kanbanOrderCommentsStateKey,
+  mergeIncomingKaitenIntoKanbanComments,
   mergeKanbanOrderComments,
   parseStoredKanbanOrderComments,
 } from "@/lib/kanban/kanban-order-comments";

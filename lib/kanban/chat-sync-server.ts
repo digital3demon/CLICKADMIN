@@ -6,9 +6,12 @@ import {
   findCardByLinkedOrderId,
   KANBAN_CHAT_STATE_KEY,
   parseKanbanAppState,
-  upsertKaitenCommentsToCard,
 } from "@/lib/kanban/chat-sync";
-import { saveKanbanOrderComments } from "@/lib/kanban/kanban-order-comments-store";
+import {
+  loadKanbanOrderComments,
+  mergeIncomingKaitenIntoKanbanComments,
+  saveKanbanOrderComments,
+} from "@/lib/kanban/kanban-order-comments-store";
 
 function isTenantClientStateMissing(err: unknown): boolean {
   if (err == null || typeof err !== "object") return false;
@@ -33,34 +36,49 @@ export async function syncKaitenCommentsIntoKanbanState(input: {
   }
 
   try {
+    const existingStore = await loadKanbanOrderComments(tenantId, orderId);
     const corePrisma = await getPrisma();
-    const row = await corePrisma.tenantClientState.findUnique({
-      where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
-      select: { value: true },
-    });
-    const state = parseKanbanAppState(row?.value ?? null);
-    if (!state) return { changed: false, skipped: true };
+    let state: ReturnType<typeof parseKanbanAppState> = null;
+    try {
+      const row = await corePrisma.tenantClientState.findUnique({
+        where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
+        select: { value: true },
+      });
+      state = parseKanbanAppState(row?.value ?? null);
+    } catch (err) {
+      if (!isTenantClientStateMissing(err)) throw err;
+    }
 
-    const loc = findCardByLinkedOrderId(state, orderId);
-    if (!loc) return { changed: false, skipped: true };
-
-    const card =
-      state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
-    const merged = upsertKaitenCommentsToCard(card.comments || [], input.comments);
+    const loc = state ? findCardByLinkedOrderId(state, orderId) : null;
+    const cardComments =
+      loc && state
+        ? state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!
+            .comments || []
+        : [];
+    const merged = mergeIncomingKaitenIntoKanbanComments(
+      cardComments,
+      existingStore,
+      input.comments,
+    );
     if (!merged.changed) return { changed: false, skipped: false };
 
-    card.comments = merged.next;
-    card.updatedAt = new Date().toISOString();
     try {
       await saveKanbanOrderComments(tenantId, orderId, merged.next);
-    } catch {
-      /* зеркало в kanbanAppStateV3 всё равно пишем */
+    } catch (e) {
+      console.error("[syncKaitenCommentsIntoKanbanState] comments store", orderId, e);
     }
-    await corePrisma.tenantClientState.upsert({
-      where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
-      create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },
-      update: { value: state as never },
-    });
+
+    if (state && loc) {
+      const card =
+        state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
+      card.comments = merged.next;
+      card.updatedAt = new Date().toISOString();
+      await corePrisma.tenantClientState.upsert({
+        where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
+        create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },
+        update: { value: state as never },
+      });
+    }
     return { changed: true, skipped: false };
   } catch (err) {
     if (isTenantClientStateMissing(err)) return { changed: false, skipped: true };

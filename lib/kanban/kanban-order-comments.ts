@@ -2,6 +2,8 @@ import type { CardComment } from "@/lib/kanban/types";
 import {
   compactCardComments,
   normalizeCardComment,
+  upsertKaitenCommentsToCard,
+  type KaitenCommentForSync,
 } from "@/lib/kanban/chat-sync";
 
 /** Отдельный ключ: slim kanbanAppStateV3 обнуляет card.comments. */
@@ -47,4 +49,18 @@ export function mergeKanbanOrderComments(
     if (nextScore >= prevScore) byId.set(key, n);
   }
   return compactCardComments([...byId.values()]);
+}
+
+/**
+ * Ingest Kaiten → лента CRM: база = slim card + persisted store, затем upsert.
+ * Нельзя мержить только в `card.comments` (после slim это `[]`) — иначе
+ * частичный ответ Kaiten затирает `kanbanCommentsV1`.
+ */
+export function mergeIncomingKaitenIntoKanbanComments(
+  fromCard: CardComment[] | undefined,
+  fromStore: CardComment[],
+  incoming: readonly KaitenCommentForSync[],
+): { next: CardComment[]; changed: boolean } {
+  const existing = mergeKanbanOrderComments(fromCard, fromStore);
+  return upsertKaitenCommentsToCard(existing, [...incoming]);
 }

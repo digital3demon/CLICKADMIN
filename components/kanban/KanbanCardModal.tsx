@@ -18,9 +18,11 @@ import {
 import {
   deleteOrderAttachmentById,
   fetchKanbanMirrorCommentsForOrder,
+  fetchOrderKaitenCommentsForKanban,
   patchOrderKaitenCard,
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
+import { needsOrderListKaitenChatFallback } from "@/lib/kanban/order-list-chat-hydrate";
 import {
   forgetOptimisticKaitenBlock,
   OPTIMISTIC_KAITEN_BLOCK_SHORT_TTL_MS,
@@ -556,20 +558,43 @@ export function KanbanCardModal({
     let cancelled = false;
     void (async () => {
       const snap = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
-      if (cancelled || !snap.ok) return;
+      if (cancelled) return;
+      let comments = snap.ok ? snap.comments : null;
+      const description = snap.ok ? snap.description : "";
+      if (
+        comments != null &&
+        needsOrderListKaitenChatFallback({
+          mirrorOk: true,
+          commentCount: comments.length,
+        })
+      ) {
+        const kaiten = await fetchOrderKaitenCommentsForKanban(
+          linkedOrderId,
+          chatActorUserId,
+        );
+        if (cancelled) return;
+        if (kaiten.ok && kaiten.comments.length > 0) {
+          comments = kaiten.comments;
+        }
+      }
+      if (comments == null) return;
+      const nextComments = comments;
       onApply((b) => {
         const fc = findCard(b, cardId);
         if (!fc) return;
-        fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
-        if (snap.description.trim() && !(fc.card.description || "").trim()) {
-          fc.card.description = snap.description;
+        const hadLocal = (fc.card.comments || []).length > 0;
+        if (nextComments.length > 0 || !hadLocal) {
+          fc.card.comments = withImagePlaceholders(nextComments, fc.card);
+        }
+        if (description.trim() && !(fc.card.description || "").trim()) {
+          fc.card.description = description;
         }
       });
     })();
     return () => {
       cancelled = true;
     };
-  }, [cardId, linkedOrderId, onApply]);
+  }, [cardId, linkedOrderId, onApply, chatActorUserId]);
 
   const adminMentionTag = useKanbanAdminMentionTag();
   const adminMentionUserIds = useMemo(

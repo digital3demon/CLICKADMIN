@@ -3,7 +3,7 @@
  *
  * Источник ленты: tenantClientState `kanbanCommentsV1:{orderId}` + шапка наряда.
  * Timezone: даты комментариев как ISO из хранилища (не нормализуем).
- * `?local=1` / `sync=0`: без Kaiten и без полного kanbanAppStateV3.
+ * `?local=1` / `sync=0`: без полного kanbanAppStateV3; Kaiten только если лента пуста.
  * Без local: после ответа ещё тянем файлы Kaiten и JSON доски (чат из списка нарядов).
  * POST: пишем CRM (лента `kanbanCommentsV1`) и сразу отвечаем; Kaiten + TG — `after()`.
  */
@@ -16,6 +16,7 @@ import type { CardComment, KanbanAppState } from "@/lib/kanban/types";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import {
   buildKaitenCommentTextWithCrmAuthor,
+  dedupeParsedKaitenComments,
   kaitenJsonIntId,
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
@@ -34,7 +35,10 @@ import {
 } from "@/lib/order-chat-pt-memo";
 import { applyOrderListTechMemo } from "@/lib/order-list-tech-memo.server";
 import { canSendKanbanChatPtMemo } from "@/lib/auth/permissions";
-import { ingestCrmKanbanCommentForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
+import {
+  ingestCrmKanbanCommentForOrder,
+  ingestKaitenCommentsForOrder,
+} from "@/lib/kanban/kaiten-comments-ingest-server";
 import {
   bindOrderChatInboxItemsByCrmDraft,
   markOrderChatInboxDraftSyncFailed,
@@ -368,8 +372,8 @@ export async function GET(
     return NextResponse.json({ error: "Не указан id" }, { status: 400 });
   }
   /**
-   * Карточка доски: `?local=1` — только CRM (чат + шапка). Без Kaiten и без
-   * полного tenant JSON канбана (~сотни КБ), иначе модалка висит секундами.
+   * Карточка доски: `?local=1` — CRM-лента + шапка, без полного JSON канбана.
+   * Если зеркало пустое, один раз тянем комментарии Kaiten и пишем store.
    */
   const localOnly = isKanbanChatLocalOnlyRequest(new URL(req.url));
   const t0 = Date.now();
@@ -381,11 +385,46 @@ export async function GET(
   let workImages = bundleImages;
 
   if (localOnly) {
-    const comments = normalizeCardCommentsForApi(storedComments);
+    let comments = normalizeCardCommentsForApi(storedComments);
+    const kaitenCardId = orderHeader?.kaitenCardId;
+    if (
+      comments.length === 0 &&
+      kaitenCardId != null &&
+      Number.isFinite(kaitenCardId)
+    ) {
+      const auth = getKaitenRestAuth();
+      if (auth) {
+        try {
+          const comm = await kaitenListComments(auth, kaitenCardId);
+          if (comm.ok) {
+            const parsed = dedupeParsedKaitenComments(
+              comm.comments
+                .map(parseKaitenListComment)
+                .filter((x): x is NonNullable<typeof x> => x != null),
+            );
+            if (parsed.length > 0) {
+              const ordersPrisma = await getOrdersPrisma();
+              await ingestKaitenCommentsForOrder({
+                prisma: ordersPrisma,
+                tenantId,
+                orderId,
+                parsed,
+              });
+              comments = normalizeCardCommentsForApi(
+                await loadKanbanOrderComments(tenantId, orderId),
+              );
+            }
+          }
+        } catch (e) {
+          console.error("[kanban-chat GET] hydrate empty store", orderId, e);
+        }
+      }
+    }
     console.info("[kanban-chat GET]", {
       orderId,
       local: true,
       comments: comments.length,
+      hydrated: comments.length > storedComments.length,
       ms: Date.now() - t0,
     });
     return NextResponse.json({
@@ -676,7 +715,18 @@ export async function POST(
       const saved = await saveTenantKanbanStateWithRetry(tenantId, next, loaded.updatedAt);
       if (!saved) continue;
       try {
-        await saveKanbanOrderComments(tenantId, orderId, card.comments || []);
+        const stored = await loadKanbanOrderComments(tenantId, orderId);
+        const withRetry = stored.map((c) =>
+          String(c.id || "").trim() === retryCommentId ? synced : c,
+        );
+        if (!withRetry.some((c) => String(c.id || "").trim() === retryCommentId)) {
+          withRetry.push(synced);
+        }
+        await saveKanbanOrderComments(
+          tenantId,
+          orderId,
+          mergeKanbanOrderComments(card.comments || [], withRetry),
+        );
       } catch (e) {
         console.error("[kanban-chat POST] persist CRM comments", orderId, e);
       }
