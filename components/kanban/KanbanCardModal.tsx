@@ -878,7 +878,7 @@ export function KanbanCardModal({
       adminUserIds: adminMentionUserIds,
       productionMentionTag: productionMentionTagResolved,
       productionUserIds,
-    }).filter((id) => id !== actor);
+    });
 
     const hasProductionTag =
       productionUserIds.length > 0 &&

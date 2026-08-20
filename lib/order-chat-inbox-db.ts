@@ -1,10 +1,9 @@
-import type {
-  OrderChatCorrectionSource,
-  PrismaClient,
-  UserRole,
-} from "@prisma/client";
+import type { OrderChatCorrectionSource, PrismaClient } from "@prisma/client";
 import { textIncludesAdminLabMention } from "@/lib/kaiten-comment-parse";
-import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
+import {
+  isKanbanLabMentionNotifyRole,
+  normalizeKanbanAdminMentionTag,
+} from "@/lib/kanban-admin-mention";
 import { parseMentionUserIdsFromText } from "@/lib/kanban-comment-mentions";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
@@ -12,8 +11,6 @@ import { trimOrderChatAuthorLabel } from "@/lib/order-chat-trigger-author";
 
 type ChatInboxType = "CORRECTION" | "PROSTHETICS" | "LAB_MENTION" | "USER_MENTION";
 type ChatInboxSyncState = "PENDING_EXTERNAL" | "SYNCED_EXTERNAL" | "LOCAL_ONLY" | "FAILED_EXTERNAL";
-
-const ADMIN_ROLES: UserRole[] = ["ADMINISTRATOR", "SENIOR_ADMINISTRATOR"];
 
 function detectChatInboxTypes(
   text: string,
@@ -60,10 +57,11 @@ async function createUserMentionInboxItems(
     source: OrderChatCorrectionSource;
     kanbanAdminMentionTag?: string | null;
   },
-): Promise<boolean> {
+): Promise<{ createdTargetUserIds: string[]; changed: boolean }> {
+  const createdTargetUserIds: string[] = [];
   const orderId = input.orderId.trim();
   const tenantId = input.tenantId.trim();
-  if (!orderId || !tenantId) return false;
+  if (!orderId || !tenantId) return { createdTargetUserIds, changed: false };
 
   const users = await db.user.findMany({
     where: { tenantId, isActive: true },
@@ -77,13 +75,13 @@ async function createUserMentionInboxItems(
   });
   const adminTag = normalizeKanbanAdminMentionTag(input.kanbanAdminMentionTag);
   const adminUserIds = users
-    .filter((u) => ADMIN_ROLES.includes(u.role))
+    .filter((u) => isKanbanLabMentionNotifyRole(u.role))
     .map((u) => u.id);
   const mentionedIds = parseMentionUserIdsFromText(input.text, users, {
     adminMentionTag: adminTag,
     adminUserIds,
   });
-  if (mentionedIds.length === 0) return false;
+  if (mentionedIds.length === 0) return { createdTargetUserIds, changed: false };
 
   const authorLabel = trimOrderChatAuthorLabel(input.authorLabel);
   let changed = false;
@@ -143,7 +141,6 @@ async function createUserMentionInboxItems(
             authorLabel,
             syncState: input.syncState,
             source: input.source,
-            ...(kaitenId != null && kaitenId > 0 ? { kaitenCommentId: kaitenId } : {}),
             ...(crmDraftFromInput
               ? { crmDraftId: userMentionDraftKey(crmDraftFromInput, targetUserId) }
               : {}),
@@ -159,7 +156,7 @@ async function createUserMentionInboxItems(
     if (!baseDraft) continue;
 
     const draftKey = userMentionDraftKey(baseDraft, targetUserId);
-    await (db as any).orderChatInboxItem.upsert({
+    const existing = await (db as any).orderChatInboxItem.findUnique({
       where: {
         orderId_type_crmDraftId: {
           orderId,
@@ -167,29 +164,46 @@ async function createUserMentionInboxItems(
           crmDraftId: draftKey,
         },
       },
-      create: {
-        tenantId,
-        orderId,
-        type: "USER_MENTION",
-        source: input.source,
-        text: input.text,
-        authorLabel,
-        crmDraftId: draftKey,
-        kaitenCommentId: input.kaitenCommentId ?? null,
-        syncState: input.syncState,
-        targetUserId,
-      },
-      update: {
-        text: input.text,
-        authorLabel,
-        syncState: input.syncState,
-        targetUserId,
-        kaitenCommentId: input.kaitenCommentId ?? null,
-      },
+      select: { id: true },
     });
-    changed = true;
+    try {
+      await (db as any).orderChatInboxItem.upsert({
+        where: {
+          orderId_type_crmDraftId: {
+            orderId,
+            type: "USER_MENTION",
+            crmDraftId: draftKey,
+          },
+        },
+        create: {
+          tenantId,
+          orderId,
+          type: "USER_MENTION",
+          source: input.source,
+          text: input.text,
+          authorLabel,
+          crmDraftId: draftKey,
+          // Не пишем kaitenCommentId: unique (orderId, type, kaitenCommentId)
+          // иначе второй @ в том же комментарии падает с P2002.
+          kaitenCommentId: null,
+          syncState: input.syncState,
+          targetUserId,
+        },
+        update: {
+          text: input.text,
+          authorLabel,
+          syncState: input.syncState,
+          targetUserId,
+        },
+      });
+      if (!existing?.id) createdTargetUserIds.push(targetUserId);
+      changed = true;
+    } catch (e) {
+      const code = (e as { code?: string } | null)?.code;
+      if (code !== "P2002") throw e;
+    }
   }
-  return changed;
+  return { createdTargetUserIds, changed };
 }
 
 export async function createOrderChatInboxItemsFromCrmComment(
@@ -246,7 +260,7 @@ export async function createOrderChatInboxItemsFromCrmComment(
     source,
     kanbanAdminMentionTag: input.kanbanAdminMentionTag,
   });
-  return changed || userChanged;
+  return changed || userChanged.changed;
 }
 
 export async function bindOrderChatInboxItemsByCrmDraft(
@@ -264,15 +278,24 @@ export async function bindOrderChatInboxItemsByCrmDraft(
     return false;
   }
   const upd = await (db as any).orderChatInboxItem.updateMany({
-    where: orderChatInboxRowsForCrmDraftWhere(orderId, draft, {
-      kaitenCommentId: null,
-    }),
+    where: {
+      ...orderChatInboxRowsForCrmDraftWhere(orderId, draft, {
+        kaitenCommentId: null,
+      }),
+      NOT: { type: "USER_MENTION" },
+    },
     data: {
       kaitenCommentId,
       syncState: "SYNCED_EXTERNAL",
     },
   });
-  return upd.count > 0;
+  const mentionUpd = await (db as any).orderChatInboxItem.updateMany({
+    where: orderChatInboxRowsForCrmDraftWhere(orderId, draft, {
+      type: "USER_MENTION",
+    }),
+    data: { syncState: "SYNCED_EXTERNAL" },
+  });
+  return upd.count > 0 || mentionUpd.count > 0;
 }
 
 export async function markOrderChatInboxDraftSyncFailed(
@@ -307,8 +330,16 @@ export async function recordUserMentionsFromOrderComment(
     kanbanAdminMentionTag?: string | null;
   },
 ): Promise<boolean> {
-  return createUserMentionInboxItems(db, input);
+  const r = await createUserMentionInboxItems(db, input);
+  return r.changed;
 }
+
+export type KaitenInboxNewPersonalMention = {
+  text: string;
+  created?: string;
+  isCrm: boolean;
+  targetUserIds: string[];
+};
 
 export async function syncOrderChatInboxFromKaitenComments(
   db: PrismaClient,
@@ -318,16 +349,21 @@ export async function syncOrderChatInboxFromKaitenComments(
     comments: ReadonlyArray<{
       id: number;
       text: string;
+      created?: string;
       authorName?: string | null;
       crmDraftId?: string | null;
+      isCrm?: boolean;
     }>;
     kanbanAdminMentionTag?: string | null;
   },
-): Promise<boolean> {
+): Promise<{ changed: boolean; newPersonalMentions: KaitenInboxNewPersonalMention[] }> {
   const tenantId = input.tenantId.trim();
   const orderId = input.orderId.trim();
-  if (!tenantId || !orderId || input.comments.length === 0) return false;
+  if (!tenantId || !orderId || input.comments.length === 0) {
+    return { changed: false, newPersonalMentions: [] };
+  }
   let changed = false;
+  const newPersonalMentions: KaitenInboxNewPersonalMention[] = [];
 
   for (const c of input.comments) {
     const kaitenCommentId = Math.trunc(c.id);
@@ -335,7 +371,7 @@ export async function syncOrderChatInboxFromKaitenComments(
     const authorLabel = trimOrderChatAuthorLabel(c.authorName);
     const crmDraftId = String(c.crmDraftId || "").trim() || null;
 
-    const userMentionChanged = await createUserMentionInboxItems(db, {
+    const userMention = await createUserMentionInboxItems(db, {
       tenantId,
       orderId,
       text: c.text,
@@ -346,7 +382,15 @@ export async function syncOrderChatInboxFromKaitenComments(
       source: "KAITEN",
       kanbanAdminMentionTag: input.kanbanAdminMentionTag,
     });
-    if (userMentionChanged) changed = true;
+    if (userMention.changed) changed = true;
+    if (userMention.createdTargetUserIds.length > 0) {
+      newPersonalMentions.push({
+        text: c.text,
+        created: c.created,
+        isCrm: c.isCrm === true,
+        targetUserIds: userMention.createdTargetUserIds,
+      });
+    }
 
     const types = detectChatInboxTypes(c.text, input.kanbanAdminMentionTag);
     if (types.length === 0) continue;
@@ -404,5 +448,5 @@ export async function syncOrderChatInboxFromKaitenComments(
     }
   }
 
-  return changed;
+  return { changed, newPersonalMentions };
 }

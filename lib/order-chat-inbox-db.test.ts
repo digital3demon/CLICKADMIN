@@ -38,11 +38,17 @@ describe("order-chat-inbox-db", () => {
       kaitenCommentId: 123,
     });
     expect(changed).toBe(true);
-    expect(updateMany).toHaveBeenCalledOnce();
+    expect(updateMany).toHaveBeenCalledTimes(2);
     expect(updateMany.mock.calls[0]?.[0]?.where?.OR).toEqual([
       { crmDraftId: "cm_abc12345" },
       { crmDraftId: { startsWith: "cm_abc12345@u:" } },
     ]);
+    expect(updateMany.mock.calls[0]?.[0]?.where?.NOT).toEqual({
+      type: "USER_MENTION",
+    });
+    expect(updateMany.mock.calls[1]?.[0]?.data).toEqual({
+      syncState: "SYNCED_EXTERNAL",
+    });
   });
 
   it("при sync из Kaiten без DRAFT обновляет pending USER_MENTION, а не плодит k:", async () => {
@@ -74,9 +80,10 @@ describe("order-chat-inbox-db", () => {
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "inbox-1" },
-        data: expect.objectContaining({ kaitenCommentId: 99 }),
+        data: expect.objectContaining({ syncState: "SYNCED_EXTERNAL" }),
       }),
     );
+    expect(update.mock.calls[0]?.[0]?.data?.kaitenCommentId).toBeUndefined();
     expect(upsert).not.toHaveBeenCalled();
   });
 
@@ -98,7 +105,7 @@ describe("order-chat-inbox-db", () => {
       orderChatInboxItem: { updateMany, upsert },
       ...emptyUsersDb(),
     } as any;
-    const changed = await syncOrderChatInboxFromKaitenComments(db, {
+    const result = await syncOrderChatInboxFromKaitenComments(db, {
       tenantId: "t1",
       orderId: "o1",
       kanbanAdminMentionTag: "clicklab",
@@ -110,7 +117,7 @@ describe("order-chat-inbox-db", () => {
         },
       ],
     });
-    expect(changed).toBe(true);
+    expect(result.changed).toBe(true);
     expect(upsert).toHaveBeenCalledTimes(2); // prosthetics + lab mention
   });
 
@@ -149,6 +156,59 @@ describe("order-chat-inbox-db", () => {
       expect.objectContaining({ where: { id: "inbox-bound" } }),
     );
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("два @ в одном комментарии — две USER_MENTION без общего kaitenCommentId", async () => {
+    const findFirst = vi.fn().mockResolvedValue(null);
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const upsert = vi.fn().mockResolvedValue({});
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: "u-zed",
+        mentionHandle: "zedpomaps",
+        email: null,
+        displayName: null,
+        role: "PRODUCTION",
+      },
+      {
+        id: "u-demon",
+        mentionHandle: "digitaldemon",
+        email: null,
+        displayName: null,
+        role: "OWNER",
+      },
+    ]);
+    const db = {
+      orderChatInboxItem: {
+        findFirst,
+        findUnique,
+        upsert,
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        update: vi.fn(),
+      },
+      user: { findMany },
+    } as any;
+    const result = await syncOrderChatInboxFromKaitenComments(db, {
+      tenantId: "t1",
+      orderId: "o1",
+      comments: [
+        {
+          id: 55,
+          text: "@digitaldemon @zedpomaps",
+          authorName: "ClickLAB",
+        },
+      ],
+    });
+    const mentionCreates = upsert.mock.calls.filter(
+      (c) => c[0]?.create?.type === "USER_MENTION",
+    );
+    expect(mentionCreates).toHaveLength(2);
+    for (const call of mentionCreates) {
+      expect(call[0].create.kaitenCommentId).toBeNull();
+    }
+    expect(result.newPersonalMentions[0]?.targetUserIds.sort()).toEqual(
+      ["u-demon", "u-zed"].sort(),
+    );
   });
 });
 

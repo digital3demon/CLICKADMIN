@@ -15,6 +15,13 @@ export function isKanbanAdminGroupRole(role: UserRole | string | undefined | nul
   return KANBAN_ADMIN_GROUP_ROLES.has(role as UserRole);
 }
 
+/** Кому слать CRM/TG по админскому тегу (@ClickLab): только админская группа, не владелец. */
+export function isKanbanLabMentionNotifyRole(
+  role: UserRole | string | undefined | null,
+): boolean {
+  return isKanbanAdminGroupRole(role);
+}
+
 /**
  * Нормализует тег для подстановки и поиска в тексте (строчные латиница/цифры/`_`/`-`/`.`).
  * Невалидное значение → дефолт.

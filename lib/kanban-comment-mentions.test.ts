@@ -75,4 +75,30 @@ describe("parseMentionUserIdsFromText", () => {
       }).sort(),
     ).toEqual(["adm1", "adm2", "x"].sort());
   });
+
+  it("несколько личных @ — все; @ClickLab не подменяет личный тег владельца", () => {
+    const users = [
+      { id: "owner", mentionHandle: "digitaldemon" },
+      { id: "zed", mentionHandle: "zedpomaps" },
+      { id: "model", mentionHandle: "ModelistD" },
+    ];
+    expect(
+      parseMentionUserIdsFromText(
+        "@digitaldemon @zedpomaps проверка",
+        users,
+      ).sort(),
+    ).toEqual(["owner", "zed"].sort());
+    expect(
+      parseMentionUserIdsFromText(
+        "ClickLAB: @digitaldemon @zedpomaps вокруг кириллицы",
+        users,
+      ).sort(),
+    ).toEqual(["owner", "zed"].sort());
+    expect(
+      parseMentionUserIdsFromText("@ClickLab и @digitaldemon", users, {
+        adminMentionTag: "clicklab",
+        adminUserIds: ["adm1"],
+      }).sort(),
+    ).toEqual(["adm1", "owner"].sort());
+  });
 });

@@ -63,5 +63,14 @@ describe("kanban-chat POST не ждёт Kaiten", () => {
     );
     expect(src).toContain("finishKanbanChatPostBackground");
     expect(src).toMatch(/after\(\(\) =>\s*\n\s*finishKanbanChatPostBackground/s);
+    const tgIdx = src.lastIndexOf("await notifyTelegramForKanbanChatMentions");
+    const afterIdx = src.lastIndexOf("after(() =>");
+    expect(tgIdx).toBeGreaterThan(0);
+    expect(afterIdx).toBeGreaterThan(tgIdx);
+    const bgFn = src.slice(
+      src.indexOf("async function finishKanbanChatPostBackground"),
+      src.indexOf("export async function POST"),
+    );
+    expect(bgFn).not.toContain("notifyTelegramForKanbanChatMentions");
   });
 });

@@ -42,6 +42,11 @@ vi.mock("@/lib/order-chat-inbox-db", () => ({
   createOrderChatInboxItemsFromCrmComment: (...args: unknown[]) => createInboxFromCrm(...args),
 }));
 
+const notifyMentionsTg = vi.fn();
+vi.mock("@/lib/kanban-chat-mention-telegram.server", () => ({
+  notifyTelegramForKanbanChatMentions: (...args: unknown[]) => notifyMentionsTg(...args),
+}));
+
 describe("kaitenParsedCommentsToKanbanSyncRows", () => {
   it("пробрасывает id/text/created для mirror", () => {
     const rows = kaitenParsedCommentsToKanbanSyncRows([
@@ -88,8 +93,12 @@ describe("ingestKaitenCommentsForOrder", () => {
     syncCrmLabMention.mockResolvedValue(true);
     advanceWaterline.mockResolvedValue(true);
     syncKanbanMirror.mockResolvedValue({ changed: true, skipped: false });
-    syncInboxFromKaiten.mockResolvedValue(true);
+    syncInboxFromKaiten.mockResolvedValue({
+      changed: true,
+      newPersonalMentions: [],
+    });
     createInboxFromCrm.mockResolvedValue(true);
+    notifyMentionsTg.mockResolvedValue(undefined);
   });
 
   it("обновляет lab mention и kanban mirror вместе с триггерами", async () => {
@@ -124,6 +133,86 @@ describe("ingestKaitenCommentsForOrder", () => {
       kanbanAdminMentionTag: "clicklab",
     });
     expect(result).toEqual({ labMentionDbChanged: true, kanbanMirrorChanged: true });
+    expect(notifyMentionsTg).not.toHaveBeenCalled();
+  });
+
+  it("шлёт TG по свежим внешним @упоминаниям", async () => {
+    const created = new Date().toISOString();
+    syncInboxFromKaiten.mockResolvedValue({
+      changed: true,
+      newPersonalMentions: [
+        {
+          text: "@digitaldemon тест",
+          created,
+          isCrm: false,
+          targetUserIds: ["u-demon"],
+        },
+      ],
+    });
+    const prisma = {
+      order: {
+        findFirst: vi.fn().mockResolvedValue({
+          orderNumber: "2607-386",
+          kaitenCardId: 68058214,
+        }),
+      },
+    } as never;
+
+    await ingestKaitenCommentsForOrder({
+      prisma,
+      tenantId: "t1",
+      orderId: "o1",
+      parsed: [
+        {
+          id: 1,
+          text: "@digitaldemon тест",
+          created,
+          authorName: "Всеволод",
+        },
+      ],
+    });
+
+    expect(notifyMentionsTg).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: null,
+        tenantId: "t1",
+        orderId: "o1",
+        orderNumber: "2607-386",
+        text: "@digitaldemon тест",
+      }),
+    );
+  });
+
+  it("не шлёт TG по CRM-черновикам и старым комментам", async () => {
+    syncInboxFromKaiten.mockResolvedValue({
+      changed: true,
+      newPersonalMentions: [
+        {
+          text: "@digitaldemon сейчас",
+          created: new Date().toISOString(),
+          isCrm: true,
+          targetUserIds: ["u-demon"],
+        },
+        {
+          text: "@zedpomaps давно",
+          created: "2020-01-01T00:00:00.000Z",
+          isCrm: false,
+          targetUserIds: ["u-zed"],
+        },
+      ],
+    });
+    const prisma = {
+      order: { findFirst: vi.fn() },
+    } as never;
+
+    await ingestKaitenCommentsForOrder({
+      prisma,
+      tenantId: "t1",
+      orderId: "o1",
+      parsed: [{ id: 2, text: "plain" }],
+    });
+
+    expect(notifyMentionsTg).not.toHaveBeenCalled();
   });
 
   it("skipLabMention не трогает сигнал заказов", async () => {

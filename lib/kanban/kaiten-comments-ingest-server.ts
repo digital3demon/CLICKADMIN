@@ -1,11 +1,13 @@
 /**
  * Единый ingest комментариев Kaiten → БД заказов (корректировки, протетика, @lab mention)
  * и зеркало CRM-канбана. Kanban UI и orders notification читают разные слои, но ingest общий.
+ * Свежие внешние @упоминания (не CRM-черновик) → Telegram в этом же проходе.
  */
 
 import type { PrismaClient } from "@prisma/client";
 import type { KaitenCommentForSync } from "@/lib/kanban/chat-sync";
 import { syncKaitenCommentsIntoKanbanState } from "@/lib/kanban/chat-sync-server";
+import { notifyTelegramForKanbanChatMentions } from "@/lib/kanban-chat-mention-telegram.server";
 import {
   syncOrderChatCorrectionsFromKaitenComments,
 } from "@/lib/order-chat-correction-db";
@@ -16,9 +18,50 @@ import {
 import { syncOrderProstheticsRequestsFromKaitenComments } from "@/lib/order-prosthetics-request-db";
 import {
   createOrderChatInboxItemsFromCrmComment,
+  type KaitenInboxNewPersonalMention,
   syncOrderChatInboxFromKaitenComments,
 } from "@/lib/order-chat-inbox-db";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
+
+/** Не слать TG по историческому бэкофиллу: только комментарии младше этого окна. */
+const KAITEN_MENTION_TG_FRESH_MS = 45 * 60 * 1000;
+
+function isFreshKaitenMentionForTelegram(created?: string): boolean {
+  if (!created?.trim()) return false;
+  const t = Date.parse(created);
+  if (Number.isNaN(t)) return false;
+  return Date.now() - t <= KAITEN_MENTION_TG_FRESH_MS;
+}
+
+async function notifyFreshExternalInboxMentions(opts: {
+  prisma: PrismaClient;
+  tenantId: string;
+  orderId: string;
+  mentions: readonly KaitenInboxNewPersonalMention[];
+}): Promise<void> {
+  const fresh = opts.mentions.filter(
+    (m) => !m.isCrm && isFreshKaitenMentionForTelegram(m.created),
+  );
+  if (fresh.length === 0) return;
+
+  const order = await opts.prisma.order.findFirst({
+    where: { id: opts.orderId, tenantId: opts.tenantId },
+    select: { orderNumber: true, kaitenCardId: true },
+  });
+  if (!order) return;
+
+  for (const m of fresh) {
+    await notifyTelegramForKanbanChatMentions({
+      actorUserId: null,
+      tenantId: opts.tenantId,
+      orderId: opts.orderId,
+      orderNumber: order.orderNumber,
+      kaitenCardId: order.kaitenCardId,
+      text: m.text,
+      siteOrigin: null,
+    });
+  }
+}
 
 export type KaitenParsedCommentForIngest = {
   id: number;
@@ -117,12 +160,22 @@ export async function ingestKaitenCommentsForOrder(
     );
   }
 
-  await syncOrderChatInboxFromKaitenComments(input.prisma, {
+  const inbox = await syncOrderChatInboxFromKaitenComments(input.prisma, {
     tenantId,
     orderId,
     comments: input.parsed,
     kanbanAdminMentionTag: input.kanbanAdminMentionTag,
   });
+  try {
+    await notifyFreshExternalInboxMentions({
+      prisma: input.prisma,
+      tenantId,
+      orderId,
+      mentions: inbox?.newPersonalMentions ?? [],
+    });
+  } catch (e) {
+    console.error("[kaiten-comments-ingest] mention tg", orderId, e);
+  }
 
   let kanbanMirrorChanged = false;
   if (!input.skipKanbanMirror) {

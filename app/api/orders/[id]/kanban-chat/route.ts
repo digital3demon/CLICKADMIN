@@ -6,7 +6,7 @@
  * `?local=1` / `sync=0`: CRM-лента + шапка без полного JSON канбана.
  * Kaiten при пустом store — только `after()`, ответ не ждёт.
  * Без local: после ответа ещё тянем файлы Kaiten и JSON доски (чат из списка нарядов).
- * POST: пишем CRM (лента `kanbanCommentsV1`) и сразу отвечаем; Kaiten + TG — `after()`.
+ * POST: пишем CRM-ленту, inbox и TG-упоминания в запросе; выгрузка в Kaiten — `after()`.
  */
 import { after, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
@@ -505,18 +505,13 @@ export async function GET(
   });
 }
 
-/** Kaiten + Telegram после ответа клиенту: чат CRM не ждёт внешние API. */
+/** Выгрузка в Kaiten после ответа клиенту: чат CRM не ждёт внешний API. */
 async function finishKanbanChatPostBackground(opts: {
   tenantId: string;
   orderId: string;
-  orderNumber: string;
   kaitenCardId: number | null;
   row: CardComment;
   inboxDraftId: string;
-  sessionDemo: boolean;
-  actorUserId: string;
-  messageText: string;
-  siteOrigin: string | null;
 }): Promise<void> {
   const ordersPrisma = await getOrdersPrisma();
   let row = opts.row;
@@ -589,32 +584,6 @@ async function finishKanbanChatPostBackground(opts: {
     } catch (e) {
       console.error("[kanban-chat POST] background state merge", opts.orderId, e);
     }
-  }
-
-  try {
-    let productionMentionTag: string | undefined;
-    const loaded = await loadTenantKanbanState(opts.tenantId);
-    const loc = loaded.state
-      ? findCardByLinkedOrderId(loaded.state, opts.orderId)
-      : null;
-    if (loaded.state && loc) {
-      productionMentionTag = normalizeProductionSettings(
-        loaded.state.boards[loc.boardIndex]!,
-      ).productionMentionTag;
-    }
-    await notifyTelegramForKanbanChatMentions({
-      sessionDemo: opts.sessionDemo,
-      actorUserId: opts.actorUserId,
-      tenantId: opts.tenantId,
-      orderId: opts.orderId,
-      orderNumber: opts.orderNumber,
-      kaitenCardId: opts.kaitenCardId,
-      text: opts.messageText,
-      siteOrigin: opts.siteOrigin,
-      productionMentionTag,
-    });
-  } catch (e) {
-    console.error("[kanban-chat POST] mention tg", opts.orderId, e);
   }
 }
 
@@ -865,18 +834,43 @@ export async function POST(
   }
 
   const siteOrigin = await getSiteOrigin();
-  after(() =>
-    finishKanbanChatPostBackground({
+  let productionMentionTag: string | undefined;
+  try {
+    const loaded = await loadTenantKanbanState(tenantId);
+    const loc = loaded.state
+      ? findCardByLinkedOrderId(loaded.state, order.id)
+      : null;
+    if (loaded.state && loc) {
+      productionMentionTag = normalizeProductionSettings(
+        loaded.state.boards[loc.boardIndex]!,
+      ).productionMentionTag;
+    }
+  } catch (e) {
+    console.error("[kanban-chat POST] production mention tag", orderId, e);
+  }
+  try {
+    await notifyTelegramForKanbanChatMentions({
+      sessionDemo: Boolean(session.demo),
+      actorUserId: session.sub,
       tenantId,
       orderId: order.id,
       orderNumber: order.orderNumber,
       kaitenCardId: order.kaitenCardId,
+      text: messageText,
+      siteOrigin,
+      productionMentionTag,
+    });
+  } catch (e) {
+    console.error("[kanban-chat POST] mention tg", orderId, e);
+  }
+
+  after(() =>
+    finishKanbanChatPostBackground({
+      tenantId,
+      orderId: order.id,
+      kaitenCardId: order.kaitenCardId,
       row,
       inboxDraftId,
-      sessionDemo: Boolean(session.demo),
-      actorUserId: session.sub,
-      messageText,
-      siteOrigin,
     }).catch((e) => {
       console.error("[kanban-chat POST] background", orderId, e);
     }),

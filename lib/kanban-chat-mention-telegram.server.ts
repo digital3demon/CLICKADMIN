@@ -5,7 +5,7 @@ import {
   textIncludesMentionToken,
 } from "@/lib/kanban-comment-mentions";
 import {
-  isKanbanAdminGroupRole,
+  isKanbanLabMentionNotifyRole,
   normalizeKanbanAdminMentionTag,
 } from "@/lib/kanban-admin-mention";
 import { buildKanbanMentionInCommentTelegramHtmlLine } from "@/lib/kanban-mention-telegram-html";
@@ -31,7 +31,7 @@ function resolveNotifySiteOrigin(primary: string | null | undefined): string {
 /** Telegram @упоминания после комментария в CRM-канбане (чат наряда / модалка карточки). */
 export async function notifyTelegramForKanbanChatMentions(opts: {
   sessionDemo?: boolean;
-  actorUserId: string;
+  actorUserId: string | null;
   tenantId: string;
   orderId: string;
   orderNumber: string;
@@ -65,7 +65,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
     tenantRow?.kanbanAdminMentionTag,
   );
   const adminUserIds = users
-    .filter((u) => isKanbanAdminGroupRole(u.role))
+    .filter((u) => isKanbanLabMentionNotifyRole(u.role))
     .map((u) => u.id);
 
   const prodTag =
@@ -102,10 +102,12 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
     });
   }
 
-  const actor = await prisma.user.findUnique({
-    where: { id: opts.actorUserId },
-    select: { displayName: true, mentionHandle: true, email: true },
-  });
+  const actor = opts.actorUserId
+    ? await prisma.user.findUnique({
+        where: { id: opts.actorUserId },
+        select: { displayName: true, mentionHandle: true, email: true },
+      })
+    : null;
 
   const kanbanCardAbsoluteUrl = `${origin}${kanbanOrderDeepLinkPath(opts.orderId)}`;
   const orderPageAbsoluteUrl = `${origin}/orders/${encodeURIComponent(opts.orderId)}`;
