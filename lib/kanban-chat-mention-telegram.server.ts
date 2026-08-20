@@ -8,7 +8,7 @@ import {
   isKanbanLabMentionNotifyRole,
   normalizeKanbanAdminMentionTag,
 } from "@/lib/kanban-admin-mention";
-import { buildKanbanMentionInCommentTelegramHtmlLine } from "@/lib/kanban-mention-telegram-html";
+import { buildKanbanMentionInCommentTelegramHtmlLines } from "@/lib/kanban-mention-telegram-html";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { normalizeProductionMentionTag } from "@/lib/kanban-production-mention-tag";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
@@ -122,7 +122,12 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
     orderPageAbsoluteUrl,
     commentText: opts.text,
   };
-  const line = buildKanbanMentionInCommentTelegramHtmlLine(mentionCtx);
+  const lines = buildKanbanMentionInCommentTelegramHtmlLines(mentionCtx);
+  console.info("[kanban-chat-mention-tg] built", {
+    orderId: opts.orderId,
+    commentChars: (opts.text || "").trim().length,
+    lineCount: lines.length,
+  });
 
   const hasProductionTag =
     Boolean(prodTag) &&
@@ -141,7 +146,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
       // Групповой @production — автору не дублируем; личный @себя — ниже.
       actorUserId: opts.actorUserId,
       targetUserIds: prodTargets,
-      lines: [line],
+      lines,
       parseMode: "HTML",
       tenantId: opts.tenantId,
       // ЛС ок; общий админ-чат даёт второй push «упомянул вас» тем же ботом.
@@ -156,7 +161,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
       // Самоупоминание (@свой_тег) = напоминание себе в CRM-боте.
       actorUserId: null,
       targetUserIds: mentionForGeneral,
-      lines: [line],
+      lines,
       parseMode: "HTML",
       tenantId: opts.tenantId,
       skipTenantSharedChat: true,

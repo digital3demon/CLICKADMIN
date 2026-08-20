@@ -3,7 +3,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import {
-  buildKanbanMentionInCommentTelegramHtmlLine,
+  buildKanbanMentionInCommentTelegramHtmlLines,
   type KanbanMentionTelegramContext,
 } from "@/lib/kanban-mention-telegram-html";
 import {
@@ -111,6 +111,9 @@ export async function POST(req: Request) {
   }
 
   const mentionCtx = parseMentionContextPayload(o.mentionContext);
+  if (mentionCtx && typeof o.commentText === "string" && !mentionCtx.commentText) {
+    mentionCtx.commentText = o.commentText;
+  }
 
   let effectiveLines: string[];
   let effectiveLinesAdmin: string[] | undefined;
@@ -120,7 +123,7 @@ export async function POST(req: Request) {
     mentionCtx &&
     (event === "tg_mentioned_in_comment" || event === "tg_production_mentioned")
   ) {
-    effectiveLines = [buildKanbanMentionInCommentTelegramHtmlLine(mentionCtx)];
+    effectiveLines = buildKanbanMentionInCommentTelegramHtmlLines(mentionCtx);
     effectiveLinesAdmin = undefined;
     parseMode = "HTML";
   } else {

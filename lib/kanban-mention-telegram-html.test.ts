@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildKanbanMentionInCommentTelegramHtmlLine,
+  buildKanbanMentionInCommentTelegramHtmlLines,
   extractOrderNumberLabelFromKanbanCardTitle,
   telegramMentionCommentQuote,
 } from "@/lib/kanban-mention-telegram-html";
@@ -33,9 +34,8 @@ describe("telegramMentionCommentQuote", () => {
     ).toBe("проверка @ilia тегнул и написал");
   });
 
-  it("только @тег — без цитаты", () => {
-    expect(telegramMentionCommentQuote("@ilia")).toBeNull();
-    expect(telegramMentionCommentQuote("  @clicklab  ")).toBeNull();
+  it("только @тег — тоже в цитате", () => {
+    expect(telegramMentionCommentQuote("@ilia")).toBe("@ilia");
   });
 
   it("пустой ввод", () => {
@@ -63,7 +63,7 @@ describe("buildKanbanMentionInCommentTelegramHtmlLine", () => {
     expect(line).toContain(
       '<a href="https://kaiten.example/card/999">карточке</a>',
     );
-    expect(line).not.toContain("«");
+    expect(line).not.toContain(": ");
   });
 
   it("без наряда — только карточка (канбан)", () => {
@@ -78,7 +78,7 @@ describe("buildKanbanMentionInCommentTelegramHtmlLine", () => {
     );
   });
 
-  it("кириллица в тексте комментария — цитата под заголовком, HTML экранирован", () => {
+  it("кириллица в тексте — в первой строке после ссылок и отдельным абзацем", () => {
     const line = buildKanbanMentionInCommentTelegramHtmlLine({
       actorDisplayName: "Илья",
       actorMentionHandle: "ilia",
@@ -90,6 +90,22 @@ describe("buildKanbanMentionInCommentTelegramHtmlLine", () => {
       commentText: "@ilia тегнул и написал <срочно>",
     });
     expect(line).toContain("Илья (@ilia) упомянул вас в заказе");
-    expect(line).toContain("\n\n«@ilia тегнул и написал &lt;срочно&gt;»");
+    expect(line).toContain(": @ilia тегнул и написал &lt;срочно&gt;");
+    expect(line).toContain("\n\n@ilia тегнул и написал &lt;срочно&gt;");
+  });
+
+  it("раскладка EN вместо кириллицы — текст не теряется", () => {
+    const lines = buildKanbanMentionInCommentTelegramHtmlLines({
+      actorDisplayName: "Всеволод Соколов",
+      actorMentionHandle: "digitaldemon",
+      linkedOrderId: "ord1",
+      orderNumberLabel: "2607-299",
+      kaitenCardId: 999,
+      kanbanCardAbsoluteUrl: "https://crm.example/kanban?card=x",
+      orderPageAbsoluteUrl: "https://crm.example/orders/ord1",
+      commentText: "@ilia ntcn hfp ldf",
+    });
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toBe("@ilia ntcn hfp ldf");
   });
 });

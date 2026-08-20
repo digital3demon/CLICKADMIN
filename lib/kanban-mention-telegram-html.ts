@@ -1,5 +1,5 @@
 /**
- * HTML для TG: кто упомянул + ссылки на наряд/карточку + цитата текста комментария.
+ * HTML для TG: кто упомянул + ссылки + текст комментария (и в первой строке, и отдельно).
  * commentText — как ввёл пользователь; в HTML только escapeTelegramHtml.
  */
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
@@ -19,14 +19,13 @@ export type KanbanMentionTelegramContext = {
   kanbanCardAbsoluteUrl: string;
   /** Абсолютная ссылка на страницу наряда в CRM; нужна при наличии linkedOrderId. */
   orderPageAbsoluteUrl?: string | null;
-  /** Текст комментария (с @тегами); в TG показываем цитату, если есть слова кроме упоминаний. */
+  /** Текст комментария (с @тегами) — всегда в конец HTML, если не пустой. */
   commentText?: string | null;
 };
 
 /**
- * Цитата для TG: схлопывает пробелы, режет длину.
- * Пусто, если в тексте только @токены — заголовок «упомянул вас» уже это говорит.
- * Не `\b`: кириллица не word-char; токен как в kanban-comment-mentions.
+ * Текст комментария для TG: схлопывает пробелы, режет длину.
+ * Не выкидываем @теги — иначе пуш без «слов кроме упоминания» уходил пустым.
  */
 export function telegramMentionCommentQuote(
   text: string,
@@ -34,11 +33,6 @@ export function telegramMentionCommentQuote(
 ): string | null {
   const collapsed = text.replace(/\s+/g, " ").trim();
   if (!collapsed) return null;
-  const withoutMentions = collapsed
-    .replace(/@[\p{L}\p{N}._-]+/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!withoutMentions) return null;
   if (collapsed.length <= max) return collapsed;
   return `${collapsed.slice(0, Math.max(1, max - 1))}…`;
 }
@@ -52,13 +46,7 @@ function actorWhoLine(ctx: KanbanMentionTelegramContext): string {
   return `${name} (${escapeTelegramHtml("@" + h)})`;
 }
 
-/**
- * Одна строка Telegram HTML: «ФИО (@тег) упомянул вас в заказе № … и в карточке …».
- * Ссылка на карточку — Kaiten при известном id и рабочем шаблоне origin, иначе канбан CRM.
- */
-export function buildKanbanMentionInCommentTelegramHtmlLine(
-  ctx: KanbanMentionTelegramContext,
-): string {
+function mentionHeadHtml(ctx: KanbanMentionTelegramContext): string {
   const who = actorWhoLine(ctx);
 
   const kid = ctx.kaitenCardId;
@@ -74,16 +62,38 @@ export function buildKanbanMentionInCommentTelegramHtmlLine(
 
   const oid = (ctx.linkedOrderId || "").trim();
   const orderUrl = (ctx.orderPageAbsoluteUrl || "").trim();
-  const head =
-    oid && orderUrl
-      ? `${who} упомянул вас в заказе ${telegramHtmlLink(
-          orderUrl,
-          (ctx.orderNumberLabel || "").trim() || oid.slice(0, 12),
-        )} и в ${cardLink}`
-      : `${who} упомянул вас в ${cardLink}`;
+  if (oid && orderUrl) {
+    const orderLink = telegramHtmlLink(
+      orderUrl,
+      (ctx.orderNumberLabel || "").trim() || oid.slice(0, 12),
+    );
+    return `${who} упомянул вас в заказе ${orderLink} и в ${cardLink}`;
+  }
+  return `${who} упомянул вас в ${cardLink}`;
+}
+
+/**
+ * Строки Telegram HTML: заголовок со ссылками, затем текст комментария.
+ * Текст — отдельным элементом массива, чтобы join не терял его.
+ */
+export function buildKanbanMentionInCommentTelegramHtmlLines(
+  ctx: KanbanMentionTelegramContext,
+): string[] {
+  const head = mentionHeadHtml(ctx);
   const quote = telegramMentionCommentQuote(ctx.commentText ?? "");
-  if (!quote) return head;
-  return `${head}\n\n«${escapeTelegramHtml(quote)}»`;
+  if (!quote) return [head];
+  return [head, escapeTelegramHtml(quote)];
+}
+
+/**
+ * Блок HTML: цитата сразу после ссылок (не только после \\n — так не режется).
+ */
+export function buildKanbanMentionInCommentTelegramHtmlLine(
+  ctx: KanbanMentionTelegramContext,
+): string {
+  const lines = buildKanbanMentionInCommentTelegramHtmlLines(ctx);
+  if (lines.length === 1) return lines[0]!;
+  return `${lines[0]}: ${lines[1]}\n\n${lines[1]}`;
 }
 
 /** Первая строка заголовка карточки до пробела — обычно номер наряда в зеркале Kaiten. */

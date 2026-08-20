@@ -172,6 +172,8 @@ function postKanbanCrmTelegramNotify(payload: {
   linesAdmin?: string[];
   /** Сервер собирает HTML строку (номер наряда + Kaiten / канбан). */
   mentionContext?: KanbanMentionTelegramContext;
+  /** Текст комментария — дубль на корне, если mentionContext без commentText. */
+  commentText?: string;
   targetUserIds?: string[];
   broadcastExcludeUserIds?: string[];
   /** На сервере: достаточно любого из ключей (для @упоминаний — комментарий или упоминание). */
@@ -918,6 +920,7 @@ export function KanbanCardModal({
           event: "tg_production_mentioned",
           targetUserIds: prodTargets,
           mentionContext: mentionCtxPayload,
+          commentText: trimmed,
         });
       }
       if (mentionForGeneral.length > 0) {
@@ -927,6 +930,7 @@ export function KanbanCardModal({
           alternatePrefKeys: ["tg_comment_added"],
           targetUserIds: mentionForGeneral,
           mentionContext: mentionCtxPayload,
+          commentText: trimmed,
         });
       }
     };
