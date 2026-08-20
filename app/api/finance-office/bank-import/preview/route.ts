@@ -34,14 +34,12 @@ export async function POST(req: Request) {
   if (name.endsWith(".xls") || name.endsWith(".xlsx")) {
     rows = parseFinanceBankWorkbook(buffer);
   } else if (name.endsWith(".pdf") || mime.includes("pdf")) {
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: buffer });
-    try {
-      const textResult = await parser.getText();
-      rows = parseFinanceBankText(textResult?.text ?? "");
-    } finally {
-      await parser.destroy().catch(() => {});
+    const { extractPdfPlainText } = await import("@/lib/extract-pdf-plain-text");
+    const extracted = await extractPdfPlainText(buffer);
+    if (extracted.error) {
+      return NextResponse.json({ error: extracted.error }, { status: 400 });
     }
+    rows = parseFinanceBankText(extracted.text);
   } else if (mime.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(name)) {
     const { recognize } = await import("tesseract.js");
     const result = await recognize(buffer, "rus+eng");
