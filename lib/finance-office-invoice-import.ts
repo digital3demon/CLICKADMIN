@@ -1,5 +1,5 @@
 /**
- * Маршрутизация дропа в фин. отделе: Excel/картинка = оплаты, PDF/ZIP = счета.
+ * Маршрутизация дропа в фин. отделе: Excel/картинка = оплаты, PDF/ZIP/RAR/7z = счета.
  */
 
 export type FinanceOfficeDropKind = "bank" | "invoices" | "mixed" | "empty" | "unknown";
@@ -21,12 +21,19 @@ export function isFinanceOfficeBankFile(file: FinanceOfficeDropFile): boolean {
   return false;
 }
 
+export function isFinanceOfficeInvoiceArchive(file: FinanceOfficeDropFile): boolean {
+  const ext = extOf(file.name);
+  const mime = String(file.type || "").toLowerCase();
+  if (ext === "zip" || ext === "rar" || ext === "7z") return true;
+  if (mime.includes("zip") || mime.includes("rar") || mime.includes("7z")) return true;
+  return false;
+}
+
 export function isFinanceOfficeInvoiceFile(file: FinanceOfficeDropFile): boolean {
   const ext = extOf(file.name);
   const mime = String(file.type || "").toLowerCase();
   if (ext === "pdf" || mime.includes("pdf")) return true;
-  if (ext === "zip" || mime.includes("zip")) return true;
-  return false;
+  return isFinanceOfficeInvoiceArchive(file);
 }
 
 export function classifyFinanceOfficeDropFiles(

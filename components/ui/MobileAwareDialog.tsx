@@ -10,7 +10,7 @@ interface MobileAwareDialogProps {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg" | "xl" | "full";
+  size?: "sm" | "md" | "lg" | "xl" | "full" | "wide";
   mobileVariant?: "center" | "bottom-sheet";
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
@@ -23,6 +23,7 @@ const sizeClasses = {
   lg: "max-w-lg",
   xl: "max-w-2xl",
   full: "max-w-5xl",
+  wide: "max-w-[min(96vw,92rem)]",
 } as const;
 
 export function MobileAwareDialog({

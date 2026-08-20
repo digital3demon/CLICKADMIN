@@ -25,8 +25,8 @@ import {
 import { extractInvoicePdfText } from "@/lib/parse-invoice-pdf-lines";
 import {
   extractOrderNumberFromInvoiceBasisText,
+  formatInvoiceBasisFoundLabel,
   invoiceFileNameForNumberExtract,
-  sliceInvoiceBasisRegion,
 } from "@/lib/parse-invoice-basis-order-number";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import {
@@ -57,9 +57,7 @@ function invoiceCaptionFromPdf(fileName: string, pdfText: string): string {
 }
 
 function snippetBasis(text: string): string {
-  const slice = sliceInvoiceBasisRegion(text).replace(/\s+/g, " ").trim();
-  if (!slice) return "";
-  return slice.length > 180 ? `${slice.slice(0, 179)}…` : slice;
+  return formatInvoiceBasisFoundLabel(text);
 }
 
 export async function buildFinanceInvoiceImportPreview(

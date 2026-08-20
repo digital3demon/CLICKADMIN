@@ -62,6 +62,21 @@ export function sliceInvoiceBasisRegion(raw: string): string {
 }
 
 /**
+ * Для колонки «Что найдено»: только «Основание» до таблицы товаров.
+ * Граница без `\b` — рядом «№» и кириллица.
+ */
+const INVOICE_TABLE_START_RE = /(?:№\s*)?Товары\s*\(|Кол-во\s+Ед/u;
+
+export function formatInvoiceBasisFoundLabel(raw: string): string {
+  const slice = sliceInvoiceBasisRegion(raw);
+  if (!slice.trim()) return "";
+  const cut = slice.search(INVOICE_TABLE_START_RE);
+  const head = (cut > 0 ? slice.slice(0, cut) : slice).replace(/\s+/g, " ").trim();
+  if (!head) return "";
+  return head.length > 220 ? `${head.slice(0, 219)}…` : head;
+}
+
+/**
  * Наряд из «Основание»: токен перед фамилиями, иначе последний
  * YYMM-NNN, который не договор и не «… от ДД.ММ».
  */

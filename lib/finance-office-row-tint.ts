@@ -1,12 +1,13 @@
 /**
  * Тинт строки ФинОтдела: не «отгружено».
- * Зелёный — просчитано, синий — есть счёт (как пилюля в отметках), градиент — оба.
+ * Синий — есть счёт (счёт важнее: раз выставлен, уже просчитано).
+ * Зелёный — только просчитано, без счёта.
  * Янтарный/голубой акцент внимания из order-list-row-accent важнее.
  *
- * Счёт: галка «выставлен», номер в поле или загруженный файл — иначе пилюля есть, а строка серая.
+ * Счёт: галка «выставлен», номер в поле или загруженный файл.
  */
 
-export type FinanceOfficeRowTintKind = "calculated" | "invoiced" | "both" | null;
+export type FinanceOfficeRowTintKind = "calculated" | "invoiced" | null;
 
 export function orderHasFinanceInvoice(opts: {
   invoiceIssued?: boolean;
@@ -25,61 +26,34 @@ export function resolveFinanceOfficeRowTintKind(opts: {
   invoiceNumber?: string | null;
   invoiceAttachmentId?: string | null;
 }): FinanceOfficeRowTintKind {
-  const calc = opts.financeCalculated === true;
-  const inv = orderHasFinanceInvoice(opts);
-  if (calc && inv) return "both";
-  if (calc) return "calculated";
-  if (inv) return "invoiced";
+  if (orderHasFinanceInvoice(opts)) return "invoiced";
+  if (opts.financeCalculated === true) return "calculated";
   return null;
 }
 
-const IDLE =
-  "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
+const IDLE = "border-b border-[var(--card-border)]";
 
-/**
- * Фон на tr / карточке. Класс both — градиент в globals.css: на tr и на td
- * (Chrome не красит image на tr). Sticky слева (max-xl) — зелёный старт.
- */
+/** Фон строки: сплошной цвет пилюли, без градиента (скролл списка). */
 export function financeOfficeRowTintClass(
   kind: FinanceOfficeRowTintKind,
 ): string {
-  if (kind === "both") {
-    return [
-      "finance-office-row-tint-both",
-      "border-b border-[var(--card-border)]",
-      "transition-colors hover:brightness-[1.03]",
-    ].join(" ");
-  }
   if (kind === "calculated") {
-    return [
-      "border-b border-[var(--card-border)]",
-      "bg-emerald-100/90 dark:bg-emerald-950/50",
-      "[&>td]:bg-emerald-100/90 dark:[&>td]:bg-emerald-950/50",
-      "transition-colors hover:[&>td]:bg-emerald-50 dark:hover:[&>td]:bg-emerald-950/65",
-    ].join(" ");
+    return "finance-office-row-tint-calc border-b border-[var(--card-border)]";
   }
   if (kind === "invoiced") {
-    return [
-      "border-b border-[var(--card-border)]",
-      "bg-sky-100/90 dark:bg-sky-950/50",
-      "[&>td]:bg-sky-100/90 dark:[&>td]:bg-sky-950/50",
-      "transition-colors hover:[&>td]:bg-sky-50 dark:hover:[&>td]:bg-sky-950/65",
-    ].join(" ");
+    return "finance-office-row-tint-inv border-b border-[var(--card-border)]";
   }
-  return IDLE;
+  return `${IDLE} transition-colors hover:bg-[var(--table-row-hover)]`;
 }
 
 export function financeOfficeMobileCardTintClass(
   kind: FinanceOfficeRowTintKind,
 ): string {
-  if (kind === "both") {
-    return "finance-office-row-tint-both rounded-lg";
-  }
   if (kind === "calculated") {
-    return "rounded-lg bg-emerald-100/90 dark:bg-emerald-950/50";
+    return "finance-office-row-tint-calc rounded-lg";
   }
   if (kind === "invoiced") {
-    return "rounded-lg bg-sky-100/90 dark:bg-sky-950/50";
+    return "finance-office-row-tint-inv rounded-lg";
   }
   return "";
 }

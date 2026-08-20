@@ -5,13 +5,13 @@ import {
 } from "@/lib/finance-office-row-tint";
 
 describe("resolveFinanceOfficeRowTintKind", () => {
-  it("оба — градиент", () => {
+  it("счёт важнее просчитано — синий, не градиент", () => {
     expect(
       resolveFinanceOfficeRowTintKind({
         financeCalculated: true,
         invoiceIssued: true,
       }),
-    ).toBe("both");
+    ).toBe("invoiced");
   });
 
   it("только просчитано — зелёный", () => {
@@ -60,16 +60,33 @@ describe("resolveFinanceOfficeRowTintKind", () => {
 });
 
 describe("financeOfficeRowTintClass", () => {
-  it("both — CSS-класс сквозного градиента, не Tailwind на каждой ячейке", () => {
-    const cls = financeOfficeRowTintClass("both");
-    expect(cls).toContain("finance-office-row-tint-both");
-    expect(cls).not.toContain("[&>td]:bg-gradient-to-r");
-    expect(cls).not.toContain("[&>td]:bg-emerald");
+  it("calculated / invoiced — сплошные CSS-классы, без both", () => {
+    expect(financeOfficeRowTintClass("calculated")).toContain(
+      "finance-office-row-tint-calc",
+    );
+    expect(financeOfficeRowTintClass("invoiced")).toContain(
+      "finance-office-row-tint-inv",
+    );
+    expect(financeOfficeRowTintClass(null)).toContain(
+      "hover:bg-[var(--table-row-hover)]",
+    );
+    expect(financeOfficeRowTintClass("calculated")).not.toContain("both");
+    expect(financeOfficeRowTintClass("invoiced")).not.toContain("gradient");
   });
+});
 
-  it("calculated — emerald, invoiced — sky", () => {
-    expect(financeOfficeRowTintClass("calculated")).toContain("emerald");
-    expect(financeOfficeRowTintClass("invoiced")).toContain("sky");
-    expect(financeOfficeRowTintClass(null)).toContain("hover:bg-[var(--table-row-hover)]");
+describe("finance-office tint CSS не вешает scroll", () => {
+  it("нет градиента и background-attachment:fixed", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    expect(src).toContain("--fo-tint-calc:");
+    expect(src).toContain("--fo-tint-inv:");
+    expect(src).not.toContain(".finance-office-row-tint-both");
+    const calcAt = src.indexOf(".finance-office-row-tint-calc");
+    expect(calcAt).toBeGreaterThan(0);
+    const block = src.slice(calcAt, calcAt + 900);
+    expect(block).not.toMatch(/background-attachment:\s*fixed/);
+    expect(block).not.toMatch(/linear-gradient/);
   });
 });

@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const raw = form.getAll("files").concat(form.getAll("file"));
   const files = raw.filter((x): x is File => x instanceof File);
   if (files.length === 0) {
-    return NextResponse.json({ error: "Загрузите PDF или ZIP со счетами" }, { status: 400 });
+    return NextResponse.json({ error: "Загрузите PDF или архив ZIP/RAR/7z со счетами" }, { status: 400 });
   }
 
   const kind = classifyFinanceOfficeDropFiles(
@@ -40,13 +40,13 @@ export async function POST(req: Request) {
   );
   if (kind.kind === "mixed") {
     return NextResponse.json(
-      { error: "Оплаты (Excel) и счета (PDF/ZIP) загружайте отдельно" },
+      { error: "Оплаты (Excel) и счета (PDF/архив) загружайте отдельно" },
       { status: 400 },
     );
   }
   if (kind.kind !== "invoices") {
     return NextResponse.json(
-      { error: "Для счетов нужны PDF или ZIP" },
+      { error: "Для счетов нужны PDF или архив ZIP / RAR / 7z" },
       { status: 400 },
     );
   }

@@ -69,6 +69,9 @@ html[data-ui="classic"] {
   --table-row-hover: rgba(220, 228, 238, 0.65);
   --input-bg: #f3f5f9;
   --input-border: #c4ccd8;
+  /* ФинОтдел: как пилюли «Просчитано» / «СЧЕТ» */
+  --fo-tint-calc: #d1fae5;
+  --fo-tint-inv: #e0f2fe;
   --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 14%, transparent);
   --text-placeholder: #8b95a5;
   --border-strong: #9aa3b2;
@@ -107,6 +110,9 @@ html.dark {
   --table-row-hover: rgba(69, 69, 78, 0.55);
   --input-bg: #34343c;
   --input-border: #505058;
+  /* Как тёмные пилюли emerald-100 / sky-100, не размытый 40% mix */
+  --fo-tint-calc: color-mix(in srgb, #34d399 52%, var(--card-bg));
+  --fo-tint-inv: color-mix(in srgb, #38bdf8 54%, var(--card-bg));
   --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 22%, transparent);
   --text-placeholder: #71717a;
   --border-strong: #63636d;
@@ -341,40 +347,26 @@ body {
 }
 
 /*
- * ФинОтдел: просчитано + счёт — зелёный→синий слева направо на всю строку.
- * Tailwind-градиент на <tr> при collapse не рисуется (ячейки прозрачные →
- * серый --card-bg). separate + image на строке; на td — тот же градиент с
- * attachment:fixed (Chrome иначе не красит tr). Firefox: image на td снимаем,
- * иначе каждая ячейка начинает градиент заново.
+ * ФинОтдел: просчитано = emerald, счёт = sky (счёт важнее, без градиента).
+ * Сплошной фон на tr/td — иначе колёсико на длинном списке замирает.
  */
 .finance-office-orders-table {
   border-collapse: separate;
   border-spacing: 0;
 }
 
-.finance-office-row-tint-both {
-  background-image: linear-gradient(
-    to right,
-    color-mix(in srgb, #059669 42%, var(--card-bg)),
-    color-mix(in srgb, #0369a1 44%, var(--card-bg))
-  );
+.finance-office-row-tint-calc {
+  background-color: var(--fo-tint-calc);
+}
+.finance-office-row-tint-calc > td {
+  background-color: var(--fo-tint-calc);
 }
 
-.finance-office-row-tint-both > td {
-  background-color: transparent;
-  background-image: linear-gradient(
-    to right,
-    color-mix(in srgb, #059669 42%, var(--card-bg)),
-    color-mix(in srgb, #0369a1 44%, var(--card-bg))
-  );
-  background-attachment: fixed;
-  background-repeat: no-repeat;
+.finance-office-row-tint-inv {
+  background-color: var(--fo-tint-inv);
 }
-
-@-moz-document url-prefix() {
-  .finance-office-row-tint-both > td {
-    background-image: none;
-  }
+.finance-office-row-tint-inv > td {
+  background-color: var(--fo-tint-inv);
 }
 
 /* Погода СПб у иконки день/ночь в сайдбаре */

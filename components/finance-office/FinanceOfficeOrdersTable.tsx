@@ -319,13 +319,9 @@ export function FinanceOfficeOrdersTable({
                 financeOfficeMobileCardTintClass(financeTint);
               const stickyCellBg = rowAccent
                 ? "max-xl:bg-[var(--card-bg)]"
-                : financeTint === "both"
-                  ? "max-xl:bg-emerald-100/90 dark:max-xl:bg-emerald-950/55"
-                  : financeTint === "calculated"
-                    ? "max-xl:bg-emerald-100/90 dark:max-xl:bg-emerald-950/50"
-                    : financeTint === "invoiced"
-                      ? "max-xl:bg-sky-100/90 dark:max-xl:bg-sky-950/50"
-                      : "max-xl:bg-[var(--card-bg)]";
+                : financeTint
+                  ? ""
+                  : "max-xl:bg-[var(--card-bg)]";
               const renderTagsCell = () => (
                 <OrderListTagsCell
                   orderId={o.id}

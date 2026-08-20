@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { extractInvoiceNumberFromFileName } from "@/lib/invoice-number-extract";
 import {
   extractOrderNumberFromInvoiceBasisText,
+  formatInvoiceBasisFoundLabel,
   invoiceFileNameForNumberExtract,
 } from "@/lib/parse-invoice-basis-order-number";
 
@@ -49,6 +50,33 @@ describe("extractOrderNumberFromInvoiceBasisText", () => {
         "Основание: Договор № 2408-003 от 20.08.2024",
       ),
     ).toBeNull();
+  });
+});
+
+describe("formatInvoiceBasisFoundLabel", () => {
+  it("оставляет Основание и наряд, отрезает таблицу товаров", () => {
+    expect(
+      formatInvoiceBasisFoundLabel(
+        "шапка счёта Основание: 2405-017 от 28.05.2024 2608-080 Поздеева Аветисян А.С. № Товары (работы, услуги) Кол-во Ед. Цена Сумма 1 -1001 Сплинт сложный",
+      ),
+    ).toBe(
+      "Основание: 2405-017 от 28.05.2024 2608-080 Поздеева Аветисян А.С.",
+    );
+  });
+
+  it("кириллица до и после, договор в основании", () => {
+    expect(
+      formatInvoiceBasisFoundLabel(
+        "Счет на оплату Основание: Договор № 2408-003 от 20.08.2024; 2608-213 Анисова М. Зубарев С.В. № Товары (работы, услуги) Кол-во Ед.",
+      ),
+    ).toBe(
+      "Основание: Договор № 2408-003 от 20.08.2024; 2608-213 Анисова М. Зубарев С.В.",
+    );
+  });
+
+  it("пустой ввод", () => {
+    expect(formatInvoiceBasisFoundLabel("")).toBe("");
+    expect(formatInvoiceBasisFoundLabel("   ")).toBe("");
   });
 });
 

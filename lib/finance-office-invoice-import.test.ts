@@ -14,6 +14,15 @@ describe("classifyFinanceOfficeDropFiles", () => {
     ).toBe("invoices");
   });
 
+  it("RAR и 7z — тоже счета", () => {
+    expect(
+      classifyFinanceOfficeDropFiles([
+        { name: "счета.rar", type: "application/vnd.rar" },
+        { name: "пачка.7z", type: "application/x-7z-compressed" },
+      ]).kind,
+    ).toBe("invoices");
+  });
+
   it("Excel — оплаты", () => {
     expect(classifyFinanceOfficeDropFiles([{ name: "bank.xlsx" }]).kind).toBe(
       "bank",
