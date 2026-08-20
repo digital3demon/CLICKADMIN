@@ -70,4 +70,23 @@ if (!fs.existsSync(schemaStandalone)) {
   process.exit(1);
 }
 
+const pdfWorkerStandalone = path.join(
+  cwd,
+  ".next",
+  "standalone",
+  "node_modules",
+  "pdfjs-dist",
+  "legacy",
+  "build",
+  "pdf.worker.mjs",
+);
+if (!fs.existsSync(pdfWorkerStandalone)) {
+  console.error(
+    "[verify-standalone] Нет pdfjs worker:",
+    pdfWorkerStandalone,
+    "\nЗапустите: node scripts/copy-standalone-assets.cjs",
+  );
+  process.exit(1);
+}
+
 console.log("[verify-standalone] OK:", serverJs, `(chunks: ${n}, standalone: ${ns})`);

@@ -71,3 +71,13 @@ if (fs.existsSync(path.join(prismaSrc, "schema.prisma"))) {
 }
 
 console.log("[copy-standalone-assets] OK → .next/standalone/.next/static");
+
+/** pdfjs worker: NFT часто не кладёт pdf.worker.mjs в standalone node_modules. */
+const pdfjsSrc = path.join(root, "node_modules", "pdfjs-dist");
+const pdfjsDest = path.join(root, ".next", "standalone", "node_modules", "pdfjs-dist");
+if (fs.existsSync(pdfjsSrc)) {
+  copyDirRecursive(pdfjsSrc, pdfjsDest);
+  console.log("[copy-standalone-assets] OK → .next/standalone/node_modules/pdfjs-dist");
+} else {
+  console.warn("[copy-standalone-assets] Нет node_modules/pdfjs-dist — разбор PDF на PaaS упадёт");
+}

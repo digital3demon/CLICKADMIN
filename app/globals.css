@@ -340,6 +340,43 @@ body {
   z-index: 1;
 }
 
+/*
+ * ФинОтдел: просчитано + счёт — зелёный→синий слева направо на всю строку.
+ * Tailwind-градиент на <tr> при collapse не рисуется (ячейки прозрачные →
+ * серый --card-bg). separate + image на строке; на td — тот же градиент с
+ * attachment:fixed (Chrome иначе не красит tr). Firefox: image на td снимаем,
+ * иначе каждая ячейка начинает градиент заново.
+ */
+.finance-office-orders-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.finance-office-row-tint-both {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, #059669 42%, var(--card-bg)),
+    color-mix(in srgb, #0369a1 44%, var(--card-bg))
+  );
+}
+
+.finance-office-row-tint-both > td {
+  background-color: transparent;
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, #059669 42%, var(--card-bg)),
+    color-mix(in srgb, #0369a1 44%, var(--card-bg))
+  );
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+@-moz-document url-prefix() {
+  .finance-office-row-tint-both > td {
+    background-image: none;
+  }
+}
+
 /* Погода СПб у иконки день/ночь в сайдбаре */
 @keyframes sky-cloud-drift-a {
   0%,

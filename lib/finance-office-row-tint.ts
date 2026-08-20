@@ -37,18 +37,16 @@ const IDLE =
   "border-b border-[var(--card-border)] transition-colors hover:bg-[var(--table-row-hover)]";
 
 /**
- * Фон на tr. Градиент только у строки: на td он начинался заново в каждой ячейке.
- * Sticky-колонки слева (max-xl) красятся стартом градиента в таблице, не здесь.
+ * Фон на tr / карточке. Класс both — градиент в globals.css: на tr и на td
+ * (Chrome не красит image на tr). Sticky слева (max-xl) — зелёный старт.
  */
 export function financeOfficeRowTintClass(
   kind: FinanceOfficeRowTintKind,
 ): string {
   if (kind === "both") {
     return [
+      "finance-office-row-tint-both",
       "border-b border-[var(--card-border)]",
-      "bg-gradient-to-r from-emerald-100/90 to-sky-200/85",
-      "dark:from-emerald-950/55 dark:to-sky-950/50",
-      "[&>td]:bg-transparent dark:[&>td]:bg-transparent",
       "transition-colors hover:brightness-[1.03]",
     ].join(" ");
   }
@@ -75,7 +73,7 @@ export function financeOfficeMobileCardTintClass(
   kind: FinanceOfficeRowTintKind,
 ): string {
   if (kind === "both") {
-    return "rounded-lg bg-gradient-to-r from-emerald-100/90 to-sky-200/85 dark:from-emerald-950/55 dark:to-sky-950/50";
+    return "finance-office-row-tint-both rounded-lg";
   }
   if (kind === "calculated") {
     return "rounded-lg bg-emerald-100/90 dark:bg-emerald-950/50";

@@ -20,10 +20,12 @@ const nextConfig: NextConfig = {
   },
   /** Папка `.next/standalone` + `npm run package:windows` → `dist/dental-lab-crm-portable` + `Запуск.bat`. */
   output: "standalone",
-  /** Windows-сборка: в архив явно кладём нативный canvas под Linux (pdf-parse / pdfjs). */
+  /** Windows-сборка и Docker standalone: pdfjs worker + canvas, иначе getText падает. */
   outputFileTracingIncludes: {
     "/*": [
       "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
+      "./node_modules/pdfjs-dist/**/*",
+      "./node_modules/pdf-parse/**/*",
       "./prisma/schema.prisma",
       "./prisma/migrations/**/*",
     ],

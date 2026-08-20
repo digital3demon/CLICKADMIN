@@ -204,7 +204,7 @@ export function FinanceOfficeOrdersTable({
       />
       <div className="relative">
       <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible shell-desktop:overflow-x-visible [-webkit-overflow-scrolling:touch]">
-        <table className="w-max min-w-full border-collapse text-center text-sm">
+        <table className="finance-office-orders-table w-max min-w-full border-separate border-spacing-0 text-center text-sm">
           <thead className="hidden shell-desktop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <th className="w-[7.5rem] px-2 py-2 text-center normal-case max-xl:sticky max-xl:left-0 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">

@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { extractPdfPlainText } from "@/lib/extract-pdf-plain-text";
+import {
+  extractPdfPlainText,
+  resolvePdfjsWorkerPath,
+} from "@/lib/extract-pdf-plain-text";
 import { extractOrderNumberFromInvoiceBasisText } from "@/lib/parse-invoice-basis-order-number";
 
 const INVOICE_1646 =
@@ -33,6 +36,12 @@ function minimalPdfWithText(text: string): Buffer {
 }
 
 describe("extractPdfPlainText", () => {
+  it("находит pdf.worker.mjs в node_modules", () => {
+    const p = resolvePdfjsWorkerPath();
+    expect(p).toBeTruthy();
+    expect(p).toMatch(/pdf\.worker\.mjs$/);
+  });
+
   it("минимальный PDF: 2608-080 перед фамилией", async () => {
     const r = await extractPdfPlainText(
       minimalPdfWithText("2405-017 ot 28.05.2024 2608-080 Pozdeeva"),

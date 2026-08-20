@@ -60,13 +60,11 @@ describe("resolveFinanceOfficeRowTintKind", () => {
 });
 
 describe("financeOfficeRowTintClass", () => {
-  it("both — один градиент на строке, не на каждой ячейке", () => {
+  it("both — CSS-класс сквозного градиента, не Tailwind на каждой ячейке", () => {
     const cls = financeOfficeRowTintClass("both");
-    expect(cls).toContain("bg-gradient-to-r");
-    expect(cls).toContain("[&>td]:bg-transparent");
+    expect(cls).toContain("finance-office-row-tint-both");
     expect(cls).not.toContain("[&>td]:bg-gradient-to-r");
-    expect(cls).toContain("from-emerald");
-    expect(cls).toContain("to-sky");
+    expect(cls).not.toContain("[&>td]:bg-emerald");
   });
 
   it("calculated — emerald, invoiced — sky", () => {

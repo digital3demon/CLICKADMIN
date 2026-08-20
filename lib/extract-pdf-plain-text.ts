@@ -1,9 +1,13 @@
 /**
  * Текст из PDF для счетов/выписок.
- * Next иногда резолвит `pdf-parse` в browser-сборку — тогда getText падает,
- * хотя тот же файл в node читается. Грузим CJS через createRequire.
- * data: Uint8Array (не Buffer). Сначала getText(), потом { first: 5 }.
+ * Next иногда резолвит `pdf-parse` в browser-сборку — тогда getText падает.
+ * Грузим CJS через createRequire. data: Uint8Array.
+ * Standalone: pdfjs ищет worker рядом с урезанным node_modules — задаём workerSrc.
  */
+
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 
 export async function extractPdfPlainText(
   buf: Buffer,
@@ -37,6 +41,7 @@ export async function extractPdfPlainText(
 }
 
 async function readPdfText(buf: Buffer): Promise<string> {
+  await ensurePdfjsWorkerSrc();
   const PDFParse = await loadPdfParseCtor();
   const data = Uint8Array.from(buf);
   const parser = new PDFParse({ data });
@@ -76,7 +81,6 @@ async function loadPdfParseCtor(): Promise<PdfParseCtor> {
   };
 
   try {
-    const { createRequire } = await import("node:module");
     const req = createRequire(`${process.cwd()}/package.json`);
     const ctor = pick(req("pdf-parse"));
     if (ctor) return ctor;
@@ -89,4 +93,46 @@ async function loadPdfParseCtor(): Promise<PdfParseCtor> {
     throw new Error("pdf-parse: нет PDFParse");
   }
   return ctor;
+}
+
+const WORKER_REL = "pdfjs-dist/legacy/build/pdf.worker.mjs";
+
+/** Абсолютный путь к worker pdfjs — в standalone его часто нет в урезанном node_modules. */
+export function resolvePdfjsWorkerPath(): string | null {
+  const cwd = process.cwd();
+  const candidates: string[] = [];
+  for (const from of [
+    `${cwd}/package.json`,
+    path.join(cwd, ".next", "standalone", "package.json"),
+    path.join(cwd, "..", "..", "package.json"),
+  ]) {
+    try {
+      candidates.push(createRequire(from).resolve(WORKER_REL));
+    } catch {
+      /* нет пакета от этой точки */
+    }
+  }
+  candidates.push(
+    path.join(cwd, "node_modules", ...WORKER_REL.split("/")),
+    path.join(cwd, ".next", "standalone", "node_modules", ...WORKER_REL.split("/")),
+    path.join(cwd, "..", "..", "node_modules", ...WORKER_REL.split("/")),
+  );
+  for (const p of candidates) {
+    if (p && existsSync(p)) return p;
+  }
+  return null;
+}
+
+async function ensurePdfjsWorkerSrc(): Promise<void> {
+  const workerPath = resolvePdfjsWorkerPath();
+  if (!workerPath) {
+    console.warn("[extractPdfPlainText] нет pdf.worker.mjs — pdfjs fake worker упадёт");
+    return;
+  }
+  const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as {
+    GlobalWorkerOptions?: { workerSrc: string };
+  };
+  if (pdfjs.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc = workerPath;
+  }
 }
