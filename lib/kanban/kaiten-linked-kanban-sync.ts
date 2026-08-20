@@ -23,12 +23,17 @@ type KaitenSnapshotComment = {
  */
 /**
  * Лента и описание из CRM (GET /kanban-chat?local=1).
- * Если зеркало пустое, сервер один раз подтягивает комментарии Kaiten.
+ * Ответ сразу из store/наряда; Kaiten модалка тянет отдельно.
  */
 export async function fetchKanbanMirrorCommentsForOrder(
   orderId: string,
 ): Promise<
-  | { ok: true; comments: CardComment[]; description: string }
+  | {
+      ok: true;
+      comments: CardComment[];
+      description: string;
+      linkedKaiten: boolean;
+    }
   | { ok: false }
 > {
   try {
@@ -40,7 +45,8 @@ export async function fetchKanbanMirrorCommentsForOrder(
       hasCard?: boolean;
       comments?: CardComment[];
       description?: string;
-      orderHeader?: { description?: string };
+      linkedKaiten?: boolean;
+      orderHeader?: { description?: string; kaitenCardId?: number | null };
     };
     if (!res.ok || !Array.isArray(data.comments)) {
       return { ok: false };
@@ -51,7 +57,11 @@ export async function fetchKanbanMirrorCommentsForOrder(
         : typeof data.orderHeader?.description === "string"
           ? data.orderHeader.description
           : "";
-    return { ok: true, comments: data.comments, description };
+    const headerKid = data.orderHeader?.kaitenCardId;
+    const linkedKaiten =
+      data.linkedKaiten === true ||
+      (headerKid != null && Number.isFinite(headerKid));
+    return { ok: true, comments: data.comments, description, linkedKaiten };
   } catch {
     return { ok: false };
   }

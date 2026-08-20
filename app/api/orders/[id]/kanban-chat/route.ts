@@ -3,7 +3,8 @@
  *
  * Источник ленты: tenantClientState `kanbanCommentsV1:{orderId}` + шапка наряда.
  * Timezone: даты комментариев как ISO из хранилища (не нормализуем).
- * `?local=1` / `sync=0`: без полного kanbanAppStateV3; Kaiten только если лента пуста.
+ * `?local=1` / `sync=0`: CRM-лента + шапка без полного JSON канбана.
+ * Kaiten при пустом store — только `after()`, ответ не ждёт.
  * Без local: после ответа ещё тянем файлы Kaiten и JSON доски (чат из списка нарядов).
  * POST: пишем CRM (лента `kanbanCommentsV1`) и сразу отвечаем; Kaiten + TG — `after()`.
  */
@@ -314,6 +315,30 @@ function normalizeCardCommentsForApi(list: CardComment[]): CardComment[] {
     .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
 }
 
+async function hydrateEmptyKanbanCommentsFromKaiten(opts: {
+  tenantId: string;
+  orderId: string;
+  kaitenCardId: number;
+}): Promise<void> {
+  const auth = getKaitenRestAuth();
+  if (!auth) return;
+  const comm = await kaitenListComments(auth, opts.kaitenCardId);
+  if (!comm.ok) return;
+  const parsed = dedupeParsedKaitenComments(
+    comm.comments
+      .map(parseKaitenListComment)
+      .filter((x): x is NonNullable<typeof x> => x != null),
+  );
+  if (parsed.length === 0) return;
+  const ordersPrisma = await getOrdersPrisma();
+  await ingestKaitenCommentsForOrder({
+    prisma: ordersPrisma,
+    tenantId: opts.tenantId,
+    orderId: opts.orderId,
+    parsed,
+  });
+}
+
 async function loadTenantKanbanState(tenantId: string): Promise<{
   state: KanbanAppState | null;
   updatedAt: Date | null;
@@ -373,7 +398,7 @@ export async function GET(
   }
   /**
    * Карточка доски: `?local=1` — CRM-лента + шапка, без полного JSON канбана.
-   * Если зеркало пустое, один раз тянем комментарии Kaiten и пишем store.
+   * Пустое зеркало дотягиваем из Kaiten в `after()`, чтобы модалка не висела.
    */
   const localOnly = isKanbanChatLocalOnlyRequest(new URL(req.url));
   const t0 = Date.now();
@@ -385,46 +410,27 @@ export async function GET(
   let workImages = bundleImages;
 
   if (localOnly) {
-    let comments = normalizeCardCommentsForApi(storedComments);
+    const comments = normalizeCardCommentsForApi(storedComments);
     const kaitenCardId = orderHeader?.kaitenCardId;
     if (
       comments.length === 0 &&
       kaitenCardId != null &&
       Number.isFinite(kaitenCardId)
     ) {
-      const auth = getKaitenRestAuth();
-      if (auth) {
-        try {
-          const comm = await kaitenListComments(auth, kaitenCardId);
-          if (comm.ok) {
-            const parsed = dedupeParsedKaitenComments(
-              comm.comments
-                .map(parseKaitenListComment)
-                .filter((x): x is NonNullable<typeof x> => x != null),
-            );
-            if (parsed.length > 0) {
-              const ordersPrisma = await getOrdersPrisma();
-              await ingestKaitenCommentsForOrder({
-                prisma: ordersPrisma,
-                tenantId,
-                orderId,
-                parsed,
-              });
-              comments = normalizeCardCommentsForApi(
-                await loadKanbanOrderComments(tenantId, orderId),
-              );
-            }
-          }
-        } catch (e) {
+      after(() =>
+        hydrateEmptyKanbanCommentsFromKaiten({
+          tenantId,
+          orderId,
+          kaitenCardId,
+        }).catch((e) => {
           console.error("[kanban-chat GET] hydrate empty store", orderId, e);
-        }
-      }
+        }),
+      );
     }
     console.info("[kanban-chat GET]", {
       orderId,
       local: true,
       comments: comments.length,
-      hydrated: comments.length > storedComments.length,
       ms: Date.now() - t0,
     });
     return NextResponse.json({

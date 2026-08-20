@@ -1,6 +1,6 @@
 /**
  * GET /api/orders/:id/kanban-chat?local=1 (или sync=0):
- * CRM-лента + шапка, без полного JSON канбана. Live Kaiten — только если store пуст.
+ * CRM-лента + шапка, без полного JSON канбана. Live Kaiten — в after() при пустом store.
  */
 export function isKanbanChatLocalOnlyRequest(url: URL): boolean {
   const local = url.searchParams.get("local");

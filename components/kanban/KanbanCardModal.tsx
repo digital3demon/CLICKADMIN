@@ -22,7 +22,7 @@ import {
   patchOrderKaitenCard,
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
-import { needsOrderListKaitenChatFallback } from "@/lib/kanban/order-list-chat-hydrate";
+import { mergeKaitenSnapshotIntoCardComments } from "@/lib/kanban/chat-sync";
 import {
   forgetOptimisticKaitenBlock,
   OPTIMISTIC_KAITEN_BLOCK_SHORT_TTL_MS,
@@ -84,7 +84,10 @@ import {
 } from "@/lib/kanban/model";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { kanbanCardDescriptionNeedsCollapse } from "@/lib/kanban/kanban-card-desc-collapse";
+import {
+  kanbanCardDescriptionAvailableHeight,
+  kanbanCardDescriptionNeedsCollapse,
+} from "@/lib/kanban/kanban-card-desc-collapse";
 import { createPortal } from "react-dom";
 import { DeadlineTomorrowHint } from "./DeadlineTomorrowHint";
 import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
@@ -382,6 +385,7 @@ export function KanbanCardModal({
   const [pickerMode, setPickerMode] = useState<null | "assign" | "part">(null);
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
+  const [kaitenChatLoading, setKaitenChatLoading] = useState(false);
   const [descExpanded, setDescExpanded] = useState(true);
   const [descCanCollapse, setDescCanCollapse] = useState(false);
   const descUserOverrideRef = useRef(false);
@@ -451,6 +455,7 @@ export function KanbanCardModal({
     descUserOverrideRef.current = false;
     setDescExpanded(true);
     setDescCanCollapse(false);
+    setKaitenChatLoading(false);
     setPlacementFieldsOpen(false);
   }, [cardId]);
 
@@ -476,13 +481,12 @@ export function KanbanCardModal({
       setDescExpanded(true);
       return;
     }
-    const currentH = box?.offsetHeight ?? 80;
-    const fullH = Math.max(measure.scrollHeight, 100);
-    const heightIfExpanded = overlay.scrollHeight - currentH + fullH;
-    const needs = kanbanCardDescriptionNeedsCollapse(
-      heightIfExpanded,
-      overlay.clientHeight,
+    const fullH = measure.scrollHeight;
+    const available = kanbanCardDescriptionAvailableHeight(
+      overlay.getBoundingClientRect().bottom,
+      (box ?? measure).getBoundingClientRect().top,
     );
+    const needs = kanbanCardDescriptionNeedsCollapse(fullH, available);
     setDescCanCollapse(needs);
     setDescExpanded(!needs);
   }, [descDraft]);
@@ -556,45 +560,56 @@ export function KanbanCardModal({
   useEffect(() => {
     if (!cardId || !linkedOrderId) return;
     let cancelled = false;
+    const alreadyLinked =
+      kaitenCardIdForChat != null && Number.isFinite(kaitenCardIdForChat);
+    if (alreadyLinked) setKaitenChatLoading(true);
+
     void (async () => {
       const snap = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
       if (cancelled) return;
-      let comments = snap.ok ? snap.comments : null;
-      const description = snap.ok ? snap.description : "";
-      if (
-        comments != null &&
-        needsOrderListKaitenChatFallback({
-          mirrorOk: true,
-          commentCount: comments.length,
-        })
-      ) {
-        const kaiten = await fetchOrderKaitenCommentsForKanban(
-          linkedOrderId,
-          chatActorUserId,
-        );
-        if (cancelled) return;
-        if (kaiten.ok && kaiten.comments.length > 0) {
-          comments = kaiten.comments;
-        }
+      if (snap.ok) {
+        onApply((b) => {
+          const fc = findCard(b, cardId);
+          if (!fc) return;
+          const hadLocal = (fc.card.comments || []).length > 0;
+          if (snap.comments.length > 0 || !hadLocal) {
+            fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
+          }
+          if (snap.description.trim() && !(fc.card.description || "").trim()) {
+            fc.card.description = snap.description;
+          }
+        });
       }
-      if (comments == null) return;
-      const nextComments = comments;
-      onApply((b) => {
-        const fc = findCard(b, cardId);
-        if (!fc) return;
-        const hadLocal = (fc.card.comments || []).length > 0;
-        if (nextComments.length > 0 || !hadLocal) {
-          fc.card.comments = withImagePlaceholders(nextComments, fc.card);
-        }
-        if (description.trim() && !(fc.card.description || "").trim()) {
-          fc.card.description = description;
-        }
-      });
+      const pullKaiten = alreadyLinked || (snap.ok && snap.linkedKaiten);
+      if (!pullKaiten) {
+        setKaitenChatLoading(false);
+        return;
+      }
+      setKaitenChatLoading(true);
+      const kaiten = await fetchOrderKaitenCommentsForKanban(
+        linkedOrderId,
+        chatActorUserId,
+      );
+      if (cancelled) return;
+      if (kaiten.ok && kaiten.comments.length > 0) {
+        onApply((b) => {
+          const fc = findCard(b, cardId);
+          if (!fc) return;
+          fc.card.comments = withImagePlaceholders(
+            mergeKaitenSnapshotIntoCardComments(
+              fc.card.comments || [],
+              kaiten.comments,
+            ),
+            fc.card,
+          );
+        });
+      }
+      setKaitenChatLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [cardId, linkedOrderId, onApply, chatActorUserId]);
+  }, [cardId, linkedOrderId, onApply, chatActorUserId, kaitenCardIdForChat]);
 
   const adminMentionTag = useKanbanAdminMentionTag();
   const adminMentionUserIds = useMemo(
@@ -2606,6 +2621,7 @@ export function KanbanCardModal({
                 <ChatPanel
                   card={card}
                   board={board}
+                  kaitenLoading={kaitenChatLoading}
                   adminMentionTag={adminMentionTag}
                   adminMentionUserIds={adminMentionUserIds}
                   productionMentionTag={productionMentionTagResolved}
@@ -3003,6 +3019,7 @@ function fallbackMentionToken(row: KanbanCrmUserRow | { name: string }): string 
 function ChatPanel({
   card,
   board,
+  kaitenLoading = false,
   adminMentionTag,
   adminMentionUserIds,
   productionMentionTag,
@@ -3014,6 +3031,7 @@ function ChatPanel({
 }: {
   card: KanbanCard;
   board: KanbanBoard;
+  kaitenLoading?: boolean;
   adminMentionTag: string;
   adminMentionUserIds: readonly string[];
   /** Нормализованный токен (напр. clickpr) для подстановки @ в текст. */
@@ -3200,6 +3218,18 @@ function ChatPanel({
         if (e.dataTransfer.files?.length) flushFiles(e.dataTransfer.files);
       }}
     >
+      {kaitenLoading ? (
+        <div
+          className="flex items-center gap-1.5 px-2 pt-2 text-[0.7rem] text-[var(--kaiten-modal-muted)]"
+          role="status"
+        >
+          <span
+            className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+            aria-hidden
+          />
+          Загрузка из Kaiten…
+        </div>
+      ) : null}
       <div className="px-2 py-2">
         {chatBlocks.map((block) => {
           if (block.kind === "imageRow") {
