@@ -2200,6 +2200,7 @@ export function NewOrderForm({
                   id={`${titleId}-work-due`}
                   label="Срок лаборатории"
                   labelPlacement="inside"
+                  tone="lab"
                   value={workDueLocal}
                   minLocal={dueLabMinLocal}
                   timeGrid="labDue"
@@ -2244,6 +2245,7 @@ export function NewOrderForm({
                   id={`${titleId}-patient-appt`}
                   label="Запись"
                   labelPlacement="inside"
+                  tone="appointment"
                   value={patientAppointmentLocal}
                   minLocal={dueDateMinLocal}
                   compactTimeLabel={

@@ -1,7 +1,11 @@
+import { formatInvoiceListPillLabel } from "@/lib/format-invoice-number-ru";
+
 type Props = {
   prostheticsOrdered: boolean;
   /** Файл счёта загружен (документооборот) */
   hasInvoiceAttachment?: boolean;
+  /** Номер счёта — пилюля «СЧЕТ №… от D.MM.YYYY», как в списке заказов. */
+  invoiceNumber?: string | null;
   /** Счёт распечатан (кнопка на вкладке «Документооборот») */
   invoicePrinted?: boolean;
   adminShippedOtpr: boolean;
@@ -17,6 +21,7 @@ type Props = {
 export function OrderHeadlinePills({
   prostheticsOrdered,
   hasInvoiceAttachment = false,
+  invoiceNumber = null,
   invoicePrinted = false,
   adminShippedOtpr,
   density = "default",
@@ -28,6 +33,10 @@ export function OrderHeadlinePills({
       : "px-2.5 py-1 text-xs";
 
   const gap = density === "table" ? "gap-1" : "gap-1.5";
+  const invoicePillLabel = formatInvoiceListPillLabel(invoiceNumber);
+  const invoicePillLong = invoicePillLabel !== "СЧЕТ";
+  const showInvoicePill =
+    hasInvoiceAttachment || Boolean((invoiceNumber ?? "").trim());
 
   return (
     <div className={`flex flex-wrap items-center ${gap} ${className}`.trim()}>
@@ -39,12 +48,18 @@ export function OrderHeadlinePills({
           Протетика заказана
         </span>
       ) : null}
-      {hasInvoiceAttachment ? (
+      {showInvoicePill ? (
         <span
-          className={`rounded-full border border-sky-300 bg-sky-50 font-semibold tracking-wide text-sky-950 shadow-sm dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-100 ${pad}`}
-          title="Загружен файл счёта (вкладка «Документооборот»)"
+          className={`rounded-full border border-sky-300 bg-sky-50 font-semibold text-sky-950 shadow-sm dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-100 ${pad}${
+            invoicePillLong ? " tracking-normal" : " tracking-wide"
+          }`}
+          title={
+            invoicePillLong
+              ? invoicePillLabel
+              : "Загружен файл счёта (вкладка «Документооборот»)"
+          }
         >
-          СЧЕТ
+          {invoicePillLabel}
         </span>
       ) : null}
       {invoicePrinted ? (

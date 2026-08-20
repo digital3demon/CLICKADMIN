@@ -13,6 +13,7 @@ import {
   toOrderListPageRow,
   type OrderListPageRow,
 } from "@/lib/fetch-orders-list-page";
+import { withKeptOrderIds } from "@/lib/orders-list-keep-where";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import { hydrateListPendingChatCorrectionsFromInbox } from "@/lib/order-chat-corrections-read";
 import { hydrateListPendingProstheticsFromInbox } from "@/lib/order-prosthetics-requests-read";
@@ -103,6 +104,7 @@ export async function fetchOrdersShipmentListPage(
     ordersListForUserId?: string | null;
     viewerRole?: UserRole | null;
     viewerUserId?: string | null;
+    keepOrderIds?: readonly string[] | null;
   },
 ): Promise<{
   orders: OrderListPageRow[];
@@ -126,11 +128,14 @@ export async function fetchOrdersShipmentListPage(
       viewerRole: opts.viewerRole ?? null,
       viewerUserId: opts.viewerUserId ?? opts.ordersListForUserId ?? null,
     }),
-    ordersShipmentListWhere({
-      mode: opts.shipmentMode,
-      shipFrom: opts.shipFrom,
-      shipTo: opts.shipTo,
-    }),
+    withKeptOrderIds(
+      ordersShipmentListWhere({
+        mode: opts.shipmentMode,
+        shipFrom: opts.shipFrom,
+        shipTo: opts.shipTo,
+      }),
+      opts.keepOrderIds,
+    ),
   ];
 
   if (parsedTag) {

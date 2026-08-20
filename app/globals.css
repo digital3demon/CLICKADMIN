@@ -69,9 +69,9 @@ html[data-ui="classic"] {
   --table-row-hover: rgba(220, 228, 238, 0.65);
   --input-bg: #f3f5f9;
   --input-border: #c4ccd8;
-  /* ФинОтдел: как пилюли «Просчитано» / «СЧЕТ» */
-  --fo-tint-calc: #d1fae5;
-  --fo-tint-inv: #e0f2fe;
+  /* ФинОтдел: лёгкий оттенок, не заливка пилюли — иначе текст теряется */
+  --fo-tint-calc: color-mix(in srgb, #059669 14%, var(--card-bg));
+  --fo-tint-inv: color-mix(in srgb, #0284c7 14%, var(--card-bg));
   --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 14%, transparent);
   --text-placeholder: #8b95a5;
   --border-strong: #9aa3b2;
@@ -110,9 +110,9 @@ html.dark {
   --table-row-hover: rgba(69, 69, 78, 0.55);
   --input-bg: #34343c;
   --input-border: #505058;
-  /* Как тёмные пилюли emerald-100 / sky-100, не размытый 40% mix */
-  --fo-tint-calc: color-mix(in srgb, #34d399 52%, var(--card-bg));
-  --fo-tint-inv: color-mix(in srgb, #38bdf8 54%, var(--card-bg));
+  /* Тонкий wash: зелёный / синий ~14% поверх карточки, чтобы читался светлый текст */
+  --fo-tint-calc: color-mix(in srgb, #059669 14%, var(--card-bg));
+  --fo-tint-inv: color-mix(in srgb, #0284c7 16%, var(--card-bg));
   --accent-selection-bg: color-mix(in srgb, var(--sidebar-blue) 22%, transparent);
   --text-placeholder: #71717a;
   --border-strong: #63636d;
@@ -347,7 +347,7 @@ body {
 }
 
 /*
- * ФинОтдел: просчитано = emerald, счёт = sky (счёт важнее, без градиента).
+ * ФинОтдел: просчитано = приглушённый emerald, счёт = приглушённый sky.
  * Сплошной фон на tr/td — иначе колёсико на длинном списке замирает.
  */
 .finance-office-orders-table {

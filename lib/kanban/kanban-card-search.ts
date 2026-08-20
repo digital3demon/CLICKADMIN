@@ -47,6 +47,7 @@ export function kanbanCardSearchHaystack(
   /* linkedOrderId / cuid не в стоге: «214» не должно цеплять случайный фрагмент id. */
   return [
     card.title,
+    card.linkedOrderNumber,
     card.description,
     typeName,
     comments,

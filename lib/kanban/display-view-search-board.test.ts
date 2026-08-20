@@ -110,6 +110,42 @@ describe("buildKanbanDisplayView · search on board", () => {
     expect(cardHomeBoardId.get("hit-214")).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
   });
 
+  it("299 подмешивает 2607-299 с Ортодонтии при активной Ортопедии", () => {
+    const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
+    const odon = mirrorBoard(KANBAN_BOARD_ORTHODONTICS_ID, "Ортодонтия");
+    const approvalOdon = odon.columns.find((c) => c.title === "Согласование")!;
+    approvalOdon.cards.push(
+      createCard({
+        id: "hit-299",
+        title: "2607-299 Степанов А.В. Жевлаков А. ХШ + Нагрузка 24.08 09:00",
+        linkedOrderId: "o-299",
+        linkedOrderNumber: "2607-299",
+      }),
+    );
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [ortho, odon],
+      activeBoardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+      search: "299",
+      viewMode: "board",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard, cardHomeBoardId } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+    });
+    const ids = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(ids).toContain("hit-299");
+    expect(cardHomeBoardId.get("hit-299")).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+  });
+
   it("прячет пустые колонки, чтобы попадание в «Сдана админам» было видно", () => {
     const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
     const shipped = ortho.columns.find((c) => c.title === "Сдана админам")!;

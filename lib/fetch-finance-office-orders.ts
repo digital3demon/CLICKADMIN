@@ -28,7 +28,7 @@ import {
   orderAttentionListSupersetWhere,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
-import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
+import { orderInvoiceCompositionMismatch, uniqueAttentionOrderCount } from "@/lib/order-invoice-composition-mismatch";
 
 const financeOfficeOrderSelect = {
   id: true,
@@ -64,6 +64,7 @@ const financeOfficeOrderSelect = {
   urgentCoefficient: true,
   compositionDiscountPercent: true,
   invoiceParsedTotalRub: true,
+  invoiceMismatchAckFingerprint: true,
   clinicId: true,
   doctorId: true,
   constructions: {
@@ -223,8 +224,9 @@ export async function countFinanceOfficeQuickFilterChips(
   noEdoCount: number;
   labMentionCount: number;
 }> {
-  // ЭДО / корректировки / протетика / чат — как текущий список (на Актуальном
-  // без тега = только непросчитанные). Просчитано/Не просчитано — по всему окну срока.
+  // Просчитано/Не просчитано — по всему окну срока.
+  // «Корректировки» — тоже по окну срока (включая просчитанные), иначе пилюля
+  // меньше, чем в Заказах: второй наряд уже с галкой «просчитано» / со счётом.
   const scope = financeOfficeChipCountScopeWhere(tenantId, opts);
   const dueWindow = financeOfficeChipDueWindowScopeWhere(tenantId, opts);
   const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
@@ -243,12 +245,13 @@ export async function countFinanceOfficeQuickFilterChips(
     financeCalculatedCount,
     edoCounts,
     labMentionCount,
+    invoiceTotalCandidates,
   ] = await Promise.all([
     db.orderChatCorrection.findMany({
       where: {
         resolvedAt: null,
         rejectedAt: null,
-        order: scope,
+        order: dueWindow,
       },
       select: { orderId: true },
       distinct: ["orderId"],
@@ -259,7 +262,7 @@ export async function countFinanceOfficeQuickFilterChips(
             type: "CORRECTION",
             resolvedAt: null,
             rejectedAt: null,
-            order: scope,
+            order: dueWindow,
           },
           select: { orderId: true },
           distinct: ["orderId"],
@@ -298,6 +301,24 @@ export async function countFinanceOfficeQuickFilterChips(
       scope,
       opts.userId,
     ),
+    db.order.findMany({
+      where: { AND: [dueWindow, { invoiceParsedTotalRub: { not: null } }] },
+      select: {
+        id: true,
+        invoiceParsedTotalRub: true,
+        invoiceMismatchAckFingerprint: true,
+        isUrgent: true,
+        urgentCoefficient: true,
+        compositionDiscountPercent: true,
+        constructions: {
+          select: {
+            quantity: true,
+            unitPrice: true,
+            lineDiscountPercent: true,
+          },
+        },
+      },
+    }),
   ]);
 
   const corrCandidateIds = [
@@ -332,8 +353,17 @@ export async function countFinanceOfficeQuickFilterChips(
           },
         });
 
+  const mismatchIds = invoiceTotalCandidates
+    .filter((o) =>
+      orderInvoiceCompositionMismatch({
+        ...o,
+        invoiceMismatchAckFingerprint: o.invoiceMismatchAckFingerprint,
+      }),
+    )
+    .map((o) => o.id);
+
   return {
-    attentionCount: pendingCorrections.size,
+    attentionCount: uniqueAttentionOrderCount(pendingCorrections, mismatchIds),
     prostheticsPendingCount,
     financeNotCalculatedCount,
     financeCalculatedCount,
@@ -555,6 +585,7 @@ export async function fetchFinanceOfficeOrders(
       constructions: hydratedConstructions,
       listCompositionMismatch: orderInvoiceCompositionMismatch({
         invoiceParsedTotalRub: o.invoiceParsedTotalRub,
+        invoiceMismatchAckFingerprint: o.invoiceMismatchAckFingerprint,
         isUrgent: o.isUrgent,
         urgentCoefficient: o.urgentCoefficient,
         compositionDiscountPercent: o.compositionDiscountPercent,
@@ -571,13 +602,11 @@ export async function fetchFinanceOfficeOrders(
   });
 
   const exact =
-    parsedTag?.kind === "orderAttention"
-      ? mapped.filter((r) => r.listCompositionMismatch || r.listPendingChatCorrections)
-      : parsedTag?.kind === "edo"
-        ? mapped.filter((r) => r.clinicWorksWithEdo)
-        : parsedTag?.kind === "noEdo"
-          ? mapped.filter((r) => !r.clinicWorksWithEdo)
-          : mapped;
+    parsedTag?.kind === "edo"
+      ? mapped.filter((r) => r.clinicWorksWithEdo)
+      : parsedTag?.kind === "noEdo"
+        ? mapped.filter((r) => !r.clinicWorksWithEdo)
+        : mapped;
 
   const withMention = await hydrateOrderKaitenLabMentionHighlight(
     db,
@@ -596,17 +625,21 @@ export async function fetchFinanceOfficeOrders(
     listKaitenLabMentionHighlight: mentionById.get(r.id) ?? false,
   }));
 
-  const filtered =
-    parsedTag?.kind === "kaitenLabMention"
-      ? withHighlight.filter((r) => r.listKaitenLabMentionHighlight)
-      : withHighlight;
-
-  const withCorrections = await hydrateListPendingProstheticsFromInbox(
+  const withInbox = await hydrateListPendingProstheticsFromInbox(
     db,
-    await hydrateListPendingChatCorrectionsFromInbox(db, filtered),
+    await hydrateListPendingChatCorrectionsFromInbox(db, withHighlight),
   );
 
-  return withCorrections.sort((a, b) => {
+  const filtered =
+    parsedTag?.kind === "orderAttention"
+      ? withInbox.filter(
+          (r) => r.listCompositionMismatch || r.listPendingChatCorrections,
+        )
+      : parsedTag?.kind === "kaitenLabMention"
+        ? withInbox.filter((r) => r.listKaitenLabMentionHighlight)
+        : withInbox;
+
+  return filtered.sort((a, b) => {
     const pr = financePriority(a) - financePriority(b);
     if (pr !== 0) return pr;
     return compareOrdersByEffectiveFinanceRecord(a, b);

@@ -1,5 +1,6 @@
 /**
  * Маршрутизация дропа в фин. отделе: Excel/картинка = оплаты, PDF/ZIP/RAR/7z = счета.
+ * Apply счетов: NDJSON phase/row/done — живой прогресс в модалке, не одно «Сохранение…».
  */
 
 export type FinanceOfficeDropKind = "bank" | "invoices" | "mixed" | "empty" | "unknown";
@@ -69,6 +70,40 @@ export function financeOfficeInvoiceRowKey(
   return `${sourceArchive ?? ""}::${fileName}`;
 }
 
+/** Неуспех apply, который имеет смысл повторить (не «строка пропущена»). */
+export function isFinanceInvoiceImportRetryable(
+  result: Pick<FinanceInvoiceImportApplyResult, "ok" | "message">,
+): boolean {
+  if (result.ok) return false;
+  if (result.message === "Строка пропущена") return false;
+  return true;
+}
+
+export function filterInvoiceRowsForRetry<T extends { key: string }>(
+  rows: readonly T[],
+  results: readonly Pick<
+    FinanceInvoiceImportApplyResult,
+    "key" | "ok" | "message"
+  >[],
+): T[] {
+  const failed = new Set(
+    results.filter(isFinanceInvoiceImportRetryable).map((r) => r.key),
+  );
+  return rows.filter((r) => failed.has(r.key));
+}
+
+/** Имена файлов дропа, нужные для повторной загрузки только ошибочных строк. */
+export function invoiceImportSourceFileNames(
+  rows: readonly { fileName: string; sourceArchive: string | null }[],
+): string[] {
+  const names = new Set<string>();
+  for (const r of rows) {
+    const n = (r.sourceArchive || r.fileName).trim();
+    if (n) names.add(n);
+  }
+  return [...names];
+}
+
 export type FinanceInvoiceImportPreviewRow = {
   key: string;
   fileName: string;
@@ -98,3 +133,90 @@ export type FinanceInvoiceImportApplyResult = {
   ok: boolean;
   message: string;
 };
+
+/** NDJSON-события POST /invoice-import/apply при Accept: application/x-ndjson. */
+export type FinanceInvoiceImportProgressEvent =
+  | { type: "phase"; phase: "unpack" | "attach" }
+  | { type: "start"; total: number }
+  | {
+      type: "row";
+      done: number;
+      total: number;
+      result: FinanceInvoiceImportApplyResult;
+    }
+  | {
+      type: "done";
+      results: FinanceInvoiceImportApplyResult[];
+      applied: number;
+      skipped: number;
+    }
+  | { type: "error"; error: string };
+
+export function parseFinanceInvoiceImportProgressLine(
+  line: string,
+): FinanceInvoiceImportProgressEvent | null {
+  const s = line.trim();
+  if (!s) return null;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(s);
+  } catch {
+    return null;
+  }
+  if (!raw || typeof raw !== "object") return null;
+  const t = (raw as { type?: unknown }).type;
+  if (
+    t === "phase" ||
+    t === "start" ||
+    t === "row" ||
+    t === "done" ||
+    t === "error"
+  ) {
+    return raw as FinanceInvoiceImportProgressEvent;
+  }
+  return null;
+}
+
+export async function readFinanceInvoiceImportApplyResponse(
+  res: Response,
+  onEvent?: (ev: FinanceInvoiceImportProgressEvent) => void,
+): Promise<FinanceInvoiceImportApplyResult[]> {
+  const ctype = (res.headers.get("content-type") || "").toLowerCase();
+  if (ctype.includes("ndjson")) {
+    if (!res.body) throw new Error("Пустой ответ сервера");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let results: FinanceInvoiceImportApplyResult[] | null = null;
+    let streamError: string | null = null;
+    const takeLine = (line: string) => {
+      const ev = parseFinanceInvoiceImportProgressLine(line);
+      if (!ev) return;
+      onEvent?.(ev);
+      if (ev.type === "done") results = ev.results;
+      if (ev.type === "error") streamError = ev.error;
+    };
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl = buf.indexOf("\n");
+      while (nl >= 0) {
+        takeLine(buf.slice(0, nl));
+        buf = buf.slice(nl + 1);
+        nl = buf.indexOf("\n");
+      }
+    }
+    takeLine(buf);
+    if (streamError) throw new Error(streamError);
+    if (!results) throw new Error("Сервер не вернул результат");
+    return results;
+  }
+
+  const data = (await res.json().catch(() => ({}))) as {
+    results?: FinanceInvoiceImportApplyResult[];
+    error?: string;
+  };
+  if (!res.ok) throw new Error(data.error || "Не удалось прикрепить счета");
+  return Array.isArray(data.results) ? data.results : [];
+}

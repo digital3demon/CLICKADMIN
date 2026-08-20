@@ -172,7 +172,39 @@ type DueDatetimeComboPickerProps = {
    * `undefined` — обычные часы; иначе показанная строка ("" — скрыть время).
    */
   compactTimeLabel?: string | null;
+  /**
+   * Активен фильтр списка по этой дате: ободок толще.
+   */
+  filterHighlight?: boolean;
+  /**
+   * Мягкий цвет ободка и фона: лабораторный срок vs запись.
+   * По умолчанию нейтральный (как обычное поле).
+   */
+  tone?: DueDatetimeTone;
 };
+
+export type DueDatetimeTone = "neutral" | "lab" | "appointment";
+
+function triggerSurfaceClass(
+  tone: DueDatetimeTone,
+  filterHighlight: boolean,
+): string {
+  const base =
+    "rounded-md outline-none transition-[border-color,box-shadow,background-color]";
+  if (tone === "lab") {
+    return filterHighlight
+      ? `${base} border-2 border-teal-600/50 bg-teal-500/[0.12] shadow-sm hover:border-teal-500/65 dark:border-teal-300/45 dark:bg-teal-400/[0.11]`
+      : `${base} border border-teal-700/35 bg-teal-500/[0.08] shadow-sm hover:border-teal-600/50 dark:border-teal-400/30 dark:bg-teal-400/[0.08]`;
+  }
+  if (tone === "appointment") {
+    return filterHighlight
+      ? `${base} border-2 border-amber-600/50 bg-amber-500/[0.12] shadow-sm hover:border-amber-500/65 dark:border-amber-300/45 dark:bg-amber-400/[0.11]`
+      : `${base} border border-amber-700/35 bg-amber-500/[0.08] shadow-sm hover:border-amber-600/50 dark:border-amber-400/30 dark:bg-amber-400/[0.08]`;
+  }
+  return filterHighlight
+    ? `${base} border-2 border-sky-400 bg-[var(--card-bg)] shadow-[0_0_0_1px_rgba(56,189,248,0.45)] hover:border-sky-300 focus-visible:border-sky-300 focus-visible:ring-1 focus-visible:ring-sky-300 dark:border-sky-300 dark:shadow-[0_0_0_1px_rgba(125,211,252,0.4)]`
+    : `${base} border border-[var(--input-border)] bg-[var(--card-bg)] shadow-sm hover:border-[var(--sidebar-blue)]/40 focus-visible:border-[var(--sidebar-blue)] focus-visible:ring-1 focus-visible:ring-[var(--sidebar-blue)]`;
+}
 
 export function DueDatetimeComboPicker({
   id,
@@ -192,6 +224,8 @@ export function DueDatetimeComboPicker({
   timeGrid = "halfHour",
   labHmSlots,
   compactTimeLabel,
+  filterHighlight = false,
+  tone = "neutral",
 }: DueDatetimeComboPickerProps) {
   const genId = useId();
   const triggerId = id ?? genId;
@@ -420,8 +454,7 @@ export function DueDatetimeComboPicker({
     .filter(Boolean)
     .join(" — ");
 
-  const triggerSurface =
-    "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] shadow-sm outline-none transition-[border-color,box-shadow] hover:border-[var(--sidebar-blue)]/40 focus-visible:border-[var(--sidebar-blue)] focus-visible:ring-1 focus-visible:ring-[var(--sidebar-blue)]";
+  const triggerSurface = triggerSurfaceClass(tone, filterHighlight);
 
   const dropdown = open ? (
     <div

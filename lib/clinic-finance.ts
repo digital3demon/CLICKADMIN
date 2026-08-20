@@ -502,6 +502,7 @@ export async function fetchReconciliationRows(
           patientName: true,
           labWorkStatus: true,
           invoiceParsedTotalRub: true,
+          invoiceMismatchAckFingerprint: true,
           isUrgent: true,
           urgentCoefficient: true,
           compositionDiscountPercent: true,
@@ -577,6 +578,7 @@ export async function fetchReconciliationRows(
         (l.order.chatCorrections?.length ?? 0) > 0 ||
         orderInvoiceCompositionMismatch({
           invoiceParsedTotalRub: l.order.invoiceParsedTotalRub,
+          invoiceMismatchAckFingerprint: l.order.invoiceMismatchAckFingerprint,
           isUrgent: l.order.isUrgent,
           urgentCoefficient: l.order.urgentCoefficient,
           compositionDiscountPercent: l.order.compositionDiscountPercent,

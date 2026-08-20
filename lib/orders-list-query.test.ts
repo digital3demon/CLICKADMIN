@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendOrdersListKeepId,
   ordersListHref,
+  parseOrdersListKeepIds,
   parseOrdersListPage,
 } from "./orders-list-query";
 
@@ -32,5 +34,28 @@ describe("ordersListHref page param", () => {
 
   it("keeps cursor only when page is first", () => {
     expect(ordersListHref({ cursor: "abc" })).toBe("/orders?cursor=abc");
+  });
+
+  it("writes keep csv", () => {
+    expect(ordersListHref({ from: "2026-08-20", keep: "clxxxxxxxxxxxxxxxx,bad" })).toBe(
+      "/orders?from=2026-08-20&keep=clxxxxxxxxxxxxxxxx",
+    );
+  });
+});
+
+describe("parseOrdersListKeepIds", () => {
+  it("берёт валидные id, отбрасывает мусор и дубли", () => {
+    expect(
+      parseOrdersListKeepIds("clxxxxxxxxxxxxxxxx, кц,clxxxxxxxxxxxxxxxx,short"),
+    ).toEqual(["clxxxxxxxxxxxxxxxx"]);
+  });
+
+  it("append не дублирует", () => {
+    expect(appendOrdersListKeepId("clxxxxxxxxxxxxxxxx", "clxxxxxxxxxxxxxxxx")).toBe(
+      "clxxxxxxxxxxxxxxxx",
+    );
+    expect(appendOrdersListKeepId(null, "clyyyyyyyyyyyyyyyy")).toBe(
+      "clyyyyyyyyyyyyyyyy",
+    );
   });
 });

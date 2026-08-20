@@ -205,6 +205,7 @@ export async function fetchOrderEditInitial(
     shippedDescription: order.shippedDescription,
     invoiceParsedLines: invParsed.invoiceParsedLines,
     invoiceParsedTotalRub: invParsed.invoiceParsedTotalRub,
+    invoiceMismatchAckFingerprint: order.invoiceMismatchAckFingerprint ?? null,
     invoiceParsedSummaryText: invParsed.invoiceParsedSummaryText,
     invoicePaymentNotes: order.invoicePaymentNotes,
     orderPriceListKind: order.orderPriceListKind,

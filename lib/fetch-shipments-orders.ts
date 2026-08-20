@@ -84,6 +84,7 @@ const shipmentOrderSelect = {
   invoiceSentToEdo: true,
   invoiceEdoSigned: true,
   invoiceAttachmentId: true,
+  invoiceNumber: true,
   payment: true,
   paymentPartialRub: true,
   adminShippedOtpr: true,
@@ -94,6 +95,7 @@ const shipmentOrderSelect = {
   urgentCoefficient: true,
   compositionDiscountPercent: true,
   invoiceParsedTotalRub: true,
+  invoiceMismatchAckFingerprint: true,
   clinicId: true,
   doctorId: true,
   kaitenCardTypeId: true,
@@ -323,6 +325,7 @@ export async function fetchShipmentOrdersInDueRange(
       constructions: hydratedConstructions,
       listCompositionMismatch: orderInvoiceCompositionMismatch({
         invoiceParsedTotalRub: o.invoiceParsedTotalRub,
+        invoiceMismatchAckFingerprint: o.invoiceMismatchAckFingerprint,
         isUrgent: o.isUrgent,
         urgentCoefficient: o.urgentCoefficient,
         compositionDiscountPercent: o.compositionDiscountPercent,

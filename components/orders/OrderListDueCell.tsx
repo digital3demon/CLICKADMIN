@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   appointmentCompactTimeLabel,
   appointmentHasTimeFlag,
@@ -24,6 +24,7 @@ import {
   snapDatetimeLocalToLabDueGrid,
 } from "@/lib/order-due-datetime";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
+import { appendOrdersListKeepId } from "@/lib/orders-list-query";
 
 type OrderListDueCellVariant = "lab" | "appointment";
 
@@ -35,6 +36,7 @@ export function OrderListDueCell({
   labHmSlots,
   /** Только для `appointment`: `dueToAdminsHasTime` с сервера. */
   appointmentHasTime = true,
+  dateFilterActive = false,
 }: {
   orderId: string;
   dueIso: string | null;
@@ -44,8 +46,15 @@ export function OrderListDueCell({
   /** Слоты «Срок лабораторный» из конфигурации тенанта; для `appointment` не используются. */
   labHmSlots?: readonly string[] | null;
   appointmentHasTime?: boolean;
+  /**
+   * Активен фильтр по этой колонке (ЛАБ или Запись).
+   * Смена даты не выкидывает наряд из текущего списка; ободок ярче.
+   */
+  dateFilterActive?: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const minLocalHalf = earliestDueGridLocalFromCreatedAt(createdAtIso);
   const minLocalLab = earliestLabDueGridLocalFromCreatedAt(
     createdAtIso,
@@ -76,6 +85,18 @@ export function OrderListDueCell({
   );
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const afterSave = useCallback(() => {
+    if (!dateFilterActive) {
+      router.refresh();
+      return;
+    }
+    const nextKeep = appendOrdersListKeepId(searchParams.get("keep"), orderId);
+    const p = new URLSearchParams(searchParams.toString());
+    p.set("keep", nextKeep);
+    const qs = p.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [dateFilterActive, orderId, pathname, router, searchParams]);
 
   useEffect(() => {
     const raw =
@@ -140,7 +161,7 @@ export function OrderListDueCell({
         });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(j.error ?? "Ошибка сохранения");
-        router.refresh();
+        afterSave();
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Ошибка");
         setValue(prevLocal ?? "");
@@ -149,7 +170,7 @@ export function OrderListDueCell({
         setSaving(false);
       }
     },
-    [orderId, dueIso, appointmentHasTime, router],
+    [orderId, dueIso, appointmentHasTime, afterSave],
   );
 
   const saveLab = useCallback(
@@ -181,7 +202,7 @@ export function OrderListDueCell({
         });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(j.error ?? "Ошибка сохранения");
-        router.refresh();
+        afterSave();
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Ошибка");
         setValue(prev ?? "");
@@ -189,7 +210,7 @@ export function OrderListDueCell({
         setSaving(false);
       }
     },
-    [orderId, dueIso, router, labHmSlots],
+    [orderId, dueIso, afterSave, labHmSlots],
   );
 
   const setModeAndSave = useCallback(
@@ -268,6 +289,8 @@ export function OrderListDueCell({
         title={titleHint}
         className="w-full max-w-full"
         compactTimeLabel={compactTimeLabel}
+        filterHighlight={dateFilterActive}
+        tone={variant === "lab" ? "lab" : "appointment"}
         calendarFooter={appointmentFooter}
         onChange={(raw) => {
           setErr(null);

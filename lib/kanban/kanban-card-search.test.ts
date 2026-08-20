@@ -98,6 +98,24 @@ describe("kanbanCardMatchesSearch", () => {
     expect(kanbanCardMatchesSearch(hyphen, "14")).toBe(false);
   });
 
+  it("299 находит 2607-299 Степанов, даже если номер только в linkedOrderNumber", () => {
+    const titled = createCard({
+      id: "c-299",
+      title: "2607-299 Степанов А.В. Жевлаков А. ХШ + Нагрузка 24.08 09:00",
+      linkedOrderId: "ord-299",
+    });
+    const kaitenTitle = createCard({
+      id: "c-299-k",
+      title: "Степанов А.В. Жевлаков А. ХШ + Нагрузка 24.08 09:00",
+      linkedOrderId: "ord-299-k",
+      linkedOrderNumber: "2607-299",
+    });
+    expect(kanbanCardMatchesSearch(titled, "299")).toBe(true);
+    expect(kanbanCardMatchesSearch(titled, "степ")).toBe(true);
+    expect(kanbanCardMatchesSearch(kaitenTitle, "299")).toBe(true);
+    expect(kanbanCardMatchesSearch(kaitenTitle, "степанов")).toBe(true);
+  });
+
   it("не ищет по внутреннему id наряда", () => {
     const card = createCard({
       id: "c-id",

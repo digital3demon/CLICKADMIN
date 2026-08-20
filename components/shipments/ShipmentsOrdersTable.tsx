@@ -393,6 +393,7 @@ export function ShipmentsOrdersTable({
                   }
                   invoicePrinted={o.invoicePrinted}
                   hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                  invoiceNumber={o.invoiceNumber}
                   invoiceAttachmentId={o.invoiceAttachmentId}
                   invoicePaperDocs={o.invoicePaperDocs}
                   invoiceSentToEdo={o.invoiceSentToEdo}

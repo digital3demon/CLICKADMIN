@@ -1481,6 +1481,8 @@ model Order {
   invoiceParsedLines                 Json?
   /// Сумма «к оплате» из счёта, целые рубли (если распознана)
   invoiceParsedTotalRub              Int?
+  /// Намеренное расхождение состава и счёта: «invoiceRub:compositionRub». Пока суммы те же — индикация скрыта.
+  invoiceMismatchAckFingerprint      String?
   /// Сумма частичной оплаты (целые рубли). Используется только при `payment = "Частично оплачено"`.
   paymentPartialRub                  Int?
   /// Текст блока «выставлено» / ручная правка поверх авторазбора

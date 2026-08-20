@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   financeOfficeChipCountScopeWhere,
+  financeOfficeChipDueWindowScopeWhere,
   financeOfficeListTagSkipsDueDateWindow,
   financeOfficeScopeWhere,
 } from "@/lib/finance-office-list-scope";
@@ -103,5 +104,14 @@ describe("financeOfficeChipCountScopeWhere", () => {
     });
     const json = JSON.stringify(w);
     expect(json).toContain('"financeCalculated":true');
+  });
+});
+
+describe("financeOfficeChipDueWindowScopeWhere", () => {
+  it("окно срока на Актуальном без clamp «непросчитанные» (пилюля Корректировки)", () => {
+    const w = financeOfficeChipDueWindowScopeWhere("t1", { mode: "actual" });
+    const json = JSON.stringify(w);
+    expect(json).toContain("dueDate");
+    expect(json).not.toContain("financeCalculated");
   });
 });

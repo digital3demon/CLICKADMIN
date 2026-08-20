@@ -95,6 +95,12 @@ import { OrderSourceEmailsModal } from "@/components/orders/OrderSourceEmailsMod
 import { IconMail } from "@/components/kanban/kanban-icons";
 import { OrderPaymentSlipsBlock } from "@/components/orders/OrderPaymentSlipsBlock";
 import { PrefixSearchCombobox } from "@/components/ui/PrefixSearchCombobox";
+import { MobileAwareDialog } from "@/components/ui/MobileAwareDialog";
+import { Spinner } from "@/components/ui/Spinner";
+import {
+  invoiceMismatchFingerprintFor,
+  orderInvoiceCompositionMismatch,
+} from "@/lib/order-invoice-composition-mismatch";
 import type { OrderProstheticsV1 } from "@/lib/order-prosthetics";
 import type { KaitenTrackLane, OrderCorrectionTrack } from "@prisma/client";
 import { OrderKaitenTab } from "@/components/orders/OrderKaitenTab";
@@ -193,15 +199,22 @@ function OrderSecondaryTabsSpoiler({
   title,
   children,
   defaultOpen = false,
+  highlight = false,
 }: {
   title: string;
   children: ReactNode;
   defaultOpen?: boolean;
+  highlight?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <details
-      className="group min-w-0 overflow-hidden rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] open:shadow-sm"
+      className={[
+        "group min-w-0 overflow-hidden rounded-lg bg-[var(--card-bg)] open:shadow-sm",
+        highlight
+          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/70 dark:border-amber-400/80 dark:ring-amber-400/50"
+          : "border border-[var(--card-border)]",
+      ].join(" ")}
       open={open}
       onToggle={(e) => {
         setOpen((e.currentTarget as HTMLDetailsElement).open);
@@ -621,6 +634,8 @@ export type OrderEditInitial = {
   shippedDescription: string | null;
   invoiceParsedLines: unknown;
   invoiceParsedTotalRub: number | null;
+  /** Подтверждённая пара сумм «счёт:состав»; пока та же — рамка не светится. */
+  invoiceMismatchAckFingerprint: string | null;
   invoiceParsedSummaryText: string | null;
   invoicePaymentNotes: string | null;
   orderPriceListKind: "MAIN" | "CUSTOM" | null;
@@ -1066,6 +1081,14 @@ export function OrderEditForm({
     () => parseInvoiceTotalRubRuInput(invoiceParsedTotalRubText),
     [invoiceParsedTotalRubText],
   );
+  const [mismatchAckFingerprint, setMismatchAckFingerprint] = useState(
+    () => initial.invoiceMismatchAckFingerprint,
+  );
+  const [mismatchConfirmOpen, setMismatchConfirmOpen] = useState(false);
+  const [mismatchAckBusy, setMismatchAckBusy] = useState(false);
+  useEffect(() => {
+    setMismatchAckFingerprint(initial.invoiceMismatchAckFingerprint);
+  }, [initial.id, initial.invoiceMismatchAckFingerprint]);
   /** Последние значения, уже записанные в БД (чтобы не дёргать PATCH лишний раз). */
   const lastPersistedInvoiceParsedRef = useRef<{
     summaryText: string | null;
@@ -1814,13 +1837,100 @@ export function OrderEditForm({
     return Math.round(sub * urgentPriceMult);
   }, [draftLines, compositionDiscountPercent, urgentPriceMult]);
 
-  /** Сумма по счёту (выставлено) заполнена и расходится с итого по строкам состава (с учётом срочности). */
+  /** Сумма по счёту заполнена и расходится с составом; подтверждённая пара не светится. */
   const invoiceCompositionMismatch = useMemo(() => {
-    if (invoiceParsedTotalRub == null) return false;
-    const compositionRub = Math.round(financePreviewTotal);
-    const invoiceRub = invoiceParsedTotalRub;
-    return Math.abs(compositionRub - invoiceRub) > 1;
-  }, [financePreviewTotal, invoiceParsedTotalRub]);
+    const u = parseUrgentSelection(urgentSelection);
+    const payload = draftToConstructionPayload(draftLines) as Array<{
+      quantity?: number;
+      unitPrice?: number | null;
+      lineDiscountPercent?: number;
+    }>;
+    return orderInvoiceCompositionMismatch({
+      invoiceParsedTotalRub,
+      isUrgent: u.isUrgent,
+      urgentCoefficient: u.urgentCoefficient,
+      compositionDiscountPercent,
+      invoiceMismatchAckFingerprint: mismatchAckFingerprint,
+      constructions: payload.map((row) => ({
+        quantity: typeof row.quantity === "number" ? row.quantity : 1,
+        unitPrice:
+          row.unitPrice != null &&
+          typeof row.unitPrice === "number" &&
+          !Number.isNaN(row.unitPrice)
+            ? row.unitPrice
+            : null,
+        lineDiscountPercent:
+          typeof row.lineDiscountPercent === "number" &&
+          !Number.isNaN(row.lineDiscountPercent)
+            ? row.lineDiscountPercent
+            : 0,
+      })),
+    });
+  }, [
+    draftLines,
+    compositionDiscountPercent,
+    urgentSelection,
+    invoiceParsedTotalRub,
+    mismatchAckFingerprint,
+  ]);
+
+  const ackInvoiceMismatch = useCallback(async () => {
+    const u = parseUrgentSelection(urgentSelection);
+    const payload = draftToConstructionPayload(draftLines) as Array<{
+      quantity?: number;
+      unitPrice?: number | null;
+      lineDiscountPercent?: number;
+    }>;
+    const fp = invoiceMismatchFingerprintFor({
+      invoiceParsedTotalRub,
+      isUrgent: u.isUrgent,
+      urgentCoefficient: u.urgentCoefficient,
+      compositionDiscountPercent,
+      constructions: payload.map((row) => ({
+        quantity: typeof row.quantity === "number" ? row.quantity : 1,
+        unitPrice:
+          row.unitPrice != null &&
+          typeof row.unitPrice === "number" &&
+          !Number.isNaN(row.unitPrice)
+            ? row.unitPrice
+            : null,
+        lineDiscountPercent:
+          typeof row.lineDiscountPercent === "number" &&
+          !Number.isNaN(row.lineDiscountPercent)
+            ? row.lineDiscountPercent
+            : 0,
+      })),
+    });
+    if (!fp) return;
+    setMismatchAckBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/orders/${initial.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceMismatchAckFingerprint: fp }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Не удалось подтвердить расхождение");
+        return;
+      }
+      setMismatchAckFingerprint(fp);
+      setMismatchConfirmOpen(false);
+      router.refresh();
+    } catch {
+      setError("Сеть или сервер недоступны");
+    } finally {
+      setMismatchAckBusy(false);
+    }
+  }, [
+    draftLines,
+    compositionDiscountPercent,
+    urgentSelection,
+    invoiceParsedTotalRub,
+    initial.id,
+    router,
+  ]);
 
   const toggleInvoiceIssued = useCallback(
     async (next: boolean) => {
@@ -2645,6 +2755,7 @@ export function OrderEditForm({
             id="oe-due"
             label="Срок лабораторный"
             labelPlacement="inside"
+            tone="lab"
             value={dueLocal}
             minLocal={dueLabMinLocal}
             timeGrid="labDue"
@@ -2688,6 +2799,7 @@ export function OrderEditForm({
             id="oe-due-admins"
             label="Запись"
             labelPlacement="inside"
+            tone="appointment"
             value={dueAdminsLocal}
             minLocal={dueDateMinLocal}
             title="Дата записи пациента (8:00–23:30); «В теч. дня» → ВТЧД; «времени приёма нет» → без времени, фильтр как 08:00"
@@ -3618,6 +3730,21 @@ export function OrderEditForm({
               <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
                 Выставлено по счёту
               </h3>
+              {invoiceCompositionMismatch ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-400/80 bg-amber-500/10 px-3 py-2">
+                  <p className="text-sm font-medium text-amber-950 dark:text-amber-100">
+                    Состав работы не сходится со счётом
+                  </p>
+                  <button
+                    type="button"
+                    disabled={!canEditOrder || previewMode || mismatchAckBusy}
+                    onClick={() => setMismatchConfirmOpen(true)}
+                    className="rounded-md border border-amber-500/80 bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-950 shadow-sm hover:bg-amber-200 disabled:opacity-50 dark:border-amber-400/60 dark:bg-amber-950/50 dark:text-amber-50 dark:hover:bg-amber-900/60"
+                  >
+                    Подтвердить расхождение
+                  </button>
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,11rem)] lg:items-start lg:gap-5">
                 <div className="min-w-0">
                   <label
@@ -3950,6 +4077,7 @@ export function OrderEditForm({
         <OrderSecondaryTabsSpoiler
           title="Документооборот-Канбан-История"
           defaultOpen={isAccountant}
+          highlight={invoiceCompositionMismatch}
         >
           {oeBottomSecondary}
         </OrderSecondaryTabsSpoiler>
@@ -3960,6 +4088,48 @@ export function OrderEditForm({
           {error}
         </div>
       ) : null}
+
+      <MobileAwareDialog
+        open={mismatchConfirmOpen}
+        onClose={() => {
+          if (!mismatchAckBusy) setMismatchConfirmOpen(false);
+        }}
+        title="Подтвердить расхождение"
+        description="Состав заказа и сумма счёта различаются. Подтвердите, что это сделано намеренно."
+        size="md"
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              disabled={mismatchAckBusy}
+              onClick={() => setMismatchConfirmOpen(false)}
+              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              disabled={mismatchAckBusy}
+              onClick={() => void ackInvoiceMismatch()}
+              className="inline-flex items-center gap-2 rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {mismatchAckBusy ? (
+                <>
+                  <Spinner size="sm" className="text-white" />
+                  Сохранение…
+                </>
+              ) : (
+                "Подтвердить"
+              )}
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm text-[var(--text-body)]">
+          Индикация (янтарная рамка и пилюля «Корректировки») снимется, пока суммы
+          счёта и состава не изменятся снова.
+        </p>
+      </MobileAwareDialog>
 
       {previewMode ? (
         <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
@@ -4188,6 +4358,7 @@ export function OrderEditForm({
       <OrderHeadlinePills
         prostheticsOrdered={prostheticsOrdered}
         hasInvoiceAttachment={Boolean(invoiceAttachmentId)}
+        invoiceNumber={invoiceNumber}
         invoicePrinted={invoicePrinted}
         adminShippedOtpr={adminShippedOtpr}
       />

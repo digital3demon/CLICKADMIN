@@ -50,6 +50,7 @@ import { ordersListOtprPeriod } from "@/lib/orders-list-otpr-period";
 import {
   normalizeOrdersSearchQuery,
   ordersListHref,
+  parseOrdersListKeepIds,
   parseOrdersListPage,
 } from "@/lib/orders-list-query";
 import {
@@ -216,6 +217,7 @@ export default async function OrdersPage({
     shipTo?: string;
     otprFrom?: string;
     otprTo?: string;
+    keep?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -325,6 +327,7 @@ export default async function OrdersPage({
   const listSearchQ = normalizeOrdersSearchQuery(sp.q);
   const fromUrl = sp.from?.trim() || null;
   const toUrl = sp.to?.trim() || null;
+  const keepOrderIds = parseOrdersListKeepIds(sp.keep);
   const otprFromUrl = sp.otprFrom?.trim() || null;
   const otprToUrl = sp.otprTo?.trim() || null;
   const shipParsed = parseOrdersShipmentParams({
@@ -376,6 +379,10 @@ export default async function OrdersPage({
     shipTo: shipmentModeActive ? shipToUrl ?? undefined : undefined,
     otprFrom: otprFromUrl ?? undefined,
     otprTo: otprToUrl ?? undefined,
+    keep:
+      (dueDateRange || shipmentModeActive) && keepOrderIds.length > 0
+        ? keepOrderIds.join(",")
+        : undefined,
   };
 
   /** Список — сразу, параллельно со счётчиками шапки (иначе пагинация ждёт чипы). */
@@ -396,6 +403,7 @@ export default async function OrdersPage({
             ordersListForUserId: session?.sub ?? null,
             viewerRole: session?.role ?? null,
             viewerUserId: session?.sub ?? null,
+            keepOrderIds,
           }),
           getLabDueHmSlotsForTenant(tenantId),
         ]).then(([page, slots]) => ({
@@ -415,6 +423,7 @@ export default async function OrdersPage({
             search: listSearchQ || undefined,
             dueDateRange: dueDateRange ?? undefined,
             otprAtRange: otprAtRange ?? undefined,
+            keepOrderIds,
             ordersListForUserId: session?.sub ?? null,
             viewerRole: session?.role ?? null,
             viewerUserId: session?.sub ?? null,
@@ -694,6 +703,7 @@ export default async function OrdersPage({
                 ...listHrefCommon,
                 from: undefined,
                 to: undefined,
+                keep: undefined,
               })}
               className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
             >
@@ -717,6 +727,7 @@ export default async function OrdersPage({
                 ship: undefined,
                 shipFrom: undefined,
                 shipTo: undefined,
+                keep: undefined,
                 from: fromUrl ?? undefined,
                 to: toUrl ?? undefined,
               })}
@@ -1062,6 +1073,7 @@ export default async function OrdersPage({
                     }
                     invoicePrinted={o.invoicePrinted}
                     hasInvoiceAttachment={o.invoiceAttachmentId != null}
+                    invoiceNumber={o.invoiceNumber}
                     invoiceAttachmentId={o.invoiceAttachmentId}
                     invoicePaperDocs={o.invoicePaperDocs}
                     invoiceSentToEdo={o.invoiceSentToEdo}
@@ -1133,6 +1145,7 @@ export default async function OrdersPage({
                             dueIso={o.dueDate?.toISOString() ?? null}
                             createdAtIso={o.createdAt.toISOString()}
                             labHmSlots={labDueHmSlots}
+                            dateFilterActive={dueDateRange != null}
                           />
                         </div>
                       </div>
@@ -1151,6 +1164,7 @@ export default async function OrdersPage({
                             }
                             createdAtIso={o.createdAt.toISOString()}
                             appointmentHasTime={o.dueToAdminsHasTime !== false}
+                            dateFilterActive={shipmentModeActive}
                           />
                         </div>
                       </div>
@@ -1309,6 +1323,7 @@ export default async function OrdersPage({
                       dueIso={o.dueDate?.toISOString() ?? null}
                       createdAtIso={o.createdAt.toISOString()}
                       labHmSlots={labDueHmSlots}
+                      dateFilterActive={dueDateRange != null}
                     />
                   </td>
                   <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
@@ -1322,6 +1337,7 @@ export default async function OrdersPage({
                       }
                       createdAtIso={o.createdAt.toISOString()}
                       appointmentHasTime={o.dueToAdminsHasTime !== false}
+                      dateFilterActive={shipmentModeActive}
                     />
                   </td>
                   <td className="max-md:hidden min-w-0 w-[4.25rem] max-w-[4.25rem] px-1 py-1 align-middle sm:px-1 sm:py-1.5">

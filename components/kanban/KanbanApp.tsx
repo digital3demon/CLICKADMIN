@@ -562,7 +562,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           goneIds?: string[];
         };
         const rows = applyOptimisticKaitenBlocksToLinkedRows(j.orders ?? []);
-        setLinkedAppointmentByOrderId(linkedOrdersToAppointmentMap(rows));
+        const incomingAppt = linkedOrdersToAppointmentMap(rows);
+        setLinkedAppointmentByOrderId((prev) => {
+          const next = new Map(prev);
+          for (const [id, snap] of incomingAppt) next.set(id, snap);
+          return next;
+        });
         setAppState((prev) => {
           if (!prev) return prev;
           const base = normalizeDemoKanbanAppState(prev);
@@ -663,7 +668,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         fetch(linkedOrdersUrl, { credentials: "include" }),
         fetch("/api/kanban/standalone-cards", { credentials: "include" }),
       ]);
-      if (!rLinked.ok) return;
+      if (!rLinked.ok) {
+        console.error("[kanban] linked-orders", rLinked.status);
+        return;
+      }
       const jL = (await rLinked.json()) as {
         orders?: KaitenLinkedOrderForKanban[];
         goneIds?: string[];
@@ -671,7 +679,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       const linkedRows = applyOptimisticKaitenBlocksToLinkedRows(
         applyOptimisticKaitenMovesToLinkedRows(jL.orders ?? []),
       );
-      setLinkedAppointmentByOrderId(linkedOrdersToAppointmentMap(linkedRows));
+      const incomingAppt = linkedOrdersToAppointmentMap(linkedRows);
+      setLinkedAppointmentByOrderId((prev) => {
+        const next = new Map(prev);
+        for (const [id, snap] of incomingAppt) next.set(id, snap);
+        return next;
+      });
       let standaloneRows: StandaloneRow[] = [];
       if (rStandalone.ok) {
         const jS = (await rStandalone.json()) as { rows?: StandaloneRow[] };

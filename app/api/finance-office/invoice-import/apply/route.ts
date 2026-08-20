@@ -2,13 +2,17 @@
  * POST /api/finance-office/invoice-import/apply
  *
  * Multipart: files[] + rows JSON. Пишем вложение и invoiceIssued; оплату не трогаем.
+ * Accept: application/x-ndjson — поток progress (unpack → row → done).
  * Разбор позиций PDF — after(), UI не ждёт. SQLITE_BUSY: короткие записи по наряду.
  */
 import { after, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import type { FinanceInvoiceImportApplyRow } from "@/lib/finance-office-invoice-import";
+import type {
+  FinanceInvoiceImportApplyRow,
+  FinanceInvoiceImportProgressEvent,
+} from "@/lib/finance-office-invoice-import";
 import {
   FINANCE_INVOICE_IMPORT_MAX_FILE_BYTES,
   applyFinanceInvoiceImport,
@@ -40,6 +44,10 @@ function parseRows(raw: unknown): FinanceInvoiceImportApplyRow[] {
     });
   }
   return out.filter((r) => r.key);
+}
+
+function wantsNdjson(req: Request): boolean {
+  return (req.headers.get("accept") || "").includes("application/x-ndjson");
 }
 
 export async function POST(req: Request) {
@@ -81,35 +89,103 @@ export async function POST(req: Request) {
     });
   }
 
-  const expanded = await expandFinanceInvoiceUploadFiles(buffers);
-  if (expanded.error) {
-    return NextResponse.json({ error: expanded.error }, { status: 400 });
+  const prisma = await getOrdersPrisma();
+  const stream = wantsNdjson(req);
+
+  if (!stream) {
+    const expanded = await expandFinanceInvoiceUploadFiles(buffers);
+    if (expanded.error) {
+      return NextResponse.json({ error: expanded.error }, { status: 400 });
+    }
+    const { results, parseOrderIds } = await applyFinanceInvoiceImport({
+      prisma,
+      tenantId,
+      rows,
+      pdfs: expanded.pdfs,
+    });
+    after(() =>
+      Promise.allSettled([
+        parseAttachedInvoicesInBackground(prisma, parseOrderIds),
+        ...parseOrderIds.map((id) => recordOrderRevision(id, { kind: "SAVE" })),
+      ]).then(() => undefined),
+    );
+    return NextResponse.json(
+      {
+        ok: true,
+        applied: results.filter((r) => r.ok).length,
+        skipped: results.filter((r) => !r.ok).length,
+        results,
+        orderNumbers: results.filter((r) => r.ok).map((r) => r.orderNumber),
+      },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 
-  const prisma = await getOrdersPrisma();
-  const { results, parseOrderIds } = await applyFinanceInvoiceImport({
-    prisma,
-    tenantId,
-    rows,
-    pdfs: expanded.pdfs,
+  let resolveBg: (ids: string[]) => void = () => {};
+  const bgIds = new Promise<string[]>((resolve) => {
+    resolveBg = resolve;
+  });
+  after(() =>
+    bgIds.then((parseOrderIds) =>
+      Promise.allSettled([
+        parseAttachedInvoicesInBackground(prisma, parseOrderIds),
+        ...parseOrderIds.map((id) => recordOrderRevision(id, { kind: "SAVE" })),
+      ]).then(() => undefined),
+    ),
+  );
+
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (ev: FinanceInvoiceImportProgressEvent) => {
+        controller.enqueue(encoder.encode(`${JSON.stringify(ev)}\n`));
+      };
+      try {
+        send({ type: "phase", phase: "unpack" });
+        const expanded = await expandFinanceInvoiceUploadFiles(buffers);
+        if (expanded.error) {
+          send({ type: "error", error: expanded.error });
+          resolveBg([]);
+          controller.close();
+          return;
+        }
+        const workTotal = rows.filter((r) => r.apply).length;
+        send({ type: "phase", phase: "attach" });
+        send({ type: "start", total: workTotal });
+        const { results, parseOrderIds } = await applyFinanceInvoiceImport({
+          prisma,
+          tenantId,
+          rows,
+          pdfs: expanded.pdfs,
+          onRow: ({ done, total, result }) => {
+            send({ type: "row", done, total, result });
+          },
+        });
+        resolveBg(parseOrderIds);
+        send({
+          type: "done",
+          results,
+          applied: results.filter((r) => r.ok).length,
+          skipped: results.filter((r) => !r.ok).length,
+        });
+        controller.close();
+      } catch (e) {
+        send({
+          type: "error",
+          error:
+            e instanceof Error ? e.message : "Не удалось прикрепить счета",
+        });
+        resolveBg([]);
+        controller.close();
+      }
+    },
   });
 
-  const okIds = results.filter((r) => r.ok).map((r) => r.orderNumber);
-  after(() =>
-    Promise.allSettled([
-      parseAttachedInvoicesInBackground(prisma, parseOrderIds),
-      ...parseOrderIds.map((id) => recordOrderRevision(id, { kind: "SAVE" })),
-    ]).then(() => undefined),
-  );
-
-  return NextResponse.json(
-    {
-      ok: true,
-      applied: results.filter((r) => r.ok).length,
-      skipped: results.filter((r) => !r.ok).length,
-      results,
-      orderNumbers: okIds,
+  return new Response(body, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "private, no-store",
+      "X-Accel-Buffering": "no",
     },
-    { headers: { "Cache-Control": "private, no-store" } },
-  );
+  });
 }

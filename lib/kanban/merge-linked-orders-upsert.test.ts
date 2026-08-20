@@ -148,6 +148,28 @@ describe("mergeKaitenLinkedOrdersIntoAppState upsertOnly", () => {
     expect(getKanbanStageDue(card2)).toBe("2026-09-15");
     expect(card2.title).toContain("01.08");
   });
+
+  it("пишет linkedOrderNumber для поиска 299 без номера в заголовке Kaiten", () => {
+    const merged = mergeKaitenLinkedOrdersIntoAppState(
+      defaultAppState(),
+      [
+        sampleRow("order-299", {
+          orderNumber: "2607-299",
+          patientName: "Степанов А.В.",
+          doctorFullName: "Жевлаков А.",
+          kaitenTrackLane: "ORTHODONTICS",
+        }),
+      ],
+      { mode: "upsertOnly" },
+    );
+    const loc = findCardByLinkedOrderId(merged, "order-299")!;
+    const card =
+      merged.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[
+        loc.cardIndex
+      ]!;
+    expect(card.linkedOrderNumber).toBe("2607-299");
+    expect(card.title).toContain("2607-299");
+  });
 });
 
 describe("removeLinkedOrderCardsFromAppState", () => {

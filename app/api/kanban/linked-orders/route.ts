@@ -14,6 +14,8 @@ import { syncKaitenColumnTitlesForOrderIds } from "@/lib/kaiten-sync-order-colum
 import { isOrderWorkAttachment } from "@/lib/order-work-attachments";
 import { importMissingKaitenFilesForOrder } from "@/lib/kaiten-files-import";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
+import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
+import { kanbanLinkedOrderNumberSuffixContains } from "@/lib/kanban/linked-orders-search-where";
 
 export const dynamic = "force-dynamic";
 
@@ -117,17 +119,23 @@ export async function GET(request: Request) {
       getClientsPrisma(),
       getPricingPrisma(),
     ]);
-    /** Не показывать на канбане «Kaiten позже» без явного зеркала CRM — иначе ложная карточка. */
-    const linkedOrdersWhere: Prisma.OrderWhereInput = {
+    const visibilityAnd = orderTestVisibilityWhere({
+      viewerRole: session.role,
+      viewerUserId: session.sub,
+    });
+    /** Как ensure-linked-order-card: не archived/cancelled/test. Без этого поиск «299» не видит наряд, пока его не открыли в Заказах. */
+    const hydrateWhere: Prisma.OrderWhereInput = {
       tenantId,
       archivedAt: null,
       status: { not: OrderStatus.CANCELLED },
       isTestOrder: false,
+      AND: [visibilityAnd],
+    };
+    /** Пуллинг без q: не тащить «Kaiten позже» без зеркала. Карточки уже на доске — через hydrateWhere по ids. */
+    const linkedOrdersWhere: Prisma.OrderWhereInput = {
+      ...hydrateWhere,
       AND: [
-        orderTestVisibilityWhere({
-          viewerRole: session.role,
-          viewerUserId: session.sub,
-        }),
+        visibilityAnd,
         {
           OR: [
             { kaitenDecideLater: false },
@@ -148,36 +156,52 @@ export async function GET(request: Request) {
     const boardExtraRows =
       missingBoardIds.length > 0
         ? await ordersPrisma.order.findMany({
-            where: { ...linkedOrdersWhere, id: { in: missingBoardIds } },
+            where: { ...hydrateWhere, id: { in: missingBoardIds } },
             select: LINKED_ORDER_SELECT,
           })
         : [];
-    /* Поиск канбана: не только последние 200 — как шапка CRM, contains по номеру. */
-    const searchExtraRows =
-      searchQ.length >= 2
-        ? await ordersPrisma.order.findMany({
+    /* Поиск: не nested doctor/clinic (SaaS split DB); суффикс -NNN отдельно, чтобы take не вытеснил 2607-299. */
+    let suffixRows: typeof recentRows = [];
+    let searchExtraRows: typeof recentRows = [];
+    if (searchQ.length >= 2) {
+      try {
+        const suffix = kanbanLinkedOrderNumberSuffixContains(searchQ);
+        if (suffix) {
+          suffixRows = await ordersPrisma.order.findMany({
             where: {
-              ...linkedOrdersWhere,
-              OR: [
-                { orderNumber: { contains: searchQ, mode: "insensitive" } },
-                { patientName: { contains: searchQ, mode: "insensitive" } },
-                { doctor: { fullName: { contains: searchQ, mode: "insensitive" } } },
-                { clinic: { name: { contains: searchQ, mode: "insensitive" } } },
-              ],
+              ...hydrateWhere,
+              orderNumber: { contains: suffix, mode: "insensitive" },
             },
             orderBy: { createdAt: "desc" },
             take: 80,
             select: LINKED_ORDER_SELECT,
-          })
-        : [];
+          });
+        }
+        const searchTextWhere = await ordersSearchWhere(searchQ, tenantId);
+        searchExtraRows = await ordersPrisma.order.findMany({
+          where: {
+            ...hydrateWhere,
+            AND: [visibilityAnd, searchTextWhere],
+          },
+          orderBy: { createdAt: "desc" },
+          take: 120,
+          select: LINKED_ORDER_SELECT,
+        });
+      } catch (e) {
+        console.error("[kanban/linked-orders] search extra", e);
+      }
+    }
     const seenRowIds = new Set<string>();
-    const rows = [...searchExtraRows, ...boardExtraRows, ...recentRows].filter(
-      (r) => {
-        if (seenRowIds.has(r.id)) return false;
-        seenRowIds.add(r.id);
-        return true;
-      },
-    );
+    const rows = [
+      ...suffixRows,
+      ...searchExtraRows,
+      ...boardExtraRows,
+      ...recentRows,
+    ].filter((r) => {
+      if (seenRowIds.has(r.id)) return false;
+      seenRowIds.add(r.id);
+      return true;
+    });
     const doctorIds = Array.from(new Set(rows.map((x) => x.doctorId)));
     const cardTypeIds = Array.from(
       new Set(rows.map((x) => x.kaitenCardTypeId).filter(Boolean)),

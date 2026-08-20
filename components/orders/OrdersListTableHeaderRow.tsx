@@ -23,7 +23,7 @@ import {
   ordersShipmentListPdfHref,
   pickOrdersShipmentHrefOpts,
 } from "@/lib/orders-shipment-list-query";
-import { moscowTodayYmd } from "@/lib/shipments-date-range";
+import { moscowTodayYmd, moscowTomorrowYmd } from "@/lib/shipments-date-range";
 
 const TH =
   "min-w-0 overflow-hidden whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
@@ -294,18 +294,36 @@ export function OrdersListTableHeaderRow({
     appliedOtprFrom?.trim() || appliedOtprTo?.trim(),
   );
 
-  const applyLab = () => {
+  const applyLabRange = (fromYmd: string, toYmd: string) => {
+    const from = fromYmd.trim();
+    const to = toYmd.trim();
+    setLabFrom(from);
+    setLabTo(to);
     router.push(
       ordersListHref({
         ...commonHref(),
-        from: labFrom.trim() || undefined,
-        to: labTo.trim() || undefined,
+        from: from || undefined,
+        to: to || undefined,
         ...pickOrdersShipmentHrefOpts(sp),
         ...pickOrdersOtprHrefOpts(sp),
       }),
     );
     setOpen(null);
   };
+
+  const applyLab = () => applyLabRange(labFrom, labTo);
+
+  const todayYmd = moscowTodayYmd();
+  const tomorrowYmd = moscowTomorrowYmd();
+  const labAppliedFrom = (appliedFrom ?? "").trim();
+  const labAppliedTo = (appliedTo ?? "").trim();
+  const labIsToday =
+    labAppliedFrom === todayYmd &&
+    (labAppliedTo === todayYmd || (!labAppliedTo && labAppliedFrom === todayYmd));
+  const labIsTomorrow =
+    labAppliedFrom === tomorrowYmd &&
+    (labAppliedTo === tomorrowYmd ||
+      (!labAppliedTo && labAppliedFrom === tomorrowYmd));
 
   const applyApptActual = () => {
     router.push(
@@ -375,6 +393,13 @@ export function OrdersListTableHeaderRow({
 
   const showBtn =
     "h-8 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-2.5 text-[11px] font-semibold text-white hover:opacity-95";
+  const dayPresetBtn = (active: boolean) =>
+    [
+      "h-8 shrink-0 rounded-md px-2.5 text-[11px] font-semibold",
+      active
+        ? "bg-[var(--sidebar-blue)] text-white"
+        : "border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]",
+    ].join(" ");
 
   return (
     <tr
@@ -452,6 +477,24 @@ export function OrdersListTableHeaderRow({
             fromTitle="Лабораторный срок с (МСК), включительно"
             toTitle="Лабораторный срок по (МСК), включительно"
           />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              className={dayPresetBtn(labIsToday)}
+              title="Лабораторный срок — сегодня (МСК)"
+              onClick={() => applyLabRange(todayYmd, todayYmd)}
+            >
+              Сегодня
+            </button>
+            <button
+              type="button"
+              className={dayPresetBtn(labIsTomorrow)}
+              title="Лабораторный срок — завтра (МСК)"
+              onClick={() => applyLabRange(tomorrowYmd, tomorrowYmd)}
+            >
+              Завтра
+            </button>
+          </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <button type="button" className={showBtn} onClick={applyLab}>
               Показать

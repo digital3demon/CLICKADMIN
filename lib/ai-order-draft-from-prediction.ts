@@ -111,6 +111,7 @@ export function buildVirtualOrderEditInitialFromPrediction(
     shippedDescription: null,
     invoiceParsedLines: null,
     invoiceParsedTotalRub: null,
+    invoiceMismatchAckFingerprint: null,
     invoiceParsedSummaryText: null,
     invoicePaymentNotes: null,
     orderPriceListKind: null,

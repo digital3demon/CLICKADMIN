@@ -97,7 +97,7 @@ type Props = {
   invoicePrinted?: boolean;
   /** Загружен файл счёта (вкладка «Документооборот») */
   hasInvoiceAttachment: boolean;
-  /** Номер счёта из наряда — в ФинОтделе пилюля «СЧЕТ №… от D.MM.YYYY». */
+  /** Номер счёта из наряда — пилюля «СЧЕТ №… от D.MM.YYYY» (Заказы, Отгрузки, ФинОтдел). */
   invoiceNumber?: string | null;
   /** ID файла счёта; нужен для печати из быстрого действия. */
   invoiceAttachmentId?: string | null;
@@ -1098,10 +1098,8 @@ export function OrderListTagsCell({
       });
     }
 
-    if (hasInvoiceAttachment || (financeOfficeFilterContext && (invoiceNumber ?? "").trim())) {
-      const invoicePillLabel = financeOfficeFilterContext
-        ? formatInvoiceListPillLabel(invoiceNumber)
-        : "СЧЕТ";
+    if (hasInvoiceAttachment || (invoiceNumber ?? "").trim()) {
+      const invoicePillLabel = formatInvoiceListPillLabel(invoiceNumber);
       const invoicePillLong = invoicePillLabel !== "СЧЕТ";
       items.push({
         key: "inv",

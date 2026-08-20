@@ -905,6 +905,9 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
       ? {
           linkedOrderId: partial.linkedOrderId,
           kaitenCardId: partial.kaitenCardId ?? null,
+          ...(partial.linkedOrderNumber
+            ? { linkedOrderNumber: partial.linkedOrderNumber }
+            : {}),
           ...(partial.kaitenCardSortOrder !== undefined
             ? { kaitenCardSortOrder: partial.kaitenCardSortOrder }
             : {}),
@@ -2681,6 +2684,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         applyContinuesFromOrderToKanbanCard(found.card, row);
         found.card.kaitenCardId = row.kaitenCardId ?? null;
         found.card.linkedOrderId = row.id;
+        found.card.linkedOrderNumber = row.orderNumber;
         found.card.cardTypeId = fallbackTypeId;
         found.card.trackLane = DEMO_KANBAN_TRACK_LANE_ID;
         found.card.blocked = !!row.kaitenBlocked;
@@ -2701,6 +2705,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
           dueDate: "",
           urgent: false,
           linkedOrderId: row.id,
+          linkedOrderNumber: row.orderNumber,
           kaitenCardId: row.kaitenCardId ?? null,
           kaitenCardSortOrder: row.kaitenCardSortOrder ?? null,
           trackLane: DEMO_KANBAN_TRACK_LANE_ID,
@@ -2800,6 +2805,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       applyContinuesFromOrderToKanbanCard(foundEff.card, row);
       foundEff.card.kaitenCardId = row.kaitenCardId ?? null;
       foundEff.card.linkedOrderId = row.id;
+      foundEff.card.linkedOrderNumber = row.orderNumber;
       foundEff.card.cardTypeId = fallbackTypeId;
       foundEff.card.trackLane = lane;
       foundEff.card.blocked = !!row.kaitenBlocked;
@@ -2820,6 +2826,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         dueDate: "",
         urgent: false,
         linkedOrderId: row.id,
+        linkedOrderNumber: row.orderNumber,
         kaitenCardId: row.kaitenCardId ?? null,
         kaitenCardSortOrder: row.kaitenCardSortOrder ?? null,
         trackLane: lane,

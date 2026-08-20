@@ -186,6 +186,7 @@ type PatchBody = {
   invoiceParsedSummaryText?: string | null;
   invoiceParsedLines?: unknown;
   invoiceParsedTotalRub?: number | null;
+  invoiceMismatchAckFingerprint?: string | null;
   orderPriceListNote?: string | null;
   /** Общая скидка на состав заказа, 0–100 */
   compositionDiscountPercent?: number;
@@ -819,6 +820,25 @@ export async function PATCH(
         );
       }
       scalarData.invoiceParsedTotalRub = n;
+    }
+  }
+
+  if (body.invoiceMismatchAckFingerprint !== undefined) {
+    if (
+      body.invoiceMismatchAckFingerprint === null ||
+      body.invoiceMismatchAckFingerprint === ""
+    ) {
+      scalarData.invoiceMismatchAckFingerprint = null;
+    } else {
+      const fp = String(body.invoiceMismatchAckFingerprint).trim();
+      // Целые рубли счёта и состава, без \b: кириллица в других полях не участвует.
+      if (!/^\d{1,9}:\d{1,9}$/.test(fp)) {
+        return NextResponse.json(
+          { error: "Некорректное подтверждение расхождения" },
+          { status: 400 },
+        );
+      }
+      scalarData.invoiceMismatchAckFingerprint = fp;
     }
   }
 

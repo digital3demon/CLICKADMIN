@@ -11,6 +11,7 @@ import {
   encodeOrdersListCursor,
 } from "@/lib/orders-list-cursor";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
+import { withKeptOrderIds } from "@/lib/orders-list-keep-where";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import { hydrateListPendingChatCorrectionsFromInbox } from "@/lib/order-chat-corrections-read";
 import { hydrateListPendingProstheticsFromInbox } from "@/lib/order-prosthetics-requests-read";
@@ -27,6 +28,7 @@ export const ordersListPageSelect = {
   invoiceSentToEdo: true,
   invoiceEdoSigned: true,
   invoiceAttachmentId: true,
+  invoiceNumber: true,
   payment: true,
   paymentPartialRub: true,
   adminShippedOtpr: true,
@@ -54,6 +56,7 @@ export const ordersListPageSelect = {
   listAdminMemo: true,
   listTechMemo: true,
   invoiceParsedTotalRub: true,
+  invoiceMismatchAckFingerprint: true,
   clinicId: true,
   doctorId: true,
   listCustomTags: { select: { id: true, label: true } },
@@ -104,6 +107,7 @@ export function toOrderListPageRow(o: OrderListPageRowRaw): OrderListPageRow {
     doctor: { id: doctorId, fullName: "—" },
     listCompositionMismatch: orderInvoiceCompositionMismatch({
       invoiceParsedTotalRub: o.invoiceParsedTotalRub,
+      invoiceMismatchAckFingerprint: o.invoiceMismatchAckFingerprint,
       isUrgent: o.isUrgent,
       urgentCoefficient: o.urgentCoefficient,
       compositionDiscountPercent: o.compositionDiscountPercent,
@@ -350,6 +354,8 @@ export async function fetchOrdersListPage(
     createdAtRange?: { start: Date; endExclusive: Date } | null | undefined;
     /** Период по лабораторному сроку (dueDate / колонка «ЛАБ»), МСК. */
     dueDateRange?: { start: Date; endExclusive: Date } | null | undefined;
+    /** Наряды, которые оставляем в списке после смены срока при активном фильтре по дате. */
+    keepOrderIds?: readonly string[] | null;
     /** Период по дате отправки (adminShippedAt / колонка «Отправка»), МСК. */
     otprAtRange?: { start: Date; endExclusive: Date } | null | undefined;
     /** Для подсветки «Упоминания»: учитываем OrderKaitenLabMentionAck текущего пользователя. */
@@ -406,12 +412,17 @@ export async function fetchOrdersListPage(
     parts.push(await ordersSearchWhere(searchTrim, opts.tenantId));
   }
   if (opts.dueDateRange) {
-    parts.push({
-      dueDate: {
-        gte: opts.dueDateRange.start,
-        lt: opts.dueDateRange.endExclusive,
-      },
-    });
+    parts.push(
+      withKeptOrderIds(
+        {
+          dueDate: {
+            gte: opts.dueDateRange.start,
+            lt: opts.dueDateRange.endExclusive,
+          },
+        },
+        opts.keepOrderIds,
+      ),
+    );
   } else if (opts.createdAtRange) {
     // Совместимость со старыми вызовами API.
     parts.push({

@@ -3,8 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MobileAwareDialog } from "@/components/ui/MobileAwareDialog";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   classifyFinanceOfficeDropFiles,
+  filterInvoiceRowsForRetry,
+  invoiceImportSourceFileNames,
+  isFinanceInvoiceImportRetryable,
+  readFinanceInvoiceImportApplyResponse,
   type FinanceInvoiceImportApplyResult,
   type FinanceInvoiceImportPreviewRow,
 } from "@/lib/finance-office-invoice-import";
@@ -30,6 +35,17 @@ type BankApplyResult = {
   ok: boolean;
   message: string;
 };
+
+function invoiceSaveProgressLabel(opts: {
+  phase: "upload" | "unpack" | "attach";
+  done: number;
+  total: number;
+}): string {
+  if (opts.phase === "upload") return "Отправляю файлы…";
+  if (opts.phase === "unpack") return "Распаковываю архив…";
+  if (opts.total > 0) return `Прикрепляю ${opts.done} из ${opts.total}`;
+  return "Прикрепляю счета…";
+}
 
 export function FinanceOfficeBankImportPanel({
   className = "",
@@ -58,9 +74,22 @@ export function FinanceOfficeBankImportPanel({
     url: string;
     title: string;
   } | null>(null);
+  const [saveProgress, setSaveProgress] = useState<{
+    phase: "upload" | "unpack" | "attach";
+    done: number;
+    total: number;
+  } | null>(null);
+  const [saveByKey, setSaveByKey] = useState<
+    Record<string, FinanceInvoiceImportApplyResult>
+  >({});
+  const lastInvoiceRowsRef = useRef<FinanceInvoiceImportPreviewRow[]>([]);
 
   const hasRows = bankRows.length > 0;
   const invoicePreviewOpen = invoiceRows.length > 0 && !invoiceResultOpen;
+  const savingInvoiceKey =
+    busy && saveProgress?.phase === "attach"
+      ? (invoiceRows.find((r) => r.apply && !saveByKey[r.key])?.key ?? null)
+      : null;
 
   const patchBankRow = (idx: number, patch: Partial<BankPreviewRow>) => {
     setBankRows((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
@@ -167,19 +196,39 @@ export function FinanceOfficeBankImportPanel({
   };
 
   const applyInvoices = async () => {
+    lastInvoiceRowsRef.current = invoiceRows;
+    const applyCount = invoiceRows.filter((r) => r.apply).length;
+    setSaveByKey({});
+    setSaveProgress({ phase: "upload", done: 0, total: applyCount });
     const form = new FormData();
     for (const f of files) form.append("files", f);
     form.set("rows", JSON.stringify(invoiceRows));
     const res = await fetch("/api/finance-office/invoice-import/apply", {
       method: "POST",
+      headers: { Accept: "application/x-ndjson" },
       body: form,
     });
-    const data = (await res.json().catch(() => ({}))) as {
-      results?: FinanceInvoiceImportApplyResult[];
-      error?: string;
-    };
-    if (!res.ok) throw new Error(data.error || "Не удалось прикрепить счета");
-    setInvoiceResults(Array.isArray(data.results) ? data.results : []);
+    const results = await readFinanceInvoiceImportApplyResponse(res, (ev) => {
+      if (ev.type === "phase") {
+        setSaveProgress((prev) => ({
+          phase: ev.phase,
+          done: prev?.done ?? 0,
+          total: prev?.total ?? applyCount,
+        }));
+      }
+      if (ev.type === "start") {
+        setSaveProgress({ phase: "attach", done: 0, total: ev.total });
+      }
+      if (ev.type === "row") {
+        setSaveByKey((prev) => ({ ...prev, [ev.result.key]: ev.result }));
+        setSaveProgress({
+          phase: "attach",
+          done: ev.done,
+          total: ev.total,
+        });
+      }
+    });
+    setInvoiceResults(results);
     setInvoiceRows([]);
     setInvoiceResultOpen(true);
   };
@@ -197,6 +246,7 @@ export function FinanceOfficeBankImportPanel({
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
     } finally {
       setBusy(false);
+      setSaveProgress(null);
     }
   };
 
@@ -234,10 +284,27 @@ export function FinanceOfficeBankImportPanel({
   };
 
   const retryInvoiceImport = () => {
-    setInvoiceResultOpen(false);
+    const retryRows = filterInvoiceRowsForRetry(
+      lastInvoiceRowsRef.current,
+      invoiceResults,
+    ).map((row) => ({ ...row, apply: true }));
+    if (retryRows.length === 0) {
+      setInvoiceResultOpen(false);
+      return;
+    }
+    const keepNames = new Set(invoiceImportSourceFileNames(retryRows));
+    setFiles((prev) => prev.filter((f) => keepNames.has(f.name)));
+    lastInvoiceRowsRef.current = retryRows;
+    setInvoiceRows(retryRows);
     setInvoiceResults([]);
-    if (files.length > 0) void runPreview(files);
+    setInvoiceResultOpen(false);
+    setError(null);
+    closePdfPreview();
   };
+
+  const canRetryFailedInvoices = invoiceResults.some(
+    isFinanceInvoiceImportRetryable,
+  );
 
   const onFilesRef = useRef(onFiles);
   onFilesRef.current = onFiles;
@@ -462,9 +529,16 @@ export function FinanceOfficeBankImportPanel({
               type="button"
               disabled={busy}
               onClick={() => void apply()}
-              className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
-              {busy ? "Сохранение…" : "Сохранить оплаты"}
+              {busy ? (
+                <>
+                  <Spinner size="sm" className="text-white" />
+                  Сохранение…
+                </>
+              ) : (
+                "Сохранить оплаты"
+              )}
             </button>
           </div>
         </div>
@@ -500,14 +574,44 @@ export function FinanceOfficeBankImportPanel({
           files.length > 1 ? `${files.length} файла` : files[0]?.name
         }
         size="wide"
-        closeOnEscape={!pdfPreview}
-        closeOnBackdrop={!pdfPreview}
+        closeOnEscape={!pdfPreview && !busy}
+        closeOnBackdrop={!pdfPreview && !busy}
         footer={
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex w-full min-w-0 flex-col gap-2">
+            {busy && saveProgress ? (
+              <div
+                className="flex min-w-0 items-center gap-3"
+                role="status"
+                aria-live="polite"
+              >
+                <Spinner size="sm" className="shrink-0 text-[var(--sidebar-blue)]" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[var(--text-strong)]">
+                    {invoiceSaveProgressLabel(saveProgress)}
+                  </p>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+                    {saveProgress.phase === "attach" && saveProgress.total > 0 ? (
+                      <div
+                        className="h-full rounded-full bg-[var(--sidebar-blue)] transition-[width] duration-200"
+                        style={{
+                          width: `${Math.round(
+                            (saveProgress.done / saveProgress.total) * 100,
+                          )}%`,
+                        }}
+                      />
+                    ) : (
+                      <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--sidebar-blue)]" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap justify-end gap-2">
             <button
               type="button"
+              disabled={busy}
               onClick={closeInvoicePreview}
-              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
             >
               Закрыть
             </button>
@@ -515,10 +619,20 @@ export function FinanceOfficeBankImportPanel({
               type="button"
               disabled={busy}
               onClick={() => void apply()}
-              className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
-              {busy ? "Сохранение…" : "Прикрепить счета"}
+              {busy ? (
+                <>
+                  <Spinner size="sm" className="text-white" />
+                  {saveProgress?.phase === "attach" && saveProgress.total > 0
+                    ? `${saveProgress.done} / ${saveProgress.total}`
+                    : "Сохранение…"}
+                </>
+              ) : (
+                "Прикрепить счета"
+              )}
             </button>
+            </div>
           </div>
         }
       >
@@ -559,6 +673,7 @@ export function FinanceOfficeBankImportPanel({
                     <input
                       type="checkbox"
                       checked={row.apply}
+                      disabled={busy}
                       onChange={(e) =>
                         patchInvoiceRow(idx, { apply: e.target.checked })
                       }
@@ -575,8 +690,9 @@ export function FinanceOfficeBankImportPanel({
                     ) : null}
                     <button
                       type="button"
+                      disabled={busy}
                       onClick={() => void openInvoicePdf(row)}
-                      className="mt-1 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-[10px] font-semibold text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
+                      className="mt-1 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-[10px] font-semibold text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
                     >
                       Открыть счёт
                     </button>
@@ -584,18 +700,20 @@ export function FinanceOfficeBankImportPanel({
                   <td className="px-2 py-2 align-top">
                     <input
                       value={row.invoiceNumberRaw}
+                      disabled={busy}
                       onChange={(e) =>
                         patchInvoiceRow(idx, {
                           invoiceNumberRaw: e.target.value,
                           errors: [],
                         })
                       }
-                      className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
+                      className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 disabled:opacity-60"
                     />
                   </td>
                   <td className="px-2 py-2 align-top">
                     <input
                       value={row.orderNumber}
+                      disabled={busy}
                       onChange={(e) =>
                         patchInvoiceRow(idx, {
                           orderNumber: e.target.value,
@@ -603,7 +721,7 @@ export function FinanceOfficeBankImportPanel({
                           apply: true,
                         })
                       }
-                      className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 font-mono"
+                      className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 font-mono disabled:opacity-60"
                     />
                   </td>
                   <td className="px-2 py-2 align-top text-[10px] leading-snug text-[var(--text-body)]">
@@ -618,7 +736,24 @@ export function FinanceOfficeBankImportPanel({
                     ) : null}
                   </td>
                   <td className="px-2 py-2 align-top">
-                    {row.errors.length ? (
+                    {saveByKey[row.key] ? (
+                      <span
+                        className={
+                          saveByKey[row.key]!.ok
+                            ? "font-medium text-emerald-700 dark:text-emerald-300"
+                            : "font-medium text-amber-700 dark:text-amber-300"
+                        }
+                      >
+                        {saveByKey[row.key]!.message}
+                      </span>
+                    ) : busy && row.apply && savingInvoiceKey === row.key ? (
+                      <span className="inline-flex items-center gap-1.5 font-medium text-[var(--text-strong)]">
+                        <Spinner size="xs" />
+                        Сохраняю…
+                      </span>
+                    ) : busy && row.apply ? (
+                      <span className="text-[var(--text-muted)]">В очереди</span>
+                    ) : row.errors.length ? (
                       <span className="font-medium text-amber-700 dark:text-amber-300">
                         {row.errors.join("; ")}
                       </span>
@@ -649,13 +784,15 @@ export function FinanceOfficeBankImportPanel({
             >
               Закрыть
             </button>
-            <button
-              type="button"
-              onClick={retryInvoiceImport}
-              className="rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
-            >
-              Попробовать ещё раз
-            </button>
+            {canRetryFailedInvoices ? (
+              <button
+                type="button"
+                onClick={retryInvoiceImport}
+                className="rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
+              >
+                Повторить ошибки
+              </button>
+            ) : null}
           </div>
         }
       >

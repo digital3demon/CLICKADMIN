@@ -57,6 +57,11 @@ export function ordersListHref(opts: {
   otprFrom?: string | null;
   /** Дата отправки (`adminShippedAt`) по (YYYY-MM-DD, МСК). */
   otprTo?: string | null;
+  /**
+   * Наряды, которые оставляем в выборке при фильтре по дате после смены срока в списке.
+   * CSV id; при смене фильтра «ЛАБ»/«Запись» не копируем.
+   */
+  keep?: string | null;
 }): string {
   const p = new URLSearchParams();
   if (
@@ -96,6 +101,8 @@ export function ordersListHref(opts: {
   const otprTo = opts.otprTo?.trim() || "";
   if (otprFrom) p.set("otprFrom", otprFrom);
   if (otprTo) p.set("otprTo", otprTo);
+  const keep = formatOrdersListKeepParam(opts.keep);
+  if (keep) p.set("keep", keep);
   const q = p.toString();
   return q ? `/orders?${q}` : "/orders";
 }
@@ -110,4 +117,45 @@ export function pickOrdersOtprHrefOpts(sp: {
     ...(otprFrom ? { otprFrom } : {}),
     ...(otprTo ? { otprTo } : {}),
   };
+}
+
+/** Не больше, чтобы URL и OR-фильтр не раздувались. */
+export const ORDERS_LIST_KEEP_MAX = 40;
+
+const ORDERS_LIST_KEEP_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * CSV `keep=` — закреплённые наряды при фильтре по дате.
+ * Без `\b`: id латиница/цифры, кириллица в URL не участвует.
+ */
+export function parseOrdersListKeepIds(
+  raw: string | null | undefined,
+): string[] {
+  const parts = String(raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => ORDERS_LIST_KEEP_ID_RE.test(s));
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of parts) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= ORDERS_LIST_KEEP_MAX) break;
+  }
+  return out;
+}
+
+export function formatOrdersListKeepParam(
+  raw: string | null | undefined,
+): string | undefined {
+  const ids = parseOrdersListKeepIds(raw);
+  return ids.length ? ids.join(",") : undefined;
+}
+
+export function appendOrdersListKeepId(
+  raw: string | null | undefined,
+  orderId: string,
+): string {
+  return parseOrdersListKeepIds(`${raw ?? ""},${orderId}`).join(",");
 }

@@ -252,6 +252,11 @@ export async function applyFinanceInvoiceImport(opts: {
   tenantId: string;
   rows: FinanceInvoiceImportApplyRow[];
   pdfs: ExpandedInvoicePdf[];
+  onRow?: (info: {
+    done: number;
+    total: number;
+    result: FinanceInvoiceImportApplyResult;
+  }) => void | Promise<void>;
 }): Promise<{
   results: FinanceInvoiceImportApplyResult[];
   parseOrderIds: string[];
@@ -264,6 +269,14 @@ export async function applyFinanceInvoiceImport(opts: {
   );
   const results: FinanceInvoiceImportApplyResult[] = [];
   const parseOrderIds: string[] = [];
+  const workTotal = opts.rows.filter((r) => r.apply).length;
+  let done = 0;
+
+  const pushTracked = async (result: FinanceInvoiceImportApplyResult) => {
+    results.push(result);
+    done += 1;
+    await opts.onRow?.({ done, total: workTotal, result });
+  };
 
   for (const row of opts.rows) {
     if (!row.apply) {
@@ -277,7 +290,7 @@ export async function applyFinanceInvoiceImport(opts: {
     }
     const orderNumber = String(row.orderNumber || "").trim();
     if (!ORDER_NUMBER_PATTERN.test(orderNumber)) {
-      results.push({
+      await pushTracked({
         key: row.key,
         orderNumber,
         ok: false,
@@ -287,7 +300,7 @@ export async function applyFinanceInvoiceImport(opts: {
     }
     const pdf = byKey.get(row.key);
     if (!pdf) {
-      results.push({
+      await pushTracked({
         key: row.key,
         orderNumber,
         ok: false,
@@ -304,7 +317,7 @@ export async function applyFinanceInvoiceImport(opts: {
       select: { id: true },
     });
     if (!order) {
-      results.push({
+      await pushTracked({
         key: row.key,
         orderNumber,
         ok: false,
@@ -322,7 +335,7 @@ export async function applyFinanceInvoiceImport(opts: {
         invoiceNumberRaw: row.invoiceNumberRaw,
       });
       parseOrderIds.push(order.id);
-      results.push({
+      await pushTracked({
         key: row.key,
         orderNumber,
         ok: true,
@@ -330,7 +343,7 @@ export async function applyFinanceInvoiceImport(opts: {
       });
     } catch (e) {
       console.error("[invoice-import] apply", orderNumber, e);
-      results.push({
+      await pushTracked({
         key: row.key,
         orderNumber,
         ok: false,

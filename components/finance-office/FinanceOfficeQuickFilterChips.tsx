@@ -199,7 +199,7 @@ export function FinanceOfficeQuickFilterChips({
                 ? "border-amber-500 bg-amber-400 text-amber-950 ring-2 ring-amber-400/90 dark:border-amber-400 dark:bg-amber-500 dark:text-amber-950 dark:ring-amber-400/80"
                 : "border-amber-400/80 bg-amber-300/90 text-amber-950 hover:bg-amber-300 dark:border-amber-500/70 dark:bg-amber-600/55 dark:text-amber-50 dark:hover:bg-amber-600/70"
             }`}
-            title="Наряды с непринятыми корректировками из чата («!!!»); в списке также может попасть расхождение суммы счёта с составом"
+            title="Непринятые корректировки из чата («!!!») и наряды, где сумма счёта не сходится с составом"
           >
             <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
               Корректировки
