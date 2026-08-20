@@ -2,8 +2,13 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  classifyFinanceOfficeDropFiles,
+  type FinanceInvoiceImportApplyResult,
+  type FinanceInvoiceImportPreviewRow,
+} from "@/lib/finance-office-invoice-import";
 
-type PreviewRow = {
+type BankPreviewRow = {
   sourceRow: number;
   originalText: string;
   orderNumber: string;
@@ -17,7 +22,7 @@ type PreviewRow = {
   orderLabel: string | null;
 };
 
-type ApplyResult = {
+type BankApplyResult = {
   sourceRow: number;
   orderNumber: string;
   ok: boolean;
@@ -34,35 +39,103 @@ export function FinanceOfficeBankImportPanel({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [rows, setRows] = useState<PreviewRow[]>([]);
-  const [results, setResults] = useState<ApplyResult[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [mode, setMode] = useState<"bank" | "invoices" | null>(null);
+  const [bankRows, setBankRows] = useState<BankPreviewRow[]>([]);
+  const [invoiceRows, setInvoiceRows] = useState<FinanceInvoiceImportPreviewRow[]>(
+    [],
+  );
+  const [bankResults, setBankResults] = useState<BankApplyResult[]>([]);
+  const [invoiceResults, setInvoiceResults] = useState<
+    FinanceInvoiceImportApplyResult[]
+  >([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const patchRow = (idx: number, patch: Partial<PreviewRow>) => {
-    setRows((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
-    setResults([]);
+  const hasRows = bankRows.length > 0 || invoiceRows.length > 0;
+
+  const patchBankRow = (idx: number, patch: Partial<BankPreviewRow>) => {
+    setBankRows((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
+    setBankResults([]);
   };
 
-  const preview = async (nextFile = file) => {
-    if (!nextFile) return;
+  const patchInvoiceRow = (
+    idx: number,
+    patch: Partial<FinanceInvoiceImportPreviewRow>,
+  ) => {
+    setInvoiceRows((prev) =>
+      prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)),
+    );
+    setInvoiceResults([]);
+  };
+
+  const previewBank = async (file: File) => {
+    const form = new FormData();
+    form.set("file", file);
+    const res = await fetch("/api/finance-office/bank-import/preview", {
+      method: "POST",
+      body: form,
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      rows?: BankPreviewRow[];
+      error?: string;
+    };
+    if (!res.ok) throw new Error(data.error || "Не удалось прочитать выгрузку");
+    setBankRows(Array.isArray(data.rows) ? data.rows : []);
+    setInvoiceRows([]);
+    setMode("bank");
+  };
+
+  const previewInvoices = async (pack: File[]) => {
+    const form = new FormData();
+    for (const f of pack) form.append("files", f);
+    const res = await fetch("/api/finance-office/invoice-import/preview", {
+      method: "POST",
+      body: form,
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      rows?: FinanceInvoiceImportPreviewRow[];
+      error?: string;
+    };
+    if (!res.ok) throw new Error(data.error || "Не удалось прочитать счета");
+    setInvoiceRows(Array.isArray(data.rows) ? data.rows : []);
+    setBankRows([]);
+    setMode("invoices");
+  };
+
+  const onFiles = (list: FileList | File[] | null) => {
+    const next = list ? Array.from(list).filter((f) => f.size > 0) : [];
+    setFiles(next);
+    setBankRows([]);
+    setInvoiceRows([]);
+    setBankResults([]);
+    setInvoiceResults([]);
+    setError(null);
+    setMode(null);
+    if (next.length === 0) return;
+    void runPreview(next);
+  };
+
+  const runPreview = async (pack: File[]) => {
+    const kind = classifyFinanceOfficeDropFiles(
+      pack.map((f) => ({ name: f.name, type: f.type })),
+    );
+    if (kind.kind === "mixed") {
+      setError("Оплаты (Excel) и счета (PDF/ZIP) загружайте отдельно");
+      return;
+    }
+    if (kind.kind === "unknown") {
+      setError("Поддерживаются Excel оплат или PDF/ZIP счетов");
+      return;
+    }
     setBusy(true);
     setError(null);
-    setResults([]);
     try {
-      const form = new FormData();
-      form.set("file", nextFile);
-      const res = await fetch("/api/finance-office/bank-import/preview", {
-        method: "POST",
-        body: form,
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        rows?: PreviewRow[];
-        error?: string;
-      };
-      if (!res.ok) throw new Error(data.error || "Не удалось прочитать выгрузку");
-      setRows(Array.isArray(data.rows) ? data.rows : []);
+      if (kind.kind === "bank") {
+        await previewBank(pack[0]!);
+      } else {
+        await previewInvoices(pack);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка чтения файла");
     } finally {
@@ -70,22 +143,44 @@ export function FinanceOfficeBankImportPanel({
     }
   };
 
+  const applyBank = async () => {
+    const res = await fetch("/api/finance-office/bank-import/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: bankRows }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      results?: BankApplyResult[];
+      error?: string;
+    };
+    if (!res.ok) throw new Error(data.error || "Не удалось сохранить оплату");
+    setBankResults(Array.isArray(data.results) ? data.results : []);
+  };
+
+  const applyInvoices = async () => {
+    const form = new FormData();
+    for (const f of files) form.append("files", f);
+    form.set("rows", JSON.stringify(invoiceRows));
+    const res = await fetch("/api/finance-office/invoice-import/apply", {
+      method: "POST",
+      body: form,
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      results?: FinanceInvoiceImportApplyResult[];
+      error?: string;
+    };
+    if (!res.ok) throw new Error(data.error || "Не удалось прикрепить счета");
+    setInvoiceResults(Array.isArray(data.results) ? data.results : []);
+  };
+
   const apply = async () => {
     setBusy(true);
     setError(null);
-    setResults([]);
+    setBankResults([]);
+    setInvoiceResults([]);
     try {
-      const res = await fetch("/api/finance-office/bank-import/apply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        results?: ApplyResult[];
-        error?: string;
-      };
-      if (!res.ok) throw new Error(data.error || "Не удалось сохранить оплату");
-      setResults(Array.isArray(data.results) ? data.results : []);
+      if (mode === "invoices") await applyInvoices();
+      else await applyBank();
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
@@ -94,25 +189,19 @@ export function FinanceOfficeBankImportPanel({
     }
   };
 
-  const onFile = (next: File | null) => {
-    setFile(next);
-    setRows([]);
-    setResults([]);
-    setError(null);
-    if (next) void preview(next);
-  };
-
-  const onPasteFile = (files: FileList | null) => {
-    const next = files?.[0] ?? null;
-    if (next) onFile(next);
-  };
+  const fileLabel =
+    files.length === 0
+      ? ""
+      : files.length === 1
+        ? files[0]!.name
+        : `${files.length} файла`;
 
   return (
     <section
       className={[
         "rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm",
         compact ? "flex min-h-[3.25rem] flex-col" : "",
-        rows.length > 0 ? "col-span-2 xl:col-span-2" : "",
+        hasRows ? "col-span-2 xl:col-span-2" : "",
         className,
       ]
         .filter(Boolean)
@@ -130,9 +219,9 @@ export function FinanceOfficeBankImportPanel({
         }}
         onDrop={(e) => {
           e.preventDefault();
-          onFile(e.dataTransfer.files?.[0] ?? null);
+          onFiles(e.dataTransfer.files);
         }}
-        onPaste={(e) => onPasteFile(e.clipboardData.files)}
+        onPaste={(e) => onFiles(e.clipboardData.files)}
         tabIndex={0}
       >
         <div
@@ -145,9 +234,13 @@ export function FinanceOfficeBankImportPanel({
           <input
             ref={inputRef}
             type="file"
-            accept=".xls,.xlsx,.pdf,image/png,image/jpeg,image/webp"
+            multiple
+            accept=".xls,.xlsx,.pdf,.zip,image/png,image/jpeg,image/webp"
             className="hidden"
-            onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              onFiles(e.target.files);
+              e.target.value = "";
+            }}
           />
           <button
             type="button"
@@ -160,26 +253,26 @@ export function FinanceOfficeBankImportPanel({
             disabled={busy}
           >
             {busy
-              ? "Читаю файл…"
-              : compact
-                ? "Выбрать файлы · Ctrl+V"
-                : "Выбрать файлы · Ctrl+V"}
+              ? mode === "invoices"
+                ? "Читаю счета…"
+                : "Читаю файл…"
+              : "Выбрать файлы · Ctrl+V"}
           </button>
           {compact ? null : (
             <p className="mt-2 text-xs leading-snug text-[var(--text-muted)]">
-              Перетащите файл в рамку или сфокусируйте её (Tab) и вставьте из
-              буфера
+              Excel — оплаты. PDF или ZIP — счета на наряды. Несколько файлов
+              и архивы можно сразу.
             </p>
           )}
-          {file ? (
+          {files.length > 0 ? (
             <div className="mt-1.5 flex flex-wrap items-center justify-center gap-2">
               <span className="max-w-full truncate text-xs text-[var(--text-muted)]">
-                Файл: {file.name}
+                {fileLabel}
               </span>
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void preview()}
+                onClick={() => void runPreview(files)}
                 className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)] disabled:opacity-50"
               >
                 Перечитать
@@ -198,7 +291,7 @@ export function FinanceOfficeBankImportPanel({
         ) : null}
       </div>
 
-      {rows.length > 0 ? (
+      {bankRows.length > 0 ? (
         <div className="space-y-3 p-3">
           <div className="max-h-[min(72dvh,760px)] overflow-auto rounded-md border border-[var(--card-border)]">
             <table className="min-w-[58rem] table-fixed text-left text-xs">
@@ -223,20 +316,22 @@ export function FinanceOfficeBankImportPanel({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--card-border)]">
-                {rows.map((row, idx) => (
+                {bankRows.map((row, idx) => (
                   <tr key={`${row.sourceRow}-${idx}`} className={row.errors.length ? "bg-amber-500/10" : ""}>
                     <td className="px-2 py-2 align-top text-center">
                       <input
                         type="checkbox"
                         checked={row.apply}
-                        onChange={(e) => patchRow(idx, { apply: e.target.checked })}
+                        onChange={(e) => patchBankRow(idx, { apply: e.target.checked })}
                       />
                     </td>
                     <td className="px-2 py-2 align-top font-mono">{row.sourceRow}</td>
                     <td className="px-2 py-2 align-top">
                       <input
                         value={row.orderNumber}
-                        onChange={(e) => patchRow(idx, { orderNumber: e.target.value, errors: [] })}
+                        onChange={(e) =>
+                          patchBankRow(idx, { orderNumber: e.target.value, errors: [] })
+                        }
                         className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
                       />
                       <div className="mt-1 max-h-20 overflow-y-auto whitespace-normal break-words text-[10px] leading-snug text-[var(--text-muted)]">
@@ -246,14 +341,21 @@ export function FinanceOfficeBankImportPanel({
                     <td className="px-2 py-2 align-top">
                       <input
                         value={row.invoiceNumberRaw}
-                        onChange={(e) => patchRow(idx, { invoiceNumberRaw: e.target.value, errors: [] })}
+                        onChange={(e) =>
+                          patchBankRow(idx, {
+                            invoiceNumberRaw: e.target.value,
+                            errors: [],
+                          })
+                        }
                         className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
                       />
                     </td>
                     <td className="px-2 py-2 align-top">
                       <input
                         value={row.invoiceDate || row.dateRaw}
-                        onChange={(e) => patchRow(idx, { invoiceDate: e.target.value, errors: [] })}
+                        onChange={(e) =>
+                          patchBankRow(idx, { invoiceDate: e.target.value, errors: [] })
+                        }
                         className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
                       />
                     </td>
@@ -261,7 +363,9 @@ export function FinanceOfficeBankImportPanel({
                       <input
                         type="checkbox"
                         checked={row.paid}
-                        onChange={(e) => patchRow(idx, { paid: e.target.checked, errors: [] })}
+                        onChange={(e) =>
+                          patchBankRow(idx, { paid: e.target.checked, errors: [] })
+                        }
                       />
                     </td>
                     <td className="max-w-[20rem] px-2 py-2 align-top">
@@ -293,13 +397,158 @@ export function FinanceOfficeBankImportPanel({
         </div>
       ) : null}
 
-      {results.length > 0 ? (
+      {invoiceRows.length > 0 ? (
+        <div className="space-y-3 p-3">
+          <div className="max-h-[min(72dvh,760px)] overflow-auto rounded-md border border-[var(--card-border)]">
+            <table className="min-w-[58rem] table-fixed text-left text-xs">
+              <colgroup>
+                <col className="w-[5.5rem]" />
+                <col className="w-[16rem]" />
+                <col className="w-[10rem]" />
+                <col className="w-[12rem]" />
+                <col className="w-[14rem]" />
+                <col className="w-[10rem]" />
+              </colgroup>
+              <thead className="bg-[var(--surface-subtle)] text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+                <tr>
+                  <th className="px-2 py-2">Применить</th>
+                  <th className="px-2 py-2">Файл</th>
+                  <th className="px-2 py-2">№ счёта</th>
+                  <th className="px-2 py-2">Наряд</th>
+                  <th className="px-2 py-2">Найден</th>
+                  <th className="px-2 py-2">Статус</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--card-border)]">
+                {invoiceRows.map((row, idx) => (
+                  <tr
+                    key={row.key}
+                    className={row.errors.length ? "bg-amber-500/10" : ""}
+                  >
+                    <td className="px-2 py-2 align-top text-center">
+                      <input
+                        type="checkbox"
+                        checked={row.apply}
+                        onChange={(e) =>
+                          patchInvoiceRow(idx, { apply: e.target.checked })
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-2 align-top">
+                      <div className="break-words font-medium text-[var(--text-strong)]">
+                        {row.fileName}
+                      </div>
+                      {row.sourceArchive ? (
+                        <div className="text-[10px] text-[var(--text-muted)]">
+                          из {row.sourceArchive}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2 align-top">
+                      <input
+                        value={row.invoiceNumberRaw}
+                        onChange={(e) =>
+                          patchInvoiceRow(idx, {
+                            invoiceNumberRaw: e.target.value,
+                            errors: [],
+                          })
+                        }
+                        className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1"
+                      />
+                    </td>
+                    <td className="px-2 py-2 align-top">
+                      <input
+                        value={row.orderNumber}
+                        onChange={(e) =>
+                          patchInvoiceRow(idx, {
+                            orderNumber: e.target.value,
+                            errors: [],
+                            apply: true,
+                          })
+                        }
+                        className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 font-mono"
+                      />
+                      {row.basisSnippet ? (
+                        <div className="mt-1 max-h-16 overflow-y-auto text-[10px] leading-snug text-[var(--text-muted)]">
+                          {row.basisSnippet}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2 align-top text-[10px] leading-snug text-[var(--text-muted)]">
+                      {row.orderLabel ?? "—"}
+                      {row.alreadyHasInvoice ? (
+                        <div className="mt-1 font-medium text-amber-700 dark:text-amber-300">
+                          Заменит старый счёт
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2 align-top">
+                      {row.errors.length ? (
+                        <span className="font-medium text-amber-700 dark:text-amber-300">
+                          {row.errors.join("; ")}
+                        </span>
+                      ) : (
+                        <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                          Распознано
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void apply()}
+              className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? "Сохранение…" : "Прикрепить счета"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {bankResults.length > 0 ? (
         <div className="border-t border-[var(--card-border)] p-3">
-          <h3 className="text-sm font-semibold text-[var(--text-strong)]">Результат сохранения</h3>
+          <h3 className="text-sm font-semibold text-[var(--text-strong)]">
+            Результат сохранения
+          </h3>
           <ul className="mt-2 space-y-1 text-xs">
-            {results.map((r, idx) => (
-              <li key={`${r.sourceRow}-${idx}`} className={r.ok ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}>
+            {bankResults.map((r, idx) => (
+              <li
+                key={`${r.sourceRow}-${idx}`}
+                className={
+                  r.ok
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : "text-amber-700 dark:text-amber-300"
+                }
+              >
                 Строка {r.sourceRow || "?"}, наряд {r.orderNumber || "?"}: {r.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {invoiceResults.length > 0 ? (
+        <div className="border-t border-[var(--card-border)] p-3">
+          <h3 className="text-sm font-semibold text-[var(--text-strong)]">
+            Результат счетов
+          </h3>
+          <ul className="mt-2 space-y-1 text-xs">
+            {invoiceResults.map((r) => (
+              <li
+                key={r.key}
+                className={
+                  r.ok
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : "text-amber-700 dark:text-amber-300"
+                }
+              >
+                {r.orderNumber || "—"}: {r.message}
               </li>
             ))}
           </ul>
