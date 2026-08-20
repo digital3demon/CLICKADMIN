@@ -24,8 +24,10 @@ export async function blobForFinanceInvoicePreviewRow(
       return basenamePath(e.name) === row.fileName;
     });
     if (!entry) return null;
-    const bytes = await entry.async("uint8array");
-    return new Blob([bytes], { type: "application/pdf" });
+    // arraybuffer, not uint8array: DOM BlobPart rejects Uint8Array<ArrayBufferLike>
+    // (Node 22 / TS 5.7+ — buffer may be SharedArrayBuffer).
+    const ab = await entry.async("arraybuffer");
+    return new Blob([ab], { type: "application/pdf" });
   } catch {
     return null;
   }
