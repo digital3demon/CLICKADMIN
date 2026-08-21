@@ -1,14 +1,11 @@
 # Timeweb Cloud Apps / Docker.
-# Без глобального pm2: платформа сама держит процесс (CMD = start:platform).
-# Не добавляйте `RUN npm install -g pm2` — registry.npmjs.org часто даёт ETIMEDOUT на сборке.
+# Сборка часто без доступа к deb.debian.org — не вызывать apt-get.
+# Не добавляйте `RUN npm install -g pm2` — registry.npmjs.org часто даёт ETIMEDOUT.
+# bookworm (не slim): openssl/ca-certificates уже в образе, Prisma не требует apt.
 
-FROM node:22-bookworm-slim AS builder
+FROM node:22-bookworm AS builder
 
 WORKDIR /app
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
 
 # Свежий npm в образе — меньше «Exit handler never called!» на npm ci.
 RUN npm install -g npm@11.6.2
@@ -27,13 +24,9 @@ ENV NODE_ENV=production
 # migrate — на старте контейнера
 RUN npm run build:platform
 
-FROM node:22-bookworm-slim AS runner
+FROM node:22-bookworm AS runner
 
 WORKDIR /app
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

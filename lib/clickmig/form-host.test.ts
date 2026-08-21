@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   clickMigFormHostPathRedirect,
   isClickMigFormHost,
+  isClickMigPublicApiPath,
+  isClickMigPublicOpen,
+  isClickMigPublicSurfacePath,
   isTrustedClickMigPublicHost,
 } from "./form-host";
 
@@ -14,6 +17,26 @@ describe("clickmig form host", () => {
   it("корень form-поддомена → форма", () => {
     expect(clickMigFormHostPathRedirect("/")).toBe("/p/clickmig/form");
     expect(clickMigFormHostPathRedirect("/cabinet")).toBe("/p/clickmig/cabinet");
+  });
+
+  it("публичные пути формы и API", () => {
+    expect(isClickMigPublicSurfacePath("/p/clickmig/form")).toBe(true);
+    expect(isClickMigPublicSurfacePath("/clickmig")).toBe(false);
+    expect(isClickMigPublicApiPath("/api/clickmig/public/config")).toBe(true);
+    expect(isClickMigPublicApiPath("/api/clickmig/applications")).toBe(false);
+  });
+
+  it("публичный контур закрыт без CLICKMIG_PUBLIC_ENABLED", () => {
+    const prev = process.env.CLICKMIG_PUBLIC_ENABLED;
+    delete process.env.CLICKMIG_PUBLIC_ENABLED;
+    try {
+      expect(isClickMigPublicOpen()).toBe(false);
+      process.env.CLICKMIG_PUBLIC_ENABLED = "1";
+      expect(isClickMigPublicOpen()).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.CLICKMIG_PUBLIC_ENABLED;
+      else process.env.CLICKMIG_PUBLIC_ENABLED = prev;
+    }
   });
 
   it("основной CRM-хост доверен для public API", () => {

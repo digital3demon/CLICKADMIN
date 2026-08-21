@@ -41,6 +41,9 @@ import {
   clickMigCrmPublicOrigin,
   clickMigFormHostPathRedirect,
   isClickMigFormHost,
+  isClickMigPublicApiPath,
+  isClickMigPublicOpen,
+  isClickMigPublicSurfacePath,
 } from "@/lib/clickmig/form-host";
 
 function securityHeaders(res: NextResponse) {
@@ -141,6 +144,50 @@ function isPublicPath(pathname: string): boolean {
   /** Сканер книг / внешние агенты: auth внутри TenantApiKey внутри роуте. */
   if (pathname.startsWith("/api/scanner/")) return true;
   return false;
+}
+
+async function hasCrmSessionCookie(req: NextRequest): Promise<boolean> {
+  if (!getAuthSecretKey()) return false;
+  const demoToken = req.cookies.get(SESSION_DEMO_COOKIE_NAME)?.value;
+  const mainToken = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  if (demoToken) {
+    const d = await verifySessionToken(demoToken);
+    if (d?.demo) return true;
+  }
+  if (mainToken) {
+    const m = await verifySessionToken(mainToken);
+    if (m && !m.demo) return true;
+  }
+  return false;
+}
+
+function clickMigPublicClosedResponse(pathname: string): NextResponse {
+  if (pathname.startsWith("/api/")) {
+    const out = NextResponse.json(
+      { error: "Публичный КликМиг временно закрыт" },
+      { status: 403 },
+    );
+    return securityHeaders(out);
+  }
+  const html = `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>КликМиг</title>
+</head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1c1c20;color:#eee;font-family:system-ui,sans-serif">
+  <main style="max-width:28rem;padding:1.5rem;text-align:center">
+    <h1 style="font-size:1.25rem;margin:0 0 0.75rem">КликМиг</h1>
+    <p style="margin:0;line-height:1.45;color:#bbb">Приём заказов временно закрыт.</p>
+  </main>
+</body>
+</html>`;
+  const out = new NextResponse(html, {
+    status: 403,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
+  return securityHeaders(out);
 }
 
 function isRateLimitExemptPath(pathname: string, method: string): boolean {
@@ -281,6 +328,15 @@ export async function middleware(req: NextRequest) {
       return securityHeaders(out);
     }
     return res;
+  }
+
+  if (
+    (isClickMigPublicSurfacePath(pathname) || isClickMigPublicApiPath(pathname)) &&
+    !isClickMigPublicOpen()
+  ) {
+    if (!(await hasCrmSessionCookie(req))) {
+      return clickMigPublicClosedResponse(pathname);
+    }
   }
 
   if (isPublicPath(pathname)) {

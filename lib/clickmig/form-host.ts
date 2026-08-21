@@ -74,4 +74,21 @@ export function clickMigFormHostPathRedirect(pathname: string): string | null {
   return null;
 }
 
+export function isClickMigPublicSurfacePath(pathname: string): boolean {
+  return pathname.startsWith("/p/clickmig/");
+}
+
+export function isClickMigPublicApiPath(pathname: string): boolean {
+  return pathname.startsWith("/api/clickmig/public/");
+}
+
+/**
+ * Публичный контур КликМиг (форма / ЛК / public API).
+ * По умолчанию закрыт; открыть: CLICKMIG_PUBLIC_ENABLED=1.
+ */
+export function isClickMigPublicOpen(): boolean {
+  const raw = process.env.CLICKMIG_PUBLIC_ENABLED?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
 export { hostWithoutPort as clickMigHostWithoutPort };

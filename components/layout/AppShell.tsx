@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { OrderCorrectionToastStack } from "@/components/orders/OrderCorrectionToastStack";
 import { OrderBackgroundUploadToast } from "@/components/orders/OrderBackgroundUploadToast";
 import { isPublicStickerHubPath } from "@/lib/sticker-public-path";
+import { isClickMigPublicSurfacePath } from "@/lib/clickmig/form-host";
 import { MobileNavProvider, useMobileNav } from "@/components/layout/mobile-nav";
 import {
   DesktopSidebarCollapseProvider,
@@ -179,9 +180,10 @@ export function AppShell({ children }: AppShellProps) {
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
   const isTgApp = pathname === "/tg-app" || pathname?.startsWith("/tg-app/");
   const isPublicSticker = isPublicStickerHubPath(pathname ?? "");
+  const isClickMigPublic = isClickMigPublicSurfacePath(pathname ?? "");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  if (isLogin || isTgApp || isPublicSticker) {
+  if (isLogin || isTgApp || isPublicSticker || isClickMigPublic) {
     return (
       <div className="min-h-screen w-full bg-[var(--app-bg)]">{children}</div>
     );
