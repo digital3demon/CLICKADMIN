@@ -1,4 +1,9 @@
 # Build context for Timeweb / Docker — keep image lean, avoid host junk.
+# Манифесты npm всегда в контексте (иначе BuildKit: "/package.json": not found).
+!package.json
+!package-lock.json
+!.npmrc
+!Dockerfile
 .git
 .cursor
 .next

@@ -1,17 +1,17 @@
 # Timeweb Cloud Apps / Docker.
-# Сборка часто без доступа к deb.debian.org — не вызывать apt-get.
-# Не добавляйте `RUN npm install -g pm2` — registry.npmjs.org часто даёт ETIMEDOUT.
-# bookworm (не slim): openssl/ca-certificates уже в образе, Prisma не требует apt.
+# Не вызывать apt-get: на сборке часто нет deb.debian.org (Network is unreachable).
+# Не `npm install -g pm2` / не `npm install -g npm` — лишний выход в сеть.
+# bookworm (не slim): openssl уже в образе.
 
 FROM node:22-bookworm AS builder
 
 WORKDIR /app
 
-# Свежий npm в образе — меньше «Exit handler never called!» на npm ci.
-RUN npm install -g npm@11.6.2
+# По одному файлу: если нет .npmrc, BuildKit не маскирует это как "/package.json".
+COPY package.json ./
+COPY package-lock.json ./
+COPY .npmrc ./
 
-COPY package.json package-lock.json .npmrc ./
-# Повтор при флапе реестра / внутреннем сбое npm.
 RUN npm ci --no-audit --no-fund \
   || (npm cache clean --force && npm ci --no-audit --no-fund)
 
@@ -20,8 +20,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# generate из локального prisma (npm ci), без npx и binaries.prisma.sh
-# migrate — на старте контейнера
+# migrate — на старте контейнера (start:platform)
 RUN npm run build:platform
 
 FROM node:22-bookworm AS runner
@@ -43,8 +42,6 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/templates ./templates
 
-# Timeweb: без EXPOSE платформа слушает 8080; приложение читает PORT.
 EXPOSE 3000
 
-# migrate deploy + server.js (standalone). Не pm2.
 CMD ["npm", "run", "start:platform"]
