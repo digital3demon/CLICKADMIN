@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import {
   applyKanbanActualAppointmentView,
+  kanbanShouldApplyActualAppointmentView,
   kanbanCardMatchesActualAppointment,
   linkedOrdersToAppointmentMap,
 } from "@/lib/kanban/kanban-actual-appointment";
@@ -121,5 +122,13 @@ describe("kanban actual appointment", () => {
       "c-later",
     ]);
     expect(board.columns[0]!.cards).toHaveLength(4);
+  });
+});
+
+describe("kanbanShouldApplyActualAppointmentView", () => {
+  it("не режет доску, пока в поиске есть текст", () => {
+    expect(kanbanShouldApplyActualAppointmentView(true, "тындик")).toBe(false);
+    expect(kanbanShouldApplyActualAppointmentView(true, "  ")).toBe(true);
+    expect(kanbanShouldApplyActualAppointmentView(false, "")).toBe(false);
   });
 });

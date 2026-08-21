@@ -80,7 +80,7 @@ export function useMobileNavOptional(): MobileNavContextValue | null {
 
 /**
  * Заголовок модуля на mobile: открывает боковое меню (вместо overlapping hamburger).
- * На shell-desktop — обычный h1.
+ * На shell-laptop — обычный h1.
  */
 export function PageTitleAsMenuButton({
   title,
@@ -107,7 +107,7 @@ export function PageTitleAsMenuButton({
     <>
       <button
         type="button"
-        className={`shell-desktop:hidden ${headingClass} border-0 bg-transparent p-0 text-left`}
+        className={`shell-laptop:hidden ${headingClass} border-0 bg-transparent p-0 text-left`}
         aria-expanded={nav.mobileNavOpen}
         aria-controls="app-primary-nav"
         aria-label={
@@ -119,7 +119,7 @@ export function PageTitleAsMenuButton({
       >
         {title}
       </button>
-      <h1 className={`hidden shell-desktop:block ${headingClass}`}>{title}</h1>
+      <h1 className={`hidden shell-laptop:block ${headingClass}`}>{title}</h1>
     </>
   );
 }

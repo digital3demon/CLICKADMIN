@@ -4,14 +4,19 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * «Десктопная оболочка»: двухколоночный layout (сайдбар 1/7 + контент).
- * Ниже ~1400px постоянный сайдбар/рельс съедает место — выезжающее меню как на мобиле.
- * В альбоме телефона ширина может быть большой, а высота мала — тоже выезжающее меню (min-height).
+ * Оболочка CRM (viewport + высота ≥560, чтобы альбом телефона оставался drawer).
+ * Тир 2: постоянный сайдбар/рельс с 1024px. Тир 3: широкая таблица / 3 колонки формы с 1400px.
+ * Контент внутри main — @container crm-shell (ширина рабочей области после сайдбара).
  */
+@custom-variant shell-laptop (@media (min-width: 1024px) and (min-height: 560px));
 @custom-variant shell-desktop (@media (min-width: 1400px) and (min-height: 560px));
 
 /* Низкий экран (альбом телефона, узкое окно): компактнее сайдбар и всплывашки. */
 @custom-variant shell-short (@media (max-height: 560px));
+
+/* Тиры по ширине main (@container/crm-shell на <main>). */
+@custom-variant crm-t2 (@container crm-shell (min-width: 40rem));
+@custom-variant crm-t3 (@container crm-shell (min-width: 56rem));
 
 /*
  * Локальные файлы (опционально): положите в public/fonts/ и раскомментируйте.
@@ -299,8 +304,8 @@ body {
  * Только заголовок модуля (h1): fixed-кнопка меню ~2.75rem + отступ слева.
  * Вынесено из Tailwind: длинные calc(max(...)) в arbitrary-классах иногда не попадают в CSS или режутся.
  */
-/* Отступ под fixed-кнопку меню: вне shell-desktop (<1400px или низкая высота). */
-@media (max-width: 1399px), ((min-width: 1400px) and (max-height: 559px)) {
+/* Отступ под fixed-кнопку меню: вне shell-laptop (<1024px или низкая высота). */
+@media (max-width: 1023px), ((min-width: 1024px) and (max-height: 559px)) {
   .module-frame-title-h1-wrap {
     padding-inline-start: max(
       3.5rem,

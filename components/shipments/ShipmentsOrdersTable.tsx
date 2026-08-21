@@ -30,6 +30,7 @@ import {
   resolveOrderListRowAccentKind,
 } from "@/lib/order-list-row-accent";
 import { shipmentsListHref } from "@/lib/shipments-list-query";
+import { ListRowUnfold } from "@/components/layout/ListRowUnfold";
 
 const TAGS_PAGE_SIZE = clampOrdersPageSize(null);
 
@@ -37,7 +38,7 @@ const SHIPMENTS_TABLE_TH =
   "min-w-0 whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
 
 const SHIPMENTS_TABLE_CLASS =
-  "w-full min-w-[56rem] table-fixed border-collapse text-left text-[10px] sm:text-[11px] md:min-w-[56rem] lg:min-w-0 lg:text-xs 2xl:text-[13px]";
+  "w-full table-fixed border-collapse text-left text-[10px] sm:text-[11px] lg:text-xs 2xl:text-[13px] shell-desktop:min-w-[56rem]";
 
 function ShipmentsTableHeaderRow({
   showAccountantColumns,
@@ -92,13 +93,13 @@ function ShipmentsTableHeaderRow({
       {showAccountantColumns ? (
         <>
           <th
-            className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
+            className={`${SHIPMENTS_TABLE_TH} hidden align-top normal-case shell-desktop:table-cell`}
             title="ИНН, КПП, банк, р/с и др. по карточке клиники или ИП врача"
           >
             Реквизиты
           </th>
           <th
-            className={`${SHIPMENTS_TABLE_TH} align-top normal-case`}
+            className={`${SHIPMENTS_TABLE_TH} hidden align-top normal-case shell-desktop:table-cell`}
             title="С какого юрлица лаборатории ведётся наряд (поле в наряде)"
           >
             Наше юрлицо
@@ -117,6 +118,14 @@ function ShipmentsTableHeaderRow({
       >
         Отметки
       </th>
+      {showAccountantColumns ? (
+        <th
+          className={`${SHIPMENTS_TABLE_TH} normal-case shell-desktop:hidden`}
+          title="Реквизиты и юрлицо"
+        >
+          Ещё
+        </th>
+      ) : null}
     </tr>
   );
 }
@@ -271,7 +280,7 @@ export function ShipmentsOrdersTable({
         </div>
         <div
           id={mirrorScrollId}
-          className="orders-list-mirror-thead hidden w-full min-w-0 overflow-x-auto overflow-y-hidden border-t border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border)] [-webkit-overflow-scrolling:touch] shell-desktop:block print:hidden"
+          className="orders-list-mirror-thead hidden w-full min-w-0 overflow-x-auto overflow-y-hidden border-t border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border)] [-webkit-overflow-scrolling:touch] shell-laptop:block print:hidden"
         >
           <table className={SHIPMENTS_TABLE_CLASS} aria-hidden="true">
             <ShipmentsTableColGroup showAccountantColumns={showAccountantColumns} />
@@ -415,7 +424,7 @@ export function ShipmentsOrdersTable({
               return (
                 <Fragment key={o.id}>
                 <tr
-                  className={`hidden shell-desktop:table-row print:table-row ${rowClass}`}
+                  className={`hidden shell-laptop:table-row print:table-row ${rowClass}`}
                 >
                   <OrderListOrderChatCell
                     orderId={o.id}
@@ -523,7 +532,7 @@ export function ShipmentsOrdersTable({
                   </td>
                   {showAccountantColumns ? (
                     <>
-                      <td className="min-w-0 whitespace-pre-wrap px-1 py-1 align-top text-left text-[11px] leading-snug text-[var(--text-body)] sm:px-1.5 sm:py-1.5 print:px-1.5 print:text-[10px]">
+                      <td className="hidden min-w-0 whitespace-pre-wrap px-1 py-1 align-top text-left text-[11px] leading-snug text-[var(--text-body)] shell-desktop:table-cell sm:px-1.5 sm:py-1.5 print:px-1.5 print:text-[10px]">
                         {o.counterpartyRequisitesText?.trim() ? (
                           <span className="block hyphens-auto break-words">
                             {o.counterpartyRequisitesText.trim()}
@@ -532,7 +541,7 @@ export function ShipmentsOrdersTable({
                           <span className="text-[var(--text-muted)]">—</span>
                         )}
                       </td>
-                      <td className="min-w-0 whitespace-pre-wrap px-1 py-1 align-top text-left text-[11px] leading-snug text-[var(--text-body)] sm:px-1.5 sm:py-1.5 print:px-1.5 print:text-[10px]">
+                      <td className="hidden min-w-0 whitespace-pre-wrap px-1 py-1 align-top text-left text-[11px] leading-snug text-[var(--text-body)] shell-desktop:table-cell sm:px-1.5 sm:py-1.5 print:px-1.5 print:text-[10px]">
                         {o.legalEntity?.trim() ? (
                           <span className="block hyphens-auto break-words">
                             {o.legalEntity.trim()}
@@ -558,9 +567,27 @@ export function ShipmentsOrdersTable({
                       {renderTagsCell()}
                     </div>
                   </td>
+                  {showAccountantColumns ? (
+                    <td className="min-w-0 px-1 py-1 align-top shell-desktop:hidden sm:px-1.5 sm:py-1.5">
+                      <ListRowUnfold>
+                        <p>
+                          <span className="font-semibold text-[var(--text-body)]">
+                            Реквизиты:{" "}
+                          </span>
+                          {o.counterpartyRequisitesText?.trim() || "—"}
+                        </p>
+                        <p>
+                          <span className="font-semibold text-[var(--text-body)]">
+                            Юрлицо:{" "}
+                          </span>
+                          {o.legalEntity?.trim() || "—"}
+                        </p>
+                      </ListRowUnfold>
+                    </td>
+                  ) : null}
                 </tr>
                 <tr
-                  className="border-b border-[var(--card-border)] shell-desktop:hidden print:hidden"
+                  className="border-b border-[var(--card-border)] shell-laptop:hidden print:hidden"
                 >
                   <td colSpan={99} className="p-0">
                     <div className={["p-3", mobileCardAccent].filter(Boolean).join(" ")}>

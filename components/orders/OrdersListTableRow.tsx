@@ -11,6 +11,7 @@ import {
   type OrderListRowAccentKind,
 } from "@/lib/order-list-row-accent";
 import { orderPathById } from "@/lib/order-public-ref";
+import { SHELL_LAPTOP_MEDIA } from "@/lib/crm-layout-tiers";
 
 function targetInsideInteractive(target: EventTarget | null) {
   if (target == null || !(target instanceof Node)) return false;
@@ -96,8 +97,8 @@ export function OrdersListTableRow({
   const [isNarrow, setIsNarrow] = useState(false);
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const apply = () => setIsNarrow(mq.matches);
+    const mq = window.matchMedia(SHELL_LAPTOP_MEDIA);
+    const apply = () => setIsNarrow(!mq.matches);
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
@@ -113,10 +114,10 @@ export function OrdersListTableRow({
   };
 
   const desktopRowClass = isHarmony
-    ? "orders-harmony-data-row hidden cursor-pointer md:table-row print:table-row"
-    : className
-      ? `hidden md:table-row print:table-row ${className} cursor-pointer`
-      : "hidden cursor-pointer md:table-row print:table-row";
+    ? "orders-harmony-data-row hidden cursor-pointer shell-laptop:table-row print:table-row"
+      : className
+      ? `hidden shell-laptop:table-row print:table-row ${className} cursor-pointer`
+      : "hidden cursor-pointer shell-laptop:table-row print:table-row";
   const mobileCardAccent = orderListMobileCardAccentClass(rowAccent);
   const mobileCardClass = [
     "cursor-pointer p-3",
@@ -142,7 +143,7 @@ export function OrdersListTableRow({
           </td>
         ) : null}
       </tr>
-      <tr className="border-b border-[var(--card-border)] md:hidden print:hidden">
+      <tr className="border-b border-[var(--card-border)] shell-laptop:hidden print:hidden">
         <td colSpan={99} className="p-0">
           <div
             className={mobileCardClass}

@@ -87,6 +87,7 @@ export function OrderAccountingFileDropZone({
       const timer = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
       try {
         let uploaded = 0;
+        let lastUploadedId: string | undefined;
         for (let i = 0; i < arr.length; i++) {
           const file = arr[i]!;
           if (i > 0) await new Promise((r) => setTimeout(r, 70));
@@ -107,6 +108,7 @@ export function OrderAccountingFileDropZone({
           if (!j.id || typeof j.id !== "string") {
             throw new Error("Сервер не вернул id вложения");
           }
+          lastUploadedId = j.id;
           uploaded += 1;
 
           if (kind === "invoice") {
@@ -125,7 +127,11 @@ export function OrderAccountingFileDropZone({
                 ? "Платёжка сохранена."
                 : `Сохранено платёжек: ${uploaded}.`,
           );
-          await Promise.resolve(onUploaded?.({ id: j.id }));
+          await Promise.resolve(
+            lastUploadedId
+              ? onUploaded?.({ id: lastUploadedId })
+              : onUploaded?.(),
+          );
         }
       } catch (e) {
         const aborted =

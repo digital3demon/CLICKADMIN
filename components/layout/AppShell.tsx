@@ -97,7 +97,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
       {!titleAsMenu || mobileNavOpen ? (
         <button
           type="button"
-          className="fixed z-[80] flex h-11 w-11 items-center justify-center rounded-md border border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text-strong)] shadow-md shell-desktop:hidden"
+          className="fixed z-[80] flex h-11 w-11 items-center justify-center rounded-md border border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text-strong)] shadow-md shell-laptop:hidden"
           style={{
             top: "max(0.75rem, env(safe-area-inset-top, 0px))",
             left: "max(0.75rem, env(safe-area-inset-left, 0px))",
@@ -113,9 +113,9 @@ function AppShellChrome({ children }: { children: ReactNode }) {
 
       <main
         className={[
-          "relative z-0 ml-0 min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-clip bg-[var(--app-bg)] pt-[env(safe-area-inset-top,0px)] pe-[env(safe-area-inset-right,0px)] transition-[margin-left,width,padding,opacity] duration-200 ease-out shell-desktop:z-auto shell-desktop:ml-[var(--app-sidebar-w)] shell-desktop:w-[calc(100%-var(--app-sidebar-w))] shell-desktop:max-w-none shell-desktop:ps-0 shell-desktop:pe-0 shell-desktop:pt-0 custom-scrollbar",
+          "relative z-0 ml-0 min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-clip bg-[var(--app-bg)] pt-[env(safe-area-inset-top,0px)] pe-[env(safe-area-inset-right,0px)] transition-[margin-left,width,padding,opacity] duration-200 ease-out @container/crm-shell shell-laptop:z-auto shell-laptop:ml-[var(--app-sidebar-w)] shell-laptop:w-[calc(100%-var(--app-sidebar-w))] shell-laptop:max-w-none shell-laptop:ps-0 shell-laptop:pe-0 shell-laptop:pt-0 custom-scrollbar",
           mobileNavOpen
-            ? "max-[1399px]:pointer-events-none max-[1399px]:select-none max-[1399px]:opacity-40 [@media(min-width:1400px)_and_(max-height:559px)]:pointer-events-none [@media(min-width:1400px)_and_(max-height:559px)]:select-none [@media(min-width:1400px)_and_(max-height:559px)]:opacity-40"
+            ? "max-[1023px]:pointer-events-none max-[1023px]:select-none max-[1023px]:opacity-40 [@media(min-width:1024px)_and_(max-height:559px)]:pointer-events-none [@media(min-width:1024px)_and_(max-height:559px)]:select-none [@media(min-width:1024px)_and_(max-height:559px)]:opacity-40"
             : "",
         ].join(" ")}
         aria-hidden={mobileNavOpen ? true : undefined}
@@ -124,7 +124,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
       </main>
 
       <div
-        className={`fixed inset-0 z-[60] bg-black/50 transition-opacity duration-200 shell-desktop:hidden ${
+        className={`fixed inset-0 z-[60] bg-black/50 transition-opacity duration-200 shell-laptop:hidden ${
           mobileNavOpen
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0"
@@ -135,15 +135,15 @@ function AppShellChrome({ children }: { children: ReactNode }) {
 
       <aside
         id="app-primary-nav"
-        className={`fixed left-0 top-0 z-[70] flex h-[100dvh] min-w-0 flex-col overflow-x-hidden border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shadow-[4px_0_24px_rgba(0,0,0,0.12)] transition-[transform,width] duration-200 ease-out dark:shadow-[4px_0_28px_rgba(0,0,0,0.45)] shell-desktop:translate-x-0 shell-desktop:shadow-none ${
-          mobileNavOpen ? "translate-x-0" : "-translate-x-full shell-desktop:translate-x-0"
-        } w-[min(20rem,calc(100vw-2.5rem))] shell-desktop:w-[var(--app-sidebar-w)]`}
+        className={`fixed left-0 top-0 z-[70] flex h-[100dvh] min-w-0 flex-col overflow-x-hidden border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shadow-[4px_0_24px_rgba(0,0,0,0.12)] transition-[transform,width] duration-200 ease-out dark:shadow-[4px_0_28px_rgba(0,0,0,0.45)] shell-laptop:translate-x-0 shell-laptop:shadow-none ${
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full shell-laptop:translate-x-0"
+        } w-[min(20rem,calc(100vw-2.5rem))] shell-laptop:w-[var(--app-sidebar-w)]`}
         aria-label="Основное меню"
       >
         <Sidebar />
         <button
           type="button"
-          className="absolute top-1/2 z-[71] hidden h-8 w-5 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-sm transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] shell-desktop:flex"
+          className="absolute top-1/2 z-[71] hidden h-8 w-5 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-sm transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] shell-laptop:flex"
           style={{ left: "100%" }}
           aria-expanded={!collapsed}
           aria-controls="app-primary-nav"
@@ -170,9 +170,9 @@ type AppShellProps = {
 };
 
 /**
- * Десктоп (shell-desktop = ширина ≥1400px и высота ≥560px): колонка меню 1/7, контент 6/7.
- * Уже — кнопка на краю сворачивает в рельс. Уже окно (<1400px) или низкая высота —
- * выезжающее меню и «гамбургер», как на телефоне.
+ * Laptop+ (shell-laptop = ширина ≥1024px и высота ≥560px): колонка меню, контент рядом.
+ * На laptop меню по умолчанию рельс. Уже окно (<1024px) или низкая высота —
+ * выезжающее меню и «гамбургер».
  */
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();

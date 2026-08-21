@@ -145,12 +145,15 @@ export async function GET(request: Request) {
         },
       ],
     };
-    const recentRows = await ordersPrisma.order.findMany({
-      where: linkedOrdersWhere,
-      orderBy: { createdAt: "desc" },
-      take: 200,
-      select: LINKED_ORDER_SELECT,
-    });
+    const searchActive = searchQ.length >= 2;
+    const recentRows = searchActive
+      ? []
+      : await ordersPrisma.order.findMany({
+          where: linkedOrdersWhere,
+          orderBy: { createdAt: "desc" },
+          take: 200,
+          select: LINKED_ORDER_SELECT,
+        });
     const recentIds = new Set(recentRows.map((r) => r.id));
     const missingBoardIds = boardOrderIds.filter((id) => !recentIds.has(id));
     const boardExtraRows =

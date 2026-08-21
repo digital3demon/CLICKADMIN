@@ -149,9 +149,9 @@ export function FinanceOfficeOrdersTable({
     >
       <OrderListKaitenPoller orderIds={kaitenOrderIds} />
       <div className="relative">
-      <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible shell-desktop:overflow-x-visible [-webkit-overflow-scrolling:touch]">
-        <table className="finance-office-orders-table w-max min-w-full border-separate border-spacing-0 text-center text-sm">
-          <thead className="hidden shell-desktop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
+      <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible shell-laptop:overflow-x-visible [-webkit-overflow-scrolling:touch]">
+        <table className="finance-office-orders-table w-full min-w-0 border-separate border-spacing-0 text-center text-sm">
+          <thead className="hidden shell-laptop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <th className="w-[7.5rem] px-2 py-2 text-center normal-case max-xl:sticky max-xl:left-0 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">
                 <div className="flex flex-col items-center gap-1.5">
@@ -165,7 +165,7 @@ export function FinanceOfficeOrdersTable({
                   <span>Выбрать</span>
                 </div>
               </th>
-              <th className="w-10 px-1 py-2 text-center normal-case max-xl:hidden">Чат</th>
+              <th className="w-10 px-1 py-2 text-center normal-case">Чат</th>
               <th className="px-2 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
               <th className="px-2 py-2 text-center">Клиника</th>
               <th className="px-2 py-2 text-center">Врач</th>
@@ -182,10 +182,11 @@ export function FinanceOfficeOrdersTable({
               >
                 Запись
               </th>
-              <th className="w-[11rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Реквизиты</th>
-              <th className="w-[7rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Наше юрлицо</th>
+              <th className="hidden w-[11rem] px-1.5 py-2 text-center normal-case shell-desktop:table-cell">Реквизиты</th>
+              <th className="hidden w-[7rem] px-1.5 py-2 text-center normal-case shell-desktop:table-cell">Наше юрлицо</th>
               <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
               <th className="w-[15.5rem] px-1.5 py-2 text-center normal-case">Отметки</th>
+              <th className="w-[4.5rem] px-1 py-2 text-center normal-case shell-desktop:hidden">Ещё</th>
             </tr>
           </thead>
           <tbody>
@@ -206,7 +207,7 @@ export function FinanceOfficeOrdersTable({
         </table>
       </div>
       <div
-        className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-12 bg-gradient-to-l from-[var(--card-bg)] to-transparent shell-desktop:hidden"
+        className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-12 bg-gradient-to-l from-[var(--card-bg)] to-transparent shell-laptop:hidden"
         aria-hidden="true"
       />
       </div>

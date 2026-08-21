@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   kanbanCardDescriptionAvailableHeight,
+  kanbanCardDescriptionForceCollapseOnNarrow,
   kanbanCardDescriptionNeedsCollapse,
 } from "@/lib/kanban/kanban-card-desc-collapse";
 
@@ -17,6 +18,17 @@ describe("kanbanCardDescriptionNeedsCollapse", () => {
 
   it("не сворачивает при нулевой высоте (ещё нет вёрстки)", () => {
     expect(kanbanCardDescriptionNeedsCollapse(200, 0)).toBe(false);
+  });
+});
+
+describe("kanbanCardDescriptionForceCollapseOnNarrow", () => {
+  it("на телефоне сворачивает непустое описание", () => {
+    expect(kanbanCardDescriptionForceCollapseOnNarrow(true, true)).toBe(true);
+    expect(kanbanCardDescriptionForceCollapseOnNarrow(true, false)).toBe(false);
+  });
+
+  it("на десктопе не форсирует сворачивание", () => {
+    expect(kanbanCardDescriptionForceCollapseOnNarrow(false, true)).toBe(false);
   });
 });
 

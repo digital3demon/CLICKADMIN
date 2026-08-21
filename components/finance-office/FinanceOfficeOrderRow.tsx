@@ -26,6 +26,7 @@ import {
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import type { FinanceOfficeOrderTableRow } from "@/components/finance-office/FinanceOfficeOrdersTable";
+import { ListRowUnfold } from "@/components/layout/ListRowUnfold";
 
 function targetInsideInteractive(target: EventTarget | null) {
   if (target == null || !(target instanceof Node)) return false;
@@ -287,10 +288,10 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
       <td className="whitespace-nowrap px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
         {formatFinanceDateTime(o.appointmentDate ?? o.dueToAdminsAt)}
       </td>
-      <td className="w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
+      <td className="hidden w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
         {o.counterpartyRequisitesText || "—"}
       </td>
-      <td className="w-[7rem] max-w-[7rem] break-words px-1.5 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
+      <td className="hidden w-[7rem] max-w-[7rem] break-words px-1.5 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
         {o.legalEntity || "—"}
       </td>
       <td
@@ -311,6 +312,18 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           periodTo={d.periodTo}
           q={d.q}
         />
+      </td>
+      <td className="w-[4.5rem] px-1 py-2 align-top shell-desktop:hidden">
+        <ListRowUnfold>
+          <p>
+            <span className="font-semibold text-[var(--text-body)]">Реквизиты: </span>
+            {o.counterpartyRequisitesText?.trim() || "—"}
+          </p>
+          <p>
+            <span className="font-semibold text-[var(--text-body)]">Юрлицо: </span>
+            {o.legalEntity?.trim() || "—"}
+          </p>
+        </ListRowUnfold>
       </td>
     </>
   );
@@ -344,7 +357,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
 
   return (
     <Fragment>
-      <tr className={`hidden shell-desktop:table-row ${d.rowClass}`}>
+      <tr className={`hidden shell-laptop:table-row ${d.rowClass}`}>
         <td
           className={`w-[7.5rem] px-2 py-2 text-center max-xl:sticky max-xl:left-0 max-xl:z-20 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
         >
@@ -358,7 +371,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
         </td>
         <DesktopRestCells {...chrome} />
       </tr>
-      <tr className="border-b border-[var(--card-border)] shell-desktop:hidden print:hidden">
+      <tr className="border-b border-[var(--card-border)] shell-laptop:hidden print:hidden">
         <td colSpan={99} className="p-0">
           <div
             className={["cursor-pointer px-2.5 py-2", d.mobileCardAccent]
@@ -428,7 +441,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
               </div>
             </div>
 
-            <div className="truncate text-xs text-[var(--text-secondary)]">
+            <div className="break-words text-xs text-[var(--text-secondary)]">
               {clinicName}
             </div>
 
@@ -448,7 +461,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
             </div>
 
             {o.counterpartyRequisitesText?.trim() ? (
-              <div className="mb-1 truncate text-[11px] leading-snug text-[var(--text-muted)]">
+              <div className="mb-1 break-words text-[11px] leading-snug text-[var(--text-muted)]">
                 {o.counterpartyRequisitesText.trim()}
               </div>
             ) : null}

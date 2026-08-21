@@ -85,7 +85,9 @@ import {
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  KANBAN_CARD_MODAL_NARROW_MAX_PX,
   kanbanCardDescriptionAvailableHeight,
+  kanbanCardDescriptionForceCollapseOnNarrow,
   kanbanCardDescriptionNeedsCollapse,
 } from "@/lib/kanban/kanban-card-desc-collapse";
 import { createPortal } from "react-dom";
@@ -278,12 +280,12 @@ function KanbanCardPeopleGroup({
     <span
       className={
         layout === "stack"
-          ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
+          ? "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
           : "mt-1 inline-flex h-[14px] w-[14px] items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
       }
       aria-hidden
     >
-      <IconPlus className={layout === "stack" ? "h-3.5 w-3.5" : "h-[8px] w-[8px]"} />
+      <IconPlus className={layout === "stack" ? "h-5 w-5" : "h-[8px] w-[8px]"} />
     </span>
   );
   const avatars = userIds.map((uid) => (
@@ -292,7 +294,7 @@ function KanbanCardPeopleGroup({
         userId={uid}
         homeBoard={board}
         variant={variant}
-        size="listSm"
+        size={layout === "stack" ? "modal" : "listSm"}
         nameCaption
         titleSuffix=""
       />
@@ -305,16 +307,16 @@ function KanbanCardPeopleGroup({
         type="button"
         disabled={!canManage}
         title={canManage ? enableTitle : disableTitle}
-        className="flex w-full min-w-0 items-center gap-2 rounded-md px-0.5 py-1 text-left hover:bg-[var(--kaiten-modal-control)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex min-w-0 flex-1 flex-col items-start gap-1 rounded-md px-0.5 py-1 text-left hover:bg-[var(--kaiten-modal-control)] disabled:cursor-not-allowed disabled:opacity-50"
         onClick={onOpen}
       >
-        <span className="w-12 shrink-0 text-[0.58rem] font-medium uppercase leading-none tracking-wide text-[var(--kaiten-modal-muted)]">
+        <span className="text-[0.58rem] font-medium uppercase leading-none tracking-wide text-[var(--kaiten-modal-muted)]">
           {label}
         </span>
-        <div className="flex min-h-8 min-w-0 flex-1 items-start gap-1 overflow-x-auto">
+        <div className="flex min-h-10 min-w-0 w-full items-start gap-1 overflow-x-auto">
           {avatars}
+          {plus}
         </div>
-        {plus}
       </button>
     );
   }
@@ -481,6 +483,14 @@ export function KanbanCardModal({
     if (!overlay || !descDraft.trim() || !measure) {
       setDescCanCollapse(false);
       setDescExpanded(true);
+      return;
+    }
+    const narrow = window.matchMedia(
+      `(max-width: ${KANBAN_CARD_MODAL_NARROW_MAX_PX}px)`,
+    ).matches;
+    if (kanbanCardDescriptionForceCollapseOnNarrow(narrow, true)) {
+      setDescCanCollapse(true);
+      setDescExpanded(false);
       return;
     }
     const fullH = measure.scrollHeight;
@@ -1879,7 +1889,7 @@ export function KanbanCardModal({
               </button>
             </div>
           </div>
-          <div className="flex flex-col gap-0.5 border-b border-[var(--kaiten-modal-border)] px-2 py-1.5 sm:hidden">
+          <div className="flex items-start gap-2 border-b border-[var(--kaiten-modal-border)] px-2 py-1.5 sm:hidden">
             <KanbanCardPeopleGroup
               layout="stack"
               label="Отв."
@@ -1944,7 +1954,7 @@ export function KanbanCardModal({
                   </span>
                 </button>
                 {placementFieldsOpen ? (
-              <div className="mt-2 grid gap-3 sm:grid-cols-3">
+              <div className="mt-2 grid gap-3 crm-t2:grid-cols-3">
                 <div>
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                     {trackLaneFieldLabel ?? "Расположение"}
@@ -2219,7 +2229,7 @@ export function KanbanCardModal({
                     </button>
                   )}
                 </div>
-                <div className="grid min-h-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] sm:items-start">
+                <div className="grid min-h-0 gap-2 crm-t2:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] crm-t2:items-start">
                   <div className="relative min-w-0">
                     <div
                       ref={descMeasureRef}

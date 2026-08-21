@@ -180,8 +180,8 @@ function MobileCollapsibleSection({
   }, [defaultOpen]);
 
   return (
-    <details ref={detailsRef} className="group shell-desktop:contents">
-      <summary className="mb-2 flex cursor-pointer select-none list-none items-center justify-between rounded-lg bg-[var(--surface-subtle)] px-3 py-2.5 shell-desktop:hidden [&::-webkit-details-marker]:hidden">
+    <details ref={detailsRef} className="group shell-laptop:contents">
+      <summary className="mb-2 flex cursor-pointer select-none list-none items-center justify-between rounded-lg bg-[var(--surface-subtle)] px-3 py-2.5 shell-laptop:hidden [&::-webkit-details-marker]:hidden">
         <span className="text-sm font-medium text-[var(--text-strong)]">
           {title}
         </span>
@@ -3375,7 +3375,7 @@ export function OrderEditForm({
       <h3 className="shrink-0 text-sm font-semibold uppercase tracking-wide text-[var(--app-text)]">
         Протетика
       </h3>
-      <div className="grid min-h-0 w-full flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:divide-x lg:divide-[var(--card-border)]">
+      <div className="grid min-h-0 w-full flex-1 grid-cols-1 gap-3 crm-t2:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] crm-t2:items-stretch crm-t2:gap-0 crm-t2:divide-x crm-t2:divide-[var(--card-border)]">
         <div className="flex min-h-0 min-w-0 flex-col gap-3 lg:pr-4">
           <div className="rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] p-2.5">
             <label
@@ -3539,7 +3539,7 @@ export function OrderEditForm({
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
           >
           <div
-            className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6"
+            className="mt-2 grid grid-cols-1 gap-4 crm-t2:grid-cols-2 crm-t2:gap-6"
           >
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
@@ -3725,7 +3725,7 @@ export function OrderEditForm({
               </div>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-1 border-t border-[var(--card-border)] pt-4 lg:grid-cols-2 lg:gap-6">
+          <div className="mt-4 grid grid-cols-1 border-t border-[var(--card-border)] pt-4 crm-t2:grid-cols-2 crm-t2:gap-6">
             <div className="min-w-0 space-y-3">
               <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
                 Выставлено по счёту
@@ -3745,7 +3745,7 @@ export function OrderEditForm({
                   </button>
                 </div>
               ) : null}
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,11rem)] lg:items-start lg:gap-5">
+              <div className="grid grid-cols-1 gap-4 crm-t3:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,11rem)] crm-t3:items-start crm-t3:gap-5">
                 <div className="min-w-0">
                   <label
                     className={labelClass}
@@ -4067,7 +4067,7 @@ export function OrderEditForm({
         ) : null}
         {workSentNarjadActions}
         {!previewMode ? (
-          <div className="hidden shrink-0 shell-desktop:block">
+          <div className="hidden shrink-0 shell-laptop:block">
             {renderSaveButton()}
           </div>
         ) : null}
@@ -4183,18 +4183,18 @@ export function OrderEditForm({
           ) : null}
           {!isAccountant && !orderLayoutCustomize ? (
             <div
-              className={`grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-start lg:gap-3 ${isHarmony ? "order-edit-harmony-grid lg:gap-4" : ""}`}
+              className={`grid grid-cols-1 gap-3 crm-t2:grid-cols-12 crm-t2:items-start crm-t2:gap-3 ${isHarmony ? "order-edit-harmony-grid crm-t2:gap-4" : ""}`}
             >
-              <div className="min-w-0 space-y-3 lg:col-span-6">
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+              <div className="min-w-0 space-y-3 crm-t2:col-span-6">
+                <div className="grid grid-cols-1 gap-3 crm-t3:grid-cols-2 crm-t3:items-start">
                   {oeColCustomer}
                   {oeColDeadlines}
                 </div>
                 {oeMidConstructions}
                 {oeMidCorrections}
               </div>
-              <div className="min-w-0 space-y-3 lg:col-span-6">
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+              <div className="min-w-0 space-y-3 crm-t2:col-span-6">
+                <div className="grid grid-cols-1 gap-3 crm-t3:grid-cols-2 crm-t3:items-start">
                   {oeColFiles}
                   {oeColClientNotes}
                 </div>
@@ -4229,20 +4229,20 @@ export function OrderEditForm({
         </>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4 lg:gap-3 lg:items-start">
+          <div className="grid grid-cols-1 gap-3 crm-t2:grid-cols-2 crm-t3:grid-cols-4 crm-t3:items-start crm-t3:gap-3">
             {oeColCustomer}
             {oeColDeadlines}
             {oeColFiles}
             {oeColClientNotes}
           </div>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:gap-3 lg:items-stretch">
-            <div className="min-w-0 lg:col-span-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+          <div className="grid grid-cols-1 gap-3 crm-t2:grid-cols-12 crm-t2:items-stretch crm-t2:gap-3">
+            <div className="min-w-0 crm-t2:col-span-6 crm-t2:flex crm-t2:h-full crm-t2:min-h-0 crm-t2:flex-col">
               {oeMidConstructions}
             </div>
-            <div className="min-w-0 lg:col-span-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+            <div className="min-w-0 crm-t2:col-span-6 crm-t2:flex crm-t2:h-full crm-t2:min-h-0 crm-t2:flex-col">
               {oeMidProsthetics}
             </div>
-            <div className="min-w-0 lg:col-span-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+            <div className="min-w-0 crm-t2:col-span-6 crm-t2:flex crm-t2:h-full crm-t2:min-h-0 crm-t2:flex-col">
               {oeMidCorrections}
             </div>
           </div>
@@ -4250,11 +4250,11 @@ export function OrderEditForm({
       )}
       </fieldset>
     </div>
-    <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shell-desktop:hidden">
+    <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shell-laptop:hidden">
       <div className="flex gap-2">{renderSaveButton(true)}</div>
     </div>
     <div
-      className="h-[calc(3.25rem+env(safe-area-inset-bottom))] shell-desktop:hidden"
+      className="h-[calc(3.25rem+env(safe-area-inset-bottom))] shell-laptop:hidden"
       aria-hidden="true"
     />
     {shipModalOpen ? (

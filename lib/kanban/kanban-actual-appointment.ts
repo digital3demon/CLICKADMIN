@@ -79,6 +79,14 @@ export function kanbanCardMatchesActualAppointment(
   );
 }
 
+/** Текстовый поиск важнее «Актуального»: иначе карточка есть, а «Найдено 0», пока нет слота записи. */
+export function kanbanShouldApplyActualAppointmentView(
+  actualOn: boolean,
+  search: string,
+): boolean {
+  return actualOn && (search || "").trim().length < 2;
+}
+
 /** Копия доски: в колонках только «актуальные» карточки, внутри колонки — сортировка как в заказах. */
 export function applyKanbanActualAppointmentView(
   board: KanbanBoard,

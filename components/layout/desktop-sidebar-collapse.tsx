@@ -19,7 +19,7 @@ import {
 } from "@/lib/app-sidebar-collapse";
 
 type DesktopSidebarCollapseValue = {
-  /** Свёрнуто в узкий рельс (только на shell-desktop). */
+  /** Свёрнуто в узкий рельс (только на shell-laptop / shell-desktop). */
   collapsed: boolean;
   toggleCollapsed: () => void;
   setCollapsed: (next: boolean) => void;

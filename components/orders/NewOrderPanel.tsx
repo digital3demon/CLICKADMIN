@@ -25,10 +25,11 @@ const easeSnappy = [0.2, 0.85, 0.25, 1] as const;
 
 /** Свернутые кнопки: на телефоне на всю ширину контента, на md — справа от сайдбара. */
 const collapsedStripClass =
-  "new-order-collapsed-strip left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] shell-desktop:left-[calc(100%/7+0.75rem)] shell-desktop:right-3";
+  "new-order-collapsed-strip left-[max(0.75rem,env(safe-area-inset-left,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] shell-laptop:left-[calc(var(--app-sidebar-w)+0.75rem)] shell-laptop:right-3";
 
-/** Обычная модалка: на десктопе не перекрывает левое меню CRM. */
-const mainStageClass = "new-order-stage-shell left-0 shell-desktop:left-[calc(100%/7)]";
+/** Обычная модалка: на laptop+ не перекрывает левое меню CRM (ширина из --app-sidebar-w). */
+const mainStageClass =
+  "new-order-stage-shell left-0 shell-laptop:left-[var(--app-sidebar-w)]";
 /** Заказ из почты занимает весь экран, чтобы справа поместить широкую колонку писем. */
 const mailOrderStageClass = "left-0";
 const mailOrderViewportMargin = "1rem";

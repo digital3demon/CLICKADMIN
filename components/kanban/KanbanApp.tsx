@@ -87,6 +87,7 @@ import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 import { canUseKanbanActualAppointmentFilter } from "@/lib/auth/permissions";
 import {
   applyKanbanActualAppointmentView,
+  kanbanShouldApplyActualAppointmentView,
   linkedOrdersToAppointmentMap,
   type KanbanLinkedAppointmentSnap,
 } from "@/lib/kanban/kanban-actual-appointment";
@@ -482,6 +483,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const standalonePushInFlightRef = useRef(false);
   const mirrorSyncInFlightRef = useRef(false);
   const mirrorSyncQueuedRef = useRef(false);
+  const searchHitsSyncInFlightRef = useRef(false);
+  const searchHitsSyncQueuedQRef = useRef<string | null>(null);
   const titlesSyncOffsetRef = useRef(0);
   const linkedOrdersIdsOffsetRef = useRef(0);
   const titlesSyncBackoffRef = useRef(0);
@@ -602,9 +605,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
        * Перед merge подтягиваем пачку позиций с активной дорожки.
        */
       let inboundStageDue: Record<string, string | null> = {};
+      const searchQ = (appStateRef.current?.search || "").trim();
+      const searchActive = searchQ.length >= 2;
       const curForTitles = appStateRef.current;
       const titlesMinGapMs = Math.max(8_000, kaitenClientPollIntervalMs() - 2_000);
       if (
+        !searchActive &&
         curForTitles &&
         !isKanbanCardDragInProgress() &&
         Date.now() >= titlesSyncBackoffRef.current &&
@@ -654,12 +660,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         }
       }
 
-      const boardIds = appStateRef.current
-        ? takeLinkedOrderIdsBatch(
-            collectAllLinkedOrderIdsOnBoards(appStateRef.current),
-            linkedOrdersIdsOffsetRef,
-          )
-        : [];
+      const boardIds = searchActive
+        ? []
+        : appStateRef.current
+          ? takeLinkedOrderIdsBatch(
+              collectAllLinkedOrderIdsOnBoards(appStateRef.current),
+              linkedOrdersIdsOffsetRef,
+            )
+          : [];
       const linkedOrdersUrl = linkedOrdersApiUrl(
         boardIds,
         appStateRef.current?.search || "",
@@ -715,6 +723,68 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       }
     }
   }, [isDemo, applyOptimisticKaitenMovesToLinkedRows]);
+
+  /**
+   * Поиск не ждёт kaiten-titles-sync и не шлёт ids (goneIds иначе может снять карточку).
+   * Свой in-flight: не стоит в очереди за полным зеркалом.
+   */
+  const syncKanbanSearchHitsFromApi = useCallback(async () => {
+    const q = (appStateRef.current?.search || "").trim();
+    if (q.length < 2) return;
+    if (searchHitsSyncInFlightRef.current) {
+      searchHitsSyncQueuedQRef.current = q;
+      return;
+    }
+    searchHitsSyncInFlightRef.current = true;
+    try {
+      const r = await fetch(linkedOrdersApiUrl([], q), { credentials: "include" });
+      if (!r.ok) return;
+      const j = (await r.json()) as { orders?: KaitenLinkedOrderForKanban[] };
+      const rows = applyOptimisticKaitenBlocksToLinkedRows(
+        applyOptimisticKaitenMovesToLinkedRows(j.orders ?? []),
+      );
+      const incomingAppt = linkedOrdersToAppointmentMap(rows);
+      setLinkedAppointmentByOrderId((prev) => {
+        const next = new Map(prev);
+        for (const [id, snap] of incomingAppt) next.set(id, snap);
+        return next;
+      });
+      setAppState((prev) => {
+        if (!prev) return prev;
+        if (isDemo) {
+          const base = normalizeDemoKanbanAppState(prev);
+          return normalizeDemoKanbanAppState(
+            mergeKaitenLinkedOrdersIntoAppState(base, rows, {
+              demo: true,
+              mode: "upsertOnly",
+            }),
+          );
+        }
+        return mergeKaitenLinkedOrdersIntoAppState(prev, rows, {
+          demo: false,
+          mode: "upsertOnly",
+        });
+      });
+    } catch {
+      /* offline */
+    } finally {
+      searchHitsSyncInFlightRef.current = false;
+      const queued = searchHitsSyncQueuedQRef.current;
+      searchHitsSyncQueuedQRef.current = null;
+      if (
+        queued &&
+        (appStateRef.current?.search || "").trim().length >= 2
+      ) {
+        window.setTimeout(() => {
+          void syncKanbanSearchHitsFromApi();
+        }, 40);
+      }
+    }
+  }, [
+    isDemo,
+    applyOptimisticKaitenBlocksToLinkedRows,
+    applyOptimisticKaitenMovesToLinkedRows,
+  ]);
 
   useEffect(() => {
     if (!appState || isDemo || !kanbanStateReady) return;
@@ -1028,10 +1098,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const q = (appState?.search || "").trim();
     if (q.length < 2) return;
     const t = window.setTimeout(() => {
-      void syncKanbanMirrorFromApi();
-    }, 280);
+      void syncKanbanSearchHitsFromApi();
+    }, 180);
     return () => window.clearTimeout(t);
-  }, [appState?.search, kanbanStateReady, syncKanbanMirrorFromApi]);
+  }, [appState?.search, kanbanStateReady, syncKanbanSearchHitsFromApi]);
 
   useEffect(() => {
     if (!kanbanStateReady) return;
@@ -1170,12 +1240,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     actualFilterAvailable && actualAppointmentBoardId === board?.id;
   const viewBoard = useMemo(() => {
     if (!displayBoard) return null;
-    if (!actualOn) return displayBoard;
+    if (
+      !kanbanShouldApplyActualAppointmentView(actualOn, appState?.search ?? "")
+    ) {
+      return displayBoard;
+    }
     return applyKanbanActualAppointmentView(
       displayBoard,
       linkedAppointmentByOrderId,
     );
-  }, [displayBoard, actualOn, linkedAppointmentByOrderId]);
+  }, [displayBoard, actualOn, linkedAppointmentByOrderId, appState?.search]);
 
   const resolveCardHomeBoard = useCallback(
     (c: KanbanCard) => {
@@ -2651,6 +2725,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               patchApp={patchApp}
               showToast={showToast}
             />
+            <details className="relative shell-laptop:contents">
+              <summary className="inline-flex h-9 cursor-pointer list-none items-center justify-center rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 text-[0.68rem] font-semibold text-[var(--kanban-text)] shadow-sm [&::-webkit-details-marker]:hidden shell-laptop:hidden">
+                Ещё
+              </summary>
+              <div className="absolute left-0 top-full z-30 mt-1 flex max-w-[min(100vw-1rem,22rem)] flex-col gap-1.5 rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] p-2 shadow-lg shell-laptop:static shell-laptop:mt-0 shell-laptop:max-w-none shell-laptop:flex-row shell-laptop:flex-wrap shell-laptop:items-center shell-laptop:border-0 shell-laptop:bg-transparent shell-laptop:p-0 shell-laptop:shadow-none shell-laptop:contents">
             {actualFilterAvailable ? (
               <button
                 type="button"
@@ -2798,6 +2877,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                     : "Перетаскивание карточек отключено при поиске/фильтрах"}
               </span>
             )}
+              </div>
+            </details>
           </div>
 
           {stopOpen ? (
