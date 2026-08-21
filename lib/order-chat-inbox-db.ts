@@ -6,11 +6,205 @@ import {
 } from "@/lib/kanban-admin-mention";
 import { parseMentionUserIdsFromText } from "@/lib/kanban-comment-mentions";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
-import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
+import { orderChatCorrectionTwinTexts } from "@/lib/order-chat-correction-db";
+import {
+  isOrderProstheticsRequestTrigger,
+  normalizeProstheticsTwinKey,
+} from "@/lib/order-prosthetics-request";
 import { trimOrderChatAuthorLabel } from "@/lib/order-chat-trigger-author";
 
 type ChatInboxType = "CORRECTION" | "PROSTHETICS" | "LAB_MENTION" | "USER_MENTION";
 type ChatInboxSyncState = "PENDING_EXTERNAL" | "SYNCED_EXTERNAL" | "LOCAL_ONLY" | "FAILED_EXTERNAL";
+
+type ClosedChatTwinFields = {
+  resolvedAt: Date | null;
+  resolvedByUserId: string | null;
+  rejectedAt: Date | null;
+  rejectedByUserId: string | null;
+  orderedAt?: Date | null;
+  orderedByUserId?: string | null;
+  arrivedAt?: Date | null;
+  arrivedByUserId?: string | null;
+  checkedAt?: Date | null;
+  checkedByUserId?: string | null;
+  completedAt?: Date | null;
+  completedByUserId?: string | null;
+};
+
+function isClosedChatTwin(row: {
+  resolvedAt: Date | null;
+  rejectedAt: Date | null;
+  completedAt?: Date | null;
+}): boolean {
+  return (
+    row.resolvedAt != null ||
+    row.rejectedAt != null ||
+    row.completedAt != null
+  );
+}
+
+function closedTwinWriteData(row: ClosedChatTwinFields) {
+  return {
+    resolvedAt: row.resolvedAt,
+    resolvedByUserId: row.resolvedByUserId,
+    rejectedAt: row.rejectedAt,
+    rejectedByUserId: row.rejectedByUserId,
+    ...(row.orderedAt !== undefined ? { orderedAt: row.orderedAt } : {}),
+    ...(row.orderedByUserId !== undefined
+      ? { orderedByUserId: row.orderedByUserId }
+      : {}),
+    ...(row.arrivedAt !== undefined ? { arrivedAt: row.arrivedAt } : {}),
+    ...(row.arrivedByUserId !== undefined
+      ? { arrivedByUserId: row.arrivedByUserId }
+      : {}),
+    ...(row.checkedAt !== undefined ? { checkedAt: row.checkedAt } : {}),
+    ...(row.checkedByUserId !== undefined
+      ? { checkedByUserId: row.checkedByUserId }
+      : {}),
+    ...(row.completedAt !== undefined ? { completedAt: row.completedAt } : {}),
+    ...(row.completedByUserId !== undefined
+      ? { completedByUserId: row.completedByUserId }
+      : {}),
+  };
+}
+
+async function findClosedLegacyChatTwin(
+  db: PrismaClient,
+  orderId: string,
+  type: "CORRECTION" | "PROSTHETICS",
+  text: string,
+  kaitenCommentId: number,
+): Promise<ClosedChatTwinFields | null> {
+  if (type === "CORRECTION") {
+    const variants = orderChatCorrectionTwinTexts(text);
+    const byKid = await db.orderChatCorrection.findFirst({
+      where: {
+        orderId,
+        kaitenCommentId,
+        OR: [{ resolvedAt: { not: null } }, { rejectedAt: { not: null } }],
+      },
+      select: {
+        resolvedAt: true,
+        resolvedByUserId: true,
+        rejectedAt: true,
+        rejectedByUserId: true,
+      },
+    });
+    if (byKid) return byKid;
+    return db.orderChatCorrection.findFirst({
+      where: {
+        orderId,
+        text: { in: variants },
+        kaitenCommentId: null,
+        OR: [{ resolvedAt: { not: null } }, { rejectedAt: { not: null } }],
+      },
+      orderBy: { createdAt: "asc" },
+      select: {
+        resolvedAt: true,
+        resolvedByUserId: true,
+        rejectedAt: true,
+        rejectedByUserId: true,
+      },
+    });
+  }
+
+  const key = normalizeProstheticsTwinKey(text);
+  const closedWhere = {
+    orderId,
+    OR: [
+      { resolvedAt: { not: null } },
+      { rejectedAt: { not: null } },
+      { completedAt: { not: null } },
+    ],
+  };
+  const byKid = await db.orderProstheticsRequest.findFirst({
+    where: { ...closedWhere, kaitenCommentId },
+    select: {
+      resolvedAt: true,
+      resolvedByUserId: true,
+      rejectedAt: true,
+      rejectedByUserId: true,
+      orderedAt: true,
+      orderedByUserId: true,
+      arrivedAt: true,
+      arrivedByUserId: true,
+      checkedAt: true,
+      checkedByUserId: true,
+      completedAt: true,
+      completedByUserId: true,
+    },
+  });
+  if (byKid) return byKid;
+  if (!key) return null;
+  const rows = await db.orderProstheticsRequest.findMany({
+    where: { ...closedWhere, kaitenCommentId: null },
+    orderBy: { createdAt: "asc" },
+    take: 80,
+    select: {
+      text: true,
+      resolvedAt: true,
+      resolvedByUserId: true,
+      rejectedAt: true,
+      rejectedByUserId: true,
+      orderedAt: true,
+      orderedByUserId: true,
+      arrivedAt: true,
+      arrivedByUserId: true,
+      checkedAt: true,
+      checkedByUserId: true,
+      completedAt: true,
+      completedByUserId: true,
+    },
+  });
+  return (
+    rows.find((r) => normalizeProstheticsTwinKey(r.text) === key) ?? null
+  );
+}
+
+async function findClosedInboxTextTwin(
+  db: PrismaClient,
+  orderId: string,
+  type: "CORRECTION" | "PROSTHETICS",
+  text: string,
+): Promise<{ id: string } & ClosedChatTwinFields | null> {
+  const rows = (await (db as any).orderChatInboxItem.findMany({
+    where: {
+      orderId,
+      type,
+      kaitenCommentId: null,
+      OR: [
+        { resolvedAt: { not: null } },
+        { rejectedAt: { not: null } },
+        { completedAt: { not: null } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+    take: 80,
+    select: {
+      id: true,
+      text: true,
+      resolvedAt: true,
+      resolvedByUserId: true,
+      rejectedAt: true,
+      rejectedByUserId: true,
+      orderedAt: true,
+      orderedByUserId: true,
+      arrivedAt: true,
+      arrivedByUserId: true,
+      checkedAt: true,
+      checkedByUserId: true,
+      completedAt: true,
+      completedByUserId: true,
+    },
+  })) as Array<{ id: string; text: string } & ClosedChatTwinFields>;
+  if (type === "CORRECTION") {
+    const variants = new Set(orderChatCorrectionTwinTexts(text));
+    return rows.find((r) => variants.has(r.text.trim())) ?? null;
+  }
+  const key = normalizeProstheticsTwinKey(text);
+  if (!key) return null;
+  return rows.find((r) => normalizeProstheticsTwinKey(r.text) === key) ?? null;
+}
 
 function detectChatInboxTypes(
   text: string,
@@ -418,6 +612,86 @@ export async function syncOrderChatInboxFromKaitenComments(
         if (bound.count > 0) {
           changed = true;
           continue;
+        }
+      }
+
+      if (type === "CORRECTION" || type === "PROSTHETICS") {
+        const existingByKid = (await (db as any).orderChatInboxItem.findFirst({
+          where: { orderId, type, kaitenCommentId },
+          select: {
+            id: true,
+            resolvedAt: true,
+            rejectedAt: true,
+            completedAt: true,
+          },
+        })) as {
+          id: string;
+          resolvedAt: Date | null;
+          rejectedAt: Date | null;
+          completedAt: Date | null;
+        } | null;
+        const closedLegacy = await findClosedLegacyChatTwin(
+          db,
+          orderId,
+          type,
+          c.text,
+          kaitenCommentId,
+        );
+        if (existingByKid && !isClosedChatTwin(existingByKid) && closedLegacy) {
+          await (db as any).orderChatInboxItem.update({
+            where: { id: existingByKid.id },
+            data: {
+              ...closedTwinWriteData(closedLegacy),
+              text: c.text,
+              authorLabel,
+              crmDraftId,
+              syncState: "SYNCED_EXTERNAL",
+              ...(type === "PROSTHETICS" ? { source: "DEMO_KANBAN" } : {}),
+            },
+          });
+          changed = true;
+          continue;
+        }
+        if (!existingByKid) {
+          const closedInbox = await findClosedInboxTextTwin(
+            db,
+            orderId,
+            type,
+            c.text,
+          );
+          if (closedInbox) {
+            await (db as any).orderChatInboxItem.update({
+              where: { id: closedInbox.id },
+              data: {
+                kaitenCommentId,
+                text: c.text,
+                authorLabel,
+                crmDraftId,
+                syncState: "SYNCED_EXTERNAL",
+                ...(type === "PROSTHETICS" ? { source: "DEMO_KANBAN" } : {}),
+              },
+            });
+            changed = true;
+            continue;
+          }
+          if (closedLegacy) {
+            await (db as any).orderChatInboxItem.create({
+              data: {
+                tenantId,
+                orderId,
+                type,
+                source: rowSource,
+                text: c.text,
+                authorLabel,
+                kaitenCommentId,
+                crmDraftId,
+                syncState: "SYNCED_EXTERNAL",
+                ...closedTwinWriteData(closedLegacy),
+              },
+            });
+            changed = true;
+            continue;
+          }
         }
       }
 

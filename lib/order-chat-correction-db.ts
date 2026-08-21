@@ -20,6 +20,36 @@ export function kaitenApiCommentNumericId(
   return kaitenJsonIntId(j.id);
 }
 
+/** Варианты текста для близнеца !!! (с префиксом и без). Кириллица — обычные символы, не \\b. */
+export function orderChatCorrectionTwinTexts(raw: string): string[] {
+  const trimmed = String(raw || "").trim();
+  const stripped =
+    stripOrderChatCorrectionPrefix(trimmed)?.trim() ||
+    trimmed.replace(/^\s*!!!\s*/u, "").trim();
+  return [...new Set([trimmed, stripped, stripped ? `!!! ${stripped}` : ""].filter(Boolean))];
+}
+
+async function findClosedCorrectionTextTwin(
+  db: PrismaClient,
+  orderId: string,
+  text: string,
+  opts?: { excludeId?: string },
+): Promise<{ id: string } | null> {
+  const variants = orderChatCorrectionTwinTexts(text);
+  if (!variants.length) return null;
+  return db.orderChatCorrection.findFirst({
+    where: {
+      orderId,
+      text: { in: variants },
+      kaitenCommentId: null,
+      OR: [{ resolvedAt: { not: null } }, { rejectedAt: { not: null } }],
+      ...(opts?.excludeId ? { id: { not: opts.excludeId } } : {}),
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+}
+
 /**
  * Пишет корректировку «!!!».
  * KAITEN + kaitenCommentId: сначала привязывает pending DEMO_KANBAN-близнеца
@@ -43,9 +73,28 @@ export async function createOrderChatCorrectionIfNeeded(
       where: {
         orderId_kaitenCommentId: { orderId, kaitenCommentId: kid },
       },
-      select: { id: true },
+      select: { id: true, resolvedAt: true, rejectedAt: true },
     });
     if (existingByKid) {
+      const pendingGhost =
+        existingByKid.resolvedAt == null && existingByKid.rejectedAt == null;
+      if (pendingGhost) {
+        const closedTwin = await findClosedCorrectionTextTwin(db, orderId, text, {
+          excludeId: existingByKid.id,
+        });
+        if (closedTwin) {
+          await db.orderChatCorrection.delete({ where: { id: existingByKid.id } });
+          await db.orderChatCorrection.update({
+            where: { id: closedTwin.id },
+            data: {
+              kaitenCommentId: kid,
+              source: "KAITEN",
+              ...(authorLabel ? { authorLabel } : {}),
+            },
+          });
+          return;
+        }
+      }
       if (authorLabel) {
         await db.orderChatCorrection.update({
           where: { id: existingByKid.id },
@@ -88,6 +137,19 @@ export async function createOrderChatCorrectionIfNeeded(
       return;
     }
 
+    const closedTwin = await findClosedCorrectionTextTwin(db, orderId, text);
+    if (closedTwin) {
+      await db.orderChatCorrection.update({
+        where: { id: closedTwin.id },
+        data: {
+          kaitenCommentId: kid,
+          source: "KAITEN",
+          ...(authorLabel ? { authorLabel } : {}),
+        },
+      });
+      return;
+    }
+
     await db.orderChatCorrection.create({
       data: {
         orderId,
@@ -99,6 +161,9 @@ export async function createOrderChatCorrectionIfNeeded(
     });
     return;
   }
+
+  const closedSame = await findClosedCorrectionTextTwin(db, orderId, text);
+  if (closedSame) return;
 
   await db.orderChatCorrection.create({
     data: {

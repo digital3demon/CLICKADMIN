@@ -351,15 +351,24 @@ function KanbanCardModalTabs({
   canUsePayrollDone: boolean;
   showCardTab: boolean;
 }) {
+  const stretch = showCardTab;
   const tabClass = (active: boolean) =>
-    `-mb-px shrink-0 border-b-2 pb-2.5 pt-2.5 text-[0.7rem] font-semibold uppercase tracking-wide sm:text-[0.75rem] ${
+    `-mb-px border-b-2 text-center font-semibold uppercase tracking-wide ${
+      stretch
+        ? "min-w-0 flex-1 px-0.5 pb-2 pt-2 text-[0.58rem] leading-tight"
+        : "shrink-0 pb-2.5 pt-2.5 text-[0.7rem] sm:text-[0.75rem]"
+    } ${
       active
         ? "border-[var(--kaiten-accent)] text-[var(--kaiten-modal-text)]"
         : "border-transparent text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
     }`;
   return (
     <div
-      className="flex w-full flex-nowrap gap-3 overflow-x-auto border-b border-[var(--kaiten-modal-border)] px-3 sm:gap-4"
+      className={`flex w-full border-b border-[var(--kaiten-modal-border)] ${
+        stretch
+          ? "items-stretch gap-0 px-1"
+          : "flex-nowrap gap-3 overflow-x-auto px-3 sm:gap-4"
+      }`}
       role="tablist"
       aria-label="Панель карточки"
     >
@@ -402,6 +411,65 @@ function KanbanCardModalTabs({
         onClick={() => setRightTab("act")}
       >
         Активность
+      </button>
+    </div>
+  );
+}
+
+function KanbanDueUrgentControls({
+  compact,
+  stageDue,
+  canEditDueDate,
+  urgent,
+  onDueChange,
+  onToggleUrgent,
+  inputClassName,
+}: {
+  compact?: boolean;
+  stageDue: string;
+  canEditDueDate: boolean;
+  urgent: boolean;
+  onDueChange: (value: string) => void;
+  onToggleUrgent: () => void;
+  inputClassName: string;
+}) {
+  return (
+    <div className={`flex items-center ${compact ? "min-w-0 gap-1" : "flex-wrap gap-2"}`}>
+      <input
+        type="date"
+        className={
+          compact
+            ? "h-6 w-auto max-w-[7.25rem] shrink-0 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1 py-0 text-[0.68rem] leading-none text-[var(--kaiten-modal-text)] [field-sizing:content] [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:h-3.5 [&::-webkit-calendar-picker-indicator]:w-3.5"
+            : `${inputClassName} max-w-[12rem]`
+        }
+        disabled={!canEditDueDate}
+        value={stageDue}
+        title="Срок карточки канбана (Kaiten). Не лабораторный срок и не дата записи."
+        onChange={(e) => onDueChange(e.target.value)}
+      />
+      <button
+        type="button"
+        className={
+          compact
+            ? `inline-flex h-6 shrink-0 items-center rounded-md border px-1.5 text-[0.58rem] font-bold uppercase leading-none tracking-wide ${
+                urgent
+                  ? "border-orange-600/80 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
+                  : "border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)]"
+              }`
+            : `rounded-md border px-3 py-1.5 text-[0.7rem] font-bold uppercase tracking-wide transition-colors ${
+                urgent
+                  ? "border-orange-600/80 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
+                  : "border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:border-orange-400/50 hover:text-orange-700 dark:hover:text-orange-300"
+              }`
+        }
+        title={
+          urgent
+            ? "Снять метку «Срочно» для следующего отдела (только канбан)"
+            : "Срочно для следующего отдела (только канбан, наряд не меняется)"
+        }
+        onClick={onToggleUrgent}
+      >
+        Срочно
       </button>
     </div>
   );
@@ -1455,6 +1523,60 @@ export function KanbanCardModal({
     }
   };
 
+  const persistStageDue = (v: string) => {
+    onApply((b) => {
+      const fc = findCard(b, cardId);
+      if (!fc) return;
+      setKanbanStageDue(fc.card, v);
+      pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
+    });
+    const oid = card.linkedOrderId?.trim() || "";
+    if (oid && card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)) {
+      rememberOptimisticKanbanStageDue(oid, v);
+      void patchOrderKaitenCard(oid, { stageDueDate: v || null }).then((r) => {
+        if (!r.ok) {
+          forgetOptimisticKanbanStageDue(oid);
+          toast(r.error, true);
+        }
+      });
+    }
+    if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
+      const titleLine = (card.title || "").trim() || "Без названия";
+      const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
+      const duePart = v ? `новый срок ${escapeTelegramHtml(v)}` : "срок сброшен";
+      const { cardWord, orderWord } = oid
+        ? cardOrderWordLinks(oid, cardId, board.id)
+        : { cardWord: "", orderWord: "" };
+      postKanbanCrmTelegramNotify({
+        kaitenCardId: card.kaitenCardId,
+        event: "tg_due_changed",
+        parseMode: "HTML",
+        lines: [`Изменён срок в ${linkHtml}: ${duePart}`],
+        ...(oid
+          ? {
+              linesAdmin: [`Изменён срок в ${cardWord} и ${orderWord}: ${duePart}`],
+            }
+          : {}),
+      });
+    }
+  };
+
+  const toggleUrgent = () => {
+    const next = !card.urgent;
+    onApply((b) => {
+      const fc = findCard(b, cardId);
+      if (!fc) return;
+      fc.card.urgent = next;
+      pushActivity(
+        fc.card,
+        next ? "Отмечена как срочная" : "Снята метка «Срочно»",
+        b.users[0]?.id,
+        b,
+        act,
+      );
+    });
+  };
+
   return (
     <div
       ref={overlayRef}
@@ -1633,7 +1755,7 @@ export function KanbanCardModal({
         onMouseDown={(e) => e.stopPropagation()}
       >
         {blocked && (
-          <div className="flex shrink-0 items-stretch gap-2 rounded-t-[10px] border border-b-0 border-red-900/50 bg-gradient-to-b from-[#dc2626] to-[#b91c1c] px-3 py-2.5 text-white shadow-md max-sm:rounded-none dark:from-[#991b1b] dark:to-[#7f1d1d]">
+          <div className="flex shrink-0 items-stretch gap-2 rounded-t-[10px] border border-b-0 border-red-900/50 bg-gradient-to-b from-[#dc2626] to-[#b91c1c] px-3 py-2.5 text-white shadow-md max-sm:rounded-none max-sm:ps-[var(--app-mobile-menu-inset,3.5rem)] dark:from-[#991b1b] dark:to-[#7f1d1d]">
             <IconBrick className="h-5 w-5 shrink-0 text-white" />
             <div className="min-w-0 flex-1">
               <div className="text-[0.65rem] font-bold uppercase tracking-wide opacity-90">
@@ -1717,7 +1839,7 @@ export function KanbanCardModal({
           }`}
           style={{ backgroundColor: "var(--kaiten-modal-bg)" }}
         >
-          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--kaiten-modal-border)] px-4 py-5 sm:gap-4 sm:px-6 sm:py-6">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--kaiten-modal-border)] px-4 py-5 max-sm:ps-[var(--app-mobile-menu-inset,3.5rem)] sm:gap-4 sm:px-6 sm:py-6">
             <div className="min-w-0 flex-1 pr-1">
               <h2
                 ref={titleRef}
@@ -1828,7 +1950,7 @@ export function KanbanCardModal({
             </button>
           </div>
 
-          <div className="flex w-full min-w-0 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-[var(--kaiten-modal-border)] px-2 py-1.5 sm:gap-2 sm:px-3 sm:py-2.5">
+          <div className="flex w-full min-w-0 shrink-0 flex-nowrap items-center gap-0.5 overflow-x-auto border-b border-[var(--kaiten-modal-border)] px-1.5 py-1 sm:gap-2 sm:px-3 sm:py-2.5">
             <button
               type="button"
               title={
@@ -1839,7 +1961,7 @@ export function KanbanCardModal({
                   : KANBAN_BLOCK_PERM_HINT
               }
               disabled={!canManageKanbanBlock}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:cursor-not-allowed disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:cursor-not-allowed disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
               onClick={() => {
                 if (!canManageKanbanBlock) {
                   toast(KANBAN_BLOCK_PERM_HINT, true);
@@ -1884,29 +2006,40 @@ export function KanbanCardModal({
               }}
             >
               {blocked ? (
-                <IconUnlock className="h-5 w-5 sm:h-[1.35rem] sm:w-[1.35rem]" />
+                <IconUnlock className="h-3.5 w-3.5 sm:h-[1.35rem] sm:w-[1.35rem]" />
               ) : (
-                <IconBrick className="h-5 w-5 sm:h-[1.35rem] sm:w-[1.35rem]" />
+                <IconBrick className="h-3.5 w-3.5 sm:h-[1.35rem] sm:w-[1.35rem]" />
               )}
             </button>
             <button
               type="button"
               title={movePrevTitle}
               disabled={!canMoveColumns}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
               onClick={() => onMovePrevStage(cardId)}
             >
-              <IconArrowLeft className="h-5 w-5 sm:h-[1.35rem] sm:w-[1.35rem]" />
+              <IconArrowLeft className="h-3.5 w-3.5 sm:h-[1.35rem] sm:w-[1.35rem]" />
             </button>
             <button
               type="button"
               title={moveNextTitle}
               disabled={!canMoveColumns}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
               onClick={() => onMoveNextStage(cardId)}
             >
-              <IconArrowRight className="h-5 w-5 sm:h-[1.35rem] sm:w-[1.35rem]" />
+              <IconArrowRight className="h-3.5 w-3.5 sm:h-[1.35rem] sm:w-[1.35rem]" />
             </button>
+            <div className="ml-0.5 min-w-0 sm:hidden">
+              <KanbanDueUrgentControls
+                compact
+                stageDue={stageDue}
+                canEditDueDate={canEditDueDate}
+                urgent={Boolean(card.urgent)}
+                onDueChange={persistStageDue}
+                onToggleUrgent={toggleUrgent}
+                inputClassName={baseInput}
+              />
+            </div>
             <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-[var(--kaiten-modal-border)] sm:mx-1 sm:block" aria-hidden />
             <div className="hidden min-w-0 shrink items-center gap-2 overflow-x-auto sm:flex">
               <KanbanCardPeopleGroup
@@ -1932,26 +2065,26 @@ export function KanbanCardModal({
                 onOpen={() => setPickerMode("part")}
               />
             </div>
-            <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
+            <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1.5">
               {showOrderMailButton && card?.linkedOrderId ? (
                 <button
                   type="button"
                   title={`Письма наряда (${card.sourceEmailCount})`}
                   aria-label="Письма наряда"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
                   onClick={() => setOrderMailOpen(true)}
                 >
-                  <IconMail className="h-5 w-5 shrink-0 sm:h-[1.35rem] sm:w-[1.35rem]" />
+                  <IconMail className="h-3.5 w-3.5 shrink-0 sm:h-[1.35rem] sm:w-[1.35rem]" />
                 </button>
               ) : null}
               <button
                 type="button"
                 title="Скопировать ссылку на карточку"
                 aria-label="Поделиться — копировать ссылку"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
                 onClick={() => onCopyCardLink(cardId)}
               >
-                <IconLink className="h-5 w-5 shrink-0 sm:h-[1.35rem] sm:w-[1.35rem]" />
+                <IconLink className="h-3.5 w-3.5 shrink-0 sm:h-[1.35rem] sm:w-[1.35rem]" />
               </button>
             </div>
           </div>
@@ -2192,97 +2325,18 @@ export function KanbanCardModal({
                     : "max-sm:hidden"
                 }`}
               >
-              <div className="mb-3">
+              <div className="mb-3 hidden sm:block">
                 <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-amber-800/90 dark:text-amber-300/90">
                   Срок
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="date"
-                    className={`${baseInput} max-w-[12rem]`}
-                    disabled={!canEditDueDate}
-                    value={stageDue}
-                    title="Срок карточки канбана (Kaiten). Не лабораторный срок и не дата записи."
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      onApply((b) => {
-                        const fc = findCard(b, cardId);
-                        if (!fc) return;
-                        setKanbanStageDue(fc.card, v);
-                        pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
-                      });
-                      const oid = card.linkedOrderId?.trim() || "";
-                      if (
-                        oid &&
-                        card.kaitenCardId != null &&
-                        Number.isFinite(card.kaitenCardId)
-                      ) {
-                        rememberOptimisticKanbanStageDue(oid, v);
-                        void patchOrderKaitenCard(oid, { stageDueDate: v || null }).then(
-                          (r) => {
-                            if (!r.ok) {
-                              forgetOptimisticKanbanStageDue(oid);
-                              toast(r.error, true);
-                            }
-                          },
-                        );
-                      }
-                      if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
-                        const titleLine = (card.title || "").trim() || "Без названия";
-                        const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
-                        const duePart = v
-                          ? `новый срок ${escapeTelegramHtml(v)}`
-                          : "срок сброшен";
-                        const { cardWord, orderWord } = oid
-                          ? cardOrderWordLinks(oid, cardId, board.id)
-                          : { cardWord: "", orderWord: "" };
-                        postKanbanCrmTelegramNotify({
-                          kaitenCardId: card.kaitenCardId,
-                          event: "tg_due_changed",
-                          parseMode: "HTML",
-                          lines: [`Изменён срок в ${linkHtml}: ${duePart}`],
-                          ...(oid
-                            ? {
-                                linesAdmin: [
-                                  `Изменён срок в ${cardWord} и ${orderWord}: ${duePart}`,
-                                ],
-                              }
-                            : {}),
-                        });
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className={`rounded-md border px-3 py-1.5 text-[0.7rem] font-bold uppercase tracking-wide transition-colors ${
-                      card.urgent
-                        ? "border-orange-600/80 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
-                        : "border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:border-orange-400/50 hover:text-orange-700 dark:hover:text-orange-300"
-                    }`}
-                    title={
-                      card.urgent
-                        ? "Снять метку «Срочно» для следующего отдела (только канбан)"
-                        : "Срочно для следующего отдела (только канбан, наряд не меняется)"
-                    }
-                    onClick={() => {
-                      const next = !card.urgent;
-                      onApply((b) => {
-                        const fc = findCard(b, cardId);
-                        if (!fc) return;
-                        fc.card.urgent = next;
-                        pushActivity(
-                          fc.card,
-                          next ? "Отмечена как срочная" : "Снята метка «Срочно»",
-                          b.users[0]?.id,
-                          b,
-                          act,
-                        );
-                      });
-                    }}
-                  >
-                    Срочно
-                  </button>
-                </div>
+                <KanbanDueUrgentControls
+                  stageDue={stageDue}
+                  canEditDueDate={canEditDueDate}
+                  urgent={Boolean(card.urgent)}
+                  onDueChange={persistStageDue}
+                  onToggleUrgent={toggleUrgent}
+                  inputClassName={baseInput}
+                />
               </div>
 
               <div className="mb-3">
@@ -2293,7 +2347,7 @@ export function KanbanCardModal({
                   {descDraft.trim() && descCanCollapse ? (
                     <button
                       type="button"
-                      className="shrink-0 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-border)]"
+                      className="inline-flex h-5 shrink-0 items-center rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1.5 text-[0.58rem] font-medium leading-none text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-border)]"
                       onClick={() => {
                         descUserOverrideRef.current = true;
                         setDescExpanded((v) => !v);
@@ -2305,7 +2359,7 @@ export function KanbanCardModal({
                   ) : descDraft.trim() ? null : (
                     <button
                       type="button"
-                      className="shrink-0 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
+                      className="inline-flex h-5 shrink-0 items-center rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1.5 text-[0.58rem] font-medium leading-none text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
                       onClick={() => {
                         descUserOverrideRef.current = true;
                         setDescExpanded(true);

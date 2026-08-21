@@ -12,29 +12,50 @@ import {
 /** В CRM «???» всегда Канбан: Kaiten → зеркало канбана → запись DEMO_KANBAN. */
 const PROSTHETICS_CRM_SOURCE: OrderChatCorrectionSource = "DEMO_KANBAN";
 
-async function findPendingProstheticsTwinIds(
+async function findProstheticsTwinIds(
   db: PrismaClient,
   orderId: string,
   text: string,
-  opts: { requireNullKid: boolean; excludeId?: string },
+  opts: {
+    requireNullKid: boolean;
+    excludeId?: string;
+    /** Закрытые / уже принятые — не плодить «новую» заявку из старого комментария Kaiten. */
+    closedOnly?: boolean;
+  },
 ): Promise<string[]> {
   const key = normalizeProstheticsTwinKey(text);
   if (!key) return [];
   const rows = await db.orderProstheticsRequest.findMany({
     where: {
       orderId,
-      resolvedAt: null,
-      rejectedAt: null,
+      ...(opts.closedOnly
+        ? {
+            OR: [
+              { resolvedAt: { not: null } },
+              { rejectedAt: { not: null } },
+              { completedAt: { not: null } },
+            ],
+          }
+        : { resolvedAt: null, rejectedAt: null }),
       ...(opts.requireNullKid ? { kaitenCommentId: null } : {}),
       ...(opts.excludeId ? { id: { not: opts.excludeId } } : {}),
     },
     orderBy: { createdAt: "asc" },
-    take: 60,
+    take: 80,
     select: { id: true, text: true, kaitenCommentId: true },
   });
   return rows
     .filter((r) => normalizeProstheticsTwinKey(r.text) === key)
     .map((r) => r.id);
+}
+
+async function findPendingProstheticsTwinIds(
+  db: PrismaClient,
+  orderId: string,
+  text: string,
+  opts: { requireNullKid: boolean; excludeId?: string },
+): Promise<string[]> {
+  return findProstheticsTwinIds(db, orderId, text, opts);
 }
 
 /**
@@ -61,9 +82,41 @@ export async function createOrderProstheticsRequestIfNeeded(
       where: {
         orderId_kaitenCommentId: { orderId, kaitenCommentId: kid },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        resolvedAt: true,
+        rejectedAt: true,
+        completedAt: true,
+      },
     });
     if (existingByKid) {
+      const pendingGhost =
+        existingByKid.resolvedAt == null &&
+        existingByKid.rejectedAt == null &&
+        existingByKid.completedAt == null;
+      if (pendingGhost) {
+        const closedIds = await findProstheticsTwinIds(db, orderId, text, {
+          requireNullKid: true,
+          closedOnly: true,
+          excludeId: existingByKid.id,
+        });
+        const closedId = closedIds[0];
+        if (closedId) {
+          await db.orderProstheticsRequest.delete({
+            where: { id: existingByKid.id },
+          });
+          await db.orderProstheticsRequest.update({
+            where: { id: closedId },
+            data: {
+              kaitenCommentId: kid,
+              source: PROSTHETICS_CRM_SOURCE,
+              text,
+              ...(authorLabel ? { authorLabel } : {}),
+            },
+          });
+          return;
+        }
+      }
       await db.orderProstheticsRequest.update({
         where: { id: existingByKid.id },
         data: {
@@ -105,6 +158,24 @@ export async function createOrderProstheticsRequestIfNeeded(
       return;
     }
 
+    const closedIds = await findProstheticsTwinIds(db, orderId, text, {
+      requireNullKid: true,
+      closedOnly: true,
+    });
+    const closedId = closedIds[0];
+    if (closedId) {
+      await db.orderProstheticsRequest.update({
+        where: { id: closedId },
+        data: {
+          kaitenCommentId: kid,
+          source: PROSTHETICS_CRM_SOURCE,
+          text,
+          ...(authorLabel ? { authorLabel } : {}),
+        },
+      });
+      return;
+    }
+
     await db.orderProstheticsRequest.create({
       data: {
         orderId,
@@ -133,6 +204,12 @@ export async function createOrderProstheticsRequestIfNeeded(
     key &&
     pendingSame.some((r) => normalizeProstheticsTwinKey(r.text) === key);
   if (already) return;
+
+  const closedSame = await findProstheticsTwinIds(db, orderId, text, {
+    requireNullKid: false,
+    closedOnly: true,
+  });
+  if (closedSame.length) return;
 
   await db.orderProstheticsRequest.create({
     data: {

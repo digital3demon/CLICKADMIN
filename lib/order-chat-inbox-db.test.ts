@@ -102,7 +102,17 @@ describe("order-chat-inbox-db", () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 0 });
     const upsert = vi.fn().mockResolvedValue({});
     const db = {
-      orderChatInboxItem: { updateMany, upsert },
+      orderChatInboxItem: {
+        updateMany,
+        upsert,
+        findFirst: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      orderChatCorrection: { findFirst: vi.fn().mockResolvedValue(null) },
+      orderProstheticsRequest: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
       ...emptyUsersDb(),
     } as any;
     const result = await syncOrderChatInboxFromKaitenComments(db, {
@@ -119,6 +129,53 @@ describe("order-chat-inbox-db", () => {
     });
     expect(result.changed).toBe(true);
     expect(upsert).toHaveBeenCalledTimes(2); // prosthetics + lab mention
+  });
+
+  it("не создаёт новую inbox-заявку, если legacy уже исполнена", async () => {
+    const create = vi.fn().mockResolvedValue({});
+    const upsert = vi.fn();
+    const db = {
+      orderChatInboxItem: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        upsert,
+        create,
+        findFirst: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      orderChatCorrection: {
+        findFirst: vi.fn().mockResolvedValue({
+          resolvedAt: new Date("2026-07-10T10:00:00Z"),
+          resolvedByUserId: "u1",
+          rejectedAt: null,
+          rejectedByUserId: null,
+        }),
+      },
+      orderProstheticsRequest: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      ...emptyUsersDb(),
+    } as any;
+    await syncOrderChatInboxFromKaitenComments(db, {
+      tenantId: "t1",
+      orderId: "o1",
+      comments: [
+        {
+          id: 501,
+          text: "!!! цвет с вестибулярной стороны 14",
+          authorName: "Роман",
+        },
+      ],
+    });
+    expect(upsert).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "CORRECTION",
+        kaitenCommentId: 501,
+        resolvedAt: new Date("2026-07-10T10:00:00Z"),
+        resolvedByUserId: "u1",
+      }),
+    });
   });
 
   it("при sync с kaitenCommentId обновляет уже связанную строку, не создаёт k:", async () => {

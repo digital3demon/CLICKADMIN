@@ -2434,8 +2434,8 @@ export function NewOrderForm({
               <p className="mb-4 text-sm text-red-600">{loadError}</p>
             ) : null}
 
-            <div className="grid grid-cols-1 gap-0 crm-t2:grid-cols-2 crm-t2:items-stretch crm-t3:grid-cols-3 crm-t3:gap-x-0">
-              <div className="flex min-h-0 min-w-0 flex-col space-y-0 crm-t3:pr-6">
+            <div className="grid grid-cols-1 gap-0 lg:grid-cols-3 lg:items-stretch lg:gap-x-0">
+              <div className="flex min-h-0 min-w-0 flex-col space-y-0 lg:pr-6">
                 <FormSection
                   title="Заказчик"
                   titleAction={
@@ -2514,7 +2514,7 @@ export function NewOrderForm({
                   </div>
                 </FormSection>
                 <div
-                  className="my-1 h-px bg-[var(--card-border)] crm-t3:hidden"
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
                   aria-hidden="true"
                 />
 
@@ -2651,12 +2651,12 @@ export function NewOrderForm({
                   </div>
                 </FormSection>
                 <div
-                  className="my-1 h-px bg-[var(--card-border)] crm-t3:hidden"
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
                   aria-hidden="true"
                 />
               </div>
 
-              <div className="flex min-h-0 min-w-0 flex-col space-y-0 border-t border-[var(--card-border)] pt-4 crm-t3:border-l crm-t3:border-t-0 crm-t3:pl-6 crm-t3:pr-6 crm-t3:pt-0">
+              <div className="flex min-h-0 min-w-0 flex-col space-y-0 border-t border-[var(--card-border)] pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pr-6 lg:pt-0">
                 <FormSection title="Финансы" noTopBorder>
                   <FieldLabel>Юр лицо</FieldLabel>
                   <div>
@@ -2722,7 +2722,7 @@ export function NewOrderForm({
                   ) : null}
                 </FormSection>
                 <div
-                  className="my-1 h-px bg-[var(--card-border)] crm-t3:hidden"
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
                   aria-hidden="true"
                 />
 
@@ -2754,12 +2754,12 @@ export function NewOrderForm({
                   className="mt-4"
                 />
                 <div
-                  className="my-1 h-px bg-[var(--card-border)] crm-t3:hidden"
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
                   aria-hidden="true"
                 />
               </div>
 
-              <div className="flex min-h-0 min-w-0 flex-col space-y-0 border-t border-[var(--card-border)] pt-4 crm-t3:border-l crm-t3:border-t-0 crm-t3:pl-6 crm-t3:pt-0">
+              <div className="flex min-h-0 min-w-0 flex-col space-y-0 border-t border-[var(--card-border)] pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
                 <OrderProstheticsBlock
                   value={prosthetics}
                   onChange={setProsthetics}
@@ -2794,7 +2794,7 @@ export function NewOrderForm({
                   />
                 </section>
                 <div
-                  className="my-1 h-px bg-[var(--card-border)] crm-t3:hidden"
+                  className="my-1 h-px bg-[var(--card-border)] shell-desktop:hidden"
                   aria-hidden="true"
                 />
               </div>
@@ -2843,13 +2843,13 @@ export function NewOrderForm({
             />
 
             <div
-              className="h-[calc(3.25rem+env(safe-area-inset-bottom))] shell-laptop:hidden"
+              className="h-[calc(3.25rem+env(safe-area-inset-bottom))] shell-desktop:hidden"
               aria-hidden="true"
             />
         </div>
       </div>
       {!previewMode ? (
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shell-laptop:hidden">
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shell-desktop:hidden">
         <button
           type="button"
           onClick={() => void requestSave()}

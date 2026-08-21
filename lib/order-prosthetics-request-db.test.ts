@@ -170,4 +170,48 @@ describe("createOrderProstheticsRequestIfNeeded", () => {
 
     expect(create).not.toHaveBeenCalled();
   });
+
+  it("не поднимает исполненную заявку как новую при повторном синке Kaiten", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const create = vi.fn();
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "done-1",
+          text: "Артикул: 01126 -1шт 3D-DER -1шт",
+          kaitenCommentId: null,
+        },
+      ]);
+
+    const db = {
+      orderProstheticsRequest: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findMany,
+        update,
+        create,
+        deleteMany: vi.fn(),
+      },
+    };
+
+    await createOrderProstheticsRequestIfNeeded(
+      db as never,
+      "order-1",
+      "???\nАртикул: 01126 -1шт\n3D-DER -1шт",
+      "KAITEN",
+      { kaitenCommentId: 88, authorLabel: "Марк" },
+    );
+
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "done-1" },
+      data: {
+        kaitenCommentId: 88,
+        source: "DEMO_KANBAN",
+        text: "Артикул: 01126 -1шт\n3D-DER -1шт",
+        authorLabel: "Марк",
+      },
+    });
+  });
 });

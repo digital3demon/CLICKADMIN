@@ -1,5 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import { createOrderChatCorrectionIfNeeded } from "./order-chat-correction-db";
+import {
+  createOrderChatCorrectionIfNeeded,
+  orderChatCorrectionTwinTexts,
+} from "./order-chat-correction-db";
+
+describe("orderChatCorrectionTwinTexts", () => {
+  it("держит кириллицу до и после «!!!»", () => {
+    const variants = orderChatCorrectionTwinTexts(
+      "до !!! цвет с вестибулярной стороны 14 после",
+    );
+    expect(variants.some((v) => v.includes("цвет с вестибулярной стороны 14"))).toBe(
+      true,
+    );
+  });
+});
 
 describe("createOrderChatCorrectionIfNeeded", () => {
   it("binds KAITEN kid onto pending DEMO_KANBAN twin with same text", async () => {
@@ -100,6 +114,80 @@ describe("createOrderChatCorrectionIfNeeded", () => {
         resolvedAt: null,
         rejectedAt: null,
         id: { not: "kaiten-1" },
+      },
+    });
+  });
+
+  it("привязывает kid к закрытой корректировке, а не создаёт новую заявку", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const create = vi.fn();
+    const findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "closed-1" });
+
+    const db = {
+      orderChatCorrection: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findFirst,
+        update,
+        create,
+        deleteMany: vi.fn(),
+      },
+    };
+
+    await createOrderChatCorrectionIfNeeded(
+      db as never,
+      "order-1",
+      "!!! цвет с вестибулярной стороны 14",
+      "KAITEN",
+      { kaitenCommentId: 501, authorLabel: "Роман" },
+    );
+
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "closed-1" },
+      data: {
+        kaitenCommentId: 501,
+        source: "KAITEN",
+        authorLabel: "Роман",
+      },
+    });
+  });
+
+  it("складывает призрак pending+kid в уже исполненную запись без kid", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const del = vi.fn().mockResolvedValue({});
+    const db = {
+      orderChatCorrection: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "ghost-1",
+          resolvedAt: null,
+          rejectedAt: null,
+        }),
+        findFirst: vi.fn().mockResolvedValue({ id: "closed-old" }),
+        update,
+        delete: del,
+        create: vi.fn(),
+        deleteMany: vi.fn(),
+      },
+    };
+
+    await createOrderChatCorrectionIfNeeded(
+      db as never,
+      "order-1",
+      "!!! цвет с вестибулярной стороны 14",
+      "KAITEN",
+      { kaitenCommentId: 501, authorLabel: "Роман" },
+    );
+
+    expect(del).toHaveBeenCalledWith({ where: { id: "ghost-1" } });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "closed-old" },
+      data: {
+        kaitenCommentId: 501,
+        source: "KAITEN",
+        authorLabel: "Роман",
       },
     });
   });
