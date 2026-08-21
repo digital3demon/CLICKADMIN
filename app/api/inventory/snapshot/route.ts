@@ -11,7 +11,7 @@ import { loadOrderRefsByIds } from "@/lib/inventory/order-lookup";
  */
 export async function GET() {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     await ensureDefaultWarehouse();
     await repairDefaultWarehouseFlag();
 

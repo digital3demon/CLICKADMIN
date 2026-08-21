@@ -106,7 +106,7 @@ async function resolveOurLineLabels(
   const map = new Map<string, string>();
   if (ids.length === 0) return map;
   try {
-    const pricing = getPricingPrismaClient();
+    const pricing = await getPricingPrismaClient();
     const rows = await pricing.inventoryItem.findMany({
       where: { id: { in: ids } },
       select: { id: true, name: true, sku: true },

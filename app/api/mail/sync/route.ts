@@ -9,6 +9,14 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
+  if (r.ctx.isDemo) {
+    return mailJsonResponse({
+      ok: true,
+      demo: true,
+      queued: false,
+      message: "В демо синхронизация с почтовым сервером отключена",
+    });
+  }
   try {
     const body = await jsonBody(req);
     const accountId = stringField(body.accountId, 200);

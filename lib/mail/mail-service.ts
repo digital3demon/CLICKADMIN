@@ -59,6 +59,7 @@ export type MailApiContext = {
   tenantId: string;
   userId: string;
   role: string;
+  isDemo: boolean;
   db: PrismaClient;
   moduleAccess: Record<AppModule, boolean>;
 };
@@ -190,7 +191,7 @@ async function requireUserEmailAccount(
 export async function getMailApiContext(): Promise<MailApiContextResult> {
   const session = await getSessionFromCookies();
   const tenantId = session ? await getTenantIdForSession(session) : null;
-  if (!session?.sub || !tenantId || session.demo) {
+  if (!session?.sub || !tenantId) {
     return {
       ok: false,
       response: NextResponse.json({ error: "Требуется вход" }, { status: 401 }),
@@ -202,6 +203,7 @@ export async function getMailApiContext(): Promise<MailApiContextResult> {
       tenantId,
       userId: session.sub,
       role: session.role,
+      isDemo: Boolean(session.demo),
       db: (await getOrdersPrisma()) as PrismaClient,
       moduleAccess: await getEffectiveModuleAccess(tenantId, session.role),
     },

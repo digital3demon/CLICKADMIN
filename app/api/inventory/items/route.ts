@@ -3,7 +3,7 @@ import { getPricingPrismaClient } from "@/lib/prisma-pricing";
 
 export async function GET() {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const full = await prisma.inventoryItem.findMany({
       orderBy: [
         { warehouse: { name: "asc" } },
@@ -58,7 +58,7 @@ type PostBody = {
 
 export async function POST(req: Request) {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const body = (await req.json()) as PostBody;
     const warehouseId = body.warehouseId?.trim() ?? "";
     if (!warehouseId) {

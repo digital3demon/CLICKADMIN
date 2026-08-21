@@ -11,6 +11,7 @@ const COLS = [
 
 type CardTypeRow = { id: string; name: string };
 
+/** Вкладка канбана на наряде в демо — без упоминаний Kaiten, как этап на доске CRM. */
 export function OrderDemoKanbanTab({
   orderId,
   initialColumn,
@@ -55,13 +56,11 @@ export function OrderDemoKanbanTab({
     <div className="space-y-5">
       <div>
         <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-          Внутренний канбан (демо)
+          Канбан
         </h2>
         <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          В демо этот наряд и есть «карточка» на доске (как в Kaiten): колонка —
-          этап, тип — тип карточки; всё хранится в записи наряда, без внешнего
-          API. В основной CRM позже тот же сценарий свяжем с заказами и общим
-          канбаном.
+          Этап на доске «Работы» и тип карточки. Сохраняется в наряде и сразу
+          виден в списке заказов и на канбане.
         </p>
       </div>
 

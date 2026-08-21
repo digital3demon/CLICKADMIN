@@ -8,7 +8,7 @@ import {
 /** Список каталогов прайса + активный для нарядов */
 export async function GET() {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const { activePriceListId } = await ensurePriceListWorkspace(prisma);
     const lists = await prisma.priceList.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     if (!name) {
       return NextResponse.json({ error: "Укажите название каталога" }, { status: 400 });
     }
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const maxSort = await prisma.priceList.aggregate({ _max: { sortOrder: true } });
     const sortOrder = (maxSort._max.sortOrder ?? 0) + 1;
     const row = await prisma.priceList.create({
@@ -77,7 +77,7 @@ export async function PATCH(req: Request) {
         { status: 400 },
       );
     }
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const r = await setActivePriceListId(prisma, id);
     if (!r.ok) {
       return NextResponse.json({ error: r.error }, { status: 400 });

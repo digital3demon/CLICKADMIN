@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { AppModule, UserRole } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
 import {
   ALL_APP_MODULES,
@@ -37,20 +38,22 @@ function bundleAccessForResponse(
 /**
  * Матрица «роль × пакет» (только владелец).
  * effective — итог с учётом БД, свёрнутый до пакетов.
+ * tenantId — через getTenantIdForSession (в демо JWT может не содержать tid).
  */
 export async function GET() {
   const s = await getSessionFromCookies();
   if (!s || s.role !== "OWNER") {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
   }
-  const tenantId = s.tid;
+  const tenantId = await getTenantIdForSession(s);
   if (!tenantId) {
     return NextResponse.json({ error: "Нет организации" }, { status: 400 });
   }
 
+  const prisma = await getPrisma();
   const effective: Record<string, Record<string, boolean>> = {};
   for (const role of ROLES_IN_ACCESS_MATRIX) {
-    const acc = await getEffectiveModuleAccess(tenantId, role);
+    const acc = await getEffectiveModuleAccess(tenantId, role, { db: prisma });
     effective[role] = bundleAccessForResponse(acc);
   }
 
@@ -81,7 +84,7 @@ export async function PUT(req: Request) {
   if (!s || s.role !== "OWNER") {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
   }
-  const tenantId = s.tid;
+  const tenantId = await getTenantIdForSession(s);
   if (!tenantId) {
     return NextResponse.json({ error: "Нет организации" }, { status: 400 });
   }
@@ -125,7 +128,8 @@ export async function PUT(req: Request) {
     );
   }
 
-  const accBefore = await getEffectiveModuleAccess(tenantId, role);
+  const prisma = await getPrisma();
+  const accBefore = await getEffectiveModuleAccess(tenantId, role, { db: prisma });
   const bundlesBefore = collapseToBundles(accBefore);
 
   if (body.allowed) {
@@ -152,7 +156,6 @@ export async function PUT(req: Request) {
   }
 
   const modulesToWrite = atomicModulesForBundleToggle(bundle);
-  const prisma = await getPrisma();
 
   for (const module of modulesToWrite) {
     if (!ALL_APP_MODULES.includes(module)) continue;
@@ -177,7 +180,7 @@ export async function PUT(req: Request) {
     }
   }
 
-  const accAfter = await getEffectiveModuleAccess(tenantId, role);
+  const accAfter = await getEffectiveModuleAccess(tenantId, role, { db: prisma });
   return NextResponse.json({
     ok: true,
     effective: bundleAccessForResponse(accAfter),

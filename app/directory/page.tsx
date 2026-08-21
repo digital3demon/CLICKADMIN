@@ -31,7 +31,8 @@ export default async function DirectoryHubPage() {
   const showKaiten = a?.CONFIG_KAITEN === true && !isCrmStandaloneDemo();
   const showCouriers = a?.CONFIG_COURIERS === true;
   const showOrdersImportExport = a?.CONFIG_ORDERS_IMPORT_EXPORT === true;
-  const showContractTemplate = a?.CONFIG_CONTRACT_TEMPLATE === true;
+  const showContractTemplate =
+    a?.CONFIG_CONTRACT_TEMPLATE === true && !session?.demo;
   const tenantId = session ? await getTenantIdForSession(session) : null;
   const showMail =
     session != null &&
@@ -118,7 +119,7 @@ export default async function DirectoryHubPage() {
             </p>
           </Link>
         ) : null}
-        {session?.role === "OWNER" ? (
+        {session?.role === "OWNER" && !session?.demo ? (
           <Link
             href="/directory/logs"
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPricingPrismaClient } from "@/lib/prisma-pricing";
 export async function GET() {
-  const prisma = getPricingPrismaClient();
+  const prisma = await getPricingPrismaClient();
   try {
     const rows = await prisma.material.findMany({
       orderBy: { name: "asc" },

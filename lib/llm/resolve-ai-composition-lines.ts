@@ -43,7 +43,7 @@ async function loadPriceListItemsForClient(
   clinicId: string | null,
   doctorId: string | null,
 ): Promise<CatalogItem[]> {
-  const prisma = getPricingPrismaClient();
+  const prisma = await getPricingPrismaClient();
   const priceListId = await getActivePriceListId(prisma);
   const items = await prisma.priceListItem.findMany({
     where: { isActive: true, priceListId },
@@ -67,7 +67,7 @@ async function loadPriceListItemsForClient(
 }
 
 export async function loadActivePriceListItemNames(): Promise<string[]> {
-  const prisma = getPricingPrismaClient();
+  const prisma = await getPricingPrismaClient();
   const priceListId = await getActivePriceListId(prisma);
   const items = await prisma.priceListItem.findMany({
     where: { isActive: true, priceListId },

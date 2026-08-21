@@ -17,7 +17,7 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> },
 ) {
   const clientsPrisma = await getPrisma();
-  const pricingPrisma = getPricingPrismaClient();
+  const pricingPrisma = await getPricingPrismaClient();
   try {
     const s = await getSessionFromCookies();
     if (!s) {
@@ -66,7 +66,7 @@ export async function PATCH(
   ctx: { params: Promise<{ id: string }> },
 ) {
   const clientsPrisma = await getPrisma();
-  const pricingPrisma = getPricingPrismaClient();
+  const pricingPrisma = await getPricingPrismaClient();
   try {
     const s = await getSessionFromCookies();
     if (!s) {

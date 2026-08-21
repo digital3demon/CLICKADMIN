@@ -10,6 +10,7 @@ import { isDemoPersistentStorage } from "@/lib/demo-reseed-policy";
 import { isDemoDatabaseSeeded, OWNER_EMAIL, OWNER_ID } from "@/lib/demo-seed";
 import { getDemoPrisma } from "@/lib/prisma-demo";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
+import { DEFAULT_TENANT_ID } from "@/lib/tenant-constants";
 import {
   consumeDemoAccessCodeOrThrow,
   DemoAccessCodeError,
@@ -87,6 +88,7 @@ export async function POST(req: Request) {
     role: "OWNER",
     name: "Демо — владелец",
     demo: true,
+    tid: DEFAULT_TENANT_ID,
     sid,
   });
 

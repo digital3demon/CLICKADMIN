@@ -1230,27 +1230,37 @@ export default async function OrdersPage({
                         />
                       ) : null}
                       <OrderStickerPrintLink orderId={o.id} />
-                      <OrderKaitenQrModal
-                        orderId={o.id}
-                        kaitenUrl={kaitenWebUrl}
-                        kanbanUrl={kanbanWebUrl}
-                        compact
-                      />
+                      {!isDemo ? (
+                        <OrderKaitenQrModal
+                          orderId={o.id}
+                          kaitenUrl={kaitenWebUrl}
+                          kanbanUrl={kanbanWebUrl}
+                          compact
+                        />
+                      ) : (
+                        <OrderKaitenQrModal
+                          orderId={o.id}
+                          kaitenUrl={null}
+                          kanbanUrl={kanbanWebUrl}
+                          compact
+                        />
+                      )}
                     </div>
                   </td>
                   <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
                     <div className="flex min-h-[2.5rem] items-center justify-center">
                       <OrderListKaitenColumnTag
-                        kaitenCardId={o.kaitenCardId}
+                        kaitenCardId={isDemo ? null : o.kaitenCardId}
                         demoKanbanColumn={o.demoKanbanColumn}
                         demoCardTypeName={o.kaitenCardType?.name ?? null}
-                        kaitenColumnTitle={o.kaitenColumnTitle}
-                        kaitenTrackLane={o.kaitenTrackLane}
-                        kaitenBlocked={blocked}
-                        kaitenBlockReason={o.kaitenBlockReason}
-                        filterHref={kaitenStatusFilterHref}
-                        boardFilterHref={boardFilterHref}
+                        kaitenColumnTitle={isDemo ? null : o.kaitenColumnTitle}
+                        kaitenTrackLane={isDemo ? null : o.kaitenTrackLane}
+                        kaitenBlocked={isDemo ? false : blocked}
+                        kaitenBlockReason={isDemo ? null : o.kaitenBlockReason}
+                        filterHref={isDemo ? null : kaitenStatusFilterHref}
+                        boardFilterHref={isDemo ? null : boardFilterHref}
                         placement="underOrderNumber"
+                        isDemoMode={isDemo}
                       />
                     </div>
                   </td>

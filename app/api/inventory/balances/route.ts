@@ -3,7 +3,7 @@ import { getPricingPrismaClient } from "@/lib/prisma-pricing";
 import { ensureDefaultWarehouse } from "@/lib/inventory/ensure-default-warehouse";
 
 export async function GET() {
-  const prisma = getPricingPrismaClient();
+  const prisma = await getPricingPrismaClient();
   try {
     await ensureDefaultWarehouse();
     const [rows, itemsNeverTouched] = await Promise.all([

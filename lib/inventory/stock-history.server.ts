@@ -18,7 +18,7 @@ export async function loadStockHistory(opts?: {
   q?: string | null;
 }): Promise<StockHistoryRow[]> {
   const q = normalizeRevisionsHistorySearchQuery(opts?.q);
-  const prisma = getPricingPrismaClient();
+  const prisma = await getPricingPrismaClient();
 
   const rows = await prisma.stockMovement.findMany({
     orderBy: { createdAt: "desc" },

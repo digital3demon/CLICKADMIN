@@ -17,7 +17,7 @@ type PatchBody = {
 
 export async function PATCH(req: Request, ctx: RouteCtx) {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const { id } = await ctx.params;
     const wid = id?.trim() ?? "";
     if (!wid) {
@@ -86,7 +86,7 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
  */
 export async function DELETE(_req: Request, ctx: RouteCtx) {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const { id } = await ctx.params;
     const wid = id?.trim() ?? "";
     if (!wid) {

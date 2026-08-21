@@ -11,6 +11,7 @@ export default async function DirectoryContractsPage() {
   if (!session) {
     redirect("/login?next=/directory/contracts");
   }
+  if (session.demo) redirect("/directory");
   if (access?.CONFIG_CONTRACT_TEMPLATE !== true && session.role !== "OWNER") {
     redirect("/directory");
   }

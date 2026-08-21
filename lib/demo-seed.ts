@@ -10,6 +10,7 @@ import {
   OrderChatInboxItemType,
   OrderChatInboxSyncState,
   OrderStatus,
+  StockMovementKind,
   UserRole,
 } from "@prisma/client";
 import { emptyProsthetics, prostheticsToJson } from "@/lib/order-prosthetics";
@@ -31,6 +32,32 @@ function hoursAgo(h: number): Date {
   return new Date(Date.now() - h * 60 * 60 * 1000);
 }
 
+/** Календарный день лаборатории = MSK (как в аналитике). */
+const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/** `daysFromToday=0` — сегодня по МСК; час/минута тоже по МСК. */
+function daysAgoMsk(daysFromToday: number, hourMsk = 11, minuteMsk = 0): Date {
+  const nowMsk = new Date(Date.now() + MSK_OFFSET_MS);
+  const y = nowMsk.getUTCFullYear();
+  const m = nowMsk.getUTCMonth();
+  const d = nowMsk.getUTCDate() - Math.max(0, daysFromToday);
+  return new Date(
+    Date.UTC(y, m, d, hourMsk, minuteMsk, 0, 0) - MSK_OFFSET_MS,
+  );
+}
+
+/** @deprecated use daysAgoMsk — оставлено для писем/склада */
+function daysAgo(d: number, hourUtc = 10): Date {
+  return daysAgoMsk(d, hourUtc, (d * 17) % 60);
+}
+
+function yymmOf(d: Date): string {
+  const msk = new Date(d.getTime() + MSK_OFFSET_MS);
+  const y = String(msk.getUTCFullYear()).slice(-2);
+  const m = String(msk.getUTCMonth() + 1).padStart(2, "0");
+  return `${y}${m}`;
+}
+
 /** Есть ли уже сид демо (для режима без принудительного reseed при каждом входе). */
 export async function isDemoDatabaseSeeded(db: PrismaClient): Promise<boolean> {
   const u = await db.user.findUnique({
@@ -42,7 +69,8 @@ export async function isDemoDatabaseSeeded(db: PrismaClient): Promise<boolean> {
 
 /** Полная демо-выгрузка: клиники, врачи, наряды, прайс, склад, курьеры, фейковая почта и чат. */
 export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
-  await db.$transaction(async (tx) => {
+  await db.$transaction(
+    async (tx) => {
     await tx.orderCustomTag.deleteMany();
     await tx.subscriptionInvoice.deleteMany();
     await tx.contractorRevision.deleteMany();
@@ -80,7 +108,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     });
 
     await tx.orderNumberSettings.create({
-      data: { id: ORDER_NUMBER_SETTINGS_ID, postingYearMonth: "2604" },
+      data: { id: ORDER_NUMBER_SETTINGS_ID, postingYearMonth: "2608" },
     });
 
     await tx.user.create({
@@ -227,20 +255,18 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       data: { id: "default", activePriceListId: demoPriceList.id },
     });
 
-    /** Ровно 12 демо-позиций (не полный рабочий прайс). */
+    /** Ровно 10 демо-позиций, без разделов/подгрупп (sectionTitle пустой). */
     const demoPriceRows = [
-      { code: "DM01", name: "Позиция · диагностика", priceRub: 2100, leadWorkingDays: 1 },
-      { code: "DM02", name: "Позиция · временная коронка", priceRub: 3900, leadWorkingDays: 2 },
-      { code: "DM03", name: "Позиция · коронка Zr", priceRub: 16200, leadWorkingDays: 8 },
-      { code: "DM04", name: "Позиция · коронка МК", priceRub: 11800, leadWorkingDays: 7 },
-      { code: "DM05", name: "Позиция · вкладка", priceRub: 7400, leadWorkingDays: 5 },
-      { code: "DM06", name: "Позиция · винир", priceRub: 14500, leadWorkingDays: 9 },
-      { code: "DM07", name: "Позиция · абатмент", priceRub: 5200, leadWorkingDays: 4 },
-      { code: "DM08", name: "Позиция · мост 3 ед.", priceRub: 33600, leadWorkingDays: 12 },
-      { code: "DM09", name: "Позиция · съёмный частичный", priceRub: 24800, leadWorkingDays: 14 },
-      { code: "DM10", name: "Позиция · каппа", priceRub: 6100, leadWorkingDays: 3 },
-      { code: "DM11", name: "Позиция · ретейнер", priceRub: 4300, leadWorkingDays: 4 },
-      { code: "DM12", name: "Позиция · индивидуальная ложка", priceRub: 2800, leadWorkingDays: 2 },
+      { code: "DM01", name: "Демо · диагностика", priceRub: 2100, leadWorkingDays: 1 },
+      { code: "DM02", name: "Демо · временная коронка", priceRub: 3900, leadWorkingDays: 2 },
+      { code: "DM03", name: "Демо · коронка Zr", priceRub: 16200, leadWorkingDays: 8 },
+      { code: "DM04", name: "Демо · коронка МК", priceRub: 11800, leadWorkingDays: 7 },
+      { code: "DM05", name: "Демо · вкладка", priceRub: 7400, leadWorkingDays: 5 },
+      { code: "DM06", name: "Демо · винир", priceRub: 14500, leadWorkingDays: 9 },
+      { code: "DM07", name: "Демо · абатмент", priceRub: 5200, leadWorkingDays: 4 },
+      { code: "DM08", name: "Демо · мост 3 ед.", priceRub: 33600, leadWorkingDays: 12 },
+      { code: "DM09", name: "Демо · съёмный частичный", priceRub: 24800, leadWorkingDays: 14 },
+      { code: "DM10", name: "Демо · каппа", priceRub: 6100, leadWorkingDays: 3 },
     ] as const;
 
     const priceItems = await Promise.all(
@@ -250,7 +276,8 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
             priceListId: demoPriceList.id,
             code: row.code,
             name: row.name,
-            sectionTitle: "Демо-прайс",
+            sectionTitle: null,
+            subsectionTitle: null,
             priceRub: row.priceRub,
             leadWorkingDays: row.leadWorkingDays,
             isActive: true,
@@ -262,18 +289,20 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
 
     const whMat = await tx.warehouse.create({
       data: {
-        name: "Склад материалов",
+        name: "Демо — склад материалов",
+        warehouseType: "demo",
         isDefault: true,
         isActive: true,
-        notes: "Демо: расходники и материалы",
+        notes: "Сгенерированные расходники (не прод)",
       },
     });
     const whPros = await tx.warehouse.create({
       data: {
-        name: "Склад протетики",
+        name: "Демо — склад протетики",
+        warehouseType: "demo",
         isDefault: false,
         isActive: true,
-        notes: "Демо: заготовки и CAD/CAM",
+        notes: "Сгенерированные заготовки (не прод)",
       },
     });
 
@@ -282,12 +311,14 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         tx.inventoryItem.create({
           data: {
             warehouseId: whMat.id,
-            name: `Склад: ${m.name}`,
+            sku: `DM-MAT-${String(i + 1).padStart(2, "0")}`,
+            name: `Демо: ${m.name}`,
             unit: "шт",
             sortOrder: i,
             isActive: true,
             unitsPerSupply: 10,
-            referenceUnitPriceRub: 12,
+            referenceUnitPriceRub: 50 + i * 7,
+            manufacturer: "ДемоМатериал",
           },
         }),
       ),
@@ -297,20 +328,37 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       tx.inventoryItem.create({
         data: {
           warehouseId: whPros.id,
-          name: "Циркониевый диск 98 мм",
+          sku: "DM-PRO-01",
+          name: "Демо: циркониевый диск 98 мм",
           unit: "шт",
           sortOrder: 0,
           isActive: true,
-          manufacturer: "Демо-производитель",
+          manufacturer: "ДемоCAD",
+          referenceUnitPriceRub: 4200,
         },
       }),
       tx.inventoryItem.create({
         data: {
           warehouseId: whPros.id,
-          name: "Абатменты титановые",
+          sku: "DM-PRO-02",
+          name: "Демо: абатменты титановые",
           unit: "шт",
           sortOrder: 1,
           isActive: true,
+          manufacturer: "ДемоImplant",
+          referenceUnitPriceRub: 890,
+        },
+      }),
+      tx.inventoryItem.create({
+        data: {
+          warehouseId: whPros.id,
+          sku: "DM-PRO-03",
+          name: "Демо: PMMA диск многослойный",
+          unit: "шт",
+          sortOrder: 2,
+          isActive: true,
+          manufacturer: "ДемоCAD",
+          referenceUnitPriceRub: 2100,
         },
       }),
     ]);
@@ -340,53 +388,53 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     const clinicSeeds = [
       {
         name: "Демо — стоматология «Импульс»",
-        address: "г. Москва, ул. Примерная, д. 10",
-        phone: "+74951110010",
+        address: "г. Санкт-Петербург, Невский пр-т, д. 28",
+        phone: "+78121110010",
       },
       {
         name: "Демо — клиника «Дент-Профи»",
-        address: "г. Москва, пр-т Демонстрационный, д. 22",
-        phone: "+74952220022",
+        address: "г. Новосибирск, Красный пр-т, д. 50",
+        phone: "+73832220022",
       },
       {
         name: "Демо — «Улыбка Плюс»",
-        address: "г. Москва, ул. Садовая, д. 5",
-        phone: "+74953330033",
+        address: "г. Екатеринбург, ул. Малышева, д. 36",
+        phone: "+73433330033",
       },
       {
         name: "Демо — «Белый Жемчуг»",
-        address: "г. Химки, ул. Ленина, д. 14",
-        phone: "+74957770077",
+        address: "г. Казань, ул. Баумана, д. 19",
+        phone: "+78437770077",
       },
       {
         name: "Демо — «Ортодент»",
-        address: "г. Москва, ул. Тверская, д. 8",
-        phone: "+74954440044",
+        address: "г. Нижний Новгород, ул. Большая Покровская, д. 12",
+        phone: "+78314440044",
       },
       {
         name: "Демо — «Стомалайн»",
-        address: "г. Мытищи, пр-т Мира, д. 31",
-        phone: "+74955550055",
+        address: "г. Самара, ул. Ленинградская, д. 25",
+        phone: "+78465550055",
       },
       {
         name: "Демо — «Дентал Сити»",
-        address: "г. Москва, ул. Новый Арбат, д. 15",
-        phone: "+74956660066",
+        address: "г. Краснодар, ул. Красная, д. 88",
+        phone: "+78616660066",
       },
       {
         name: "Демо — «КронаМед»",
-        address: "г. Королёв, ул. Гагарина, д. 3",
-        phone: "+74958880088",
+        address: "г. Владивосток, ул. Светланская, д. 41",
+        phone: "+74238880088",
       },
       {
         name: "Демо — «Апекс»",
-        address: "г. Москва, Ленинградский пр-т, д. 40",
-        phone: "+74959990099",
+        address: "г. Ростов-на-Дону, пр-т Будённовский, д. 17",
+        phone: "+78639990099",
       },
       {
         name: "Демо — «Формула Улыбки»",
-        address: "г. Одинцово, ул. Молодёжная, д. 2",
-        phone: "+74951231212",
+        address: "г. Калининград, ул. Пролетарская, д. 7",
+        phone: "+74012123121",
       },
     ] as const;
 
@@ -547,8 +595,22 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       },
     ] as const;
 
+    /** Города врачей — те же регионы, что у клиник (не только Москва). */
+    const doctorCities = [
+      "Санкт-Петербург",
+      "Новосибирск",
+      "Екатеринбург",
+      "Казань",
+      "Нижний Новгород",
+      "Самара",
+      "Краснодар",
+      "Владивосток",
+      "Ростов-на-Дону",
+      "Калининград",
+    ] as const;
+
     const doctors = await Promise.all(
-      doctorSeeds.map((d) => {
+      doctorSeeds.map((d, di) => {
         const fullName = `${d.lastName} ${d.firstName} ${d.patronymic}`;
         return tx.doctor.create({
           data: {
@@ -558,15 +620,13 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
             firstName: d.firstName,
             patronymic: d.patronymic,
             specialty: d.specialty,
-            city: "Москва",
+            city: doctorCities[di % doctorCities.length]!,
             acceptsPrivatePractice: d.private,
           },
         });
       }),
     );
 
-    const [d0, d1, d2, d3, d4] = doctors;
-    const [clinicImpuls, clinicDentProfi] = clinics;
     const links: Array<{ doctorId: string; clinicId: string }> = [];
     for (let di = 0; di < doctors.length; di++) {
       const doc = doctors[di]!;
@@ -595,80 +655,234 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       await tx.doctorOnClinic.create({ data: row });
     }
 
-    const orderSeeds = [
-      { i: 1, doctor: d0!, clinic: clinicImpuls!, col: DemoKanbanColumn.NEW },
-      {
-        i: 2,
-        doctor: d1!,
-        clinic: clinicImpuls!,
-        col: DemoKanbanColumn.IN_PROGRESS,
-      },
-      {
-        i: 3,
-        doctor: d3!,
-        clinic: clinicDentProfi!,
-        col: DemoKanbanColumn.IN_PROGRESS,
-      },
-      { i: 4, doctor: d4!, clinic: null, col: DemoKanbanColumn.DONE },
+    /** ~90 нарядов за 30 дней МСК — по ~3 в день для живой аналитики. */
+    const DEMO_ORDER_COUNT = 90;
+    const DEMO_ORDER_SPAN_DAYS = 30;
+    const patientSurnames = [
+      "Иванов",
+      "Петрова",
+      "Сидоров",
+      "Козлова",
+      "Морозов",
+      "Волкова",
+      "Лебедев",
+      "Соколова",
+      "Новиков",
+      "Фёдорова",
+      "Михайлов",
+      "Егорова",
+      "Алексеев",
+      "Кузнецова",
+      "Степанов",
+      "Павлова",
+    ] as const;
+    const patientInitials = [
+      "А.С.",
+      "О.В.",
+      "П.К.",
+      "Н.Д.",
+      "И.М.",
+      "Е.А.",
+      "Р.Л.",
+      "Т.Ю.",
+    ] as const;
+    const toothHints = [
+      "11, 12 коронки",
+      "временная 21",
+      "цирконий 36",
+      "съёмный",
+      "виниры 12–22",
+      "абатмент 46",
+      "мост 34–36",
+      "каппа",
+      "вкладка 15",
+      "ретейнер",
     ] as const;
 
-    const patientNames = [
-      "Иванов А.С. (11, 12 коронки)",
-      "Петрова О.В. (временная 21)",
-      "Сидоров П.К. (цирконий 36)",
-      "Козлова Н.Д. (частная практика, съёмный)",
-    ];
+    const orderDescriptionTemplates = [
+      (h: string, color: string) =>
+        `Клиника прислала скан.\nРабота: ${h}.\nЦвет ${color}.\nКонтакт окклюзии средний, без срочности.`,
+      (h: string, color: string) =>
+        `Заказ с почты.\n${h}.\nОттенок ${color}, прозрачность стандарт.\nПросим фото до/после при возможности.`,
+      (h: string, color: string) =>
+        `Пациент на повторный приём.\n${h}, цвет ${color}.\nУчесть прикус по присланной регистрации.`,
+      (h: string, color: string) =>
+        `Новый заказ.\nПозиция: ${h}.\nЦвет ${color}.\nСкан во вложении к письму (демо).`,
+      (h: string, color: string) =>
+        `${h}.\nЦвет ${color}, индивидуализация десны по фото.\nСрок — как в шапке наряда.`,
+      (h: string, color: string) =>
+        `Ортопедия.\n${h}.\n${color}.\nБез металлического края, просим глазурь.`,
+    ] as const;
+    const shadePool = ["A1", "A2", "A3", "B1", "BL2", "C2"] as const;
 
+    const seqByYymm = new Map<string, number>();
     const createdOrders: { id: string; orderNumber: string }[] = [];
-    for (let ix = 0; ix < orderSeeds.length; ix++) {
-      const row = orderSeeds[ix]!;
-      const i = row.i;
-      const doc = row.doctor;
-      const clinic = row.clinic;
-      const col = row.col;
-      const kt = kaitenTypes[ix % 4]!;
-      const courierPick = couriers[ix % 2]!;
-      const courierDel = couriers[(ix + 1) % 2]!;
-      const dueLab = new Date();
-      dueLab.setUTCDate(dueLab.getUTCDate() + 14 + i);
-      const dueAdm = new Date();
-      dueAdm.setUTCDate(dueAdm.getUTCDate() + 2 + (i % 6));
+
+    for (let ix = 0; ix < DEMO_ORDER_COUNT; ix++) {
+      /** Равномерно по дням: 0 = сегодня МСК … SPAN-1 = самый старый. */
+      const daysFromToday =
+        DEMO_ORDER_SPAN_DAYS -
+        1 -
+        Math.floor((ix * DEMO_ORDER_SPAN_DAYS) / DEMO_ORDER_COUNT);
+      const hourMsk = 9 + (ix % 9);
+      const minuteMsk = (ix * 7) % 60;
+      const createdAt = daysAgoMsk(daysFromToday, hourMsk, minuteMsk);
+      const yymm = yymmOf(createdAt);
+      const seq = (seqByYymm.get(yymm) ?? 0) + 1;
+      seqByYymm.set(yymm, seq);
+      const orderNumber = `${yymm}-${pad3(seq)}`;
+
+      const doc = doctors[ix % doctors.length]!;
+      const privateOrder = ix % 7 === 0;
+      const clinic = privateOrder ? null : clinics[ix % clinics.length]!;
+      const kt = kaitenTypes[ix % kaitenTypes.length]!;
+      const courierPick = couriers[ix % couriers.length]!;
+      const courierDel = couriers[(ix + 1) % couriers.length]!;
+
+      const bucket = ix % 10;
+      let status: OrderStatus = OrderStatus.IN_PROGRESS;
+      let labWorkStatus: LabWorkStatus = LabWorkStatus.PRODUCTION;
+      let col: DemoKanbanColumn = DemoKanbanColumn.IN_PROGRESS;
+      let adminShippedOtpr = false;
+      let adminShippedAt: Date | null = null;
+      let payment: string | null = null;
+      if (bucket === 9) {
+        status = OrderStatus.CANCELLED;
+        labWorkStatus = LabWorkStatus.TO_ADMINS;
+        col = DemoKanbanColumn.DONE;
+      } else if (bucket >= 5 || daysFromToday >= 8) {
+        status = OrderStatus.DELIVERED;
+        labWorkStatus = LabWorkStatus.TO_ADMINS;
+        col = DemoKanbanColumn.DONE;
+        adminShippedOtpr = true;
+        adminShippedAt = new Date(
+          createdAt.getTime() + (2 + (ix % 4)) * 24 * 60 * 60 * 1000,
+        );
+        payment =
+          ix % 3 === 0 ? "Оплачено" : ix % 3 === 1 ? "Сверка-ОПЛАЧЕНО" : null;
+      } else if (bucket <= 1 && daysFromToday < 4) {
+        status = OrderStatus.REVIEW;
+        labWorkStatus = LabWorkStatus.TO_SCAN;
+        col = DemoKanbanColumn.NEW;
+      }
+
+      const dueLab = new Date(createdAt);
+      dueLab.setUTCDate(dueLab.getUTCDate() + 10 + (ix % 8));
+      const dueAdm = new Date(createdAt);
+      dueAdm.setUTCDate(dueAdm.getUTCDate() + 2 + (ix % 6));
+
+      const pi = priceItems[ix % priceItems.length]!;
+      const qty = 1 + (ix % 3);
+      const constructions: Array<{
+        category: typeof ConstructionCategory.PRICE_LIST;
+        priceListItemId: string;
+        quantity: number;
+        unitPrice: number;
+        sortOrder: number;
+      }> = [
+        {
+          category: ConstructionCategory.PRICE_LIST,
+          priceListItemId: pi.id,
+          quantity: qty,
+          unitPrice: pi.priceRub,
+          sortOrder: 0,
+        },
+      ];
+      if (ix % 4 === 0) {
+        const pi2 = priceItems[(ix + 3) % priceItems.length]!;
+        constructions.push({
+          category: ConstructionCategory.PRICE_LIST,
+          priceListItemId: pi2.id,
+          quantity: 1,
+          unitPrice: pi2.priceRub,
+          sortOrder: 1,
+        });
+      }
+
+      const surname = patientSurnames[ix % patientSurnames.length]!;
+      const initials = patientInitials[ix % patientInitials.length]!;
+      const hint = toothHints[ix % toothHints.length]!;
+      const shade = shadePool[ix % shadePool.length]!;
+      const descTpl =
+        orderDescriptionTemplates[ix % orderDescriptionTemplates.length]!;
+      const clientOrderText = descTpl(hint, shade);
+      const notes =
+        ix % 5 === 0
+          ? "Демо: внутренний комментарий админа — проверить комплектацию перед отгрузкой."
+          : null;
 
       const order = await tx.order.create({
         data: {
           tenantId: DEFAULT_TENANT_ID,
-          orderNumber: `2604-${pad3(i)}`,
+          orderNumber,
+          createdAt,
           clinicId: clinic?.id ?? null,
           doctorId: doc.id,
-          patientName: patientNames[ix] ?? `Пациент демо ${i}`,
-          status: OrderStatus.IN_PROGRESS,
-          labWorkStatus: LabWorkStatus.PRODUCTION,
+          patientName: `${surname} ${initials} (${hint})`,
+          status,
+          labWorkStatus,
           dueDate: dueLab,
           dueToAdminsAt: dueAdm,
           appointmentDate: dueAdm,
+          workReceivedAt: createdAt,
           demoKanbanColumn: col,
           kaitenCardTypeId: kt.id,
           kaitenTrackLane: null,
           kaitenDecideLater: false,
+          clientOrderText,
+          notes,
+          payment,
+          kaitenCardDescriptionMirror: clientOrderText,
           prosthetics: prostheticsToJson(emptyProsthetics()),
           courierPickupId: courierPick.id,
           courierDeliveryId: courierDel.id,
           registeredByLabel: "Демо CRM",
-          constructions: {
-            create: [
-              {
-                category: ConstructionCategory.PRICE_LIST,
-                priceListItemId: priceItems[ix % priceItems.length]!.id,
-                quantity: 1,
-                unitPrice: priceItems[ix % priceItems.length]!.priceRub,
-                sortOrder: 0,
-              },
-            ],
-          },
+          adminShippedOtpr,
+          adminShippedAt,
+          constructions: { create: constructions },
         },
         select: { id: true, orderNumber: true },
       });
       createdOrders.push(order);
+    }
+
+    const latestYymm = [...seqByYymm.keys()].sort().at(-1) ?? "2608";
+    const maxSeqLatest = seqByYymm.get(latestYymm) ?? 0;
+    await tx.orderNumberSettings.update({
+      where: { id: ORDER_NUMBER_SETTINGS_ID },
+      data: {
+        postingYearMonth: latestYymm,
+        nextSequenceFloor: maxSeqLatest + 1,
+      },
+    });
+
+    /** Движения склада за тот же период — вкладка «Склад» в аналитике. */
+    const stockItems = [...invMat, ...invPros];
+    for (let mi = 0; mi < 24; mi++) {
+      const it = stockItems[mi % stockItems.length]!;
+      const whId = it.warehouseId;
+      const at = daysAgo(40 - mi, 12);
+      const isIssue = mi % 3 !== 0;
+      const linked =
+        isIssue && createdOrders.length > 0
+          ? createdOrders[mi % createdOrders.length]!
+          : null;
+      await tx.stockMovement.create({
+        data: {
+          createdAt: at,
+          kind: isIssue
+            ? StockMovementKind.SALE_ISSUE
+            : StockMovementKind.PURCHASE_RECEIPT,
+          quantity: isIssue ? 1 + (mi % 3) : 10 + (mi % 5),
+          totalCostRub: isIssue ? 120 * (1 + (mi % 3)) : 800 + mi * 15,
+          note: isIssue ? "Демо: отпуск в работу" : "Демо: приход от поставщика",
+          itemId: it.id,
+          warehouseId: whId,
+          orderId: linked?.id ?? null,
+          actorLabel: DEMO_AUTHOR,
+          idempotencyKey: `demo-stock-${mi + 1}`,
+        },
+      });
     }
 
     const mailAccount = await tx.emailAccount.create({
@@ -678,9 +892,15 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         email: DEMO_MAILBOX,
         displayName: "Демо-почта лаборатории",
         encryptedAppPassword: null,
-        allowedRoles: [UserRole.OWNER, UserRole.ADMINISTRATOR],
+        allowedRoles: [
+          UserRole.OWNER,
+          UserRole.ADMINISTRATOR,
+          UserRole.SENIOR_ADMINISTRATOR,
+        ],
+        settingsRoles: [UserRole.OWNER],
         isActive: true,
         lastSyncAt: hoursAgo(1),
+        lastSyncError: null,
       },
     });
 
@@ -741,9 +961,25 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
 
     const inboxId = folders.INBOX!;
     const sentId = folders.SENT!;
-    const o1 = createdOrders[0]!;
-    const o2 = createdOrders[1]!;
-    const o3 = createdOrders[2]!;
+    const oLinked = [
+      createdOrders[createdOrders.length - 1]!,
+      createdOrders[createdOrders.length - 2]!,
+      createdOrders[createdOrders.length - 3]!,
+      createdOrders[createdOrders.length - 4]!,
+      createdOrders[createdOrders.length - 5]!,
+      createdOrders[Math.floor(createdOrders.length / 2)]!,
+      createdOrders[10]!,
+    ];
+    const o1 = oLinked[0]!;
+    const o2 = oLinked[1]!;
+    const o3 = oLinked[2]!;
+    const clinicA = clinics[0]!;
+    const clinicB = clinics[1]!;
+    const clinicC = clinics[2]!;
+    const clinicD = clinics[3]!;
+    const docA = doctors[0]!;
+    const docB = doctors[1]!;
+    const docC = doctors[2]!;
 
     const mailSpecs: Array<{
       folderId: string;
@@ -762,27 +998,165 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         folderId: inboxId,
         direction: EmailDirection.INBOUND,
         isRead: false,
-        fromName: "Клиника Импульс",
+        fromName: clinicA.name,
         fromAddress: "reception@impuls-demo.ru",
         to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
         subject: `Скан к наряду ${o1.orderNumber}`,
-        preview: "Добрый день! Прикладываем скан, можно брать в работу.",
-        body: `Добрый день!\n\nПо наряду ${o1.orderNumber} отправили скан.\nМожно брать в работу.\n\nС уважением,\nКлиника Импульс`,
-        at: hoursAgo(5),
+        preview: "Прикладываем скан, можно брать в работу.",
+        body: `Добрый день!\n\nКлиника: ${clinicA.name}\nВрач: ${docA.fullName}\nНаряд: ${o1.orderNumber}\n\nОтправили скан — можно брать в работу.\n\nС уважением,\nРесепшен`,
+        at: hoursAgo(2),
         linkOrderId: o1.id,
       },
       {
         folderId: inboxId,
         direction: EmailDirection.INBOUND,
         isRead: false,
-        fromName: "Д-р Петрова",
+        fromName: docB.fullName,
         fromAddress: "petrova@dent-demo.ru",
         to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
         subject: `Уточнение по ${o2.orderNumber}`,
         preview: "Можно ли сдвинуть срок на 2 дня?",
-        body: `Здравствуйте!\n\nПо наряду ${o2.orderNumber} можно ли сдвинуть срок сдачи на 2 дня?\n\nПетрова О.В.`,
-        at: hoursAgo(3),
+        body: `Здравствуйте!\n\nПо наряду ${o2.orderNumber} можно ли сдвинуть срок сдачи на 2 дня?\n\n${docB.fullName}`,
+        at: hoursAgo(4),
         linkOrderId: o2.id,
+      },
+      {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        isRead: true,
+        fromName: clinicB.name,
+        fromAddress: "lab@dent-profi-demo.ru",
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        subject: `Коррекция цвета ${o3.orderNumber}`,
+        preview: "Просим чуть светлее A2 → A1.",
+        body: `Добрый день!\n\nНаряд ${o3.orderNumber}: просим сделать цвет чуть светлее (A2 → A1).\n\n${clinicB.name}`,
+        at: hoursAgo(18),
+        linkOrderId: o3.id,
+      },
+      {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        isRead: true,
+        fromName: clinicC.name,
+        fromAddress: "ordo@ulybka-demo.ru",
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        subject: `Готовность ${oLinked[3]!.orderNumber}?`,
+        preview: "Когда можно забирать работу?",
+        body: `Здравствуйте!\n\nПодскажите, наряд ${oLinked[3]!.orderNumber} уже можно забирать?\n\n${clinicC.name}`,
+        at: hoursAgo(30),
+        linkOrderId: oLinked[3]!.id,
+      },
+      {
+        folderId: sentId,
+        direction: EmailDirection.OUTBOUND,
+        isRead: true,
+        fromName: "Демо-почта лаборатории",
+        fromAddress: DEMO_MAILBOX,
+        to: [{ name: clinicA.name, address: "reception@impuls-demo.ru" }],
+        subject: `Re: Скан к наряду ${o1.orderNumber}`,
+        preview: "Скан получили, в работу взяли.",
+        body: `Добрый день!\n\nСкан по ${o1.orderNumber} получили, наряд в работе.\n\nЛаборатория`,
+        at: hoursAgo(1.5),
+        linkOrderId: o1.id,
+      },
+      {
+        folderId: sentId,
+        direction: EmailDirection.OUTBOUND,
+        isRead: true,
+        fromName: "Демо-почта лаборатории",
+        fromAddress: DEMO_MAILBOX,
+        to: [{ name: docC.fullName, address: "sidorov@demo-clinic.ru" }],
+        subject: `Готовность ${oLinked[4]!.orderNumber}`,
+        preview: "Работа готова, можно забирать после 14:00.",
+        body: `Добрый день!\n\nНаряд ${oLinked[4]!.orderNumber} готов — после 14:00 можно забирать.\n\nЛаборатория`,
+        at: hoursAgo(12),
+        linkOrderId: oLinked[4]!.id,
+      },
+      {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        isRead: true,
+        fromName: clinicD.name,
+        fromAddress: "info@zhemchug-demo.ru",
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        subject: `Фото припасовки ${oLinked[5]!.orderNumber}`,
+        preview: "Присылаем фото после примерки.",
+        body: `Добрый день!\n\nПо наряду ${oLinked[5]!.orderNumber} присылаем фото после примерки. Нужна доработка контакта.\n\n${clinicD.name}`,
+        at: daysAgo(3, 11),
+        linkOrderId: oLinked[5]!.id,
+      },
+      // Новые заявки без наряда — можно «Создать заказ» из письма
+      {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        isRead: false,
+        fromName: clinicA.name,
+        fromAddress: "reception@impuls-demo.ru",
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        subject: "Новый заказ: коронки Zr 11, 21",
+        preview: "Пациент Смирнов И.П., цвет A2, срок 10 раб. дней.",
+        body: `Добрый день!\n\nКлиника: ${clinicA.name}\nВрач: ${docA.fullName}\nПациент: Смирнов И.П.\n\nЗаказ:\n— коронки циркониевые 11, 21\n— цвет A2\n— срок 10 рабочих дней\n\nСкан во вложении (демо).\n\nС уважением,\nРесепшен`,
+        at: hoursAgo(6),
+      },
+      {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        isRead: false,
+        fromName: clinicB.name,
+        fromAddress: "lab@dent-profi-demo.ru",
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        subject: "Заявка: временные коронки 34–36",
+        preview: "Нужны временные на 3 зуба, срочно к пятнице.",
+        body: `Здравствуйте!\n\nКлиника: ${clinicB.name}\nВрач: ${docB.fullName}\nПациент: Орлова М.А.\n\nНужны временные коронки 34, 35, 36.\nСрок — к пятнице.\n\n${clinicB.name}`,
+        at: hoursAgo(9),
+      },
+      {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        isRead: false,
+        fromName: docC.fullName,
+        fromAddress: "sidorov@demo-clinic.ru",
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        subject: "Частная практика: каппа на верх",
+        preview: "Пациент без клиники, каппа ночная.",
+        body: `Добрый день!\n\nВрач (частная практика): ${docC.fullName}\nПациент: Кузнецов Д.В.\n\nЗаказ: каппа ночная на верхнюю челюсть.\nСрок 5 рабочих дней.\n\nС уважением`,
+        at: hoursAgo(14),
+      },
+      {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        isRead: true,
+        fromName: clinicC.name,
+        fromAddress: "ordo@ulybka-demo.ru",
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        subject: "Мост 3 ед. Zr 45–47",
+        preview: "Цвет A3, каркас на примерку.",
+        body: `Добрый день!\n\nКлиника: ${clinicC.name}\nВрач: ${doctors[3]!.fullName}\nПациент: Васильева Е.Н.\n\nМост циркониевый 45–47, цвет A3.\nСначала каркас на примерку.\n\n${clinicC.name}`,
+        at: daysAgo(1, 15),
+      },
+      {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        isRead: true,
+        fromName: clinicD.name,
+        fromAddress: "info@zhemchug-demo.ru",
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        subject: "Виниры 12–22",
+        preview: "6 виниров E.max, фото во вложении.",
+        body: `Здравствуйте!\n\nКлиника: ${clinicD.name}\nВрач: ${doctors[4]!.fullName}\nПациент: Николаева С.И.\n\nВиниры 12, 11, 21, 22 (и по ситуации 13, 23).\nМатериал E.max, фото улыбки приложили.\n\n${clinicD.name}`,
+        at: daysAgo(2, 9),
+      },
+      {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        isRead: false,
+        fromName: clinics[4]!.name,
+        fromAddress: "mail@ortodent-demo.ru",
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        subject: "Абатмент Multi-unit + коронка 36",
+        preview: "Имплант Straumann, срочно.",
+        body: `Добрый день!\n\nКлиника: ${clinics[4]!.name}\nВрач: ${doctors[5]!.fullName}\nПациент: Фролов А.К.\n\nНужен абатмент Multi-unit и коронка Zr на 36.\nПлатформа Straumann.\n\nС уважением`,
+        at: hoursAgo(20),
       },
       {
         folderId: inboxId,
@@ -794,33 +1168,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         subject: "Счёт на диски ZrO2",
         preview: "Счёт во вложении (демо без файла).",
         body: "Добрый день!\n\nНаправляем счёт на диски ZrO2. Оплата по реквизитам в письме.\n\nЦиркон+",
-        at: hoursAgo(28),
-      },
-      {
-        folderId: sentId,
-        direction: EmailDirection.OUTBOUND,
-        isRead: true,
-        fromName: "Демо-почта лаборатории",
-        fromAddress: DEMO_MAILBOX,
-        to: [{ name: "Клиника Импульс", address: "reception@impuls-demo.ru" }],
-        subject: `Re: Скан к наряду ${o1.orderNumber}`,
-        preview: "Скан получили, в работу взяли.",
-        body: `Добрый день!\n\nСкан по ${o1.orderNumber} получили, наряд в работе.\n\nЛаборатория`,
-        at: hoursAgo(4),
-        linkOrderId: o1.id,
-      },
-      {
-        folderId: sentId,
-        direction: EmailDirection.OUTBOUND,
-        isRead: true,
-        fromName: "Демо-почта лаборатории",
-        fromAddress: DEMO_MAILBOX,
-        to: [{ name: "Д-р Сидоров", address: "sidorov@demo-clinic.ru" }],
-        subject: `Готовность ${o3.orderNumber}`,
-        preview: "Работа почти готова, завтра можно забирать.",
-        body: `Добрый день!\n\nНаряд ${o3.orderNumber} почти готов — завтра после 14:00 можно забирать.\n\nЛаборатория`,
-        at: hoursAgo(10),
-        linkOrderId: o3.id,
+        at: daysAgo(4, 10),
       },
       {
         folderId: inboxId,
@@ -843,6 +1191,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           tenantId: DEFAULT_TENANT_ID,
           accountId: mailAccount.id,
           folderId: m.folderId,
+          uid: mi + 1,
           messageId: `<demo-mail-${mi + 1}@demo.crm>`,
           direction: m.direction,
           isRead: m.isRead,
@@ -856,6 +1205,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           receivedAt: m.direction === EmailDirection.INBOUND ? m.at : null,
           sentAt: m.direction === EmailDirection.OUTBOUND ? m.at : null,
           internalDate: m.at,
+          createdAt: m.at,
         },
         select: { id: true },
       });
@@ -1041,7 +1391,9 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       },
     ]);
 
-  });
+  },
+    { maxWait: 60_000, timeout: 180_000 },
+  );
 }
 
 export { OWNER_ID, OWNER_EMAIL };

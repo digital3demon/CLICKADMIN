@@ -38,6 +38,9 @@ export async function GET() {
     if (!session) {
       return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
     }
+    if (session.demo) {
+      return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+    }
     const tenantId = await requireSessionTenantId(session);
     const prisma = await getPrisma();
     const row = await prisma.contractTemplateSettings.findUnique({
@@ -91,6 +94,9 @@ export async function POST(req: Request) {
     const session = await getSessionFromCookies();
     if (!session) {
       return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    }
+    if (session.demo) {
+      return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
     }
     const tenantId = await requireSessionTenantId(session);
 

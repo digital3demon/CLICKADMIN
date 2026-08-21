@@ -69,7 +69,7 @@ export async function GET(req: Request) {
     const s = await getSessionFromCookies();
     if (!s) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
     const tenantId = await requireSessionTenantId(s);
-    const pricingPrisma = getPricingPrismaClient();
+    const pricingPrisma = await getPricingPrismaClient();
     const url = new URL(req.url);
     const targetType = parseTargetType(url.searchParams.get("targetType"));
     if (!targetType) {
@@ -129,7 +129,7 @@ export async function PATCH(req: Request) {
     if (!s) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
     const tenantId = await requireSessionTenantId(s);
     const clientsPrisma = await getPrisma();
-    const pricingPrisma = getPricingPrismaClient();
+    const pricingPrisma = await getPricingPrismaClient();
 
     const body = (await req.json().catch(() => ({}))) as OverridePatchBody;
     const targetType = parseTargetType(body.targetType);

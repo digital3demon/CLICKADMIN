@@ -45,4 +45,14 @@ describe("getDemoDatabaseUrl", () => {
     expect(getDemoDatabaseUrl()).toContain(`schema=${DEMO_PG_SCHEMA}`);
     expect(getDemoDatabaseUrl().startsWith("postgresql://")).toBe(true);
   });
+
+  it("на том же postgres-хосте всегда schema=crm_demo, даже если DEMO_DATABASE_URL=public", () => {
+    process.env.DATABASE_URL =
+      "postgresql://u:p@localhost:5432/db?schema=public";
+    process.env.DEMO_DATABASE_URL =
+      "postgresql://u:p@localhost:5432/db?schema=public";
+    expect(getDemoDatabaseUrl()).toBe(
+      `postgresql://u:p@localhost:5432/db?schema=${DEMO_PG_SCHEMA}`,
+    );
+  });
 });

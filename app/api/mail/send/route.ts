@@ -9,6 +9,12 @@ const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
 export async function POST(req: Request) {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
+  if (r.ctx.isDemo) {
+    return NextResponse.json(
+      { error: "В демо отправка писем отключена" },
+      { status: 403 },
+    );
+  }
   try {
     const form = await req.formData();
     const accountId = stringField(form.get("accountId"), 200);

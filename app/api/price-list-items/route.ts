@@ -9,7 +9,7 @@ import { resolvePriceOverrideMap } from "@/lib/price-overrides";
 /** Прайс для форм заказа и раздела «Конфигурация». ?listId= — иначе активный каталог. */
 export async function GET(req: Request) {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const url = new URL(req.url);
     const qList = url.searchParams.get("listId")?.trim() ?? "";
     const clinicId = url.searchParams.get("clinicId")?.trim() ?? "";
@@ -88,7 +88,7 @@ type PostBody = {
 
 export async function POST(req: Request) {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     await ensurePriceListWorkspace(prisma);
     const body = (await req.json()) as PostBody;
     const code = body.code?.trim() ?? "";

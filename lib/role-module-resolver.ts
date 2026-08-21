@@ -1,4 +1,4 @@
-import type { AppModule, UserRole } from "@prisma/client";
+import type { AppModule, PrismaClient, UserRole } from "@prisma/client";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import {
   ALL_APP_MODULES,
@@ -16,10 +16,13 @@ import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
 /**
  * Эффективный набор флагов по модулям: переопределения в БД или дефолт из
  * `defaultModuleAllowed`. Владелец — всегда full true. Однопользовательский режим — full true.
+ *
+ * `options.db` — явный клиент (демо / getPrisma), иначе resolveTenantPrismaClient(tenantId).
  */
 export async function getEffectiveModuleAccess(
   tenantId: string | null | undefined,
   role: UserRole,
+  options?: { db?: PrismaClient },
 ): Promise<Record<AppModule, boolean>> {
   if (isSingleUserPortable() || !tenantId || role === "OWNER") {
     const all = {} as Record<AppModule, boolean>;
@@ -29,7 +32,7 @@ export async function getEffectiveModuleAccess(
     return all;
   }
 
-  const db = await resolveTenantPrismaClient(tenantId);
+  const db = options?.db ?? (await resolveTenantPrismaClient(tenantId));
   const rows = await db.roleModuleAccess.findMany({
     where: { tenantId, role },
     select: { module: true, allowed: true },

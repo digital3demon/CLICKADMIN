@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getPricingPrismaClient } from "@/lib/prisma-pricing";
 export async function GET() {
   try {
-    const types = await getPricingPrismaClient().constructionType.findMany({
+    const types = await (await getPricingPrismaClient()).constructionType.findMany({
       orderBy: { name: "asc" },
     });
     return NextResponse.json(types);

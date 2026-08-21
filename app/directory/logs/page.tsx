@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function DirectoryLogsPage() {
   const session = await getSessionFromCookies();
   if (!session) redirect("/login?next=/directory/logs");
-  if (session.role !== "OWNER") redirect("/directory");
+  if (session.role !== "OWNER" || session.demo) redirect("/directory");
 
   return (
     <ModuleFrame

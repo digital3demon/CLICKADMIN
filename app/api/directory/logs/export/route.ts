@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "Нужна авторизация" }, { status: 401 });
   }
-  if (session.role !== "OWNER") {
+  if (session.role !== "OWNER" || session.demo) {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
   }
 

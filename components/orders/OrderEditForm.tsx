@@ -4075,7 +4075,11 @@ export function OrderEditForm({
 
       {isOrderPageFramed ? (
         <OrderSecondaryTabsSpoiler
-          title="Документооборот-Канбан-История"
+          title={
+            isDemoMode
+              ? "Документооборот · Канбан · История"
+              : "Документооборот-Канбан-История"
+          }
           defaultOpen={isAccountant}
           highlight={invoiceCompositionMismatch}
         >
@@ -4133,7 +4137,7 @@ export function OrderEditForm({
 
       {previewMode ? (
         <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
-          Виртуальный наряд ИИ — только просмотр. Файлы и Kaiten не создаются.
+          Виртуальный наряд ИИ — только просмотр. Файлы не создаются.
         </p>
       ) : !canEditOrder ? (
         <p className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-[var(--text-secondary)]">
@@ -4146,7 +4150,7 @@ export function OrderEditForm({
         className={`min-w-0 border-0 p-0 disabled:opacity-[0.88]${previewMode ? " pointer-events-none select-none" : ""}`}
       >
 
-      {initial.kaitenBlocked ? (
+      {initial.kaitenBlocked && showKaitenExternalUi ? (
         <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-red-400/70 bg-red-950/40 px-3 py-2.5 text-sm text-red-50 shadow-sm dark:border-red-900/70 dark:bg-red-950/55">
           <div className="inline-flex min-w-0 items-center gap-1.5 font-medium leading-tight">
             <span aria-hidden>⛔</span>

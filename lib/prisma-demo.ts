@@ -34,22 +34,27 @@ export function isSqliteFileUrl(url: string): boolean {
 
 /**
  * URL демо-БД для Prisma и `db push`.
- * По умолчанию: тот же Postgres, что DATABASE_URL, но схема `crm_demo`
- * (на App Platform SQLite с postgresql-схемой не работает).
- * Устаревший `DEMO_DATABASE_URL=file:…` при postgres-проде игнорируется.
+ * При postgres-проде всегда та же БД со схемой `crm_demo` (не public / не полный прайс прода).
+ * `DEMO_DATABASE_URL=file:…` и тот же postgres URL что DATABASE_URL — игнорируются.
+ * Отдельный postgres-хост в DEMO_DATABASE_URL допускается, тоже с schema=crm_demo.
  */
 export function getDemoDatabaseUrl(): string {
   const u = process.env.DEMO_DATABASE_URL?.trim();
   const main = process.env.DATABASE_URL?.trim() ?? "";
 
-  if (u && isPostgresUrl(u)) return u;
-
   if (isPostgresUrl(main)) {
-    // Старый file:./prisma/demo.db в env App Platform — не использовать
+    if (u && isPostgresUrl(u)) {
+      const mainBase = splitUrlQuery(main)[0];
+      const demoBase = splitUrlQuery(u)[0];
+      if (mainBase !== demoBase) {
+        return withPostgresSchema(u, DEMO_PG_SCHEMA);
+      }
+    }
     return withPostgresSchema(main, DEMO_PG_SCHEMA);
   }
 
-  if (u) return u;
+  if (u && !isSqliteFileUrl(u)) return u;
+  if (u && isSqliteFileUrl(u)) return u;
   return "file:./prisma/demo.db";
 }
 

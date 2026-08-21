@@ -239,7 +239,7 @@ const pmmaOrderText = [
 describe("resolveAiCompositionLines", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getPricingPrismaClient).mockReturnValue({
+    vi.mocked(getPricingPrismaClient).mockResolvedValue({
       priceListItem: {
         findMany: vi.fn().mockResolvedValue(mockItems),
       },
@@ -640,7 +640,7 @@ describe("PMMA temporary crown + Ultrastom bases", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getPricingPrismaClient).mockReturnValue({
+    vi.mocked(getPricingPrismaClient).mockResolvedValue({
       priceListItem: {
         findMany: vi.fn().mockResolvedValue(mockItems),
       },

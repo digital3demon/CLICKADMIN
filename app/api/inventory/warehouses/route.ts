@@ -14,7 +14,7 @@ export async function GET(req: Request) {
       new URL(req.url).searchParams.get("all") === "1" ||
       new URL(req.url).searchParams.get("all") === "true";
 
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const rows = await prisma.warehouse.findMany({
       where: all ? {} : { isActive: true },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -47,7 +47,7 @@ type PostBody = {
 
 export async function POST(req: Request) {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const body = (await req.json()) as PostBody;
     const name = body.name?.trim() ?? "";
     if (!name) {

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { AiAdminClient } from "./AiAdminClient";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 
@@ -11,6 +12,18 @@ export default async function AiAdminPage() {
     redirect("/");
   }
 
+  if (s.demo) {
+    return (
+      <ModuleFrame title="ИИ-Админ">
+        <div className="flex min-h-[min(52vh,28rem)] items-center justify-center px-6 py-16">
+          <p className="text-center text-2xl font-semibold uppercase tracking-[0.28em] text-[var(--text-muted)]">
+            В РАЗРАБОТКЕ
+          </p>
+        </div>
+      </ModuleFrame>
+    );
+  }
+
   const db = await getOrdersPrisma();
   const tenant = await db.tenant.findUnique({
     where: { id: s.tid },
@@ -18,9 +31,9 @@ export default async function AiAdminPage() {
   });
 
   return (
-    <AiAdminClient 
+    <AiAdminClient
       initialAiEnabled={tenant?.aiEnabled ?? false}
-      hasApiKey={Boolean(tenant?.aiApiKey)} 
+      hasApiKey={Boolean(tenant?.aiApiKey)}
       initialAiModel={tenant?.aiModel}
     />
   );

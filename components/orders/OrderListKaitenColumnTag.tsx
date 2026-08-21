@@ -197,15 +197,20 @@ export function OrderListKaitenColumnTag({
   });
   const hasKaitenColumnLabel =
     !isDemoMode && String(kaitenColumnTitle || "").trim().length > 0;
+  const demoColLabel = kanbanColumnLabelForNoKaitenPill(
+    demoKanbanColumn,
+    demoCardTypeName,
+  );
+  /** Есть колонка демо-канбана — только она, без «Нет в Kaiten». */
+  const demoKanbanStatus =
+    isDemoMode || demoColLabel
+      ? (demoColLabel ?? (isDemoMode ? kaitenLabel : null))
+      : null;
   const showNoKaitenPill =
-    !isDemoMode && !hasKaitenColumnLabel && kaitenCardId == null;
-  const demoKanbanStatus = isDemoMode
-    ? kanbanColumnLabelForNoKaitenPill(demoKanbanColumn, demoCardTypeName) ??
-      kaitenLabel
-    : null;
-  const noKaitenKanbanStatus = showNoKaitenPill
-    ? kanbanColumnLabelForNoKaitenPill(demoKanbanColumn, demoCardTypeName)
-    : null;
+    !isDemoMode &&
+    !demoColLabel &&
+    !hasKaitenColumnLabel &&
+    kaitenCardId == null;
   const effectiveFilterHref = isDemoMode ? null : filterHref;
   const effectiveBoardFilterHref = isDemoMode ? null : boardFilterHref;
   const kaitenColTrimmed = isDemoMode
@@ -221,7 +226,7 @@ export function OrderListKaitenColumnTag({
   });
   const kaitenStatusPillClass = (classicRounded: string) => {
     const tone =
-      noKaitenKanbanStatus || demoKanbanStatus ? "gray" : kaitenHarmonyTone;
+      showNoKaitenPill || demoKanbanStatus ? "gray" : kaitenHarmonyTone;
     return isHarmony
       ? `${resolveListPillClass(true, "", tone)} ${padClass}`
       : `${classicRounded} ${padClass}`;
@@ -237,19 +242,14 @@ export function OrderListKaitenColumnTag({
       >
         <span className="truncate">{demoKanbanStatus}</span>
       </span>
-    ) : noKaitenKanbanStatus ? (
+    ) : showNoKaitenPill ? (
       <span
         className={kaitenStatusPillClass(
           `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-center font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
         )}
-        title={noKaitenKanbanStatus}
+        title="Нет в Kaiten"
       >
-        <span className="inline-flex min-w-0 flex-col leading-tight normal-case">
-          <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
-          <span className="truncate text-[8px] font-medium opacity-90 sm:text-[9px]">
-            {noKaitenKanbanStatus}
-          </span>
-        </span>
+        <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
       </span>
     ) : (
       <span

@@ -15,7 +15,7 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> },
 ) {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const { id } = await ctx.params;
     const movementId = id?.trim();
     if (!movementId) {

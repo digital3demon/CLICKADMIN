@@ -79,7 +79,7 @@ export async function PATCH(req: Request, { params }: RouteProps) {
     }
     const variablePrice = body.variablePrice === true;
 
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const activePriceListId = await getActivePriceListId(prisma);
     const item = await prisma.priceListItem.findUnique({
       where: { id: itemId },
@@ -150,7 +150,7 @@ export async function DELETE(_req: Request, { params }: RouteProps) {
       return NextResponse.json({ error: "Некорректная позиция" }, { status: 400 });
     }
 
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const activePriceListId = await getActivePriceListId(prisma);
     const item = await prisma.priceListItem.findUnique({
       where: { id: itemId },

@@ -1,44 +1,37 @@
 import type { Warehouse } from "@prisma/client";
-import { getPricingPrismaClient } from "@/lib/prisma-pricing";
-/** Схлопывает параллельные вызовы (несколько GET /api/inventory/* в один момент). */
-let ensureInflight: Promise<Warehouse> | null = null;
+import { getPrisma } from "@/lib/get-prisma";
 
 /**
- * Гарантирует наличие хотя бы одного склада; при пустой таблице создаёт «Основной склад».
+ * Гарантирует наличие хотя бы одного склада; при пустой таблице создаёт демо/основной.
+ * Без глобального inflight-кэша: демо и прод — разные PrismaClient/схемы.
  */
 export async function ensureDefaultWarehouse(): Promise<Warehouse> {
-  if (ensureInflight) return ensureInflight;
-  ensureInflight = (async (): Promise<Warehouse> => {
-    const prisma = getPricingPrismaClient();
-    const existingDefault = await prisma.warehouse.findFirst({
-      where: { isDefault: true, isActive: true },
-    });
-    if (existingDefault) return existingDefault;
-
-    const any = await prisma.warehouse.findFirst({
-      where: { isActive: true },
-      orderBy: { createdAt: "asc" },
-    });
-    if (any) return any;
-
-    return prisma.warehouse.create({
-      data: {
-        name: "Основной склад",
-        isDefault: true,
-        isActive: true,
-      },
-    });
-  })().finally(() => {
-    ensureInflight = null;
+  const prisma = await getPrisma();
+  const existingDefault = await prisma.warehouse.findFirst({
+    where: { isDefault: true, isActive: true },
   });
-  return ensureInflight;
+  if (existingDefault) return existingDefault;
+
+  const any = await prisma.warehouse.findFirst({
+    where: { isActive: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (any) return any;
+
+  return prisma.warehouse.create({
+    data: {
+      name: "Основной склад",
+      isDefault: true,
+      isActive: true,
+    },
+  });
 }
 
 /**
  * Если нет активного склада с флагом «по умолчанию», назначает его первому активному.
  */
 export async function repairDefaultWarehouseFlag() {
-  const prisma = getPricingPrismaClient();
+  const prisma = await getPrisma();
   const activeDefault = await prisma.warehouse.findFirst({
     where: { isDefault: true, isActive: true },
   });

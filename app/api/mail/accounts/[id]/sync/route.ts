@@ -12,6 +12,16 @@ export async function POST(
 ) {
   const r = await getMailApiContext();
   if (!r.ok) return r.response;
+  if (r.ctx.isDemo) {
+    return mailJsonResponse({
+      ok: true,
+      demo: true,
+      queued: false,
+      status: "DONE",
+      lastError: null,
+      message: "В демо синхронизация с почтовым сервером отключена",
+    });
+  }
   try {
     const { id } = await params;
     const body = await jsonBody(req);

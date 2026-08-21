@@ -13,7 +13,7 @@ import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 
 export async function GET(req: Request) {
   try {
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     await ensureDefaultWarehouse();
     const { searchParams } = new URL(req.url);
     const itemId = searchParams.get("itemId")?.trim() || undefined;
@@ -80,7 +80,7 @@ type PostBody = {
 
 export async function POST(req: Request) {
   try {
-    const pricingPrisma = getPricingPrismaClient();
+    const pricingPrisma = await getPricingPrismaClient();
     const s = await getSessionFromCookies();
     if (!s) {
       return NextResponse.json({ error: "Требуется вход" }, { status: 401 });

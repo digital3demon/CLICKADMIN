@@ -21,7 +21,7 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
     }
 
     const body = (await req.json()) as PatchBody;
-    const prisma = getPricingPrismaClient();
+    const prisma = await getPricingPrismaClient();
     const existing = await prisma.inventoryItem.findUnique({
       where: { id: id.trim() },
       select: { id: true, sku: true, warehouseId: true },
