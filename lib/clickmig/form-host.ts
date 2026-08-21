@@ -29,6 +29,12 @@ export function isTrustedClickMigPublicHost(
   if (isClickMigFormHost(host)) return true;
   const h = hostWithoutPort(host);
   if (!h) return false;
+  if (
+    process.env.NODE_ENV !== "production" &&
+    (h === "localhost" || h === "127.0.0.1")
+  ) {
+    return true;
+  }
   try {
     const crmHost = hostWithoutPort(new URL(clickMigCrmPublicOrigin()).host);
     return h === crmHost;

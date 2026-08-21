@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { deleteS3Object, getS3ObjectBytes, isS3StorageEnabled, putS3ObjectBytes } from "@/lib/s3-client";
+import { resolvePathUnderRoot } from "@/lib/storage-path-safe";
 
 const S3_REL_PREFIX = "s3:";
 
@@ -49,8 +50,7 @@ function s3KeyFromRelPath(rel: string): string | null {
 }
 
 function absolutePathFromRel(rel: string): string {
-  const parts = rel.replace(/\\/g, "/").split("/").filter(Boolean);
-  return path.join(getMailAttachmentStorageRoot(), ...parts);
+  return resolvePathUnderRoot(getMailAttachmentStorageRoot(), rel);
 }
 
 export function sha256Hex(body: Buffer): string {

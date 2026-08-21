@@ -45,7 +45,17 @@ const nextConfig: NextConfig = {
     "@react-pdf/png-js",
   ],
   experimental: {
-    optimizePackageImports: ["framer-motion", "recharts"],
+    optimizePackageImports: [
+      "framer-motion",
+      "recharts",
+      "lucide-react",
+      "@dnd-kit/core",
+      "@dnd-kit/sortable",
+      "@dnd-kit/utilities",
+      "@tiptap/react",
+      "@tiptap/starter-kit",
+      "@tiptap/core",
+    ],
     /** Иначе Next 15 клонирует тело в middleware и режет ~10MB → HTML 500 на фото/STL. */
     middlewareClientMaxBodySize: "1gb",
   },

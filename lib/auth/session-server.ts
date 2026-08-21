@@ -22,6 +22,7 @@ export async function getSessionFromCookies(): Promise<SessionClaims | null> {
       if (d?.demo) return d;
     }
     if (isSingleUserPortable()) {
+      if (process.env.NODE_ENV === "production") return null;
       return SINGLE_USER_SESSION;
     }
     const t = c.get(SESSION_COOKIE_NAME)?.value;

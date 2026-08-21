@@ -9,14 +9,19 @@ import {
   payrollTrackRequiredForRole,
 } from "@/lib/payroll-tracks";
 import { deleteUserAvatarFile } from "@/lib/user-custom-avatar";
+import { userInTenantWhere } from "@/lib/auth/user-in-tenant";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 type PatchBody = { isActive?: boolean; role?: unknown; payrollTrack?: unknown };
 
-async function otherOwnerCount(prisma: Awaited<ReturnType<typeof getPrisma>>, excludeId: string) {
+async function otherOwnerCount(
+  prisma: Awaited<ReturnType<typeof getPrisma>>,
+  excludeId: string,
+  tenantId: string,
+) {
   return prisma.user.count({
-    where: { role: "OWNER", id: { not: excludeId } },
+    where: { role: "OWNER", tenantId, id: { not: excludeId } },
   });
 }
 
@@ -68,9 +73,14 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Некорректное направление" }, { status: 400 });
   }
 
+  const where = userInTenantWhere(id, s.tid);
+  if (!where) {
+    return NextResponse.json({ error: "Нет организации в сессии" }, { status: 403 });
+  }
+
   const prisma = await getPrisma();
-  const target = await prisma.user.findUnique({
-    where: { id },
+  const target = await prisma.user.findFirst({
+    where,
     select: { id: true, role: true, payrollTrack: true, isActive: true },
   });
   if (!target) {
@@ -88,6 +98,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const otherActiveOwners = await prisma.user.count({
       where: {
         role: "OWNER",
+        tenantId: where.tenantId,
         isActive: true,
         id: { not: id },
       },
@@ -102,7 +113,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   if (hasRole && newRole != null && newRole !== target.role) {
     if (target.role === "OWNER" && newRole !== "OWNER") {
-      if ((await otherOwnerCount(prisma, id)) < 1) {
+      if ((await otherOwnerCount(prisma, id, where.tenantId)) < 1) {
         return NextResponse.json(
           { error: "Нельзя снять роль владельца с последнего пользователя с ролью «Владелец»" },
           { status: 400 },
@@ -110,7 +121,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       }
     }
     if (id === s.sub && target.role === "OWNER" && newRole !== "OWNER") {
-      if ((await otherOwnerCount(prisma, id)) < 1) {
+      if ((await otherOwnerCount(prisma, id, where.tenantId)) < 1) {
         return NextResponse.json(
           { error: "Нельзя сменить себе роль: вы единственный владелец" },
           { status: 400 },
@@ -160,10 +171,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Нет изменений" }, { status: 400 });
   }
 
-  await prisma.user.update({
-    where: { id },
+  const updated = await prisma.user.updateMany({
+    where,
     data,
   });
+  if (updated.count === 0) {
+    return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+  }
 
   return NextResponse.json({ ok: true });
 }
@@ -183,16 +197,21 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Нельзя удалить самого себя" }, { status: 400 });
   }
 
+  const where = userInTenantWhere(id, s.tid);
+  if (!where) {
+    return NextResponse.json({ error: "Нет организации в сессии" }, { status: 403 });
+  }
+
   const prisma = await getPrisma();
-  const target = await prisma.user.findUnique({
-    where: { id },
+  const target = await prisma.user.findFirst({
+    where,
     select: { id: true, role: true },
   });
   if (!target) {
     return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
   }
 
-  if (target.role === "OWNER" && (await otherOwnerCount(prisma, id)) < 1) {
+  if (target.role === "OWNER" && (await otherOwnerCount(prisma, id, where.tenantId)) < 1) {
     return NextResponse.json(
       { error: "Нельзя удалить последнего пользователя с ролью «Владелец»" },
       { status: 400 },
@@ -201,7 +220,10 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
   const demo = Boolean(s.demo);
   await deleteUserAvatarFile(id, demo);
-  await prisma.user.delete({ where: { id } });
+  const deleted = await prisma.user.deleteMany({ where });
+  if (deleted.count === 0) {
+    return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+  }
 
   return NextResponse.json({ ok: true });
 }

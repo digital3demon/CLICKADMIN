@@ -5,6 +5,10 @@ import { getTelegramBotUserIdStr } from "@/lib/telegram-bot-identity";
 import { tryTelegramBotAddedChatIdAnnounce } from "@/lib/telegram-bot-my-chat-member";
 import { tryTelegramDoctorGroupsAndMessenger } from "@/lib/telegram-doctor-groups-and-messenger";
 import { buildTelegramConnectivityDiagnostic } from "@/lib/telegram-connectivity-diagnostic.server";
+import {
+  telegramWebhookAnonymousGetJson,
+  telegramWebhookProductionGetJson,
+} from "@/lib/telegram-webhook-public-get";
 
 export const dynamic = "force-dynamic";
 
@@ -31,38 +35,15 @@ async function handleTelegramUpdate(
 
 /**
  * Краткая проверка без логина (для браузера после деплоя).
- * Полный отчёт с вердиктом — Конфигурация → Telegram (`/api/telegram/diagnostic`, OWNER).
+ * В production — только флаги env, без username/URL.
+ * Полный отчёт — Конфигурация → Telegram (`/api/telegram/diagnostic`, OWNER).
  */
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(telegramWebhookProductionGetJson());
+  }
   const report = await buildTelegramConnectivityDiagnostic();
-  return NextResponse.json({
-    ok: true,
-    hasBotToken: report.env.hasBotToken,
-    webhookSecretEnvSet: report.env.webhookSecretEnvSet,
-    postPath: "/api/telegram/webhook",
-    verdict: report.verdict,
-    network: report.network,
-    telegram: {
-      botMe: report.botApi.getMe.ok
-        ? {
-            username: report.botApi.getMe.username,
-            id: report.botApi.getMe.id,
-          }
-        : null,
-      botMeError: report.botApi.getMe.ok ? null : report.botApi.getMe.error,
-      webhookUrl: report.webhook.getWebhookInfo.url,
-      webhookUrlOk: report.webhook.getWebhookInfo.urlLooksLikeCrm,
-      pendingUpdateCount: report.webhook.getWebhookInfo.pendingUpdateCount,
-      lastErrorMessage: report.webhook.getWebhookInfo.lastErrorMessage,
-      lastErrorDate: report.webhook.getWebhookInfo.lastErrorDate,
-      webhookInfoError: report.webhook.getWebhookInfo.ok
-        ? null
-        : report.webhook.getWebhookInfo.error,
-    },
-    notes: report.notes,
-    uiHint:
-      "Удобный разбор: Конфигурация → Telegram (владелец). JSON для поддержки: кнопка «Скопировать отчёт».",
-  });
+  return NextResponse.json(telegramWebhookAnonymousGetJson(report, false));
 }
 
 /**

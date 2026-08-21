@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth/session-cookie";
 import { tenantSlugFromHostHeader } from "@/lib/tenant-slug";
 import { sessionClaimsForUserId } from "@/lib/auth/session-claims-for-user";
+import { jsonIfAuthLoginRateLimited } from "@/lib/auth/login-rate-limit";
 import {
   DeviceLimitReachedError,
   issueUserDeviceSessionOrThrow,
@@ -52,6 +53,8 @@ export async function POST(req: Request) {
     if (!email || !email.includes("@")) {
       return NextResponse.json({ error: "Укажите корректную почту" }, { status: 400 });
     }
+    const limited = jsonIfAuthLoginRateLimited(req, email);
+    if (limited) return limited;
     if (!displayName) {
       return NextResponse.json({ error: "Укажите ФИО" }, { status: 400 });
     }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/get-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { readUserCustomAvatarBuffer } from "@/lib/user-custom-avatar";
+import { userInTenantWhere } from "@/lib/auth/user-in-tenant";
 
 type Ctx = { params: Promise<{ userId: string }> };
 
@@ -19,10 +20,15 @@ export async function GET(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
   }
 
+  const where = userInTenantWhere(userId, session.tid);
+  if (!where) {
+    return NextResponse.json({ error: "Нет организации в сессии" }, { status: 403 });
+  }
+
   const demo = Boolean(session.demo);
   const prisma = await getPrisma();
-  const row = await prisma.user.findUnique({
-    where: { id: userId },
+  const row = await prisma.user.findFirst({
+    where,
     select: {
       avatarCustomMime: true,
       avatarCustomUploadedAt: true,
@@ -36,8 +42,8 @@ export async function GET(_req: Request, ctx: Ctx) {
   const buf = await readUserCustomAvatarBuffer(userId, demo, row);
   if (!buf) {
     try {
-      await prisma.user.update({
-        where: { id: userId },
+      await prisma.user.updateMany({
+        where,
         data: {
           avatarCustomMime: null,
           avatarCustomUploadedAt: null,

@@ -1,7 +1,11 @@
 import "server-only";
 import type { AppModule, UserRole } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
-import { isSingleUserPortable, SINGLE_USER_SESSION } from "@/lib/auth/single-user";
+import {
+  isSingleUserBlockedInProduction,
+  isSingleUserPortable,
+  SINGLE_USER_SESSION,
+} from "@/lib/auth/single-user";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
 import {
@@ -31,7 +35,7 @@ export type ClientSessionBootstrap = {
 
 /** Снимок сессии для первого кадра клиента (без ожидания /api/auth/session). */
 export async function getClientSessionBootstrap(): Promise<ClientSessionBootstrap> {
-  if (isSingleUserPortable()) {
+  if (isSingleUserPortable() && !isSingleUserBlockedInProduction()) {
     const mod = await getEffectiveModuleAccess(SINGLE_USER_SESSION.tid, SINGLE_USER_SESSION.role);
     return {
       singleUser: true,

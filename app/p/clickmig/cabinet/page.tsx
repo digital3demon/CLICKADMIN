@@ -3,12 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
-const API_KEY = process.env.NEXT_PUBLIC_CLICKMIG_API_KEY ?? "";
-
-function apiHeaders(): HeadersInit {
-  const h: HeadersInit = { "Content-Type": "application/json" };
-  if (API_KEY) h["x-clickmig-api-key"] = API_KEY;
-  return h;
+function jsonHeaders(): HeadersInit {
+  return { "Content-Type": "application/json" };
 }
 
 export default function ClickMigCabinetPage() {
@@ -26,7 +22,7 @@ export default function ClickMigCabinetPage() {
   const loadApps = useCallback(async () => {
     const res = await fetch("/api/clickmig/public/cabinet/applications", {
       credentials: "include",
-      headers: apiHeaders(),
+      headers: jsonHeaders(),
     });
     if (res.ok) {
       const data = (await res.json()) as { applications: typeof applications };
@@ -48,7 +44,7 @@ export default function ClickMigCabinetPage() {
     const res = await fetch(path, {
       method: "POST",
       credentials: "include",
-      headers: apiHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ email, password, fullName }),
     });
     if (res.ok) await loadApps();
@@ -59,7 +55,7 @@ export default function ClickMigCabinetPage() {
     await fetch("/api/clickmig/public/cabinet/clinics", {
       method: "POST",
       credentials: "include",
-      headers: apiHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify({ name: clinicName, address: clinicAddress, isDefault: true }),
     });
     setClinicName("");

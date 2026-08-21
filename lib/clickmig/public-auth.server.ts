@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import type { NextRequest } from "next/server";
 import { getClickMigConfig } from "./config.server";
+import { clickMigClientJwtSecretSource } from "./client-jwt-secret";
 
 const CLIENT_COOKIE = "clickmig_client_session";
 const API_KEY_HEADER = "x-clickmig-api-key";
@@ -53,11 +54,7 @@ export function getApiKeyFromRequest(req: NextRequest): string | null {
 }
 
 function clientJwtSecret(): Uint8Array {
-  const secret =
-    process.env.CLICKMIG_CLIENT_JWT_SECRET?.trim() ||
-    process.env.AUTH_SECRET?.trim() ||
-    "clickmig-dev-secret-change-me";
-  return new TextEncoder().encode(secret);
+  return new TextEncoder().encode(clickMigClientJwtSecretSource());
 }
 
 export type ClickMigClientSession = {

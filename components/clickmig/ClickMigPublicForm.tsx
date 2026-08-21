@@ -13,16 +13,7 @@ type PublicConfig = {
   validationHints: { field: string; label: string; whyImportant: string; required: boolean }[];
 };
 
-const API_KEY =
-  typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_CLICKMIG_API_KEY ?? "")
-    : "";
-
-function apiHeaders(): HeadersInit {
-  const h: HeadersInit = {};
-  if (API_KEY) h["x-clickmig-api-key"] = API_KEY;
-  return h;
-}
+/** Ключ не кладём в бандл: на CRM/form-хосте API доверяет Host. */
 
 const inputClass =
   "w-full rounded border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-[var(--app-text)]";
@@ -62,7 +53,7 @@ export function ClickMigPublicForm({ embedded = false }: Props) {
   });
 
   useEffect(() => {
-    void fetch("/api/clickmig/public/config", { headers: apiHeaders() })
+    void fetch("/api/clickmig/public/config")
       .then((r) => r.json())
       .then((d) => setConfig(d as PublicConfig));
   }, []);
@@ -82,7 +73,7 @@ export function ClickMigPublicForm({ embedded = false }: Props) {
     const teethFdi = [...selectedTeeth].sort();
     const res = await fetch("/api/clickmig/public/applications/validate", {
       method: "POST",
-      headers: { ...apiHeaders(), "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
         teethFdi,
@@ -118,7 +109,6 @@ export function ClickMigPublicForm({ embedded = false }: Props) {
 
     const res = await fetch("/api/clickmig/public/applications", {
       method: "POST",
-      headers: apiHeaders(),
       body: fd,
     });
     const data = (await res.json()) as { publicNumber?: string; error?: string; hints?: typeof hints };

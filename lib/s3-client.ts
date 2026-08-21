@@ -7,6 +7,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import type { Readable } from "node:stream";
+import { assertSafeS3ObjectKey } from "@/lib/storage-path-safe";
 
 type S3EnvConfig = {
   enabled: boolean;
@@ -78,11 +79,12 @@ export async function putS3ObjectBytes(
   body: Buffer,
   contentType: string,
 ): Promise<void> {
+  const safeKey = assertSafeS3ObjectKey(key);
   const { client, cfg } = getClientAndConfig();
   await client.send(
     new PutObjectCommand({
       Bucket: cfg.bucket,
-      Key: key,
+      Key: safeKey,
       Body: body,
       ContentType: contentType || "application/octet-stream",
     }),
@@ -98,11 +100,12 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
 }
 
 export async function getS3ObjectBytes(key: string): Promise<Buffer> {
+  const safeKey = assertSafeS3ObjectKey(key);
   const { client, cfg } = getClientAndConfig();
   const out = await client.send(
     new GetObjectCommand({
       Bucket: cfg.bucket,
-      Key: key,
+      Key: safeKey,
     }),
   );
   const body = out.Body;
@@ -115,11 +118,12 @@ export async function getS3ObjectBytes(key: string): Promise<Buffer> {
 }
 
 export async function deleteS3Object(key: string): Promise<void> {
+  const safeKey = assertSafeS3ObjectKey(key);
   const { client, cfg } = getClientAndConfig();
   await client.send(
     new DeleteObjectCommand({
       Bucket: cfg.bucket,
-      Key: key,
+      Key: safeKey,
     }),
   );
 }

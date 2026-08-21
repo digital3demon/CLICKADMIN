@@ -21,7 +21,10 @@ import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { canOpenMailSettingsModule } from "@/lib/mail/mail-settings-access";
 import type { UserRole } from "@prisma/client";
-import { isSingleUserPortable } from "@/lib/auth/single-user";
+import {
+  isSingleUserBlockedInProduction,
+  isSingleUserPortable,
+} from "@/lib/auth/single-user";
 import { publicOriginFromHeaders } from "@/lib/public-origin-from-headers";
 import { tenantSlugFromHostHeader } from "@/lib/tenant-slug";
 import { prisma } from "@/lib/prisma";
@@ -225,6 +228,21 @@ export async function middleware(req: NextRequest) {
     }
     const out = NextResponse.json({ error: "Forbidden" }, { status: 403 });
     return securityHeaders(out);
+  }
+
+  if (isSingleUserBlockedInProduction()) {
+    if (pathname.startsWith("/api")) {
+      const out = NextResponse.json(
+        { error: "Однопользовательский режим на сервере запрещён" },
+        { status: 503 },
+      );
+      return securityHeaders(out);
+    }
+    return securityHeaders(
+      new NextResponse("Однопользовательский режим на сервере запрещён", {
+        status: 503,
+      }),
+    );
   }
 
   if (isSingleUserPortable()) {

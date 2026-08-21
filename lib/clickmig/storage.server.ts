@@ -10,6 +10,7 @@ import {
   isS3StorageEnabled,
   putS3ObjectBytes,
 } from "@/lib/s3-client";
+import { resolvePathUnderRoot } from "@/lib/storage-path-safe";
 
 export function getClickMigStorageRoot(): string {
   const fromEnv = process.env.CLICKMIG_STORAGE_DIR?.trim();
@@ -41,8 +42,7 @@ export function newClickMigFileId(): string {
 }
 
 function absolutePathFromRel(rel: string): string {
-  const parts = rel.replace(/\\/g, "/").split("/").filter(Boolean);
-  return path.join(getClickMigStorageRoot(), ...parts);
+  return resolvePathUnderRoot(getClickMigStorageRoot(), rel);
 }
 
 export function clickMigDiskRelPath(tenantId: string, fileId: string): string {

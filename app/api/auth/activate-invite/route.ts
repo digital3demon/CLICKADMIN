@@ -10,6 +10,7 @@ import {
 import { normalizeInviteCodeInput } from "@/lib/auth/invite-code";
 import { defaultHomePathForRole } from "@/lib/auth/permissions";
 import { getTenantForRequest } from "@/lib/auth/tenant-for-auth-request";
+import { jsonIfAuthLoginRateLimited } from "@/lib/auth/login-rate-limit";
 import { sessionClaimsForUserId } from "@/lib/auth/session-claims-for-user";
 import {
   DeviceLimitReachedError,
@@ -45,6 +46,8 @@ export async function POST(req: Request) {
     if (!email || !email.includes("@")) {
       return NextResponse.json({ error: "Укажите почту" }, { status: 400 });
     }
+    const limited = jsonIfAuthLoginRateLimited(req, email);
+    if (limited) return limited;
     if (!/^[A-F0-9]{10}$/.test(code)) {
       return NextResponse.json(
         { error: "Код — 10 символов (цифры и A–F), как в приглашении" },

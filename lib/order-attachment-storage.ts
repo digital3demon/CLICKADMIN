@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { deleteS3Object, getS3ObjectBytes, isS3StorageEnabled, putS3ObjectBytes } from "@/lib/s3-client";
+import { resolvePathUnderRoot } from "@/lib/storage-path-safe";
 
 /**
  * Новые вложения — в БД (`OrderAttachment.data`). Корень на диске нужен только для
@@ -62,8 +63,7 @@ export async function writeOrderAttachmentToS3(
 }
 
 function absolutePathFromRel(rel: string): string {
-  const parts = rel.replace(/\\/g, "/").split("/").filter(Boolean);
-  return path.join(getOrderAttachmentStorageRoot(), ...parts);
+  return resolvePathUnderRoot(getOrderAttachmentStorageRoot(), rel);
 }
 
 /** Записывает байты на диск; возвращает `diskRelPath` для поля в БД. */

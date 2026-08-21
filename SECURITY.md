@@ -1,78 +1,57 @@
-# Безопасность и операционный контур
+# Безопасность CRM
 
-Краткий аудит и то, что уже сделано в репозитории. Полный чеклист из enterprise-ТЗ (Redis, Kafka, monorepo, IoC, Sentry в проде, CI/CD, k6, Grafana и т.д.) **не реализован** — это отдельные проекты на недели/месяцы и требуют инфраструктуры и команды.
-
----
-
-## 1. Аудит (кратко)
-
-### SQL-инъекции
-
-- Доступ к данным через **Prisma**; сырых строковых SQL в `app/` и `lib/` не найдено.
-- **Рекомендация:** не вводить `$queryRaw` с конкатенацией пользовательского ввода; при необходимости только `Prisma.sql` с параметрами.
-
-### XSS
-
-- UI на **React** — текст по умолчанию экранируется.
-- **Рекомендация:** не использовать `dangerouslySetInnerHTML` для пользовательского контента; при вставке HTML — санитайзер (DOMPurify и т.п.).
-
-### Command injection
-
-- Вызовов `child_process` / `exec` в коде приложения нет.
-
-### Аутентификация и авторизация
-
-- **Критично:** в приложении **нет входа пользователей** и **нет проверки прав** на API. Любой, кто может открыть URL/порт, может вызывать API и смотреть данные.
-- **Что сделать для реальной эксплуатации:** NextAuth / Auth.js или внешний IdP, сессии или JWT, middleware с проверкой токена/сессии на `/api/*` и страницах, роли (RBAC).
-
-### Утечки секретов
-
-- Токен Kaiten и прочее — из `process.env`. Логгер **pino** настроен с **redact** для типичных путей (authorization, cookie, password, token).
-- **Рекомендация:** не логировать тела запросов целиком; не коммитить `.env`; в проде — секреты из vault/CI.
-
-### CORS
-
-- Браузерный Same-Origin для типичного деплоя «один origin». Отдельный CORS для сторонних сайтов не настраивался.
-- **Рекомендация:** при мобильном/внешнем клиенте — явный `Access-Control-Allow-*` только для нужных origin.
-
-### CSP (Content-Security-Policy)
-
-- Строгий CSP **ломает** стандартный Next.js (inline-скрипты, в т.ч. инициализация темы). В middleware CSP **не включён**.
-- **Следующий шаг:** CSP с **nonce** через `next/headers` и документация Next.js — отдельная задача.
-
-### Защита от DoS
-
-- Лимит запросов: **middleware** на `/api/*` — скользящее окно (по умолчанию **240 запросов / 60 с / IP**), настраивается env. На одном процессе работает; для serverless без общего хранилища — слабее.
-- Загрузка файлов к наряду: лимит **10 МБ** (`app/api/orders/[id]/attachments/route.ts`).
+Контур: Timeweb App Platform, PostgreSQL, S3, JWT-сессия. Portable ZIP / `CRM_SINGLE_USER` — **наследие**, не режим эксплуатации.
 
 ---
 
-## 2. Что реализовано в коде
+## Что уже есть
 
-| Компонент | Описание |
-|-----------|----------|
-| `GET /api/health` | Проверка БД (`SELECT 1`), доступности `cwd`. Кэш в проекте не используется — в ответе `cache: not_configured`. |
-| `GET /api/metrics` | Текст в формате **Prometheus** (uptime, heap, rss). В **production** без `METRICS_SECRET` — **404**. С секретом — заголовок `x-metrics-key: <METRICS_SECRET>`. |
-| `middleware.ts` | Заголовки: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`. Rate limit на `/api`. |
-| `lib/server/logger.ts` | **pino**: JSON в stdout, дочерние каналы `audit` / `security` через `auditLogger`, `securityLogger`. |
-| `lib/server/api-timing.ts` | Обёртка `withApiTiming` — лог `api_request` с `ms` и `status`. Подключено к **GET/POST `/api/orders`**. |
-| Аудит | После успешного **создания заказа** — запись `auditLogger.info({ action: 'order.create', orderId, orderNumber })`. |
+### Вход и права
 
-**Ротация файлов логов:** не настроена — логи идут в **stdout**; ротацию делает systemd, Docker, Kubernetes или обратный прокси.
+- Сессия: JWT (`jose`), cookie `crm_session` / `crm_session_demo` — **httpOnly**, `SameSite=lax`, в production обычно `Secure`.
+- Middleware проверяет сессию на закрытых страницах и `/api/*` (кроме явного public: логин, health, webhook, QR-стикер, ClickMig public).
+- Роли и модули (RBAC). На production флаг `NEXT_PUBLIC_CRM_SINGLE_USER` / `CRM_SINGLE_USER` **запрещён**: контейнер не стартует, API не открывается без входа.
 
-**Sentry:** пакет не подключён. Подключение: `@sentry/nextjs`, переменная `SENTRY_DSN`, wizard в документации Sentry.
+### Секреты
 
-**UptimeRobot / StatusCake:** настройка внешних URL на `https://<host>/api/health` — в панели сервиса, не в репозитории.
+- Токены и пароли — из `process.env`. **pino** с redact (authorization, cookie, password, token).
+- Не коммитить `.env`. `/api/metrics` в production без `METRICS_SECRET` — **404**.
+- Публичный GET `/api/telegram/webhook` в production не отдаёт username бота и URL. Полный отчёт — у владельца в «Конфигурация → Telegram».
+- Ключ ClickMig не кладётся в `NEXT_PUBLIC_*` на страницах CRM.
+
+### Лимиты
+
+- Middleware: **300 запросов / 60 с** на IP без сессии; **5000 / 60 с** при наличии cookie сессии (офисный NAT). Env: `RATE_LIMIT_IP_MAX_PER_WINDOW`, `RATE_LIMIT_AUTH_MAX_PER_WINDOW`.
+- Вход (login, reset-password, invite, bootstrap, telegram-webapp): **~60 / 15 мин на IP** и **~10 / 15 мин на почту**.
+- Вложения наряда: лимит приложения **1 ГиБ** (`CRM_UPLOAD_MAX_BYTES`). Прокси App Platform часто режет раньше — это платформа, не баг CRM. `middlewareClientMaxBodySize` = `1gb`.
+
+### Данные
+
+- Доступ через **Prisma**. Не вводить `$queryRaw` с конкатенацией пользовательского ввода.
+- Пользователи API фильтруются по `tenantId` сессии.
+- S3-ключи только под `orders/`, `tenants/`, `clickmig/`, `crm-dumps/`. Диск: путь не выходит из корня.
+
+### Заголовки
+
+- `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`.
+- HSTS — только при `CRM_HSTS=1`.
+- Строгий CSP **не включён** (ломает inline Next.js / тему). Nonce — отдельная задача.
+
+### Намеренно публичное
+
+- QR-стикер `/p/t/…` — физический токен наклейки, не «дыра без логина».
+- `GET /api/health` — живость процесса и БД, без env и версий.
 
 ---
 
-## 3. Из большого ТЗ сознательно не сделано (нужны решения и ресурсы)
+## Не делать «заодно»
 
-- Централизованный Redis, двухуровневый кэш, бенчмарк 1000 concurrent.
-- Inversify/TSyringe, Repository повсеместно, микросервисы, RabbitMQ/Kafka, gRPC, API Gateway.
-- Turbo monorepo, плагинная система, LaunchDarkly-like feature flags, админка конфигов.
-- Покрытие >80%, Playwright, k6, Stryker, OWASP ZAP в CI, blue-green, canary.
-- Lighthouse CI, Grafana, bundle budget в пайплайне.
-- Storybook, OpenAPI, локальный SSL — по желанию отдельными задачами.
+- Обязательный `TELEGRAM_WEBHOOK_SECRET`, пока `setWebhook` не совпадает — бот замолчит.
+- Фильтр клиник по `tenantId` без проверки строк в БД.
+- Включать `productionBrowserSourceMaps`.
 
-Если нужно продолжить — лучше выбрать **1–2 направления** (например: только Auth + Sentry, или только Redis-кэш для тяжёлых API).
+---
+
+## Сознательно не в этом контуре
+
+Redis, Kafka, Sentry в проде, CSP-nonce, DOMPurify на HTML писем — отдельные волны, не текущий сервер лабы.

@@ -17,6 +17,8 @@ import {
   issueUserDeviceSessionOrThrow,
 } from "@/lib/auth/device-session";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
+import { loginPublicServerErrorMessage } from "@/lib/auth/login-public-error";
+import { jsonIfAuthLoginRateLimited } from "@/lib/auth/login-rate-limit";
 import { findCrmUserByTelegramIdForBot } from "@/lib/telegram-bot-resolve-user";
 import { telegramRoleLinksToOrderPage } from "@/lib/telegram-bot-role-matrix";
 import { prisma } from "@/lib/prisma";
@@ -40,6 +42,9 @@ export async function POST(req: Request) {
 
     const secretMissing = jsonResponseIfAuthSecretMissing();
     if (secretMissing) return secretMissing;
+
+    const limited = jsonIfAuthLoginRateLimited(req);
+    if (limited) return limited;
 
     const token = botToken();
     if (!token) {
@@ -141,8 +146,9 @@ export async function POST(req: Request) {
     if (e instanceof Error && e.message === SESSION_MISSING_TENANT_ERROR) {
       return NextResponse.json(
         {
-          error:
+          error: loginPublicServerErrorMessage(
             "У пользователя нет связанной организации в базе. Проверьте миграции (Tenant).",
+          ),
         },
         { status: 500 },
       );

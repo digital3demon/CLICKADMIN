@@ -15,6 +15,8 @@ import {
   sessionClaimsForUserId,
 } from "@/lib/auth/session-claims-for-user";
 import { dbRequestUserHint } from "@/lib/db-request-error-hint";
+import { loginPublicServerErrorMessage } from "@/lib/auth/login-public-error";
+import { jsonIfAuthLoginRateLimited } from "@/lib/auth/login-rate-limit";
 import { getPrismaCliVersion } from "@/lib/prisma-cli-version";
 import {
   DeviceLimitReachedError,
@@ -47,6 +49,9 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+
+    const limited = jsonIfAuthLoginRateLimited(req, email);
+    if (limited) return limited;
 
     const tenant = await getTenantForRequest(req);
     if (!tenant) {
@@ -121,7 +126,9 @@ export async function POST(req: Request) {
         const pv = getPrismaCliVersion();
         return NextResponse.json(
           {
-            error: `В базе не хватает таблиц или колонок. Из каталога с server.js: node prisma-migrate-deploy.cjs (файл в корне свежего архива) или npx -y "prisma@${pv}" migrate deploy --schema=prisma/schema.prisma. Не вызывайте «npx prisma» без @версии — подтянется Prisma 7 и будет ошибка P1012.`,
+            error: loginPublicServerErrorMessage(
+              `В базе не хватает таблиц или колонок. Из каталога с server.js: node prisma-migrate-deploy.cjs (файл в корне свежего архива) или npx -y "prisma@${pv}" migrate deploy --schema=prisma/schema.prisma. Не вызывайте «npx prisma» без @версии — подтянется Prisma 7 и будет ошибка P1012.`,
+            ),
           },
           { status: 500 },
         );
@@ -130,17 +137,20 @@ export async function POST(req: Request) {
     if (e instanceof Error && e.message === SESSION_MISSING_TENANT_ERROR) {
       return NextResponse.json(
         {
-          error:
+          error: loginPublicServerErrorMessage(
             "У пользователя нет связанной организации в базе. Проверьте миграции (Tenant) и при необходимости scripts/backfill-tenant-ids.cjs",
+          ),
         },
         { status: 500 },
       );
     }
     return NextResponse.json(
       {
-        error: dbRequestUserHint(
-          e,
-          "Ошибка входа. Смотрите логи сервера: строка с [auth/login-owner].",
+        error: loginPublicServerErrorMessage(
+          dbRequestUserHint(
+            e,
+            "Ошибка входа. Смотрите логи сервера: строка с [auth/login-owner].",
+          ),
         ),
       },
       { status: 500 },

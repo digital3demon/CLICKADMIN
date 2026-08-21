@@ -55,13 +55,13 @@ export function createClickMigPublicClient(opts: ClickMigPublicClientOptions) {
   };
 }
 
-/** Env для локальной разработки внешнего сайта. */
+/** Env для внешнего фронта. Ключ не из NEXT_PUBLIC_ — задайте apiKey с сервера. */
 export function clickMigPublicEnvFromProcess(): ClickMigPublicClientOptions {
   return {
     baseUrl:
       process.env.NEXT_PUBLIC_CLICKMIG_CRM_URL?.trim() ||
       process.env.NEXT_PUBLIC_APP_URL?.trim() ||
       "http://localhost:3000",
-    apiKey: process.env.NEXT_PUBLIC_CLICKMIG_API_KEY?.trim() || "",
+    apiKey: "",
   };
 }

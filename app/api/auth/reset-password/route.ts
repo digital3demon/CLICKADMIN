@@ -19,6 +19,7 @@ import {
   isPasswordResetExpired,
   normalizePasswordResetCodeInput,
 } from "@/lib/auth/password-reset";
+import { jsonIfAuthLoginRateLimited } from "@/lib/auth/login-rate-limit";
 
 type Body = {
   email?: string;
@@ -83,6 +84,8 @@ export async function POST(req: Request) {
     if (!email || !email.includes("@")) {
       return NextResponse.json({ error: "Укажите почту" }, { status: 400 });
     }
+    const limited = jsonIfAuthLoginRateLimited(req, email);
+    if (limited) return limited;
     if (!isPasswordResetCodeFormat(code)) {
       return NextResponse.json(
         { error: "Код — 10 символов (цифры и A–F), как выдал владелец" },

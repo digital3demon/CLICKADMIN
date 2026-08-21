@@ -9,6 +9,22 @@ const path = require("node:path");
 const root = process.cwd();
 const migrateScript = path.join(root, "scripts", "prisma-migrate-deploy.cjs");
 
+function isTruthyFlag(v) {
+  const s = String(v || "").trim().toLowerCase();
+  return s === "1" || s === "true";
+}
+
+if (
+  process.env.NODE_ENV === "production" &&
+  (isTruthyFlag(process.env.NEXT_PUBLIC_CRM_SINGLE_USER) ||
+    isTruthyFlag(process.env.CRM_SINGLE_USER))
+) {
+  console.error(
+    "[start-production] CRM_SINGLE_USER / NEXT_PUBLIC_CRM_SINGLE_USER нельзя на production-сервере",
+  );
+  process.exit(1);
+}
+
 if (String(process.env.DATABASE_URL || "").trim()) {
   if (!fs.existsSync(migrateScript)) {
     console.error("[start-production] Нет scripts/prisma-migrate-deploy.cjs");

@@ -11,7 +11,13 @@ export async function GET() {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
   }
 
+  const tenantId = s.tid?.trim();
+  if (!tenantId) {
+    return NextResponse.json({ error: "Нет организации в сессии" }, { status: 403 });
+  }
+
   const rows = await (await getPrisma()).user.findMany({
+    where: { tenantId },
     orderBy: [{ role: "asc" }, { email: "asc" }],
     select: {
       id: true,

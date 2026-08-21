@@ -3,13 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
-const API_KEY = process.env.NEXT_PUBLIC_CLICKMIG_API_KEY ?? "";
-
-function apiHeaders(): HeadersInit {
-  const h: HeadersInit = {};
-  if (API_KEY) h["x-clickmig-api-key"] = API_KEY;
-  return h;
-}
 
 export default function ClickMigResubmitPage() {
   const params = useParams<{ token: string }>();
@@ -29,9 +22,7 @@ export default function ClickMigResubmitPage() {
 
   const load = useCallback(async () => {
     if (!token) return;
-    const res = await fetch(`/api/clickmig/public/resubmit/${token}`, {
-      headers: apiHeaders(),
-    });
+    const res = await fetch(`/api/clickmig/public/resubmit/${token}`);
     if (res.ok) {
       const j = (await res.json()) as typeof data;
       setData(j);
@@ -52,7 +43,6 @@ export default function ClickMigResubmitPage() {
     }
     const res = await fetch(`/api/clickmig/public/resubmit/${token}`, {
       method: "POST",
-      headers: apiHeaders(),
       body: fd,
     });
     if (res.ok) setDone(true);

@@ -16,6 +16,11 @@ export function isSingleUserPortable(): boolean {
   return v === "1" || v === "true";
 }
 
+/** Production-сервер: флаг ZIP не должен открывать CRM без входа. */
+export function isSingleUserBlockedInProduction(): boolean {
+  return process.env.NODE_ENV === "production" && isSingleUserPortable();
+}
+
 /** Синтетическая сессия: полный доступ, в т.ч. аналитика. */
 export const SINGLE_USER_SESSION: SessionClaims = {
   sub: "portable-single-user",

@@ -23,6 +23,9 @@ describe("clickmig form host", () => {
       expect(isTrustedClickMigPublicHost("click-lab.online")).toBe(true);
       expect(isTrustedClickMigPublicHost("test.click-lab.online")).toBe(true);
       expect(isTrustedClickMigPublicHost("evil.example.com")).toBe(false);
+      expect(isTrustedClickMigPublicHost("localhost")).toBe(
+        process.env.NODE_ENV !== "production",
+      );
     } finally {
       if (prev === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
       else process.env.NEXT_PUBLIC_APP_URL = prev;
