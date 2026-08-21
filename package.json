@@ -149,6 +149,9 @@
   "optionalDependencies": {
     "@napi-rs/canvas-linux-x64-gnu": "^0.1.99"
   },
+  "overrides": {
+    "rimraf": "^3.0.2"
+  },
   "engines": {
     "node": ">=20.16.0"
   }

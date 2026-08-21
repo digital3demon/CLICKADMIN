@@ -44,7 +44,8 @@ else
 fi
 
 echo "==> npm ci"
-npm ci
+npm ci --no-audit --no-fund \
+  || (npm cache clean --force && npm ci --no-audit --no-fund)
 
 if [[ "$SKIP_MIGRATE" -eq 0 ]]; then
   echo "==> prisma migrate deploy (через npm run db:migrate:deploy — фиксированная версия CLI, не Prisma 7+)"

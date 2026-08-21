@@ -2,7 +2,7 @@
 # Без глобального pm2: платформа сама держит процесс (CMD = start:platform).
 # Не добавляйте `RUN npm install -g pm2` — registry.npmjs.org часто даёт ETIMEDOUT на сборке.
 
-FROM node:22-slim AS builder
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -10,8 +10,13 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json ./
-RUN npm ci
+# Свежий npm в образе — меньше «Exit handler never called!» на npm ci.
+RUN npm install -g npm@11.6.2
+
+COPY package.json package-lock.json .npmrc ./
+# Повтор при флапе реестра / внутреннем сбое npm.
+RUN npm ci --no-audit --no-fund \
+  || (npm cache clean --force && npm ci --no-audit --no-fund)
 
 COPY . .
 
@@ -22,7 +27,7 @@ ENV NODE_ENV=production
 # migrate — на старте контейнера
 RUN npm run build:platform
 
-FROM node:22-slim AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
