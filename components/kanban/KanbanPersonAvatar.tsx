@@ -20,8 +20,8 @@ const sizeClass = {
   card: "h-[22px] w-[22px] text-[0.58rem] max-md:h-[18px] max-md:w-[18px] max-md:text-[0.5rem]",
   /** Список desktop: чуть меньше md, под кружком подпись */
   listSm: "h-7 w-7 text-[0.6rem]",
-  /** Модалка карточки на телефоне: крупный круг, пиктограмма добивается отдельно */
-  modal: "h-10 w-10 text-[0.75rem]",
+  /** Модалка карточки на телефоне: круг чуть ниже, чтобы блок ОТВ./УЧАСТН. не раздувал шапку */
+  modal: "h-8 w-8 text-[0.68rem]",
   md: "h-9 w-9 text-[0.65rem]",
   picker: "h-7 w-7 text-[0.6rem]",
 } as const;
@@ -183,7 +183,7 @@ export function KanbanPersonAvatar({
       <span className={base} style={{ background: bg }}>
         <span
           className={`select-none leading-none ${
-            size === "modal" ? "text-[1.5rem]" : ""
+            size === "modal" ? "text-[1.15rem]" : ""
           }`}
           aria-hidden
         >

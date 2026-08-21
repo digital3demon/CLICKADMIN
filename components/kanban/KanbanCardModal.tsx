@@ -71,7 +71,6 @@ import {
   formatDate,
   formatDateTimeRu,
   generateId,
-  deadlineHintKind,
   isCardBlocked,
   kaitenCardTypes,
   performUnblock,
@@ -91,7 +90,6 @@ import {
   kanbanCardDescriptionNeedsCollapse,
 } from "@/lib/kanban/kanban-card-desc-collapse";
 import { createPortal } from "react-dom";
-import { DeadlineTomorrowHint } from "./DeadlineTomorrowHint";
 import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
 import { PayrollDonePanel } from "@/components/payroll/PayrollDonePanel";
 import { OrderSourceEmailsModal } from "@/components/orders/OrderSourceEmailsModal";
@@ -280,7 +278,7 @@ function KanbanCardPeopleGroup({
     <span
       className={
         layout === "stack"
-          ? "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
+          ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
           : "mt-1 inline-flex h-[14px] w-[14px] items-center justify-center rounded-full border border-dashed border-[var(--kaiten-modal-muted)] text-[var(--kaiten-modal-muted)]"
       }
       aria-hidden
@@ -313,7 +311,7 @@ function KanbanCardPeopleGroup({
         <span className="text-[0.58rem] font-medium uppercase leading-none tracking-wide text-[var(--kaiten-modal-muted)]">
           {label}
         </span>
-        <div className="flex min-h-10 min-w-0 w-full items-start gap-1 overflow-x-auto">
+        <div className="flex min-h-8 min-w-0 w-full items-start gap-1 overflow-x-auto">
           {avatars}
           {plus}
         </div>
@@ -337,6 +335,75 @@ function KanbanCardPeopleGroup({
         {plus}
       </div>
     </button>
+  );
+}
+
+type KanbanCardModalTab = "card" | "done" | "chat" | "act";
+
+function KanbanCardModalTabs({
+  rightTab,
+  setRightTab,
+  canUsePayrollDone,
+  showCardTab,
+}: {
+  rightTab: KanbanCardModalTab;
+  setRightTab: (tab: KanbanCardModalTab) => void;
+  canUsePayrollDone: boolean;
+  showCardTab: boolean;
+}) {
+  const tabClass = (active: boolean) =>
+    `-mb-px shrink-0 border-b-2 pb-2.5 pt-2.5 text-[0.7rem] font-semibold uppercase tracking-wide sm:text-[0.75rem] ${
+      active
+        ? "border-[var(--kaiten-accent)] text-[var(--kaiten-modal-text)]"
+        : "border-transparent text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
+    }`;
+  return (
+    <div
+      className="flex w-full flex-nowrap gap-3 overflow-x-auto border-b border-[var(--kaiten-modal-border)] px-3 sm:gap-4"
+      role="tablist"
+      aria-label="Панель карточки"
+    >
+      {showCardTab ? (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={rightTab === "card"}
+          className={tabClass(rightTab === "card")}
+          onClick={() => setRightTab("card")}
+        >
+          Карточка
+        </button>
+      ) : null}
+      {canUsePayrollDone ? (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={rightTab === "done"}
+          className={tabClass(rightTab === "done")}
+          onClick={() => setRightTab("done")}
+        >
+          Что сделано
+        </button>
+      ) : null}
+      <button
+        type="button"
+        role="tab"
+        aria-selected={rightTab === "chat"}
+        className={tabClass(rightTab === "chat")}
+        onClick={() => setRightTab("chat")}
+      >
+        Комментарии
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={rightTab === "act"}
+        className={tabClass(rightTab === "act")}
+        onClick={() => setRightTab("act")}
+      >
+        Активность
+      </button>
+    </div>
   );
 }
 
@@ -378,7 +445,7 @@ export function KanbanCardModal({
   onOpenLinkedCard,
   onParentProductionFilesUpdated,
 }: KanbanCardModalProps) {
-  const [rightTab, setRightTab] = useState<"done" | "chat" | "act">("chat");
+  const [rightTab, setRightTab] = useState<KanbanCardModalTab>("chat");
   const [blockPopupOpen, setBlockPopupOpen] = useState(false);
   const [blockReasonDraft, setBlockReasonDraft] = useState("");
   const [blockReasonEditing, setBlockReasonEditing] = useState(false);
@@ -646,7 +713,6 @@ export function KanbanCardModal({
 
   const blocked = isCardBlocked(card);
   const stageDue = getKanbanStageDue(card);
-  const dueHintKind = deadlineHintKind(stageDue);
   const currentColumnIndex = board.columns.findIndex((col) => col.id === found.col.id);
   const prevColumnTitle =
     currentColumnIndex > 0 ? board.columns[currentColumnIndex - 1]?.title || "" : "";
@@ -1392,7 +1458,7 @@ export function KanbanCardModal({
   return (
     <div
       ref={overlayRef}
-      className="kanban-root fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/55 p-4 py-6"
+      className="kanban-root fixed inset-0 z-[200] flex bg-black/55 max-sm:items-stretch max-sm:overflow-hidden max-sm:p-0 sm:items-start sm:justify-center sm:overflow-y-auto sm:p-4 sm:py-6"
       role="dialog"
       aria-modal
       onMouseDown={(ev) => {
@@ -1563,11 +1629,11 @@ export function KanbanCardModal({
       ) : null}
 
       <div
-        className="flex w-full max-w-[min(1200px,100vw-24px)] flex-col"
+        className="flex w-full flex-col max-sm:h-dvh max-sm:max-h-dvh max-sm:pt-[env(safe-area-inset-top)] sm:max-w-[min(1200px,100vw-24px)]"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {blocked && (
-          <div className="flex items-stretch gap-2 rounded-t-[10px] border border-b-0 border-red-900/50 bg-gradient-to-b from-[#dc2626] to-[#b91c1c] px-3 py-2.5 text-white shadow-md dark:from-[#991b1b] dark:to-[#7f1d1d]">
+          <div className="flex shrink-0 items-stretch gap-2 rounded-t-[10px] border border-b-0 border-red-900/50 bg-gradient-to-b from-[#dc2626] to-[#b91c1c] px-3 py-2.5 text-white shadow-md max-sm:rounded-none dark:from-[#991b1b] dark:to-[#7f1d1d]">
             <IconBrick className="h-5 w-5 shrink-0 text-white" />
             <div className="min-w-0 flex-1">
               <div className="text-[0.65rem] font-bold uppercase tracking-wide opacity-90">
@@ -1646,12 +1712,12 @@ export function KanbanCardModal({
         )}
 
         <div
-          className={`relative flex flex-col border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] ${
+          className={`relative flex flex-col border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:min-h-0 max-sm:flex-1 max-sm:overflow-hidden max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
             blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
           }`}
           style={{ backgroundColor: "var(--kaiten-modal-bg)" }}
         >
-          <div className="flex items-start justify-between gap-3 border-b border-[var(--kaiten-modal-border)] px-4 py-5 sm:gap-4 sm:px-6 sm:py-6">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--kaiten-modal-border)] px-4 py-5 sm:gap-4 sm:px-6 sm:py-6">
             <div className="min-w-0 flex-1 pr-1">
               <h2
                 ref={titleRef}
@@ -1762,7 +1828,7 @@ export function KanbanCardModal({
             </button>
           </div>
 
-          <div className="flex w-full min-w-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-[var(--kaiten-modal-border)] px-2 py-1.5 sm:gap-2 sm:px-3 sm:py-2.5">
+          <div className="flex w-full min-w-0 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-[var(--kaiten-modal-border)] px-2 py-1.5 sm:gap-2 sm:px-3 sm:py-2.5">
             <button
               type="button"
               title={
@@ -1818,9 +1884,9 @@ export function KanbanCardModal({
               }}
             >
               {blocked ? (
-                <IconUnlock className="h-3.5 w-3.5 sm:h-[1.05rem] sm:w-[1.05rem]" />
+                <IconUnlock className="h-5 w-5 sm:h-[1.35rem] sm:w-[1.35rem]" />
               ) : (
-                <IconBrick className="h-3.5 w-3.5 sm:h-[1.05rem] sm:w-[1.05rem]" />
+                <IconBrick className="h-5 w-5 sm:h-[1.35rem] sm:w-[1.35rem]" />
               )}
             </button>
             <button
@@ -1830,7 +1896,7 @@ export function KanbanCardModal({
               className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
               onClick={() => onMovePrevStage(cardId)}
             >
-              <IconArrowLeft className="h-3.5 w-3.5 sm:h-[1.05rem] sm:w-[1.05rem]" />
+              <IconArrowLeft className="h-5 w-5 sm:h-[1.35rem] sm:w-[1.35rem]" />
             </button>
             <button
               type="button"
@@ -1839,7 +1905,7 @@ export function KanbanCardModal({
               className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
               onClick={() => onMoveNextStage(cardId)}
             >
-              <IconArrowRight className="h-3.5 w-3.5 sm:h-[1.05rem] sm:w-[1.05rem]" />
+              <IconArrowRight className="h-5 w-5 sm:h-[1.35rem] sm:w-[1.35rem]" />
             </button>
             <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-[var(--kaiten-modal-border)] sm:mx-1 sm:block" aria-hidden />
             <div className="hidden min-w-0 shrink items-center gap-2 overflow-x-auto sm:flex">
@@ -1875,7 +1941,7 @@ export function KanbanCardModal({
                   className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
                   onClick={() => setOrderMailOpen(true)}
                 >
-                  <IconMail className="h-3.5 w-3.5 shrink-0 sm:h-[1.05rem] sm:w-[1.05rem]" />
+                  <IconMail className="h-5 w-5 shrink-0 sm:h-[1.35rem] sm:w-[1.35rem]" />
                 </button>
               ) : null}
               <button
@@ -1885,11 +1951,11 @@ export function KanbanCardModal({
                 className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
                 onClick={() => onCopyCardLink(cardId)}
               >
-                <IconLink className="h-3.5 w-3.5 shrink-0 sm:h-[1.05rem] sm:w-[1.05rem]" />
+                <IconLink className="h-5 w-5 shrink-0 sm:h-[1.35rem] sm:w-[1.35rem]" />
               </button>
             </div>
           </div>
-          <div className="flex items-start gap-2 border-b border-[var(--kaiten-modal-border)] px-2 py-1.5 sm:hidden">
+          <div className="flex shrink-0 items-start gap-2 border-b border-[var(--kaiten-modal-border)] px-2 py-1.5 sm:hidden">
             <KanbanCardPeopleGroup
               layout="stack"
               label="Отв."
@@ -1919,10 +1985,14 @@ export function KanbanCardModal({
             </p>
           ) : null}
 
-          <div className="flex flex-col sm:flex-row sm:items-start">
-            <div className="flex min-w-0 flex-1 flex-col">
-              <div className="px-3 pb-3 pt-2.5">
-              <div className="mb-3">
+          <div className="flex min-h-0 max-sm:flex-1 max-sm:flex-col sm:flex-row sm:items-start">
+            <div
+              className={`flex min-w-0 flex-col max-sm:min-h-0 ${
+                rightTab === "card" ? "max-sm:min-h-0 max-sm:flex-1" : "max-sm:shrink-0"
+              } sm:flex-1`}
+            >
+              <div className="shrink-0 px-3 pb-2 pt-2.5">
+              <div className="mb-0 sm:mb-3">
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-2 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2.5 py-1.5 text-left hover:bg-[var(--kaiten-modal-input)]"
@@ -2105,7 +2175,23 @@ export function KanbanCardModal({
               </div>
                 ) : null}
               </div>
+              </div>
+              <div className="sm:hidden">
+                <KanbanCardModalTabs
+                  rightTab={rightTab}
+                  setRightTab={setRightTab}
+                  canUsePayrollDone={canUsePayrollDone}
+                  showCardTab
+                />
+              </div>
 
+              <div
+                className={`px-3 pb-3 ${
+                  rightTab === "card"
+                    ? "max-sm:min-h-0 max-sm:flex-1 max-sm:overflow-y-auto max-sm:overscroll-contain"
+                    : "max-sm:hidden"
+                }`}
+              >
               <div className="mb-3">
                 <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-amber-800/90 dark:text-amber-300/90">
                   Срок
@@ -2568,90 +2654,34 @@ export function KanbanCardModal({
 
               </div>
 
-              {dueHintKind !== "none" ? (
-                <div className="shrink-0 px-3 pb-0 pt-1">
-                  <DeadlineTomorrowHint />
-                </div>
-              ) : null}
             </div>
 
             <div
-              className="flex w-full shrink-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:border-l sm:border-t-0"
+              className={`flex w-full min-h-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l sm:border-t-0 ${
+                rightTab === "card"
+                  ? "max-sm:hidden"
+                  : "max-sm:min-h-0 max-sm:flex-1"
+              }`}
               style={{ backgroundColor: "var(--kaiten-modal-aside)" }}
             >
-              <div
-                className="flex w-full flex-wrap gap-4 border-b border-[var(--kaiten-modal-border)] px-3"
-                role="tablist"
-                aria-label="Правая панель карточки"
-              >
-                {canUsePayrollDone ? (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={rightTab === "done"}
-                    className={`-mb-px border-b-2 pb-2.5 pt-2.5 text-[0.7rem] font-semibold uppercase tracking-wide sm:text-[0.75rem] ${
-                      rightTab === "done"
-                        ? "border-[var(--kaiten-accent)] text-[var(--kaiten-modal-text)]"
-                        : "border-transparent text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
-                    }`}
-                    onClick={() => setRightTab("done")}
-                  >
-                    Что сделано
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={rightTab === "chat"}
-                  className={`-mb-px border-b-2 pb-2.5 pt-2.5 text-[0.7rem] font-semibold uppercase tracking-wide sm:text-[0.75rem] ${
-                    rightTab === "chat"
-                      ? "border-[var(--kaiten-accent)] text-[var(--kaiten-modal-text)]"
-                      : "border-transparent text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
-                  }`}
-                  onClick={() => setRightTab("chat")}
-                >
-                  Комментарии
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={rightTab === "act"}
-                  className={`-mb-px border-b-2 pb-2.5 pt-2.5 text-[0.7rem] font-semibold uppercase tracking-wide sm:text-[0.75rem] ${
-                    rightTab === "act"
-                      ? "border-[var(--kaiten-accent)] text-[var(--kaiten-modal-text)]"
-                      : "border-transparent text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
-                  }`}
-                  onClick={() => setRightTab("act")}
-                >
-                  Активность
-                </button>
+              <div className="hidden sm:block">
+                <KanbanCardModalTabs
+                  rightTab={rightTab === "card" ? "chat" : rightTab}
+                  setRightTab={setRightTab}
+                  canUsePayrollDone={canUsePayrollDone}
+                  showCardTab={false}
+                />
               </div>
               {rightTab === "done" ? (
-                <PayrollDonePanel
-                  orderId={card.linkedOrderId ?? null}
-                  kanbanCardId={card.id}
-                  sessionRole={sessionUserRole}
-                />
-              ) : rightTab === "chat" ? (
-                <ChatPanel
-                  card={card}
-                  board={board}
-                  kaitenLoading={kaitenChatLoading}
-                  adminMentionTag={adminMentionTag}
-                  adminMentionUserIds={adminMentionUserIds}
-                  productionMentionTag={productionMentionTagResolved}
-                  productionUserIds={productionUserIds}
-                  canSendPt={
-                    sessionUserRole != null &&
-                    canSendKanbanChatPtMemo(sessionUserRole) &&
-                    Boolean(card.linkedOrderId)
-                  }
-                  onSend={sendComment}
-                  onFilesDropped={attachFilesFromChat}
-                  onOpenAttachment={openAttachment}
-                />
-              ) : (
-                <div className="px-2 py-2 text-[0.8125rem]">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                  <PayrollDonePanel
+                    orderId={card.linkedOrderId ?? null}
+                    kanbanCardId={card.id}
+                    sessionRole={sessionUserRole}
+                  />
+                </div>
+              ) : rightTab === "act" ? (
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 text-[0.8125rem]">
                   {(card.activity || []).slice(0, 40).map((a) => {
                     const u = board.users.find((x) => x.id === a.userId);
                     const name =
@@ -2673,6 +2703,24 @@ export function KanbanCardModal({
                     );
                   })}
                 </div>
+              ) : (
+                <ChatPanel
+                  card={card}
+                  board={board}
+                  kaitenLoading={kaitenChatLoading}
+                  adminMentionTag={adminMentionTag}
+                  adminMentionUserIds={adminMentionUserIds}
+                  productionMentionTag={productionMentionTagResolved}
+                  productionUserIds={productionUserIds}
+                  canSendPt={
+                    sessionUserRole != null &&
+                    canSendKanbanChatPtMemo(sessionUserRole) &&
+                    Boolean(card.linkedOrderId)
+                  }
+                  onSend={sendComment}
+                  onFilesDropped={attachFilesFromChat}
+                  onOpenAttachment={openAttachment}
+                />
               )}
             </div>
           </div>
@@ -3213,7 +3261,7 @@ function ChatPanel({
 
   return (
     <div
-      className={`flex flex-col transition-[box-shadow] ${
+      className={`flex min-h-0 flex-1 flex-col transition-[box-shadow] ${
         dragOver
           ? "ring-2 ring-[var(--kaiten-accent)] ring-inset ring-offset-0"
           : ""
@@ -3246,7 +3294,7 @@ function ChatPanel({
           Загрузка из Kaiten…
         </div>
       ) : null}
-      <div className="px-2 py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2">
         {chatBlocks.map((block) => {
           if (block.kind === "imageRow") {
             const cm0 = block.comments[0];
@@ -3270,7 +3318,7 @@ function ChatPanel({
                       requestAnimationFrame(() => inputRef.current?.focus());
                     }}
                   >
-                    <IconReply className="h-3.5 w-3.5" />
+                    <IconReply className="h-5 w-5" />
                   </button>
                 </div>
                 <div className="mt-1 grid grid-cols-3 gap-1">
@@ -3352,7 +3400,7 @@ function ChatPanel({
                     requestAnimationFrame(() => inputRef.current?.focus());
                   }}
                 >
-                  <IconReply className="h-3.5 w-3.5" />
+                  <IconReply className="h-5 w-5" />
                 </button>
               </div>
               {parentAuthor ? (
@@ -3385,7 +3433,7 @@ function ChatPanel({
           );
         })}
       </div>
-      <div className="relative flex flex-col gap-2 border-t border-[var(--kaiten-modal-border)] p-2">
+      <div className="relative flex shrink-0 flex-col gap-2 border-t border-[var(--kaiten-modal-border)] p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {replyTo ? (
           <div className="flex items-start gap-2 rounded-md border border-[var(--kaiten-accent)]/35 bg-[var(--kaiten-accent)]/10 px-2 py-1.5 text-[0.7rem] text-[var(--kaiten-modal-text)]">
             <div className="min-w-0 flex-1">
@@ -3528,7 +3576,7 @@ function ChatPanel({
               void submitMessage();
             }}
           >
-            <IconSend />
+            <IconSend className="h-5 w-5" />
           </button>
         </div>
       </div>

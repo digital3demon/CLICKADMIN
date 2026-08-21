@@ -2725,11 +2725,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               patchApp={patchApp}
               showToast={showToast}
             />
-            <details className="relative shell-laptop:contents">
-              <summary className="inline-flex h-9 cursor-pointer list-none items-center justify-center rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 text-[0.68rem] font-semibold text-[var(--kanban-text)] shadow-sm [&::-webkit-details-marker]:hidden shell-laptop:hidden">
-                Ещё
-              </summary>
-              <div className="absolute left-0 top-full z-30 mt-1 flex max-w-[min(100vw-1rem,22rem)] flex-col gap-1.5 rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] p-2 shadow-lg shell-laptop:static shell-laptop:mt-0 shell-laptop:max-w-none shell-laptop:flex-row shell-laptop:flex-wrap shell-laptop:items-center shell-laptop:border-0 shell-laptop:bg-transparent shell-laptop:p-0 shell-laptop:shadow-none shell-laptop:contents">
+            <div className="contents">
             {actualFilterAvailable ? (
               <button
                 type="button"
@@ -2878,7 +2874,6 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               </span>
             )}
               </div>
-            </details>
           </div>
 
           {stopOpen ? (
