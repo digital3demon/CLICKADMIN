@@ -106,12 +106,10 @@ export function IconBrick({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="16"
-      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
@@ -127,12 +125,10 @@ export function IconUnlock({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="16"
-      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       aria-hidden
     >
       <rect x="3" y="11" width="18" height="11" rx="2" />
@@ -163,12 +159,10 @@ export function IconReply({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="14"
-      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       aria-hidden
     >
       <polyline points="9 17 4 12 9 7" />
@@ -251,12 +245,10 @@ export function IconArrowRight({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="18"
-      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       aria-hidden
     >
       <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
@@ -268,12 +260,10 @@ export function IconArrowLeft({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="18"
-      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       aria-hidden
     >
       <path d="M19 12H5m6 6-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
@@ -306,12 +296,10 @@ export function IconMail({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="16"
-      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       aria-hidden
     >
       <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -324,12 +312,10 @@ export function IconLink({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="18"
-      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden

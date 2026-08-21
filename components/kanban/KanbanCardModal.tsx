@@ -253,6 +253,10 @@ type KanbanCardModalProps = {
 const KANBAN_BLOCK_PERM_HINT =
   "Блокировку могут менять ответственные и участники карточки или администратор";
 
+/** Пиктограмма в круглой кнопке тулбара: ~65–70% диаметра, жирнее штрих. */
+const TOOLBAR_CIRCLE_ICON =
+  "block !h-[68%] !w-[68%] shrink-0 overflow-visible [stroke-width:2.85]";
+
 function KanbanCardPeopleGroup({
   layout,
   label,
@@ -434,12 +438,12 @@ function KanbanDueUrgentControls({
   inputClassName: string;
 }) {
   return (
-    <div className={`flex items-center ${compact ? "min-w-0 gap-1" : "flex-wrap gap-2"}`}>
+    <div className={`flex items-center ${compact ? "min-w-0 gap-1.5" : "flex-wrap gap-2"}`}>
       <input
         type="date"
         className={
           compact
-            ? "h-6 w-auto max-w-[7.25rem] shrink-0 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1 py-0 text-[0.68rem] leading-none text-[var(--kaiten-modal-text)] [field-sizing:content] [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:h-3.5 [&::-webkit-calendar-picker-indicator]:w-3.5"
+            ? "h-9 w-auto max-w-[8.5rem] shrink-0 rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-0 text-[1.02rem] leading-none text-[var(--kaiten-modal-text)] [field-sizing:content] [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:h-4 [&::-webkit-calendar-picker-indicator]:w-4"
             : `${inputClassName} max-w-[12rem]`
         }
         disabled={!canEditDueDate}
@@ -451,7 +455,7 @@ function KanbanDueUrgentControls({
         type="button"
         className={
           compact
-            ? `inline-flex h-6 shrink-0 items-center rounded-md border px-1.5 text-[0.58rem] font-bold uppercase leading-none tracking-wide ${
+            ? `inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-full border px-0.5 text-center text-[0.42rem] font-extrabold uppercase leading-[1.05] tracking-wide ${
                 urgent
                   ? "border-orange-600/80 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
                   : "border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)]"
@@ -469,7 +473,14 @@ function KanbanDueUrgentControls({
         }
         onClick={onToggleUrgent}
       >
-        Срочно
+        {compact ? (
+          <span className="flex flex-col items-center">
+            <span>Сроч</span>
+            <span>но</span>
+          </span>
+        ) : (
+          "Срочно"
+        )}
       </button>
     </div>
   );
@@ -1950,7 +1961,7 @@ export function KanbanCardModal({
             </button>
           </div>
 
-          <div className="flex w-full min-w-0 shrink-0 flex-nowrap items-center gap-0.5 overflow-x-auto border-b border-[var(--kaiten-modal-border)] px-1.5 py-1 sm:gap-2 sm:px-3 sm:py-2.5">
+          <div className="flex w-full min-w-0 shrink-0 flex-nowrap items-center gap-0.5 overflow-x-auto border-b border-[var(--kaiten-modal-border)] px-1.5 py-1.5 sm:gap-2 sm:px-3 sm:py-2.5">
             <button
               type="button"
               title={
@@ -2006,9 +2017,9 @@ export function KanbanCardModal({
               }}
             >
               {blocked ? (
-                <IconUnlock className="h-3.5 w-3.5 sm:h-[1.35rem] sm:w-[1.35rem]" />
+                <IconUnlock className={TOOLBAR_CIRCLE_ICON} />
               ) : (
-                <IconBrick className="h-3.5 w-3.5 sm:h-[1.35rem] sm:w-[1.35rem]" />
+                <IconBrick className={TOOLBAR_CIRCLE_ICON} />
               )}
             </button>
             <button
@@ -2018,7 +2029,7 @@ export function KanbanCardModal({
               className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
               onClick={() => onMovePrevStage(cardId)}
             >
-              <IconArrowLeft className="h-3.5 w-3.5 sm:h-[1.35rem] sm:w-[1.35rem]" />
+              <IconArrowLeft className={TOOLBAR_CIRCLE_ICON} />
             </button>
             <button
               type="button"
@@ -2027,9 +2038,9 @@ export function KanbanCardModal({
               className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
               onClick={() => onMoveNextStage(cardId)}
             >
-              <IconArrowRight className="h-3.5 w-3.5 sm:h-[1.35rem] sm:w-[1.35rem]" />
+              <IconArrowRight className={TOOLBAR_CIRCLE_ICON} />
             </button>
-            <div className="ml-0.5 min-w-0 sm:hidden">
+            <div className="flex min-w-0 flex-1 justify-center sm:hidden">
               <KanbanDueUrgentControls
                 compact
                 stageDue={stageDue}
@@ -2074,7 +2085,7 @@ export function KanbanCardModal({
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
                   onClick={() => setOrderMailOpen(true)}
                 >
-                  <IconMail className="h-3.5 w-3.5 shrink-0 sm:h-[1.35rem] sm:w-[1.35rem]" />
+                  <IconMail className={TOOLBAR_CIRCLE_ICON} />
                 </button>
               ) : null}
               <button
@@ -2084,7 +2095,7 @@ export function KanbanCardModal({
                 className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
                 onClick={() => onCopyCardLink(cardId)}
               >
-                <IconLink className="h-3.5 w-3.5 shrink-0 sm:h-[1.35rem] sm:w-[1.35rem]" />
+                <IconLink className={TOOLBAR_CIRCLE_ICON} />
               </button>
             </div>
           </div>
@@ -3364,7 +3375,7 @@ function ChatPanel({
                   </span>
                   <button
                     type="button"
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
                     title="Ответить"
                     aria-label="Ответить на комментарий"
                     onClick={() => {
@@ -3372,7 +3383,7 @@ function ChatPanel({
                       requestAnimationFrame(() => inputRef.current?.focus());
                     }}
                   >
-                    <IconReply className="h-5 w-5" />
+                    <IconReply className={TOOLBAR_CIRCLE_ICON} />
                   </button>
                 </div>
                 <div className="mt-1 grid grid-cols-3 gap-1">
@@ -3446,7 +3457,7 @@ function ChatPanel({
                 </div>
                 <button
                   type="button"
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
                   title="Ответить"
                   aria-label="Ответить на комментарий"
                   onClick={() => {
@@ -3454,7 +3465,7 @@ function ChatPanel({
                     requestAnimationFrame(() => inputRef.current?.focus());
                   }}
                 >
-                  <IconReply className="h-5 w-5" />
+                  <IconReply className={TOOLBAR_CIRCLE_ICON} />
                 </button>
               </div>
               {parentAuthor ? (
