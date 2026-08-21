@@ -120,10 +120,19 @@ export function FinanceOfficeOrdersTable({
         <div className="space-y-4">
           {toolbar}
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
-            <div className="text-sm font-medium text-[var(--text-body)]">
-              Нарядов: {orders.length} · выбрано: {selectedCount}
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium text-[var(--text-body)]">
+              <button
+                type="button"
+                onClick={toggleAllVisible}
+                className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-[11px] font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)]"
+              >
+                {allVisibleSelected ? "Снять видимые" : "Выбрать видимые"}
+              </button>
+              <span>
+                Нарядов: {orders.length} · выбрано: {selectedCount}
+              </span>
               {activeTag ? (
-                <span className="ml-2 text-[var(--text-muted)]">
+                <span className="text-[var(--text-muted)]">
                   Фильтр: {activeTag}
                 </span>
               ) : null}
@@ -149,43 +158,56 @@ export function FinanceOfficeOrdersTable({
     >
       <OrderListKaitenPoller orderIds={kaitenOrderIds} />
       <div className="relative">
-      <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible shell-desktop:overflow-x-visible [-webkit-overflow-scrolling:touch]">
-        <table className="finance-office-orders-table w-max min-w-full border-separate border-spacing-0 text-center text-sm">
+      <div className="crm-list-scroll scrollbar-none">
+        <table className="crm-list-table finance-office-orders-table text-center text-sm">
+          <colgroup>
+            <col className="w-9" />
+            <col className="w-8 max-xl:w-0" />
+            <col className="w-[6.5rem]" />
+            <col />
+            <col className="w-[7.5rem]" />
+            <col className="w-[7.5rem]" />
+            <col className="w-[4.75rem]" />
+            <col className="w-[4.75rem]" />
+            <col className="w-[8.5rem] max-2xl:w-0" />
+            <col className="w-[5.5rem] max-2xl:w-0" />
+            <col className="w-14" />
+            <col className="w-[11rem] 2xl:w-[13rem]" />
+          </colgroup>
           <thead className="hidden shell-desktop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
-            <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-              <th className="w-[7.5rem] px-2 py-2 text-center normal-case max-xl:sticky max-xl:left-0 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">
-                <div className="flex flex-col items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={toggleAllVisible}
-                    className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-[11px] font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)]"
-                  >
-                    {allVisibleSelected ? "Снять видимые" : "Выбрать все видимые"}
-                  </button>
-                  <span>Выбрать</span>
-                </div>
+            <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] 2xl:text-[11px]">
+              <th className="w-9 px-1 py-1.5 text-center normal-case max-xl:sticky max-xl:left-0 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-[var(--input-border)]"
+                  checked={allVisibleSelected}
+                  onChange={toggleAllVisible}
+                  aria-label={
+                    allVisibleSelected ? "Снять видимые" : "Выбрать видимые"
+                  }
+                />
               </th>
-              <th className="w-10 px-1 py-2 text-center normal-case max-xl:hidden">Чат</th>
-              <th className="px-2 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
-              <th className="px-2 py-2 text-center">Клиника</th>
-              <th className="px-2 py-2 text-center">Врач</th>
-              <th className="px-2 py-2 text-center">Пациент</th>
+              <th className="w-8 px-0.5 py-1.5 text-center normal-case max-xl:hidden">Чат</th>
+              <th className="px-1 py-1.5 text-center max-xl:sticky max-xl:left-9 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№</th>
+              <th className="px-1 py-1.5 text-center">Клиника</th>
+              <th className="px-1 py-1.5 text-center">Врач</th>
+              <th className="px-1 py-1.5 text-center">Пациент</th>
               <th
-                className="px-2 py-2 text-center"
+                className="px-1 py-1.5 text-center"
                 title="Лаб-срок: dueDate"
               >
-                Лаб срок
+                Лаб
               </th>
               <th
-                className="px-2 py-2 text-center"
+                className="px-1 py-1.5 text-center"
                 title="Запись: дата и время приёма пациента"
               >
                 Запись
               </th>
-              <th className="w-[11rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Реквизиты</th>
-              <th className="w-[7rem] px-1.5 py-2 text-center normal-case max-xl:hidden">Наше юрлицо</th>
-              <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
-              <th className="w-[15.5rem] px-1.5 py-2 text-center normal-case">Отметки</th>
+              <th className="px-1 py-1.5 text-center normal-case max-2xl:hidden">Реквизиты</th>
+              <th className="px-1 py-1.5 text-center normal-case max-2xl:hidden">Юрлицо</th>
+              <th className="px-0.5 py-1.5 text-center normal-case">Отпр.</th>
+              <th className="px-1 py-1.5 text-center normal-case">Отметки</th>
             </tr>
           </thead>
           <tbody>
@@ -206,7 +228,7 @@ export function FinanceOfficeOrdersTable({
         </table>
       </div>
       <div
-        className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-12 bg-gradient-to-l from-[var(--card-bg)] to-transparent shell-desktop:hidden"
+        className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-8 bg-gradient-to-l from-[var(--card-bg)] to-transparent 2xl:hidden"
         aria-hidden="true"
       />
       </div>

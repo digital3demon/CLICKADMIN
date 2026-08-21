@@ -52,6 +52,33 @@ function formatFinanceDateTime(iso: string | null): string {
   });
 }
 
+function FinanceDateCell({ iso }: { iso: string | null }) {
+  if (!iso) return <span className="text-[var(--text-muted)]">—</span>;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    return <span className="text-[var(--text-muted)]">—</span>;
+  }
+  const date = d.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+  const time = d.toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return (
+    <time
+      dateTime={iso}
+      title={formatFinanceDateTime(iso)}
+      className="block leading-tight tabular-nums"
+    >
+      <span className="block">{date}</span>
+      <span className="block text-[10px] text-[var(--text-muted)]">{time}</span>
+    </time>
+  );
+}
+
 function formatFinanceCardDate(iso: string | null): string | undefined {
   if (!iso) return undefined;
   const d = new Date(iso);
@@ -228,14 +255,15 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
         labMentionHighlight={
           d.canSeeAdminIndicators && o.listKaitenLabMentionHighlight
         }
+        cellClassName="max-xl:hidden"
       />
       <td
-        className={`whitespace-nowrap px-2 py-2 text-center font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
+        className={`min-w-0 px-1 py-1.5 text-center font-mono font-semibold max-xl:sticky max-xl:left-9 max-xl:z-10 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
       >
-        <div className="flex min-h-[2.5rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
+        <div className="flex min-h-[2.25rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
           <Link
             href={orderPathById(o.id)}
-            className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
+            className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline"
             title={`${o.orderNumber} — открыть наряд`}
           >
             {o.orderNumber}
@@ -254,48 +282,60 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           />
         </div>
       </td>
-      <td className="max-w-[13rem] px-2 py-2 text-center align-middle">
+      <td className="min-w-0 px-1 py-1.5 text-center align-middle">
         {o.clinic ? (
           <Link
             href={`/clients/${o.clinic.id}`}
-            className="block hyphens-auto break-words text-center text-[var(--sidebar-blue)] hover:underline"
+            className="line-clamp-2 break-words text-center text-[var(--sidebar-blue)] hover:underline"
+            title={o.clinic.name}
           >
             {o.clinic.name}
           </Link>
         ) : (
-          <span className="block break-words text-center text-[var(--text-secondary)]">
+          <span className="line-clamp-2 break-words text-center text-[var(--text-secondary)]">
             Частное лицо
           </span>
         )}
       </td>
-      <td className="max-w-[10rem] px-2 py-2 text-center align-middle">
+      <td className="min-w-0 px-1 py-1.5 text-center align-middle">
         <Link
           href={`/clients/doctors/${o.doctor.id}`}
-          className="block break-words text-center text-[var(--sidebar-blue)] hover:underline"
+          className="line-clamp-2 break-words text-center text-[var(--sidebar-blue)] hover:underline"
+          title={o.doctor.fullName}
         >
           {personNameSurnameInitials(o.doctor.fullName)}
         </Link>
       </td>
-      <td className="max-w-[10rem] px-2 py-2 text-center align-middle">
-        <span className="block hyphens-auto break-words text-center">
+      <td className="min-w-0 px-1 py-1.5 text-center align-middle">
+        <span
+          className="line-clamp-2 break-words text-center"
+          title={o.patientName ?? undefined}
+        >
           {o.patientName ? personNameSurnameInitials(o.patientName) : "—"}
         </span>
       </td>
-      <td className="whitespace-nowrap px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
-        {formatFinanceDateTime(o.dueDate)}
+      <td className="px-1 py-1.5 text-center align-middle text-[var(--text-secondary)]">
+        <FinanceDateCell iso={o.dueDate} />
       </td>
-      <td className="whitespace-nowrap px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
-        {formatFinanceDateTime(o.appointmentDate ?? o.dueToAdminsAt)}
+      <td className="px-1 py-1.5 text-center align-middle text-[var(--text-secondary)]">
+        <FinanceDateCell iso={o.appointmentDate ?? o.dueToAdminsAt} />
       </td>
-      <td className="w-[11rem] max-w-[11rem] whitespace-pre-line break-words px-1.5 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
-        {o.counterpartyRequisitesText || "—"}
+      <td className="min-w-0 px-1 py-1.5 text-center text-[10px] leading-snug text-[var(--text-secondary)] max-2xl:hidden">
+        <span
+          className="line-clamp-2 break-words"
+          title={o.counterpartyRequisitesText ?? undefined}
+        >
+          {o.counterpartyRequisitesText || "—"}
+        </span>
       </td>
-      <td className="w-[7rem] max-w-[7rem] break-words px-1.5 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] max-xl:hidden">
-        {o.legalEntity || "—"}
+      <td className="min-w-0 px-1 py-1.5 text-center text-[10px] leading-snug text-[var(--text-secondary)] max-2xl:hidden">
+        <span className="line-clamp-2 break-words" title={o.legalEntity ?? undefined}>
+          {o.legalEntity || "—"}
+        </span>
       </td>
       <td
         data-shipped-cell
-        className="w-[4.5rem] px-1 py-2 text-center align-middle"
+        className="w-14 px-0.5 py-1.5 text-center align-middle"
       >
         <OrderShippedToggle
           orderId={o.id}
@@ -303,7 +343,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           shippedAtIso={o.adminShippedAt}
         />
       </td>
-      <td className="w-[15.5rem] max-w-[15.5rem] px-1.5 py-2 text-left align-top">
+      <td className="min-w-0 px-1 py-1.5 text-left align-top">
         <TagsCell
           o={o}
           tab={d.tab}
@@ -346,7 +386,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
     <Fragment>
       <tr className={`hidden shell-desktop:table-row ${d.rowClass}`}>
         <td
-          className={`w-[7.5rem] px-2 py-2 text-center max-xl:sticky max-xl:left-0 max-xl:z-20 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
+          className={`w-9 px-1 py-1.5 text-center max-xl:sticky max-xl:left-0 max-xl:z-20 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
         >
           <input
             type="checkbox"

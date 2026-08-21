@@ -31,6 +31,7 @@ export function OrderListOrderChatCell({
   doctorName,
   labMentionHighlight,
   embedded = false,
+  cellClassName = "",
 }: {
   orderId: string;
   orderNumber: string;
@@ -40,6 +41,7 @@ export function OrderListOrderChatCell({
   labMentionHighlight: boolean;
   /** Встроенный режим — без обёртки `<td>` (объединённая колонка таблицы). */
   embedded?: boolean;
+  cellClassName?: string;
 }) {
   const { user } = useSessionUser();
   const chatAllowed =
@@ -90,7 +92,7 @@ export function OrderListOrderChatCell({
   if (embedded) return content;
 
   return (
-    <td className="max-md:hidden min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5">
+    <td className={`max-md:hidden min-w-0 px-1 py-1 align-middle text-center sm:px-1 sm:py-1.5 ${cellClassName}`.trim()}>
       {content}
     </td>
   );

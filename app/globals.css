@@ -347,12 +347,47 @@ body {
 }
 
 /*
+ * Общий контракт плотных списков: таблица занимает ширину контейнера,
+ * ячейки делят место, длинный текст режется. Горизонтальный скролл — запас,
+ * не основной макет.
+ */
+.crm-list-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+}
+.crm-list-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.crm-list-table th,
+.crm-list-table td {
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+}
+@media (min-width: 1680px) {
+  .crm-list-table th,
+  .crm-list-table td {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
+
+/*
  * ФинОтдел: просчитано = приглушённый emerald, счёт = приглушённый sky.
  * Сплошной фон на tr/td — иначе колёсико на длинном списке замирает.
  */
 .finance-office-orders-table {
   border-collapse: separate;
   border-spacing: 0;
+}
+.finance-office-orders-table .order-list-tags-pack,
+.finance-office-orders-table .order-list-tags-root {
+  max-width: 100%;
 }
 
 .finance-office-row-tint-calc {
