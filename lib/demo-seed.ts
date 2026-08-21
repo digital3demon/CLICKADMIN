@@ -24,6 +24,15 @@ const OWNER_EMAIL = "owner@demo.crm";
 const DEMO_MAILBOX = "lab@demo.crm";
 const DEMO_AUTHOR = "Владелец (демо)";
 
+/**
+ * Бамп → при входе в демо (в т.ч. DEMO_RESEED_ON_START=0) старая выгрузка
+ * считается «не сиднутой» и пересоздаётся. См. isDemoDatabaseSeeded.
+ */
+export const DEMO_SEED_REVISION = 4;
+const DEMO_SEED_REVISION_KEY = "demo-seed-revision";
+/** Минимум нарядов в актуальном сиде (ниже = устаревшая выгрузка на 4 заказа). */
+const DEMO_ORDER_COUNT_MIN = 50;
+
 function pad3(n: number): string {
   return String(n).padStart(3, "0");
 }
@@ -58,13 +67,34 @@ function yymmOf(d: Date): string {
   return `${y}${m}`;
 }
 
-/** Есть ли уже сид демо (для режима без принудительного reseed при каждом входе). */
+/**
+ * Актуальна ли демо-БД (не «просто есть владелец»).
+ * Старые выгрузки (4 наряда / без revision) → false → resetAndSeed.
+ */
 export async function isDemoDatabaseSeeded(db: PrismaClient): Promise<boolean> {
   const u = await db.user.findUnique({
     where: { id: OWNER_ID },
     select: { id: true },
   });
-  return Boolean(u);
+  if (!u) return false;
+  const orderCount = await db.order.count({
+    where: { tenantId: DEFAULT_TENANT_ID },
+  });
+  if (orderCount < DEMO_ORDER_COUNT_MIN) return false;
+  const rev = await db.tenantClientState.findUnique({
+    where: {
+      tenantId_key: {
+        tenantId: DEFAULT_TENANT_ID,
+        key: DEMO_SEED_REVISION_KEY,
+      },
+    },
+    select: { value: true },
+  });
+  const raw =
+    rev?.value && typeof rev.value === "object" && rev.value !== null
+      ? (rev.value as { v?: unknown }).v
+      : null;
+  return Number(raw) === DEMO_SEED_REVISION;
 }
 
 /** Полная демо-выгрузка: клиники, врачи, наряды, прайс, склад, курьеры, фейковая почта и чат. */
@@ -961,27 +991,23 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
 
     const inboxId = folders.INBOX!;
     const sentId = folders.SENT!;
-    const oLinked = [
-      createdOrders[createdOrders.length - 1]!,
-      createdOrders[createdOrders.length - 2]!,
-      createdOrders[createdOrders.length - 3]!,
-      createdOrders[createdOrders.length - 4]!,
-      createdOrders[createdOrders.length - 5]!,
-      createdOrders[Math.floor(createdOrders.length / 2)]!,
-      createdOrders[10]!,
-    ];
-    const o1 = oLinked[0]!;
-    const o2 = oLinked[1]!;
-    const o3 = oLinked[2]!;
     const clinicA = clinics[0]!;
     const clinicB = clinics[1]!;
     const clinicC = clinics[2]!;
     const clinicD = clinics[3]!;
+    const clinicE = clinics[4]!;
     const docA = doctors[0]!;
     const docB = doctors[1]!;
     const docC = doctors[2]!;
+    const docD = doctors[3]!;
+    const docE = doctors[4]!;
+    const docF = doctors[5]!;
 
-    const mailSpecs: Array<{
+    /**
+     * Входящие = заявки на НОВЫЕ наряды (без linkOrderId) → в UI «Создать заказ».
+     * Не «переписка / счёт / курьер» — это мешало демо почты как источника заказов.
+     */
+    type MailSpec = {
       folderId: string;
       direction: EmailDirection;
       isRead: boolean;
@@ -993,59 +1019,156 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       body: string;
       at: Date;
       linkOrderId?: string;
-    }> = [
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
+    };
+
+    const orderMail = (
+      partial: Omit<MailSpec, "folderId" | "direction" | "to"> & {
+        folderId?: string;
+        direction?: EmailDirection;
+      },
+    ): MailSpec => ({
+      folderId: inboxId,
+      direction: EmailDirection.INBOUND,
+      to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+      ...partial,
+    });
+
+    const mailSpecs: MailSpec[] = [
+      orderMail({
         isRead: false,
         fromName: clinicA.name,
         fromAddress: "reception@impuls-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: `Скан к наряду ${o1.orderNumber}`,
-        preview: "Прикладываем скан, можно брать в работу.",
-        body: `Добрый день!\n\nКлиника: ${clinicA.name}\nВрач: ${docA.fullName}\nНаряд: ${o1.orderNumber}\n\nОтправили скан — можно брать в работу.\n\nС уважением,\nРесепшен`,
-        at: hoursAgo(2),
-        linkOrderId: o1.id,
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
+        subject: "Заказ: коронки Zr 11, 21",
+        preview: "Пациент Смирнов И.П., цвет A2, срок 10 раб. дней.",
+        body: `Клиника: ${clinicA.name}\nВрач: ${docA.fullName}\nПациент: Смирнов И.П.\n\nКоронки циркониевые 11, 21.\nЦвет A2.\nСрок 10 рабочих дней.\nСкан во вложении (демо).`,
+        at: hoursAgo(1),
+      }),
+      orderMail({
         isRead: false,
-        fromName: docB.fullName,
-        fromAddress: "petrova@dent-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: `Уточнение по ${o2.orderNumber}`,
-        preview: "Можно ли сдвинуть срок на 2 дня?",
-        body: `Здравствуйте!\n\nПо наряду ${o2.orderNumber} можно ли сдвинуть срок сдачи на 2 дня?\n\n${docB.fullName}`,
-        at: hoursAgo(4),
-        linkOrderId: o2.id,
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: true,
         fromName: clinicB.name,
         fromAddress: "lab@dent-profi-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: `Коррекция цвета ${o3.orderNumber}`,
-        preview: "Просим чуть светлее A2 → A1.",
-        body: `Добрый день!\n\nНаряд ${o3.orderNumber}: просим сделать цвет чуть светлее (A2 → A1).\n\n${clinicB.name}`,
-        at: hoursAgo(18),
-        linkOrderId: o3.id,
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
+        subject: "Заказ: временные коронки 34–36",
+        preview: "Орлова М.А., срочно к пятнице.",
+        body: `Клиника: ${clinicB.name}\nВрач: ${docB.fullName}\nПациент: Орлова М.А.\n\nВременные коронки 34, 35, 36.\nСрок — к пятнице.`,
+        at: hoursAgo(2),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: docC.fullName,
+        fromAddress: "sidorov@demo-clinic.ru",
+        subject: "Заказ (частная практика): каппа на верх",
+        preview: "Кузнецов Д.В., каппа ночная.",
+        body: `Врач: ${docC.fullName}\nПациент: Кузнецов Д.В.\n\nКаппа ночная на верхнюю челюсть.\nСрок 5 рабочих дней.`,
+        at: hoursAgo(3),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: clinicC.name,
+        fromAddress: "ordo@ulybka-demo.ru",
+        subject: "Заказ: мост Zr 45–47",
+        preview: "Васильева Е.Н., цвет A3, каркас на примерку.",
+        body: `Клиника: ${clinicC.name}\nВрач: ${docD.fullName}\nПациент: Васильева Е.Н.\n\nМост циркониевый 45–47, цвет A3.\nСначала каркас на примерку.`,
+        at: hoursAgo(4),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: clinicD.name,
+        fromAddress: "info@zhemchug-demo.ru",
+        subject: "Заказ: виниры 12–22",
+        preview: "Николаева С.И., 6 виниров E.max.",
+        body: `Клиника: ${clinicD.name}\nВрач: ${docE.fullName}\nПациент: Николаева С.И.\n\nВиниры 12, 11, 21, 22 (при необходимости 13, 23).\nМатериал E.max.\nФото улыбки приложили (демо).`,
+        at: hoursAgo(5),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: clinicE.name,
+        fromAddress: "mail@ortodent-demo.ru",
+        subject: "Заказ: абатмент Multi-unit + коронка 36",
+        preview: "Фролов А.К., Straumann, срочно.",
+        body: `Клиника: ${clinicE.name}\nВрач: ${docF.fullName}\nПациент: Фролов А.К.\n\nАбатмент Multi-unit и коронка Zr на 36.\nПлатформа Straumann.\nСрочно.`,
+        at: hoursAgo(6),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: clinicA.name,
+        fromAddress: "reception@impuls-demo.ru",
+        subject: "Заказ: вкладка 15 + ретейнер",
+        preview: "Белова К.Т., цвет A1.",
+        body: `Клиника: ${clinicA.name}\nВрач: ${docA.fullName}\nПациент: Белова К.Т.\n\nВкладка 15, цвет A1.\nРетейнер на верх после фиксации.`,
+        at: hoursAgo(8),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: clinicB.name,
+        fromAddress: "lab@dent-profi-demo.ru",
+        subject: "Заказ: цирконий 36 одиночная",
+        preview: "Громов П.И., цвет B1.",
+        body: `Клиника: ${clinicB.name}\nВрач: ${docB.fullName}\nПациент: Громов П.И.\n\nКоронка циркониевая 36, цвет B1.\nСкан приложен (демо).`,
+        at: hoursAgo(10),
+      }),
+      orderMail({
         isRead: true,
         fromName: clinicC.name,
         fromAddress: "ordo@ulybka-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: `Готовность ${oLinked[3]!.orderNumber}?`,
-        preview: "Когда можно забирать работу?",
-        body: `Здравствуйте!\n\nПодскажите, наряд ${oLinked[3]!.orderNumber} уже можно забирать?\n\n${clinicC.name}`,
-        at: hoursAgo(30),
-        linkOrderId: oLinked[3]!.id,
-      },
+        subject: "Заказ: съёмный частичный протез",
+        preview: "Ершова Н.В., верх, кламмеры.",
+        body: `Клиника: ${clinicC.name}\nВрач: ${docD.fullName}\nПациент: Ершова Н.В.\n\nСъёмный частичный протез на верх.\nКламмеры по ситуации.\nСрок 12 рабочих дней.`,
+        at: daysAgo(1, 14),
+      }),
+      orderMail({
+        isRead: true,
+        fromName: clinicD.name,
+        fromAddress: "info@zhemchug-demo.ru",
+        subject: "Заказ: временная коронка 21",
+        preview: "Лапин С.О., на имплант.",
+        body: `Клиника: ${clinicD.name}\nВрач: ${docE.fullName}\nПациент: Лапин С.О.\n\nВременная коронка 21 на имплант.\nЦвет A2.\nСрок 3 рабочих дня.`,
+        at: daysAgo(1, 11),
+      }),
+      orderMail({
+        isRead: true,
+        fromName: clinicE.name,
+        fromAddress: "mail@ortodent-demo.ru",
+        subject: "Заказ: мост 34–36 металл-керамика",
+        preview: "Тихонов В.А., цвет A3.",
+        body: `Клиника: ${clinicE.name}\nВрач: ${docF.fullName}\nПациент: Тихонов В.А.\n\nМост металл-керамика 34–36.\nЦвет A3.\nКаркас на примерку.`,
+        at: daysAgo(2, 16),
+      }),
+      orderMail({
+        isRead: true,
+        fromName: docA.fullName,
+        fromAddress: "sokolova@impuls-demo.ru",
+        subject: "Заказ: каппа ретенционная низ",
+        preview: "Частная практика, пациент Юдин Р.М.",
+        body: `Врач: ${docA.fullName}\nПациент: Юдин Р.М.\n\nКаппа ретенционная на низ.\nСрок 4 рабочих дня.`,
+        at: daysAgo(2, 9),
+      }),
+      orderMail({
+        isRead: true,
+        fromName: clinicA.name,
+        fromAddress: "reception@impuls-demo.ru",
+        subject: "Заказ: коронки E.max 11–12",
+        preview: "Савельева И.Л., цвет BL2.",
+        body: `Клиника: ${clinicA.name}\nВрач: ${docB.fullName}\nПациент: Савельева И.Л.\n\nКоронки E.max 11 и 12.\nЦвет BL2.\nИндивидуализация режущего края.`,
+        at: daysAgo(3, 12),
+      }),
+      orderMail({
+        isRead: true,
+        fromName: clinicB.name,
+        fromAddress: "lab@dent-profi-demo.ru",
+        subject: "Заказ: абатмент индивидуальный 46",
+        preview: "Ковалёв Д.Н., Nobel.",
+        body: `Клиника: ${clinicB.name}\nВрач: ${docC.fullName}\nПациент: Ковалёв Д.Н.\n\nИндивидуальный абатмент 46.\nПлатформа Nobel.\nДалее коронка Zr отдельным заказом.`,
+        at: daysAgo(3, 10),
+      }),
+      orderMail({
+        isRead: true,
+        fromName: clinicC.name,
+        fromAddress: "ordo@ulybka-demo.ru",
+        subject: "Заказ: полный съёмный верх",
+        preview: "Макарова Е.П., срочная постановка.",
+        body: `Клиника: ${clinicC.name}\nВрач: ${docD.fullName}\nПациент: Макарова Е.П.\n\nПолный съёмный протез верхняя челюсть.\nПостановка на примерку.\nСрок 14 рабочих дней.`,
+        at: daysAgo(4, 15),
+      }),
       {
         folderId: sentId,
         direction: EmailDirection.OUTBOUND,
@@ -1053,134 +1176,10 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         fromName: "Демо-почта лаборатории",
         fromAddress: DEMO_MAILBOX,
         to: [{ name: clinicA.name, address: "reception@impuls-demo.ru" }],
-        subject: `Re: Скан к наряду ${o1.orderNumber}`,
-        preview: "Скан получили, в работу взяли.",
-        body: `Добрый день!\n\nСкан по ${o1.orderNumber} получили, наряд в работе.\n\nЛаборатория`,
-        at: hoursAgo(1.5),
-        linkOrderId: o1.id,
-      },
-      {
-        folderId: sentId,
-        direction: EmailDirection.OUTBOUND,
-        isRead: true,
-        fromName: "Демо-почта лаборатории",
-        fromAddress: DEMO_MAILBOX,
-        to: [{ name: docC.fullName, address: "sidorov@demo-clinic.ru" }],
-        subject: `Готовность ${oLinked[4]!.orderNumber}`,
-        preview: "Работа готова, можно забирать после 14:00.",
-        body: `Добрый день!\n\nНаряд ${oLinked[4]!.orderNumber} готов — после 14:00 можно забирать.\n\nЛаборатория`,
-        at: hoursAgo(12),
-        linkOrderId: oLinked[4]!.id,
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: true,
-        fromName: clinicD.name,
-        fromAddress: "info@zhemchug-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: `Фото припасовки ${oLinked[5]!.orderNumber}`,
-        preview: "Присылаем фото после примерки.",
-        body: `Добрый день!\n\nПо наряду ${oLinked[5]!.orderNumber} присылаем фото после примерки. Нужна доработка контакта.\n\n${clinicD.name}`,
-        at: daysAgo(3, 11),
-        linkOrderId: oLinked[5]!.id,
-      },
-      // Новые заявки без наряда — можно «Создать заказ» из письма
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: false,
-        fromName: clinicA.name,
-        fromAddress: "reception@impuls-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: "Новый заказ: коронки Zr 11, 21",
-        preview: "Пациент Смирнов И.П., цвет A2, срок 10 раб. дней.",
-        body: `Добрый день!\n\nКлиника: ${clinicA.name}\nВрач: ${docA.fullName}\nПациент: Смирнов И.П.\n\nЗаказ:\n— коронки циркониевые 11, 21\n— цвет A2\n— срок 10 рабочих дней\n\nСкан во вложении (демо).\n\nС уважением,\nРесепшен`,
-        at: hoursAgo(6),
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: false,
-        fromName: clinicB.name,
-        fromAddress: "lab@dent-profi-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: "Заявка: временные коронки 34–36",
-        preview: "Нужны временные на 3 зуба, срочно к пятнице.",
-        body: `Здравствуйте!\n\nКлиника: ${clinicB.name}\nВрач: ${docB.fullName}\nПациент: Орлова М.А.\n\nНужны временные коронки 34, 35, 36.\nСрок — к пятнице.\n\n${clinicB.name}`,
-        at: hoursAgo(9),
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: false,
-        fromName: docC.fullName,
-        fromAddress: "sidorov@demo-clinic.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: "Частная практика: каппа на верх",
-        preview: "Пациент без клиники, каппа ночная.",
-        body: `Добрый день!\n\nВрач (частная практика): ${docC.fullName}\nПациент: Кузнецов Д.В.\n\nЗаказ: каппа ночная на верхнюю челюсть.\nСрок 5 рабочих дней.\n\nС уважением`,
-        at: hoursAgo(14),
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: true,
-        fromName: clinicC.name,
-        fromAddress: "ordo@ulybka-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: "Мост 3 ед. Zr 45–47",
-        preview: "Цвет A3, каркас на примерку.",
-        body: `Добрый день!\n\nКлиника: ${clinicC.name}\nВрач: ${doctors[3]!.fullName}\nПациент: Васильева Е.Н.\n\nМост циркониевый 45–47, цвет A3.\nСначала каркас на примерку.\n\n${clinicC.name}`,
-        at: daysAgo(1, 15),
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: true,
-        fromName: clinicD.name,
-        fromAddress: "info@zhemchug-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: "Виниры 12–22",
-        preview: "6 виниров E.max, фото во вложении.",
-        body: `Здравствуйте!\n\nКлиника: ${clinicD.name}\nВрач: ${doctors[4]!.fullName}\nПациент: Николаева С.И.\n\nВиниры 12, 11, 21, 22 (и по ситуации 13, 23).\nМатериал E.max, фото улыбки приложили.\n\n${clinicD.name}`,
-        at: daysAgo(2, 9),
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: false,
-        fromName: clinics[4]!.name,
-        fromAddress: "mail@ortodent-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: "Абатмент Multi-unit + коронка 36",
-        preview: "Имплант Straumann, срочно.",
-        body: `Добрый день!\n\nКлиника: ${clinics[4]!.name}\nВрач: ${doctors[5]!.fullName}\nПациент: Фролов А.К.\n\nНужен абатмент Multi-unit и коронка Zr на 36.\nПлатформа Straumann.\n\nС уважением`,
-        at: hoursAgo(20),
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: true,
-        fromName: "Поставщик Циркон+",
-        fromAddress: "sales@zircon-plus-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: "Счёт на диски ZrO2",
-        preview: "Счёт во вложении (демо без файла).",
-        body: "Добрый день!\n\nНаправляем счёт на диски ZrO2. Оплата по реквизитам в письме.\n\nЦиркон+",
-        at: daysAgo(4, 10),
-      },
-      {
-        folderId: inboxId,
-        direction: EmailDirection.INBOUND,
-        isRead: true,
-        fromName: "Курьерская служба",
-        fromAddress: "dispatch@courier-demo.ru",
-        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-        subject: "Забор завтра 11:00–13:00",
-        preview: "Подтверждаем окно забора на завтра.",
-        body: "Подтверждаем забор завтра с 11:00 до 13:00.\n\nКурьерская служба",
-        at: hoursAgo(8),
+        subject: "Re: Заказ: коронки Zr 11, 21",
+        preview: "Заявку приняли, наряд оформим сегодня.",
+        body: `Добрый день!\n\nЗаявку на коронки Zr 11, 21 получили.\nНаряд оформим в CRM сегодня.\n\nЛаборатория`,
+        at: hoursAgo(0.5),
       },
     ];
 
@@ -1311,8 +1310,11 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     const c1a = "cm_demo_chat_001a";
     const c1b = "cm_demo_chat_001b";
     const c1c = "cm_demo_chat_001c";
+    const oChat1 = createdOrders[createdOrders.length - 1]!;
+    const oChat2 = createdOrders[createdOrders.length - 2]!;
+    const oChat3 = createdOrders[createdOrders.length - 3]!;
     await seedOrderChat(
-      o1.id,
+      oChat1.id,
       [
         {
           id: c1a,
@@ -1351,7 +1353,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     const c2a = "cm_demo_chat_002a";
     const c2b = "cm_demo_chat_002b";
     await seedOrderChat(
-      o2.id,
+      oChat2.id,
       [
         {
           id: c2a,
@@ -1379,7 +1381,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     );
 
     const c3a = "cm_demo_chat_003a";
-    await seedOrderChat(o3.id, [
+    await seedOrderChat(oChat3.id, [
       {
         id: c3a,
         userId: OWNER_ID,
@@ -1390,6 +1392,14 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         syncStatus: "local",
       },
     ]);
+
+    await tx.tenantClientState.create({
+      data: {
+        tenantId: DEFAULT_TENANT_ID,
+        key: DEMO_SEED_REVISION_KEY,
+        value: { v: DEMO_SEED_REVISION },
+      },
+    });
 
   },
     { maxWait: 60_000, timeout: 180_000 },

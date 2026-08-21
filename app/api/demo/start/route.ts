@@ -23,7 +23,8 @@ export const dynamic = "force-dynamic";
  * Код сгорает при первом успешном входе и привязывается к sid сессии (одна машина).
  *
  * По умолчанию демо-БД каждый раз пересоздаётся из сида. Чтобы сохранять правки в демо между
- * заходами, задайте в .env: `DEMO_RESEED_ON_START=0` — тогда сид выполнится только при пустой демо-БД.
+ * заходами, задайте в .env: `DEMO_RESEED_ON_START=0` — тогда сид выполнится только при пустой
+ * или устаревшей демо-БД (см. DEMO_SEED_REVISION / минимум нарядов в isDemoDatabaseSeeded).
  */
 export async function POST(req: Request) {
   if (isSingleUserPortable()) {
@@ -59,13 +60,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    if (!isDemoPersistentStorage()) {
+    const db = getDemoPrisma();
+    const mustReseed =
+      !isDemoPersistentStorage() || !(await isDemoDatabaseSeeded(db));
+    if (mustReseed) {
       await resetAndSeedDemoDatabase();
-    } else {
-      const db = getDemoPrisma();
-      if (!(await isDemoDatabaseSeeded(db))) {
-        await resetAndSeedDemoDatabase();
-      }
     }
   } catch (e) {
     console.error("[demo/start]", e);

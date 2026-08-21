@@ -35,7 +35,8 @@ export const STORAGE_KEY_LEGACY = "kanban-app-state-v2";
 /** Исторические имена ключей (оставлены для совместимости типов и миграционных комментариев). */
 export const STORAGE_KEY_V1_LEGACY = "kanban-app-state-v1";
 /** Исторический демо-ключ (до переноса в серверное хранилище). */
-export const STORAGE_KEY_DEMO = "kanban-app-state-v3-demo";
+/** v4: сброс localStorage после дублей карточек на старом 4-нарядном демо. */
+export const STORAGE_KEY_DEMO = "kanban-app-state-v4-demo";
 let memoryStateRawLive: string | null = null;
 let memoryStateRawDemo: string | null = null;
 
@@ -2148,6 +2149,25 @@ function removeLinkedOrderCardFromBoard(board: KanbanBoard, orderId: string): vo
   }
 }
 
+/** Один linkedOrderId → одна карточка (оставляем первую встреченную). */
+export function dedupeLinkedOrderCardsOnBoard(board: KanbanBoard): void {
+  const seen = new Set<string>();
+  for (const col of board.columns) {
+    const next: KanbanCard[] = [];
+    for (const c of col.cards) {
+      const lid = (c.linkedOrderId || "").trim();
+      if (!lid) {
+        next.push(c);
+        continue;
+      }
+      if (seen.has(lid)) continue;
+      seen.add(lid);
+      next.push(c);
+    }
+    col.cards = next;
+  }
+}
+
 /** Убрать linked-карточки нарядов, которых больше нет (архив / отмена / чужой тест). */
 export function removeLinkedOrderCardsFromAppState(
   state: KanbanAppState,
@@ -2726,6 +2746,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         targetCol.cards.unshift(card);
       }
     }
+    dedupeLinkedOrderCardsOnBoard(activeBoard);
     sortMirrorLinkedCardsInBoard(activeBoard);
     return next;
   }
