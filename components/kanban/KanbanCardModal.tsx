@@ -450,23 +450,33 @@ function KanbanDueUrgentControls({
   return (
     <div className={`flex items-center ${compact ? "min-w-0 gap-1" : "flex-wrap gap-2"}`}>
       {compact ? (
-        <label
-          className={`relative inline-flex h-6 w-[4.6rem] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1.5 text-[0.68rem] font-medium tabular-nums leading-none ${
+        <div
+          className={`relative isolate inline-flex h-6 w-[4.6rem] shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1.5 text-[0.68rem] font-medium tabular-nums leading-none ${
             stageDue
               ? "text-[var(--kaiten-modal-text)]"
               : "text-[var(--kaiten-modal-muted)]"
-          } ${canEditDueDate ? "cursor-pointer" : "opacity-60"}`}
+          } ${canEditDueDate ? "" : "opacity-60"}`}
           title="Срок карточки канбана (Kaiten). Не лабораторный срок и не дата записи."
         >
-          <span className="pointer-events-none">{compactDueLabel}</span>
+          <span className="pointer-events-none select-none">{compactDueLabel}</span>
           <input
             type="date"
-            className="absolute inset-0 cursor-pointer opacity-0"
+            aria-label="Срок карточки"
             disabled={!canEditDueDate}
             value={stageDue}
             onChange={(e) => onDueChange(e.target.value)}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              const el = e.currentTarget;
+              try {
+                el.showPicker?.();
+              } catch {
+                /* iOS / уже открыт */
+              }
+            }}
+            className="absolute inset-0 z-10 m-0 h-full w-full cursor-pointer border-0 bg-transparent p-0 text-[16px] text-transparent outline-none disabled:cursor-not-allowed [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-clear-button]:hidden [&::-webkit-datetime-edit]:hidden [&::-webkit-inner-spin-button]:hidden"
           />
-        </label>
+        </div>
       ) : (
         <input
           type="date"
