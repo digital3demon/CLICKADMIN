@@ -48,6 +48,8 @@ import {
 import { applyOptimisticKaitenBlocksToLinkedRows } from "@/lib/kanban/optimistic-kaiten-block";
 import { applyKanbanLegacyStageDueClearMigration, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { applyKaitenStageDueByOrderId } from "@/lib/kanban/kaiten-head-to-kanban-card";
+import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
+import { mergeInboundKaitenMirrorFieldsFromStored } from "@/lib/kanban/merge-inbound-kaiten-card-fields";
 import {
   forgetOptimisticKanbanStageDue,
   rememberOptimisticKanbanStageDue,
@@ -698,6 +700,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         const jS = (await rStandalone.json()) as { rows?: StandaloneRow[] };
         standaloneRows = Array.isArray(jS.rows) ? jS.rows : [];
       }
+      const remoteKanban = parseKanbanAppState(
+        await readClientState<unknown>("tenant", "kanbanAppStateV3"),
+      );
       setAppState((prev) => {
         if (!prev) return prev;
         let next = mergeKaitenLinkedOrdersIntoAppState(prev, linkedRows, {
@@ -706,6 +711,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         });
         next = removeLinkedOrderCardsFromAppState(next, jL.goneIds ?? []);
         next = applyStandaloneRowsFromServer(next, standaloneRows);
+        if (remoteKanban) {
+          mergeInboundKaitenMirrorFieldsFromStored(next, remoteKanban);
+        }
         if (Object.keys(inboundStageDue).length > 0) {
           applyKaitenStageDueByOrderId(next, inboundStageDue);
         }

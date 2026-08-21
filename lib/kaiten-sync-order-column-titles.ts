@@ -25,6 +25,7 @@ import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-
 import { ingestKaitenCommentsForOrder } from "@/lib/kanban/kaiten-comments-ingest-server";
 import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
 import { ymdFromKaitenDueDate } from "@/lib/kanban/kaiten-head-to-kanban-card";
+import { persistKaitenStageDueToKanbanState } from "@/lib/kanban/kaiten-inbound-card-head";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import { kaitenLogger } from "@/lib/server/logger";
 
@@ -67,6 +68,10 @@ export async function syncKaitenColumnTitlesForOrderIds(
   );
   const titles: Record<string, string | null> = {};
   const stageDueByOrderId: Record<string, string | null> = {};
+  const headByTenant = new Map<
+    string,
+    Record<string, { stageDue?: string | null; urgent?: boolean }>
+  >();
   const clicklabByOrderId: Record<string, boolean> = {};
   let syncedCount = 0;
   let errorCount = 0;
@@ -206,6 +211,19 @@ export async function syncKaitenColumnTitlesForOrderIds(
       if ("due_date" in cardObj) {
         stageDueByOrderId[row.id] = ymdFromKaitenDueDate(cardObj.due_date);
       }
+      const tenantHead = headByTenant.get(row.tenantId) ?? {};
+      const dueYmd =
+        "due_date" in cardObj ? ymdFromKaitenDueDate(cardObj.due_date) : undefined;
+      const dueExplicitEmpty =
+        "due_date" in cardObj &&
+        (cardObj.due_date == null ||
+          cardObj.due_date === false ||
+          String(cardObj.due_date).trim() === "");
+      tenantHead[row.id] = {
+        ...(dueYmd != null || dueExplicitEmpty ? { stageDue: dueYmd ?? null } : {}),
+        ...("asap" in cardObj ? { urgent: cardObj.asap === true } : {}),
+      };
+      headByTenant.set(row.tenantId, tenantHead);
       const boardIdRaw = cardObj.board_id;
       const boardId = typeof boardIdRaw === "number" ? boardIdRaw : null;
       if (boardId == null) {
@@ -332,6 +350,23 @@ export async function syncKaitenColumnTitlesForOrderIds(
       where: { id: { in: [...successfullyCheckedOrderIds] } },
       data: { kaitenSyncedAt: new Date(), kaitenSyncError: null },
     });
+  }
+
+  for (const [tenantId, patches] of headByTenant) {
+    const nonempty = Object.fromEntries(
+      Object.entries(patches).filter(
+        ([, p]) => p.stageDue !== undefined || typeof p.urgent === "boolean",
+      ),
+    );
+    if (Object.keys(nonempty).length === 0) continue;
+    try {
+      await persistKaitenStageDueToKanbanState(tenantId, nonempty);
+    } catch (e) {
+      kaitenLogger.warn(
+        { err: e, tenantId, msg: "kaiten_titles_sync_persist_due" },
+        "kaiten titles sync persist stage due failed",
+      );
+    }
   }
 
   return {

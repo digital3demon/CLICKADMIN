@@ -5,6 +5,8 @@ import {
   CLIENT_STATE_MAX_JSON_BYTES,
 } from "@/lib/client-state-limits";
 import { getPrisma } from "@/lib/get-prisma";
+import { KANBAN_CHAT_STATE_KEY, parseKanbanAppState } from "@/lib/kanban/chat-sync";
+import { mergeInboundKaitenMirrorFieldsFromStored } from "@/lib/kanban/merge-inbound-kaiten-card-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -146,14 +148,29 @@ export async function PUT(req: Request) {
         return NextResponse.json({ ok: true, scope, key });
       }
 
+      let valueToStore = body.value;
+      if (key === KANBAN_CHAT_STATE_KEY) {
+        const incoming = parseKanbanAppState(body.value);
+        if (incoming) {
+          const existing = await prisma.tenantClientState.findUnique({
+            where: { tenantId_key: { tenantId, key } },
+            select: { value: true },
+          });
+          const stored = parseKanbanAppState(existing?.value ?? null);
+          if (stored) {
+            mergeInboundKaitenMirrorFieldsFromStored(incoming, stored);
+            valueToStore = incoming;
+          }
+        }
+      }
       await prisma.tenantClientState.upsert({
         where: { tenantId_key: { tenantId, key } },
         create: {
           tenantId,
           key,
-          value: body.value as never,
+          value: valueToStore as never,
         },
-        update: { value: body.value as never },
+        update: { value: valueToStore as never },
       });
       return NextResponse.json({ ok: true, scope, key });
     };

@@ -18,6 +18,7 @@ import {
 import {
   deleteOrderAttachmentById,
   fetchKanbanMirrorCommentsForOrder,
+  fetchOrderKaitenCardHeadForKanban,
   fetchOrderKaitenCommentsForKanban,
   patchOrderKaitenCard,
   uploadOrderAttachmentFromFile,
@@ -31,6 +32,7 @@ import {
 import {
   forgetOptimisticKanbanStageDue,
   rememberOptimisticKanbanStageDue,
+  shouldSkipInboundKanbanStageDue,
 } from "@/lib/kanban/optimistic-kaiten-stage-due";
 import {
   formatKanbanChatMessageDisplay,
@@ -253,9 +255,9 @@ type KanbanCardModalProps = {
 const KANBAN_BLOCK_PERM_HINT =
   "Блокировку могут менять ответственные и участники карточки или администратор";
 
-/** Пиктограмма в круглой кнопке тулбара: ~65–70% диаметра, жирнее штрих. */
+/** Пиктограмма в круглой кнопке тулбара: ~65–70% диаметра. */
 const TOOLBAR_CIRCLE_ICON =
-  "block !h-[68%] !w-[68%] shrink-0 overflow-visible [stroke-width:2.85]";
+  "block !h-[68%] !w-[68%] shrink-0 overflow-visible [stroke-width:2]";
 
 function KanbanCardPeopleGroup({
   layout,
@@ -420,6 +422,13 @@ function KanbanCardModalTabs({
   );
 }
 
+/** Компактный срок в тулбаре: ДДММГГ, канон в value остаётся YYYY-MM-DD. */
+function formatKanbanDueDdmmyy(ymd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim().slice(0, 10));
+  if (!m) return "";
+  return `${m[3]}${m[2]}${m[1]!.slice(2)}`;
+}
+
 function KanbanDueUrgentControls({
   compact,
   stageDue,
@@ -437,25 +446,42 @@ function KanbanDueUrgentControls({
   onToggleUrgent: () => void;
   inputClassName: string;
 }) {
+  const compactDueLabel = formatKanbanDueDdmmyy(stageDue) || "ДДММГГ";
   return (
-    <div className={`flex items-center ${compact ? "min-w-0 gap-1.5" : "flex-wrap gap-2"}`}>
-      <input
-        type="date"
-        className={
-          compact
-            ? "h-9 w-auto max-w-[8.5rem] shrink-0 rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-0 text-[1.02rem] leading-none text-[var(--kaiten-modal-text)] [field-sizing:content] [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:h-4 [&::-webkit-calendar-picker-indicator]:w-4"
-            : `${inputClassName} max-w-[12rem]`
-        }
-        disabled={!canEditDueDate}
-        value={stageDue}
-        title="Срок карточки канбана (Kaiten). Не лабораторный срок и не дата записи."
-        onChange={(e) => onDueChange(e.target.value)}
-      />
+    <div className={`flex items-center ${compact ? "min-w-0 gap-1" : "flex-wrap gap-2"}`}>
+      {compact ? (
+        <label
+          className={`relative inline-flex h-6 w-[4.6rem] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1.5 text-[0.68rem] font-medium tabular-nums leading-none ${
+            stageDue
+              ? "text-[var(--kaiten-modal-text)]"
+              : "text-[var(--kaiten-modal-muted)]"
+          } ${canEditDueDate ? "cursor-pointer" : "opacity-60"}`}
+          title="Срок карточки канбана (Kaiten). Не лабораторный срок и не дата записи."
+        >
+          <span className="pointer-events-none">{compactDueLabel}</span>
+          <input
+            type="date"
+            className="absolute inset-0 cursor-pointer opacity-0"
+            disabled={!canEditDueDate}
+            value={stageDue}
+            onChange={(e) => onDueChange(e.target.value)}
+          />
+        </label>
+      ) : (
+        <input
+          type="date"
+          className={`${inputClassName} max-w-[12rem]`}
+          disabled={!canEditDueDate}
+          value={stageDue}
+          title="Срок карточки канбана (Kaiten). Не лабораторный срок и не дата записи."
+          onChange={(e) => onDueChange(e.target.value)}
+        />
+      )}
       <button
         type="button"
         className={
           compact
-            ? `inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-full border px-0.5 text-center text-[0.42rem] font-extrabold uppercase leading-[1.05] tracking-wide ${
+            ? `inline-flex h-6 shrink-0 items-center justify-center rounded-full border px-2.5 text-[0.68rem] font-bold uppercase leading-none tracking-wide ${
                 urgent
                   ? "border-orange-600/80 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
                   : "border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)]"
@@ -473,14 +499,7 @@ function KanbanDueUrgentControls({
         }
         onClick={onToggleUrgent}
       >
-        {compact ? (
-          <span className="flex flex-col items-center">
-            <span>Сроч</span>
-            <span>но</span>
-          </span>
-        ) : (
-          "Срочно"
-        )}
+        Срочно
       </button>
     </div>
   );
@@ -744,11 +763,23 @@ export function KanbanCardModal({
         return;
       }
       setKaitenChatLoading(true);
-      const kaiten = await fetchOrderKaitenCommentsForKanban(
-        linkedOrderId,
-        chatActorUserId,
-      );
+      const [kaiten, head] = await Promise.all([
+        fetchOrderKaitenCommentsForKanban(linkedOrderId, chatActorUserId),
+        fetchOrderKaitenCardHeadForKanban(linkedOrderId),
+      ]);
       if (cancelled) return;
+      if (head.ok) {
+        onApply((b) => {
+          const fc = findCard(b, cardId);
+          if (!fc) return;
+          fc.card.assignees = [...head.assignees];
+          fc.card.participants = [...head.participants];
+          fc.card.urgent = head.urgent;
+          if (!shouldSkipInboundKanbanStageDue(linkedOrderId, head.stageDue)) {
+            setKanbanStageDue(fc.card, head.stageDue);
+          }
+        });
+      }
       if (kaiten.ok && kaiten.comments.length > 0) {
         onApply((b) => {
           const fc = findCard(b, cardId);

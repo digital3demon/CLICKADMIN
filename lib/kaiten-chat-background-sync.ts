@@ -4,6 +4,7 @@ import {
   maybeRunActiveInboundKaitenSync,
 } from "@/lib/kaiten-inbound-active-sync";
 import { maybeRunMembersInboundKaitenSync } from "@/lib/kaiten-members-active-sync";
+import { syncKaitenCardHeadInboundForOrderIds } from "@/lib/kanban/kaiten-inbound-card-head";
 import { syncKaitenChatCommentsForOrderIds } from "@/lib/order-chat-correction-kaiten-sync";
 import { syncAllUnpushedAttachmentsInBackground } from "@/lib/kaiten-sync";
 import { cronLogger, kaitenLogger } from "@/lib/server/logger";
@@ -96,7 +97,22 @@ export async function syncKaitenChatsInBackground(
           checked += res.checkedCount;
           syncedCount += res.syncedCount;
           errorCount += res.errorCount;
-          return { rateLimited: res.rateLimited };
+          if (res.rateLimited) return { rateLimited: true };
+          try {
+            const head = await syncKaitenCardHeadInboundForOrderIds(
+              db,
+              auth,
+              tenantId,
+              orderIds,
+            );
+            if (head.rateLimited) return { rateLimited: true };
+          } catch (err) {
+            kaitenLogger.warn(
+              { err, tenantId },
+              "background Kaiten card head (due/members) sync failed",
+            );
+          }
+          return { rateLimited: false };
         },
         { maxTake },
       );
@@ -113,7 +129,7 @@ export async function syncKaitenChatsInBackground(
         break;
       }
 
-      if (!rateLimited) {
+      if (!rateLimited && !result.ran) {
         try {
           const mem = await maybeRunMembersInboundKaitenSync(db, tenantId, auth);
           if (mem.rateLimited) rateLimited = true;

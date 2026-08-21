@@ -67,6 +67,48 @@ export async function fetchKanbanMirrorCommentsForOrder(
   }
 }
 
+export async function fetchOrderKaitenCardHeadForKanban(
+  orderId: string,
+): Promise<
+  | {
+      ok: true;
+      assignees: string[];
+      participants: string[];
+      stageDue: string;
+      urgent: boolean;
+    }
+  | { ok: false }
+> {
+  try {
+    const res = await fetch(`/api/orders/${orderId}/kaiten/card-head`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      assignees?: unknown;
+      participants?: unknown;
+      stageDue?: unknown;
+      urgent?: unknown;
+    };
+    if (!res.ok) return { ok: false };
+    const assignees = Array.isArray(data.assignees)
+      ? data.assignees.filter((x): x is string => typeof x === "string")
+      : [];
+    const participants = Array.isArray(data.participants)
+      ? data.participants.filter((x): x is string => typeof x === "string")
+      : [];
+    return {
+      ok: true,
+      assignees,
+      participants,
+      stageDue: typeof data.stageDue === "string" ? data.stageDue : "",
+      urgent: data.urgent === true,
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function fetchOrderKaitenCommentsForKanban(
   orderId: string,
   displayUserId: string,
