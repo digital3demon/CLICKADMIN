@@ -74,6 +74,36 @@ export function kaitenStatusDisplay(o: {
   return "Нет в Kaiten";
 }
 
+/** Длинная пилюля в списке нарядов: две строки, иначе заезжает в №. */
+export const ORDER_STATUS_PILL_WRAP_AT = 20;
+
+/**
+ * Если вся подпись длиннее 20 символов — две строки.
+ * Режем по « · » (колонка · тип); иначе по последнему пробелу до порога.
+ * `\b` не используем: кириллица для него не «слово».
+ */
+export function splitOrderStatusPillLines(label: string): string[] {
+  const t = label.trim();
+  if (!t) return [""];
+  if (t.length <= ORDER_STATUS_PILL_WRAP_AT) return [t];
+  const sep = " · ";
+  const sepAt = t.indexOf(sep);
+  if (sepAt > 0) {
+    const left = t.slice(0, sepAt).trim();
+    const right = t.slice(sepAt + sep.length).trim();
+    if (left && right) return [left, right];
+  }
+  const head = t.slice(0, ORDER_STATUS_PILL_WRAP_AT);
+  const spaceAt = head.lastIndexOf(" ");
+  if (spaceAt >= 4) {
+    return [t.slice(0, spaceAt).trim(), t.slice(spaceAt).trim()];
+  }
+  return [
+    t.slice(0, ORDER_STATUS_PILL_WRAP_AT),
+    t.slice(ORDER_STATUS_PILL_WRAP_AT).trim(),
+  ];
+}
+
 /** Подпись доски под статусом в списке нарядов (ортопедия / ортодонтия / тест). */
 export function kaitenTrackLaneListLabel(
   lane: string | null | undefined,

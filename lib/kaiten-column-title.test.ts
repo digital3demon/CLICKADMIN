@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   kaitenStatusDisplay,
   kaitenTrackLaneListLabel,
+  splitOrderStatusPillLines,
 } from "@/lib/kaiten-column-title";
 
 describe("kaitenTrackLaneListLabel", () => {
@@ -57,5 +58,32 @@ describe("kaitenStatusDisplay", () => {
         kaitenCardId: null,
       }),
     ).toBe("Нет в Kaiten");
+  });
+});
+
+describe("splitOrderStatusPillLines", () => {
+  it("короткий статус — одна строка", () => {
+    expect(splitOrderStatusPillLines("Готово")).toEqual(["Готово"]);
+    expect(splitOrderStatusPillLines("Стоп")).toEqual(["Стоп"]);
+  });
+
+  it("кириллица до и после · — две строки если >20", () => {
+    expect(splitOrderStatusPillLines("К исполнению · Накладки")).toEqual([
+      "К исполнению",
+      "Накладки",
+    ]);
+    expect(
+      splitOrderStatusPillLines("К исполнению · Ортоаппараты Х хирургия"),
+    ).toEqual(["К исполнению", "Ортоаппараты Х хирургия"]);
+  });
+
+  it("ровно 20 — не режем", () => {
+    expect(splitOrderStatusPillLines("12345678901234567890")).toEqual([
+      "12345678901234567890",
+    ]);
+  });
+
+  it("пустой ввод", () => {
+    expect(splitOrderStatusPillLines("")).toEqual([""]);
   });
 });

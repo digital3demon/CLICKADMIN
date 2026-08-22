@@ -48,7 +48,7 @@ export function KanbanCardHoverPreviewPopover({
 
   return (
     <div
-      className="pointer-events-none fixed z-[260] w-72 rounded-xl border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] p-3 text-xs text-[var(--kanban-text)] shadow-[var(--kanban-shadow-elevated)]"
+      className="kanban-root pointer-events-none fixed z-[260] w-72 rounded-xl border border-[var(--kanban-border)] bg-[var(--kanban-card-bg,#44444c)] p-3 text-xs text-[var(--kanban-text,#f4f4f5)] shadow-[0_8px_28px_rgba(0,0,0,0.45)]"
       style={{ left, top }}
       role="tooltip"
     >

@@ -6,6 +6,7 @@ import { LAB_WORK_STATUS_PILL_STYLES } from "@/lib/lab-work-status";
 import {
   kaitenStatusDisplay,
   kaitenTrackLaneListLabel,
+  splitOrderStatusPillLines,
 } from "@/lib/kaiten-column-title";
 import { getKaitenColumnPillClassFromOrder } from "@/lib/order-status-display";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
@@ -82,6 +83,22 @@ function boardLanePill(
   );
 }
 
+function StatusPillLabel({ label }: { label: string }) {
+  const lines = splitOrderStatusPillLines(label);
+  if (lines.length < 2) {
+    return <span className="max-w-full text-center">{label}</span>;
+  }
+  return (
+    <span className="flex max-w-full flex-col text-center leading-tight">
+      {lines.map((line) => (
+        <span key={line} className="max-w-full whitespace-normal break-words">
+          {line}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function wrapStatusAndBoard(
   statusNode: ReactNode,
   boardLabel: string | null,
@@ -144,7 +161,7 @@ export function OrderListKaitenColumnTag({
 
   const wrapClass = underOrder
     ? "flex w-full min-w-0 justify-center"
-    : "inline-flex min-w-0 max-w-full items-center truncate text-left";
+    : "inline-flex min-w-0 max-w-full items-center text-center";
 
   if (kaitenBlocked && !isDemoMode) {
     const reason = String(kaitenBlockReason || "").trim();
@@ -236,29 +253,29 @@ export function OrderListKaitenColumnTag({
     demoKanbanStatus ? (
       <span
         className={kaitenStatusPillClass(
-          `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-center font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
+          `inline-flex min-w-0 max-w-full items-center justify-center rounded-full text-center font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
         )}
         title={demoKanbanStatus}
       >
-        <span className="truncate">{demoKanbanStatus}</span>
+        <StatusPillLabel label={demoKanbanStatus} />
       </span>
     ) : showNoKaitenPill ? (
       <span
         className={kaitenStatusPillClass(
-          `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-center font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
+          `inline-flex min-w-0 max-w-full items-center justify-center rounded-full text-center font-semibold uppercase tracking-wide shadow-sm ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`,
         )}
         title="Нет в Kaiten"
       >
-        <span className="truncate font-semibold uppercase">Нет в Kaiten</span>
+        <StatusPillLabel label="Нет в Kaiten" />
       </span>
     ) : (
       <span
         className={kaitenStatusPillClass(
-          `inline-flex min-w-0 max-w-full items-center truncate rounded-full text-center font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass}${underOrder ? "" : " px-2 py-0.5"}`,
+          `inline-flex min-w-0 max-w-full items-center justify-center rounded-full text-center font-semibold uppercase tracking-wide shadow-sm ${kaitenPillClass}${underOrder ? "" : " px-2 py-0.5"}`,
         )}
         title={kaitenLabel}
       >
-        <span className="truncate">{kaitenLabel}</span>
+        <StatusPillLabel label={kaitenLabel} />
       </span>
     );
 
