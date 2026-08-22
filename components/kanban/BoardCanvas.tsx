@@ -122,9 +122,14 @@ const KANBAN_BOARD_CARD_FRAME_CLASS =
 
 const CARD_MENU_GAP = 4;
 const CARD_MENU_EST_HEIGHT = 150;
-/** Одна ширина колонок на mobile и desktop — иначе на узких карточках мнётся лицо. */
-const BOARD_COLUMN_WIDTH_CLASS =
+/** Фиксированная ширина: mobile и DragOverlay. На ПК колонки делят доску (см. BOARD_COLUMN_WIDTH_CLASS). */
+const BOARD_COLUMN_WIDTH_FIXED =
   "w-[230px] sm:w-[240px] lg:w-[255px] xl:w-[270px]";
+/**
+ * На ПК (shell-laptop) колонки flex-1 — все влезают без горизонтального скролла.
+ * `!w-0` перекрывает sm/lg/xl px. Mobile / низкое окно — прежние px + скролл.
+ */
+const BOARD_COLUMN_WIDTH_CLASS = `${BOARD_COLUMN_WIDTH_FIXED} shrink-0 shell-laptop:!w-0 shell-laptop:min-w-0 shell-laptop:max-w-[270px] shell-laptop:flex-1 shell-laptop:shrink shell-laptop:h-full`;
 
 /** На touch-экранах: удержание перед перетаскиванием карточки, чтобы работал горизонтальный скролл. */
 const KANBAN_TOUCH_DRAG_DELAY_MS = 420;
@@ -653,7 +658,7 @@ function SortableColumnSection({
       ref={setNodeRef}
       style={style}
       data-column-id={col.id}
-      className={`kanban-column flex max-h-full ${BOARD_COLUMN_WIDTH_CLASS} shrink-0 flex-col rounded-[9px] border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.06] dark:bg-gradient-to-b dark:from-[#2d2d32] dark:to-[#27272a]`}
+      className={`kanban-column flex max-h-full ${BOARD_COLUMN_WIDTH_CLASS} flex-col rounded-[9px] border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.06] dark:bg-gradient-to-b dark:from-[#2d2d32] dark:to-[#27272a]`}
     >
       <header
         className={`column-header-handle relative border-b border-[var(--kanban-border)] px-2 pb-1.5 pt-2 max-md:px-1.5 max-md:pb-1 max-md:pt-1.5 sm:px-2 sm:pb-1.5 sm:pt-2 ${
@@ -1456,7 +1461,7 @@ export function BoardCanvas({
         ref={horizontalScrollRef}
         className="relative z-0 flex min-h-0 min-w-0 flex-1 touch-pan-x overflow-x-auto overflow-y-auto overscroll-x-contain p-1.5 [-webkit-overflow-scrolling:touch] sm:p-2"
       >
-        <div className="flex w-max min-w-0 shrink-0 items-start gap-1.5 sm:gap-2">
+        <div className="flex w-max min-w-0 shrink-0 items-start gap-1.5 sm:gap-2 shell-laptop:h-full shell-laptop:w-full shell-laptop:min-w-0 shell-laptop:flex-1 shell-laptop:items-stretch">
           <SortableContext
             items={columnIds}
             strategy={horizontalListSortingStrategy}
@@ -1546,7 +1551,7 @@ export function BoardCanvas({
                 ))}
               </div>
             ) : (
-              <div className="flex items-start gap-1.5 sm:gap-2">
+              <div className="flex items-start gap-1.5 sm:gap-2 shell-laptop:h-full shell-laptop:min-h-0 shell-laptop:w-full shell-laptop:flex-1 shell-laptop:items-stretch">
                 {board.columns.map((col) => {
                   const vis = visibleCardsInColumn(col, appState, resolveCardHomeBoard);
                   const cardIds = vis.map((c) => c.id);
@@ -1618,7 +1623,7 @@ export function BoardCanvas({
             )}
           </SortableContext>
           {!aggregateLayoutLocked ? (
-            <div className={`flex ${BOARD_COLUMN_WIDTH_CLASS} shrink-0 self-start`}>
+            <div className={`flex ${BOARD_COLUMN_WIDTH_FIXED} shrink-0 self-start shell-laptop:w-36`}>
               <button
                 type="button"
                 className="w-full rounded-md border-2 border-dashed border-[var(--kanban-border)] bg-black/[0.05] px-1.5 py-2 text-left text-[0.72rem] leading-snug text-[var(--kanban-text-muted)] hover:text-[var(--kanban-text)] dark:bg-white/[0.04] sm:px-2 sm:py-2 sm:text-[0.75rem]"
@@ -1634,7 +1639,7 @@ export function BoardCanvas({
       </div>
       <DragOverlay adjustScale dropAnimation={null}>
         {activeDragCard && activeDragCardHomeBoard ? (
-          <div className={BOARD_COLUMN_WIDTH_CLASS}>
+          <div className={BOARD_COLUMN_WIDTH_FIXED}>
             <KanbanCardView
               card={activeDragCard}
               homeBoard={activeDragCardHomeBoard}

@@ -61,8 +61,13 @@ export function kaitenStatusDisplay(o: {
   demoCardTypeName?: string | null;
   /** Тип карточки (демо и бой — одно поле; demoCardTypeName оставлен для вызовов). */
   cardTypeName?: string | null;
+  /** false — только колонка (тип в списке нарядов вынесен в отдельную колонку). */
+  includeCardType?: boolean;
 }): string {
-  const typeName = (o.cardTypeName ?? o.demoCardTypeName)?.trim();
+  const typeName =
+    o.includeCardType === false
+      ? ""
+      : (o.cardTypeName ?? o.demoCardTypeName)?.trim();
   if (o.demoKanbanColumn) {
     const col =
       DEMO_KANBAN_COL_RU[String(o.demoKanbanColumn)] ?? o.demoKanbanColumn;
@@ -72,6 +77,42 @@ export function kaitenStatusDisplay(o: {
   if (t) return typeName ? `${t} · ${typeName}` : t;
   if (o.kaitenCardId != null) return typeName ? `— · ${typeName}` : "—";
   return "Нет в Kaiten";
+}
+
+/**
+ * Сопоставление типа карточки: регистр, ё/е, лат. x / кир. х / ×.
+ * `\b` не используем — кириллица для него не «слово».
+ */
+export function normalizeKaitenCardTypeName(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/\s+/g, " ")
+    .replace(/[×xх]/gi, "x");
+}
+
+/** Цвета как у типов канбана (`kaitenCardTypes`), ключ — normalizeKaitenCardTypeName. */
+const KAITEN_CARD_TYPE_PILL_COLORS: Record<string, string> = {
+  [normalizeKaitenCardTypeName("Временные")]: "#22c55e",
+  [normalizeKaitenCardTypeName("МиоСплинт")]: "#06b6d4",
+  [normalizeKaitenCardTypeName("Модели")]: "#92400e",
+  [normalizeKaitenCardTypeName("Накладки")]: "#2563eb",
+  [normalizeKaitenCardTypeName("Накладки МРТ")]: "#1f2937",
+  [normalizeKaitenCardTypeName("ОртоАппараты")]: "#ec4899",
+  [normalizeKaitenCardTypeName("ОртоАппараты x Хирургия")]: "#f97316",
+  [normalizeKaitenCardTypeName("Постоянные")]: "#ef4444",
+  [normalizeKaitenCardTypeName("Сплинт")]: "#3b82f6",
+  [normalizeKaitenCardTypeName("Сплинт МРТ")]: "#171717",
+  [normalizeKaitenCardTypeName("Хирургия")]: "#eab308",
+};
+
+export function kaitenCardTypePillColor(
+  name: string | null | undefined,
+): string | null {
+  const key = normalizeKaitenCardTypeName(String(name || ""));
+  if (!key) return null;
+  return KAITEN_CARD_TYPE_PILL_COLORS[key] ?? null;
 }
 
 /** Длинная пилюля в списке нарядов: две строки, иначе заезжает в №. */

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { OrderListCardTypeTag } from "@/components/orders/OrderListCardTypeTag";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
@@ -186,6 +187,11 @@ export function OrdersListTableRow({
                   boardFilterHref={boardFilterHref}
                   placement="underOrderNumber"
                   isDemoMode={isDemoMode}
+                  includeCardType={false}
+                />
+                <OrderListCardTypeTag
+                  name={demoCardTypeName}
+                  placement="underOrderNumber"
                 />
               </div>
               {mobileShippedNode ? (

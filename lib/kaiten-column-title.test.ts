@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  kaitenCardTypePillColor,
   kaitenStatusDisplay,
   kaitenTrackLaneListLabel,
+  normalizeKaitenCardTypeName,
   splitOrderStatusPillLines,
 } from "@/lib/kaiten-column-title";
 
@@ -58,6 +60,32 @@ describe("kaitenStatusDisplay", () => {
         kaitenCardId: null,
       }),
     ).toBe("Нет в Kaiten");
+  });
+
+  it("список нарядов: колонка без типа", () => {
+    expect(
+      kaitenStatusDisplay({
+        kaitenColumnTitle: "К исполнению",
+        kaitenCardId: 9,
+        demoCardTypeName: "ОртоАппараты x Хирургия",
+        includeCardType: false,
+      }),
+    ).toBe("К исполнению");
+  });
+});
+
+describe("kaitenCardTypePillColor", () => {
+  it("кириллица до и после х — тот же цвет что у каталога", () => {
+    expect(normalizeKaitenCardTypeName("ОРТОАППАРАТЫ Х ХИРУРГИЯ")).toBe(
+      normalizeKaitenCardTypeName("ОртоАппараты x Хирургия"),
+    );
+    expect(kaitenCardTypePillColor("ОРТОАППАРАТЫ Х ХИРУРГИЯ")).toBe("#f97316");
+    expect(kaitenCardTypePillColor("Временные")).toBe("#22c55e");
+  });
+
+  it("пустой ввод", () => {
+    expect(kaitenCardTypePillColor("")).toBe(null);
+    expect(kaitenCardTypePillColor("   ")).toBe(null);
   });
 });
 

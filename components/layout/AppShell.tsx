@@ -14,9 +14,8 @@ import {
   useDesktopSidebarCollapse,
 } from "@/components/layout/desktop-sidebar-collapse";
 import { APP_SIDEBAR_W_COLLAPSED } from "@/lib/app-sidebar-collapse";
+import { APP_SIDEBAR_W_EXPANDED } from "@/lib/crm-layout-tiers";
 import { Sidebar } from "./Sidebar";
-
-const SIDEBAR_W_CLASSIC = "calc(100% / 7)";
 
 /** Слева от липких полос на mobile: кнопка меню (0.75rem + 2.75rem) + небольшой зазор. */
 const MOBILE_MENU_INSET =
@@ -82,7 +81,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
     };
   }, [mobileNavOpen]);
 
-  const sidebarW = collapsed ? APP_SIDEBAR_W_COLLAPSED : SIDEBAR_W_CLASSIC;
+  const sidebarW = collapsed ? APP_SIDEBAR_W_COLLAPSED : APP_SIDEBAR_W_EXPANDED;
 
   return (
     <div

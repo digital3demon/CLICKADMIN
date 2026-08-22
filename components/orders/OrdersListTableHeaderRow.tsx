@@ -437,6 +437,9 @@ export function OrdersListTableHeaderRow({
       >
         Статус
       </th>
+      <th className={TH} title="Тип карточки канбана">
+        Тип
+      </th>
       <th className={TH} title="№ наряда">
         № наряда
       </th>

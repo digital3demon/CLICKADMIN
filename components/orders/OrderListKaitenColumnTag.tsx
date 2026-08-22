@@ -18,6 +18,7 @@ import {
 function kanbanColumnLabelForNoKaitenPill(
   demoKanbanColumn: string | null | undefined,
   demoCardTypeName: string | null | undefined,
+  includeCardType: boolean,
 ): string | null {
   const raw = String(demoKanbanColumn || "").trim();
   if (!raw) return null;
@@ -29,7 +30,7 @@ function kanbanColumnLabelForNoKaitenPill(
         : raw === "DONE"
           ? "Готово"
           : raw;
-  const typeName = String(demoCardTypeName || "").trim();
+  const typeName = includeCardType ? String(demoCardTypeName || "").trim() : "";
   return typeName ? `${ru} · ${typeName}` : ru;
 }
 
@@ -134,6 +135,8 @@ type Props = {
   placement?: "tags" | "underOrderNumber";
   /** Демо: без брендинга Kaiten — только статус канбана. */
   isDemoMode?: boolean;
+  /** false — не клеить тип в пилюлю статуса (отдельная колонка «Тип»). */
+  includeCardType?: boolean;
 };
 
 export function OrderListKaitenColumnTag({
@@ -148,6 +151,7 @@ export function OrderListKaitenColumnTag({
   boardFilterHref = null,
   placement = "tags",
   isDemoMode = false,
+  includeCardType = true,
 }: Props) {
   const isHarmony = useUiDesign() === "harmony";
   const underOrder = placement === "underOrderNumber";
@@ -211,12 +215,14 @@ export function OrderListKaitenColumnTag({
     kaitenCardId: isDemoMode ? null : kaitenCardId,
     demoKanbanColumn,
     demoCardTypeName,
+    includeCardType,
   });
   const hasKaitenColumnLabel =
     !isDemoMode && String(kaitenColumnTitle || "").trim().length > 0;
   const demoColLabel = kanbanColumnLabelForNoKaitenPill(
     demoKanbanColumn,
     demoCardTypeName,
+    includeCardType,
   );
   /** Есть колонка демо-канбана — только она, без «Нет в Kaiten». */
   const demoKanbanStatus =

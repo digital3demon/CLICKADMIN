@@ -176,7 +176,7 @@ export function Sidebar() {
             </>
           ) : (
             <span
-              className={`relative z-20 flex w-full min-w-0 max-w-full items-baseline justify-center gap-1.5 overflow-hidden text-[1.35rem] leading-snug tracking-[0.04em] text-[var(--sidebar-text-strong)] shell-short:text-[1.05rem] shell-short:leading-tight shell-short:tracking-[0.02em] [@media(min-width:1024px)_and_(min-height:560px)]:text-[clamp(0.62rem,calc(((100vw/7)-2.75rem)/9),1.12rem)] [@media(min-width:1024px)_and_(min-height:560px)]:leading-tight [@media(min-width:1024px)_and_(min-height:560px)]:tracking-[0.05em] ${brandDisplayFont.className}`}
+              className={`relative z-20 flex w-full min-w-0 max-w-full items-baseline justify-center gap-1.5 overflow-hidden text-[1.35rem] leading-snug tracking-[0.04em] text-[var(--sidebar-text-strong)] shell-short:text-[1.05rem] shell-short:leading-tight shell-short:tracking-[0.02em] [@media(min-width:1024px)_and_(min-height:560px)]:text-[clamp(0.62rem,calc(((100vw/8)-2.75rem)/9),1.12rem)] [@media(min-width:1024px)_and_(min-height:560px)]:leading-tight [@media(min-width:1024px)_and_(min-height:560px)]:tracking-[0.05em] ${brandDisplayFont.className}`}
               style={{ textShadow: "var(--sidebar-title-shadow)" }}
               title={
                 sessionUser?.displayName
@@ -235,7 +235,7 @@ export function Sidebar() {
       </div>
 
       <div
-        className={railCollapsed ? "mx-2 h-px bg-[var(--sidebar-border)]" : "mx-5 h-px bg-[var(--sidebar-border)]"}
+        className={railCollapsed ? "mx-2 h-px bg-[var(--sidebar-border)]" : "mx-3.5 h-px bg-[var(--sidebar-border)]"}
         aria-hidden
       />
 

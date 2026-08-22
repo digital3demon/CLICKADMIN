@@ -4,7 +4,7 @@
  */
 
 html[data-ui="harmony"] {
-  --app-sidebar-w: 260px;
+  --app-sidebar-w: calc(100% / 8);
   --status-red: #dc2626;
   --status-green: #16a34a;
   --status-yellow: #d97706;
@@ -554,10 +554,10 @@ html[data-ui="harmony"] .new-order-stage-shell {
 
 @media (min-width: 1024px) and (min-height: 560px) {
   html[data-ui="harmony"] .new-order-stage-shell {
-    left: 260px;
+    left: var(--app-sidebar-w);
   }
 
   html[data-ui="harmony"] .new-order-collapsed-strip {
-    left: calc(260px + 0.75rem);
+    left: calc(var(--app-sidebar-w) + 0.75rem);
   }
 }

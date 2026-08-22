@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
+import { OrderListCardTypeTag } from "@/components/orders/OrderListCardTypeTag";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
@@ -136,19 +137,20 @@ function OrdersTableColGroup() {
     <colgroup>
       <col className="max-md:hidden lg:w-[2.5%]" />
       <col className="max-md:hidden lg:w-[5.5%]" />
-      <col className="lg:w-[7%]" />
-      <col className="lg:w-[5.5%]" />
-      <col className="lg:w-[7%]" />
-      <col className="lg:w-[7%]" />
-      <col className="lg:w-[8.5%]" />
-      <col className="lg:w-[8.5%]" />
+      <col className="lg:w-[6%]" />
+      <col className="lg:w-[6.5%]" />
       <col className="lg:w-[5%]" />
-      <col className="lg:w-[5%]" />
-      <col className="lg:w-[5%]" />
-      <col className="max-md:hidden lg:w-[4.25%]" />
-      <col className="max-md:hidden lg:w-[4.25%]" />
+      <col className="lg:w-[6.5%]" />
+      <col className="lg:w-[6.5%]" />
+      <col className="lg:w-[8%]" />
+      <col className="lg:w-[8%]" />
       <col className="lg:w-[4.5%]" />
-      <col className="lg:w-[12.5%]" />
+      <col className="lg:w-[5%]" />
+      <col className="lg:w-[5%]" />
+      <col className="max-md:hidden lg:w-[4%]" />
+      <col className="max-md:hidden lg:w-[4%]" />
+      <col className="lg:w-[4.5%]" />
+      <col className="lg:w-[8.5%]" />
     </colgroup>
   );
 }
@@ -178,7 +180,7 @@ function OrdersTableHeader({
     <Suspense
       fallback={
         <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)]">
-          <th className={ORDERS_TABLE_TH} colSpan={14}>
+          <th className={ORDERS_TABLE_TH} colSpan={16}>
             …
           </th>
         </tr>
@@ -971,7 +973,7 @@ export default async function OrdersPage({
             {orders.length === 0 ? (
               <tr>
                 <td
-                  colSpan={14}
+                  colSpan={16}
                   className="px-4 py-10 text-center text-sm text-[var(--text-muted)]"
                 >
                   {activeFilter
@@ -1261,6 +1263,15 @@ export default async function OrdersPage({
                         boardFilterHref={isDemo ? null : boardFilterHref}
                         placement="underOrderNumber"
                         isDemoMode={isDemo}
+                        includeCardType={false}
+                      />
+                    </div>
+                  </td>
+                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
+                    <div className="flex min-h-[2.5rem] items-center justify-center">
+                      <OrderListCardTypeTag
+                        name={o.kaitenCardType?.name ?? null}
+                        placement="underOrderNumber"
                       />
                     </div>
                   </td>

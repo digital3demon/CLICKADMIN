@@ -9,6 +9,9 @@ export const APP_SHELL_LAPTOP_MIN_W = 1024;
 export const APP_SHELL_DESKTOP_MIN_W = 1400;
 export const APP_SHELL_MIN_H = 560;
 
+/** Развёрнутое левое меню (classic + AppShell). Было 1/7 — канбан с 9 колонками не влезал. */
+export const APP_SIDEBAR_W_EXPANDED = "calc(100% / 8)";
+
 export const SHELL_LAPTOP_MEDIA =
   "(min-width: 1024px) and (min-height: 560px)";
 export const SHELL_DESKTOP_MEDIA =
