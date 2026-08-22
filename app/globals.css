@@ -695,3 +695,114 @@ label {
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
 }
+
+/*
+ * Список нарядов: свёрнутый столбец — точка в шапке.
+ * data-orders-collapsed="status type" + data-col="status".
+ */
+[data-orders-cols] [data-col-dot] {
+  display: none;
+}
+
+[data-orders-collapsed~="chat"] [data-col="chat"] [data-col-body],
+[data-orders-collapsed~="print"] [data-col="print"] [data-col-body],
+[data-orders-collapsed~="status"] [data-col="status"] [data-col-body],
+[data-orders-collapsed~="type"] [data-col="type"] [data-col-body],
+[data-orders-collapsed~="number"] [data-col="number"] [data-col-body],
+[data-orders-collapsed~="patient"] [data-col="patient"] [data-col-body],
+[data-orders-collapsed~="doctor"] [data-col="doctor"] [data-col-body],
+[data-orders-collapsed~="clinic"] [data-col="clinic"] [data-col-body],
+[data-orders-collapsed~="address"] [data-col="address"] [data-col-body],
+[data-orders-collapsed~="admission"] [data-col="admission"] [data-col-body],
+[data-orders-collapsed~="lab"] [data-col="lab"] [data-col-body],
+[data-orders-collapsed~="appointment"] [data-col="appointment"] [data-col-body],
+[data-orders-collapsed~="memoAdmin"] [data-col="memoAdmin"] [data-col-body],
+[data-orders-collapsed~="memoTech"] [data-col="memoTech"] [data-col-body],
+[data-orders-collapsed~="shipped"] [data-col="shipped"] [data-col-body],
+[data-orders-collapsed~="tags"] [data-col="tags"] [data-col-body] {
+  display: none !important;
+}
+
+[data-orders-collapsed~="chat"] [data-col="chat"] [data-col-dot],
+[data-orders-collapsed~="print"] [data-col="print"] [data-col-dot],
+[data-orders-collapsed~="status"] [data-col="status"] [data-col-dot],
+[data-orders-collapsed~="type"] [data-col="type"] [data-col-dot],
+[data-orders-collapsed~="number"] [data-col="number"] [data-col-dot],
+[data-orders-collapsed~="patient"] [data-col="patient"] [data-col-dot],
+[data-orders-collapsed~="doctor"] [data-col="doctor"] [data-col-dot],
+[data-orders-collapsed~="clinic"] [data-col="clinic"] [data-col-dot],
+[data-orders-collapsed~="address"] [data-col="address"] [data-col-dot],
+[data-orders-collapsed~="admission"] [data-col="admission"] [data-col-dot],
+[data-orders-collapsed~="lab"] [data-col="lab"] [data-col-dot],
+[data-orders-collapsed~="appointment"] [data-col="appointment"] [data-col-dot],
+[data-orders-collapsed~="memoAdmin"] [data-col="memoAdmin"] [data-col-dot],
+[data-orders-collapsed~="memoTech"] [data-col="memoTech"] [data-col-dot],
+[data-orders-collapsed~="shipped"] [data-col="shipped"] [data-col-dot],
+[data-orders-collapsed~="tags"] [data-col="tags"] [data-col-dot] {
+  display: inline-flex;
+}
+
+[data-orders-collapsed~="chat"] col[data-col="chat"],
+[data-orders-collapsed~="chat"] th[data-col="chat"],
+[data-orders-collapsed~="chat"] td[data-col="chat"],
+[data-orders-collapsed~="print"] col[data-col="print"],
+[data-orders-collapsed~="print"] th[data-col="print"],
+[data-orders-collapsed~="print"] td[data-col="print"],
+[data-orders-collapsed~="status"] col[data-col="status"],
+[data-orders-collapsed~="status"] th[data-col="status"],
+[data-orders-collapsed~="status"] td[data-col="status"],
+[data-orders-collapsed~="type"] col[data-col="type"],
+[data-orders-collapsed~="type"] th[data-col="type"],
+[data-orders-collapsed~="type"] td[data-col="type"],
+[data-orders-collapsed~="number"] col[data-col="number"],
+[data-orders-collapsed~="number"] th[data-col="number"],
+[data-orders-collapsed~="number"] td[data-col="number"],
+[data-orders-collapsed~="patient"] col[data-col="patient"],
+[data-orders-collapsed~="patient"] th[data-col="patient"],
+[data-orders-collapsed~="patient"] td[data-col="patient"],
+[data-orders-collapsed~="doctor"] col[data-col="doctor"],
+[data-orders-collapsed~="doctor"] th[data-col="doctor"],
+[data-orders-collapsed~="doctor"] td[data-col="doctor"],
+[data-orders-collapsed~="clinic"] col[data-col="clinic"],
+[data-orders-collapsed~="clinic"] th[data-col="clinic"],
+[data-orders-collapsed~="clinic"] td[data-col="clinic"],
+[data-orders-collapsed~="address"] col[data-col="address"],
+[data-orders-collapsed~="address"] th[data-col="address"],
+[data-orders-collapsed~="address"] td[data-col="address"],
+[data-orders-collapsed~="admission"] col[data-col="admission"],
+[data-orders-collapsed~="admission"] th[data-col="admission"],
+[data-orders-collapsed~="admission"] td[data-col="admission"],
+[data-orders-collapsed~="lab"] col[data-col="lab"],
+[data-orders-collapsed~="lab"] th[data-col="lab"],
+[data-orders-collapsed~="lab"] td[data-col="lab"],
+[data-orders-collapsed~="appointment"] col[data-col="appointment"],
+[data-orders-collapsed~="appointment"] th[data-col="appointment"],
+[data-orders-collapsed~="appointment"] td[data-col="appointment"],
+[data-orders-collapsed~="memoAdmin"] col[data-col="memoAdmin"],
+[data-orders-collapsed~="memoAdmin"] th[data-col="memoAdmin"],
+[data-orders-collapsed~="memoAdmin"] td[data-col="memoAdmin"],
+[data-orders-collapsed~="memoTech"] col[data-col="memoTech"],
+[data-orders-collapsed~="memoTech"] th[data-col="memoTech"],
+[data-orders-collapsed~="memoTech"] td[data-col="memoTech"],
+[data-orders-collapsed~="shipped"] col[data-col="shipped"],
+[data-orders-collapsed~="shipped"] th[data-col="shipped"],
+[data-orders-collapsed~="shipped"] td[data-col="shipped"],
+[data-orders-collapsed~="tags"] col[data-col="tags"],
+[data-orders-collapsed~="tags"] th[data-col="tags"],
+[data-orders-collapsed~="tags"] td[data-col="tags"] {
+  width: 1.15rem !important;
+  max-width: 1.15rem !important;
+  min-width: 1.15rem !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  overflow: hidden;
+}
+
+@media print {
+  [data-orders-cols] [data-col-body] {
+    display: revert !important;
+  }
+  [data-orders-cols] [data-col-dot] {
+    display: none !important;
+  }
+}

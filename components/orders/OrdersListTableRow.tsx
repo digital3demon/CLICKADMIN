@@ -139,8 +139,11 @@ export function OrdersListTableRow({
       >
         {children}
         {tagsNode ? (
-          <td className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5">
-            {!isNarrow ? tagsNode : null}
+          <td
+            data-col="tags"
+            className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5"
+          >
+            <div data-col-body>{!isNarrow ? tagsNode : null}</div>
           </td>
         ) : null}
       </tr>

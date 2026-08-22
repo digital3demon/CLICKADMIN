@@ -90,8 +90,11 @@ export function OrderListOrderChatCell({
   if (embedded) return content;
 
   return (
-    <td className="max-md:hidden min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5">
-      {content}
+    <td
+      data-col="chat"
+      className="max-md:hidden min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5"
+    >
+      <div data-col-body>{content}</div>
     </td>
   );
 }

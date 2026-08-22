@@ -24,9 +24,9 @@ import {
   pickOrdersShipmentHrefOpts,
 } from "@/lib/orders-shipment-list-query";
 import { moscowTodayYmd, moscowTomorrowYmd } from "@/lib/shipments-date-range";
-
-const TH =
-  "min-w-0 overflow-hidden whitespace-nowrap px-1 py-1 text-center sm:px-1.5 sm:py-1.5";
+import { OrdersListColHeader } from "@/components/orders/OrdersListColHeader";
+import { useOrdersListColCollapse } from "@/components/orders/OrdersListColumnsProvider";
+import type { OrdersListColId } from "@/lib/orders-list-collapsed-cols";
 
 type OpenKey = "lab" | "appt" | "otpr" | null;
 
@@ -119,6 +119,7 @@ function DateRangeFields({
  * Панель в portal + fixed: sticky thead с overflow-x/y иначе обрезает absolute-dropdown.
  */
 function FilterTh({
+  col,
   label,
   title,
   active,
@@ -126,6 +127,7 @@ function FilterTh({
   onToggle,
   children,
 }: {
+  col: OrdersListColId;
   label: string;
   title: string;
   active: boolean;
@@ -168,7 +170,7 @@ function FilterTh({
   }, [open]);
 
   return (
-    <th className={`${TH} normal-case`} title={title}>
+    <OrdersListColHeader col={col} title={title} className="normal-case">
       <button
         ref={buttonRef}
         type="button"
@@ -193,7 +195,7 @@ function FilterTh({
           ▾
         </span>
       </button>
-      {mounted && open && coords
+      {mounted && open && coords && !isCollapsed(col)
         ? createPortal(
             <div
               data-orders-col-filter-panel=""
@@ -208,7 +210,7 @@ function FilterTh({
             document.body,
           )
         : null}
-    </th>
+    </OrdersListColHeader>
   );
 }
 
@@ -406,29 +408,26 @@ export function OrdersListTableHeaderRow({
       ref={rowRef}
       className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs"
     >
-      <th
-        className={`${TH} max-md:hidden normal-case`}
+      <OrdersListColHeader
+        col="chat"
         title="Чат карточки в Kaiten"
+        className="max-md:hidden normal-case"
       >
         Чат
-      </th>
-      <th
-        className={`${TH} max-md:hidden normal-case`}
-        aria-label={
-          isDemo
-            ? "Печать наряда, этикетки и QR на карточку канбана"
-            : "Печать наряда, этикетки и QR на карточку Kaiten"
-        }
+      </OrdersListColHeader>
+      <OrdersListColHeader
+        col="print"
         title={
           isDemo
             ? "Печать наряда, этикетки и QR на карточку канбана"
             : "Печать наряда, этикетки и QR на карточку Kaiten"
         }
+        className="max-md:hidden normal-case"
       >
         Печать
-      </th>
-      <th
-        className={TH}
+      </OrdersListColHeader>
+      <OrdersListColHeader
+        col="status"
         title={
           isDemo
             ? "Статус карточки в канбане"
@@ -436,33 +435,34 @@ export function OrdersListTableHeaderRow({
         }
       >
         Статус
-      </th>
-      <th className={TH} title="Тип карточки канбана">
+      </OrdersListColHeader>
+      <OrdersListColHeader col="type" title="Тип карточки канбана">
         Тип
-      </th>
-      <th className={TH} title="№ наряда">
+      </OrdersListColHeader>
+      <OrdersListColHeader col="number" title="№ наряда">
         № наряда
-      </th>
-      <th className={TH} title="Пациент">
+      </OrdersListColHeader>
+      <OrdersListColHeader col="patient" title="Пациент">
         Пациент
-      </th>
-      <th className={TH} title="Врач">
+      </OrdersListColHeader>
+      <OrdersListColHeader col="doctor" title="Врач">
         Врач
-      </th>
-      <th className={TH} title="Клиника">
+      </OrdersListColHeader>
+      <OrdersListColHeader col="clinic" title="Клиника">
         Клиника
-      </th>
-      <th className={TH} title="Адрес клиники">
+      </OrdersListColHeader>
+      <OrdersListColHeader col="address" title="Адрес клиники">
         Адрес
-      </th>
-      <th
-        className={TH}
+      </OrdersListColHeader>
+      <OrdersListColHeader
+        col="admission"
         title="Поступление: когда работа зашла в лабораторию (без даты — дата занесения наряда)"
       >
         Постп
-      </th>
+      </OrdersListColHeader>
 
       <FilterTh
+        col="lab"
         label="ЛАБ"
         title="Срок лабораторный — фильтр с/по"
         active={labActive}
@@ -523,6 +523,7 @@ export function OrdersListTableHeaderRow({
       </FilterTh>
 
       <FilterTh
+        col="appointment"
         label="Запись"
         title="Запись: актуальное или период + печать списка"
         active={apptActive}
@@ -590,20 +591,23 @@ export function OrdersListTableHeaderRow({
         </div>
       </FilterTh>
 
-      <th
-        className={`${TH} w-[4.25rem] max-w-[4.25rem] px-1 max-md:hidden normal-case`}
+      <OrdersListColHeader
+        col="memoAdmin"
         title="ПА — пометки админов (не уходят в наряд и Kaiten)"
+        className="w-[4.25rem] max-w-[4.25rem] px-1 max-md:hidden normal-case"
       >
         ПА
-      </th>
-      <th
-        className={`${TH} w-[4.25rem] max-w-[4.25rem] px-1 max-md:hidden normal-case`}
+      </OrdersListColHeader>
+      <OrdersListColHeader
+        col="memoTech"
         title="ПТ — пометки техники (не уходят в наряд и Kaiten)"
+        className="w-[4.25rem] max-w-[4.25rem] px-1 max-md:hidden normal-case"
       >
         ПТ
-      </th>
+      </OrdersListColHeader>
 
       <FilterTh
+        col="shipped"
         label="Отправка"
         title="Отправка работы — фильтр по дате отправки с/по"
         active={otprActive}
@@ -648,12 +652,13 @@ export function OrdersListTableHeaderRow({
         </div>
       </FilterTh>
 
-      <th
-        className={`${TH} align-top normal-case`}
+      <OrdersListColHeader
+        col="tags"
         title="Теги: нажмите — фильтр списка; «+» — добавить свой тег к наряду"
+        className="align-top normal-case"
       >
         Отметки
-      </th>
+      </OrdersListColHeader>
     </tr>
   );
 }

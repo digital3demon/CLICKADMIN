@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { StickyListChrome } from "@/components/layout/StickyListChrome";
+import { OrdersListColumnsProvider } from "@/components/orders/OrdersListColumnsProvider";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 
 export function OrdersListChrome({
@@ -16,13 +17,15 @@ export function OrdersListChrome({
   const isHarmony = useUiDesign() === "harmony";
 
   return (
-    <StickyListChrome
-      className={className}
-      harmonyUnifiedCard={isHarmony}
-      toolbarClassName={isHarmony ? "orders-harmony-sticky-toolbar" : undefined}
-      toolbar={toolbar}
-    >
-      {children}
-    </StickyListChrome>
+    <OrdersListColumnsProvider>
+      <StickyListChrome
+        className={className}
+        harmonyUnifiedCard={isHarmony}
+        toolbarClassName={isHarmony ? "orders-harmony-sticky-toolbar" : undefined}
+        toolbar={toolbar}
+      >
+        {children}
+      </StickyListChrome>
+    </OrdersListColumnsProvider>
   );
 }

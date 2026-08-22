@@ -135,22 +135,22 @@ function formatOrderCardDate(d: Date | null | undefined): string | undefined {
 function OrdersTableColGroup() {
   return (
     <colgroup>
-      <col className="max-md:hidden lg:w-[2.5%]" />
-      <col className="max-md:hidden lg:w-[5.5%]" />
-      <col className="lg:w-[6%]" />
-      <col className="lg:w-[6.5%]" />
-      <col className="lg:w-[5%]" />
-      <col className="lg:w-[6.5%]" />
-      <col className="lg:w-[6.5%]" />
-      <col className="lg:w-[8%]" />
-      <col className="lg:w-[8%]" />
-      <col className="lg:w-[4.5%]" />
-      <col className="lg:w-[5%]" />
-      <col className="lg:w-[5%]" />
-      <col className="max-md:hidden lg:w-[4%]" />
-      <col className="max-md:hidden lg:w-[4%]" />
-      <col className="lg:w-[4.5%]" />
-      <col className="lg:w-[8.5%]" />
+      <col data-col="chat" className="max-md:hidden lg:w-[2.5%]" />
+      <col data-col="print" className="max-md:hidden lg:w-[5.5%]" />
+      <col data-col="status" className="lg:w-[6%]" />
+      <col data-col="type" className="lg:w-[6.5%]" />
+      <col data-col="number" className="lg:w-[5%]" />
+      <col data-col="patient" className="lg:w-[6.5%]" />
+      <col data-col="doctor" className="lg:w-[6.5%]" />
+      <col data-col="clinic" className="lg:w-[8%]" />
+      <col data-col="address" className="lg:w-[8%]" />
+      <col data-col="admission" className="lg:w-[4.5%]" />
+      <col data-col="lab" className="lg:w-[5%]" />
+      <col data-col="appointment" className="lg:w-[5%]" />
+      <col data-col="memoAdmin" className="max-md:hidden lg:w-[4%]" />
+      <col data-col="memoTech" className="max-md:hidden lg:w-[4%]" />
+      <col data-col="shipped" className="lg:w-[4.5%]" />
+      <col data-col="tags" className="lg:w-[8.5%]" />
     </colgroup>
   );
 }
@@ -1222,8 +1222,11 @@ export default async function OrdersPage({
                       canSeeAdminChip && o.listKaitenLabMentionHighlight
                     }
                   />
-                  <td className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-0.5 sm:py-1.5">
-                    <div className="flex min-w-0 flex-nowrap items-center justify-center gap-0">
+                  <td
+                    data-col="print"
+                    className="max-md:hidden min-w-0 px-0.5 py-1 align-middle sm:px-0.5 sm:py-1.5"
+                  >
+                    <div data-col-body className="flex min-w-0 flex-nowrap items-center justify-center gap-0">
                       {!workSent ? (
                         <OrderNarjadPrintTrigger
                           orderId={o.id}
@@ -1249,8 +1252,11 @@ export default async function OrdersPage({
                       )}
                     </div>
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
-                    <div className="flex min-h-[2.5rem] items-center justify-center">
+                  <td
+                    data-col="status"
+                    className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5"
+                  >
+                    <div data-col-body className="flex min-h-[2.5rem] items-center justify-center">
                       <OrderListKaitenColumnTag
                         kaitenCardId={isDemo ? null : o.kaitenCardId}
                         demoKanbanColumn={o.demoKanbanColumn}
@@ -1267,16 +1273,22 @@ export default async function OrdersPage({
                       />
                     </div>
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
-                    <div className="flex min-h-[2.5rem] items-center justify-center">
+                  <td
+                    data-col="type"
+                    className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5"
+                  >
+                    <div data-col-body className="flex min-h-[2.5rem] items-center justify-center">
                       <OrderListCardTypeTag
                         name={o.kaitenCardType?.name ?? null}
                         placement="underOrderNumber"
                       />
                     </div>
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5">
-                    <div className="flex min-h-[2.5rem] items-center justify-center -translate-y-px">
+                  <td
+                    data-col="number"
+                    className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5"
+                  >
+                    <div data-col-body className="flex min-h-[2.5rem] items-center justify-center -translate-y-px">
                       <Link
                         href={orderPathById(o.id)}
                         className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
@@ -1287,17 +1299,22 @@ export default async function OrdersPage({
                     </div>
                   </td>
                   <td
+                    data-col="patient"
                     className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5"
                     title={o.patientName ?? undefined}
                   >
-                    <span className="block hyphens-auto break-words text-center">
+                    <span data-col-body className="block hyphens-auto break-words text-center">
                       {o.patientName
                         ? personNameSurnameInitials(o.patientName)
                         : "—"}
                     </span>
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
+                  <td
+                    data-col="doctor"
+                    className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5"
+                  >
                     <Link
+                      data-col-body
                       href={`/clients/doctors/${o.doctor.id}`}
                       title={o.doctor.fullName}
                       className="block break-words text-center text-[var(--sidebar-blue)] hover:underline sm:leading-snug"
@@ -1305,7 +1322,11 @@ export default async function OrdersPage({
                       {personNameSurnameInitials(o.doctor.fullName)}
                     </Link>
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5">
+                  <td
+                    data-col="clinic"
+                    className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5"
+                  >
+                    <div data-col-body>
                     {o.clinic ? (
                       <Link
                         href={`/clients/${o.clinic.id}`}
@@ -1319,8 +1340,13 @@ export default async function OrdersPage({
                         Частное лицо
                       </span>
                     )}
+                    </div>
                   </td>
-                  <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5">
+                  <td
+                    data-col="address"
+                    className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5"
+                  >
+                    <div data-col-body>
                     {o.clinic?.address?.trim() ? (
                       <span
                         className="block hyphens-auto break-words text-center text-[var(--text-secondary)]"
@@ -1331,14 +1357,20 @@ export default async function OrdersPage({
                     ) : (
                       <span className="block text-center text-[var(--text-muted)]">—</span>
                     )}
+                    </div>
                   </td>
                   <td
+                    data-col="admission"
                     className="min-w-0 whitespace-nowrap px-1 py-1 align-middle text-center text-[11px] font-light text-[var(--text-muted)] sm:px-1.5 sm:py-1.5 sm:text-xs"
                     title={admission.full}
                   >
-                    {admission.short}
+                    <span data-col-body>{admission.short}</span>
                   </td>
-                  <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
+                  <td
+                    data-col="lab"
+                    className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5"
+                  >
+                    <div data-col-body>
                     <OrderListDueCell
                       orderId={o.id}
                       dueIso={o.dueDate?.toISOString() ?? null}
@@ -1346,8 +1378,13 @@ export default async function OrdersPage({
                       labHmSlots={labDueHmSlots}
                       dateFilterActive={dueDateRange != null}
                     />
+                    </div>
                   </td>
-                  <td className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5">
+                  <td
+                    data-col="appointment"
+                    className="min-w-0 w-[5.5rem] max-w-[5.5rem] px-1 py-1 align-middle text-[var(--text-secondary)] sm:px-1.5 sm:py-1.5"
+                  >
+                    <div data-col-body>
                     <OrderListDueCell
                       variant="appointment"
                       orderId={o.id}
@@ -1360,29 +1397,43 @@ export default async function OrdersPage({
                       appointmentHasTime={o.dueToAdminsHasTime !== false}
                       dateFilterActive={shipmentModeActive}
                     />
+                    </div>
                   </td>
-                  <td className="max-md:hidden min-w-0 w-[4.25rem] max-w-[4.25rem] px-1 py-1 align-middle sm:px-1 sm:py-1.5">
+                  <td
+                    data-col="memoAdmin"
+                    className="max-md:hidden min-w-0 w-[4.25rem] max-w-[4.25rem] px-1 py-1 align-middle sm:px-1 sm:py-1.5"
+                  >
+                    <div data-col-body>
                     <OrderListAdminMemoCell
                       orderId={o.id}
                       initialMemo={o.listAdminMemo ?? null}
                     />
+                    </div>
                   </td>
-                  <td className="max-md:hidden min-w-0 w-[4.25rem] max-w-[4.25rem] px-1 py-1 align-middle sm:px-1 sm:py-1.5">
+                  <td
+                    data-col="memoTech"
+                    className="max-md:hidden min-w-0 w-[4.25rem] max-w-[4.25rem] px-1 py-1 align-middle sm:px-1 sm:py-1.5"
+                  >
+                    <div data-col-body>
                     <OrderListTechMemoCell
                       orderId={o.id}
                       initialMemo={o.listTechMemo ?? null}
                       canEdit={canEditTechMemo}
                     />
+                    </div>
                   </td>
                   <td
+                    data-col="shipped"
                     data-shipped-cell
                     className="min-w-0 w-[4.5rem] max-w-[4.5rem] px-1 py-1 align-middle text-center sm:px-1 sm:py-1.5"
                   >
+                    <div data-col-body>
                     <OrderShippedToggle
                       orderId={o.id}
                       shipped={workSent}
                       shippedAtIso={o.adminShippedAt?.toISOString() ?? null}
                     />
+                    </div>
                   </td>
                 </OrdersListTableRow>
               );
