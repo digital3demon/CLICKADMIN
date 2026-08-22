@@ -147,7 +147,7 @@ function FilterTh({
   }, []);
 
   useLayoutEffect(() => {
-    if (!open) {
+    if (!open || isCollapsed(col)) {
       setCoords(null);
       return;
     }
@@ -168,7 +168,9 @@ function FilterTh({
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, [open]);
+  }, [open, col, isCollapsed]);
+
+  if (isCollapsed(col)) return null;
 
   return (
     <OrdersListColHeader col={col} title={title} className="normal-case">

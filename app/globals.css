@@ -719,6 +719,27 @@ label {
   display: none !important;
 }
 
+/*
+ * После сворачивания % у оставшихся col иначе не добирают 100% → щель/рельса.
+ * Делим ширину поровну на видимые (--orders-col-n с провайдера).
+ */
+[data-orders-cols]:not([data-orders-collapsed=""]) col[data-col] {
+  width: calc(100% / var(--orders-col-n, 16)) !important;
+  min-width: 0 !important;
+}
+
+/* Узкий «Чат»: не даём заголовку схлопнуться в «Ч…» из‑за % в table-fixed. */
+[data-orders-cols] col[data-col="chat"] {
+  width: 2.75rem !important;
+  min-width: 2.75rem !important;
+  max-width: 3rem !important;
+}
+[data-orders-cols]:not([data-orders-collapsed=""]) col[data-col="chat"] {
+  width: 2.75rem !important;
+  min-width: 2.75rem !important;
+  max-width: 3rem !important;
+}
+
 @media print {
   [data-orders-cols] col[data-col] {
     display: table-column !important;
