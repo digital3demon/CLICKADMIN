@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   canAccessSidebarPayments,
@@ -69,7 +68,6 @@ export function Sidebar() {
   const uiDesign = useUiDesign();
   const isHarmony = uiDesign === "harmony";
   const railCollapsed = useDesktopSidebarCollapseOptional()?.collapsed ?? false;
-  const router = useRouter();
   const { open: openNewOrder, canOpen, canCreate, createAccessReady } =
     useNewOrderPanel();
   const { user: sessionUser, isDemo, singleUser: singleUserMode } =
@@ -80,26 +78,20 @@ export function Sidebar() {
     !isActualOwner &&
     isKanbanOnlyUser(sessionUser.role, sessionUser.moduleAccess ?? undefined);
 
-  const logout = useCallback(async () => {
-    try {
-      if (isDemo) {
-        await fetch("/api/demo/exit", {
-          method: "POST",
-          credentials: "include",
-        });
-      } else {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          credentials: "include",
-        });
-      }
-    } catch {
-      /* ignore */
-    }
+  const logout = useCallback(() => {
     writeClientStorageBucket("live");
-    router.replace("/login");
-    router.refresh();
-  }, [router, isDemo]);
+    // Сразу уходим на логин — не ждём сеть/API (раньше exit ждал reseed БД).
+    const exitUrl = isDemo ? "/api/demo/exit" : "/api/auth/logout";
+    void fetch(exitUrl, { method: "POST", credentials: "include" }).catch(
+      () => {
+        void fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include",
+        }).catch(() => {});
+      },
+    );
+    window.location.assign("/login");
+  }, [isDemo]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 w-full flex-col text-[var(--sidebar-text-strong)]">
@@ -340,14 +332,9 @@ export function Sidebar() {
             {singleUserMode ? null : (
               <button
                 type="button"
-                title={
-                  isDemo
-                    ? "Выйти из демо и сбросить демо-базу к исходным данным"
-                    : "Выйти"
-                }
+                title={isDemo ? "Выйти из демо" : "Выйти"}
                 aria-label={isDemo ? "Выйти из демо" : "Выйти"}
-                onClick={() => void logout()}
-                className="rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] dark:hover:bg-white/10"
+                onClick={logout}                className="rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] dark:hover:bg-white/10"
               >
                 <LogOut className="h-4 w-4" aria-hidden />
               </button>
