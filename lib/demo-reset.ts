@@ -1,21 +1,24 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   assertDemoDatabaseDistinctFromMain,
+  DEMO_PG_SCHEMA,
   disconnectDemoPrisma,
   getDemoDatabaseUrl,
   getDemoPrisma,
+  isPostgresUrl,
+  isSqliteFileUrl,
 } from "@/lib/prisma-demo";
 import { unlinkDemoSqliteFiles } from "@/lib/demo-db-path";
 import { seedDemoDatabase } from "@/lib/demo-seed";
 import { resolvePrismaSchemaPath } from "@/lib/prisma-schema-path";
 
 /**
- * Полностью пересоздаёт файл демо-БД и заполняет сидом (после выхода из демо или при первом старте).
- * `db push --force-reset --skip-generate`: на PaaS после push Prisma иначе
- * запускает `npm i @prisma/client` (generate) и падает (exit 243 / read-only).
- * Клиент уже собран на этапе build.
+ * Полностью пересоздаёт демо-данные.
+ * Postgres: `db push --force-reset` только если схемы ещё нет — иначе сид сам чистит таблицы.
+ * (Раньше push на каждый вход → на PaaS часто уходил в `npx prisma` и падал на fast-check.)
  */
 export async function resetAndSeedDemoDatabase(): Promise<void> {
   assertDemoDatabaseDistinctFromMain();
@@ -24,21 +27,89 @@ export async function resetAndSeedDemoDatabase(): Promise<void> {
   await new Promise((r) => setTimeout(r, 400));
 
   const url = getDemoDatabaseUrl();
-  if (url.trim().toLowerCase().startsWith("file:")) {
+
+  if (isSqliteFileUrl(url)) {
     unlinkDemoSqliteFiles();
+    await runPrismaDbPush(url);
+    await seedDemoDatabase(getDemoPrisma());
+    return;
+  }
+
+  if (isPostgresUrl(url)) {
+    const ready = await isDemoPostgresSchemaReady();
+    if (ready) {
+      await seedDemoDatabase(getDemoPrisma());
+      return;
+    }
+    await disconnectDemoPrisma();
+    await runPrismaDbPush(url);
+    await seedDemoDatabase(getDemoPrisma());
+    return;
   }
 
   await runPrismaDbPush(url);
+  await seedDemoDatabase(getDemoPrisma());
+}
 
-  const db = getDemoPrisma();
-  await seedDemoDatabase(db);
+/** Есть ли в schema=crm_demo базовая таблица User (после первого успешного push). */
+export async function isDemoPostgresSchemaReady(): Promise<boolean> {
+  try {
+    const db = getDemoPrisma();
+    const rows = await db.$queryRaw<Array<{ ok: number }>>`
+      SELECT 1 AS ok
+      FROM information_schema.tables
+      WHERE table_schema = ${DEMO_PG_SCHEMA}
+        AND table_name = 'User'
+      LIMIT 1
+    `;
+    return rows.length > 0;
+  } catch {
+    await disconnectDemoPrisma().catch(() => {});
+    return false;
+  }
 }
 
 /**
- * На проде (NetAngels и т.п.) в PATH часто нет `npx` → spawn ENOENT.
- * Надёжнее: тот же Node, что крутит приложение, + `prisma/build/index.js` из `node_modules`.
- * При необходимости: `PRISMA_CLI_JS=/abs/path/to/prisma/build/index.js` в .env.
+ * Локальный `prisma/build/index.js` — без npx (на PaaS npx тянет битый кэш / MODULE_NOT_FOUND).
+ * `PRISMA_CLI_JS` — явный override.
  */
+export function resolveLocalPrismaCliJs(): string | null {
+  const fromEnv = process.env.PRISMA_CLI_JS?.trim();
+  if (fromEnv && existsSync(fromEnv)) return fromEnv;
+
+  const fromMarker = path.join(process.cwd(), ".prisma-cli-js");
+  if (existsSync(fromMarker)) {
+    try {
+      const p = readFileSync(fromMarker, "utf8").trim();
+      if (p && existsSync(p)) return p;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const candidates: string[] = [];
+  const roots = [
+    process.cwd(),
+    path.join(process.cwd(), ".next", "standalone"),
+  ];
+  for (const root of roots) {
+    candidates.push(
+      path.join(root, "node_modules", "prisma", "build", "index.js"),
+    );
+    try {
+      const req = createRequire(path.join(root, "package.json"));
+      candidates.push(req.resolve("prisma/build/index.js"));
+    } catch {
+      /* no package.json / no prisma */
+    }
+  }
+
+  for (const prismaJs of candidates) {
+    if (existsSync(prismaJs)) return prismaJs;
+  }
+  return null;
+}
+
 function resolvePrismaDbPushSpawn(schemaPath: string): {
   command: string;
   args: string[];
@@ -52,41 +123,22 @@ function resolvePrismaDbPushSpawn(schemaPath: string): {
     "--skip-generate",
     `--schema=${schemaPath}`,
   ] as const;
-  const fromEnv = process.env.PRISMA_CLI_JS?.trim();
-  if (fromEnv && existsSync(fromEnv)) {
+
+  const localJs = resolveLocalPrismaCliJs();
+  if (localJs) {
     return {
       command: process.execPath,
-      args: [fromEnv, ...pushArgs],
+      args: [localJs, ...pushArgs],
       shell: false,
     };
   }
-  const prismaJsCandidates = [
-    path.join(process.cwd(), "node_modules", "prisma", "build", "index.js"),
-    path.join(
-      process.cwd(),
-      ".next",
-      "standalone",
-      "node_modules",
-      "prisma",
-      "build",
-      "index.js",
-    ),
-  ];
-  for (const prismaJs of prismaJsCandidates) {
-    if (existsSync(prismaJs)) {
-      return {
-        command: process.execPath,
-        args: [prismaJs, ...pushArgs],
-        shell: false,
-      };
-    }
-  }
-  const isWin = process.platform === "win32";
-  return {
-    command: "npx",
-    args: ["-y", "prisma@6.19.3", ...pushArgs],
-    shell: isWin,
-  };
+
+  throw new Error(
+    "Не найден локальный Prisma CLI (node_modules/prisma/build/index.js). " +
+      "На PaaS нельзя использовать npx prisma — падает MODULE_NOT_FOUND (fast-check). " +
+      "Скопируйте пакет prisma в выкладку или задайте PRISMA_CLI_JS. " +
+      `cwd=${process.cwd()}`,
+  );
 }
 
 function runPrismaDbPush(databaseUrl: string): Promise<void> {
@@ -102,7 +154,18 @@ function runPrismaDbPush(databaseUrl: string): Promise<void> {
   }
 
   return new Promise((resolve, reject) => {
-    const { command, args, shell } = resolvePrismaDbPushSpawn(schemaPath);
+    let spawnSpec: { command: string; args: string[]; shell: boolean };
+    try {
+      spawnSpec = resolvePrismaDbPushSpawn(schemaPath);
+    } catch (e) {
+      reject(e);
+      return;
+    }
+    const { command, args, shell } = spawnSpec;
+    console.info(
+      "[demo-reset] prisma db push via",
+      command === process.execPath ? args[0] : command,
+    );
     const child = spawn(command, args, {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"],

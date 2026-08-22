@@ -38,6 +38,7 @@ COPY --from=builder /app/server.js ./
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/.prisma-cli-version ./
+COPY --from=builder /app/.prisma-cli-js ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/templates ./templates

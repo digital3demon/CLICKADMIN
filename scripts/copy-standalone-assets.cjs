@@ -81,3 +81,24 @@ if (fs.existsSync(pdfjsSrc)) {
 } else {
   console.warn("[copy-standalone-assets] Нет node_modules/pdfjs-dist — разбор PDF на PaaS упадёт");
 }
+
+/**
+ * CLI `prisma` для демо `db push` на PaaS (без npx).
+ * Next standalone NFT обычно не тащит пакет `prisma` — только `@prisma/client`.
+ */
+const prismaCliSrc = path.join(root, "node_modules", "prisma");
+const prismaCliDest = path.join(root, ".next", "standalone", "node_modules", "prisma");
+const prismaCliJs = path.join(prismaCliSrc, "build", "index.js");
+if (fs.existsSync(prismaCliJs)) {
+  copyDirRecursive(prismaCliSrc, prismaCliDest);
+  const marker = path.join(root, ".prisma-cli-js");
+  const markerStandalone = path.join(root, ".next", "standalone", ".prisma-cli-js");
+  const absJs = path.resolve(prismaCliJs);
+  fs.writeFileSync(marker, `${absJs}\n`, "utf8");
+  fs.writeFileSync(markerStandalone, `${path.resolve(path.join(prismaCliDest, "build", "index.js"))}\n`, "utf8");
+  console.log("[copy-standalone-assets] OK → .next/standalone/node_modules/prisma + .prisma-cli-js");
+} else {
+  console.warn(
+    "[copy-standalone-assets] Нет node_modules/prisma/build/index.js — демо db push на пустой схеме упадёт",
+  );
+}
