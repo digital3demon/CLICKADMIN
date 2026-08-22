@@ -1116,14 +1116,14 @@ export default async function OrdersPage({
                   }
                   labDate={labDateFormatted}
                   appointmentDate={appointmentDateFormatted}
-                  kaitenColumnTitle={isDemo ? null : o.kaitenColumnTitle}
+                  kaitenColumnTitle={o.kaitenColumnTitle}
                   kaitenTrackLane={isDemo ? null : o.kaitenTrackLane}
                   demoKanbanColumn={o.demoKanbanColumn}
                   demoCardTypeName={o.kaitenCardType?.name ?? null}
                   kaitenCardId={isDemo ? null : o.kaitenCardId}
                   kaitenBlocked={isDemo ? false : blocked}
                   kaitenBlockReason={isDemo ? null : o.kaitenBlockReason}
-                  kaitenFilterHref={isDemo ? null : kaitenStatusFilterHref}
+                  kaitenFilterHref={kaitenStatusFilterHref}
                   boardFilterHref={isDemo ? null : boardFilterHref}
                   isDemoMode={isDemo}
                   isLabOverdue={isLabOverdue}
@@ -1261,11 +1261,11 @@ export default async function OrdersPage({
                         kaitenCardId={isDemo ? null : o.kaitenCardId}
                         demoKanbanColumn={o.demoKanbanColumn}
                         demoCardTypeName={o.kaitenCardType?.name ?? null}
-                        kaitenColumnTitle={isDemo ? null : o.kaitenColumnTitle}
+                        kaitenColumnTitle={o.kaitenColumnTitle}
                         kaitenTrackLane={isDemo ? null : o.kaitenTrackLane}
                         kaitenBlocked={isDemo ? false : blocked}
                         kaitenBlockReason={isDemo ? null : o.kaitenBlockReason}
-                        filterHref={isDemo ? null : kaitenStatusFilterHref}
+                        filterHref={kaitenStatusFilterHref}
                         boardFilterHref={isDemo ? null : boardFilterHref}
                         placement="underOrderNumber"
                         isDemoMode={isDemo}

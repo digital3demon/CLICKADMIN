@@ -17,4 +17,13 @@ describe("personNameSurnameInitials", () => {
       "Иванов П. С.",
     );
   });
+
+  it("strips parenthetical notes so list cells stay clean", () => {
+    expect(personNameSurnameInitials("Фёдорова О.В. (каппа)")).toBe(
+      "Фёдорова О.",
+    );
+    expect(personNameSurnameInitials("Новиков А.С. (11, 12 коронки)")).toBe(
+      "Новиков А.",
+    );
+  });
 });

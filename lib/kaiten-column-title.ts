@@ -68,13 +68,15 @@ export function kaitenStatusDisplay(o: {
     o.includeCardType === false
       ? ""
       : (o.cardTypeName ?? o.demoCardTypeName)?.trim();
+  const colTitle = o.kaitenColumnTitle?.trim();
+  if (colTitle) {
+    return typeName ? `${colTitle} · ${typeName}` : colTitle;
+  }
   if (o.demoKanbanColumn) {
     const col =
       DEMO_KANBAN_COL_RU[String(o.demoKanbanColumn)] ?? o.demoKanbanColumn;
     return typeName ? `${col} · ${typeName}` : col;
   }
-  const t = o.kaitenColumnTitle?.trim();
-  if (t) return typeName ? `${t} · ${typeName}` : t;
   if (o.kaitenCardId != null) return typeName ? `— · ${typeName}` : "—";
   return "Нет в Kaiten";
 }

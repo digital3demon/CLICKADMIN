@@ -28,7 +28,7 @@ const DEMO_AUTHOR = "Владелец (демо)";
  * Бамп → при входе в демо (в т.ч. DEMO_RESEED_ON_START=0) старая выгрузка
  * считается «не сиднутой» и пересоздаётся. См. isDemoDatabaseSeeded.
  */
-export const DEMO_SEED_REVISION = 5;
+export const DEMO_SEED_REVISION = 6;
 const DEMO_SEED_REVISION_KEY = "demo-seed-revision";
 /** Минимум нарядов в актуальном сиде (ниже = устаревшая выгрузка на 4 заказа). */
 const DEMO_ORDER_COUNT_MIN = 50;
@@ -840,6 +840,14 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         ix % 5 === 0
           ? "Демо: внутренний комментарий админа — проверить комплектацию перед отгрузкой."
           : null;
+      /** Как в CRM-списке: ФИО без «(подсказка)» — иначе personNameSurnameInitials даёт «О. (.». */
+      const patientName = `${surname} ${initials}`;
+      const kaitenColumnTitle =
+        col === DemoKanbanColumn.NEW
+          ? "Новые"
+          : col === DemoKanbanColumn.IN_PROGRESS
+            ? "В работе"
+            : "Готово";
 
       const order = await tx.order.create({
         data: {
@@ -848,7 +856,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           createdAt,
           clinicId: clinic?.id ?? null,
           doctorId: doc.id,
-          patientName: `${surname} ${initials} (${hint})`,
+          patientName,
           status,
           labWorkStatus,
           dueDate: dueLab,
@@ -856,6 +864,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           appointmentDate: dueAdm,
           workReceivedAt: createdAt,
           demoKanbanColumn: col,
+          kaitenColumnTitle,
           kaitenCardTypeId: kt.id,
           kaitenTrackLane: null,
           kaitenDecideLater: false,

@@ -52,7 +52,7 @@ export function OrderListCardTypeTag({
 
   return (
     <span
-      className={`inline-flex min-w-0 max-w-full items-center justify-center rounded-full text-center font-medium uppercase tracking-wide ${padClass} ${
+      className={`inline-flex min-w-0 max-w-full items-center justify-center rounded-full text-center font-semibold uppercase tracking-wide ${padClass} ${
         color
           ? ""
           : "bg-[var(--surface-subtle)] text-[var(--text-secondary)] ring-1 ring-[var(--card-border)]"
@@ -60,9 +60,9 @@ export function OrderListCardTypeTag({
       style={
         color
           ? {
-              background: `color-mix(in srgb, ${color} 8%, var(--card-bg))`,
-              color: `color-mix(in srgb, ${color} 28%, var(--text-secondary))`,
-              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 12%, transparent)`,
+              background: `color-mix(in srgb, ${color} 34%, var(--card-bg))`,
+              color: `color-mix(in srgb, ${color} 82%, var(--app-text))`,
+              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 42%, transparent)`,
             }
           : undefined
       }

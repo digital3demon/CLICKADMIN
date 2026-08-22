@@ -211,22 +211,25 @@ export function OrderListKaitenColumnTag({
 }
 
   const kaitenLabel = kaitenStatusDisplay({
-    kaitenColumnTitle: isDemoMode ? null : kaitenColumnTitle,
+    kaitenColumnTitle,
     kaitenCardId: isDemoMode ? null : kaitenCardId,
     demoKanbanColumn,
     demoCardTypeName,
     includeCardType,
   });
   const hasKaitenColumnLabel =
-    !isDemoMode && String(kaitenColumnTitle || "").trim().length > 0;
-  const demoColLabel = kanbanColumnLabelForNoKaitenPill(
-    demoKanbanColumn,
-    demoCardTypeName,
-    includeCardType,
-  );
+    String(kaitenColumnTitle || "").trim().length > 0;
+  const demoColLabel =
+    hasKaitenColumnLabel
+      ? null
+      : kanbanColumnLabelForNoKaitenPill(
+          demoKanbanColumn,
+          demoCardTypeName,
+          includeCardType,
+        );
   /** Есть колонка демо-канбана — только она, без «Нет в Kaiten». */
   const demoKanbanStatus =
-    isDemoMode || demoColLabel
+    !hasKaitenColumnLabel && (isDemoMode || demoColLabel)
       ? (demoColLabel ?? (isDemoMode ? kaitenLabel : null))
       : null;
   const showNoKaitenPill =
@@ -234,11 +237,9 @@ export function OrderListKaitenColumnTag({
     !demoColLabel &&
     !hasKaitenColumnLabel &&
     kaitenCardId == null;
-  const effectiveFilterHref = isDemoMode ? null : filterHref;
+  const effectiveFilterHref = filterHref;
   const effectiveBoardFilterHref = isDemoMode ? null : boardFilterHref;
-  const kaitenColTrimmed = isDemoMode
-    ? ""
-    : (kaitenColumnTitle?.trim() ?? "");
+  const kaitenColTrimmed = kaitenColumnTitle?.trim() ?? "";
   const kaitenPillClass = getKaitenColumnPillClassFromOrder({
     kaitenColumnTitle: kaitenColTrimmed || null,
     demoKanbanColumn,
