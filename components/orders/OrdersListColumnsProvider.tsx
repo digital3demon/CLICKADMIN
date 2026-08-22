@@ -7,14 +7,12 @@ import {
   useEffect,
   useMemo,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import {
   collapsedColsAttr,
   collapsedColsPayload,
-  ORDERS_LIST_COL_IDS,
   ORDERS_LIST_COLLAPSED_COLS_KEY,
   parseCollapsedColIds,
   readCollapsedColsFromLocalStorage,
@@ -88,11 +86,6 @@ export function OrdersListColumnsProvider({ children }: { children: ReactNode })
     });
   }, []);
 
-  const visibleCount = Math.max(
-    1,
-    ORDERS_LIST_COL_IDS.length - collapsed.length,
-  );
-
   const value = useMemo<Ctx>(
     () => ({
       collapsed,
@@ -108,11 +101,6 @@ export function OrdersListColumnsProvider({ children }: { children: ReactNode })
         data-orders-cols=""
         data-orders-collapsed={collapsedColsAttr(collapsed)}
         className="min-w-0 w-full"
-        style={
-          {
-            ["--orders-col-n" as string]: String(visibleCount),
-          } as CSSProperties
-        }
       >
         {children}
       </div>

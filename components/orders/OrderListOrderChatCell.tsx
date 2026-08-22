@@ -92,7 +92,7 @@ export function OrderListOrderChatCell({
   return (
     <td
       data-col="chat"
-      className="max-md:hidden min-w-0 px-1 py-1 align-middle text-center sm:px-1.5 sm:py-1.5"
+      className="max-md:hidden w-10 max-w-10 min-w-0 px-0.5 py-1 align-middle text-center sm:py-1.5"
     >
       <div data-col-body>{content}</div>
     </td>

@@ -99,8 +99,8 @@ export function OrdersListColHeader({
       className={`group ${TH} ${className ?? ""}`}
       title={label}
     >
-      <div className="relative flex min-w-0 items-center justify-center px-0.5">
-        <div className="min-w-0 whitespace-nowrap">{children}</div>
+      <div className="relative flex min-w-0 items-center justify-center">
+        <div className="min-w-0 truncate">{children}</div>
         <button
           type="button"
           tabIndex={-1}
