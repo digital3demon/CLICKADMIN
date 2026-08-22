@@ -20,6 +20,7 @@ import {
   normalizePasswordResetCodeInput,
 } from "@/lib/auth/password-reset";
 import { jsonIfAuthLoginRateLimited } from "@/lib/auth/login-rate-limit";
+import { invalidateSessionLookupCacheByUserId } from "@/lib/auth/session-lookup-cache";
 
 type Body = {
   email?: string;
@@ -125,6 +126,7 @@ export async function POST(req: Request) {
         data: { revokedAt: now },
       }),
     ]);
+    invalidateSessionLookupCacheByUserId(loaded.user.id);
 
     let sid: string;
     try {

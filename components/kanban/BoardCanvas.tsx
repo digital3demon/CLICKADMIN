@@ -69,6 +69,7 @@ import { KanbanCardTitleFit } from "./KanbanCardTitleFit";
 import { useKanbanCardHoverPreview } from "./KanbanCardHoverPreview";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import type { AggregateCardDragArgs } from "@/lib/kanban/aggregate-card-drag";
+import { kanbanBoardDesktopZoom } from "@/lib/crm-layout-tiers";
 
 type BoardCanvasProps = {
   appState: KanbanAppState;
@@ -652,7 +653,7 @@ function SortableColumnSection({
       ref={setNodeRef}
       style={style}
       data-column-id={col.id}
-      className={`kanban-column flex max-h-[calc(100dvh-184px)] ${BOARD_COLUMN_WIDTH_CLASS} shrink-0 flex-col rounded-[9px] border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.06] dark:bg-gradient-to-b dark:from-[#2d2d32] dark:to-[#27272a] max-md:max-h-[calc(100dvh-132px)]`}
+      className={`kanban-column flex max-h-full ${BOARD_COLUMN_WIDTH_CLASS} shrink-0 flex-col rounded-[9px] border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.06] dark:bg-gradient-to-b dark:from-[#2d2d32] dark:to-[#27272a]`}
     >
       <header
         className={`column-header-handle relative border-b border-[var(--kanban-border)] px-2 pb-1.5 pt-2 max-md:px-1.5 max-md:pb-1 max-md:pt-1.5 sm:px-2 sm:pb-1.5 sm:pt-2 ${
@@ -1044,8 +1045,9 @@ export function BoardCanvas({
           const drag = laneDragRef.current;
           const pending = laneDragPendingPointRef.current;
           if (!drag || !pending || drag.laneId !== laneId || pending.laneId !== laneId) return;
-          const dx = pending.clientX - drag.startClientX;
-          const dy = pending.clientY - drag.startClientY;
+          const zoom = kanbanBoardDesktopZoom();
+          const dx = (pending.clientX - drag.startClientX) / zoom;
+          const dy = (pending.clientY - drag.startClientY) / zoom;
           setLaneOffsets((prev) => ({
             ...prev,
             [laneId]: { x: drag.startX + dx, y: drag.startY + dy },
@@ -1630,7 +1632,7 @@ export function BoardCanvas({
           ) : null}
         </div>
       </div>
-      <DragOverlay dropAnimation={null}>
+      <DragOverlay adjustScale dropAnimation={null}>
         {activeDragCard && activeDragCardHomeBoard ? (
           <div className={BOARD_COLUMN_WIDTH_CLASS}>
             <KanbanCardView

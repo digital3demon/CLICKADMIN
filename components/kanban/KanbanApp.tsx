@@ -2640,7 +2640,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   if (!appState || !board || !viewBoard) {
     return (
-      <div className="flex h-[calc(100dvh)] min-h-0 w-full flex-col items-center justify-center overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text-muted)]">
+      <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text-muted)]">
         <span className="text-[0.95rem]">Загрузка доски…</span>
       </div>
     );
@@ -2648,7 +2648,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   return (
     <KanbanCrmUsersProvider>
-    <div className="flex h-[calc(100dvh)] min-h-0 w-full flex-col overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text)]">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text)]">
       <header className="flex max-w-full flex-col gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:gap-2 sm:px-4 sm:py-2.5">
         <div className="flex min-w-0 max-w-full items-center gap-1.5 sm:gap-2">
           <div className="relative max-md:ms-[max(2.75rem,calc(env(safe-area-inset-left,0px)+2.35rem+0.2rem))] md:ms-0">

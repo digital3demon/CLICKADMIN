@@ -281,7 +281,8 @@ export function OrderCorrectionToastStack() {
     }
     let cancelled = false;
     const tick = async () => {
-      if (cancelled || document.visibilityState !== "visible") return;
+      /* Не глушить на скрытой вкладке — иначе «!!!»/корректировки копятся без тоста. */
+      if (cancelled) return;
       if (isLoginRef.current || isPublicStickerRef.current) return;
       const now = Date.now();
       if (pollInFlightRef.current) return;

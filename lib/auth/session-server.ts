@@ -12,6 +12,11 @@ import {
 } from "@/lib/auth/single-user";
 import { prisma } from "@/lib/prisma";
 import { VIEW_AS_ROLE_COOKIE_NAME, parseViewAsRole } from "@/lib/auth/view-as-role";
+import {
+  readSessionLookupCache,
+  sessionLookupCacheKey,
+  writeSessionLookupCache,
+} from "@/lib/auth/session-lookup-cache";
 
 export async function getSessionFromCookies(): Promise<SessionClaims | null> {
   try {
@@ -30,6 +35,15 @@ export async function getSessionFromCookies(): Promise<SessionClaims | null> {
     const m = await verifySessionToken(t);
     if (m?.demo) return null;
     if (!m?.sid) return null;
+    const viewAsRaw = c.get(VIEW_AS_ROLE_COOKIE_NAME)?.value ?? "";
+    /* ~10 с: revoke/роль/addonKanban могут отставать; logout сбрасывает кэш. */
+    const cacheKey = sessionLookupCacheKey({
+      sid: m.sid,
+      demo: false,
+      viewAsRaw,
+    });
+    const cached = readSessionLookupCache<SessionClaims>(cacheKey);
+    if (cached) return cached;
     const row = await prisma.userDeviceSession.findUnique({
       where: { id: m.sid },
       select: {
@@ -59,8 +73,8 @@ export async function getSessionFromCookies(): Promise<SessionClaims | null> {
     if (!row.user || row.user.isActive !== true) return null;
     const actualRole = row.user.role;
     const viewAsRole =
-      actualRole === "OWNER" ? parseViewAsRole(c.get(VIEW_AS_ROLE_COOKIE_NAME)?.value) : null;
-    return {
+      actualRole === "OWNER" ? parseViewAsRole(viewAsRaw) : null;
+    const session: SessionClaims = {
       sub: row.user.id,
       email: row.user.email,
       role: viewAsRole ?? actualRole,
@@ -71,6 +85,8 @@ export async function getSessionFromCookies(): Promise<SessionClaims | null> {
       plan: row.user.tenant?.plan,
       addonKanban: row.user.tenant?.addonKanban === true,
     };
+    writeSessionLookupCache(cacheKey, session);
+    return session;
   } catch {
     return null;
   }

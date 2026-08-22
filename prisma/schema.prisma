@@ -1568,6 +1568,8 @@ model Order {
   @@index([courierDeliveryId])
   @@index([continuesFromOrderId])
   @@index([archivedAt, createdAt])
+  /// Список нарядов: tenant + не архив + createdAt. Миграция на старте контейнера — окно 502.
+  @@index([tenantId, archivedAt, createdAt])
   @@index([tenantId, isTestOrder, testOrderOwnerUserId])
 }
 

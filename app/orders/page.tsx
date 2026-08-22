@@ -775,7 +775,7 @@ export default async function OrdersPage({
         ) : null}
         {shipmentListTruncated ? (
           <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-            Показаны первые 5000 неотгруженных нарядов по фильтру — уточните период или поиск.
+            Показаны не все: первые 5000 неотгруженных нарядов по фильтру — уточните период или поиск.
           </div>
         ) : null}
         <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">

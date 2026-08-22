@@ -14,6 +14,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 
 const PREVIEW_WIDTH = 288;
 const PREVIEW_EST_HEIGHT = 220;
@@ -112,13 +113,16 @@ export function useKanbanCardHoverPreview(enabled = true) {
   }, [hover]);
 
   const previewNode =
-    active && hover && position ? (
-      <KanbanCardHoverPreviewPopover
-        card={hover.card}
-        left={position.left}
-        top={position.top}
-      />
-    ) : null;
+    active && hover && position && typeof document !== "undefined"
+      ? createPortal(
+          <KanbanCardHoverPreviewPopover
+            card={hover.card}
+            left={position.left}
+            top={position.top}
+          />,
+          document.body,
+        )
+      : null;
 
   return { onPreviewMove, onPreviewLeave, previewNode };
 }

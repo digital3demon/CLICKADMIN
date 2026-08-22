@@ -294,6 +294,7 @@ export function MailLayout() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<MailFilter>("all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(initialMailState.nextCursor);
@@ -338,15 +339,20 @@ export function MailLayout() {
     [activeAccount],
   );
   const canConnectAccount = currentUserRole === "OWNER";
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
   const listQueryKey = useMemo(
     () => JSON.stringify({
       accountId: activeAccountId,
       folderId: activeFolderId,
       labelId: activeLabelId,
       filter,
-      search: search.trim(),
+      search: debouncedSearch.trim(),
     }),
-    [activeAccountId, activeFolderId, activeLabelId, filter, search],
+    [activeAccountId, activeFolderId, activeLabelId, filter, debouncedSearch],
   );
 
   const persistBootstrapCache = useCallback(
@@ -468,7 +474,7 @@ export function MailLayout() {
       });
       if (activeFolderId) params.set("folderId", activeFolderId);
       if (activeLabelId) params.set("labelId", activeLabelId);
-      if (search.trim()) params.set("q", search.trim());
+      if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
       if (cursor) params.set("cursor", cursor);
       const data = await jsonFetch<{ emails: MailEmailRow[]; nextCursor: string | null }>(
         `/api/mail/emails?${params.toString()}`,
@@ -485,7 +491,7 @@ export function MailLayout() {
       setNextCursor(data.nextCursor);
       if (!append) {
         writeMailListCache(listQueryKey, data.emails, data.nextCursor);
-        if (!activeLabelId && !search.trim() && filter === "all" && activeAccountId && activeFolderId) {
+        if (!activeLabelId && !debouncedSearch.trim() && filter === "all" && activeAccountId && activeFolderId) {
           persistBootstrapCache(
             {
               accounts,
@@ -506,7 +512,7 @@ export function MailLayout() {
       if (append) setLoadingMore(false);
       else setLoadingEmails(false);
     }
-  }, [activeAccountId, activeFolderId, activeLabelId, filter, search, listQueryKey, accounts, persistBootstrapCache]);
+  }, [activeAccountId, activeFolderId, activeLabelId, filter, debouncedSearch, listQueryKey, accounts, persistBootstrapCache]);
 
   const refreshEmailsSilently = useCallback(async () => {
     if (!activeAccountId) return;
@@ -521,7 +527,7 @@ export function MailLayout() {
       });
       if (activeFolderId) params.set("folderId", activeFolderId);
       if (activeLabelId) params.set("labelId", activeLabelId);
-      if (search.trim()) params.set("q", search.trim());
+      if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
       const data = await jsonFetch<{ emails: MailEmailRow[]; nextCursor: string | null }>(
         `/api/mail/emails?${params.toString()}`,
       );
@@ -533,7 +539,7 @@ export function MailLayout() {
     } catch {
       /* Тихое обновление не должно мешать чтению письма. */
     }
-  }, [activeAccountId, activeFolderId, activeLabelId, filter, search, listQueryKey]);
+  }, [activeAccountId, activeFolderId, activeLabelId, filter, debouncedSearch, listQueryKey]);
 
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
@@ -611,12 +617,12 @@ export function MailLayout() {
 
   useEffect(() => {
     if (!listReady) return;
-    if (!bootstrapDoneRef.current && listHasRowsRef.current && !activeLabelId && !search.trim() && filter === "all") {
+    if (!bootstrapDoneRef.current && listHasRowsRef.current && !activeLabelId && !debouncedSearch.trim() && filter === "all") {
       return;
     }
     setNextCursor(null);
     void loadEmails(null, false);
-  }, [listReady, loadEmails, activeLabelId, search, filter]);
+  }, [listReady, loadEmails, activeLabelId, debouncedSearch, filter]);
 
   useEffect(() => {
     if (!activeAccountId) return;

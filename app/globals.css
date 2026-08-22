@@ -276,12 +276,18 @@ html {
 }
 
 /*
- * Десктопный канбан: как зум 85% (при html 110% слишком крупно).
- * Не transform/zoom — ломают координаты dnd-kit.
+ * Десктопный канбан: zoom 87.5%.
+ * font-size на .kanban-root не работает: rem у Tailwind от html (110%),
+ * колонки w-[230px]…w-[270px] — абсолютные px.
+ * Не transform: scale — ломает getBoundingClientRect у dnd-kit.
+ * zoom + компенсирующие width/height: визуально мельче, доска на весь экран.
+ * Только .kanban-board-scale (страница), не модалки fixed inset-0.
  */
 @media (min-width: 1024px) and (min-height: 560px) {
-  .kanban-root {
-    font-size: 85%;
+  .kanban-root.kanban-board-scale {
+    zoom: 0.875;
+    width: calc(100% / 0.875);
+    height: calc(100dvh / 0.875);
   }
 }
 

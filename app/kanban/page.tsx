@@ -10,7 +10,7 @@ export default async function KanbanPage() {
   const session = await getSessionFromCookies();
   const isDemo = Boolean(session?.demo);
   return (
-    <div className="kanban-root min-h-0 w-full overflow-hidden">
+    <div className="kanban-root kanban-board-scale h-dvh min-h-0 w-full overflow-hidden">
       <KanbanApp isDemo={isDemo} />
     </div>
   );

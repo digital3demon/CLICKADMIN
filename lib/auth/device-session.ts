@@ -1,6 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { UserDeviceType } from "@prisma/client";
+import {
+  invalidateSessionLookupCacheBySid,
+  invalidateSessionLookupCacheByUserId,
+} from "@/lib/auth/session-lookup-cache";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -78,6 +82,7 @@ export async function issueUserDeviceSessionOrThrow(input: {
         },
         data: { revokedAt: now },
       });
+      invalidateSessionLookupCacheByUserId(input.userId);
     }
 
     await tx.userDeviceSession.create({
@@ -110,4 +115,5 @@ export async function revokeUserDeviceSessionBySid(
     },
     data: { revokedAt: now },
   });
+  invalidateSessionLookupCacheBySid(sid);
 }

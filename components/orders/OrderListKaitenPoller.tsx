@@ -300,8 +300,9 @@ export function OrderListKaitenPoller({
     void (async () => {
       const result = await pullKaitenChatFeedLiveForVisible();
       if (cancelled) return;
-      if (result.ok || result.imported) {
-        refreshListDebounced({ importHit: result.imported });
+      /* Пустой ok Kaiten — не router.refresh(): иначе шторм RSC без смены колонок. */
+      if (result.imported) {
+        refreshListDebounced({ importHit: true });
       }
       if (!cancelled) {
         window.setTimeout(() => {
