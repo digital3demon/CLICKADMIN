@@ -135,6 +135,7 @@ function FilterTh({
   onToggle: () => void;
   children: ReactNode;
 }) {
+  const { isCollapsed } = useOrdersListColCollapse();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(
     null,
