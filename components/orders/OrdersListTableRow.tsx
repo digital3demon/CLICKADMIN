@@ -137,6 +137,7 @@ export function OrdersListTableRow({
           go(e);
         }}
       >
+        <td data-collapsed-rail="" className="p-0" aria-hidden />
         {children}
         {tagsNode ? (
           <td

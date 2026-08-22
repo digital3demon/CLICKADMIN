@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
@@ -101,6 +102,11 @@ export function OrdersListColumnsProvider({ children }: { children: ReactNode })
         data-orders-cols=""
         data-orders-collapsed={collapsedColsAttr(collapsed)}
         className="min-w-0 w-full"
+        style={
+          {
+            "--orders-collapsed-rail-w": `${collapsed.length * 14}px`,
+          } as CSSProperties
+        }
       >
         {children}
       </div>
