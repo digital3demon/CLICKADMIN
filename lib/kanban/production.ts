@@ -1,4 +1,7 @@
-import JSZip from "jszip";
+/**
+ * Настройки производства и чеклист из zip карточки.
+ * JSZip — только внутри expand… (dynamic import), не server-only: KanbanApp зовёт из браузера.
+ */
 import { archiveCardByIdOnBoard, createCard, findCard, generateId, pushActivity } from "./model";
 import type { CardFile, KanbanBoard, KanbanCard, ProductionChecklistItem } from "./types";
 
@@ -547,6 +550,7 @@ export async function expandProductionChecklistFromArchives(
     }
     try {
       const buf = await readCardFileBuffer(f);
+      const JSZip = (await import("jszip")).default;
       const zip = await JSZip.loadAsync(buf);
       let names = Object.values(zip.files)
         .filter((entry) => !entry.dir)

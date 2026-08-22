@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
 
 type Props = {
   orderId: string;
@@ -65,6 +64,7 @@ export function OrderKaitenQrModal({
         setHubUrl(url);
         setLoadingHub(false);
         try {
+          const QRCode = (await import("qrcode")).default;
           const d = await QRCode.toDataURL(url, {
             width: compact ? 200 : 256,
             margin: 2,

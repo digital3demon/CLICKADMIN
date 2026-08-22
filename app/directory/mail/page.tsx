@@ -1,11 +1,23 @@
+import nextDynamic from "next/dynamic";
 import { redirect } from "next/navigation";
+import type { PrismaClient } from "@prisma/client";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
-import { MailSettingsClient } from "@/components/mail/MailSettingsClient";
-import { canOpenMailSettingsModule } from "@/lib/mail/mail-settings-access";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import type { PrismaClient } from "@prisma/client";
+import { canOpenMailSettingsModule } from "@/lib/mail/mail-settings-access";
+
+const MailSettingsClient = nextDynamic(
+  () =>
+    import("@/components/mail/MailSettingsClient").then((m) => ({
+      default: m.MailSettingsClient,
+    })),
+  {
+    loading: () => (
+      <p className="text-sm text-[var(--text-muted)]">Загрузка настроек почты…</p>
+    ),
+  },
+);
 
 export const dynamic = "force-dynamic";
 

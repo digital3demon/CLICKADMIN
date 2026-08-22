@@ -59,16 +59,18 @@ export function kaitenStatusDisplay(o: {
   kaitenCardId: number | null;
   demoKanbanColumn?: string | null;
   demoCardTypeName?: string | null;
+  /** Тип карточки (демо и бой — одно поле; demoCardTypeName оставлен для вызовов). */
+  cardTypeName?: string | null;
 }): string {
+  const typeName = (o.cardTypeName ?? o.demoCardTypeName)?.trim();
   if (o.demoKanbanColumn) {
     const col =
       DEMO_KANBAN_COL_RU[String(o.demoKanbanColumn)] ?? o.demoKanbanColumn;
-    const tn = o.demoCardTypeName?.trim();
-    return tn ? `${col} · ${tn}` : col;
+    return typeName ? `${col} · ${typeName}` : col;
   }
   const t = o.kaitenColumnTitle?.trim();
-  if (t) return t;
-  if (o.kaitenCardId != null) return "—";
+  if (t) return typeName ? `${t} · ${typeName}` : t;
+  if (o.kaitenCardId != null) return typeName ? `— · ${typeName}` : "—";
   return "Нет в Kaiten";
 }
 

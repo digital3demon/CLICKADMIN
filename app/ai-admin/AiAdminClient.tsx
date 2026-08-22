@@ -6,10 +6,8 @@ import { Maximize2, X } from "lucide-react";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/toast-store";
-import {
-  OrderEditForm,
-  type OrderEditInitial,
-} from "@/components/orders/OrderEditForm";
+import type { OrderEditInitial } from "@/components/orders/OrderEditForm";
+import { OrderEditFormLazy } from "@/components/orders/OrderEditFormLazy";
 import { OrderSourceEmailView } from "@/components/orders/OrderSourceEmailView";
 import type { OrderSourceEmailRow } from "@/lib/mail/order-source-emails";
 import {
@@ -224,7 +222,7 @@ function AiDiffCompareModal({
               <div className="border-b border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)]">
                 Сохранил администратор
               </div>
-              <OrderEditForm
+              <OrderEditFormLazy
                 key={`real-${data.realOrderInitial.id}`}
                 initial={data.realOrderInitial}
                 isDemoMode={data.isDemoMode}
@@ -253,7 +251,7 @@ function AiDiffCompareModal({
                   </span>
                 ) : null}
               </div>
-              <OrderEditForm
+              <OrderEditFormLazy
                 key={`ai-${data.aiOrderInitial.id}`}
                 initial={data.aiOrderInitial}
                 isDemoMode={data.isDemoMode}

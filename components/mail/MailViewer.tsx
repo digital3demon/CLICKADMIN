@@ -30,6 +30,7 @@ export function MailViewer({
   onCreateOrder,
   onAddToOrder,
   onReply,
+  onClose,
 }: {
   email: MailEmailDetail | null;
   loading: boolean;
@@ -37,6 +38,8 @@ export function MailViewer({
   onCreateOrder: () => void;
   onAddToOrder: () => void;
   onReply: (html: string, mode: "reply" | "replyAll" | "forward") => void;
+  /** Оверлей <xl: закрыть письмо и вернуться к списку. На xl не передаём. */
+  onClose?: () => void;
 }) {
   const [quickReply, setQuickReply] = useState("");
   const [bodyFrameHeight, setBodyFrameHeight] = useState(360);
@@ -49,22 +52,48 @@ export function MailViewer({
 
   if (loading) {
     return (
-      <section className="hidden h-full min-w-0 flex-1 bg-[var(--app-bg)] p-8 text-sm text-[var(--text-muted)] xl:flex xl:items-center xl:justify-center">
-        Открываем письмо...
+      <section className="flex h-full min-w-0 flex-1 items-center justify-center bg-[var(--app-bg)] p-8 text-sm text-[var(--text-muted)]">
+        {onClose ? (
+          <div className="flex flex-col items-center gap-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+            >
+              К списку
+            </button>
+            <span>Открываем письмо...</span>
+          </div>
+        ) : (
+          "Открываем письмо..."
+        )}
       </section>
     );
   }
   if (!email) {
     return (
       <section
-        className="hidden min-w-0 flex-1 items-center justify-center bg-[var(--app-bg)] p-10 xl:flex"
-        style={{ paddingRight: "calc((100vw / 0.85) - 100vw + 2.5rem)" }}
+        className="flex min-w-0 flex-1 items-center justify-center bg-[var(--app-bg)] p-10"
+        style={
+          onClose
+            ? undefined
+            : { paddingRight: "calc((100vw / 0.85) - 100vw + 2.5rem)" }
+        }
       >
         <div className="max-w-sm text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-[var(--card-bg)] text-3xl shadow-sm">
             ✉
           </div>
           <h3 className="text-lg font-semibold text-[var(--app-text)]">Выберите письмо</h3>
+          {onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-4 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+            >
+              К списку
+            </button>
+          ) : null}
         </div>
       </section>
     );
@@ -82,6 +111,15 @@ export function MailViewer({
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--card-bg)]">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-5 py-3">
+        {onClose ? (
+          <button
+            type="button"
+            className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+            onClick={onClose}
+          >
+            К списку
+          </button>
+        ) : null}
         <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" onClick={() => onReply("", "reply")}>
           Ответить
         </button>

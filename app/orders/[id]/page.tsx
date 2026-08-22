@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
-import {
-  OrderEditForm,
-  type OrderEditTab,
-} from "@/components/orders/OrderEditForm";
+import type { OrderEditTab } from "@/components/orders/OrderEditForm";
+import { OrderEditFormLazy } from "@/components/orders/OrderEditFormLazy";
 import { OrderArchivedView } from "@/components/orders/OrderArchivedView";
 import { canAcceptOrderChatCorrections, canEditOrders } from "@/lib/auth/permissions";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
@@ -112,7 +110,7 @@ export default async function OrderEditPage({
   }
 
   return (
-    <OrderEditForm
+    <OrderEditFormLazy
       initial={fetched.initial}
       initialActiveTab={initialActiveTab}
       isDemoMode={isDemoMode}

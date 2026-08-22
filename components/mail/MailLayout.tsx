@@ -149,6 +149,8 @@ const MAIL_LIST_INITIAL_SYNC_DELAY_MS = 12_000;
 const MAIL_LIST_WIDTH_STORAGE_KEY = "dental-crm:mail-list-width";
 const MAIL_SIDEBAR_COLLAPSED_STORAGE_KEY = "dental-crm:mail-sidebar-collapsed";
 const MAIL_LIST_DEFAULT_WIDTH = 600;
+/** Tailwind `xl` — десктопная тройка колонок. Ниже: тот же viewer оверлеем. */
+const MAIL_XL_MEDIA = "(min-width: 1280px)";
 const MAIL_LIST_MIN_WIDTH = 420;
 const MAIL_LIST_MAX_WIDTH = 920;
 const MAIL_DB_REFRESH_INTERVAL_MS = 30_000;
@@ -307,6 +309,9 @@ export function MailLayout() {
   const [savingAccount, setSavingAccount] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mailListWidth, setMailListWidth] = useState(MAIL_LIST_DEFAULT_WIDTH);
+  const [isMailXl, setIsMailXl] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(MAIL_XL_MEDIA).matches : true,
+  );
   const [error, setError] = useState("");
   const [addToOrderOpen, setAddToOrderOpen] = useState(false);
   const [addToOrderEmailIds, setAddToOrderEmailIds] = useState<string[]>([]);
@@ -570,6 +575,30 @@ export function MailLayout() {
     setMailListWidth(readMailListWidth());
     setSidebarCollapsed(readMailSidebarCollapsed());
   }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia(MAIL_XL_MEDIA);
+    const sync = () => setIsMailXl(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const closeMailOverlay = useCallback(() => {
+    setActiveEmailId("");
+    setDetail(null);
+  }, []);
+
+  const mailOverlayOpen = !isMailXl && Boolean(activeEmailId);
+
+  useEffect(() => {
+    if (!mailOverlayOpen || composerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMailOverlay();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mailOverlayOpen, composerOpen, closeMailOverlay]);
 
   useEffect(() => {
     if (!activeAccount) return;
@@ -1113,8 +1142,14 @@ export function MailLayout() {
               }}
             />
             <div
-              className="relative flex h-full min-h-0 min-w-0 shrink-0 xl:flex-none"
-              style={{ width: mailListWidth, flexBasis: mailListWidth }}
+              className={`relative flex h-full min-h-0 min-w-0 ${
+                isMailXl ? "shrink-0 xl:flex-none" : "min-w-0 flex-1"
+              }`}
+              style={
+                isMailXl
+                  ? { width: mailListWidth, flexBasis: mailListWidth }
+                  : undefined
+              }
             >
               <MailList
                 folder={activeFolder}
@@ -1179,10 +1214,20 @@ export function MailLayout() {
                 <span className="h-12 w-1 rounded-full bg-[var(--sidebar-blue)]/0 transition group-hover:bg-[var(--sidebar-blue)]/40" />
               </div>
             </div>
-            <div className="hidden h-full min-h-0 min-w-0 flex-1 overflow-hidden xl:flex">
+            <div
+              className={
+                mailOverlayOpen
+                  ? "fixed inset-0 z-[70] flex min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--app-bg)]"
+                  : "hidden h-full min-h-0 min-w-0 flex-1 overflow-hidden xl:flex"
+              }
+              role={mailOverlayOpen ? "dialog" : undefined}
+              aria-modal={mailOverlayOpen ? true : undefined}
+              aria-label={mailOverlayOpen ? "Письмо" : undefined}
+            >
               <MailViewer
                 email={detail}
                 loading={loadingDetail}
+                onClose={mailOverlayOpen ? closeMailOverlay : undefined}
                 onAction={(action) => void bulk(action, activeEmailId ? [activeEmailId] : [])}
                 onCreateOrder={() => void createOrderFromEmailIds(activeEmailId ? [activeEmailId] : [])}
                 onAddToOrder={() =>
