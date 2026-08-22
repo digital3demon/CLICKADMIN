@@ -83,6 +83,45 @@ export function collapsedColsAttr(ids: readonly OrdersListColId[]): string {
   return ids.join(" ");
 }
 
+/** Свёрнутые столбцы сразу справа от видимого `col` — точка на его правом краю. */
+export function collapsedRunsAfter(
+  col: OrdersListColId,
+  collapsed: readonly OrdersListColId[],
+): OrdersListColId[] {
+  const hidden = new Set(collapsed);
+  if (hidden.has(col)) return [];
+  const i = ORDERS_LIST_COL_IDS.indexOf(col);
+  if (i < 0) return [];
+  const out: OrdersListColId[] = [];
+  for (let j = i + 1; j < ORDERS_LIST_COL_IDS.length; j++) {
+    const id = ORDERS_LIST_COL_IDS[j];
+    if (!id) break;
+    if (hidden.has(id)) out.push(id);
+    else break;
+  }
+  return out;
+}
+
+/** Свёрнутые с самого левого края — точка на левом краю первого видимого. */
+export function collapsedRunAtStart(
+  collapsed: readonly OrdersListColId[],
+): OrdersListColId[] {
+  const hidden = new Set(collapsed);
+  const out: OrdersListColId[] = [];
+  for (const id of ORDERS_LIST_COL_IDS) {
+    if (hidden.has(id)) out.push(id);
+    else break;
+  }
+  return out;
+}
+
+export function firstVisibleColId(
+  collapsed: readonly OrdersListColId[],
+): OrdersListColId | null {
+  const hidden = new Set(collapsed);
+  return ORDERS_LIST_COL_IDS.find((id) => !hidden.has(id)) ?? null;
+}
+
 export function readCollapsedColsFromLocalStorage(): OrdersListColId[] {
   if (typeof window === "undefined") return [];
   try {

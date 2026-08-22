@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   collapsedColsAttr,
+  collapsedRunAtStart,
+  collapsedRunsAfter,
+  firstVisibleColId,
   parseCollapsedColIds,
   toggleCollapsedColId,
 } from "@/lib/orders-list-collapsed-cols";
@@ -39,5 +42,28 @@ describe("toggleCollapsedColId", () => {
 describe("collapsedColsAttr", () => {
   it("пробел для CSS ~=", () => {
     expect(collapsedColsAttr(["status", "type"])).toBe("status type");
+  });
+});
+
+describe("collapsedRunsAfter", () => {
+  it("тип сразу после статуса — точка у статуса", () => {
+    expect(collapsedRunsAfter("status", ["type"])).toEqual(["type"]);
+    expect(collapsedRunsAfter("type", ["type"])).toEqual([]);
+    expect(collapsedRunsAfter("print", ["type"])).toEqual([]);
+  });
+
+  it("кириллица в соседних подписях не нужна — режем по id", () => {
+    expect(collapsedRunsAfter("status", ["type", "number"])).toEqual([
+      "type",
+      "number",
+    ]);
+  });
+});
+
+describe("collapsedRunAtStart", () => {
+  it("чат слева — точка у первого видимого", () => {
+    expect(collapsedRunAtStart(["chat"])).toEqual(["chat"]);
+    expect(firstVisibleColId(["chat"])).toBe("print");
+    expect(collapsedRunAtStart(["type"])).toEqual([]);
   });
 });

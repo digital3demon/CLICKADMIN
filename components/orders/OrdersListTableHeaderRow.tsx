@@ -24,10 +24,7 @@ import {
   pickOrdersShipmentHrefOpts,
 } from "@/lib/orders-shipment-list-query";
 import { moscowTodayYmd, moscowTomorrowYmd } from "@/lib/shipments-date-range";
-import {
-  OrdersListColHeader,
-  OrdersListCollapsedDotsTh,
-} from "@/components/orders/OrdersListColHeader";
+import { OrdersListColHeader } from "@/components/orders/OrdersListColHeader";
 import { useOrdersListColCollapse } from "@/components/orders/OrdersListColumnsProvider";
 import type { OrdersListColId } from "@/lib/orders-list-collapsed-cols";
 
@@ -412,7 +409,6 @@ export function OrdersListTableHeaderRow({
       ref={rowRef}
       className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[9px] font-semibold uppercase leading-snug tracking-wide text-[var(--text-secondary)] sm:text-[10px] md:text-xs"
     >
-      <OrdersListCollapsedDotsTh />
       <OrdersListColHeader
         col="chat"
         title="Чат карточки в Kaiten"

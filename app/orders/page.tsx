@@ -135,7 +135,6 @@ function formatOrderCardDate(d: Date | null | undefined): string | undefined {
 function OrdersTableColGroup() {
   return (
     <colgroup>
-      <col data-collapsed-rail="" />
       <col data-col="chat" className="max-md:hidden lg:w-[2.5%]" />
       <col data-col="print" className="max-md:hidden lg:w-[5.5%]" />
       <col data-col="status" className="lg:w-[6%]" />
@@ -181,7 +180,7 @@ function OrdersTableHeader({
     <Suspense
       fallback={
         <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)]">
-          <th className={ORDERS_TABLE_TH} colSpan={17}>
+          <th className={ORDERS_TABLE_TH} colSpan={16}>
             …
           </th>
         </tr>
@@ -974,7 +973,7 @@ export default async function OrdersPage({
             {orders.length === 0 ? (
               <tr>
                 <td
-                  colSpan={17}
+                  colSpan={16}
                   className="px-4 py-10 text-center text-sm text-[var(--text-muted)]"
                 >
                   {activeFilter

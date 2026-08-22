@@ -696,19 +696,9 @@ label {
   --safe-right: env(safe-area-inset-right, 0px);
 }
 
-[data-orders-cols] col[data-collapsed-rail],
-[data-orders-cols] th[data-collapsed-rail],
-[data-orders-cols] td[data-collapsed-rail] {
-  width: var(--orders-collapsed-rail-w, 0px) !important;
-  max-width: var(--orders-collapsed-rail-w, 0px) !important;
-  min-width: 0 !important;
-  padding: 0 !important;
-}
-
 /*
- * Список нарядов: свёрнутый столбец вынимаем из table-fixed
- * (иначе свободная ширина размазывается и щель шире, чем была колонка).
- * Точки разворота — отдельная узкая полоска в шапке.
+ * Список нарядов: свёрнутый столбец вынимаем из table-fixed —
+ * ширина уходит соседним. Точка разворота — на шве шапки, не отдельная колонка.
  */
 [data-orders-collapsed~="chat"] :is(col, th, td)[data-col="chat"],
 [data-orders-collapsed~="print"] :is(col, th, td)[data-col="print"],
