@@ -1,10 +1,33 @@
-import { kaitenCardTypePillColor } from "@/lib/kaiten-column-title";
+import {
+  kaitenCardTypePillColor,
+  splitOrderStatusPillLines,
+} from "@/lib/kaiten-column-title";
 
 type Props = {
   name: string | null | undefined;
   /** Как статус под № — чуть крупнее. */
   placement?: "tags" | "underOrderNumber";
 };
+
+function TypePillLabel({ label }: { label: string }) {
+  const lines = splitOrderStatusPillLines(label);
+  if (lines.length < 2) {
+    return (
+      <span className="max-w-full whitespace-normal break-words text-center">
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span className="flex max-w-full flex-col text-center leading-tight">
+      {lines.map((line) => (
+        <span key={line} className="max-w-full whitespace-normal break-words">
+          {line}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 /**
  * Пилюля типа карточки канбана / Kaiten в списке нарядов.
@@ -37,15 +60,15 @@ export function OrderListCardTypeTag({
       style={
         color
           ? {
-              background: `color-mix(in srgb, ${color} 14%, var(--card-bg))`,
-              color: `color-mix(in srgb, ${color} 42%, var(--text-secondary))`,
-              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 22%, transparent)`,
+              background: `color-mix(in srgb, ${color} 8%, var(--card-bg))`,
+              color: `color-mix(in srgb, ${color} 28%, var(--text-secondary))`,
+              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 12%, transparent)`,
             }
           : undefined
       }
       title={`Тип карточки: ${label}`}
     >
-      <span className="max-w-full truncate">{label}</span>
+      <TypePillLabel label={label} />
     </span>
   );
 }
