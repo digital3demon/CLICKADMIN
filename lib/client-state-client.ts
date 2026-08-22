@@ -124,6 +124,7 @@ async function flushWrite(
     const res = await fetch("/api/client-state", {
       method: "PUT",
       credentials: "include",
+      keepalive: true,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scope, key, value }),
     });

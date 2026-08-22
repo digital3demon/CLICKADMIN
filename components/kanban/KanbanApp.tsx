@@ -46,6 +46,11 @@ import {
   withActiveBoard,
 } from "@/lib/kanban/model";
 import { applyOptimisticKaitenBlocksToLinkedRows } from "@/lib/kanban/optimistic-kaiten-block";
+import {
+  applyPendingKanbanColumnMoves,
+  listPendingKanbanColumnMoves,
+  rememberPendingKanbanColumnMove,
+} from "@/lib/kanban/pending-column-moves";
 import { applyKanbanLegacyStageDueClearMigration, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { applyKaitenStageDueByOrderId } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
@@ -510,6 +515,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
    * Оптимистичные переносы колонок: пока Kaiten/БД догоняют, merge не должен
    * откатывать карточку на старый `kaitenColumnTitle` из снимка.
    */
+  const flushKanbanTenantNowRef = useRef<() => void>(() => {});
+
   const optimisticKaitenColumnMovesRef = useRef(
     new Map<
       string,
@@ -530,6 +537,15 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       const map = optimisticKaitenColumnMovesRef.current;
       for (const [orderId, opt] of map) {
         if (now >= opt.until) map.delete(orderId);
+      }
+      for (const pending of listPendingKanbanColumnMoves(now)) {
+        if (!pending.orderId || !pending.toColumnTitle?.trim()) continue;
+        if (map.has(pending.orderId)) continue;
+        map.set(pending.orderId, {
+          columnTitle: pending.toColumnTitle.trim(),
+          sortOrder: 0,
+          until: pending.at + 120_000,
+        });
       }
       if (map.size === 0) return rows;
       return rows.map((row) => {
@@ -833,7 +849,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       next.activeBoardId = bid;
     }
     const c = kanbanCardIdFromSearchParams(params);
-    setAppState(next);
+    setAppState(applyPendingKanbanColumnMoves(next, listPendingKanbanColumnMoves()));
     if (c) setCardModalId(c);
   }, [isDemo]);
 
@@ -855,9 +871,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             mergeKanbanStatePreservingLocalBoards(prev, remoteState),
             lastCardTypeLanesRef.current,
           );
-          const finalState = isDemo
-            ? merged
-            : applyKanbanLegacyStageDueClearMigration(merged).state;
+          const finalState = applyPendingKanbanColumnMoves(
+            isDemo
+              ? merged
+              : applyKanbanLegacyStageDueClearMigration(merged).state,
+            listPendingKanbanColumnMoves(),
+          );
           if (currentCard && !findCardInAppState(finalState, currentCard)) {
             setCardModalId(null);
           }
@@ -991,6 +1010,35 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       }
     };
   }, [appState, isDemo, kanbanStateReady]);
+
+  useEffect(() => {
+    flushKanbanTenantNowRef.current = () => {
+      if (isDemo || kanbanPersistPausedRef.current) return;
+      const cur = appStateRef.current;
+      if (!cur) return;
+      if (kanbanStateSaveTimerRef.current) {
+        clearTimeout(kanbanStateSaveTimerRef.current);
+        kanbanStateSaveTimerRef.current = null;
+      }
+      void writeClientState(
+        "tenant",
+        "kanbanAppStateV3",
+        kanbanStateForPersistence(cur, false),
+      );
+    };
+    const onPageHide = () => flushKanbanTenantNowRef.current();
+    const onVis = () => {
+      if (document.visibilityState === "hidden") {
+        flushKanbanTenantNowRef.current();
+      }
+    };
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [isDemo]);
 
   // Персональный UI — отдельный debounce в user client-state.
   useEffect(() => {
@@ -1539,7 +1587,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         mergeKanbanStatePreservingLocalBoards(prev, remote as KanbanAppState),
         lastCardTypeLanesRef.current,
       );
-      const finalState = applyKanbanLegacyStageDueClearMigration(merged).state;
+      const finalState = applyPendingKanbanColumnMoves(
+        applyKanbanLegacyStageDueClearMigration(merged).state,
+        listPendingKanbanColumnMoves(),
+      );
       saveKanbanState(finalState, false);
       return finalState;
     });
@@ -1585,6 +1636,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       sortOrder: number;
     }) => {
       /* UI уже обновлён локально — Kaiten в фоне; защищаем merge от отката. */
+      if (args.columnTitle?.trim()) {
+        rememberPendingKanbanColumnMove({
+          cardId: args.orderId,
+          orderId: args.orderId,
+          toColumnTitle: args.columnTitle.trim(),
+        });
+      }
       optimisticKaitenColumnMovesRef.current.set(args.orderId, {
         columnTitle: args.columnTitle,
         sortOrder: args.sortOrder,
@@ -2946,6 +3004,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   if (!toCol) return s;
                   const card = findCard(b, cardId)?.card;
                   if (!card) return s;
+                  rememberPendingKanbanColumnMove({
+                    cardId,
+                    orderId: card.linkedOrderId ?? undefined,
+                    toColumnId,
+                    toColumnTitle: toCol.title,
+                  });
                   if (card.parentCardId) {
                     const doneRaw = settings.childDoneColumnTitle.trim().toLowerCase();
                     const toRaw = toCol.title.trim().toLowerCase();
@@ -3006,6 +3070,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                     }
                   }
                   syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+                  queueMicrotask(() => {
+                    if (isDemo || kanbanPersistPausedRef.current) return;
+                    void writeClientState(
+                      "tenant",
+                      "kanbanAppStateV3",
+                      kanbanStateForPersistence(next, false),
+                    );
+                  });
                   return next;
                 });
                 if (expandBoardId && expandChildIds.length > 0) {

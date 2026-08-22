@@ -275,6 +275,16 @@ html {
   }
 }
 
+/*
+ * Десктопный канбан: как зум 85% (при html 110% слишком крупно).
+ * Не transform/zoom — ломают координаты dnd-kit.
+ */
+@media (min-width: 1024px) and (min-height: 560px) {
+  .kanban-root {
+    font-size: 85%;
+  }
+}
+
 body {
   @apply antialiased;
   overflow-x: clip;
