@@ -135,7 +135,7 @@ function formatOrderCardDate(d: Date | null | undefined): string | undefined {
 function OrdersTableColGroup() {
   return (
     <colgroup>
-      <col data-col="chat" className="max-md:hidden w-10" />
+      <col data-col="chat" className="max-md:hidden lg:w-[2.5%]" />
       <col data-col="print" className="max-md:hidden lg:w-[5.5%]" />
       <col data-col="status" className="lg:w-[6%]" />
       <col data-col="type" className="lg:w-[6.5%]" />

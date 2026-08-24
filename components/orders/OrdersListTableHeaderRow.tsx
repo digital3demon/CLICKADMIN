@@ -414,7 +414,7 @@ export function OrdersListTableHeaderRow({
       <OrdersListColHeader
         col="chat"
         title="Чат карточки в Kaiten"
-        className="max-md:hidden w-10 max-w-10 overflow-hidden normal-case"
+        className="max-md:hidden normal-case"
       >
         Чат
       </OrdersListColHeader>

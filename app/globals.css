@@ -719,6 +719,15 @@ label {
   display: none !important;
 }
 
+/* «Чат»: lg:w-[2.5%] как до сворачивания; при collapse соседей не раздувается. */
+[data-orders-cols] col[data-col="chat"] {
+  width: 2.5% !important;
+  max-width: 2.75rem !important;
+}
+[data-orders-cols] :is(th, td)[data-col="chat"] {
+  max-width: 2.75rem !important;
+}
+
 @media print {
   [data-orders-cols] col[data-col] {
     display: table-column !important;
