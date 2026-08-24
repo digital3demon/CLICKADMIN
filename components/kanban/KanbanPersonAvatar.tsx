@@ -39,6 +39,8 @@ type KanbanPersonAvatarProps = {
   nameArc?: boolean;
   /** Короткое имя под кружком (desktop list). */
   nameCaption?: boolean;
+  /** Перекрыть размер подписи (напр. карточка доски). */
+  captionClassName?: string;
 };
 
 function polarOnCircle(
@@ -105,6 +107,7 @@ export function KanbanPersonAvatar({
   titleSuffix,
   nameArc = false,
   nameCaption = false,
+  captionClassName,
 }: KanbanPersonAvatarProps) {
   const reactId = useId();
   const pathId = `kanban-name-arc-${reactId.replace(/:/g, "")}`;
@@ -224,11 +227,12 @@ export function KanbanPersonAvatar({
         {face}
         <span
           className={`w-full truncate text-center font-semibold leading-tight text-[var(--kanban-text)] ${
-            size === "xs"
+            captionClassName ??
+            (size === "xs"
               ? "text-[0.5rem]"
               : dense
                 ? "text-[0.62rem]"
-                : "text-[0.68rem] sm:text-[0.75rem]"
+                : "text-[0.68rem] sm:text-[0.75rem]")
           }`}
         >
           {shortLabel || "—"}

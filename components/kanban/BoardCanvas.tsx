@@ -303,7 +303,7 @@ function KanbanCardView({
 
   /** Один канон на mobile и desktop — без sm:/max-md: развилок лица карточки. */
   let duePillClass =
-    "inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[0.62rem] font-medium tabular-nums leading-none";
+    "inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[calc(0.62rem+3px)] font-medium tabular-nums leading-none";
   if (stageDue) {
     const cat = dueCategory(stageDue);
     if (cat === "overdue")
@@ -363,7 +363,7 @@ function KanbanCardView({
                 title={blockReasonText}
               >
                 <IconBrick className="mt-0.5 h-3 w-3 shrink-0 text-white" />
-                <span className="min-w-0 flex-1 break-words text-[0.48rem] font-bold uppercase leading-snug tracking-wide line-clamp-3">
+                <span className="min-w-0 flex-1 break-words text-[calc(0.48rem+3px)] font-bold uppercase leading-snug tracking-wide line-clamp-3">
                   {blockReasonText}
                 </span>
               </div>
@@ -375,12 +375,12 @@ function KanbanCardView({
                 background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 28%, var(--kanban-card-bg)) 0%, color-mix(in srgb, ${accent} 14%, var(--kanban-card-bg)) 100%)`,
               }}
             >
-              <span className="min-w-0 truncate text-[0.62rem] font-bold uppercase tracking-wide">
+              <span className="min-w-0 truncate text-[calc(0.62rem+3px)] font-bold uppercase tracking-wide">
                 {ct?.name ?? "—"}
               </span>
               {urgent ? (
                 <span
-                  className="inline-flex shrink-0 items-center rounded-full border border-orange-300/50 bg-gradient-to-b from-orange-500 to-red-600 px-1.5 py-0.5 text-[0.5rem] font-extrabold uppercase leading-none tracking-wide text-white shadow-sm"
+                  className="inline-flex shrink-0 items-center rounded-full border border-orange-300/50 bg-gradient-to-b from-orange-500 to-red-600 px-1.5 py-0.5 text-[calc(0.5rem+3px)] font-extrabold uppercase leading-none tracking-wide text-white shadow-sm"
                   title="Срочно"
                 >
                   Срочно
@@ -389,7 +389,7 @@ function KanbanCardView({
             </div>
             {foreignBoardLabel ? (
               <div
-                className="shrink-0 truncate border-b border-black/[0.08] px-2 py-0.5 text-[0.5rem] font-medium leading-none text-[var(--kanban-text-muted)] dark:border-white/[0.08]"
+                className="shrink-0 truncate border-b border-black/[0.08] px-2 py-0.5 text-[calc(0.5rem+3px)] font-medium leading-none text-[var(--kanban-text-muted)] dark:border-white/[0.08]"
                 title={`Карточка с доски «${foreignBoardLabel}»`}
               >
                 <span className="opacity-80">Доска:</span>{" "}
@@ -413,6 +413,7 @@ function KanbanCardView({
                     }
                     size="xs"
                     nameCaption
+                    captionClassName="text-[calc(0.5rem+3px)]"
                     titleSuffix=""
                   />
                 ) : null}
@@ -428,11 +429,12 @@ function KanbanCardView({
                         }
                         size="xs"
                         nameCaption
+                        captionClassName="text-[calc(0.5rem+3px)]"
                         titleSuffix=""
                       />
                     ))}
                     {stackOverflow > 0 ? (
-                      <span className="mb-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-black/40 text-[0.45rem] font-bold text-white">
+                      <span className="mb-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-black/40 text-[calc(0.45rem+3px)] font-bold text-white">
                         +{stackOverflow}
                       </span>
                     ) : null}

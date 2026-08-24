@@ -2,8 +2,8 @@
 
 import { useLayoutEffect, useRef } from "react";
 
-const FONT_MAX_PX = 12.8; // ~0.8rem
-const FONT_MIN_PX = 6.5;
+const FONT_MAX_PX = 15.8; // ~0.8rem + 3px
+const FONT_MIN_PX = 9.5;
 const STEP_PX = 0.5;
 
 /**

@@ -2704,75 +2704,75 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
             />
           </div>
-          <div
-            className="ms-auto flex min-w-0 shrink-0 items-center justify-end gap-1 sm:gap-1.5"
-            role="group"
-            aria-label="Виртуальные доски"
-          >
-            <button
-              type="button"
-              className={`rounded-full border px-1.5 py-1 text-[0.55rem] font-bold uppercase tracking-wide transition-colors sm:px-3 sm:py-1.5 sm:text-[0.62rem] md:px-3.5 md:py-2 md:text-[0.68rem] ${
-                appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID
-                  ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
-                  : "border-white/30 text-[var(--kanban-text-muted)] hover:border-white/45 hover:text-[var(--kanban-text)]"
-              }`}
-              onClick={() => {
-                if (!visibleBoards.length) return;
-                const fallbackId =
-                  visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
-                  visibleBoards[0]!.id;
-                if (appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID) {
-                  patchApp((s) => {
-                    s.activeBoardId = fallbackId;
-                  });
-                  const label = appState.boards.find((x) => x.id === fallbackId)?.title;
-                  showToast(label ? `Доска: ${label}` : "Доска");
-                } else {
-                  patchApp((s) => {
-                    s.activeBoardId = KANBAN_BOARD_MY_CARDS_ID;
-                  });
-                  showToast("Доска: Мои");
-                }
-              }}
-            >
-              Мои
-            </button>
-            <button
-              type="button"
-              className={`rounded-full border px-1.5 py-1 text-[0.55rem] font-bold uppercase tracking-wide transition-colors sm:px-3 sm:py-1.5 sm:text-[0.62rem] md:px-3.5 md:py-2 md:text-[0.68rem] ${
-                appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID
-                  ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
-                  : "border-white/30 text-[var(--kanban-text-muted)] hover:border-white/45 hover:text-[var(--kanban-text)]"
-              }`}
-              title="Ответственный"
-              onClick={() => {
-                if (!visibleBoards.length) return;
-                const fallbackId =
-                  visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
-                  visibleBoards[0]!.id;
-                if (appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID) {
-                  patchApp((s) => {
-                    s.activeBoardId = fallbackId;
-                  });
-                  const label = appState.boards.find((x) => x.id === fallbackId)?.title;
-                  showToast(label ? `Доска: ${label}` : "Доска");
-                } else {
-                  patchApp((s) => {
-                    s.activeBoardId = KANBAN_BOARD_DISTRIBUTE_ID;
-                  });
-                  showToast("Доска: Ответственный");
-                }
-              }}
-            >
-              <span className="sm:hidden">отвст</span>
-              <span className="hidden sm:inline">Ответственный</span>
-            </button>
-          </div>
         </div>
       </header>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="relative z-20 flex max-w-full flex-wrap items-center gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 sm:gap-2.5 sm:px-4 sm:py-2.5">
+            <div
+              className="flex shrink-0 items-center gap-1 sm:gap-1.5"
+              role="group"
+              aria-label="Виртуальные доски"
+            >
+              <button
+                type="button"
+                className={`rounded-full border px-1.5 py-1 text-[0.55rem] font-bold uppercase tracking-wide transition-colors sm:px-3 sm:py-1.5 sm:text-[0.62rem] md:px-3.5 md:py-2 md:text-[0.68rem] ${
+                  appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID
+                    ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
+                    : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:border-[var(--kanban-text)]/35 hover:text-[var(--kanban-text)]"
+                }`}
+                onClick={() => {
+                  if (!visibleBoards.length) return;
+                  const fallbackId =
+                    visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
+                    visibleBoards[0]!.id;
+                  if (appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID) {
+                    patchApp((s) => {
+                      s.activeBoardId = fallbackId;
+                    });
+                    const label = appState.boards.find((x) => x.id === fallbackId)?.title;
+                    showToast(label ? `Доска: ${label}` : "Доска");
+                  } else {
+                    patchApp((s) => {
+                      s.activeBoardId = KANBAN_BOARD_MY_CARDS_ID;
+                    });
+                    showToast("Доска: Мои");
+                  }
+                }}
+              >
+                Мои
+              </button>
+              <button
+                type="button"
+                className={`rounded-full border px-1.5 py-1 text-[0.55rem] font-bold uppercase tracking-wide transition-colors sm:px-3 sm:py-1.5 sm:text-[0.62rem] md:px-3.5 md:py-2 md:text-[0.68rem] ${
+                  appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID
+                    ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
+                    : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:border-[var(--kanban-text)]/35 hover:text-[var(--kanban-text)]"
+                }`}
+                title="Ответственный"
+                onClick={() => {
+                  if (!visibleBoards.length) return;
+                  const fallbackId =
+                    visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
+                    visibleBoards[0]!.id;
+                  if (appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID) {
+                    patchApp((s) => {
+                      s.activeBoardId = fallbackId;
+                    });
+                    const label = appState.boards.find((x) => x.id === fallbackId)?.title;
+                    showToast(label ? `Доска: ${label}` : "Доска");
+                  } else {
+                    patchApp((s) => {
+                      s.activeBoardId = KANBAN_BOARD_DISTRIBUTE_ID;
+                    });
+                    showToast("Доска: Ответственный");
+                  }
+                }}
+              >
+                <span className="sm:hidden">отвст</span>
+                <span className="hidden sm:inline">Ответственный</span>
+              </button>
+            </div>
             <input
               type="search"
               placeholder="Поиск…"
