@@ -1725,7 +1725,7 @@ export function KanbanCardModal({
   return (
     <div
       ref={overlayRef}
-      className="kanban-root fixed inset-0 z-[200] flex bg-black/55 max-sm:items-stretch max-sm:overflow-hidden max-sm:p-0 sm:items-start sm:justify-center sm:overflow-y-auto sm:p-4 sm:py-6"
+      className="kanban-root fixed inset-0 z-[200] flex overflow-hidden bg-black/55 max-sm:items-stretch max-sm:p-0 sm:items-center sm:justify-center sm:p-4"
       role="dialog"
       aria-modal
       onMouseDown={(ev) => {
@@ -1896,7 +1896,7 @@ export function KanbanCardModal({
       ) : null}
 
       <div
-        className="flex w-full flex-col max-sm:h-dvh max-sm:max-h-dvh max-sm:pt-[env(safe-area-inset-top)] sm:max-w-[min(1200px,100vw-24px)]"
+        className="flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {blocked && (
@@ -1979,7 +1979,7 @@ export function KanbanCardModal({
         )}
 
         <div
-          className={`relative flex flex-col border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:min-h-0 max-sm:flex-1 max-sm:overflow-hidden max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
+          className={`relative flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
             blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
           }`}
           style={{ backgroundColor: "var(--kaiten-modal-bg)" }}
@@ -2263,10 +2263,10 @@ export function KanbanCardModal({
             </p>
           ) : null}
 
-          <div className="flex min-h-0 max-sm:flex-1 max-sm:flex-col sm:flex-row sm:items-start">
+          <div className="flex min-h-0 flex-1 max-sm:flex-col sm:flex-row sm:items-stretch">
             <div
-              className={`flex min-w-0 flex-col max-sm:min-h-0 ${
-                rightTab === "card" ? "max-sm:min-h-0 max-sm:flex-1" : "max-sm:shrink-0"
+              className={`flex min-h-0 min-w-0 flex-col sm:overflow-y-auto sm:overscroll-contain ${
+                rightTab === "card" ? "max-sm:flex-1" : "max-sm:shrink-0"
               } sm:flex-1`}
             >
               <div className="shrink-0 px-3 pb-2 pt-2.5">
@@ -2858,7 +2858,7 @@ export function KanbanCardModal({
             </div>
 
             <div
-              className={`flex w-full min-h-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l sm:border-t-0 ${
+              className={`flex w-full min-h-0 flex-col overflow-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l sm:border-t-0 ${
                 rightTab === "card"
                   ? "max-sm:hidden"
                   : "max-sm:min-h-0 max-sm:flex-1"
