@@ -644,6 +644,7 @@ function SortableColumnSection({
   totalCount,
   layoutLocked,
   columnDragDisabled,
+  shareBoardWidth = true,
 }: {
   col: KanbanBoard["columns"][0];
   children: ReactNode;
@@ -653,6 +654,11 @@ function SortableColumnSection({
   totalCount: number;
   layoutLocked?: boolean;
   columnDragDisabled?: boolean;
+  /**
+   * false на дорожках производства: родитель — столбик без ширины,
+   * `shell-laptop:!w-0 flex-1` схлопывает колонки в пиксель.
+   */
+  shareBoardWidth?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: col.id, disabled: Boolean(layoutLocked || columnDragDisabled) });
@@ -672,7 +678,9 @@ function SortableColumnSection({
       ref={setNodeRef}
       style={style}
       data-column-id={col.id}
-      className={`kanban-column flex max-h-full ${BOARD_COLUMN_WIDTH_CLASS} flex-col rounded-[9px] border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.06] dark:bg-gradient-to-b dark:from-[#2d2d32] dark:to-[#27272a]`}
+      className={`kanban-column flex max-h-full ${
+        shareBoardWidth ? BOARD_COLUMN_WIDTH_CLASS : `${BOARD_COLUMN_WIDTH_FIXED} shrink-0`
+      } flex-col rounded-[9px] border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.06] dark:bg-gradient-to-b dark:from-[#2d2d32] dark:to-[#27272a]`}
     >
       <header
         className={`column-header-handle relative border-b border-[var(--kanban-border)] px-2 pb-1.5 pt-2 max-md:px-1.5 max-md:pb-1 max-md:pt-1.5 sm:px-2 sm:pb-1.5 sm:pt-2 ${
@@ -841,7 +849,9 @@ function DraggableLaneSection({
           <IconGrip className="h-3 w-3" />
         </button>
       </header>
-      <div className="flex items-start gap-1.5 sm:gap-2">{children}</div>
+      <div className="flex w-max flex-nowrap items-start gap-1.5 sm:gap-2">
+        {children}
+      </div>
     </section>
   );
 }
@@ -1481,7 +1491,7 @@ export function BoardCanvas({
             strategy={horizontalListSortingStrategy}
           >
             {laneLayoutEnabled ? (
-              <div className="flex flex-col items-start gap-1.5 sm:gap-2">
+              <div className="flex w-max max-w-none shrink-0 flex-col items-start gap-1.5 sm:gap-2">
                 {laneGroups.map((lane) => (
                   <DraggableLaneSection
                     key={lane.id}
@@ -1506,6 +1516,7 @@ export function BoardCanvas({
                           totalCount={col.cards.length}
                           layoutLocked={aggregateLayoutLocked}
                           columnDragDisabled
+                          shareBoardWidth={false}
                         >
                           <SortableContext
                             id={col.id}

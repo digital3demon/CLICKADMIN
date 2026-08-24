@@ -382,7 +382,7 @@ export function SidebarNav() {
     <nav
       className={
         railCollapsed
-          ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 pb-2 pt-2 custom-scrollbar"
+          ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 pb-2 pt-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           : isHarmony
             ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-3 pt-3 custom-scrollbar shell-short:px-2"
             : "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-3.5 pb-3 pt-5 shell-short:px-3 shell-short:pb-2 shell-short:pt-3"

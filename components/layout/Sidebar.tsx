@@ -94,7 +94,7 @@ export function Sidebar() {
   }, [isDemo]);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 w-full flex-col text-[var(--sidebar-text-strong)]">
+    <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-x-hidden overflow-y-hidden text-[var(--sidebar-text-strong)]">
       <div
         className={
           railCollapsed
@@ -275,7 +275,7 @@ export function Sidebar() {
       </div>
 
       <div
-        className={`mt-auto shrink-0 border-t border-[var(--sidebar-border)] ${
+        className={`mt-auto shrink-0 overflow-x-hidden border-t border-[var(--sidebar-border)] ${
           railCollapsed ? "px-1.5 py-2" : "px-3 py-2"
         } ${isHarmony ? "" : "dark:bg-black/25"}`}
       >

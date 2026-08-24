@@ -141,7 +141,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
 
       <aside
         id="app-primary-nav"
-        className={`fixed left-0 top-0 z-[70] flex h-[100dvh] min-w-0 flex-col overflow-x-visible overflow-y-hidden border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shadow-[4px_0_24px_rgba(0,0,0,0.12)] transition-[transform,width] duration-200 ease-out dark:shadow-[4px_0_28px_rgba(0,0,0,0.45)] shell-laptop:shadow-none ${
+        className={`fixed left-0 top-0 z-[70] flex h-[100dvh] min-w-0 flex-col overflow-visible border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shadow-[4px_0_24px_rgba(0,0,0,0.12)] transition-[transform,width] duration-200 ease-out dark:shadow-[4px_0_28px_rgba(0,0,0,0.45)] shell-laptop:shadow-none ${
           permanentRail
             ? "w-[var(--app-sidebar-w)] translate-x-0"
             : mobileNavOpen
@@ -153,10 +153,9 @@ function AppShellChrome({ children }: { children: ReactNode }) {
         <Sidebar />
         <button
           type="button"
-          className={`absolute top-7 z-[71] h-10 w-4 items-center justify-center rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-sm transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] ${
+          className={`absolute left-full top-8 z-[80] h-11 w-3.5 -translate-x-px items-center justify-center rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-[2px_1px_6px_rgba(0,0,0,0.18)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] ${
             permanentRail ? "flex" : "hidden shell-laptop:flex"
           }`}
-          style={{ left: "100%" }}
           aria-expanded={!collapsed}
           aria-controls="app-primary-nav"
           aria-label={collapsed ? "Развернуть меню" : "Свернуть меню"}
