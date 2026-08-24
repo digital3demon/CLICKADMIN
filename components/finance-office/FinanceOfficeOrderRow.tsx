@@ -355,7 +355,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
               >
                 № {o.orderNumber}
               </Link>
-              <div>
+              <div
                 className="ms-auto flex shrink-0 items-center gap-1.5"
                 data-row-click-ignore
                 onClick={(e) => e.stopPropagation()}
