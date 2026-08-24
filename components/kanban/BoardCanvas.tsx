@@ -317,7 +317,7 @@ function KanbanCardView({
         " border-[color-mix(in_srgb,var(--kanban-today)_35%,transparent)] bg-[color-mix(in_srgb,var(--kanban-today)_12%,transparent)] text-[var(--kanban-today)]";
     else
       duePillClass +=
-        " border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] text-[var(--kanban-text)]";
+        " border-[var(--kanban-border)] bg-black/[0.06] text-[var(--kanban-text)] dark:bg-white/[0.06]";
   } else {
     duePillClass +=
       " border-[var(--kanban-border)] bg-black/[0.04] text-[var(--kanban-text-muted)] dark:bg-white/[0.04]";
@@ -406,13 +406,16 @@ function KanbanCardView({
             <div className="min-h-[3.4rem] min-w-0 flex-1 px-2 pb-0.5 pt-1.5">
               <KanbanCardTitleFit title={card.title} />
             </div>
-            <div className="relative z-[1] mt-auto flex shrink-0 flex-nowrap items-end gap-1.5 bg-[var(--kanban-card-bg)] px-2 pb-2 pt-0.5">
-              <span className={duePillClass} title={stageDue ? "Срок этапа" : "Срок не задан"}>
+            <div className="relative z-[1] mt-auto h-[2.35rem] shrink-0 bg-[var(--kanban-card-bg)]">
+              <span
+                className={`absolute bottom-2 left-2 ${duePillClass}`}
+                title={stageDue ? "Срок этапа" : "Срок не задан"}
+              >
                 {stageDue
                   ? formatDate(stageDue).replace(/\sг\.?$/u, "\u00a0г.")
                   : "дд.мм.гггг"}
               </span>
-              <div className="ml-auto flex min-w-0 flex-row flex-wrap items-end justify-end gap-x-0.5 gap-y-0.5">
+              <div className="absolute bottom-2 right-2 flex items-end justify-end gap-x-0.5">
                 {primaryMemberId ? (
                   <KanbanPersonAvatar
                     userId={primaryMemberId}
@@ -449,12 +452,12 @@ function KanbanCardView({
                     ) : null}
                   </>
                 ) : null}
+                <KanbanTimerIcon
+                  card={card}
+                  className="mb-0.5 shrink-0"
+                  sizeClassName="h-[1.125rem] w-[1.125rem]"
+                />
               </div>
-              <KanbanTimerIcon
-                card={card}
-                className="mb-0.5 shrink-0"
-                sizeClassName="h-[1.125rem] w-[1.125rem]"
-              />
             </div>
           </div>
           <div

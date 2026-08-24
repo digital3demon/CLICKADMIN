@@ -135,8 +135,8 @@ export function Sidebar() {
             railCollapsed
               ? "relative z-10 mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--sidebar-blue)] text-white outline-offset-2 transition-opacity hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
               : isHarmony
-                ? "relative z-10 mb-8 flex min-w-0 items-center gap-3 outline-offset-2 transition-opacity hover:opacity-80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
-                : "relative z-10 mx-auto block w-full min-w-0 max-w-full text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+                ? "relative z-10 mb-8 flex min-w-0 items-center gap-3 pr-9 outline-offset-2 transition-opacity hover:opacity-80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+                : "relative z-10 mx-auto block w-full min-w-0 max-w-full pr-8 text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
           }
           title={`На стартовый экран · ${APP_DISPLAY_NAME}`}
         >
@@ -159,7 +159,7 @@ export function Sidebar() {
                   height={20}
                 />
               </span>
-              <span className="flex min-w-0 items-baseline gap-1.5">
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0">
                 <span
                   className={`${fontDisplay.className} shrink-0 text-[17px] font-semibold tracking-tight text-[var(--sidebar-text-strong)]`}
                 >
@@ -167,7 +167,7 @@ export function Sidebar() {
                 </span>
                 {sessionUser?.displayName ? (
                   <span
-                    className={`${fontDisplay.className} min-w-0 truncate text-[17px] font-bold tracking-tight text-[var(--sidebar-text-strong)]`}
+                    className={`${fontDisplay.className} min-w-0 max-w-full break-words text-[17px] font-bold tracking-tight text-[var(--sidebar-text-strong)] [overflow-wrap:anywhere]`}
                     title={sessionUser.displayName}
                   >
                     {sessionUser.displayName}
@@ -177,7 +177,7 @@ export function Sidebar() {
             </>
           ) : (
             <span
-              className={`relative z-20 flex w-full min-w-0 max-w-full items-baseline justify-center gap-1.5 overflow-hidden text-[1.35rem] leading-snug tracking-[0.04em] text-[var(--sidebar-text-strong)] shell-short:text-[1.05rem] shell-short:leading-tight shell-short:tracking-[0.02em] [@media(min-width:1024px)_and_(min-height:560px)]:text-[clamp(0.62rem,calc(((100vw/8)-2.75rem)/9),1.12rem)] [@media(min-width:1024px)_and_(min-height:560px)]:leading-tight [@media(min-width:1024px)_and_(min-height:560px)]:tracking-[0.05em] ${brandDisplayFont.className}`}
+              className={`relative z-20 block w-full min-w-0 max-w-full text-center text-[1.2rem] leading-snug tracking-[0.04em] text-[var(--sidebar-text-strong)] shell-short:text-[1.05rem] shell-short:leading-tight shell-short:tracking-[0.02em] ${brandDisplayFont.className}`}
               style={{ textShadow: "var(--sidebar-title-shadow)" }}
               title={
                 sessionUser?.displayName
@@ -185,11 +185,14 @@ export function Sidebar() {
                   : APP_DISPLAY_NAME
               }
             >
-              <span className="shrink-0 font-semibold">Клик</span>
+              <span className="font-semibold">Клик</span>
               {sessionUser?.displayName ? (
-                <span className="min-w-0 truncate font-bold">
-                  {sessionUser.displayName}
-                </span>
+                <>
+                  {" "}
+                  <span className="break-words font-bold [overflow-wrap:anywhere]">
+                    {sessionUser.displayName}
+                  </span>
+                </>
               ) : null}
             </span>
           )}
@@ -239,8 +242,8 @@ export function Sidebar() {
             type="button"
             className={
               railCollapsed
-                ? "mx-auto mt-2 flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
-                : "mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] shell-short:mt-1.5"
+                ? "absolute right-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
+                : "absolute right-2 top-2 z-20 flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
             }
             title={railCollapsed ? "Развернуть меню" : "Свернуть меню"}
             aria-label={railCollapsed ? "Развернуть меню" : "Свернуть меню"}

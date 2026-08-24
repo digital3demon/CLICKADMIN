@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, memo, type MouseEvent } from "react";
-import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
@@ -17,12 +16,6 @@ import {
   financeOfficeRowTintClass,
   resolveFinanceOfficeRowTintKind,
 } from "@/lib/finance-office-row-tint";
-import { financeOfficeListHref } from "@/lib/finance-office-list-query";
-import {
-  listTagKaitenColumnTitle,
-  listTagKaitenTrackLaneOrNull,
-  LIST_TAG_KAITEN_BLOCKED,
-} from "@/lib/order-list-tag-filter";
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import type { FinanceOfficeOrderTableRow } from "@/components/finance-office/FinanceOfficeOrdersTable";
@@ -85,35 +78,6 @@ function deriveRowChrome(args: RowChrome) {
   const appointmentLabel = formatFinanceCardDate(
     o.appointmentDate ?? o.dueToAdminsAt,
   );
-  const kaitenColTrimmed = o.kaitenColumnTitle?.trim() ?? "";
-  const blocked = o.kaitenBlocked === true;
-  const kaitenStatusFilterHref = blocked
-    ? financeOfficeListHref({
-        tab,
-        tag: LIST_TAG_KAITEN_BLOCKED,
-        from: periodFrom ?? undefined,
-        to: periodTo ?? undefined,
-        q: (q ?? "").trim() || undefined,
-      })
-    : kaitenColTrimmed
-      ? financeOfficeListHref({
-          tab,
-          tag: listTagKaitenColumnTitle(kaitenColTrimmed),
-          from: periodFrom ?? undefined,
-          to: periodTo ?? undefined,
-          q: (q ?? "").trim() || undefined,
-        })
-      : null;
-  const laneTag = listTagKaitenTrackLaneOrNull(o.kaitenTrackLane);
-  const boardFilterHref = laneTag
-    ? financeOfficeListHref({
-        tab,
-        tag: laneTag,
-        from: periodFrom ?? undefined,
-        to: periodTo ?? undefined,
-        q: (q ?? "").trim() || undefined,
-      })
-    : null;
   const rowAccent = resolveOrderListRowAccentKind({
     listPendingChatCorrections: o.listPendingChatCorrections,
     listCompositionMismatch: o.listCompositionMismatch,
@@ -148,9 +112,6 @@ function deriveRowChrome(args: RowChrome) {
     patientName,
     labDueLabel,
     appointmentLabel,
-    blocked,
-    kaitenStatusFilterHref,
-    boardFilterHref,
     rowClass,
     mobileCardAccent,
     stickyCellBg,
@@ -234,7 +195,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
       <td
         className={`whitespace-nowrap px-2 py-2 text-center font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
       >
-        <div className="flex min-h-[2.5rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
+        <div className="flex items-center justify-center">
           <Link
             href={orderPathById(o.id)}
             className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
@@ -242,18 +203,6 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           >
             {o.orderNumber}
           </Link>
-          <OrderListKaitenColumnTag
-            kaitenCardId={o.kaitenCardId}
-            demoKanbanColumn={o.demoKanbanColumn}
-            demoCardTypeName={o.kaitenCardType?.name ?? null}
-            kaitenColumnTitle={o.kaitenColumnTitle}
-            kaitenTrackLane={o.kaitenTrackLane}
-            kaitenBlocked={d.blocked}
-            kaitenBlockReason={o.kaitenBlockReason}
-            filterHref={d.kaitenStatusFilterHref}
-            boardFilterHref={d.boardFilterHref}
-            placement="underOrderNumber"
-          />
         </div>
       </td>
       <td className="max-w-[13rem] px-2 py-2 text-center align-middle">
@@ -406,19 +355,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
               >
                 № {o.orderNumber}
               </Link>
-              <OrderListKaitenColumnTag
-                kaitenCardId={o.kaitenCardId}
-                demoKanbanColumn={o.demoKanbanColumn}
-                demoCardTypeName={o.kaitenCardType?.name ?? null}
-                kaitenColumnTitle={o.kaitenColumnTitle}
-                kaitenTrackLane={o.kaitenTrackLane}
-                kaitenBlocked={d.blocked}
-                kaitenBlockReason={o.kaitenBlockReason}
-                filterHref={d.kaitenStatusFilterHref}
-                boardFilterHref={d.boardFilterHref}
-                placement="underOrderNumber"
-              />
-              <div
+              <div>
                 className="ms-auto flex shrink-0 items-center gap-1.5"
                 data-row-click-ignore
                 onClick={(e) => e.stopPropagation()}
