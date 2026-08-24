@@ -1,11 +1,6 @@
-# Timeweb Cloud Apps / Docker.
-# Никакого apt-get / curl / wget: deb.debian.org на сборке Timeweb часто
-# недоступен (IPv6 unreachable, IPv4 timeout) → exit 100.
-# Healthcheck — node (scripts/docker-healthcheck.cjs), не curl.
-# Не `npm install -g pm2` / не `npm install -g npm` — лишний выход в сеть.
-# bookworm (не slim): openssl уже в образе.
-# В панели Timeweb тип приложения должен быть «Dockerfile», не Next.js:
-# Next.js-сборка платформы сама делает apt-get install curl.
+# Timeweb: только инструкции образа. Без apt, без HEALTHCHECK
+# (платформа иначе ставит системный curl и ходит на deb.debian.org).
+# Тип приложения в панели — «Dockerfile». Не `npm install -g`.
 
 FROM node:22-bookworm AS builder
 
@@ -48,8 +43,5 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/templates ./templates
 
 EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-  CMD node scripts/docker-healthcheck.cjs
 
 CMD ["npm", "run", "start:platform"]
