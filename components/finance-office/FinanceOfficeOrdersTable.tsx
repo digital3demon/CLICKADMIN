@@ -33,6 +33,7 @@ export type FinanceOfficeOrderTableRow = {
   adminShippedAt: string | null;
   financeCalculated: boolean;
   clinicWorksWithEdo: boolean;
+  clinicUsesPaperDocs: boolean;
   kaitenBlocked: boolean;
   kaitenBlockReason: string | null;
   isUrgent: boolean;

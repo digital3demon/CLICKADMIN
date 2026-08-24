@@ -342,6 +342,7 @@ export default async function ClientCardPage({ params, searchParams }: PageProps
                 contractSigned: clinic.contractSigned,
                 contractNumber: clinic.contractNumber ?? "",
                 worksWithEdo: clinic.worksWithEdo,
+                usesPaperDocs: clinic.usesPaperDocs,
                 hasContractDoc: clinic.contractDoc != null,
               }}
             />

@@ -68,8 +68,10 @@ export const LIST_TAG_FINANCE_CALCULATED = "finance-calculated";
 export const LIST_TAG_FINANCE_NOT_CALCULATED = "finance-not-calculated";
 /** Клиника работает по ЭДО (`Clinic.worksWithEdo`) */
 export const LIST_TAG_EDO = "edo";
-/** Клиника без ЭДО или наряд без клиники */
+/** Клиника без ЭДО или наряд без клиники → пилюля «бумдоки» */
 export const LIST_TAG_NO_EDO = "no-edo";
+/** Клиника и по ЭДО, и по бумаге */
+export const LIST_TAG_EDO_PAPER = "edo-paper";
 
 /** @deprecated Фильтр по статусу заказа CRM отключён в UI; ключ оставлен для старых ссылок. */
 export function listTagOrderStatus(status: OrderStatus): string {
@@ -122,6 +124,7 @@ export type ParsedListTag =
   | { kind: "financeNotCalculated" }
   | { kind: "edo" }
   | { kind: "noEdo" }
+  | { kind: "edoPaper" }
   | { kind: "custom"; label: string };
 
 const KAITEN_COLUMN_TAG_MAX_LEN = 500;
@@ -185,6 +188,7 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t === LIST_TAG_FINANCE_NOT_CALCULATED) return { kind: "financeNotCalculated" };
   if (t === LIST_TAG_EDO) return { kind: "edo" };
   if (t === LIST_TAG_NO_EDO) return { kind: "noEdo" };
+  if (t === LIST_TAG_EDO_PAPER) return { kind: "edoPaper" };
 
   if (t.startsWith("k:")) {
     try {
@@ -316,13 +320,27 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
     case "financeNotCalculated":
       return { financeCalculated: false };
     case "edo":
-      return { clinic: { worksWithEdo: true, deletedAt: null } };
+      return {
+        clinic: {
+          worksWithEdo: true,
+          usesPaperDocs: false,
+          deletedAt: null,
+        },
+      };
     case "noEdo":
       return {
         OR: [
           { clinicId: null },
           { clinic: { worksWithEdo: false } },
         ],
+      };
+    case "edoPaper":
+      return {
+        clinic: {
+          worksWithEdo: true,
+          usesPaperDocs: true,
+          deletedAt: null,
+        },
       };
     case "custom":
       return {
@@ -389,7 +407,9 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
     case "edo":
       return "ЭДО";
     case "noEdo":
-      return "БЕЗ ЭДО";
+      return "бумдоки";
+    case "edoPaper":
+      return "ЭДО+бумдоки";
     case "custom":
       return parsed.label;
   }
@@ -531,12 +551,31 @@ export function relatedOrdersListTagQuickFilters(
           label: humanListTagLabel({ kind: "noEdo" }),
           tag: LIST_TAG_NO_EDO,
         },
+        {
+          label: humanListTagLabel({ kind: "edoPaper" }),
+          tag: LIST_TAG_EDO_PAPER,
+        },
       ];
     case "noEdo":
       return [
         {
           label: humanListTagLabel({ kind: "edo" }),
           tag: LIST_TAG_EDO,
+        },
+        {
+          label: humanListTagLabel({ kind: "edoPaper" }),
+          tag: LIST_TAG_EDO_PAPER,
+        },
+      ];
+    case "edoPaper":
+      return [
+        {
+          label: humanListTagLabel({ kind: "edo" }),
+          tag: LIST_TAG_EDO,
+        },
+        {
+          label: humanListTagLabel({ kind: "noEdo" }),
+          tag: LIST_TAG_NO_EDO,
         },
       ];
     default:

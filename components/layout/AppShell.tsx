@@ -82,6 +82,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
   }, [mobileNavOpen]);
 
   const sidebarW = collapsed ? APP_SIDEBAR_W_COLLAPSED : APP_SIDEBAR_W_EXPANDED;
+  const permanentRail = collapsed;
 
   return (
     <div
@@ -94,7 +95,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
         } as CSSProperties
       }
     >
-      {!titleAsMenu || mobileNavOpen ? (
+      {!permanentRail && (!titleAsMenu || mobileNavOpen) ? (
         <button
           type="button"
           className="fixed z-[80] flex h-11 w-11 items-center justify-center rounded-md border border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text-strong)] shadow-md shell-laptop:hidden"
@@ -113,8 +114,11 @@ function AppShellChrome({ children }: { children: ReactNode }) {
 
       <main
         className={[
-          "relative z-0 ml-0 min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-clip bg-[var(--app-bg)] pt-[env(safe-area-inset-top,0px)] pe-[env(safe-area-inset-right,0px)] transition-[margin-left,width,padding,opacity] duration-200 ease-out @container/crm-shell shell-laptop:z-auto shell-laptop:ml-[var(--app-sidebar-w)] shell-laptop:w-[calc(100%-var(--app-sidebar-w))] shell-laptop:max-w-none shell-laptop:ps-0 shell-laptop:pe-0 shell-laptop:pt-0 custom-scrollbar",
-          mobileNavOpen
+          "relative z-0 min-h-[100dvh] min-w-0 max-w-full overflow-x-clip bg-[var(--app-bg)] pt-[env(safe-area-inset-top,0px)] pe-[env(safe-area-inset-right,0px)] transition-[margin-left,width,padding,opacity] duration-200 ease-out @container/crm-shell custom-scrollbar",
+          permanentRail
+            ? "ml-[var(--app-sidebar-w)] w-[calc(100%-var(--app-sidebar-w))] ps-0 pe-[env(safe-area-inset-right,0px)] pt-[env(safe-area-inset-top,0px)]"
+            : "ml-0 w-full shell-laptop:z-auto shell-laptop:ml-[var(--app-sidebar-w)] shell-laptop:w-[calc(100%-var(--app-sidebar-w))] shell-laptop:max-w-none shell-laptop:ps-0 shell-laptop:pe-0 shell-laptop:pt-0",
+          !permanentRail && mobileNavOpen
             ? "max-[1023px]:pointer-events-none max-[1023px]:select-none max-[1023px]:opacity-40 [@media(min-width:1024px)_and_(max-height:559px)]:pointer-events-none [@media(min-width:1024px)_and_(max-height:559px)]:select-none [@media(min-width:1024px)_and_(max-height:559px)]:opacity-40"
             : "",
         ].join(" ")}
@@ -123,6 +127,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
         {children}
       </main>
 
+      {!permanentRail ? (
       <div
         className={`fixed inset-0 z-[60] bg-black/50 transition-opacity duration-200 shell-laptop:hidden ${
           mobileNavOpen
@@ -132,18 +137,25 @@ function AppShellChrome({ children }: { children: ReactNode }) {
         aria-hidden
         onClick={closeMobileNav}
       />
+      ) : null}
 
       <aside
         id="app-primary-nav"
-        className={`fixed left-0 top-0 z-[70] flex h-[100dvh] min-w-0 flex-col overflow-x-hidden border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shadow-[4px_0_24px_rgba(0,0,0,0.12)] transition-[transform,width] duration-200 ease-out dark:shadow-[4px_0_28px_rgba(0,0,0,0.45)] shell-laptop:translate-x-0 shell-laptop:shadow-none ${
-          mobileNavOpen ? "translate-x-0" : "-translate-x-full shell-laptop:translate-x-0"
-        } w-[min(20rem,calc(100vw-2.5rem))] shell-laptop:w-[var(--app-sidebar-w)]`}
+        className={`fixed left-0 top-0 z-[70] flex h-[100dvh] min-w-0 flex-col overflow-x-hidden border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shadow-[4px_0_24px_rgba(0,0,0,0.12)] transition-[transform,width] duration-200 ease-out dark:shadow-[4px_0_28px_rgba(0,0,0,0.45)] shell-laptop:shadow-none ${
+          permanentRail
+            ? "w-[var(--app-sidebar-w)] translate-x-0"
+            : mobileNavOpen
+              ? "w-[min(20rem,calc(100vw-2.5rem))] translate-x-0"
+              : "-translate-x-full shell-laptop:w-[var(--app-sidebar-w)] shell-laptop:translate-x-0"
+        }`}
         aria-label="Основное меню"
       >
         <Sidebar />
         <button
           type="button"
-          className="absolute top-1/2 z-[71] hidden h-8 w-5 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-sm transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] shell-laptop:flex"
+          className={`absolute top-1/2 z-[71] h-8 w-5 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-sm transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] ${
+            permanentRail ? "flex" : "hidden shell-laptop:flex"
+          }`}
           style={{ left: "100%" }}
           aria-expanded={!collapsed}
           aria-controls="app-primary-nav"
@@ -170,9 +182,8 @@ type AppShellProps = {
 };
 
 /**
- * Laptop+ (shell-laptop = ширина ≥1024px и высота ≥560px): колонка меню, контент рядом.
- * На laptop меню по умолчанию рельс. Уже окно (<1024px) или низкая высота —
- * выезжающее меню и «гамбургер».
+ * Laptop+ (shell-laptop): колонка меню, контент рядом; рельс можно включить на любом размере.
+ * Уже окно (<1024px) или низкая высота — drawer; явное «свернуть» даёт постоянный рельс и на телефоне.
  */
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();

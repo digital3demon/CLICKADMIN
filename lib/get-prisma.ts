@@ -10,6 +10,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { ensureClinicPriceOverrideTable } from "@/lib/ensure-clinic-price-override-table";
 import { ensureClinicSourceDoctorColumn } from "@/lib/ensure-clinic-source-doctor-column";
+import { ensureClinicUsesPaperDocsColumn } from "@/lib/ensure-clinic-uses-paper-docs-column";
 import { ensureOrderAttachmentDiskRelPathColumn } from "@/lib/ensure-order-attachment-disk-column";
 import { ensureSqlitePragmas } from "@/lib/ensure-sqlite-pragmas";
 import { getDemoPrisma } from "@/lib/prisma-demo";
@@ -30,6 +31,7 @@ async function prepareClient(
     await ensureSqlitePragmas(client);
     await ensureClinicPriceOverrideTable(client);
     await ensureClinicSourceDoctorColumn(client);
+    await ensureClinicUsesPaperDocsColumn(client);
     await ensureOrderAttachmentDiskRelPathColumn(client);
   }
   return client;

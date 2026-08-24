@@ -246,6 +246,8 @@ model Clinic {
   contractDoc                  ClinicContractDoc?
   /// Работа по ЭДО
   worksWithEdo                 Boolean                        @default(false)
+  /// Бумажный документооборот («бумдоки»). Можно вместе с ЭДО.
+  usesPaperDocs                Boolean                        @default(false)
   /// От какого юрлица ведётся работа: ИП или ООО
   billingLegalForm             BillingLegalForm?
   /// Если задано — клиника создана как «юрлицо врача-ИП» (дублирование в справочнике клиник)

@@ -2,6 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  clinicDocChannel,
+  clinicDocChannelLabel,
+} from "@/lib/clinic-doc-channel";
 
 const btnBase =
   "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm";
@@ -28,6 +32,7 @@ export type ClinicCommercialInitial = {
   contractNumber: string;
   hasContractDoc: boolean;
   worksWithEdo: boolean;
+  usesPaperDocs: boolean;
 };
 
 type ContractDraftValues = {
@@ -237,6 +242,7 @@ export function ClinicCommercialTermsPanel({
           contractSigned: values.contractSigned,
           contractNumber: values.contractNumber.trim() || null,
           worksWithEdo: values.worksWithEdo,
+          usesPaperDocs: values.usesPaperDocs,
           orderPriceListKind:
             values.orderPriceListKind === ""
               ? null
@@ -272,6 +278,7 @@ export function ClinicCommercialTermsPanel({
           typeof data.contractNumber === "string" ? data.contractNumber : "",
         hasContractDoc,
         worksWithEdo: Boolean(data.worksWithEdo),
+        usesPaperDocs: Boolean(data.usesPaperDocs),
       });
       setEditing(false);
       router.refresh();
@@ -611,23 +618,51 @@ export function ClinicCommercialTermsPanel({
             )}
           </dd>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <dt className="font-medium text-[var(--text-body)]">Работа по ЭДО</dt>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <dt className="font-medium text-[var(--text-body)]">Документооборот</dt>
           <dd>
             {editing ? (
-              <label className="flex cursor-pointer items-center gap-2 text-[var(--text-strong)]">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-[var(--input-border)]"
-                  checked={values.worksWithEdo}
-                  onChange={(e) =>
-                    setValues((p) => ({ ...p, worksWithEdo: e.target.checked }))
-                  }
-                />
-                Да
-              </label>
+              <div className="flex flex-col gap-2 text-[var(--text-strong)]">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-[var(--input-border)]"
+                    checked={values.worksWithEdo}
+                    onChange={(e) =>
+                      setValues((p) => ({ ...p, worksWithEdo: e.target.checked }))
+                    }
+                  />
+                  ЭДО
+                </label>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-[var(--input-border)]"
+                    checked={values.usesPaperDocs}
+                    onChange={(e) =>
+                      setValues((p) => ({
+                        ...p,
+                        usesPaperDocs: e.target.checked,
+                      }))
+                    }
+                  />
+                  бумдоки
+                </label>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Можно отметить оба — клиент работает и по ЭДО, и по бумаге.
+                </p>
+              </div>
             ) : (
-              <span className="text-[var(--app-text)]">{yesNo(values.worksWithEdo)}</span>
+              <span className="text-[var(--app-text)]">
+                {values.worksWithEdo || values.usesPaperDocs
+                  ? clinicDocChannelLabel(
+                      clinicDocChannel(
+                        values.worksWithEdo,
+                        values.usesPaperDocs,
+                      ),
+                    )
+                  : "—"}
+              </span>
             )}
           </dd>
         </div>

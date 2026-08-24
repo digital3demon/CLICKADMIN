@@ -25,6 +25,7 @@ import {
 } from "@/lib/order-due-datetime";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 import { appendOrdersListKeepId } from "@/lib/orders-list-query";
+import { useOrdersListDueTint } from "@/components/orders/OrdersListDueTint";
 
 type OrderListDueCellVariant = "lab" | "appointment";
 
@@ -55,6 +56,9 @@ export function OrderListDueCell({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { tintFor, markEdited } = useOrdersListDueTint();
+  const tint =
+    dateFilterActive ? tintFor(variant, orderId) : "stock";
   const minLocalHalf = earliestDueGridLocalFromCreatedAt(createdAtIso);
   const minLocalLab = earliestLabDueGridLocalFromCreatedAt(
     createdAtIso,
@@ -161,6 +165,7 @@ export function OrderListDueCell({
         });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(j.error ?? "Ошибка сохранения");
+        if (dateFilterActive) markEdited("appointment", orderId);
         afterSave();
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Ошибка");
@@ -170,7 +175,7 @@ export function OrderListDueCell({
         setSaving(false);
       }
     },
-    [orderId, dueIso, appointmentHasTime, afterSave],
+    [orderId, dueIso, appointmentHasTime, afterSave, dateFilterActive, markEdited],
   );
 
   const saveLab = useCallback(
@@ -202,6 +207,7 @@ export function OrderListDueCell({
         });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(j.error ?? "Ошибка сохранения");
+        if (dateFilterActive) markEdited("lab", orderId);
         afterSave();
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Ошибка");
@@ -210,7 +216,7 @@ export function OrderListDueCell({
         setSaving(false);
       }
     },
-    [orderId, dueIso, afterSave, labHmSlots],
+    [orderId, dueIso, afterSave, labHmSlots, dateFilterActive, markEdited],
   );
 
   const setModeAndSave = useCallback(
@@ -289,7 +295,7 @@ export function OrderListDueCell({
         title={titleHint}
         className="w-full max-w-full"
         compactTimeLabel={compactTimeLabel}
-        filterHighlight={dateFilterActive}
+        tint={tint}
         tone={variant === "lab" ? "lab" : "appointment"}
         calendarFooter={appointmentFooter}
         onChange={(raw) => {

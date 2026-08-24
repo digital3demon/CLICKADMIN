@@ -172,6 +172,7 @@ const CLINIC_SNAPSHOT_ORDER: { key: string; label: string }[] = [
   { key: "contractSigned", label: "Договор подписан" },
   { key: "contractNumber", label: "Номер договора" },
   { key: "worksWithEdo", label: "ЭДО" },
+  { key: "usesPaperDocs", label: "бумдоки" },
   { key: "billingLegalForm", label: "Юрлицо (ИП/ООО)" },
 ];
 

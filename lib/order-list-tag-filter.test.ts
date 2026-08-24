@@ -55,6 +55,9 @@ describe("parseListTagParam / urgent", () => {
     });
     expect(parseListTagParam("edo")).toEqual({ kind: "edo" });
     expect(parseListTagParam("no-edo")).toEqual({ kind: "noEdo" });
+    expect(parseListTagParam("edo-paper")).toEqual({ kind: "edoPaper" });
+    expect(humanListTagLabel({ kind: "noEdo" })).toBe("бумдоки");
+    expect(humanListTagLabel({ kind: "edoPaper" })).toBe("ЭДО+бумдоки");
   });
 
   it("parses admin-memo (колонка Пометки)", () => {

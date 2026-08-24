@@ -51,17 +51,17 @@ export function isAppShellDesktopViewport(width: number, height: number): boolea
 }
 
 /**
- * Свёрнутый рельс только в laptop/desktop-shell.
- * На мобильном/низком окне drawer всегда полный.
- * auto: рельс на laptop (<1400), развёрнуто на широком desktop.
+ * Свёрнутый рельс: явный pref «collapsed» — на любом viewport;
+ * «expanded» — развёрнуто (на mobile drawer по кнопке);
+ * auto — рельс на laptop-shell любой ширины, на узком экране drawer.
  */
 export function resolveAppSidebarCollapsed(
   viewportWidth: number,
   viewportHeight: number,
   pref: AppSidebarCollapsePref,
 ): boolean {
-  if (!isAppShellLaptopViewport(viewportWidth, viewportHeight)) return false;
   if (pref === "collapsed") return true;
+  if (!isAppShellLaptopViewport(viewportWidth, viewportHeight)) return false;
   if (pref === "expanded") return false;
-  return viewportWidth < APP_SIDEBAR_AUTO_COLLAPSE_MAX_PX;
+  return true;
 }

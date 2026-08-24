@@ -20,13 +20,11 @@ import {
   type KaitenUnblockFromListTagResult,
 } from "@/lib/custom-list-tag-kaiten-unblock-label";
 import {
-  LIST_TAG_EDO,
   LIST_TAG_FINANCE_CALCULATED,
   LIST_TAG_FINANCE_NOT_CALCULATED,
   LIST_TAG_INVOICE,
   LIST_TAG_INVOICE_PRINTED,
   LIST_TAG_KAITEN_BLOCKED,
-  LIST_TAG_NO_EDO,
   LIST_TAG_PAYMENT_EXPECTED,
   LIST_TAG_PAYMENT_PAID,
   LIST_TAG_PAYMENT_PARTIAL,
@@ -47,6 +45,11 @@ import {
 } from "@/lib/order-list-quick-tag-suggestions";
 import { ordersListHref } from "@/lib/orders-list-query";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
+import {
+  clinicDocChannel,
+  clinicDocChannelLabel,
+  clinicDocChannelListTag,
+} from "@/lib/clinic-doc-channel";
 import { formatInvoiceListPillLabel } from "@/lib/format-invoice-number-ru";
 import { shipmentsListHref } from "@/lib/shipments-list-query";
 import {
@@ -141,6 +144,8 @@ type Props = {
   financeCalculated?: boolean | null;
   /** ЭДО клиники (или ИП врача); только в ФинОтделе. */
   clinicWorksWithEdo?: boolean | null;
+  /** Бумажные доки клиники (или ИП врача); только в ФинОтделе. */
+  clinicUsesPaperDocs?: boolean | null;
   /** Клиника наряда (null — частная практика). */
   clinicId?: string | null;
   /** Врач наряда — для пополнения депозита врача. */
@@ -382,6 +387,7 @@ export function OrderListTagsCell({
   financeOfficeFilterContext = null,
   financeCalculated = null,
   clinicWorksWithEdo = null,
+  clinicUsesPaperDocs = null,
   omitKaitenColumnTag = false,
   isDemoMode = false,
   clinicId = null,
@@ -1056,25 +1062,28 @@ export function OrderListTagsCell({
     }
 
     if (financeOfficeFilterContext && clinicWorksWithEdo != null) {
-      const edoTag = clinicWorksWithEdo ? LIST_TAG_EDO : LIST_TAG_NO_EDO;
+      const channel = clinicDocChannel(
+        clinicWorksWithEdo,
+        clinicUsesPaperDocs === true,
+      );
+      const edoTag = clinicDocChannelListTag(channel);
+      const edoLabel = clinicDocChannelLabel(channel);
+      const edoClass =
+        channel === "edo"
+          ? "border-teal-300 bg-teal-50 text-teal-950 dark:border-teal-800/60 dark:bg-teal-950/40 dark:text-teal-100"
+          : channel === "edoPaper"
+            ? "border-teal-400 bg-slate-800 text-teal-50 dark:border-teal-500 dark:bg-slate-900 dark:text-teal-100"
+            : "border-slate-300 bg-slate-50 text-slate-800 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-100";
       items.push({
         key: "clinic-edo",
         slot: "small",
         node: (
           <Link prefetch={false}
             href={href(edoTag)}
-            title={
-              clinicWorksWithEdo
-                ? "Клиника работает по ЭДО — показать такие наряды"
-                : "Клиника без ЭДО — показать такие наряды"
-            }
-            className={`rounded-full border font-semibold shadow-sm outline-none focus-visible:outline-none ${
-              clinicWorksWithEdo
-                ? "border-teal-300 bg-teal-50 text-teal-950 dark:border-teal-800/60 dark:bg-teal-950/40 dark:text-teal-100"
-                : "border-slate-300 bg-slate-50 text-slate-800 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-100"
-            } ${padTable}`}
+            title={`${edoLabel} — показать такие наряды`}
+            className={`rounded-full border font-semibold shadow-sm outline-none focus-visible:outline-none ${edoClass} ${padTable}`}
           >
-            {clinicWorksWithEdo ? "ЭДО" : "БЕЗ ЭДО"}
+            {edoLabel}
           </Link>
         ),
       });
@@ -1243,6 +1252,7 @@ export function OrderListTagsCell({
     customTags,
     financeCalculated,
     clinicWorksWithEdo,
+    clinicUsesPaperDocs,
     financeOfficeFilterContext,
     hasInvoiceAttachment,
     invoiceNumber,

@@ -173,9 +173,12 @@ type DueDatetimeComboPickerProps = {
    */
   compactTimeLabel?: string | null;
   /**
-   * Активен фильтр списка по этой дате: ободок толще.
+   * Активен фильтр списка по этой дате: ободок толще (legacy).
+   * Предпочтительнее `tint`.
    */
   filterHighlight?: boolean;
+  /** Сток / приглушение / яркость после правки даты при активном фильтре. */
+  tint?: "stock" | "muted" | "bright";
   /**
    * Мягкий цвет ободка и фона: лабораторный срок vs запись.
    * По умолчанию нейтральный (как обычное поле).
@@ -187,21 +190,29 @@ export type DueDatetimeTone = "neutral" | "lab" | "appointment";
 
 function triggerSurfaceClass(
   tone: DueDatetimeTone,
-  filterHighlight: boolean,
+  tint: "stock" | "muted" | "bright",
 ): string {
   const base =
-    "rounded-md outline-none transition-[border-color,box-shadow,background-color]";
+    "rounded-md outline-none transition-[border-color,box-shadow,background-color,filter,color]";
   if (tone === "lab") {
-    return filterHighlight
-      ? `${base} border-2 border-teal-600/50 bg-teal-500/[0.12] shadow-sm hover:border-teal-500/65 dark:border-teal-300/45 dark:bg-teal-400/[0.11]`
-      : `${base} border border-teal-700/35 bg-teal-500/[0.08] shadow-sm hover:border-teal-600/50 dark:border-teal-400/30 dark:bg-teal-400/[0.08]`;
+    if (tint === "bright") {
+      return `${base} border-2 border-teal-400 bg-teal-400/[0.22] text-teal-800 shadow-sm hover:border-teal-300 dark:border-teal-200/80 dark:bg-teal-300/[0.18] dark:text-teal-100`;
+    }
+    if (tint === "muted") {
+      return `${base} border border-teal-800/20 bg-teal-500/[0.04] text-zinc-500 saturate-[0.25] hover:border-teal-700/30 dark:border-teal-500/15 dark:bg-teal-400/[0.04] dark:text-zinc-500`;
+    }
+    return `${base} border border-teal-700/35 bg-teal-500/[0.08] text-teal-800 shadow-sm hover:border-teal-600/50 dark:border-teal-400/30 dark:bg-teal-400/[0.08] dark:text-teal-200`;
   }
   if (tone === "appointment") {
-    return filterHighlight
-      ? `${base} border-2 border-amber-600/50 bg-amber-500/[0.12] shadow-sm hover:border-amber-500/65 dark:border-amber-300/45 dark:bg-amber-400/[0.11]`
-      : `${base} border border-amber-700/35 bg-amber-500/[0.08] shadow-sm hover:border-amber-600/50 dark:border-amber-400/30 dark:bg-amber-400/[0.08]`;
+    if (tint === "bright") {
+      return `${base} border-2 border-amber-400 bg-amber-400/[0.22] text-amber-900 shadow-sm hover:border-amber-300 dark:border-amber-200/80 dark:bg-amber-300/[0.18] dark:text-amber-100`;
+    }
+    if (tint === "muted") {
+      return `${base} border border-amber-800/20 bg-amber-500/[0.04] text-zinc-500 saturate-[0.25] hover:border-amber-700/30 dark:border-amber-500/15 dark:bg-amber-400/[0.04] dark:text-zinc-500`;
+    }
+    return `${base} border border-amber-700/35 bg-amber-500/[0.08] text-amber-900 shadow-sm hover:border-amber-600/50 dark:border-amber-400/30 dark:bg-amber-400/[0.08] dark:text-amber-200`;
   }
-  return filterHighlight
+  return tint === "bright"
     ? `${base} border-2 border-sky-400 bg-[var(--card-bg)] shadow-[0_0_0_1px_rgba(56,189,248,0.45)] hover:border-sky-300 focus-visible:border-sky-300 focus-visible:ring-1 focus-visible:ring-sky-300 dark:border-sky-300 dark:shadow-[0_0_0_1px_rgba(125,211,252,0.4)]`
     : `${base} border border-[var(--input-border)] bg-[var(--card-bg)] shadow-sm hover:border-[var(--sidebar-blue)]/40 focus-visible:border-[var(--sidebar-blue)] focus-visible:ring-1 focus-visible:ring-[var(--sidebar-blue)]`;
 }
@@ -225,6 +236,7 @@ export function DueDatetimeComboPicker({
   labHmSlots,
   compactTimeLabel,
   filterHighlight = false,
+  tint,
   tone = "neutral",
 }: DueDatetimeComboPickerProps) {
   const genId = useId();
@@ -454,7 +466,8 @@ export function DueDatetimeComboPicker({
     .filter(Boolean)
     .join(" — ");
 
-  const triggerSurface = triggerSurfaceClass(tone, filterHighlight);
+  const resolvedTint = tint ?? (filterHighlight ? "bright" : "stock");
+  const triggerSurface = triggerSurfaceClass(tone, resolvedTint);
 
   const dropdown = open ? (
     <div
@@ -629,7 +642,7 @@ export function DueDatetimeComboPicker({
               "flex min-h-[2.35rem] min-w-0 flex-1 items-center justify-center gap-0.5 px-0.5 py-0.5 text-center text-[10px] tabular-nums sm:min-h-[2.4rem] sm:px-1 sm:text-[11px]",
               triggerSurface,
               disabled ? "cursor-not-allowed" : "cursor-pointer",
-              showPlaceholder ? "text-[var(--text-placeholder)]" : "text-[var(--app-text)]",
+              showPlaceholder ? "text-[var(--text-placeholder)]" : "",
             ].join(" ")}
           >
             <span className="flex min-w-0 flex-1 flex-col items-center justify-center gap-px leading-tight">
@@ -637,7 +650,15 @@ export function DueDatetimeComboPicker({
                 {showPlaceholder ? "Дата" : datePart}
               </span>
               {showTimeRow ? (
-                <span className="whitespace-nowrap text-[var(--text-secondary)]">
+                <span
+                  className={
+                    showPlaceholder
+                      ? "whitespace-nowrap text-[var(--text-placeholder)]"
+                      : resolvedTint === "muted"
+                        ? "whitespace-nowrap opacity-80"
+                        : "whitespace-nowrap opacity-90"
+                  }
+                >
                   {showPlaceholder ? "Время" : timePart}
                 </span>
               ) : null}

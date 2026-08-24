@@ -30,6 +30,7 @@ const clinicBeforePatchSelect = {
   contractSigned: true,
   contractNumber: true,
   worksWithEdo: true,
+  usesPaperDocs: true,
   billingLegalForm: true,
   orderPriceListKind: true,
   legalFullName: true,
@@ -58,6 +59,7 @@ type PatchBody = {
   contractSigned?: boolean;
   contractNumber?: string | null;
   worksWithEdo?: boolean;
+  usesPaperDocs?: boolean;
   billingLegalForm?: BillingLegalForm | null;
   orderPriceListKind?: OrderPriceListKind | null;
 } & Partial<Record<ClinicRequisiteKey, string | null>>;
@@ -154,6 +156,9 @@ export async function PATCH(
     }
     if (body.worksWithEdo !== undefined) {
       data.worksWithEdo = Boolean(body.worksWithEdo);
+    }
+    if (body.usesPaperDocs !== undefined) {
+      data.usesPaperDocs = Boolean(body.usesPaperDocs);
     }
     if (body.billingLegalForm !== undefined) {
       if (body.billingLegalForm === null) {

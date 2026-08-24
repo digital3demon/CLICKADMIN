@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addCalendarDaysYmd,
   addMoscowWorkingDaysYmd,
   moscowActualAppointmentWindowYmd,
   moscowWorkWeekFridayYmd,
@@ -20,6 +21,12 @@ describe("moscowWorkWeekFridayYmd", () => {
 
   it("Sunday → next Friday", () => {
     expect(moscowWorkWeekFridayYmd("2026-05-10")).toBe("2026-05-15");
+  });
+});
+
+describe("addCalendarDaysYmd", () => {
+  it("вчера через границу месяца", () => {
+    expect(addCalendarDaysYmd("2026-08-01", -1)).toBe("2026-07-31");
   });
 });
 

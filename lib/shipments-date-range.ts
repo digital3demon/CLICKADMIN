@@ -36,6 +36,10 @@ export function moscowTomorrowYmd(): string {
   return addCalendarDaysYmd(moscowTodayYmd(), 1);
 }
 
+export function moscowYesterdayYmd(): string {
+  return addCalendarDaysYmd(moscowTodayYmd(), -1);
+}
+
 /** Проверка строки YYYY-MM-DD. */
 export function parseYmdOrNull(raw: string | null | undefined): string | null {
   if (raw == null || !String(raw).trim()) return null;

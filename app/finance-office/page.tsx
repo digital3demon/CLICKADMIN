@@ -71,6 +71,7 @@ function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[
     adminShippedAt: o.adminShippedAt?.toISOString() ?? null,
     financeCalculated: o.financeCalculated,
     clinicWorksWithEdo: o.clinicWorksWithEdo,
+    clinicUsesPaperDocs: o.clinicUsesPaperDocs,
     kaitenBlocked: o.kaitenBlocked,
     kaitenBlockReason: o.kaitenBlockReason,
     isUrgent: o.isUrgent,

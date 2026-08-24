@@ -28,6 +28,7 @@ import {
   orderAttentionListSupersetWhere,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
+import { clinicDocChannel } from "@/lib/clinic-doc-channel";
 import { orderInvoiceCompositionMismatch, uniqueAttentionOrderCount } from "@/lib/order-invoice-composition-mismatch";
 
 const financeOfficeOrderSelect = {
@@ -109,6 +110,8 @@ export type FinanceOfficeOrderRow = Omit<
   } | null;
   /** ЭДО клиники наряда или ИП-клиники врача; без клиники — false. */
   clinicWorksWithEdo: boolean;
+  /** Бумажные доки клиники / ИП врача; без клиники — false. */
+  clinicUsesPaperDocs: boolean;
   counterpartyRequisitesText: string | null;
   doctor: { id: string; fullName: string };
   constructions: Array<{
@@ -135,7 +138,7 @@ export {
 async function countFinanceOfficeEdoChips(
   db: PrismaClient,
   scope: Prisma.OrderWhereInput,
-): Promise<{ edoCount: number; noEdoCount: number }> {
+): Promise<{ edoCount: number; noEdoCount: number; edoPaperCount: number }> {
   const [clinicGroups, doctorGroups] = await Promise.all([
     db.order.groupBy({
       by: ["clinicId"],
@@ -150,7 +153,7 @@ async function countFinanceOfficeEdoChips(
   ]);
 
   if (clinicGroups.length === 0 && doctorGroups.length === 0) {
-    return { edoCount: 0, noEdoCount: 0 };
+    return { edoCount: 0, noEdoCount: 0, edoPaperCount: 0 };
   }
 
   const clinicIds = clinicGroups
@@ -163,7 +166,7 @@ async function countFinanceOfficeEdoChips(
     clinicIds.length
       ? clientsPrisma.clinic.findMany({
           where: { id: { in: clinicIds }, deletedAt: null },
-          select: { id: true, worksWithEdo: true },
+          select: { id: true, worksWithEdo: true, usesPaperDocs: true },
         })
       : Promise.resolve([]),
     doctorIds.length
@@ -171,37 +174,62 @@ async function countFinanceOfficeEdoChips(
           where: { id: { in: doctorIds } },
           select: {
             id: true,
-            ipClinicAsSource: { select: { worksWithEdo: true, deletedAt: true } },
+            ipClinicAsSource: {
+              select: {
+                worksWithEdo: true,
+                usesPaperDocs: true,
+                deletedAt: true,
+              },
+            },
           },
         })
       : Promise.resolve([]),
   ]);
 
-  const clinicEdoById = new Map(
-    clinics.map((c) => [c.id, Boolean(c.worksWithEdo)]),
+  const clinicFlagsById = new Map(
+    clinics.map((c) => [
+      c.id,
+      {
+        edo: Boolean(c.worksWithEdo),
+        paper: Boolean(c.usesPaperDocs),
+      },
+    ]),
   );
-  const privateEdoByDoctorId = new Map(
+  const privateFlagsByDoctorId = new Map(
     doctorsIp.map((d) => {
       const ip = d.ipClinicAsSource;
-      if (!ip || ip.deletedAt != null) return [d.id, false] as const;
-      return [d.id, Boolean(ip.worksWithEdo)] as const;
+      if (!ip || ip.deletedAt != null) {
+        return [d.id, { edo: false, paper: false }] as const;
+      }
+      return [
+        d.id,
+        {
+          edo: Boolean(ip.worksWithEdo),
+          paper: Boolean(ip.usesPaperDocs),
+        },
+      ] as const;
     }),
   );
 
   let edoCount = 0;
   let noEdoCount = 0;
+  let edoPaperCount = 0;
+  const bump = (edo: boolean, paper: boolean, n: number) => {
+    const ch = clinicDocChannel(edo, paper);
+    if (ch === "edo") edoCount += n;
+    else if (ch === "edoPaper") edoPaperCount += n;
+    else noEdoCount += n;
+  };
   for (const g of clinicGroups) {
     if (g.clinicId == null) continue;
-    const n = g._count._all;
-    if (clinicEdoById.get(g.clinicId)) edoCount += n;
-    else noEdoCount += n;
+    const flags = clinicFlagsById.get(g.clinicId);
+    bump(flags?.edo ?? false, flags?.paper ?? false, g._count._all);
   }
   for (const g of doctorGroups) {
-    const n = g._count._all;
-    if (privateEdoByDoctorId.get(g.doctorId)) edoCount += n;
-    else noEdoCount += n;
+    const flags = privateFlagsByDoctorId.get(g.doctorId);
+    bump(flags?.edo ?? false, flags?.paper ?? false, g._count._all);
   }
-  return { edoCount, noEdoCount };
+  return { edoCount, noEdoCount, edoPaperCount };
 }
 
 export async function countFinanceOfficeQuickFilterChips(
@@ -222,6 +250,7 @@ export async function countFinanceOfficeQuickFilterChips(
   financeCalculatedCount: number;
   edoCount: number;
   noEdoCount: number;
+  edoPaperCount: number;
   labMentionCount: number;
 }> {
   // Просчитано/Не просчитано — по всему окну срока.
@@ -369,6 +398,7 @@ export async function countFinanceOfficeQuickFilterChips(
     financeCalculatedCount,
     edoCount: edoCounts.edoCount,
     noEdoCount: edoCounts.noEdoCount,
+    edoPaperCount: edoCounts.edoPaperCount,
     labMentionCount,
   };
 }
@@ -405,8 +435,12 @@ export async function fetchFinanceOfficeOrders(
     }),
   ];
   if (parsedTag) {
-    if (parsedTag.kind === "edo" || parsedTag.kind === "noEdo") {
-      // Точный отбор по clinicWorksWithEdo (в т.ч. ИП врача) — после гидрации клиник.
+    if (
+      parsedTag.kind === "edo" ||
+      parsedTag.kind === "noEdo" ||
+      parsedTag.kind === "edoPaper"
+    ) {
+      // Точный отбор по каналу ЭДО/бумдоки (в т.ч. ИП врача) — после гидрации клиник.
     } else {
       parts.push(
         parsedTag.kind === "orderAttention"
@@ -455,6 +489,7 @@ export async function fetchFinanceOfficeOrders(
     settlementAccount: true,
     correspondentAccount: true,
     worksWithEdo: true,
+    usesPaperDocs: true,
   } as const;
 
   const [doctors, clinics, doctorsIpRequisites, constructionTypes, priceItems] =
@@ -505,6 +540,7 @@ export async function fetchFinanceOfficeOrders(
         {
           counterpartyRequisitesText: formatCounterpartyRequisitesShortSummary(req),
           worksWithEdo: Boolean(req.worksWithEdo),
+          usesPaperDocs: Boolean(req.usesPaperDocs),
         },
       ] as const;
     }),
@@ -521,6 +557,7 @@ export async function fetchFinanceOfficeOrders(
         settlementAccount,
         correspondentAccount,
         worksWithEdo,
+        usesPaperDocs,
         ...pub
       } = x;
       return [
@@ -529,6 +566,7 @@ export async function fetchFinanceOfficeOrders(
           ...pub,
           legalFullName,
           worksWithEdo: Boolean(worksWithEdo),
+          usesPaperDocs: Boolean(usesPaperDocs),
           counterpartyRequisitesText: formatCounterpartyRequisitesShortSummary({
             legalFullName,
             inn,
@@ -568,6 +606,9 @@ export async function fetchFinanceOfficeOrders(
     const clinicWorksWithEdo = clinFull
       ? clinFull.worksWithEdo
       : (privateReq?.worksWithEdo ?? false);
+    const clinicUsesPaperDocs = clinFull
+      ? clinFull.usesPaperDocs
+      : (privateReq?.usesPaperDocs ?? false);
     return {
       ...rest,
       clinic: clinFull
@@ -580,6 +621,7 @@ export async function fetchFinanceOfficeOrders(
           }
         : null,
       clinicWorksWithEdo,
+      clinicUsesPaperDocs,
       counterpartyRequisitesText,
       doctor: doctorById.get(o.doctorId) ?? { id: o.doctorId, fullName: "—" },
       constructions: hydratedConstructions,
@@ -602,11 +644,19 @@ export async function fetchFinanceOfficeOrders(
   });
 
   const exact =
-    parsedTag?.kind === "edo"
-      ? mapped.filter((r) => r.clinicWorksWithEdo)
-      : parsedTag?.kind === "noEdo"
-        ? mapped.filter((r) => !r.clinicWorksWithEdo)
-        : mapped;
+    parsedTag?.kind === "edo" ||
+    parsedTag?.kind === "noEdo" ||
+    parsedTag?.kind === "edoPaper"
+      ? mapped.filter((r) => {
+          const ch = clinicDocChannel(
+            r.clinicWorksWithEdo,
+            r.clinicUsesPaperDocs,
+          );
+          if (parsedTag.kind === "edo") return ch === "edo";
+          if (parsedTag.kind === "edoPaper") return ch === "edoPaper";
+          return ch === "paper";
+        })
+      : mapped;
 
   const withMention = await hydrateOrderKaitenLabMentionHighlight(
     db,

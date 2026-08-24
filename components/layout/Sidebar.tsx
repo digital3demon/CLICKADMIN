@@ -21,7 +21,7 @@ import { profileAvatarEmoji } from "@/lib/profile-avatar-presets";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { fontDisplay } from "@/lib/app-fonts";
-import { LogOut, Plus } from "lucide-react";
+import { LogOut, PanelLeft, PanelLeftClose, Plus } from "lucide-react";
 import { useDesktopSidebarCollapseOptional } from "@/components/layout/desktop-sidebar-collapse";
 
 const WorkdaySunMoon = dynamic(
@@ -68,6 +68,7 @@ export function Sidebar() {
   const uiDesign = useUiDesign();
   const isHarmony = uiDesign === "harmony";
   const railCollapsed = useDesktopSidebarCollapseOptional()?.collapsed ?? false;
+  const sidebarCollapse = useDesktopSidebarCollapseOptional();
   const { open: openNewOrder, canOpen, canCreate, createAccessReady } =
     useNewOrderPanel();
   const { user: sessionUser, isDemo, singleUser: singleUserMode } =
@@ -232,6 +233,30 @@ export function Sidebar() {
             )}
           </button>
         )}
+
+        {sidebarCollapse ? (
+          <button
+            type="button"
+            className={
+              railCollapsed
+                ? "mx-auto mt-2 flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
+                : "mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] shell-short:mt-1.5"
+            }
+            title={railCollapsed ? "Развернуть меню" : "Свернуть меню"}
+            aria-label={railCollapsed ? "Развернуть меню" : "Свернуть меню"}
+            aria-expanded={!railCollapsed}
+            onClick={sidebarCollapse.toggleCollapsed}
+          >
+            {railCollapsed ? (
+              <PanelLeft className="h-4 w-4" aria-hidden />
+            ) : (
+              <>
+                <PanelLeftClose className="h-4 w-4 shrink-0" aria-hidden />
+                <span>Свернуть</span>
+              </>
+            )}
+          </button>
+        ) : null}
       </div>
 
       <div

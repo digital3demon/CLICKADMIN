@@ -23,7 +23,11 @@ import {
   ordersShipmentListPdfHref,
   pickOrdersShipmentHrefOpts,
 } from "@/lib/orders-shipment-list-query";
-import { moscowTodayYmd, moscowTomorrowYmd } from "@/lib/shipments-date-range";
+import {
+  moscowTodayYmd,
+  moscowTomorrowYmd,
+  moscowYesterdayYmd,
+} from "@/lib/shipments-date-range";
 import { OrdersListColHeader } from "@/components/orders/OrdersListColHeader";
 import { useOrdersListColCollapse } from "@/components/orders/OrdersListColumnsProvider";
 import type { OrdersListColId } from "@/lib/orders-list-collapsed-cols";
@@ -360,19 +364,35 @@ export function OrdersListTableHeaderRow({
     setOpen(null);
   };
 
-  const applyOtpr = () => {
+  const applyOtprRange = (fromYmd: string, toYmd: string) => {
+    const from = fromYmd.trim();
+    const to = toYmd.trim();
+    setOtprFrom(from);
+    setOtprTo(to);
     router.push(
       ordersListHref({
         ...commonHref(),
         from: labActive ? appliedFrom ?? undefined : undefined,
         to: labActive ? appliedTo ?? undefined : undefined,
         ...pickOrdersShipmentHrefOpts(sp),
-        otprFrom: otprFrom.trim() || undefined,
-        otprTo: otprTo.trim() || undefined,
+        otprFrom: from || undefined,
+        otprTo: to || undefined,
       }),
     );
     setOpen(null);
   };
+
+  const applyOtpr = () => applyOtprRange(otprFrom, otprTo);
+  const yesterdayYmd = moscowYesterdayYmd();
+  const otprAppliedFrom = (appliedOtprFrom ?? "").trim();
+  const otprAppliedTo = (appliedOtprTo ?? "").trim();
+  const otprIsToday =
+    otprAppliedFrom === todayYmd &&
+    (otprAppliedTo === todayYmd || (!otprAppliedTo && otprAppliedFrom === todayYmd));
+  const otprIsYesterday =
+    otprAppliedFrom === yesterdayYmd &&
+    (otprAppliedTo === yesterdayYmd ||
+      (!otprAppliedTo && otprAppliedFrom === yesterdayYmd));
 
   const printPdfHref = useMemo(() => {
     if (shipMode === "actual") {
@@ -628,7 +648,23 @@ export function OrdersListTableHeaderRow({
             fromTitle="Дата отправки с (МСК), включительно"
             toTitle="Дата отправки по (МСК), включительно"
           />
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-nowrap items-center gap-1.5">
+            <button
+              type="button"
+              className={dayPresetBtn(otprIsToday)}
+              title="Дата отправки — сегодня (МСК)"
+              onClick={() => applyOtprRange(todayYmd, todayYmd)}
+            >
+              Сегодня
+            </button>
+            <button
+              type="button"
+              className={dayPresetBtn(otprIsYesterday)}
+              title="Дата отправки — вчера (МСК)"
+              onClick={() => applyOtprRange(yesterdayYmd, yesterdayYmd)}
+            >
+              Вчера
+            </button>
             <button type="button" className={showBtn} onClick={applyOtpr}>
               Показать
             </button>

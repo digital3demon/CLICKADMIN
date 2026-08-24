@@ -12,6 +12,7 @@ import {
   LIST_TAG_FINANCE_NOT_CALCULATED,
   LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_NO_EDO,
+  LIST_TAG_EDO_PAPER,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
   type ParsedListTag,
@@ -24,6 +25,7 @@ type FinanceOfficeChipCounts = {
   financeCalculatedCount: number;
   edoCount: number;
   noEdoCount: number;
+  edoPaperCount: number;
   labMentionCount: number;
 };
 
@@ -34,6 +36,7 @@ const EMPTY_COUNTS: FinanceOfficeChipCounts = {
   financeCalculatedCount: 0,
   edoCount: 0,
   noEdoCount: 0,
+  edoPaperCount: 0,
   labMentionCount: 0,
 };
 
@@ -98,6 +101,8 @@ export function FinanceOfficeQuickFilterChips({
               : 0,
           edoCount: typeof j.edoCount === "number" ? j.edoCount : 0,
           noEdoCount: typeof j.noEdoCount === "number" ? j.noEdoCount : 0,
+          edoPaperCount:
+            typeof j.edoPaperCount === "number" ? j.edoPaperCount : 0,
           labMentionCount:
             typeof j.labMentionCount === "number" ? j.labMentionCount : 0,
         });
@@ -121,6 +126,7 @@ export function FinanceOfficeQuickFilterChips({
     financeCalculatedCount,
     edoCount,
     noEdoCount,
+    edoPaperCount,
     labMentionCount,
   } = counts ?? EMPTY_COUNTS;
 
@@ -162,6 +168,7 @@ export function FinanceOfficeQuickFilterChips({
     financeCalculatedCount > 0 || activeFilter?.kind === "financeCalculated";
   const showEdo = edoCount > 0 || activeFilter?.kind === "edo";
   const showNoEdo = noEdoCount > 0 || activeFilter?.kind === "noEdo";
+  const showEdoPaper = edoPaperCount > 0 || activeFilter?.kind === "edoPaper";
   const showChat =
     canAdmin &&
     (labMentionCount > 0 || activeFilter?.kind === "kaitenLabMention");
@@ -172,6 +179,7 @@ export function FinanceOfficeQuickFilterChips({
     showNotCalculated ||
     showCalculated ||
     showEdo ||
+    showEdoPaper ||
     showNoEdo ||
     showChat ||
     activeFilter != null;
@@ -283,13 +291,34 @@ export function FinanceOfficeQuickFilterChips({
                 ? "border-teal-400/90 bg-teal-100 text-teal-950 ring-2 ring-teal-500/85 dark:border-teal-700 dark:bg-teal-950/45 dark:text-teal-100 dark:ring-teal-500/70"
                 : "border-teal-300/70 bg-teal-100/70 text-teal-950 hover:bg-teal-100 dark:border-teal-800/60 dark:bg-teal-950/35 dark:text-teal-100 dark:hover:bg-teal-950/50"
             }`}
-            title="Клиника работает по ЭДО (в т.ч. ИП врача)"
+            title="Клиника только по ЭДО (в т.ч. ИП врача)"
           >
             <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
               ЭДО
             </span>
             <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
               {edoCount}
+            </span>
+          </Link>
+        ) : null}
+        {showEdoPaper ? (
+          <Link
+            href={financeOfficeListHref({
+              ...listCtx,
+              tag: LIST_TAG_EDO_PAPER,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "edoPaper"
+                ? "border-cyan-400/90 bg-slate-800 text-teal-50 ring-2 ring-teal-400/80 dark:border-teal-400 dark:bg-slate-900 dark:text-teal-50 dark:ring-teal-400/70"
+                : "border-teal-500/70 bg-slate-800/90 text-teal-50 hover:bg-slate-800 dark:border-slate-600 dark:bg-slate-900/70 dark:text-teal-100 dark:hover:bg-slate-900"
+            }`}
+            title="Клиника работает и по ЭДО, и по бумдокам"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              ЭДО+бумдоки
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {edoPaperCount}
             </span>
           </Link>
         ) : null}
@@ -304,10 +333,10 @@ export function FinanceOfficeQuickFilterChips({
                 ? "border-slate-400/90 bg-slate-100 text-slate-950 ring-2 ring-slate-500/85 dark:border-slate-600 dark:bg-slate-950/45 dark:text-slate-100 dark:ring-slate-500/70"
                 : "border-slate-300/70 bg-slate-100/70 text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/50"
             }`}
-            title="Клиника без ЭДО или наряд без клиники"
+            title="Бумажный документооборот или наряд без клиники"
           >
             <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-              БЕЗ ЭДО
+              бумдоки
             </span>
             <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
               {noEdoCount}

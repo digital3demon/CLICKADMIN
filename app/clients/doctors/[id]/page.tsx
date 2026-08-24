@@ -158,6 +158,7 @@ export default async function DoctorCardPage({
             contractNumber: true,
             contractDoc: { select: { updatedAt: true } },
             worksWithEdo: true,
+            usesPaperDocs: true,
           },
         },
         clinicLinks: {
@@ -352,6 +353,7 @@ export default async function DoctorCardPage({
                   contractNumber: doctor.ipClinicAsSource.contractNumber ?? "",
                   hasContractDoc: doctor.ipClinicAsSource.contractDoc != null,
                   worksWithEdo: doctor.ipClinicAsSource.worksWithEdo,
+                  usesPaperDocs: doctor.ipClinicAsSource.usesPaperDocs,
                 }}
               />
             </div>

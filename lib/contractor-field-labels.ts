@@ -10,6 +10,7 @@ export const CLINIC_UPDATE_FIELD_LABELS: Record<string, string> = {
   contractSigned: "договор",
   contractNumber: "номер договора",
   worksWithEdo: "ЭДО",
+  usesPaperDocs: "бумдоки",
   billingLegalForm: "юрлицо (ИП/ООО)",
   orderPriceListKind: "прайс в нарядах",
   legalFullName: "юр. наименование",

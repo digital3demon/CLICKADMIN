@@ -211,6 +211,7 @@ const TagsCell = memo(function TagsCell({
       financeOfficeFilterContext={{ tab, periodFrom, periodTo, q }}
       financeCalculated={o.financeCalculated}
       clinicWorksWithEdo={o.clinicWorksWithEdo}
+      clinicUsesPaperDocs={o.clinicUsesPaperDocs}
       omitKaitenColumnTag
     />
   );
