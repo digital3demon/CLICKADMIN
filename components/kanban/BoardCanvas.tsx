@@ -118,7 +118,10 @@ const CARD_MENU_WIDTH = 220;
  * Соотношение сторон width/height = √2.
  */
 const KANBAN_BOARD_CARD_FRAME_CLASS =
-  "w-full min-w-0 shrink-0 aspect-[1414/1000] touch-pan-x touch-pan-y";
+  "w-full min-w-0 shrink-0 touch-pan-x touch-pan-y";
+/** Тело карточки без надстройки (стоп). Надстройка — плюс к высоте, не внутри пропорции. */
+const KANBAN_BOARD_CARD_BODY_ASPECT_CLASS =
+  "flex min-h-0 w-full flex-col overflow-hidden aspect-[1414/1000]";
 
 const CARD_MENU_GAP = 4;
 const CARD_MENU_EST_HEIGHT = 150;
@@ -303,7 +306,7 @@ function KanbanCardView({
 
   /** Один канон на mobile и desktop — без sm:/max-md: развилок лица карточки. */
   let duePillClass =
-    "inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[calc(0.62rem+3px)] font-medium tabular-nums leading-none";
+    "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[calc(0.62rem+3px)] font-medium tabular-nums leading-none";
   if (stageDue) {
     const cat = dueCategory(stageDue);
     if (cat === "overdue")
@@ -340,11 +343,11 @@ function KanbanCardView({
       className={KANBAN_BOARD_CARD_FRAME_CLASS}
     >
       <div
-        className="relative h-full rounded-[9px] p-[2px]"
+        className="relative rounded-[9px] p-[2px]"
         style={typeRing}
       >
         <article
-          className={`relative flex h-full flex-col overflow-hidden rounded-[7px] border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.1] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] ${dragArticleClass}`}
+          className={`relative flex flex-col overflow-hidden rounded-[7px] border border-black/[0.1] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] dark:border-white/[0.1] cursor-grab active:cursor-grabbing hover:border-[color-mix(in_srgb,var(--kanban-accent)_35%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.25)] dark:hover:border-white/[0.12] dark:hover:shadow-[0_8px_28px_rgba(0,0,0,0.5)] ${dragArticleClass}`}
           {...(dragListeners ?? {})}
           onMouseMove={(event) => {
             if (hoverPreviewEnabled && onPreviewMove) onPreviewMove(card, event);
@@ -355,19 +358,23 @@ function KanbanCardView({
             onOpen();
           }}
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[7px]">
-            {blocked ? (
-              <div
-                className="flex shrink-0 items-start gap-1 border-b border-[#7f1d1d] bg-gradient-to-b from-[#dc2626] to-[#b91c1c] px-2 py-1 pr-8 text-white dark:from-[#c02626] dark:to-[#991b1b]"
-                aria-label={blockReasonText}
-                title={blockReasonText}
-              >
-                <IconBrick className="mt-0.5 h-3 w-3 shrink-0 text-white" />
-                <span className="min-w-0 flex-1 break-words text-[calc(0.48rem+3px)] font-bold uppercase leading-snug tracking-wide line-clamp-3">
-                  {blockReasonText}
-                </span>
-              </div>
-            ) : null}
+          {blocked ? (
+            <div
+              className="flex shrink-0 items-start gap-1 rounded-t-[7px] border-b border-[#7f1d1d] bg-gradient-to-b from-[#dc2626] to-[#b91c1c] px-2 py-1 pr-8 text-white dark:from-[#c02626] dark:to-[#991b1b]"
+              aria-label={blockReasonText}
+              title={blockReasonText}
+            >
+              <IconBrick className="mt-0.5 h-3 w-3 shrink-0 text-white" />
+              <span className="min-w-0 flex-1 break-words text-[calc(0.48rem+3px)] font-bold uppercase leading-snug tracking-wide line-clamp-3">
+                {blockReasonText}
+              </span>
+            </div>
+          ) : null}
+          <div
+            className={`${KANBAN_BOARD_CARD_BODY_ASPECT_CLASS} ${
+              blocked ? "rounded-b-[7px]" : "rounded-[7px]"
+            }`}
+          >
             <div
               className="flex shrink-0 items-center gap-1 border-b border-black/[0.08] py-0.5 pl-2 pr-8 dark:border-white/[0.1]"
               style={{
@@ -396,12 +403,14 @@ function KanbanCardView({
                 <span className="text-[var(--kanban-text)]">{foreignBoardLabel}</span>
               </div>
             ) : null}
-            <div className="min-h-0 min-w-0 flex-1 px-2 pb-0.5 pt-1.5">
+            <div className="min-h-[3.4rem] min-w-0 flex-1 px-2 pb-0.5 pt-1.5">
               <KanbanCardTitleFit title={card.title} />
             </div>
-            <div className="relative z-[1] mt-auto flex shrink-0 items-end gap-1.5 bg-[var(--kanban-card-bg)] px-2 pb-2 pt-0.5">
+            <div className="relative z-[1] mt-auto flex shrink-0 flex-nowrap items-end gap-1.5 bg-[var(--kanban-card-bg)] px-2 pb-2 pt-0.5">
               <span className={duePillClass} title={stageDue ? "Срок этапа" : "Срок не задан"}>
-                {stageDue ? formatDate(stageDue) : "дд.мм.гггг"}
+                {stageDue
+                  ? formatDate(stageDue).replace(/\sг\.?$/u, "\u00a0г.")
+                  : "дд.мм.гггг"}
               </span>
               <div className="ml-auto flex min-w-0 flex-row flex-wrap items-end justify-end gap-x-0.5 gap-y-0.5">
                 {primaryMemberId ? (
