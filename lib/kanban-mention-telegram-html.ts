@@ -2,7 +2,6 @@
  * HTML для TG: кто упомянул + ссылки + текст комментария (и в первой строке, и отдельно).
  * commentText — как ввёл пользователь; в HTML только escapeTelegramHtml.
  */
-import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 
 const TELEGRAM_MENTION_COMMENT_MAX = 800;
@@ -14,8 +13,9 @@ export type KanbanMentionTelegramContext = {
   linkedOrderId?: string | null;
   /** Текст ссылки на наряд — номер наряда (как в списке заказов). */
   orderNumberLabel?: string | null;
+  /** Не используется для ссылки «карточке» — всегда канбан CRM. */
   kaitenCardId?: number | null;
-  /** Fallback и если веб-URL Kaiten не собрался из env. */
+  /** Абсолютная ссылка на карточку в канбане CRM. */
   kanbanCardAbsoluteUrl: string;
   /** Абсолютная ссылка на страницу наряда в CRM; нужна при наличии linkedOrderId. */
   orderPageAbsoluteUrl?: string | null;
@@ -49,15 +49,7 @@ function actorWhoLine(ctx: KanbanMentionTelegramContext): string {
 function mentionHeadHtml(ctx: KanbanMentionTelegramContext): string {
   const who = actorWhoLine(ctx);
 
-  const kid = ctx.kaitenCardId;
-  const kaitenHref =
-    kid != null && Number.isFinite(Number(kid))
-      ? getKaitenCardWebUrl(Number(kid))
-      : null;
-  const cardHref =
-    kaitenHref && kaitenHref.trim().length > 0
-      ? kaitenHref.trim()
-      : ctx.kanbanCardAbsoluteUrl.trim();
+  const cardHref = ctx.kanbanCardAbsoluteUrl.trim();
   const cardLink = telegramHtmlLink(cardHref, "карточке");
 
   const oid = (ctx.linkedOrderId || "").trim();

@@ -1,15 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   buildKanbanMentionInCommentTelegramHtmlLine,
   buildKanbanMentionInCommentTelegramHtmlLines,
   extractOrderNumberLabelFromKanbanCardTitle,
   telegramMentionCommentQuote,
 } from "@/lib/kanban-mention-telegram-html";
-
-vi.mock("@/lib/kaiten-card-web-url", () => ({
-  getKaitenCardWebUrl: (id: number) =>
-    id === 999 ? "https://kaiten.example/card/999" : null,
-}));
 
 describe("extractOrderNumberLabelFromKanbanCardTitle", () => {
   it("берёт первый токен первой строки", () => {
@@ -45,7 +40,7 @@ describe("telegramMentionCommentQuote", () => {
 });
 
 describe("buildKanbanMentionInCommentTelegramHtmlLine", () => {
-  it("заказ + карточка: номер наряда и ссылка на Kaiten", () => {
+  it("заказ + карточка: номер наряда и ссылка на канбан CRM", () => {
     const line = buildKanbanMentionInCommentTelegramHtmlLine({
       actorDisplayName: "Иван Петров",
       actorMentionHandle: "dent",
@@ -61,8 +56,9 @@ describe("buildKanbanMentionInCommentTelegramHtmlLine", () => {
       '<a href="https://crm.example/orders/ord1">2605-002</a>',
     );
     expect(line).toContain(
-      '<a href="https://kaiten.example/card/999">карточке</a>',
+      '<a href="https://crm.example/kanban?card=x">карточке</a>',
     );
+    expect(line).not.toContain("kaiten.example");
     expect(line).not.toContain(": ");
   });
 
