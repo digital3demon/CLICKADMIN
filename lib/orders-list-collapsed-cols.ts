@@ -1,9 +1,10 @@
 /**
  * Свёрнутые столбцы списка нарядов.
- * scope=user в client-state + localStorage, чтобы не ждать API.
+ * scope=user в client-state; localStorage — ключ с userId (+ demo/live bucket).
  */
 
 export const ORDERS_LIST_COLLAPSED_COLS_KEY = "ordersListCollapsedColsV1";
+/** Без userId — только legacy; не читать/писать напрямую. */
 export const ORDERS_LIST_COLLAPSED_COLS_LS = "crm.ordersListCollapsedColsV1";
 
 export const ORDERS_LIST_COL_IDS = [
@@ -122,10 +123,24 @@ export function firstVisibleColId(
   return ORDERS_LIST_COL_IDS.find((id) => !hidden.has(id)) ?? null;
 }
 
-export function readCollapsedColsFromLocalStorage(): OrdersListColId[] {
+/** localStorage: отдельный ключ на пользователя и demo/live bucket. */
+export function ordersListCollapsedColsLsKey(
+  userId: string,
+  bucket: "live" | "demo" = "live",
+): string {
+  const uid = userId.trim();
+  if (!uid) return ORDERS_LIST_COLLAPSED_COLS_LS;
+  return `${ORDERS_LIST_COLLAPSED_COLS_LS}.${bucket}.${uid}`;
+}
+
+export function readCollapsedColsFromLocalStorage(
+  userId: string,
+  bucket: "live" | "demo" = "live",
+): OrdersListColId[] {
   if (typeof window === "undefined") return [];
+  const key = ordersListCollapsedColsLsKey(userId, bucket);
   try {
-    const raw = window.localStorage.getItem(ORDERS_LIST_COLLAPSED_COLS_LS);
+    const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     return parseCollapsedColIds(JSON.parse(raw) as unknown);
   } catch {
@@ -134,12 +149,16 @@ export function readCollapsedColsFromLocalStorage(): OrdersListColId[] {
 }
 
 export function writeCollapsedColsToLocalStorage(
+  userId: string,
   ids: readonly OrdersListColId[],
+  bucket: "live" | "demo" = "live",
 ): void {
   if (typeof window === "undefined") return;
+  const uid = userId.trim();
+  if (!uid) return;
   try {
     window.localStorage.setItem(
-      ORDERS_LIST_COLLAPSED_COLS_LS,
+      ordersListCollapsedColsLsKey(uid, bucket),
       JSON.stringify({ v: 1, collapsed: [...ids] }),
     );
   } catch {

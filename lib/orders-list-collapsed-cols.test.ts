@@ -4,6 +4,7 @@ import {
   collapsedRunAtStart,
   collapsedRunsAfter,
   firstVisibleColId,
+  ordersListCollapsedColsLsKey,
   parseCollapsedColIds,
   toggleCollapsedColId,
 } from "@/lib/orders-list-collapsed-cols";
@@ -65,5 +66,17 @@ describe("collapsedRunAtStart", () => {
     expect(collapsedRunAtStart(["chat"])).toEqual(["chat"]);
     expect(firstVisibleColId(["chat"])).toBe("print");
     expect(collapsedRunAtStart(["type"])).toEqual([]);
+  });
+});
+
+describe("ordersListCollapsedColsLsKey", () => {
+  it("разные пользователи — разные ключи localStorage", () => {
+    expect(ordersListCollapsedColsLsKey("u1", "live")).toBe(
+      "crm.ordersListCollapsedColsV1.live.u1",
+    );
+    expect(ordersListCollapsedColsLsKey("u2", "live")).not.toBe(
+      ordersListCollapsedColsLsKey("u1", "live"),
+    );
+    expect(ordersListCollapsedColsLsKey("u1", "demo")).toContain(".demo.");
   });
 });

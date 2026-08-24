@@ -9,6 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useSessionUser } from "@/components/providers/SessionUserProvider";
+import { readClientStorageBucket } from "@/lib/client-storage-bucket";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import {
   collapsedColsAttr,
@@ -42,12 +44,20 @@ export function useOrdersListColCollapse(): Ctx {
 }
 
 export function OrdersListColumnsProvider({ children }: { children: ReactNode }) {
+  const { user, ready, isDemo } = useSessionUser();
+  const userId = user?.id?.trim() ?? "";
+  const bucket = isDemo ? "demo" : readClientStorageBucket();
+
   const [collapsed, setCollapsed] = useState<OrdersListColId[]>([]);
 
   useEffect(() => {
-    const local = readCollapsedColsFromLocalStorage();
-    if (local.length) setCollapsed(local);
+    if (!ready || !userId) {
+      setCollapsed([]);
+      return;
+    }
     let cancelled = false;
+    const local = readCollapsedColsFromLocalStorage(userId, bucket);
+    setCollapsed(local);
     void (async () => {
       const remote = await readClientState<unknown>(
         "user",
@@ -57,7 +67,7 @@ export function OrdersListColumnsProvider({ children }: { children: ReactNode })
       if (remote != null) {
         const parsed = parseCollapsedColIds(remote);
         setCollapsed(parsed);
-        writeCollapsedColsToLocalStorage(parsed);
+        writeCollapsedColsToLocalStorage(userId, parsed, bucket);
         return;
       }
       if (local.length) {
@@ -71,20 +81,24 @@ export function OrdersListColumnsProvider({ children }: { children: ReactNode })
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ready, userId, bucket]);
 
-  const toggle = useCallback((id: OrdersListColId) => {
-    setCollapsed((prev) => {
-      const next = toggleCollapsedColId(prev, id);
-      writeCollapsedColsToLocalStorage(next);
-      void writeClientState(
-        "user",
-        ORDERS_LIST_COLLAPSED_COLS_KEY,
-        collapsedColsPayload(next),
-      );
-      return next;
-    });
-  }, []);
+  const toggle = useCallback(
+    (id: OrdersListColId) => {
+      if (!userId) return;
+      setCollapsed((prev) => {
+        const next = toggleCollapsedColId(prev, id);
+        writeCollapsedColsToLocalStorage(userId, next, bucket);
+        void writeClientState(
+          "user",
+          ORDERS_LIST_COLLAPSED_COLS_KEY,
+          collapsedColsPayload(next),
+        );
+        return next;
+      });
+    },
+    [userId, bucket],
+  );
 
   const value = useMemo<Ctx>(
     () => ({
