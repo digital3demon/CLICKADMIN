@@ -85,6 +85,34 @@ describe("kanban chat sync", () => {
     expect(result.next[0]?.externalCommentId).toBe("123");
   });
 
+  it("не воскрешает удалённый CRM-комментарий из Kaiten", () => {
+    const current: CardComment[] = [
+      {
+        id: "cm-gone",
+        userId: "u1",
+        text: "было",
+        createdAt: "2026-05-07T10:00:00.000Z",
+        externalCommentId: "1001",
+        source: "CRM",
+        syncStatus: "synced",
+        deletedAt: "2026-05-07T11:00:00.000Z",
+      },
+    ];
+    const merged = upsertKaitenCommentsToCard(current, [
+      {
+        id: 1001,
+        text: "было",
+        created: "2026-05-07T10:00:00.000Z",
+        authorName: "Автор",
+        isCrm: true,
+        crmDraftId: "cm-gone",
+      },
+    ]);
+    expect(merged.next).toHaveLength(1);
+    expect(merged.next[0]?.deletedAt).toBe("2026-05-07T11:00:00.000Z");
+    expect(merged.next[0]?.text).toBe("было");
+  });
+
   it("adds new kaiten comments with external id and synced status", () => {
     const current: CardComment[] = [];
     const merged = upsertKaitenCommentsToCard(current, [

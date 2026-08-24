@@ -2,6 +2,11 @@
 
 import type { KanbanBoard } from "@/lib/kanban/types";
 import type { KanbanMemberPickerMode } from "@/lib/kanban/kanban-card-members-client";
+import {
+  KANBAN_MEMBER_PICKER_PAGE_SIZE,
+  sliceKanbanMemberPickerPage,
+  splitPickerIntoColumns,
+} from "@/lib/kanban/member-picker-page";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
@@ -13,19 +18,6 @@ import {
 
 const baseInput =
   "w-full rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2.5 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)]";
-
-/** Высота столбца: ~6 строк пользователей, дальше — прокрутка внутри столбца. */
-const PICKER_COLUMN_MAX_HEIGHT = "17.5rem";
-
-function splitPickerIntoColumns<T>(items: readonly T[]): [T[], T[], T[]] {
-  if (items.length === 0) return [[], [], []];
-  const size = Math.ceil(items.length / 3);
-  return [
-    items.slice(0, size),
-    items.slice(size, size * 2),
-    items.slice(size * 2),
-  ];
-}
 
 type KanbanMemberPickerDialogProps = {
   open: boolean;
@@ -47,11 +39,13 @@ export function KanbanMemberPickerDialog({
   const { list: crmList } = useKanbanCrmUsers();
   const [pickerIds, setPickerIds] = useState<string[]>(() => [...initialUserIds]);
   const [pickerQuery, setPickerQuery] = useState("");
+  const [pickerPage, setPickerPage] = useState(0);
 
   useEffect(() => {
     if (!open) return;
     setPickerIds([...initialUserIds]);
     setPickerQuery("");
+    setPickerPage(0);
     // Только при открытии / смене режима — иначе новый массив initialUserIds
     // с каждого рендера родителя сбрасывает снятие галочек.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on open/mode only
@@ -73,10 +67,18 @@ export function KanbanMemberPickerDialog({
     });
   }, [pickerMerged, pickerQuery]);
 
-  const pickerColumns = useMemo(
-    () => splitPickerIntoColumns(pickerFiltered),
-    [pickerFiltered],
+  const pickerSlice = useMemo(
+    () => sliceKanbanMemberPickerPage(pickerFiltered, pickerPage),
+    [pickerFiltered, pickerPage],
   );
+  const pickerColumns = useMemo(
+    () => splitPickerIntoColumns(pickerSlice.items),
+    [pickerSlice.items],
+  );
+
+  useEffect(() => {
+    setPickerPage(0);
+  }, [pickerQuery]);
 
   const togglePickerId = (uid: string) => {
     setPickerIds((prev) =>
@@ -122,11 +124,7 @@ export function KanbanMemberPickerDialog({
             </p>
           ) : (
             pickerColumns.map((column, columnIndex) => (
-              <div
-                key={columnIndex}
-                className="min-w-0 overflow-y-auto"
-                style={{ maxHeight: PICKER_COLUMN_MAX_HEIGHT }}
-              >
+              <div key={columnIndex} className="min-w-0">
                 <div className="flex flex-col gap-2">
                   {column.map((row) => {
                     const selected = pickerIds.includes(row.id);
@@ -162,6 +160,33 @@ export function KanbanMemberPickerDialog({
             ))
           )}
         </div>
+        {pickerFiltered.length > KANBAN_MEMBER_PICKER_PAGE_SIZE ? (
+          <div className="mt-3 flex items-center justify-center gap-2 text-[0.75rem] text-[var(--kaiten-modal-muted)]">
+            <button
+              type="button"
+              className="rounded-md border border-[var(--kaiten-modal-border)] px-2 py-1 disabled:opacity-40"
+              disabled={pickerSlice.page <= 0}
+              onClick={() => setPickerPage((p) => Math.max(0, p - 1))}
+            >
+              Назад
+            </button>
+            <span>
+              {pickerSlice.page + 1} / {pickerSlice.pageCount}
+            </span>
+            <button
+              type="button"
+              className="rounded-md border border-[var(--kaiten-modal-border)] px-2 py-1 disabled:opacity-40"
+              disabled={pickerSlice.page >= pickerSlice.pageCount - 1}
+              onClick={() =>
+                setPickerPage((p) =>
+                  Math.min(pickerSlice.pageCount - 1, p + 1),
+                )
+              }
+            >
+              Далее
+            </button>
+          </div>
+        ) : null}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"

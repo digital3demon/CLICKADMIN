@@ -7,6 +7,7 @@
  * Kaiten при пустом store — только `after()`, ответ не ждёт.
  * Без local: после ответа ещё тянем файлы Kaiten и JSON доски (чат из списка нарядов).
  * POST: пишем CRM-ленту, inbox и TG-упоминания в запросе; выгрузка в Kaiten — `after()`.
+ * PATCH/DELETE: автор правит или удаляет своё сообщение в течение 12 часов.
  */
 import { after, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
@@ -24,7 +25,9 @@ import {
 import {
   getKaitenRestAuth,
   kaitenCreateComment,
+  kaitenDeleteComment,
   kaitenListComments,
+  kaitenUpdateComment,
 } from "@/lib/kaiten-rest";
 import {
   createOrderChatCorrectionIfNeeded,
@@ -48,6 +51,11 @@ import { advanceKaitenLabMentionWaterlineOnly } from "@/lib/order-kaiten-lab-men
 import {
   commentBodyDedupKey,
 } from "@/lib/kanban/chat-sync";
+import {
+  applyEditedKanbanChatText,
+  canAuthorMutateKanbanChatMessage,
+  isKanbanChatCommentDeleted,
+} from "@/lib/kanban/chat-message-edit";
 import { resolveLinkedOrderKanbanDescription } from "@/lib/kanban/kaiten-linked-order";
 import {
   loadKanbanOrderComments,
@@ -281,6 +289,8 @@ function normalizeCardComment(row: CardComment): CardComment {
     source: row.source === "KAITEN" ? "KAITEN" : "CRM",
     syncStatus: normalizeSyncStatus(row.syncStatus),
     syncedAt: row.syncedAt ?? null,
+    editedAt: row.editedAt ?? null,
+    deletedAt: row.deletedAt ?? null,
   };
 }
 
@@ -312,6 +322,7 @@ function findCardByLinkedOrderId(state: KanbanAppState, orderId: string): CardLo
 function normalizeCardCommentsForApi(list: CardComment[]): CardComment[] {
   return (list || [])
     .map((row) => normalizeCardComment(row))
+    .filter((row) => !isKanbanChatCommentDeleted(row))
     .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
 }
 
@@ -877,4 +888,231 @@ export async function POST(
   );
 
   return NextResponse.json({ ok: true, comment: row });
+}
+
+type MutateBody = {
+  commentId?: string;
+  text?: string;
+};
+
+async function persistKanbanChatComments(
+  tenantId: string,
+  orderId: string,
+  comments: CardComment[],
+): Promise<void> {
+  await saveKanbanOrderComments(tenantId, orderId, comments);
+  try {
+    const loaded = await loadTenantKanbanState(tenantId);
+    const loc = loaded.state
+      ? findCardByLinkedOrderId(loaded.state, orderId)
+      : null;
+    if (!loaded.state || !loc) return;
+    const next = structuredClone(loaded.state);
+    const card =
+      next.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[
+        loc.cardIndex
+      ]!;
+    card.comments = comments;
+    card.updatedAt = nowIso();
+    await saveTenantKanbanStateWithRetry(tenantId, next, loaded.updatedAt);
+  } catch (e) {
+    console.error("[kanban-chat] persist card comments", orderId, e);
+  }
+}
+
+async function loadOwnedMutableComment(
+  tenantId: string,
+  orderId: string,
+  sessionSub: string,
+  commentId: string,
+): Promise<
+  | { ok: true; stored: CardComment[]; index: number; row: CardComment }
+  | { ok: false; status: number; error: string }
+> {
+  const stored = (await loadKanbanOrderComments(tenantId, orderId)).map((c) =>
+    normalizeCardComment(c),
+  );
+  const index = stored.findIndex(
+    (c) => String(c.id || "").trim() === commentId,
+  );
+  if (index < 0) {
+    return { ok: false, status: 404, error: "Сообщение не найдено" };
+  }
+  const row = stored[index]!;
+  if (
+    !canAuthorMutateKanbanChatMessage({
+      userId: row.userId,
+      currentUserId: sessionSub,
+      createdAt: row.createdAt,
+      deletedAt: row.deletedAt,
+    })
+  ) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Изменить или удалить можно только своё сообщение в течение 12 часов",
+    };
+  }
+  return { ok: true, stored, index, row };
+}
+
+export async function PATCH(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const session = await getSessionFromCookies();
+  if (!session?.sub) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+  const tenantId = await getTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Нет контекста организации" }, { status: 403 });
+  }
+  const { id } = await ctx.params;
+  const orderId = String(id || "").trim();
+  if (!orderId) {
+    return NextResponse.json({ error: "Не указан id" }, { status: 400 });
+  }
+  let body: MutateBody;
+  try {
+    body = (await req.json()) as MutateBody;
+  } catch {
+    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  }
+  const commentId = String(body.commentId || "").trim();
+  if (!commentId) {
+    return NextResponse.json({ error: "Не указан комментарий" }, { status: 400 });
+  }
+  const loaded = await loadOwnedMutableComment(
+    tenantId,
+    orderId,
+    session.sub,
+    commentId,
+  );
+  if (!loaded.ok) {
+    return NextResponse.json({ error: loaded.error }, { status: loaded.status });
+  }
+  const nextText = applyEditedKanbanChatText(loaded.row.text, String(body.text || ""));
+  if (!nextText) {
+    return NextResponse.json({ error: "Пустой текст" }, { status: 400 });
+  }
+  const edited: CardComment = {
+    ...loaded.row,
+    text: nextText,
+    editedAt: nowIso(),
+  };
+  const nextList = loaded.stored.map((c, i) => (i === loaded.index ? edited : c));
+  try {
+    await persistKanbanChatComments(tenantId, orderId, nextList);
+  } catch (e) {
+    console.error("[kanban-chat PATCH] persist", orderId, e);
+    return NextResponse.json(
+      { error: "Не удалось сохранить правку" },
+      { status: 500 },
+    );
+  }
+  const ext = kaitenJsonIntId(edited.externalCommentId);
+  const ordersPrisma = await getOrdersPrisma();
+  const order = await ordersPrisma.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: { kaitenCardId: true },
+  });
+  if (
+    ext != null &&
+    order?.kaitenCardId != null &&
+    Number.isFinite(order.kaitenCardId)
+  ) {
+    const auth = getKaitenRestAuth();
+    if (auth) {
+      const kaitenText = buildKaitenCommentTextWithCrmAuthor(
+        edited.authorLabel || "CRM",
+        edited.text,
+        String(edited.id || "").trim() || null,
+      );
+      const upd = await kaitenUpdateComment(auth, order.kaitenCardId, ext, kaitenText, {
+        burst: true,
+      });
+      if (!upd.ok) {
+        console.error("[kanban-chat PATCH] kaiten", orderId, upd.error);
+      }
+    }
+  }
+  return NextResponse.json({ ok: true, comment: edited });
+}
+
+export async function DELETE(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const session = await getSessionFromCookies();
+  if (!session?.sub) {
+    return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  }
+  const tenantId = await getTenantIdForSession(session);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Нет контекста организации" }, { status: 403 });
+  }
+  const { id } = await ctx.params;
+  const orderId = String(id || "").trim();
+  if (!orderId) {
+    return NextResponse.json({ error: "Не указан id" }, { status: 400 });
+  }
+  const url = new URL(req.url);
+  let commentId = String(url.searchParams.get("commentId") || "").trim();
+  if (!commentId) {
+    try {
+      const body = (await req.json()) as MutateBody;
+      commentId = String(body.commentId || "").trim();
+    } catch {
+      commentId = "";
+    }
+  }
+  if (!commentId) {
+    return NextResponse.json({ error: "Не указан комментарий" }, { status: 400 });
+  }
+  const loaded = await loadOwnedMutableComment(
+    tenantId,
+    orderId,
+    session.sub,
+    commentId,
+  );
+  if (!loaded.ok) {
+    return NextResponse.json({ error: loaded.error }, { status: loaded.status });
+  }
+  const deleted: CardComment = {
+    ...loaded.row,
+    deletedAt: nowIso(),
+  };
+  const nextList = loaded.stored.map((c, i) => (i === loaded.index ? deleted : c));
+  try {
+    await persistKanbanChatComments(tenantId, orderId, nextList);
+  } catch (e) {
+    console.error("[kanban-chat DELETE] persist", orderId, e);
+    return NextResponse.json(
+      { error: "Не удалось удалить сообщение" },
+      { status: 500 },
+    );
+  }
+  const ext = kaitenJsonIntId(deleted.externalCommentId);
+  const ordersPrisma = await getOrdersPrisma();
+  const order = await ordersPrisma.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: { kaitenCardId: true },
+  });
+  if (
+    ext != null &&
+    order?.kaitenCardId != null &&
+    Number.isFinite(order.kaitenCardId)
+  ) {
+    const auth = getKaitenRestAuth();
+    if (auth) {
+      const del = await kaitenDeleteComment(auth, order.kaitenCardId, ext, {
+        burst: true,
+      });
+      if (!del.ok) {
+        console.error("[kanban-chat DELETE] kaiten", orderId, del.error);
+      }
+    }
+  }
+  return NextResponse.json({ ok: true });
 }

@@ -40,6 +40,12 @@ import {
   kanbanChatMessageShellClass,
   shouldShowKanbanChatSyncStatus,
 } from "@/lib/kanban/chat-message-display";
+import {
+  applyEditedKanbanChatText,
+  canAuthorMutateKanbanChatMessage,
+  isChatComposerSendEnter,
+  visibleKanbanChatComments,
+} from "@/lib/kanban/chat-message-edit";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
 import {
@@ -1327,6 +1333,91 @@ export function KanbanCardModal({
     return true;
   };
 
+  const patchComment = async (
+    commentId: string,
+    nextBody: string,
+  ): Promise<boolean> => {
+    const existing = (card.comments || []).find((c) => c.id === commentId);
+    if (!existing) return false;
+    const nextText = applyEditedKanbanChatText(existing.text, nextBody);
+    if (!nextText) return false;
+    if (card.linkedOrderId) {
+      try {
+        const res = await fetch(`/api/orders/${card.linkedOrderId}/kanban-chat`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ commentId, text: nextBody }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          comment?: CardComment;
+        };
+        if (!res.ok) {
+          toast(data.error ?? "Не удалось изменить сообщение", true);
+          return false;
+        }
+        onApply((b) => {
+          const fc = findCard(b, cardId);
+          if (!fc) return;
+          fc.card.comments = (fc.card.comments || []).map((c) =>
+            c.id === commentId ? { ...c, ...(data.comment ?? { text: nextText }) } : c,
+          );
+        });
+        return true;
+      } catch {
+        toast("Сеть недоступна", true);
+        return false;
+      }
+    }
+    onApply((b) => {
+      const fc = findCard(b, cardId);
+      if (!fc) return;
+      fc.card.comments = (fc.card.comments || []).map((c) =>
+        c.id === commentId
+          ? { ...c, text: nextText, editedAt: new Date().toISOString() }
+          : c,
+      );
+    });
+    return true;
+  };
+
+  const deleteComment = async (commentId: string): Promise<boolean> => {
+    if (!window.confirm("Удалить это сообщение?")) return false;
+    if (card.linkedOrderId) {
+      try {
+        const res = await fetch(
+          `/api/orders/${card.linkedOrderId}/kanban-chat?commentId=${encodeURIComponent(commentId)}`,
+          { method: "DELETE", credentials: "include" },
+        );
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          toast(data.error ?? "Не удалось удалить сообщение", true);
+          return false;
+        }
+        onApply((b) => {
+          const fc = findCard(b, cardId);
+          if (!fc) return;
+          fc.card.comments = (fc.card.comments || []).map((c) =>
+            c.id === commentId ? { ...c, deletedAt: new Date().toISOString() } : c,
+          );
+        });
+        return true;
+      } catch {
+        toast("Сеть недоступна", true);
+        return false;
+      }
+    }
+    onApply((b) => {
+      const fc = findCard(b, cardId);
+      if (!fc) return;
+      fc.card.comments = (fc.card.comments || []).map((c) =>
+        c.id === commentId ? { ...c, deletedAt: new Date().toISOString() } : c,
+      );
+    });
+    return true;
+  };
+
   const persistAttachedFiles = async (
     fileList: File[],
     manualByIndex?: Map<number, { laneId: string; skipProduction: boolean }>,
@@ -1491,6 +1582,8 @@ export function KanbanCardModal({
   const createdWhen = formatDateTimeRu(card.createdAt);
 
   const cardImageFiles = (card.files || []).filter((f) => isCardFileImage(f));
+  /** В блоке слева — не картинки: PNG/JPEG и т.п. уже в сетке чата. */
+  const cardDocumentFiles = (card.files || []).filter((f) => !isCardFileImage(f));
   const cardPdfFiles = (card.files || []).filter((f) => isPdfMime(f.mime || "", f.name));
   const childLookupBoards = allBoards && allBoards.length > 0 ? allBoards : [board];
   const childStatusRows = (card.childCardIds || [])
@@ -2515,14 +2608,16 @@ export function KanbanCardModal({
                       Файлы наряда и чата
                     </div>
                     <div className="space-y-1.5 overflow-x-hidden">
-                      {(card.files || []).length === 0 ? (
+                      {cardDocumentFiles.length === 0 ? (
                         <p className="m-0 px-0.5 py-1 text-[0.7rem] leading-snug text-[var(--kaiten-modal-muted)]">
-                          {card.parentCardId || (card.childCardIds || []).length > 0
-                            ? "Файлы производства хранятся только в CRM-канбане. Перетащите архив/файл в чат справа."
-                            : "Вложения из наряда подтягиваются сюда автоматически. Чтобы отправить ещё файл в Kaiten и обсудить в чате — перетащите его в область чата справа."}
+                          {cardImageFiles.length > 0
+                            ? "Изображения смотрите в чате. Здесь — документы (PDF, архивы и другие файлы)."
+                            : card.parentCardId || (card.childCardIds || []).length > 0
+                              ? "Файлы производства хранятся только в CRM-канбане. Перетащите архив/файл в чат справа."
+                              : "Вложения из наряда подтягиваются сюда автоматически. Чтобы отправить ещё файл в Kaiten и обсудить в чате — перетащите его в область чата справа."}
                         </p>
                       ) : (
-                        (card.files || []).map((f) => (
+                        cardDocumentFiles.map((f) => (
                           <div
                             key={f.id}
                             className="group relative rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] py-0.5 pl-1 pr-14"
@@ -2824,6 +2919,9 @@ export function KanbanCardModal({
                     Boolean(card.linkedOrderId)
                   }
                   onSend={sendComment}
+                  onPatchComment={patchComment}
+                  onDeleteComment={deleteComment}
+                  sessionUserId={chatActorUserId}
                   onFilesDropped={attachFilesFromChat}
                   onOpenAttachment={openAttachment}
                 />
@@ -3195,7 +3293,10 @@ function ChatPanel({
   productionMentionTag,
   productionUserIds,
   canSendPt = false,
+  sessionUserId,
   onSend,
+  onPatchComment,
+  onDeleteComment,
   onFilesDropped,
   onOpenAttachment,
 }: {
@@ -3209,16 +3310,21 @@ function ChatPanel({
   productionUserIds: readonly string[];
   /** Кнопка «ПТ»: старший техник, админ, руководитель, владелец; наряд привязан. */
   canSendPt?: boolean;
+  sessionUserId?: string;
   onSend: (
     t: string,
     action?: ChatAction,
     parentId?: string | null,
   ) => boolean | Promise<boolean>;
+  onPatchComment: (commentId: string, nextBody: string) => Promise<boolean>;
+  onDeleteComment: (commentId: string) => Promise<boolean>;
   onFilesDropped: (files: File[]) => void | Promise<void>;
   onOpenAttachment: (f: CardFile) => void;
 }) {
   const { byId: crmChatById, list: crmChatList } = useKanbanCrmUsers();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const [inp, setInp] = useState("");
   const [caretPos, setCaretPos] = useState(0);
   const [dragOver, setDragOver] = useState(false);
@@ -3239,7 +3345,11 @@ function ChatPanel({
     return m;
   }, [card.comments]);
   const chatBlocks = useMemo(
-    () => buildChatRenderBlocks(card.comments || [], card),
+    () =>
+      buildChatRenderBlocks(
+        visibleKanbanChatComments(card.comments || []),
+        card,
+      ),
     [card.comments, card.files, card.id],
   );
   const mentionOptions = useMemo<ChatMentionOption[]>(() => {
@@ -3495,19 +3605,50 @@ function ChatPanel({
               <div className="mb-0.5 flex items-start justify-between gap-2">
                 <div className="min-w-0 text-[0.7rem] text-[var(--kaiten-modal-muted)]">
                   {author} · {relativeTimeRu(cm.createdAt)}
+                  {cm.editedAt ? " · изм." : ""}
                 </div>
-                <button
-                  type="button"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
-                  title="Ответить"
-                  aria-label="Ответить на комментарий"
-                  onClick={() => {
-                    setReplyTo(cm);
-                    requestAnimationFrame(() => inputRef.current?.focus());
-                  }}
-                >
-                  <IconReply className={TOOLBAR_CIRCLE_ICON} />
-                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {canAuthorMutateKanbanChatMessage({
+                    userId: cm.userId,
+                    currentUserId: sessionUserId,
+                    createdAt: cm.createdAt,
+                    deletedAt: cm.deletedAt,
+                  }) ? (
+                    <>
+                      <button
+                        type="button"
+                        className="rounded border border-[var(--kaiten-modal-border)] px-1.5 py-0.5 text-[0.65rem] text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
+                        onClick={() => {
+                          setEditingId(cm.id);
+                          setEditDraft(display.body);
+                        }}
+                      >
+                        Изменить
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-[var(--kaiten-modal-border)] px-1.5 py-0.5 text-[0.65rem] text-[var(--kaiten-modal-muted)] hover:text-red-300"
+                        onClick={() => {
+                          void onDeleteComment(cm.id);
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
+                    title="Ответить"
+                    aria-label="Ответить на комментарий"
+                    onClick={() => {
+                      setReplyTo(cm);
+                      requestAnimationFrame(() => inputRef.current?.focus());
+                    }}
+                  >
+                    <IconReply className={TOOLBAR_CIRCLE_ICON} />
+                  </button>
+                </div>
               </div>
               {parentAuthor ? (
                 <p className="mb-1 text-[0.65rem] leading-snug text-[var(--kaiten-modal-muted)]">
@@ -3523,7 +3664,44 @@ function ChatPanel({
                   {chatSyncStatusLabel(cm)}
                 </div>
               ) : null}
-              {cm.imageFileId && !imgFile ? (
+              {editingId === cm.id ? (
+                <div className="mt-1 flex flex-col gap-1.5">
+                  <textarea
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    rows={3}
+                    className="w-full resize-y rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.8125rem] text-[var(--kaiten-modal-text)]"
+                  />
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      type="button"
+                      className="rounded border border-[var(--kaiten-modal-border)] px-2 py-0.5 text-[0.7rem]"
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditDraft("");
+                      }}
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded bg-[var(--sidebar-blue)] px-2 py-0.5 text-[0.7rem] text-white disabled:opacity-40"
+                      disabled={!editDraft.trim()}
+                      onClick={() => {
+                        void (async () => {
+                          const ok = await onPatchComment(cm.id, editDraft);
+                          if (ok) {
+                            setEditingId(null);
+                            setEditDraft("");
+                          }
+                        })();
+                      }}
+                    >
+                      Сохранить
+                    </button>
+                  </div>
+                </div>
+              ) : cm.imageFileId && !imgFile ? (
                 <div className="mt-0.5 text-[0.75rem] text-[var(--kaiten-modal-muted)]">
                   Изображение удалено из карточки
                   {display.body.trim() ? (
@@ -3586,10 +3764,10 @@ function ChatPanel({
             ))}
           </div>
         ) : null}
-        <input
+        <textarea
           ref={inputRef}
-          type="text"
-          className="h-11 w-full min-w-0 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-3 py-2 text-center text-[0.8125rem] font-medium text-[var(--kaiten-modal-text)] placeholder:text-[var(--kaiten-modal-muted)]"
+          rows={2}
+          className="min-h-11 w-full min-w-0 resize-y rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-3 py-2 text-left text-[0.8125rem] font-medium text-[var(--kaiten-modal-text)] placeholder:text-center placeholder:text-[var(--kaiten-modal-muted)]"
           placeholder="Комментарий"
           value={inp}
           onChange={(e) => {
@@ -3623,7 +3801,7 @@ function ChatPanel({
                 );
                 return;
               }
-              if (e.key === "Tab" || e.key === "Enter") {
+              if (e.key === "Tab" || isChatComposerSendEnter(e)) {
                 e.preventDefault();
                 applyMention(
                   mentionFiltered[Math.min(mentionIndex, mentionFiltered.length - 1)],
@@ -3631,7 +3809,7 @@ function ChatPanel({
                 return;
               }
             }
-            if (e.key === "Enter") {
+            if (isChatComposerSendEnter(e)) {
               e.preventDefault();
               void submitMessage();
             }

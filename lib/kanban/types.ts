@@ -76,6 +76,10 @@ export type CardComment = {
   syncStatus?: "local" | "pending" | "synced" | "failed" | "retried";
   /** Когда сообщение успешно синхронизировано с внешней системой. */
   syncedAt?: string | null;
+  /** Правка автором (окно 12 ч с createdAt). */
+  editedAt?: string | null;
+  /** Мягкое удаление автором; ingest из Kaiten не воскрешает строку. */
+  deletedAt?: string | null;
 };
 
 export type CardActivity = {

@@ -41,6 +41,8 @@ export function normalizeCardComment(row: CardComment): CardComment {
     source: row.source === "KAITEN" ? "KAITEN" : "CRM",
     syncStatus: normalizeSyncStatus(row.syncStatus),
     syncedAt: row.syncedAt ?? null,
+    editedAt: row.editedAt ?? null,
+    deletedAt: row.deletedAt ?? null,
   };
 }
 
@@ -271,12 +273,14 @@ export function upsertKaitenCommentsToCard(
 
     const byDraft = draftId ? byId.get(draftId) : undefined;
     if (byDraft && byDraft.source === "CRM") {
+      if (byDraft.deletedAt) continue;
       bindCrmReadback(byDraft, row, extId);
       continue;
     }
 
     const existing = byExternalId.get(extId);
     if (existing) {
+      if (existing.deletedAt) continue;
       if (existing.source === "CRM" || fromCrm) {
         bindCrmReadback(existing, row, extId);
         continue;
@@ -306,6 +310,7 @@ export function upsertKaitenCommentsToCard(
 
     const orphanCrm = next.find((c) => orphanCrmMatchesIncoming(c, row));
     if (orphanCrm) {
+      if (orphanCrm.deletedAt) continue;
       bindCrmReadback(orphanCrm, row, extId);
       continue;
     }

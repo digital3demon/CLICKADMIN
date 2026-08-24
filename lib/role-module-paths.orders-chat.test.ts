@@ -18,6 +18,12 @@ describe("orderChatApiModuleForPath", () => {
     expect(
       orderChatApiModuleForPath("/api/orders/abc/kanban-chat", "POST"),
     ).toBe("KANBAN_CARD_CHAT");
+    expect(
+      orderChatApiModuleForPath("/api/orders/abc/kanban-chat", "PATCH"),
+    ).toBe("KANBAN_CARD_CHAT");
+    expect(
+      orderChatApiModuleForPath("/api/orders/abc/kanban-chat", "DELETE"),
+    ).toBe("KANBAN_CARD_CHAT");
   });
 
   it("kaiten-lab-mention-ack → ORDERS (просмотр)", () => {

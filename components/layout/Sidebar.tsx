@@ -21,7 +21,7 @@ import { profileAvatarEmoji } from "@/lib/profile-avatar-presets";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { fontDisplay } from "@/lib/app-fonts";
-import { LogOut, PanelLeft, PanelLeftClose, Plus } from "lucide-react";
+import { LogOut, Plus } from "lucide-react";
 import { useDesktopSidebarCollapseOptional } from "@/components/layout/desktop-sidebar-collapse";
 
 const WorkdaySunMoon = dynamic(
@@ -68,7 +68,6 @@ export function Sidebar() {
   const uiDesign = useUiDesign();
   const isHarmony = uiDesign === "harmony";
   const railCollapsed = useDesktopSidebarCollapseOptional()?.collapsed ?? false;
-  const sidebarCollapse = useDesktopSidebarCollapseOptional();
   const { open: openNewOrder, canOpen, canCreate, createAccessReady } =
     useNewOrderPanel();
   const { user: sessionUser, isDemo, singleUser: singleUserMode } =
@@ -135,8 +134,8 @@ export function Sidebar() {
             railCollapsed
               ? "relative z-10 mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--sidebar-blue)] text-white outline-offset-2 transition-opacity hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
               : isHarmony
-                ? "relative z-10 mb-8 flex min-w-0 items-center gap-3 pr-9 outline-offset-2 transition-opacity hover:opacity-80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
-                : "relative z-10 mx-auto block w-full min-w-0 max-w-full pr-8 text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+                ? "relative z-10 mb-8 flex min-w-0 items-center gap-3 outline-offset-2 transition-opacity hover:opacity-80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
+                : "relative z-10 mx-auto block w-full min-w-0 max-w-full text-center outline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--sidebar-blue)]"
           }
           title={`На стартовый экран · ${APP_DISPLAY_NAME}`}
         >
@@ -237,29 +236,6 @@ export function Sidebar() {
           </button>
         )}
 
-        {sidebarCollapse ? (
-          <button
-            type="button"
-            className={
-              railCollapsed
-                ? "absolute right-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
-                : "absolute right-2 top-2 z-20 flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)]"
-            }
-            title={railCollapsed ? "Развернуть меню" : "Свернуть меню"}
-            aria-label={railCollapsed ? "Развернуть меню" : "Свернуть меню"}
-            aria-expanded={!railCollapsed}
-            onClick={sidebarCollapse.toggleCollapsed}
-          >
-            {railCollapsed ? (
-              <PanelLeft className="h-4 w-4" aria-hidden />
-            ) : (
-              <>
-                <PanelLeftClose className="h-4 w-4 shrink-0" aria-hidden />
-                <span>Свернуть</span>
-              </>
-            )}
-          </button>
-        ) : null}
       </div>
 
       <div

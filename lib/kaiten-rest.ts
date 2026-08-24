@@ -544,6 +544,67 @@ export async function kaitenListComments(
   return { ok: true, status: r.status, comments: arr, error: null };
 }
 
+export async function kaitenUpdateComment(
+  auth: KaitenAuth,
+  cardId: number,
+  commentId: number,
+  text: string,
+  opts?: KaitenHttpOpts,
+): Promise<{ ok: boolean; status: number; error: string | null }> {
+  const trimmed = text.trim();
+  const paths = [
+    `/comments/${commentId}`,
+    `/cards/${cardId}/comments/${commentId}`,
+  ];
+  let lastErr = "Kaiten error";
+  let lastStatus = 0;
+  for (const path of paths) {
+    const r = await kaitenFetch(
+      auth,
+      path,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: trimmed }),
+      },
+      opts,
+    );
+    if (r.ok) return { ok: true, status: r.status, error: null };
+    lastStatus = r.status;
+    lastErr =
+      typeof r.text === "string" && r.text.trim()
+        ? r.text.slice(0, 800)
+        : "Kaiten error";
+  }
+  return { ok: false, status: lastStatus, error: lastErr };
+}
+
+export async function kaitenDeleteComment(
+  auth: KaitenAuth,
+  cardId: number,
+  commentId: number,
+  opts?: KaitenHttpOpts,
+): Promise<{ ok: boolean; status: number; error: string | null }> {
+  const paths = [
+    `/comments/${commentId}`,
+    `/cards/${cardId}/comments/${commentId}`,
+  ];
+  let lastErr = "Kaiten error";
+  let lastStatus = 0;
+  for (const path of paths) {
+    const r = await kaitenFetch(auth, path, { method: "DELETE" }, opts);
+    if (r.ok || r.status === 404) {
+      return { ok: true, status: r.status, error: null };
+    }
+    lastStatus = r.status;
+    lastErr =
+      typeof r.text === "string" && r.text.trim()
+        ? r.text.slice(0, 800)
+        : "Kaiten error";
+  }
+  return { ok: false, status: lastStatus, error: lastErr };
+}
+
 export async function kaitenCreateComment(
   auth: KaitenAuth,
   cardId: number,

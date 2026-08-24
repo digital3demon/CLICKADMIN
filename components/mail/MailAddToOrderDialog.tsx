@@ -526,7 +526,7 @@ export function MailAddToOrderDialog({
                     );
                     return;
                   }
-                  if (e.key === "Enter" || e.key === "Tab") {
+                  if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
                     e.preventDefault();
                     applyMention(
                       mentionFiltered[

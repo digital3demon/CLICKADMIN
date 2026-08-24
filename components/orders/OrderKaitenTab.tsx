@@ -1244,6 +1244,12 @@ export function OrderKaitenTab({
                 placeholder="Новое сообщение…"
                 value={kanbanPostText}
                 onChange={(e) => setKanbanPostText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void sendKanbanChatMessage();
+                  }
+                }}
               />
             </div>
             {kanbanPostError ? (
@@ -1765,14 +1771,19 @@ export function OrderKaitenTab({
                   );
                   return;
                 }
-                if (e.key === "Enter" || e.key === "Tab") {
+                if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
                   e.preventDefault();
                   applyMention(
                     mentionFiltered[
                       Math.min(mentionIndex, mentionFiltered.length - 1)
                     ],
                   );
+                  return;
                 }
+              }
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void sendComment();
               }
             }}
           />

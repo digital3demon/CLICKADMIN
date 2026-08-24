@@ -36,6 +36,10 @@ import {
   orderListChatMessageShellClass,
   shouldShowKanbanChatSyncStatus,
 } from "@/lib/kanban/chat-message-display";
+import {
+  canAuthorMutateKanbanChatMessage,
+  isChatComposerSendEnter,
+} from "@/lib/kanban/chat-message-edit";
 import { needsOrderListKaitenChatFallback } from "@/lib/kanban/order-list-chat-hydrate";
 import { formatOrderListChatModalTitle } from "@/lib/order-list-chat-modal-title";
 
@@ -44,11 +48,13 @@ type CommentRow = {
   text: string;
   created?: string;
   authorName?: string;
+  userId?: string;
   parentId: string | number | null;
   images?: ChatImage[];
   source?: "CRM" | "KAITEN";
   syncStatus?: "local" | "pending" | "synced" | "failed" | "retried";
   syncedAt?: string | null;
+  editedAt?: string | null;
 };
 
 type ChatImage = {
@@ -115,6 +121,8 @@ type KanbanChatCommentPayload = {
   source?: "CRM" | "KAITEN";
   syncStatus?: CommentRow["syncStatus"];
   syncedAt?: string | null;
+  userId?: string;
+  editedAt?: string | null;
 };
 
 /** GET /kanban-chat отдаёт CardComment (createdAt, authorLabel), модалке нужен CommentRow. */
@@ -129,6 +137,8 @@ function normalizeKanbanChatComment(raw: KanbanChatCommentPayload): CommentRow {
     source: raw.source,
     syncStatus: raw.syncStatus,
     syncedAt: raw.syncedAt,
+    userId: raw.userId,
+    editedAt: raw.editedAt,
   };
 }
 
@@ -463,6 +473,74 @@ export function OrderListKaitenChatModal({
     }
   };
 
+  const [editingId, setEditingId] = useState<string | number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+
+  const patchComment = async (commentId: string | number, nextBody: string) => {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/kanban-chat`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId: String(commentId), text: nextBody }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        comment?: KanbanChatCommentPayload;
+      };
+      if (!res.ok) {
+        setPostError(data.error ?? "Не удалось изменить сообщение");
+        return false;
+      }
+      if (data.comment) {
+        const row = normalizeKanbanChatComment(data.comment);
+        setSnap((prev) =>
+          prev
+            ? {
+                ...prev,
+                comments: prev.comments.map((c) =>
+                  String(c.id) === String(commentId) ? row : c,
+                ),
+              }
+            : prev,
+        );
+      }
+      setEditingId(null);
+      setEditDraft("");
+      return true;
+    } catch {
+      setPostError("Сеть недоступна");
+      return false;
+    }
+  };
+
+  const deleteComment = async (commentId: string | number) => {
+    if (!window.confirm("Удалить это сообщение?")) return;
+    try {
+      const res = await fetch(
+        `/api/orders/${orderId}/kanban-chat?commentId=${encodeURIComponent(String(commentId))}`,
+        { method: "DELETE", credentials: "include" },
+      );
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setPostError(data.error ?? "Не удалось удалить сообщение");
+        return;
+      }
+      setSnap((prev) =>
+        prev
+          ? {
+              ...prev,
+              comments: prev.comments.filter(
+                (c) => String(c.id) !== String(commentId),
+              ),
+            }
+          : prev,
+      );
+    } catch {
+      setPostError("Сеть недоступна");
+    }
+  };
+
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
       const { queue: arr, skippedTooLarge } =
@@ -719,6 +797,7 @@ export function OrderListKaitenChatModal({
                       <div className="flex flex-wrap items-baseline justify-between gap-2 text-[10px] text-[var(--text-muted)]">
                         <span className="font-medium text-[var(--text-strong)]">
                           {c.authorName ?? "Участник"}
+                          {c.editedAt ? " · изм." : ""}
                         </span>
                         {c.created ? (
                           <span suppressHydrationWarning>
@@ -731,9 +810,40 @@ export function OrderListKaitenChatModal({
                           {display.label}
                         </p>
                       ) : null}
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-text)]">
-                        {display.body}
-                      </p>
+                      {editingId === c.id ? (
+                        <div className="mt-1 flex flex-col gap-1.5">
+                          <textarea
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            rows={3}
+                            className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              className="text-xs text-[var(--text-muted)]"
+                              onClick={() => {
+                                setEditingId(null);
+                                setEditDraft("");
+                              }}
+                            >
+                              Отмена
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-[var(--sidebar-blue)]"
+                              disabled={!editDraft.trim()}
+                              onClick={() => void patchComment(c.id, editDraft)}
+                            >
+                              Сохранить
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-text)]">
+                          {display.body}
+                        </p>
+                      )}
                       {shouldShowKanbanChatSyncStatus(display.kind, c.syncStatus) ? (
                         <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
                           <span>{syncStatusLabel(c.syncStatus)}</span>
@@ -749,13 +859,41 @@ export function OrderListKaitenChatModal({
                           ) : null}
                         </div>
                       ) : null}
-                      <button
-                        type="button"
-                        className="mt-1 text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
-                        onClick={() => setReplyToId(c.id)}
-                      >
-                        Ответить
-                      </button>
+                      <div className="mt-1 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
+                          onClick={() => setReplyToId(c.id)}
+                        >
+                          Ответить
+                        </button>
+                        {isKanbanMode &&
+                        canAuthorMutateKanbanChatMessage({
+                          userId: c.userId,
+                          currentUserId: user?.id,
+                          createdAt: c.created,
+                        }) ? (
+                          <>
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
+                              onClick={() => {
+                                setEditingId(c.id);
+                                setEditDraft(display.body);
+                              }}
+                            >
+                              Изменить
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                              onClick={() => void deleteComment(c.id)}
+                            >
+                              Удалить
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
                       {childrenOf(c.id).length > 0 ? (
                         <ul className="mt-2 space-y-2 border-l-2 border-[var(--card-border)] pl-3">
                           {childrenOf(c.id).map((ch) => {
@@ -776,9 +914,40 @@ export function OrderListKaitenChatModal({
                                   {childDisplay.label}
                                 </p>
                               ) : null}
-                              <p className="whitespace-pre-wrap text-[var(--app-text)]">
-                                {childDisplay.body}
-                              </p>
+                              {editingId === ch.id ? (
+                                <div className="mt-1 flex flex-col gap-1.5">
+                                  <textarea
+                                    value={editDraft}
+                                    onChange={(e) => setEditDraft(e.target.value)}
+                                    rows={3}
+                                    className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm"
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      className="text-xs text-[var(--text-muted)]"
+                                      onClick={() => {
+                                        setEditingId(null);
+                                        setEditDraft("");
+                                      }}
+                                    >
+                                      Отмена
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="text-xs font-medium text-[var(--sidebar-blue)]"
+                                      disabled={!editDraft.trim()}
+                                      onClick={() => void patchComment(ch.id, editDraft)}
+                                    >
+                                      Сохранить
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="whitespace-pre-wrap text-[var(--app-text)]">
+                                  {childDisplay.body}
+                                </p>
+                              )}
                               {shouldShowKanbanChatSyncStatus(
                                 childDisplay.kind,
                                 ch.syncStatus,
@@ -797,13 +966,41 @@ export function OrderListKaitenChatModal({
                                   ) : null}
                                 </div>
                               ) : null}
-                              <button
-                                type="button"
-                                className="mt-0.5 text-xs text-[var(--sidebar-blue)] hover:underline"
-                                onClick={() => setReplyToId(ch.id)}
-                              >
-                                Ответить
-                              </button>
+                              <div className="mt-0.5 flex flex-wrap gap-3">
+                                <button
+                                  type="button"
+                                  className="text-xs text-[var(--sidebar-blue)] hover:underline"
+                                  onClick={() => setReplyToId(ch.id)}
+                                >
+                                  Ответить
+                                </button>
+                                {isKanbanMode &&
+                                canAuthorMutateKanbanChatMessage({
+                                  userId: ch.userId,
+                                  currentUserId: user?.id,
+                                  createdAt: ch.created,
+                                }) ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="text-xs text-[var(--sidebar-blue)] hover:underline"
+                                      onClick={() => {
+                                        setEditingId(ch.id);
+                                        setEditDraft(childDisplay.body);
+                                      }}
+                                    >
+                                      Изменить
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="text-xs text-red-600 hover:underline dark:text-red-400"
+                                      onClick={() => void deleteComment(ch.id)}
+                                    >
+                                      Удалить
+                                    </button>
+                                  </>
+                                ) : null}
+                              </div>
                             </li>
                             );
                           })}
@@ -901,14 +1098,19 @@ export function OrderListKaitenChatModal({
                     );
                     return;
                   }
-                  if (e.key === "Enter" || e.key === "Tab") {
+                  if (e.key === "Tab" || isChatComposerSendEnter(e)) {
                     e.preventDefault();
                     applyMention(
                       mentionFiltered[
                         Math.min(mentionIndex, mentionFiltered.length - 1)
                       ],
                     );
+                    return;
                   }
+                }
+                if (isChatComposerSendEnter(e)) {
+                  e.preventDefault();
+                  void sendComment();
                 }
               }}
               onPaste={onPasteIntoMessage}
