@@ -22,6 +22,8 @@ export type ClinicRequisiteKey = (typeof CLINIC_REQUISITE_ROWS)[number]["key"];
 export type ClinicCopySource = {
   name: string;
   address: string | null;
+  /** Обычный e-mail клиники можно слать счета, если нет invoiceEmail. */
+  useEmailForInvoices: boolean;
 } & Partial<Record<ClinicRequisiteKey, string | null>>;
 
 /** Состояние формы «Реквизиты» из записи клиники (сервер → RequisitesPanel). */
