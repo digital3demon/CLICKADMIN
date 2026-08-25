@@ -510,6 +510,7 @@ export async function POST(req: Request, ctx: Ctx) {
               data: {
                 invoiceAttachmentId: row.id,
                 invoiceIssued: true,
+                invoiceIssuedAt: new Date(),
                 invoiceParsedLines: Prisma.DbNull,
                 invoiceParsedTotalRub: null,
                 invoiceParsedSummaryText: null,

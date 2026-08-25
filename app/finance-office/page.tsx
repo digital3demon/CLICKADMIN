@@ -78,6 +78,7 @@ function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[
     urgentCoefficient: o.urgentCoefficient,
     invoiceAttachmentId: o.invoiceAttachmentId,
     invoiceIssued: o.invoiceIssued,
+    invoiceIssuedAt: o.invoiceIssuedAt?.toISOString() ?? null,
     invoiceNumber: o.invoiceNumber,
     invoicePrinted: o.invoicePrinted,
     updAttachmentId: o.updAttachmentId,

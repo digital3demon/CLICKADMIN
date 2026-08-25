@@ -252,40 +252,32 @@ function DocumentFlowCompositionSpoiler({
         {lines.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">Нет позиций в составе</p>
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {lines.map((line, idx) => {
               const sumValue = moneyRu(line.amountRub);
-              const chip =
-                "shrink-0 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left text-[11px] leading-snug shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500";
               return (
                 <li
                   key={`${line.title}-${idx}`}
-                  className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto"
+                  className="flex w-fit max-w-full flex-nowrap items-center gap-2 overflow-x-auto"
                 >
                   <button
                     type="button"
                     title="Нажмите — скопировать в буфер обмена"
                     onClick={() => onCopy(line.title)}
-                    className={`${chip} min-w-0 flex-1 truncate font-medium text-[var(--text-strong)]`}
+                    className="w-fit max-w-[18rem] shrink-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:max-w-[22rem] sm:text-sm"
                   >
                     {line.title}
                   </button>
-                  <button
-                    type="button"
-                    title="Нажмите — скопировать в буфер обмена"
-                    onClick={() => onCopy(String(line.quantity))}
-                    className={`${chip} text-[var(--text-body)]`}
-                  >
-                    кол-во {line.quantity}
-                  </button>
-                  <button
-                    type="button"
-                    title="Нажмите — скопировать в буфер обмена"
-                    onClick={() => onCopy(sumValue)}
-                    className={`${chip} text-[var(--text-body)]`}
-                  >
-                    сумма {sumValue}
-                  </button>
+                  <InvoiceCopyChip
+                    label="Кол-во"
+                    value={String(line.quantity)}
+                    onCopy={onCopy}
+                  />
+                  <InvoiceCopyChip
+                    label="Сумма"
+                    value={sumValue}
+                    onCopy={onCopy}
+                  />
                 </li>
               );
             })}

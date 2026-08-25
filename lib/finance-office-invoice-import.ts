@@ -159,6 +159,66 @@ export function financeInvoiceRowIsRecognized(
   );
 }
 
+/** Можно жать «Прикрепить»: наряд выбран; для УПД-только нужен ровно один УПД. */
+export function financeInvoiceRowCanApply(
+  row: Pick<
+    FinanceInvoiceImportPreviewRow,
+    "orderId" | "errors" | "updMatch" | "sourceKind"
+  >,
+): boolean {
+  if (!row.orderId || row.errors.length > 0) return false;
+  if (row.updMatch === "many") return false;
+  if (row.sourceKind === "crm-invoice") return row.updMatch === "one";
+  return true;
+}
+
+export type FinanceOfficeOrderBindHit = {
+  id: string;
+  orderNumber: string;
+  label: string;
+  alreadyHasInvoice: boolean;
+  alreadyHasUpd: boolean;
+  invoiceAttachmentId: string | null;
+};
+
+const MANUAL_BIND_CLEAR_ERROR =
+  /^(Счёт не найден|Наряд с таким номером не найден)/;
+
+export function bindFinanceInvoiceRowToOrder(
+  row: FinanceInvoiceImportPreviewRow,
+  hit: FinanceOfficeOrderBindHit | null,
+): FinanceInvoiceImportPreviewRow {
+  if (!hit) {
+    return withPreviewRowUpdItems(
+      {
+        ...row,
+        orderId: null,
+        orderNumber: "",
+        orderLabel: null,
+        alreadyHasInvoice: false,
+        alreadyHasUpd: false,
+      },
+      row.updItems ?? [],
+    );
+  }
+  return withPreviewRowUpdItems(
+    {
+      ...row,
+      orderId: hit.id,
+      orderNumber: hit.orderNumber,
+      orderLabel: hit.label,
+      alreadyHasInvoice: hit.alreadyHasInvoice,
+      alreadyHasUpd: hit.alreadyHasUpd,
+      invoiceAttachmentId:
+        row.sourceKind === "crm-invoice"
+          ? hit.invoiceAttachmentId
+          : row.invoiceAttachmentId,
+      errors: row.errors.filter((e) => !MANUAL_BIND_CLEAR_ERROR.test(e)),
+    },
+    row.updItems ?? [],
+  );
+}
+
 export function findUpdDtosByNumber(
   pool: readonly FinanceUpdPoolItemDto[],
   rawNumber: string,
@@ -182,7 +242,7 @@ export function withPreviewRowUpdItems(
         ? (items[0]?.number ?? row.updNumberRaw ?? "")
         : (row.updNumberRaw ?? ""),
   };
-  next.apply = financeInvoiceRowIsRecognized(next);
+  next.apply = financeInvoiceRowCanApply(next);
   return next;
 }
 

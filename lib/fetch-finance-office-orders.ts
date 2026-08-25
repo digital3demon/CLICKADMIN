@@ -48,6 +48,8 @@ const financeOfficeOrderSelect = {
   prostheticsOrdered: true,
   invoiceAttachmentId: true,
   invoiceIssued: true,
+  invoiceIssuedAt: true,
+  invoiceAttachment: { select: { createdAt: true } },
   invoiceNumber: true,
   invoicePrinted: true,
   updAttachmentId: true,
@@ -101,7 +103,7 @@ type FinanceOfficeRaw = Prisma.OrderGetPayload<{
 
 export type FinanceOfficeOrderRow = Omit<
   FinanceOfficeRaw,
-  "constructions" | "chatCorrections" | "prostheticsRequests" | "clinicId" | "doctorId"
+  "constructions" | "chatCorrections" | "prostheticsRequests" | "clinicId" | "doctorId" | "invoiceAttachment"
 > & {
   clinic: {
     id: string;
@@ -582,7 +584,13 @@ export async function fetchFinanceOfficeOrders(
   const priceItemById = new Map(priceItems.map((x) => [x.id, x]));
 
   const mapped = stageFiltered.map((o): FinanceOfficeOrderRow => {
-    const { chatCorrections, prostheticsRequests, constructions, ...rest } = o;
+    const {
+      chatCorrections,
+      prostheticsRequests,
+      constructions,
+      invoiceAttachment,
+      ...rest
+    } = o;
     const hydratedConstructions = constructions.map((c) => ({
       quantity: c.quantity,
       unitPrice: c.unitPrice,
@@ -621,6 +629,9 @@ export async function fetchFinanceOfficeOrders(
       clinicUsesPaperDocs,
       counterpartyRequisitesText,
       doctor: doctorById.get(o.doctorId) ?? { id: o.doctorId, fullName: "—" },
+      invoiceIssuedAt:
+        rest.invoiceIssuedAt ??
+        (rest.invoiceIssued ? (invoiceAttachment?.createdAt ?? null) : null),
       constructions: hydratedConstructions,
       listCompositionMismatch: orderInvoiceCompositionMismatch({
         invoiceParsedTotalRub: o.invoiceParsedTotalRub,

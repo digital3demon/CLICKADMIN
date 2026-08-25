@@ -23,6 +23,7 @@ const KEY_LABELS: Record<string, string> = {
   additionalSourceNotes: "Что ещё к работе",
   quickOrder: "Быстрый наряд",
   invoiceIssued: "Счёт выставлен",
+  invoiceIssuedAt: "Дата выставления счёта",
   invoiceNumber: "Номер счёта",
   invoicePaperDocs: "Бумажные документы",
   invoiceSentToEdo: "Отправлен в ЭДО",

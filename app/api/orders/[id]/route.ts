@@ -173,6 +173,7 @@ type PatchBody = {
   dueToAdminsHasTime?: boolean;
   workReceivedAt?: string | null;
   invoiceIssued?: boolean;
+  invoiceIssuedAt?: string | null;
   invoiceNumber?: string | null;
   invoicePaperDocs?: boolean;
   invoiceSentToEdo?: boolean;
@@ -518,6 +519,8 @@ export async function PATCH(
       correctionPaid: true,
       prostheticsOrdered: true,
       adminShippedOtpr: true,
+      invoiceIssued: true,
+      invoiceIssuedAt: true,
     },
   });
   if (!existing) {
@@ -736,8 +739,18 @@ export async function PATCH(
 
   /** appointmentDate обновляется вместе с dueToAdminsAt (дата приёма пациента). */
 
-  if (body.invoiceIssued !== undefined) {
-    scalarData.invoiceIssued = Boolean(body.invoiceIssued);
+  if (body.invoiceIssuedAt !== undefined) {
+    const parsed = parseOptionalDateTime(body.invoiceIssuedAt);
+    scalarData.invoiceIssuedAt = parsed;
+    scalarData.invoiceIssued = parsed != null;
+  } else if (body.invoiceIssued !== undefined) {
+    const next = Boolean(body.invoiceIssued);
+    scalarData.invoiceIssued = next;
+    if (next && !existing.invoiceIssuedAt) {
+      scalarData.invoiceIssuedAt = new Date();
+    } else if (!next) {
+      scalarData.invoiceIssuedAt = null;
+    }
   }
 
   if (body.invoiceNumber !== undefined) {

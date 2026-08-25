@@ -61,6 +61,7 @@ export function FinanceOfficeBankImportPanel({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const moreDocsInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController | null>(null);
   const previewGenRef = useRef(0);
   const [files, setFiles] = useState<File[]>([]);
@@ -90,6 +91,7 @@ export function FinanceOfficeBankImportPanel({
   const [saveByKey, setSaveByKey] = useState<
     Record<string, FinanceInvoiceImportApplyResult>
   >({});
+  const [moreDocsDrag, setMoreDocsDrag] = useState(false);
   const lastInvoiceRowsRef = useRef<FinanceInvoiceImportPreviewRow[]>([]);
 
   const busy = reading || saving;
@@ -464,6 +466,11 @@ export function FinanceOfficeBankImportPanel({
   const onFilesRef = useRef(onFiles);
   onFilesRef.current = onFiles;
 
+  const acceptMoreDocs = (list: FileList | File[] | null) => {
+    if (saving) return;
+    onFiles(list);
+  };
+
   useEffect(() => {
     const wantsFiles = (e: DragEvent) =>
       Array.from(e.dataTransfer?.types ?? []).includes("Files");
@@ -484,6 +491,30 @@ export function FinanceOfficeBankImportPanel({
       window.removeEventListener("drop", onDrop);
     };
   }, []);
+
+  useEffect(() => {
+    if (!invoicePreviewOpen) {
+      setMoreDocsDrag(false);
+      return;
+    }
+    const onPaste = (e: ClipboardEvent) => {
+      const t = e.target;
+      if (
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        t instanceof HTMLSelectElement ||
+        (t instanceof HTMLElement && t.isContentEditable)
+      ) {
+        return;
+      }
+      const pack = e.clipboardData?.files;
+      if (!pack?.length) return;
+      e.preventDefault();
+      onFilesRef.current(pack);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [invoicePreviewOpen]);
 
   useEffect(() => {
     return () => {
@@ -820,6 +851,62 @@ export function FinanceOfficeBankImportPanel({
             {error}
           </p>
         ) : null}
+        <input
+          ref={moreDocsInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.zip,.rar,.7z,application/zip,application/x-zip-compressed,application/vnd.rar,application/x-rar-compressed,application/x-7z-compressed,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            acceptMoreDocs(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            if (saving) return;
+            moreDocsInputRef.current?.click();
+          }}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!saving) setMoreDocsDrag(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = "copy";
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setMoreDocsDrag(false);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMoreDocsDrag(false);
+            acceptMoreDocs(e.dataTransfer.files);
+          }}
+          className={[
+            "mb-3 w-full rounded-lg border-2 border-dashed px-3 py-2.5 text-left transition-colors disabled:opacity-50",
+            moreDocsDrag
+              ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)]/10"
+              : "border-[var(--card-border)] bg-[var(--surface-subtle)] hover:border-[var(--sidebar-blue)]/60",
+          ].join(" ")}
+        >
+          <p className="text-sm font-semibold text-[var(--text-strong)]">
+            {reading ? "Читаю добавленные файлы…" : "Догрузить счета или УПД"}
+          </p>
+          <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-muted)]">
+            Перетащите PDF или архив, нажмите, чтобы открыть проводник, либо
+            Ctrl+V. Новые файлы добавятся к текущему распознаванию, а не
+            заменят его.
+          </p>
+        </button>
         <div className="overflow-auto rounded-md border border-[var(--card-border)]">
           <table className="min-w-[72rem] table-fixed text-left text-xs">
             <colgroup>

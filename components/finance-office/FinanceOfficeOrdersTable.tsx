@@ -40,6 +40,8 @@ export type FinanceOfficeOrderTableRow = {
   urgentCoefficient: number | null;
   invoiceAttachmentId: string | null;
   invoiceIssued: boolean;
+  /** ISO даты выставления счёта (ручная или загрузка файла). */
+  invoiceIssuedAt: string | null;
   invoiceNumber: string | null;
   invoicePrinted: boolean;
   updAttachmentId: string | null;
@@ -175,26 +177,32 @@ export function FinanceOfficeOrdersTable({
                 </div>
               </th>
               <th className="w-10 px-1 py-2 text-center normal-case">Чат</th>
-              <th className="px-2 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
-              <th className="px-2 py-2 text-center">Клиника</th>
-              <th className="px-2 py-2 text-center">Врач</th>
-              <th className="px-2 py-2 text-center">Пациент</th>
+              <th className="px-1 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
+              <th className="w-[7.5rem] px-1 py-2 text-center">Клиника</th>
+              <th className="w-[6.5rem] px-1 py-2 text-center">Врач</th>
+              <th className="w-[6.5rem] px-1 py-2 text-center">Пациент</th>
               <th
-                className="px-2 py-2 text-center"
+                className="w-[5.75rem] px-1 py-2 text-center"
                 title="Лаб-срок: dueDate"
               >
                 Лаб срок
               </th>
               <th
-                className="px-2 py-2 text-center"
+                className="w-[5.75rem] px-1 py-2 text-center"
                 title="Запись: дата и время приёма пациента"
               >
                 Запись
               </th>
-              <th className="hidden w-[11rem] px-1.5 py-2 text-center normal-case shell-desktop:table-cell">Реквизиты</th>
-              <th className="hidden w-[7rem] px-1.5 py-2 text-center normal-case shell-desktop:table-cell">Наше юрлицо</th>
+              <th className="hidden w-[8rem] px-1 py-2 text-center normal-case shell-desktop:table-cell">Реквизиты</th>
+              <th className="hidden w-[4.5rem] px-1 py-2 text-center normal-case shell-desktop:table-cell">Наше юрлицо</th>
               <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
-              <th className="w-[15.5rem] px-1.5 py-2 text-center normal-case">Отметки</th>
+              <th
+                className="w-[5.75rem] px-1 py-2 text-center normal-case"
+                title="Дата выставления / отправки счёта"
+              >
+                Счёт выставлен
+              </th>
+              <th className="min-w-[18rem] px-1 py-2 text-center normal-case">Отметки</th>
               <th className="w-[4.5rem] px-1 py-2 text-center normal-case shell-desktop:hidden">Ещё</th>
             </tr>
           </thead>

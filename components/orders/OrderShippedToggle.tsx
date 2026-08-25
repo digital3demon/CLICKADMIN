@@ -28,11 +28,14 @@ export function OrderShippedToggle({
   orderId,
   shipped,
   shippedAtIso = null,
+  readOnly = false,
 }: {
   orderId: string;
   shipped: boolean;
   /** ISO `adminShippedAt` с сервера. */
   shippedAtIso?: string | null;
+  /** Только дата отгрузки, без постановки/снятия отметки. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [value, setValue] = useState(shipped);
@@ -77,6 +80,32 @@ export function OrderShippedToggle({
 
   if (value) {
     const compact = formatShippedCompact(localAt);
+    const badgeClass =
+      "mx-auto inline-flex min-w-[3.25rem] max-w-[4.5rem] flex-col items-center justify-center gap-0 rounded-md border border-emerald-500/70 bg-emerald-600/20 px-1 py-0.5 text-center leading-none shadow-sm dark:border-emerald-500/55 dark:bg-emerald-500/15";
+    const badgeInner = (
+      <>
+        <span className="text-[10px] font-semibold tabular-nums text-emerald-950 dark:text-emerald-100 sm:text-[11px]">
+          {compact?.date ?? "—"}
+        </span>
+        <span className="text-[9px] font-medium tabular-nums text-emerald-900/80 dark:text-emerald-200/85 sm:text-[10px]">
+          {compact?.time ?? ""}
+        </span>
+      </>
+    );
+    if (readOnly) {
+      return (
+        <span
+          className={badgeClass}
+          title={
+            compact
+              ? `Отправлено ${compact.date} ${compact.time} (МСК)`
+              : "Работа отправлена"
+          }
+        >
+          {badgeInner}
+        </span>
+      );
+    }
     return (
       <button
         type="button"
@@ -89,15 +118,18 @@ export function OrderShippedToggle({
             : "Работа отправлена. Нажмите, чтобы снять"
         }
         onClick={() => void toggle()}
-        className="mx-auto inline-flex min-w-[3.25rem] max-w-[4.5rem] flex-col items-center justify-center gap-0 rounded-md border border-emerald-500/70 bg-emerald-600/20 px-1 py-0.5 text-center leading-none shadow-sm hover:bg-emerald-600/30 disabled:opacity-55 dark:border-emerald-500/55 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25"
+        className={`${badgeClass} hover:bg-emerald-600/30 disabled:opacity-55 dark:hover:bg-emerald-500/25`}
       >
-        <span className="text-[10px] font-semibold tabular-nums text-emerald-950 dark:text-emerald-100 sm:text-[11px]">
-          {compact?.date ?? "—"}
-        </span>
-        <span className="text-[9px] font-medium tabular-nums text-emerald-900/80 dark:text-emerald-200/85 sm:text-[10px]">
-          {compact?.time ?? ""}
-        </span>
+        {badgeInner}
       </button>
+    );
+  }
+
+  if (readOnly) {
+    return (
+      <span className="text-[11px] text-[var(--text-muted)]" title="Не отправлено">
+        —
+      </span>
     );
   }
 

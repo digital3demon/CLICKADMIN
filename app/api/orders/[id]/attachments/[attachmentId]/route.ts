@@ -117,6 +117,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
       data: {
         invoiceAttachmentId: null,
         invoiceIssued: false,
+        invoiceIssuedAt: null,
         invoiceParsedSummaryText: null,
         invoiceParsedTotalRub: null,
         invoiceParsedLines: Prisma.DbNull,

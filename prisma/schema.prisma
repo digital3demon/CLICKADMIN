@@ -1461,6 +1461,8 @@ model Order {
   kaitenLabMentionToastText          String?
   /// Счёт по наряду выставлен клиенту
   invoiceIssued                      Boolean                    @default(false)
+  /// Когда счёт выставлен / отправлен (загрузка файла или ручная дата)
+  invoiceIssuedAt                    DateTime?
   /// Номер выставленного счёта (ручной ввод)
   invoiceNumber                      String?
   /// Бумажные документы переданы / учтены

@@ -8,7 +8,7 @@ import "server-only";
 import { OrderAttachmentScope, Prisma, type PrismaClient } from "@prisma/client";
 import { applyInvoiceParseToOrder } from "@/lib/apply-invoice-parse-to-order";
 import {
-  financeInvoiceRowIsRecognized,
+  financeInvoiceRowCanApply,
   financeOfficeInvoiceRowKey,
   type FinanceInvoiceImportApplyResult,
   type FinanceInvoiceImportApplyRow,
@@ -93,7 +93,7 @@ function updCaptionFromPdf(fileName: string, pdfText: string): string {
 function finishRow(
   row: FinanceInvoiceImportPreviewRow,
 ): FinanceInvoiceImportPreviewRow {
-  const apply = financeInvoiceRowIsRecognized(row);
+  const apply = financeInvoiceRowCanApply(row);
   return { ...row, apply };
 }
 
@@ -333,7 +333,7 @@ async function buildCrmInvoiceRowsForUpdPool(opts: {
         sourceKind: "crm-invoice",
         invoiceAttachmentId: null,
         updNumberRaw: u.number,
-        updMatch: "none",
+        updMatch: "one",
         updItems: opts.updPoolDto.filter((d) => d.key === u.key),
       }),
     );
@@ -433,7 +433,7 @@ async function buildCrmInvoiceRowsForUpdPool(opts: {
         sourceKind: "crm-invoice",
         invoiceAttachmentId: null,
         updNumberRaw: u.number,
-        updMatch: "none",
+        updMatch: "one",
         updItems: opts.updPoolDto.filter((d) => d.key === u.key),
       }),
     );
@@ -517,6 +517,7 @@ export async function attachInvoicePdfToOrder(opts: {
     data: {
       invoiceAttachmentId: row.id,
       invoiceIssued: true,
+      invoiceIssuedAt: new Date(),
       invoiceParsedLines: Prisma.DbNull,
       invoiceParsedTotalRub: null,
       invoiceParsedSummaryText: null,
@@ -652,17 +653,17 @@ export async function applyFinanceInvoiceImport(opts: {
     }
     const sourceKind = row.sourceKind === "crm-invoice" ? "crm-invoice" : "drop-invoice";
     const updKeys = (row.updKeys ?? []).filter(Boolean);
-    if (updKeys.length !== 1) {
+    if (updKeys.length > 1) {
       await pushTracked({
         key: row.key,
         orderNumber,
         ok: false,
-        message: updKeys.length === 0 ? "Нет УПД" : "Несколько УПД",
+        message: "Несколько УПД",
       });
       continue;
     }
-    const updPdf = byKey.get(updKeys[0]!);
-    if (!updPdf) {
+    const updPdf = updKeys[0] ? byKey.get(updKeys[0]) : null;
+    if (updKeys.length === 1 && !updPdf) {
       await pushTracked({
         key: row.key,
         orderNumber,
@@ -678,6 +679,15 @@ export async function applyFinanceInvoiceImport(opts: {
         orderNumber,
         ok: false,
         message: "Файл счёта не найден в пакете",
+      });
+      continue;
+    }
+    if (!invoicePdf && !updPdf) {
+      await pushTracked({
+        key: row.key,
+        orderNumber,
+        ok: false,
+        message: "Нет УПД",
       });
       continue;
     }
@@ -710,19 +720,26 @@ export async function applyFinanceInvoiceImport(opts: {
         });
         parseOrderIds.push(order.id);
       }
-      await attachUpdPdfToOrder({
-        prisma: opts.prisma,
-        tenantId: opts.tenantId,
-        orderId: order.id,
-        fileName: updPdf.fileName,
-        buf: updPdf.buf,
-        updNumberRaw: row.updNumberRaw ?? "",
-      });
+      if (updPdf) {
+        await attachUpdPdfToOrder({
+          prisma: opts.prisma,
+          tenantId: opts.tenantId,
+          orderId: order.id,
+          fileName: updPdf.fileName,
+          buf: updPdf.buf,
+          updNumberRaw: row.updNumberRaw ?? "",
+        });
+      }
       await pushTracked({
         key: row.key,
         orderNumber,
         ok: true,
-        message: invoicePdf ? "Счёт и УПД прикреплены" : "УПД прикреплён",
+        message:
+          invoicePdf && updPdf
+            ? "Счёт и УПД прикреплены"
+            : invoicePdf
+              ? "Счёт прикреплён"
+              : "УПД прикреплён",
       });
     } catch (e) {
       console.error("[invoice-import] apply", orderNumber, e);
