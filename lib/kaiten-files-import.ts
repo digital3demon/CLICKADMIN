@@ -54,6 +54,43 @@ async function downloadKaitenBytes(
   return { buf, mime };
 }
 
+function normalizeAttachName(name: string): string {
+  return String(name || "")
+    .replace(/\uFEFF/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * CRM уже сохранил файл, Kaiten ещё не проставил kaitenFileId.
+ * Не плодим второе вложение с тем же именем и размером.
+ */
+async function bindImportedFileToCrmTwin(
+  prisma: PrismaClient,
+  orderId: string,
+  file: KaitenRemoteFile,
+  byteLength: number,
+): Promise<boolean> {
+  const want = normalizeAttachName(file.name);
+  if (!want || byteLength <= 0) return false;
+  const orphans = await prisma.orderAttachment.findMany({
+    where: { orderId, kaitenFileId: null, size: byteLength },
+    orderBy: { createdAt: "desc" },
+    take: 24,
+    select: { id: true, fileName: true },
+  });
+  const match = orphans.find((row) => normalizeAttachName(row.fileName) === want);
+  if (!match) return false;
+  await prisma.orderAttachment.update({
+    where: { id: match.id },
+    data: {
+      kaitenFileId: file.kaitenFileId,
+      uploadedToKaitenAt: new Date(),
+    },
+  });
+  return true;
+}
+
 async function storeImportedFile(
   prisma: PrismaClient,
   orderId: string,
@@ -144,6 +181,13 @@ export async function importMissingKaitenFilesForOrder(
     try {
       const downloaded = await downloadKaitenBytes(auth, file);
       if (!downloaded) continue;
+      const bound = await bindImportedFileToCrmTwin(
+        prisma,
+        orderId,
+        file,
+        downloaded.buf.byteLength,
+      );
+      if (bound) continue;
       await storeImportedFile(prisma, orderId, file, downloaded.buf, downloaded.mime);
       imported += 1;
     } catch (e) {

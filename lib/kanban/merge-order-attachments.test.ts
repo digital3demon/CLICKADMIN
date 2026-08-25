@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createCard,
+  ensureKanbanCardFilesFromChatImages,
   mergeOrderAttachmentsIntoLinkedCard,
 } from "@/lib/kanban/model";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
@@ -140,5 +141,51 @@ describe("mergeOrderAttachmentsIntoLinkedCard", () => {
     mergeOrderAttachmentsIntoLinkedCard(card, "ord-1", row([]));
     expect(card.files).toHaveLength(1);
     expect(card.files[0]!.orderAttachmentId).toBe("att-a");
+  });
+});
+
+describe("ensureKanbanCardFilesFromChatImages", () => {
+  it("после reload восстанавливает превью из cardImages наряда", () => {
+    const card = createCard({ id: "c4", title: "2608-261 Шубина Т." });
+    ensureKanbanCardFilesFromChatImages(card, [
+      {
+        id: "oa-att-new",
+        name: "image.png",
+        url: "/api/orders/ord-1/attachments/att-new",
+        mime: "image/png",
+      },
+    ]);
+    expect(card.files).toHaveLength(1);
+    expect(card.files[0]!.id).toBe("oa-att-new");
+    expect(card.files[0]!.orderAttachmentId).toBe("att-new");
+    expect(card.comments?.some((c) => c.imageFileId === "oa-att-new")).toBe(true);
+  });
+
+  it("не дублирует уже лежащий oa-файл", () => {
+    const card = createCard({
+      id: "c5",
+      title: "тест",
+      files: [
+        {
+          id: "oa-att-new",
+          name: "image.png",
+          mime: "image/png",
+          size: 10,
+          dataUrl: "/api/orders/ord-1/attachments/att-new",
+          addedAt: "2026-08-25T12:00:00.000Z",
+          addedByUserId: "",
+          orderAttachmentId: "att-new",
+        },
+      ],
+    });
+    ensureKanbanCardFilesFromChatImages(card, [
+      {
+        id: "oa-att-new",
+        name: "image.png",
+        url: "/api/orders/ord-1/attachments/att-new",
+        mime: "image/png",
+      },
+    ]);
+    expect(card.files).toHaveLength(1);
   });
 });

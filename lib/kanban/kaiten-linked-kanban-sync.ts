@@ -33,6 +33,7 @@ export async function fetchKanbanMirrorCommentsForOrder(
       comments: CardComment[];
       description: string;
       linkedKaiten: boolean;
+      cardImages: KaitenChatImageLite[];
     }
   | { ok: false }
 > {
@@ -44,6 +45,7 @@ export async function fetchKanbanMirrorCommentsForOrder(
     const data = (await res.json().catch(() => ({}))) as {
       hasCard?: boolean;
       comments?: CardComment[];
+      cardImages?: KaitenChatImageLite[];
       description?: string;
       linkedKaiten?: boolean;
       orderHeader?: { description?: string; kaitenCardId?: number | null };
@@ -61,7 +63,21 @@ export async function fetchKanbanMirrorCommentsForOrder(
     const linkedKaiten =
       data.linkedKaiten === true ||
       (headerKid != null && Number.isFinite(headerKid));
-    return { ok: true, comments: data.comments, description, linkedKaiten };
+    const cardImages = (Array.isArray(data.cardImages) ? data.cardImages : [])
+      .filter((img) => img && String(img.id || "").trim() && String(img.url || "").trim())
+      .map((img) => ({
+        id: String(img.id),
+        name: String(img.name || "image.png"),
+        url: String(img.url),
+        mime: img.mime ?? null,
+      }));
+    return {
+      ok: true,
+      comments: data.comments,
+      description,
+      linkedKaiten,
+      cardImages,
+    };
   } catch {
     return { ok: false };
   }

@@ -74,6 +74,7 @@ import {
   notifyKanbanCardMemberChange,
 } from "@/lib/kanban/kanban-card-members-client";
 import {
+  ensureKanbanCardFilesFromChatImages,
   findCard,
   formatBlockedAt,
   formatDate,
@@ -765,9 +766,15 @@ export function KanbanCardModal({
         onApply((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
+          ensureKanbanCardFilesFromChatImages(fc.card, snap.cardImages);
           const hadLocal = (fc.card.comments || []).length > 0;
           if (snap.comments.length > 0 || !hadLocal) {
             fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
+          } else {
+            fc.card.comments = withImagePlaceholders(
+              fc.card.comments || [],
+              fc.card,
+            );
           }
           if (snap.description.trim() && !(fc.card.description || "").trim()) {
             fc.card.description = snap.description;
@@ -1410,16 +1417,12 @@ export function KanbanCardModal({
     if (!fileList.length) return;
     const actor = chatActorUserId || board.users[0]?.id || "";
     const productionOnly = Boolean(card.parentCardId || (card.childCardIds || []).length > 0);
-    const linked =
-      !productionOnly &&
-      Boolean(card.linkedOrderId) &&
-      card.kaitenCardId != null &&
-      Number.isFinite(card.kaitenCardId);
+    const persistToOrder = !productionOnly && Boolean(card.linkedOrderId);
     let attachedOkCount = 0;
     for (const [i, file] of fileList.entries()) {
       try {
         let orderAttId: string | undefined;
-        if (linked && card.linkedOrderId) {
+        if (persistToOrder && card.linkedOrderId) {
           const up = await uploadOrderAttachmentFromFile(card.linkedOrderId, file);
           if (!up.ok) {
             toast(up.error, true);

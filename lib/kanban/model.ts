@@ -2595,6 +2595,50 @@ export function mergeOrderAttachmentsIntoLinkedCard(
   syncChatImageCommentsWithImageFiles(card);
 }
 
+/**
+ * Картинки из GET /kanban-chat (`cardImages`) — обратно в card.files.
+ * Иначе после reload лента из store без imageFileId, а превью нечем восстановить.
+ */
+export function ensureKanbanCardFilesFromChatImages(
+  card: KanbanCard,
+  images: ReadonlyArray<{
+    id: string;
+    name: string;
+    url: string;
+    mime?: string | null;
+  }>,
+): void {
+  if (!images.length) return;
+  const files = [...(card.files || [])];
+  const seenIds = new Set(files.map((f) => f.id));
+  const seenOa = new Set(
+    files
+      .map((f) => f.orderAttachmentId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  for (const img of images) {
+    const id = String(img.id || "").trim();
+    const url = String(img.url || "").trim();
+    if (!id || !url) continue;
+    const oaId = id.startsWith("oa-") ? id.slice(3) : "";
+    if (seenIds.has(id) || (oaId && seenOa.has(oaId))) continue;
+    files.push({
+      id,
+      name: String(img.name || "image.png").trim() || "image.png",
+      mime: img.mime || "image/png",
+      size: 0,
+      dataUrl: url,
+      addedAt: new Date().toISOString(),
+      addedByUserId: "",
+      ...(oaId ? { orderAttachmentId: oaId } : {}),
+    });
+    seenIds.add(id);
+    if (oaId) seenOa.add(oaId);
+  }
+  card.files = files;
+  syncChatImageCommentsWithImageFiles(card);
+}
+
 function resolveLinkedOrderCardTypeId(
   board: KanbanBoard,
   row: KaitenLinkedOrderForKanban,
