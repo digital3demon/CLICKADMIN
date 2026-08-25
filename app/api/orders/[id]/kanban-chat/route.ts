@@ -56,6 +56,7 @@ import {
   canAuthorMutateKanbanChatMessage,
   isKanbanChatCommentDeleted,
 } from "@/lib/kanban/chat-message-edit";
+import { applyKanbanChatTriggerSideEffects } from "@/lib/order-chat-trigger-mutate";
 import { resolveLinkedOrderKanbanDescription } from "@/lib/kanban/kaiten-linked-order";
 import {
   loadKanbanOrderComments,
@@ -1013,6 +1014,20 @@ export async function PATCH(
   }
   const ext = kaitenJsonIntId(edited.externalCommentId);
   const ordersPrisma = await getOrdersPrisma();
+  try {
+    await applyKanbanChatTriggerSideEffects({
+      db: ordersPrisma,
+      tenantId,
+      orderId,
+      commentId,
+      oldText: loaded.row.text,
+      newText: nextText,
+      kaitenCommentId: edited.externalCommentId,
+      authorLabel: edited.authorLabel,
+    });
+  } catch (e) {
+    console.error("[kanban-chat PATCH] trigger side effects", orderId, e);
+  }
   const order = await ordersPrisma.order.findFirst({
     where: { id: orderId, tenantId },
     select: { kaitenCardId: true },
@@ -1095,6 +1110,20 @@ export async function DELETE(
   }
   const ext = kaitenJsonIntId(deleted.externalCommentId);
   const ordersPrisma = await getOrdersPrisma();
+  try {
+    await applyKanbanChatTriggerSideEffects({
+      db: ordersPrisma,
+      tenantId,
+      orderId,
+      commentId,
+      oldText: loaded.row.text,
+      newText: null,
+      kaitenCommentId: deleted.externalCommentId,
+      authorLabel: deleted.authorLabel,
+    });
+  } catch (e) {
+    console.error("[kanban-chat DELETE] trigger side effects", orderId, e);
+  }
   const order = await ordersPrisma.order.findFirst({
     where: { id: orderId, tenantId },
     select: { kaitenCardId: true },
