@@ -201,7 +201,7 @@ function formatDocumentFlowCompositionLineText(line: {
   quantity: number;
   amountRub: number;
 }): string {
-  return `${line.title}\nкол-во ${line.quantity}\nсумма ${moneyRu(line.amountRub)}`;
+  return `${line.title}\n${line.quantity}\n${moneyRu(line.amountRub)}`;
 }
 
 function formatDocumentFlowCompositionAllText(
@@ -252,29 +252,38 @@ function DocumentFlowCompositionSpoiler({
         {lines.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">Нет позиций в составе</p>
         ) : (
-          <ul className="space-y-2">
-            {lines.map((line, idx) => (
-              <li key={`${line.title}-${idx}`}>
-                <button
-                  type="button"
-                  title="Нажмите — скопировать в буфер обмена"
-                  onClick={() =>
-                    onCopy(formatDocumentFlowCompositionLineText(line))
-                  }
-                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-left shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
-                >
-                  <p className="text-xs font-medium leading-snug text-[var(--text-strong)]">
+          <ul className="space-y-3">
+            {lines.map((line, idx) => {
+              const sumValue = moneyRu(line.amountRub);
+              return (
+                <li key={`${line.title}-${idx}`} className="space-y-1">
+                  <button
+                    type="button"
+                    title="Нажмите — скопировать в буфер обмена"
+                    onClick={() => onCopy(line.title)}
+                    className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-left text-xs font-medium leading-snug text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
+                  >
                     {line.title}
-                  </p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-body)]">
+                  </button>
+                  <button
+                    type="button"
+                    title="Нажмите — скопировать в буфер обмена"
+                    onClick={() => onCopy(String(line.quantity))}
+                    className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-left text-[11px] leading-snug text-[var(--text-body)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
+                  >
                     кол-во {line.quantity}
-                  </p>
-                  <p className="text-[11px] leading-snug text-[var(--text-body)]">
-                    сумма {moneyRu(line.amountRub)}
-                  </p>
-                </button>
-              </li>
-            ))}
+                  </button>
+                  <button
+                    type="button"
+                    title="Нажмите — скопировать в буфер обмена"
+                    onClick={() => onCopy(sumValue)}
+                    className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-left text-[11px] leading-snug text-[var(--text-body)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
+                  >
+                    сумма {sumValue}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
