@@ -137,6 +137,62 @@ export function financeOfficeLabDueInRange(
   };
 }
 
+/**
+ * Дата выставления счёта: `invoiceIssuedAt`, иначе дата файла счёта.
+ * Без даты — не входит.
+ */
+export function financeOfficeInvoiceIssuedBeforeEndExclusive(
+  endExclusive: Date,
+): Prisma.OrderWhereInput {
+  return {
+    OR: [
+      { invoiceIssuedAt: { not: null, lt: endExclusive } },
+      {
+        AND: [
+          { invoiceIssuedAt: null },
+          { invoiceAttachment: { is: { createdAt: { lt: endExclusive } } } },
+        ],
+      },
+    ],
+  };
+}
+
+export function financeOfficeInvoiceIssuedInRange(
+  start: Date,
+  endExclusive: Date,
+): Prisma.OrderWhereInput {
+  return {
+    OR: [
+      { invoiceIssuedAt: { not: null, gte: start, lt: endExclusive } },
+      {
+        AND: [
+          { invoiceIssuedAt: null },
+          {
+            invoiceAttachment: {
+              is: { createdAt: { gte: start, lt: endExclusive } },
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function financeOfficeInvoiceIssuedDateWhere(input: {
+  fromYmd?: string | null;
+  toYmd?: string | null;
+}): Prisma.OrderWhereInput | null {
+  const toYmd = input.toYmd?.trim() || null;
+  if (!toYmd) return null;
+  const { endExclusive } = moscowDayBoundsUtc(toYmd);
+  const fromYmd = input.fromYmd?.trim() || null;
+  if (fromYmd) {
+    const { start } = moscowDayBoundsUtc(fromYmd);
+    return financeOfficeInvoiceIssuedInRange(start, endExclusive);
+  }
+  return financeOfficeInvoiceIssuedBeforeEndExclusive(endExclusive);
+}
+
 /** @deprecated используйте financeOfficeLabDueBeforeEndExclusive */
 export function financeOfficeRecordDateBeforeEndExclusive(
   endExclusive: Date,

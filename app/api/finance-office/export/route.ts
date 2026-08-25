@@ -7,6 +7,7 @@ import { fetchFinanceOfficeOrders, type FinanceOfficeOrderRow } from "@/lib/fetc
 import { cleanLegalFullName } from "@/lib/format-counterparty-requisites-summary";
 import { isReconciliationPaymentStatus } from "@/lib/order-clinic-client-fields";
 import { parseFinanceOfficeMode } from "@/lib/finance-office-list-filter";
+import { parseFinanceOfficeInvoiceIssuedParams } from "@/lib/finance-office-list-query";
 import { parseOrdersShipmentParams } from "@/lib/orders-shipment-list-query";
 import {
   parseYmdOrNull,
@@ -134,13 +135,37 @@ export async function GET(req: Request) {
           shipTo: shipParsed.shipTo,
         }
       : null;
+  const invParsed = parseFinanceOfficeInvoiceIssuedParams({
+    invFrom: sp.get("invFrom"),
+    invTo: sp.get("invTo"),
+  });
+  const invoiceIssued =
+    invParsed.toYmd && !invParsed.error
+      ? { fromYmd: invParsed.fromYmd, toYmd: invParsed.toYmd }
+      : null;
 
-  if (shipParsed.periodError) {
+  if (invParsed.error) {
+    return NextResponse.json({ error: invParsed.error }, { status: 400 });
+  }
+  if (!invoiceIssued && shipParsed.periodError) {
     return NextResponse.json({ error: shipParsed.periodError }, { status: 400 });
   }
 
   let periodLabel = "";
-  if (appointment) {
+  if (invoiceIssued) {
+    if (
+      invoiceIssued.fromYmd &&
+      rangeDaySpan(invoiceIssued.fromYmd, invoiceIssued.toYmd) > MAX_RANGE_DAYS
+    ) {
+      return NextResponse.json(
+        { error: `Максимальный период — ${MAX_RANGE_DAYS} дней` },
+        { status: 400 },
+      );
+    }
+    periodLabel = invoiceIssued.fromYmd
+      ? `schet_${invoiceIssued.fromYmd}_${invoiceIssued.toYmd}`
+      : `schet_to_${invoiceIssued.toYmd}`;
+  } else if (appointment) {
     periodLabel = `zapis_${appointment.mode}`;
   } else if (mode === "actual") {
     periodLabel = "actual";
@@ -161,9 +186,12 @@ export async function GET(req: Request) {
     listTag: parsedTag ? rawTag : null,
     search: q,
     mode,
-    fromYmd: appointment ? null : mode === "period" ? fromRaw : null,
-    toYmd: appointment ? null : mode === "period" ? toRaw : null,
-    appointment,
+    fromYmd:
+      invoiceIssued || appointment ? null : mode === "period" ? fromRaw : null,
+    toYmd:
+      invoiceIssued || appointment ? null : mode === "period" ? toRaw : null,
+    appointment: invoiceIssued ? null : appointment,
+    invoiceIssued,
   })).filter(
     (order) =>
       !isReconciliationPaymentStatus(order.payment) &&

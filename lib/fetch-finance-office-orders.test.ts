@@ -87,6 +87,23 @@ describe("financeOfficeScopeWhere", () => {
     expect(json).toContain("dueDate");
     expect(json).not.toContain("financeCalculated");
   });
+
+  it("фильтр счёта перекрывает лаб-срок и запись", () => {
+    const w = financeOfficeScopeWhere("t1", {
+      mode: "actual",
+      invoiceIssued: { fromYmd: "2026-07-01", toYmd: "2026-07-10" },
+      appointment: {
+        mode: "period",
+        shipFrom: "2026-05-07",
+        shipTo: "2026-05-09",
+      },
+    });
+    const json = JSON.stringify(w);
+    expect(json).toContain("invoiceIssuedAt");
+    expect(json).not.toContain("dueDate");
+    expect(json).not.toContain("appointmentDate");
+    expect(json).not.toContain("financeCalculated");
+  });
 });
 
 describe("financeOfficeChipCountScopeWhere", () => {

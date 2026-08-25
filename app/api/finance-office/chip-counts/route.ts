@@ -4,6 +4,7 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { countFinanceOfficeQuickFilterChips } from "@/lib/fetch-finance-office-orders";
 import { parseFinanceOfficeMode } from "@/lib/finance-office-list-filter";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { parseFinanceOfficeInvoiceIssuedParams } from "@/lib/finance-office-list-query";
 import { parseOrdersShipmentParams } from "@/lib/orders-shipment-list-query";
 import { parseYmdOrNull } from "@/lib/shipments-date-range";
 
@@ -43,8 +44,16 @@ export async function GET(req: Request) {
           shipTo: shipParsed.shipTo,
         }
       : null;
+  const invParsed = parseFinanceOfficeInvoiceIssuedParams({
+    invFrom: url.searchParams.get("invFrom"),
+    invTo: url.searchParams.get("invTo"),
+  });
+  const invoiceIssued =
+    invParsed.toYmd && !invParsed.error
+      ? { fromYmd: invParsed.fromYmd, toYmd: invParsed.toYmd }
+      : null;
 
-  if (!appointment && mode === "period" && !toYmd) {
+  if (!invoiceIssued && !appointment && mode === "period" && !toYmd) {
     return NextResponse.json(
       {
         attentionCount: 0,
@@ -68,7 +77,8 @@ export async function GET(req: Request) {
     fromYmd,
     toYmd,
     listTag: listTag || null,
-    appointment,
+    appointment: invoiceIssued ? null : appointment,
+    invoiceIssued,
   });
 
   return NextResponse.json(counts, {

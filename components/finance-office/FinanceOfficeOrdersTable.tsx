@@ -71,6 +71,8 @@ export function FinanceOfficeOrdersTable({
   shipMode = null,
   shipFrom = null,
   shipTo = null,
+  invFrom = null,
+  invTo = null,
   exportHref,
   toolbar = null,
 }: {
@@ -84,6 +86,8 @@ export function FinanceOfficeOrdersTable({
   shipMode?: OrdersShipmentMode | null;
   shipFrom?: string | null;
   shipTo?: string | null;
+  invFrom?: string | null;
+  invTo?: string | null;
   exportHref?: string;
   toolbar?: ReactNode;
 }) {
@@ -118,6 +122,24 @@ export function FinanceOfficeOrdersTable({
     });
   };
 
+  const headerRow = (
+    <FinanceOfficeTableHeaderRow
+      interactive
+      allVisibleSelected={allVisibleSelected}
+      onToggleAllVisible={toggleAllVisible}
+      periodFrom={periodFrom}
+      periodTo={periodTo}
+      shipMode={shipMode}
+      shipFrom={shipFrom}
+      shipTo={shipTo}
+      invFrom={invFrom}
+      invTo={invTo}
+      tab={tab}
+      listTag={listTag}
+      q={q}
+    />
+  );
+
   if (orders.length === 0) {
     return (
       <StickyListChrome
@@ -137,9 +159,9 @@ export function FinanceOfficeOrdersTable({
       className="w-full max-w-full min-w-0 overflow-y-visible rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm"
       toolbarClassName="rounded-t-lg bg-[var(--card-bg)] pb-0"
       toolbar={
-        <div className="space-y-4">
+        <div>
           {toolbar}
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
             <div className="text-sm font-medium text-[var(--text-body)]">
               Нарядов: {orders.length} · выбрано: {selectedCount}
               {activeTag ? (
@@ -165,6 +187,12 @@ export function FinanceOfficeOrdersTable({
               </div>
             ) : null}
           </div>
+          <div className="orders-list-mirror-thead hidden w-full min-w-0 overflow-x-auto overflow-y-hidden bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border)] [-webkit-overflow-scrolling:touch] shell-laptop:block print:hidden">
+            <table className="finance-office-orders-table w-full min-w-0 table-fixed border-separate border-spacing-0 text-center text-sm">
+              <FinanceOfficeTableColGroup />
+              <thead>{headerRow}</thead>
+            </table>
+          </div>
         </div>
       }
     >
@@ -172,42 +200,23 @@ export function FinanceOfficeOrdersTable({
       <div className="relative">
       <div className="w-full min-w-0">
         <table className="finance-office-orders-table w-full min-w-0 table-fixed border-separate border-spacing-0 text-center text-sm">
-          <thead className="hidden shell-laptop:table-header-group">
-            <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-              <th className="w-[7.5rem] px-2 py-1.5 text-center normal-case">
-                <button
-                  type="button"
-                  onClick={toggleAllVisible}
-                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-[11px] font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)]"
-                >
-                  {allVisibleSelected ? "Снять видимые" : "Выбрать видимые"}
-                </button>
-              </th>
-              <th className="w-10 px-2 py-2 text-center normal-case">Чат</th>
-              <th className="px-2 py-2 text-center">№ наряда</th>
-              <th className="min-w-0 px-2 py-2 text-center">Клиника</th>
-              <th className="min-w-0 px-2 py-2 text-center">Врач</th>
-              <th className="min-w-0 px-2 py-2 text-center">Пациент</th>
-              <th
-                className="min-w-0 w-[8%] px-2 py-2 text-center normal-case"
-                title="Дата выставления / отправки счёта"
-              >
-                Счёт выставлен
-              </th>
-              <FinanceOfficeDateFilterHeaders
-                appliedFrom={periodFrom}
-                appliedTo={periodTo}
-                shipMode={shipMode}
-                appliedShipFrom={shipFrom}
-                appliedShipTo={shipTo}
-                ctx={{ tab, tag: listTag, q }}
-              />
-              <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">Реквизиты</th>
-              <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">Наше юрлицо</th>
-              <th className="min-w-0 w-[5%] px-2 py-2 text-center normal-case">Отправка</th>
-              <th className="min-w-0 px-2 py-2 text-center normal-case">Отметки</th>
-              <th className="w-[5rem] px-2 py-2 text-center normal-case shell-desktop:hidden">Ещё</th>
-            </tr>
+          <FinanceOfficeTableColGroup />
+          <thead className="sr-only">
+            <FinanceOfficeTableHeaderRow
+              interactive={false}
+              allVisibleSelected={allVisibleSelected}
+              onToggleAllVisible={toggleAllVisible}
+              periodFrom={periodFrom}
+              periodTo={periodTo}
+              shipMode={shipMode}
+              shipFrom={shipFrom}
+              shipTo={shipTo}
+              invFrom={invFrom}
+              invTo={invTo}
+              tab={tab}
+              listTag={listTag}
+              q={q}
+            />
           </thead>
           <tbody className="[&>tr:first-child>td]:pt-2">
             {orders.map((o) => (
@@ -223,6 +232,8 @@ export function FinanceOfficeOrdersTable({
                 shipMode={shipMode}
                 shipFrom={shipFrom}
                 shipTo={shipTo}
+                invFrom={invFrom}
+                invTo={invTo}
                 canSeeAdminIndicators={canSeeAdminIndicators}
               />
             ))}
@@ -235,5 +246,112 @@ export function FinanceOfficeOrdersTable({
       />
       </div>
     </StickyListChrome>
+  );
+}
+
+function FinanceOfficeTableColGroup() {
+  return (
+    <colgroup>
+      <col className="w-[7.5rem]" />
+      <col className="w-10" />
+      <col />
+      <col />
+      <col />
+      <col />
+      <col className="w-[8%]" />
+      <col />
+      <col />
+      <col className="hidden shell-desktop:table-column" />
+      <col className="hidden shell-desktop:table-column" />
+      <col className="w-[5%]" />
+      <col />
+      <col className="w-[5rem] shell-desktop:hidden" />
+    </colgroup>
+  );
+}
+
+function FinanceOfficeTableHeaderRow({
+  interactive,
+  allVisibleSelected,
+  onToggleAllVisible,
+  periodFrom,
+  periodTo,
+  shipMode,
+  shipFrom,
+  shipTo,
+  invFrom,
+  invTo,
+  tab,
+  listTag,
+  q,
+}: {
+  interactive: boolean;
+  allVisibleSelected: boolean;
+  onToggleAllVisible: () => void;
+  periodFrom: string | null;
+  periodTo: string | null;
+  shipMode: OrdersShipmentMode | null;
+  shipFrom: string | null;
+  shipTo: string | null;
+  invFrom: string | null;
+  invTo: string | null;
+  tab: string;
+  listTag: string | null;
+  q: string | null | undefined;
+}) {
+  return (
+    <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+      <th className="w-[7.5rem] px-2 py-1.5 text-center normal-case">
+        {interactive ? (
+          <button
+            type="button"
+            onClick={onToggleAllVisible}
+            className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-[11px] font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)]"
+          >
+            {allVisibleSelected ? "Снять видимые" : "Выбрать видимые"}
+          </button>
+        ) : (
+          "Выбор"
+        )}
+      </th>
+      <th className="w-10 px-2 py-2 text-center normal-case">Чат</th>
+      <th className="px-2 py-2 text-center">№ наряда</th>
+      <th className="min-w-0 px-2 py-2 text-center">Клиника</th>
+      <th className="min-w-0 px-2 py-2 text-center">Врач</th>
+      <th className="min-w-0 px-2 py-2 text-center">Пациент</th>
+      {interactive ? (
+        <FinanceOfficeDateFilterHeaders
+          appliedFrom={periodFrom}
+          appliedTo={periodTo}
+          shipMode={shipMode}
+          appliedShipFrom={shipFrom}
+          appliedShipTo={shipTo}
+          appliedInvFrom={invFrom}
+          appliedInvTo={invTo}
+          ctx={{ tab, tag: listTag, q }}
+        />
+      ) : (
+        <>
+          <th className="min-w-0 px-2 py-2 text-center normal-case">
+            Счёт выставлен
+          </th>
+          <th className="min-w-0 px-2 py-2 text-center normal-case">Лаб срок</th>
+          <th className="min-w-0 px-2 py-2 text-center normal-case">Запись</th>
+        </>
+      )}
+      <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">
+        Реквизиты
+      </th>
+      <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">
+        Наше юрлицо
+      </th>
+      <th className="min-w-0 w-[5%] px-2 py-2 text-center normal-case">
+        Отправка
+      </th>
+      <th className="min-w-0 px-2 py-2 text-center normal-case">Отметки</th>
+      <th className="w-[5rem] px-2 py-2 text-center normal-case shell-desktop:hidden">
+        Ещё
+      </th>
+    </tr>
   );
 }

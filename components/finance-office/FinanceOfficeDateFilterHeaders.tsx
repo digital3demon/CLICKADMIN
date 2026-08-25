@@ -17,7 +17,7 @@ import {
   moscowTomorrowYmd,
 } from "@/lib/shipments-date-range";
 
-type OpenKey = "lab" | "appt" | null;
+type OpenKey = "inv" | "lab" | "appt" | null;
 
 type Ctx = {
   tab: string;
@@ -176,6 +176,8 @@ export function FinanceOfficeDateFilterHeaders({
   shipMode,
   appliedShipFrom,
   appliedShipTo,
+  appliedInvFrom,
+  appliedInvTo,
   ctx,
 }: {
   appliedFrom: string | null;
@@ -183,6 +185,8 @@ export function FinanceOfficeDateFilterHeaders({
   shipMode: OrdersShipmentMode | null;
   appliedShipFrom: string | null;
   appliedShipTo: string | null;
+  appliedInvFrom: string | null;
+  appliedInvTo: string | null;
   ctx: Ctx;
 }) {
   const router = useRouter();
@@ -192,6 +196,8 @@ export function FinanceOfficeDateFilterHeaders({
   const [labTo, setLabTo] = useState(appliedTo ?? "");
   const [apptFrom, setApptFrom] = useState(appliedShipFrom ?? "");
   const [apptTo, setApptTo] = useState(appliedShipTo ?? "");
+  const [invFrom, setInvFrom] = useState(appliedInvFrom ?? "");
+  const [invTo, setInvTo] = useState(appliedInvTo ?? "");
 
   useEffect(() => {
     setLabFrom(appliedFrom ?? "");
@@ -228,8 +234,10 @@ export function FinanceOfficeDateFilterHeaders({
     };
   }, [open]);
 
+  const invActive = Boolean(appliedInvTo?.trim());
   const labActive = Boolean(appliedFrom?.trim() || appliedTo?.trim());
-  const apptActive = shipMode != null;
+  const apptActive = shipMode != null && !invActive;
+  const labHeaderActive = labActive && !apptActive && !invActive;
   const todayYmd = moscowTodayYmd();
   const tomorrowYmd = moscowTomorrowYmd();
   const labAppliedFrom = (appliedFrom ?? "").trim();
@@ -241,6 +249,12 @@ export function FinanceOfficeDateFilterHeaders({
     labAppliedFrom === tomorrowYmd &&
     (labAppliedTo === tomorrowYmd ||
       (!labAppliedTo && labAppliedFrom === tomorrowYmd));
+  const invAppliedFrom = (appliedInvFrom ?? "").trim();
+  const invAppliedTo = (appliedInvTo ?? "").trim();
+  const invIsToday =
+    invAppliedFrom === todayYmd && invAppliedTo === todayYmd;
+  const invIsTomorrow =
+    invAppliedFrom === tomorrowYmd && invAppliedTo === tomorrowYmd;
 
   const showBtn =
     "h-8 shrink-0 rounded-md bg-[var(--sidebar-blue)] px-2.5 text-[11px] font-semibold text-white hover:opacity-95";
@@ -269,12 +283,93 @@ export function FinanceOfficeDateFilterHeaders({
     setOpen(null);
   };
 
+  const applyInvRange = (fromYmd: string, toYmd: string) => {
+    const from = fromYmd.trim();
+    const to = toYmd.trim();
+    if (!to) return;
+    setInvFrom(from);
+    setInvTo(to);
+    router.push(
+      financeOfficeListHref({
+        tab: ctx.tab,
+        tag: ctx.tag,
+        q: ctx.q,
+        invFrom: from || undefined,
+        invTo: to,
+      }),
+    );
+    setOpen(null);
+  };
+
   return (
     <>
       <FilterTh
+        label="Счёт выставлен"
+        title="Дата выставления счёта — фильтр с/по (дата, без времени)"
+        active={invActive}
+        open={open === "inv"}
+        onToggle={() => setOpen((k) => (k === "inv" ? null : "inv"))}
+      >
+        <div className="flex flex-col gap-2">
+          <DateRangeFields
+            fromId={`${uid}-inv-from`}
+            toId={`${uid}-inv-to`}
+            from={invFrom}
+            to={invTo}
+            onFrom={setInvFrom}
+            onTo={setInvTo}
+            fromTitle="Счёт выставлен с (МСК), включительно"
+            toTitle="Счёт выставлен по (МСК), включительно"
+          />
+          <div className="flex flex-nowrap items-center gap-1.5">
+            <button
+              type="button"
+              className={dayPresetBtn(invIsToday && invActive)}
+              onClick={() => applyInvRange(todayYmd, todayYmd)}
+            >
+              Сегодня
+            </button>
+            <button
+              type="button"
+              className={dayPresetBtn(invIsTomorrow && invActive)}
+              onClick={() => applyInvRange(tomorrowYmd, tomorrowYmd)}
+            >
+              Завтра
+            </button>
+            <button
+              type="button"
+              className={showBtn}
+              onClick={() => applyInvRange(invFrom, invTo)}
+            >
+              Показать
+            </button>
+            {invActive ? (
+              <button
+                type="button"
+                className="h-8 shrink-0 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 text-[11px] font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                onClick={() => {
+                  router.push(
+                    financeOfficeListHref({
+                      tab: ctx.tab,
+                      from: appliedFrom,
+                      to: appliedTo,
+                      tag: ctx.tag,
+                      q: ctx.q,
+                    }),
+                  );
+                  setOpen(null);
+                }}
+              >
+                Сбросить
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </FilterTh>
+      <FilterTh
         label="Лаб срок"
         title="Срок лабораторный — фильтр с/по (дата, без времени)"
-        active={labActive && !apptActive}
+        active={labHeaderActive}
         open={open === "lab"}
         onToggle={() => setOpen((k) => (k === "lab" ? null : "lab"))}
       >
@@ -292,14 +387,14 @@ export function FinanceOfficeDateFilterHeaders({
           <div className="flex flex-nowrap items-center gap-1.5">
             <button
               type="button"
-              className={dayPresetBtn(labIsToday && !apptActive)}
+              className={dayPresetBtn(labIsToday && labHeaderActive)}
               onClick={() => applyLabRange(todayYmd, todayYmd)}
             >
               Сегодня
             </button>
             <button
               type="button"
-              className={dayPresetBtn(labIsTomorrow && !apptActive)}
+              className={dayPresetBtn(labIsTomorrow && labHeaderActive)}
               onClick={() => applyLabRange(tomorrowYmd, tomorrowYmd)}
             >
               Завтра
@@ -311,7 +406,7 @@ export function FinanceOfficeDateFilterHeaders({
             >
               Показать
             </button>
-            {labActive && !apptActive ? (
+            {labHeaderActive ? (
               <button
                 type="button"
                 className="h-8 shrink-0 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 text-[11px] font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"

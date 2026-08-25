@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { financeOfficeListHref } from "@/lib/finance-office-list-query";
+import {
+  financeOfficeListHref,
+  parseFinanceOfficeInvoiceIssuedParams,
+} from "@/lib/finance-office-list-query";
 
 describe("financeOfficeListHref", () => {
   it("кириллица в поиске и период записи без времени", () => {
@@ -25,5 +28,27 @@ describe("financeOfficeListHref", () => {
         ship: "actual",
       }),
     ).toContain("ship=actual");
+  });
+
+  it("кириллица в поиске и период счёта без времени", () => {
+    expect(
+      financeOfficeListHref({
+        tab: "actual",
+        q: "Соколов",
+        invFrom: "2026-05-07",
+        invTo: "2026-05-09",
+      }),
+    ).toBe(
+      "/finance-office?tab=actual&q=%D0%A1%D0%BE%D0%BA%D0%BE%D0%BB%D0%BE%D0%B2&invFrom=2026-05-07&invTo=2026-05-09",
+    );
+  });
+
+  it("без даты «по» у счёта — ошибка на русском", () => {
+    const parsed = parseFinanceOfficeInvoiceIssuedParams({
+      invFrom: "2026-05-07",
+      invTo: "",
+    });
+    expect(parsed.error).toMatch(/по/i);
+    expect(parsed.toYmd).toBeNull();
   });
 });

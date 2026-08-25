@@ -55,11 +55,13 @@ type RowChrome = {
   shipMode: OrdersShipmentMode | null;
   shipFrom: string | null;
   shipTo: string | null;
+  invFrom: string | null;
+  invTo: string | null;
   canSeeAdminIndicators: boolean;
 };
 
 function deriveRowChrome(args: RowChrome) {
-  const { o, tab, periodFrom, periodTo, q, shipMode, shipFrom, shipTo, canSeeAdminIndicators } = args;
+  const { o, tab, periodFrom, periodTo, q, shipMode, shipFrom, shipTo, invFrom, invTo, canSeeAdminIndicators } = args;
   const workSent = o.adminShippedOtpr;
   const clinicName = o.clinic?.name ?? "Частное лицо";
   const doctorName = personNameSurnameInitials(o.doctor.fullName);
@@ -109,6 +111,8 @@ function deriveRowChrome(args: RowChrome) {
     shipMode,
     shipFrom,
     shipTo,
+    invFrom,
+    invTo,
   };
 }
 
@@ -121,6 +125,8 @@ const TagsCell = memo(function TagsCell({
   shipMode,
   shipFrom,
   shipTo,
+  invFrom,
+  invTo,
 }: {
   o: FinanceOfficeOrderTableRow;
   tab: string;
@@ -130,6 +136,8 @@ const TagsCell = memo(function TagsCell({
   shipMode: OrdersShipmentMode | null;
   shipFrom: string | null;
   shipTo: string | null;
+  invFrom: string | null;
+  invTo: string | null;
 }) {
   return (
     <OrderListTagsCell
@@ -176,6 +184,8 @@ const TagsCell = memo(function TagsCell({
         ship: shipMode,
         shipFrom,
         shipTo,
+        invFrom,
+        invTo,
       }}
       financeCalculated={o.financeCalculated}
       clinicWorksWithEdo={o.clinicWorksWithEdo}
@@ -278,6 +288,8 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           shipMode={d.shipMode}
           shipFrom={d.shipFrom}
           shipTo={d.shipTo}
+          invFrom={d.invFrom}
+          invTo={d.invTo}
         />
       </td>
       <td className="w-[4.5rem] px-1 py-2 align-top shell-desktop:hidden">
@@ -307,6 +319,8 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
   shipMode,
   shipFrom,
   shipTo,
+  invFrom,
+  invTo,
   canSeeAdminIndicators,
 }: RowChrome & {
   isSelected: boolean;
@@ -322,6 +336,8 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
     shipMode,
     shipFrom,
     shipTo,
+    invFrom,
+    invTo,
     canSeeAdminIndicators,
   };
   const d = deriveRowChrome(chrome);
@@ -465,6 +481,8 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
                   shipMode={shipMode}
                   shipFrom={shipFrom}
                   shipTo={shipTo}
+                  invFrom={invFrom}
+                  invTo={invTo}
                 />
               </div>
             </div>

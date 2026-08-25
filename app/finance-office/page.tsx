@@ -25,7 +25,10 @@ import {
   humanListTagLabel,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
-import { financeOfficeListHref } from "@/lib/finance-office-list-query";
+import {
+  financeOfficeListHref,
+  parseFinanceOfficeInvoiceIssuedParams,
+} from "@/lib/finance-office-list-query";
 import {
   ordersShipmentModeLabel,
   parseOrdersShipmentParams,
@@ -112,6 +115,8 @@ export default async function FinanceOfficePage({
     ship?: string;
     shipFrom?: string;
     shipTo?: string;
+    invFrom?: string;
+    invTo?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -150,10 +155,31 @@ export default async function FinanceOfficePage({
           shipTo: shipParsed.shipTo,
         }
       : null;
+  const invParsed = parseFinanceOfficeInvoiceIssuedParams({
+    invFrom: sp.invFrom,
+    invTo: sp.invTo,
+  });
+  const invoiceIssued =
+    invParsed.toYmd && !invParsed.error
+      ? { fromYmd: invParsed.fromYmd, toYmd: invParsed.toYmd }
+      : null;
   let error: string | null = null;
   let rangeSummary: string | null = null;
 
-  if (shipParsed.periodError) {
+  if (invParsed.error) {
+    error = invParsed.error;
+  } else if (invoiceIssued) {
+    if (
+      invoiceIssued.fromYmd &&
+      rangeDaySpan(invoiceIssued.fromYmd, invoiceIssued.toYmd) > MAX_RANGE_DAYS
+    ) {
+      error = `Максимальный период — ${MAX_RANGE_DAYS} дней. Сузьте диапазон.`;
+    } else if (invoiceIssued.fromYmd) {
+      rangeSummary = `Счёт выставлен (МСК): с ${invoiceIssued.fromYmd} по ${invoiceIssued.toYmd}, все этапы воронки`;
+    } else {
+      rangeSummary = `Счёт выставлен (МСК): по ${invoiceIssued.toYmd} (включая прошлые), все этапы воронки`;
+    }
+  } else if (shipParsed.periodError) {
     error = shipParsed.periodError;
   } else if (appointment) {
     const apptLabel = ordersShipmentModeLabel(shipParsed);
@@ -176,7 +202,8 @@ export default async function FinanceOfficePage({
 
   const shouldFetch =
     !error &&
-    (Boolean(appointment) ||
+    (Boolean(invoiceIssued) ||
+      Boolean(appointment) ||
       mode === "actual" ||
       (mode === "period" && Boolean(toRaw)));
   const ordersPrisma = await getOrdersPrisma();
@@ -186,10 +213,21 @@ export default async function FinanceOfficePage({
           listTag: rawTagInvalid ? null : rawTag,
           search: q,
           mode,
-          fromYmd: appointment ? null : mode === "period" ? fromRaw : null,
-          toYmd: appointment ? null : mode === "period" ? toRaw : null,
+          fromYmd:
+            invoiceIssued || appointment
+              ? null
+              : mode === "period"
+                ? fromRaw
+                : null,
+          toYmd:
+            invoiceIssued || appointment
+              ? null
+              : mode === "period"
+                ? toRaw
+                : null,
           userId: session?.sub,
-          appointment,
+          appointment: invoiceIssued ? null : appointment,
+          invoiceIssued,
         })
       : Promise.resolve(
           [] as Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>,
@@ -211,7 +249,10 @@ export default async function FinanceOfficePage({
   if (toRaw) exportParams.set("to", toRaw);
   if (rawTag && !rawTagInvalid) exportParams.set("tag", rawTag);
   if (q) exportParams.set("q", q);
-  if (appointment) {
+  if (invoiceIssued) {
+    if (invoiceIssued.fromYmd) exportParams.set("invFrom", invoiceIssued.fromYmd);
+    exportParams.set("invTo", invoiceIssued.toYmd);
+  } else if (appointment) {
     exportParams.set("ship", appointment.mode);
     if (appointment.shipFrom) exportParams.set("shipFrom", appointment.shipFrom);
     if (appointment.shipTo) exportParams.set("shipTo", appointment.shipTo);
@@ -231,6 +272,21 @@ export default async function FinanceOfficePage({
         <input type="hidden" name="tab" value={mode} />
         {fromRaw ? <input type="hidden" name="from" value={fromRaw} /> : null}
         {toRaw ? <input type="hidden" name="to" value={toRaw} /> : null}
+        {appointment ? (
+          <input type="hidden" name="ship" value={appointment.mode} />
+        ) : null}
+        {appointment?.shipFrom ? (
+          <input type="hidden" name="shipFrom" value={appointment.shipFrom} />
+        ) : null}
+        {appointment?.shipTo ? (
+          <input type="hidden" name="shipTo" value={appointment.shipTo} />
+        ) : null}
+        {invoiceIssued?.fromYmd ? (
+          <input type="hidden" name="invFrom" value={invoiceIssued.fromYmd} />
+        ) : null}
+        {invoiceIssued ? (
+          <input type="hidden" name="invTo" value={invoiceIssued.toYmd} />
+        ) : null}
         {rawTag && !rawTagInvalid ? (
           <input type="hidden" name="tag" value={rawTag} />
         ) : null}
@@ -263,9 +319,11 @@ export default async function FinanceOfficePage({
               tab: mode,
               from: fromRaw,
               to: toRaw,
-              ship: appointment?.mode,
-              shipFrom: appointment?.shipFrom,
-              shipTo: appointment?.shipTo,
+              ship: invoiceIssued ? undefined : appointment?.mode,
+              shipFrom: invoiceIssued ? undefined : appointment?.shipFrom,
+              shipTo: invoiceIssued ? undefined : appointment?.shipTo,
+              invFrom: invoiceIssued?.fromYmd,
+              invTo: invoiceIssued?.toYmd,
             })}
             className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
           >
@@ -341,9 +399,11 @@ export default async function FinanceOfficePage({
             periodTo={toRaw}
             q={q}
             listTag={rawTagInvalid ? null : rawTag}
-            ship={appointment?.mode ?? null}
-            shipFrom={appointment?.shipFrom ?? null}
-            shipTo={appointment?.shipTo ?? null}
+            ship={invoiceIssued ? null : appointment?.mode ?? null}
+            shipFrom={invoiceIssued ? null : appointment?.shipFrom ?? null}
+            shipTo={invoiceIssued ? null : appointment?.shipTo ?? null}
+            invFrom={invoiceIssued?.fromYmd ?? null}
+            invTo={invoiceIssued?.toYmd ?? null}
           />
         ) : null}
         <FinanceOfficeOrdersTable
@@ -354,9 +414,11 @@ export default async function FinanceOfficePage({
           periodTo={toRaw}
           q={q}
           listTag={rawTagInvalid ? null : rawTag}
-          shipMode={appointment?.mode ?? null}
-          shipFrom={appointment?.shipFrom ?? null}
-          shipTo={appointment?.shipTo ?? null}
+          shipMode={invoiceIssued ? null : appointment?.mode ?? null}
+          shipFrom={invoiceIssued ? null : appointment?.shipFrom ?? null}
+          shipTo={invoiceIssued ? null : appointment?.shipTo ?? null}
+          invFrom={invoiceIssued?.fromYmd ?? null}
+          invTo={invoiceIssued?.toYmd ?? null}
           exportHref={exportHref}
         />
       </div>

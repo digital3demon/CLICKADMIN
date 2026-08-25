@@ -4,6 +4,7 @@ import {
   FINANCE_OFFICE_INCLUDED_LAB_STATUSES,
   effectiveFinanceLabDueDate,
   financeOfficeLabDueBeforeEndExclusive,
+  financeOfficeInvoiceIssuedDateWhere,
   financeOfficeLabDueInRange,
   financeOfficeModeDateWhere,
   financeOfficeProductionAndLaterWhere,
@@ -117,6 +118,18 @@ describe("finance-office-list-filter", () => {
         kaitenColumnTitle: "Сборка",
       }),
     ).toBe(true);
+  });
+
+  it("invoice issued closed range uses MSK day bounds", () => {
+    const where = financeOfficeInvoiceIssuedDateWhere({
+      fromYmd: "2026-07-01",
+      toYmd: "2026-07-10",
+    });
+    const json = JSON.stringify(where);
+    expect(json).toContain("invoiceIssuedAt");
+    expect(json).toContain("invoiceAttachment");
+    expect(json).toContain("2026-06-30T21:00:00.000Z");
+    expect(json).toContain("2026-07-10T21:00:00.000Z");
   });
 
   it("production where includes kaiten column titles but not сдана админам", () => {

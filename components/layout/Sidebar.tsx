@@ -3,16 +3,12 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState } from "react";
-import {
-  canAccessSidebarPayments,
-  isKanbanOnlyUser,
-} from "@/lib/auth/permissions";
+import { isKanbanOnlyUser } from "@/lib/auth/permissions";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import { APP_DISPLAY_NAME } from "@/lib/app-brand";
 import { brandDisplayFont } from "@/lib/brand-font";
 import { useNewOrderPanel } from "@/components/orders/new-order-panel-context";
 import { SidebarDrafts } from "./SidebarDrafts";
-import { SidebarPayments } from "./SidebarPayments";
 import { SidebarNav } from "./SidebarNav";
 import { CommandPalette } from "@/components/ui/CommandPalette";
 import { isWorkdaySkyWidgetEnabled } from "@/lib/ui-flags";
@@ -257,21 +253,7 @@ export function Sidebar() {
           <SidebarNav />
         </Suspense>
 
-        {isEffectiveKanbanOnly || railCollapsed ? null : (
-          <>
-            {sessionUser &&
-            canAccessSidebarPayments(
-              sessionUser.role,
-              sessionUser.moduleAccess ?? undefined,
-            ) ? (
-              <SidebarPayments
-                sessionRole={sessionUser.role}
-                moduleAccess={sessionUser.moduleAccess}
-              />
-            ) : null}
-            <SidebarDrafts />
-          </>
-        )}
+        {isEffectiveKanbanOnly || railCollapsed ? null : <SidebarDrafts />}
       </div>
 
       <div
