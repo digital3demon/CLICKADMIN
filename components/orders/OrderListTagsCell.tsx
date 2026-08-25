@@ -73,6 +73,11 @@ import {
 } from "@/lib/order-urgency";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderPaymentModalAccountingUpload } from "@/components/orders/OrderPaymentModalAccountingUpload";
+import {
+  formatDocumentCopyCompositionText,
+  formatDocumentCopyOrderLegalText,
+  type DocumentCopyPayload,
+} from "@/lib/order-document-copy";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
   paymentValueToHarmonyTone,
@@ -445,6 +450,57 @@ export function OrderListTagsCell({
   useEffect(() => {
     setLocalUpdAttachmentId(updAttachmentId);
   }, [updAttachmentId]);
+
+  const [docCopy, setDocCopy] = useState<DocumentCopyPayload | null>(null);
+  const [docCopyBusy, setDocCopyBusy] = useState(false);
+  const [docCopyHint, setDocCopyHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!addOpen) {
+      setDocCopy(null);
+      setDocCopyHint(null);
+      return;
+    }
+    let cancelled = false;
+    setDocCopyBusy(true);
+    void fetch(`/api/orders/${orderId}/document-copy`, {
+      credentials: "include",
+    })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => null)) as
+          | DocumentCopyPayload
+          | { error?: string }
+          | null;
+        if (cancelled) return;
+        if (!res.ok || !data || !("orderLine" in data)) {
+          setDocCopy(null);
+          return;
+        }
+        setDocCopy(data);
+      })
+      .catch(() => {
+        if (!cancelled) setDocCopy(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDocCopyBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [addOpen, orderId]);
+
+  const copyDocText = useCallback(async (text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    try {
+      await navigator.clipboard.writeText(t);
+      setDocCopyHint("Скопировано");
+      window.setTimeout(() => setDocCopyHint(null), 2000);
+    } catch {
+      setDocCopyHint("Не удалось скопировать");
+      window.setTimeout(() => setDocCopyHint(null), 2500);
+    }
+  }, []);
 
   const closeAdd = useCallback(() => {
     setAddOpen(false);
@@ -1645,6 +1701,102 @@ export function OrderListTagsCell({
                 ))}
               </div>
             ) : null}
+            <div className="mt-4 min-w-0 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Документооборот
+              </p>
+              {docCopyBusy ? (
+                <p className="text-xs text-[var(--text-muted)]">Загрузка…</p>
+              ) : docCopy ? (
+                <>
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                        Заказ и юрлицо
+                      </p>
+                      <button
+                        type="button"
+                        title="Номер, ФИО, юрлицо и ИНН"
+                        onClick={() =>
+                          void copyDocText(
+                            formatDocumentCopyOrderLegalText(docCopy),
+                          )
+                        }
+                        className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+                      >
+                        Скопировать все
+                      </button>
+                    </div>
+                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        title="Нажмите — скопировать в буфер обмена"
+                        onClick={() => void copyDocText(docCopy.orderLine)}
+                        className="min-w-0 max-w-full truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left text-xs font-semibold text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+                      >
+                        {docCopy.orderLine}
+                      </button>
+                      {docCopy.legalName ? (
+                        <button
+                          type="button"
+                          title="Нажмите — скопировать в буфер обмена"
+                          onClick={() =>
+                            void copyDocText(docCopy.legalName ?? "")
+                          }
+                          className="min-w-0 max-w-full truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left text-xs font-medium text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+                        >
+                          {docCopy.legalName}
+                        </button>
+                      ) : null}
+                      {docCopy.inn ? (
+                        <button
+                          type="button"
+                          title="Нажмите — скопировать в буфер обмена"
+                          onClick={() => void copyDocText(docCopy.inn ?? "")}
+                          className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+                        >
+                          {docCopy.inn}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                        Состав заказа
+                        {docCopy.composition.length > 0
+                          ? ` · ${docCopy.composition.length}`
+                          : ""}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={docCopy.composition.length === 0}
+                        title="Только значения, построчно"
+                        onClick={() =>
+                          void copyDocText(
+                            formatDocumentCopyCompositionText(
+                              docCopy.composition,
+                            ),
+                          )
+                        }
+                        className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] disabled:opacity-40"
+                      >
+                        Скопировать все
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-[var(--text-muted)]">
+                  Не удалось загрузить данные наряда
+                </p>
+              )}
+              {docCopyHint ? (
+                <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                  {docCopyHint}
+                </p>
+              ) : null}
+            </div>
             <OrderPaymentModalAccountingUpload
               orderId={orderId}
               invoiceAttachmentId={localInvoiceAttachmentId}
