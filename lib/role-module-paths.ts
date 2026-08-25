@@ -245,6 +245,8 @@ const RULES: Rule[] = [
   { prefix: "/api/orders/import-export", module: "CONFIG_ORDERS_IMPORT_EXPORT" },
   { prefix: "/directory/contracts", module: "CONFIG_CONTRACT_TEMPLATE" },
   { prefix: "/directory/mail", module: "CONFIG_MAIL" },
+  { prefix: "/directory/finance-office", module: "FINANCE_OFFICE" },
+  { prefix: "/api/directory/finance-office", module: "FINANCE_OFFICE" },
   { prefix: "/directory/warehouse", module: "CONFIG_WAREHOUSE" },
   { prefix: "/api/tenant/kaiten-integration", module: "CONFIG_KANBAN_BOARDS" },
   { prefix: "/directory/kanban-boards", module: "CONFIG_KANBAN_BOARDS" },

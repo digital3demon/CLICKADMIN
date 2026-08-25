@@ -46,6 +46,8 @@ const clinicBeforePatchSelect = {
   phoneAccounting: true,
   phoneManagement: true,
   email: true,
+  useEmailForInvoices: true,
+  invoiceEmail: true,
   ceoName: true,
 } as const;
 
@@ -62,6 +64,7 @@ type PatchBody = {
   usesPaperDocs?: boolean;
   billingLegalForm?: BillingLegalForm | null;
   orderPriceListKind?: OrderPriceListKind | null;
+  useEmailForInvoices?: boolean;
 } & Partial<Record<ClinicRequisiteKey, string | null>>;
 
 function trimOrNull(v: unknown): string | null {
@@ -175,6 +178,9 @@ export async function PATCH(
         );
       }
     }
+    if (body.useEmailForInvoices !== undefined) {
+      data.useEmailForInvoices = Boolean(body.useEmailForInvoices);
+    }
     if (body.orderPriceListKind !== undefined) {
       if (body.orderPriceListKind === null) {
         data.orderPriceListKind = null;
@@ -233,6 +239,9 @@ export async function PATCH(
             break;
           case "email":
             data.email = v;
+            break;
+          case "invoiceEmail":
+            data.invoiceEmail = v;
             break;
           case "ceoName":
             data.ceoName = v;

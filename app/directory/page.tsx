@@ -44,6 +44,7 @@ export default async function DirectoryHubPage() {
       session.role,
       a ?? undefined,
     ));
+  const showFinanceOffice = a?.FINANCE_OFFICE === true;
   const showPrint = a?.CONFIG_PRINT === true;
   const showAppearance = a?.CONFIG_APPEARANCE === true;
   const showClickMig = a?.CONFIG_CLICKMIG === true && !session?.demo;
@@ -258,6 +259,19 @@ export default async function DirectoryHubPage() {
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
               Загрузка DOCX-шаблона: поля для замены распознаются из красного
               текста в кавычках.
+            </p>
+          </Link>
+        ) : null}
+        {showFinanceOffice ? (
+          <Link
+            href="/directory/finance-office"
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
+          >
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">
+              ФинОтдел
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Шаблон письма о долге, срок в рабочих днях МСК и ящик для рассылки.
             </p>
           </Link>
         ) : null}

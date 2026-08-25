@@ -10,6 +10,7 @@ import { FinanceOfficeBankImportPanel } from "@/components/finance-office/Financ
 import { FinanceOfficeQuickFilterChips } from "@/components/finance-office/FinanceOfficeQuickFilterChips";
 import { FinanceOfficeModePanel } from "@/components/finance-office/FinanceOfficeModePanel";
 import { CorrectionsHistoryActionCard } from "@/components/orders/CorrectionsHistoryActionCard";
+import { FinanceOfficeDebtsCard } from "@/components/finance-office/FinanceOfficeDebtsCard";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
@@ -18,6 +19,8 @@ import {
   fetchFinanceOfficeOrders,
 } from "@/lib/fetch-finance-office-orders";
 import { countOrdersWithPendingMergedCorrections } from "@/lib/order-chat-corrections-read";
+import { countFinanceOfficeDebts } from "@/lib/finance-office-debts";
+import { FINANCE_OFFICE_DEBT_DEFAULT_DAYS } from "@/lib/finance-office-debt-settings";
 import {
   parseFinanceOfficeMode,
 } from "@/lib/finance-office-list-filter";
@@ -207,7 +210,7 @@ export default async function FinanceOfficePage({
       mode === "actual" ||
       (mode === "period" && Boolean(toRaw)));
   const ordersPrisma = await getOrdersPrisma();
-  const [orders, correctionsPendingCount] = await Promise.all([
+  const [orders, correctionsPendingCount, debtsCount] = await Promise.all([
     shouldFetch && !error
       ? fetchFinanceOfficeOrders(ordersPrisma, tenantId, {
           listTag: rawTagInvalid ? null : rawTag,
@@ -233,6 +236,18 @@ export default async function FinanceOfficePage({
           [] as Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>,
         ),
     countOrdersWithPendingMergedCorrections(ordersPrisma, tenantId),
+    ordersPrisma.tenant
+      .findUnique({
+        where: { id: tenantId },
+        select: { financeOfficeDebtWorkingDays: true },
+      })
+      .then((t) =>
+        countFinanceOfficeDebts(
+          ordersPrisma,
+          tenantId,
+          t?.financeOfficeDebtWorkingDays ?? FINANCE_OFFICE_DEBT_DEFAULT_DAYS,
+        ),
+      ),
   ]);
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;
   const listRangeSummary =
@@ -347,8 +362,8 @@ export default async function FinanceOfficePage({
           ранние этапы).
         </p>
       </div>
-      {/* Одна высота: режим · корректировки · загрузка выписки */}
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(11rem,13rem)_minmax(18rem,24rem)] xl:items-stretch">
+      {/* Режим · долги · корректировки · выписка */}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(11rem,13rem)_minmax(11rem,13rem)_minmax(18rem,24rem)] xl:items-stretch">
         <FinanceOfficeModePanel
           mode={mode}
           appliedFrom={fromRaw}
@@ -356,6 +371,10 @@ export default async function FinanceOfficePage({
           listTag={rawTagInvalid ? null : rawTag}
           q={q}
           listSummaryLine={listSummaryLine}
+        />
+        <FinanceOfficeDebtsCard
+          className="h-full w-full max-w-[13rem] justify-self-stretch"
+          initialCount={debtsCount}
         />
         <CorrectionsHistoryActionCard
           dense

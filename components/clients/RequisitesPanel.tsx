@@ -54,9 +54,10 @@ export function RequisitesPanel({
     setSaving(true);
     setError(null);
     try {
-      const payload: Record<string, string | null> = {
+      const payload: Record<string, string | boolean | null> = {
         name: values.name.trim(),
         address: values.address?.trim() ? values.address.trim() : null,
+        useEmailForInvoices: Boolean(values.useEmailForInvoices),
       };
       for (const { key } of CLINIC_REQUISITE_ROWS) {
         const v = values[key];
@@ -91,6 +92,7 @@ export function RequisitesPanel({
             ];
           }),
         ) as Record<ClinicRequisiteKey, string>,
+        useEmailForInvoices: data.useEmailForInvoices === true,
       });
       router.refresh();
     } catch {
@@ -224,17 +226,45 @@ export function RequisitesPanel({
             </dt>
             <dd className="mt-1">
               {editing ? (
-                <input
-                  className="w-full rounded-md border border-[var(--input-border)] px-2 py-1.5 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
-                  value={(values[key] as string) ?? ""}
-                  onChange={(e) => setField(key, e.target.value)}
-                />
+                <div className="space-y-2">
+                  <input
+                    type={key === "email" || key === "invoiceEmail" ? "email" : "text"}
+                    className="w-full rounded-md border border-[var(--input-border)] px-2 py-1.5 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
+                    value={(values[key] as string) ?? ""}
+                    onChange={(e) => setField(key, e.target.value)}
+                  />
+                  {key === "email" ? (
+                    <label className="flex items-center gap-2 text-sm text-[var(--text-body)]">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-[var(--input-border)]"
+                        checked={Boolean(values.useEmailForInvoices)}
+                        onChange={(e) =>
+                          setValues((p) => ({
+                            ...p,
+                            useEmailForInvoices: e.target.checked,
+                          }))
+                        }
+                      />
+                      Использовать для счетов
+                    </label>
+                  ) : null}
+                </div>
               ) : (
-                <span className="whitespace-pre-wrap break-words text-sm text-[var(--app-text)]">
-                  {values[key] != null && String(values[key]).trim()
-                    ? String(values[key])
-                    : "—"}
-                </span>
+                <div className="space-y-1">
+                  <span className="whitespace-pre-wrap break-words text-sm text-[var(--app-text)]">
+                    {values[key] != null && String(values[key]).trim()
+                      ? String(values[key])
+                      : "—"}
+                  </span>
+                  {key === "email" ? (
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {values.useEmailForInvoices
+                        ? "Используется для счетов"
+                        : "Для счетов не используется"}
+                    </p>
+                  ) : null}
+                </div>
               )}
             </dd>
           </div>

@@ -26,6 +26,8 @@ export const CLINIC_UPDATE_FIELD_LABELS: Record<string, string> = {
   phoneAccounting: "телефон бухгалтерии",
   phoneManagement: "телефон руководства",
   email: "e-mail",
+  useEmailForInvoices: "e-mail для счетов (галочка)",
+  invoiceEmail: "e-mail для отправки счёта",
   ceoName: "руководитель",
 };
 

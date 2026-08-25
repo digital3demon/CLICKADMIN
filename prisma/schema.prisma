@@ -92,6 +92,13 @@ model Tenant {
   productionCalendarCountry         ProductionCalendarCountry  @default(RU)
   /// Срок хранения архивных заказов до безвозвратного удаления (дней).
   orderArchiveRetentionDays         Int                        @default(30)
+  /// Через сколько рабочих дней МСК после выставления счёта наряд попадает в «Долги».
+  financeOfficeDebtWorkingDays      Int                        @default(10)
+  /// Текстовый шаблон письма-напоминания о долге.
+  financeOfficeDebtEmailTemplate    String?
+  /// Ящик, с которого уходят уведомления о долгах.
+  financeOfficeDebtEmailAccountId   String?
+  financeOfficeDebtEmailAccount     EmailAccount?              @relation("TenantFinanceOfficeDebtMail", fields: [financeOfficeDebtEmailAccountId], references: [id], onDelete: SetNull)
   /// Опция «Канбан» (доска в CRM), отдельно от тарифа
   addonKanban                       Boolean                    @default(false)
   /// Интеграция с Kaiten API: при false — только CRM/канбан, без внешней синхронизации.
@@ -151,6 +158,8 @@ model Tenant {
   labTasks                          LabTask[]
   tenantApiKeys                     TenantApiKey[]
   depositLedgerEntries              DepositLedgerEntry[]
+
+  @@index([financeOfficeDebtEmailAccountId])
 }
 
 /// Карточка канбана без `linkedOrderId` — хранится на сервере для общего доступа в организации.
@@ -233,6 +242,10 @@ model Clinic {
   /// Телефон руководства
   phoneManagement              String?
   email                        String?
+  /// Существующий e-mail клиники использовать для рассылки счетов.
+  useEmailForInvoices          Boolean                        @default(false)
+  /// Отдельный e-mail для отправки счетов (приоритетнее галочки).
+  invoiceEmail                 String?
   /// Руководитель (ФИО, должность — как заведено)
   ceoName                      String?
   /// Работают по сверке (колонка «Сверка» в реестре)
@@ -959,8 +972,9 @@ model EmailAccount {
   emails              Email[]
   rules               EmailRule[]
   syncJobs            EmailSyncJob[]
-  replyTemplate       EmailReplyTemplate?
-  replyTemplateAssets EmailReplyTemplateAsset[]
+  replyTemplate        EmailReplyTemplate?
+  replyTemplateAssets  EmailReplyTemplateAsset[]
+  debtNotifyForTenants Tenant[]                  @relation("TenantFinanceOfficeDebtMail")
 
   @@unique([tenantId, createdByUserId, email])
   @@index([tenantId, isActive])

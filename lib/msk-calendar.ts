@@ -78,6 +78,32 @@ export function lastWorkingDayOfMskMonth(year: number, month1: number): string {
   return lastWorkingDayOnOrBeforeMsk(year, month1, 31);
 }
 
+/** Прибавить N рабочих дней МСК, считая со следующего дня после `startYmd`. */
+export function addMskWorkingDaysAfterYmd(startYmd: string, days: number): string {
+  const n = Math.max(0, Math.trunc(Number(days) || 0));
+  let cur = startYmd;
+  for (let i = 0; i < n; i++) {
+    cur = firstWorkingDayStrictlyAfterYmd(cur);
+  }
+  return cur;
+}
+
+/** Отступить на N рабочих дней МСК назад (включая сам `startYmd`, если он рабочий). */
+export function subtractMskWorkingDaysBeforeYmd(
+  startYmd: string,
+  days: number,
+): string {
+  const n = Math.max(0, Math.trunc(Number(days) || 0));
+  let cur = startYmd;
+  for (let i = 0; i < n; i++) {
+    cur = addCalendarDaysYmd(cur, -1);
+    for (let j = 0; j < 14 && !isMskWeekdayYmd(cur); j++) {
+      cur = addCalendarDaysYmd(cur, -1);
+    }
+  }
+  return cur;
+}
+
 /** Первый рабочий день строго после `ymd` (МСК). */
 export function firstWorkingDayStrictlyAfterYmd(ymd: string): string {
   let cur = addCalendarDaysYmd(ymd, 1);

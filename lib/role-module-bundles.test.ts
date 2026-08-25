@@ -81,6 +81,19 @@ describe("defaultModuleAllowed bundles alignment", () => {
     ).toBe(false);
   });
 
+  it("FINANCE_OFFICE: бухгалтер, финменеджер, админы и руководитель", () => {
+    expect(defaultModuleAllowed("ACCOUNTANT", "FINANCE_OFFICE")).toBe(true);
+    expect(defaultModuleAllowed("FINANCIAL_MANAGER", "FINANCE_OFFICE")).toBe(
+      true,
+    );
+    expect(defaultModuleAllowed("ADMINISTRATOR", "FINANCE_OFFICE")).toBe(true);
+    expect(defaultModuleAllowed("SENIOR_ADMINISTRATOR", "FINANCE_OFFICE")).toBe(
+      true,
+    );
+    expect(defaultModuleAllowed("MANAGER", "FINANCE_OFFICE")).toBe(true);
+    expect(defaultModuleAllowed("USER", "FINANCE_OFFICE")).toBe(false);
+  });
+
   it("MANAGER: заказы + канбан + все типы уведомлений по нарядам", () => {
     expect(defaultModuleAllowed("MANAGER", "ORDERS")).toBe(true);
     expect(defaultModuleAllowed("MANAGER", "ORDERS_CREATE")).toBe(true);

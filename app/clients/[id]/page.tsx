@@ -61,11 +61,14 @@ function requisitesInitialFromClinic(clinic: {
   phoneAccounting: string | null;
   phoneManagement: string | null;
   email: string | null;
+  invoiceEmail?: string | null;
+  useEmailForInvoices?: boolean | null;
   ceoName: string | null;
 }) {
   const base = {
     name: clinic.name,
     address: clinic.address ?? "",
+    useEmailForInvoices: clinic.useEmailForInvoices === true,
   };
   const rest = {} as Record<ClinicRequisiteKey, string>;
   for (const { key } of CLINIC_REQUISITE_ROWS) {

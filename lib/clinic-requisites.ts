@@ -13,6 +13,7 @@ export const CLINIC_REQUISITE_ROWS = [
   { key: "phoneAccounting", label: "Телефон бухгалтерии" },
   { key: "phoneManagement", label: "Телефон руководства" },
   { key: "email", label: "E-mail" },
+  { key: "invoiceEmail", label: "E-mail для отправки счёта" },
   { key: "ceoName", label: "Руководитель" },
 ] as const;
 
@@ -28,11 +29,13 @@ export function requisitesFormStateFromClinic(
   clinic: {
     name: string;
     address: string | null;
+    useEmailForInvoices?: boolean | null;
   } & Partial<Record<ClinicRequisiteKey, string | null>>,
 ): ClinicCopySource {
   const base = {
     name: clinic.name,
     address: clinic.address ?? "",
+    useEmailForInvoices: clinic.useEmailForInvoices === true,
   };
   const rest = {} as Record<ClinicRequisiteKey, string>;
   for (const { key } of CLINIC_REQUISITE_ROWS) {
@@ -47,6 +50,9 @@ export function buildClinicRequisitesCopyText(clinic: ClinicCopySource): string 
   const lines: string[] = [];
   lines.push(`Краткое название: ${clinic.name?.trim() || "—"}`);
   lines.push(`Адрес: ${clinic.address?.trim() ? clinic.address.trim() : "—"}`);
+  lines.push(
+    `E-mail использовать для счетов: ${clinic.useEmailForInvoices ? "да" : "нет"}`,
+  );
   for (const { key, label } of CLINIC_REQUISITE_ROWS) {
     const v = clinic[key];
     const s = v != null && String(v).trim() ? String(v).trim() : "—";

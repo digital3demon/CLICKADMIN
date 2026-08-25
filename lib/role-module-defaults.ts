@@ -340,7 +340,13 @@ export function defaultModuleAllowed(
     case "PAYROLL":
       return false;
     case "FINANCE_OFFICE":
-      return role === "ACCOUNTANT" || role === "FINANCIAL_MANAGER";
+      return (
+        role === "ACCOUNTANT" ||
+        role === "FINANCIAL_MANAGER" ||
+        role === "ADMINISTRATOR" ||
+        role === "SENIOR_ADMINISTRATOR" ||
+        role === "MANAGER"
+      );
     case "MAIL":
       return (["ADMINISTRATOR", "SENIOR_ADMINISTRATOR", "MANAGER"] as UserRole[]).includes(role);
     case "SHIPMENTS":
