@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  bindFinanceInvoiceRowToOrder,
   classifyFinanceOfficeDropFiles,
   filterInvoiceRowsForRetry,
+  financeInvoiceRowCanApply,
   financeOfficeInvoiceRowKey,
   invoiceImportSourceFileNames,
   isFinanceInvoiceImportRetryable,
   parseFinanceInvoiceImportProgressLine,
   readFinanceInvoiceImportApplyResponse,
+  type FinanceInvoiceImportPreviewRow,
 } from "@/lib/finance-office-invoice-import";
 
 describe("classifyFinanceOfficeDropFiles", () => {
@@ -147,6 +150,58 @@ describe("readFinanceInvoiceImportApplyResponse", () => {
     expect(seen).toEqual(["phase", "start", "row", "done"]);
   });
 
+  it("ручная привязка снимает «Счёт не найден» у УПД с кириллицей в имени", () => {
+    const row: FinanceInvoiceImportPreviewRow = {
+      key: "orphan::upd",
+      fileName: "УПД_статус_1_№_1656.pdf",
+      sourceArchive: null,
+      invoiceNumberRaw: "",
+      orderNumber: "",
+      orderId: null,
+      orderLabel: null,
+      alreadyHasInvoice: false,
+      apply: false,
+      errors: ["Счёт не найден"],
+      basisSnippet: "",
+      sourceKind: "crm-invoice",
+      updMatch: "one",
+      updItems: [
+        {
+          key: "k1",
+          number: "1656",
+          fileName: "УПД_статус_1_№_1656.pdf",
+          sourceArchive: null,
+        },
+      ],
+    };
+    expect(financeInvoiceRowCanApply(row)).toBe(false);
+    const bound = bindFinanceInvoiceRowToOrder(row, {
+      id: "ord-1",
+      orderNumber: "2608-226",
+      label: "2608-226 · Марченко · Лахта",
+      alreadyHasInvoice: true,
+      alreadyHasUpd: false,
+      invoiceAttachmentId: "att-1",
+    });
+    expect(bound.errors).toEqual([]);
+    expect(bound.orderId).toBe("ord-1");
+    expect(bound.apply).toBe(true);
+    expect(financeInvoiceRowCanApply(bound)).toBe(true);
+  });
+
+  it("счёт из дропа можно прикрепить без УПД", () => {
+    expect(
+      financeInvoiceRowCanApply({
+        orderId: "o1",
+        errors: [],
+        updMatch: "none",
+        sourceKind: "drop-invoice",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("readFinanceInvoiceImportApplyResponse extra", () => {
   it("бросает ошибку из потока", async () => {
     const body = `${JSON.stringify({ type: "error", error: "Файл слишком большой: счёт.zip" })}\n`;
     const res = new Response(body, {
