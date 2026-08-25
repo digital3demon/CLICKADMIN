@@ -1,5 +1,5 @@
 import "server-only";
-import type { PrismaClient } from "@prisma/client";
+import type { EmailDirection, PrismaClient } from "@prisma/client";
 import { cleanMailTextBody, mailHtmlToText } from "@/lib/mail/mail-text-cleanup";
 import { mergeEmailAttachmentsWithYandexDisk } from "@/lib/mail/yandex-disk-mail-attachments";
 
@@ -8,7 +8,7 @@ export type OrderSourceEmailRow = {
   subject: string | null;
   fromName: string | null;
   fromAddress: string | null;
-  direction: "INBOUND" | "OUTBOUND";
+  direction: EmailDirection;
   receivedAt: string | null;
   sentAt: string | null;
   preview: string | null;

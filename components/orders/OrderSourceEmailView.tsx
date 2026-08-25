@@ -67,7 +67,11 @@ export function OrderSourceEmailView({
             {email.subject?.trim() || "(без темы)"}
           </h4>
           <p className="mt-0.5 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            {email.direction === "OUTBOUND" ? "Исходящее" : "Входящее"}
+            {email.direction === "OUTBOUND"
+              ? "Исходящее"
+              : email.direction === "DRAFT"
+                ? "Черновик"
+                : "Входящее"}
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
