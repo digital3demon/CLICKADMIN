@@ -31,7 +31,9 @@ export function OrderDocumentMailPanel({
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/orders/${orderId}/source-emails`, {
+      const res = await fetch(
+        `/api/orders/${orderId}/source-emails?kind=documents`,
+        {
         cache: "no-store",
         credentials: "include",
       });
@@ -117,7 +119,7 @@ export function OrderDocumentMailPanel({
   };
 
   return (
-    <div className="min-w-0 space-y-3">
+    <div className="min-w-0 space-y-1.5">
       {showActions ? (
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -151,16 +153,11 @@ export function OrderDocumentMailPanel({
           {loading ? (
             <p className="text-xs text-[var(--text-muted)]">Загрузка писем…</p>
           ) : emails.length === 0 ? (
-            <p className="text-xs text-[var(--text-muted)]">
-              Писем по этому наряду пока нет. Ответы на отправленные документы
-              появятся здесь после синхронизации почты.
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Нет писем по документам. Появятся после «Отправить документы».
             </p>
           ) : (
-            <div
-              className={
-                compact ? "max-h-56 space-y-2 overflow-y-auto" : "space-y-3"
-              }
-            >
+            <div className="max-h-40 space-y-1.5 overflow-y-auto">
               {emails.map((email, index) => (
                 <OrderSourceEmailView
                   key={email.id}
@@ -172,6 +169,7 @@ export function OrderDocumentMailPanel({
               ))}
             </div>
           )}
+          {emails.length > 0 ? (
           <div>
             <label
               className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]"
@@ -181,21 +179,22 @@ export function OrderDocumentMailPanel({
             </label>
             <textarea
               id={`oe-doc-reply-${orderId}`}
-              rows={compact ? 3 : 4}
-              className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm"
+              rows={2}
+              className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-xs"
               value={reply}
               onChange={(e) => setReply(e.target.value)}
-              placeholder="Текст ответа на последнее письмо…"
+              placeholder="Текст ответа…"
             />
             <button
               type="button"
-              disabled={busy || !reply.trim() || emails.length === 0}
-              className="mt-2 rounded-md bg-[var(--sidebar-blue)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95 disabled:opacity-50 sm:text-sm"
+              disabled={busy || !reply.trim()}
+              className="mt-1.5 rounded-md bg-[var(--sidebar-blue)] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-95 disabled:opacity-50"
               onClick={() => void sendReply()}
             >
               Отправить ответ
             </button>
           </div>
+          ) : null}
         </>
       ) : null}
     </div>

@@ -52,7 +52,7 @@ export function OrderSourceEmailView({
         usedByAi
           ? "border-[var(--sidebar-blue)]/50 ring-1 ring-[var(--sidebar-blue)]/25"
           : "border-[var(--card-border)]"
-      } ${compact ? "p-3" : "p-4"} ${
+      } ${compact ? "p-2" : "p-4"} ${
         fillHeight ? "flex h-full min-h-0 flex-col" : ""
       }`}
     >
@@ -109,11 +109,11 @@ export function OrderSourceEmailView({
         {senderLabel(email)}
       </p>
       <p
-        className={`mt-3 overflow-y-auto whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text-body)] ${
+        className={`mt-2 overflow-y-auto whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] ${compact ? "p-1.5 leading-4" : "p-3 leading-5"} text-xs text-[var(--text-body)] ${
           fillHeight
             ? "min-h-0 flex-1"
             : compact
-              ? "max-h-48"
+              ? "max-h-24"
               : "max-h-72"
         }`}
       >

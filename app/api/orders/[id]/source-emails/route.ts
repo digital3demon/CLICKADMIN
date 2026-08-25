@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { canLinkEmailsToOrder } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { filterOrderDocumentMailEmails } from "@/lib/mail/order-document-mail-filter";
 import { fetchOrderSourceEmails } from "@/lib/mail/order-source-emails";
 import { linkEmailsToOrder } from "@/lib/mail/link-emails-to-order.server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
@@ -14,7 +15,7 @@ function canReadOrderMail(access: Record<string, boolean> | null | undefined) {
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getSessionFromCookies();
@@ -39,7 +40,11 @@ export async function GET(
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
   }
   const emails = await fetchOrderSourceEmails(prisma, tenantId, orderId);
-  return NextResponse.json({ emails });
+  const kind = new URL(req.url).searchParams.get("kind");
+  return NextResponse.json({
+    emails:
+      kind === "documents" ? filterOrderDocumentMailEmails(emails) : emails,
+  });
 }
 
 type PostBody = {

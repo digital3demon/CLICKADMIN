@@ -221,7 +221,7 @@ function DocumentFlowCompositionSpoiler({
 }) {
   const allText = formatDocumentFlowCompositionAllText(lines);
   return (
-    <details className="group min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]">
+    <details className="group w-fit max-w-full rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 select-none hover:brightness-105 [&::-webkit-details-marker]:hidden">
         <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
           Состав заказа
@@ -3733,9 +3733,9 @@ export function OrderEditForm({
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
           >
           <div
-            className="mt-2 grid grid-cols-1 items-start gap-4 crm-t2:grid-cols-2 crm-t2:gap-6"
+            className="mt-2 grid grid-cols-1 items-start justify-items-start gap-4 crm-t2:grid-cols-2 crm-t2:gap-6"
           >
-            <div className="min-w-0 space-y-3">
+            <div className="w-fit max-w-full space-y-3">
               <DocumentFlowCompositionSpoiler
                 lines={documentFlowCompositionRows}
                 onCopy={(t) => void copyInvoiceBlockText(t)}
@@ -3795,7 +3795,7 @@ export function OrderEditForm({
                   id="oe-invoice-number"
                   type="text"
                   aria-label="Номер счёта"
-                  className={inputClass}
+                  className={`${inputClass} max-w-[20rem]`}
                   value={invoiceNumber}
                   onChange={(e) => setInvoiceNumber(e.target.value)}
                   placeholder="Номер счёта"
@@ -3826,7 +3826,7 @@ export function OrderEditForm({
                     setError(msg);
                     toast.error(msg);
                   }}
-                  className="w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+                  className="w-[16rem] max-w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
                 />
                 {invoiceAttachmentId ? (
                   <div className="mt-1.5">
@@ -3842,7 +3842,7 @@ export function OrderEditForm({
                 ) : null}
               </div>
             </div>
-            <div className="min-w-0 space-y-3 border-t border-[var(--card-border)] pt-3 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+            <div className="w-fit max-w-full space-y-3 border-t border-[var(--card-border)] pt-3 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
                 <button
                   type="button"
@@ -3892,7 +3892,7 @@ export function OrderEditForm({
                   id="oe-upd-number"
                   type="text"
                   aria-label="Номер УПД"
-                  className={inputClass}
+                  className={`${inputClass} max-w-[20rem]`}
                   value={updNumber}
                   onChange={(e) => setUpdNumber(e.target.value)}
                   placeholder="Номер УПД"
@@ -3920,7 +3920,7 @@ export function OrderEditForm({
                     setError(msg);
                     toast.error(msg);
                   }}
-                  className="w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+                  className="w-[16rem] max-w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
                 />
                 {updAttachmentId ? (
                   <div className="mt-1.5">
@@ -4003,7 +4003,7 @@ export function OrderEditForm({
                     </button>
                   </div>
                 </div>
-                <div className="min-w-0 flex-1 border-t border-[var(--card-border)] pt-4 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+                <div className="min-w-0 flex-1 border-t border-[var(--card-border)] pt-2 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
                   <label
                     className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]"
                     htmlFor="oe-invoice-payment-notes"
@@ -4012,18 +4012,19 @@ export function OrderEditForm({
                   </label>
                   <textarea
                     id="oe-invoice-payment-notes"
-                    className={`${inputClass} min-h-[5rem] w-full resize-y sm:min-h-[6.5rem]`}
-                    rows={3}
+                    className={`${inputClass} min-h-[2.5rem] w-full max-w-md resize-y`}
+                    rows={2}
                     maxLength={8000}
                     value={invoicePaymentNotes}
                     onChange={(e) => setInvoicePaymentNotes(e.target.value)}
                     placeholder="Условия оплаты, напоминания, переписка с бухгалтерией…"
                   />
-                  <div className="mt-4 border-t border-[var(--card-border)] pt-4">
+                  <div className="mt-2 border-t border-[var(--card-border)] pt-2">
                     <OrderDocumentMailPanel
                       orderId={initial.id}
                       hasInvoice={Boolean(invoiceAttachmentId)}
                       mode="thread"
+                      compact
                     />
                   </div>
                 </div>
