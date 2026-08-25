@@ -25,6 +25,8 @@ export type ClarifyCorrectionRef = {
   clarifyCommentId: string | null;
   clarifyReplyAt: Date | string | null;
   clarifyReplyAckAt: Date | string | null;
+  resolvedAt?: Date | string | null;
+  rejectedAt?: Date | string | null;
 };
 
 function commentIdSet(values: Array<string | number | null | undefined>): Set<string> {
