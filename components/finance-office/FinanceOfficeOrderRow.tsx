@@ -20,6 +20,7 @@ import {
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import type { FinanceOfficeOrderTableRow } from "@/components/finance-office/FinanceOfficeOrdersTable";
+import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { ListRowUnfold } from "@/components/layout/ListRowUnfold";
 
 function targetInsideInteractive(target: EventTarget | null) {
@@ -32,19 +33,6 @@ function targetInsideInteractive(target: EventTarget | null) {
       "a, button, input, select, textarea, label, [role='button'], [role='combobox'], [data-row-click-ignore]",
     ),
   );
-}
-
-function formatFinanceDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function formatFinanceCardDate(iso: string | null): string | undefined {
@@ -64,11 +52,14 @@ type RowChrome = {
   periodFrom: string | null;
   periodTo: string | null;
   q: string | null;
+  shipMode: OrdersShipmentMode | null;
+  shipFrom: string | null;
+  shipTo: string | null;
   canSeeAdminIndicators: boolean;
 };
 
 function deriveRowChrome(args: RowChrome) {
-  const { o, tab, periodFrom, periodTo, q, canSeeAdminIndicators } = args;
+  const { o, tab, periodFrom, periodTo, q, shipMode, shipFrom, shipTo, canSeeAdminIndicators } = args;
   const workSent = o.adminShippedOtpr;
   const clinicName = o.clinic?.name ?? "Частное лицо";
   const doctorName = personNameSurnameInitials(o.doctor.fullName);
@@ -100,11 +91,6 @@ function deriveRowChrome(args: RowChrome) {
   const mobileCardAccent =
     orderListMobileCardAccentClass(rowAccent) ||
     financeOfficeMobileCardTintClass(financeTint);
-  const stickyCellBg = rowAccent
-    ? "max-xl:bg-[var(--card-bg)]"
-    : financeTint
-      ? ""
-      : "max-xl:bg-[var(--card-bg)]";
   return {
     o,
     workSent,
@@ -115,12 +101,14 @@ function deriveRowChrome(args: RowChrome) {
     appointmentLabel,
     rowClass,
     mobileCardAccent,
-    stickyCellBg,
     canSeeAdminIndicators,
     tab,
     periodFrom,
     periodTo,
     q,
+    shipMode,
+    shipFrom,
+    shipTo,
   };
 }
 
@@ -130,12 +118,18 @@ const TagsCell = memo(function TagsCell({
   periodFrom,
   periodTo,
   q,
+  shipMode,
+  shipFrom,
+  shipTo,
 }: {
   o: FinanceOfficeOrderTableRow;
   tab: string;
   periodFrom: string | null;
   periodTo: string | null;
   q: string | null;
+  shipMode: OrdersShipmentMode | null;
+  shipFrom: string | null;
+  shipTo: string | null;
 }) {
   return (
     <OrderListTagsCell
@@ -174,7 +168,15 @@ const TagsCell = memo(function TagsCell({
       isUrgent={o.isUrgent}
       urgentCoefficient={o.urgentCoefficient}
       customTags={o.listCustomTags}
-      financeOfficeFilterContext={{ tab, periodFrom, periodTo, q }}
+      financeOfficeFilterContext={{
+        tab,
+        periodFrom,
+        periodTo,
+        q,
+        ship: shipMode,
+        shipFrom,
+        shipTo,
+      }}
       financeCalculated={o.financeCalculated}
       clinicWorksWithEdo={o.clinicWorksWithEdo}
       clinicUsesPaperDocs={o.clinicUsesPaperDocs}
@@ -198,7 +200,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
         }
       />
       <td
-        className={`whitespace-nowrap px-2 py-2 text-center font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
+        className="whitespace-nowrap px-2 py-2 text-center font-mono font-semibold"
       >
         <div className="flex items-center justify-center">
           <Link
@@ -244,10 +246,10 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
         />
       </td>
       <td className="min-w-0 break-words px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
-        {formatFinanceDateTime(o.dueDate)}
+        {formatFinanceCardDate(o.dueDate) ?? "—"}
       </td>
       <td className="min-w-0 break-words px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
-        {formatFinanceDateTime(o.appointmentDate ?? o.dueToAdminsAt)}
+        {formatFinanceCardDate(o.appointmentDate ?? o.dueToAdminsAt) ?? "—"}
       </td>
       <td className="hidden min-w-0 whitespace-pre-line break-words px-2 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
         {o.counterpartyRequisitesText || "—"}
@@ -273,6 +275,9 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           periodFrom={d.periodFrom}
           periodTo={d.periodTo}
           q={d.q}
+          shipMode={d.shipMode}
+          shipFrom={d.shipFrom}
+          shipTo={d.shipTo}
         />
       </td>
       <td className="w-[4.5rem] px-1 py-2 align-top shell-desktop:hidden">
@@ -299,6 +304,9 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
   periodFrom,
   periodTo,
   q,
+  shipMode,
+  shipFrom,
+  shipTo,
   canSeeAdminIndicators,
 }: RowChrome & {
   isSelected: boolean;
@@ -311,6 +319,9 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
     periodFrom,
     periodTo,
     q,
+    shipMode,
+    shipFrom,
+    shipTo,
     canSeeAdminIndicators,
   };
   const d = deriveRowChrome(chrome);
@@ -321,7 +332,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
     <Fragment>
       <tr className={`hidden shell-laptop:table-row ${d.rowClass}`}>
         <td
-          className={`w-[7.5rem] px-2 py-2 text-center max-xl:sticky max-xl:left-0 max-xl:z-20 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
+          className="w-[7.5rem] px-2 py-2 text-center"
         >
           <input
             type="checkbox"
@@ -451,6 +462,9 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
                   periodFrom={periodFrom}
                   periodTo={periodTo}
                   q={q}
+                  shipMode={shipMode}
+                  shipFrom={shipFrom}
+                  shipTo={shipTo}
                 />
               </div>
             </div>

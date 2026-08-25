@@ -27,6 +27,10 @@ import {
 } from "@/lib/order-list-tag-filter";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
 import {
+  ordersShipmentModeLabel,
+  parseOrdersShipmentParams,
+} from "@/lib/orders-shipment-list-query";
+import {
   moscowTomorrowYmd,
   parseYmdOrNull,
 } from "@/lib/shipments-date-range";
@@ -99,7 +103,16 @@ function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[
 export default async function FinanceOfficePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; from?: string; to?: string; tag?: string; q?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    from?: string;
+    to?: string;
+    tag?: string;
+    q?: string;
+    ship?: string;
+    shipFrom?: string;
+    shipTo?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const session = await getSessionFromCookies();
@@ -124,10 +137,30 @@ export default async function FinanceOfficePage({
   const mode = parseFinanceOfficeMode(sp.tab);
   const fromRaw = parseYmdOrNull(sp.from ?? null);
   const toRaw = parseYmdOrNull(sp.to ?? null);
+  const shipParsed = parseOrdersShipmentParams({
+    ship: sp.ship,
+    shipFrom: sp.shipFrom,
+    shipTo: sp.shipTo,
+  });
+  const appointment =
+    shipParsed.mode && !shipParsed.periodError
+      ? {
+          mode: shipParsed.mode,
+          shipFrom: shipParsed.shipFrom,
+          shipTo: shipParsed.shipTo,
+        }
+      : null;
   let error: string | null = null;
   let rangeSummary: string | null = null;
 
-  if (mode === "actual") {
+  if (shipParsed.periodError) {
+    error = shipParsed.periodError;
+  } else if (appointment) {
+    const apptLabel = ordersShipmentModeLabel(shipParsed);
+    rangeSummary = apptLabel
+      ? `Запись (МСК): ${apptLabel}, все этапы воронки`
+      : "Запись: фильтр по дате приёма, все этапы воронки";
+  } else if (mode === "actual") {
     rangeSummary = `Актуальное: непросчитанные с лаб-сроком до завтра (${moscowTomorrowYmd()} МСК), все этапы воронки`;
   } else if (!toRaw) {
     error = "Укажите дату «по» и нажмите «Показать».";
@@ -141,7 +174,11 @@ export default async function FinanceOfficePage({
     rangeSummary = `Лаб-срок (МСК): по ${toRaw} (включая прошлые), все этапы воронки`;
   }
 
-  const shouldFetch = mode === "actual" || (mode === "period" && Boolean(toRaw) && !error);
+  const shouldFetch =
+    !error &&
+    (Boolean(appointment) ||
+      mode === "actual" ||
+      (mode === "period" && Boolean(toRaw)));
   const ordersPrisma = await getOrdersPrisma();
   const [orders, correctionsPendingCount] = await Promise.all([
     shouldFetch && !error
@@ -149,9 +186,10 @@ export default async function FinanceOfficePage({
           listTag: rawTagInvalid ? null : rawTag,
           search: q,
           mode,
-          fromYmd: mode === "period" ? fromRaw : null,
-          toYmd: mode === "period" ? toRaw : null,
+          fromYmd: appointment ? null : mode === "period" ? fromRaw : null,
+          toYmd: appointment ? null : mode === "period" ? toRaw : null,
           userId: session?.sub,
+          appointment,
         })
       : Promise.resolve(
           [] as Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>,
@@ -173,6 +211,11 @@ export default async function FinanceOfficePage({
   if (toRaw) exportParams.set("to", toRaw);
   if (rawTag && !rawTagInvalid) exportParams.set("tag", rawTag);
   if (q) exportParams.set("q", q);
+  if (appointment) {
+    exportParams.set("ship", appointment.mode);
+    if (appointment.shipFrom) exportParams.set("shipFrom", appointment.shipFrom);
+    if (appointment.shipTo) exportParams.set("shipTo", appointment.shipTo);
+  }
   const exportHref = `/api/finance-office/export?${exportParams.toString()}`;
   const tableOrders =
     error || !shouldFetch ? [] : orders.map(serializeOrder);
@@ -220,6 +263,9 @@ export default async function FinanceOfficePage({
               tab: mode,
               from: fromRaw,
               to: toRaw,
+              ship: appointment?.mode,
+              shipFrom: appointment?.shipFrom,
+              shipTo: appointment?.shipTo,
             })}
             className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--table-row-hover)]"
           >
@@ -295,6 +341,9 @@ export default async function FinanceOfficePage({
             periodTo={toRaw}
             q={q}
             listTag={rawTagInvalid ? null : rawTag}
+            ship={appointment?.mode ?? null}
+            shipFrom={appointment?.shipFrom ?? null}
+            shipTo={appointment?.shipTo ?? null}
           />
         ) : null}
         <FinanceOfficeOrdersTable
@@ -304,6 +353,10 @@ export default async function FinanceOfficePage({
           periodFrom={fromRaw}
           periodTo={toRaw}
           q={q}
+          listTag={rawTagInvalid ? null : rawTag}
+          shipMode={appointment?.mode ?? null}
+          shipFrom={appointment?.shipFrom ?? null}
+          shipTo={appointment?.shipTo ?? null}
           exportHref={exportHref}
         />
       </div>

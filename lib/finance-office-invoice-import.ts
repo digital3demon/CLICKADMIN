@@ -130,7 +130,7 @@ export type FinanceInvoiceImportPreviewRow = {
   sourceKind?: "drop-invoice" | "crm-invoice";
   invoiceAttachmentId?: string | null;
   updNumberRaw?: string;
-  updMatch?: "none" | "one" | "many";
+  updMatch?: "none" | "one" | "many" | "ambiguous";
   updItems?: FinanceUpdPoolItemDto[];
 };
 
@@ -145,6 +145,9 @@ export type FinanceInvoiceImportApplyRow = {
   updKeys?: string[];
   updNumberRaw?: string;
 };
+
+export const UPD_AMBIGUOUS_STATUS =
+  "НЕ удалось определить, откуда УПД номер";
 
 export function financeInvoiceRowIsRecognized(
   row: Pick<
@@ -168,6 +171,9 @@ export function financeInvoiceRowCanApply(
 ): boolean {
   if (!row.orderId || row.errors.length > 0) return false;
   if (row.updMatch === "many") return false;
+  if (row.updMatch === "ambiguous") {
+    return row.sourceKind !== "crm-invoice";
+  }
   if (row.sourceKind === "crm-invoice") return row.updMatch === "one";
   return true;
 }

@@ -16,9 +16,17 @@ export type UpdPoolItem = {
   fingerprint: DocFingerprint;
 };
 
+export type UpdAssignmentMatch = "none" | "one" | "many" | "ambiguous";
+
 export type UpdAssignment = {
   keys: string[];
-  match: "none" | "one" | "many";
+  match: UpdAssignmentMatch;
+};
+
+export type AssignUpdsByFingerprintResult = {
+  keysByInvoice: Map<string, string[]>;
+  /** Счета, к которым один УПД подошёл так же, как к другому. */
+  ambiguousByInvoice: Map<string, string[]>;
 };
 
 export function findUpdsByNumber(
@@ -33,10 +41,11 @@ export function findUpdsByNumber(
 export function assignUpdsByFingerprint(
   invoiceFingerprints: ReadonlyMap<string, DocFingerprint>,
   pool: readonly UpdPoolItem[],
-): Map<string, string[]> {
+): AssignUpdsByFingerprintResult {
   const invKeys = [...invoiceFingerprints.keys()];
-  const matches = new Map<string, string[]>();
-  for (const ik of invKeys) matches.set(ik, []);
+  const keysByInvoice = new Map<string, string[]>();
+  const ambiguousByInvoice = new Map<string, string[]>();
+  for (const ik of invKeys) keysByInvoice.set(ik, []);
 
   for (const upd of pool) {
     const hits = invKeys.filter((ik) => {
@@ -44,12 +53,19 @@ export function assignUpdsByFingerprint(
       return fp ? fingerprintsMatch(fp, upd.fingerprint) : false;
     });
     if (hits.length === 1) {
-      matches.get(hits[0]!)!.push(upd.key);
-    } else if (hits.length > 1) {
-      for (const ik of hits) matches.get(ik)!.push(upd.key);
+      keysByInvoice.get(hits[0]!)!.push(upd.key);
+      continue;
+    }
+    // Несколько счетов с тем же отпечатком — УПД никуда не вешаем.
+    if (hits.length > 1) {
+      for (const ik of hits) {
+        const list = ambiguousByInvoice.get(ik) ?? [];
+        list.push(upd.key);
+        ambiguousByInvoice.set(ik, list);
+      }
     }
   }
-  return matches;
+  return { keysByInvoice, ambiguousByInvoice };
 }
 
 export function assignmentFromKeys(keys: readonly string[]): UpdAssignment {

@@ -4,6 +4,7 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { countFinanceOfficeQuickFilterChips } from "@/lib/fetch-finance-office-orders";
 import { parseFinanceOfficeMode } from "@/lib/finance-office-list-filter";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { parseOrdersShipmentParams } from "@/lib/orders-shipment-list-query";
 import { parseYmdOrNull } from "@/lib/shipments-date-range";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +30,21 @@ export async function GET(req: Request) {
   const toYmd = parseYmdOrNull(url.searchParams.get("to"));
   const q = url.searchParams.get("q")?.trim() || "";
   const listTag = url.searchParams.get("tag")?.trim() || "";
+  const shipParsed = parseOrdersShipmentParams({
+    ship: url.searchParams.get("ship"),
+    shipFrom: url.searchParams.get("shipFrom"),
+    shipTo: url.searchParams.get("shipTo"),
+  });
+  const appointment =
+    shipParsed.mode && !shipParsed.periodError
+      ? {
+          mode: shipParsed.mode,
+          shipFrom: shipParsed.shipFrom,
+          shipTo: shipParsed.shipTo,
+        }
+      : null;
 
-  if (mode === "period" && !toYmd) {
+  if (!appointment && mode === "period" && !toYmd) {
     return NextResponse.json(
       {
         attentionCount: 0,
@@ -54,6 +68,7 @@ export async function GET(req: Request) {
     fromYmd,
     toYmd,
     listTag: listTag || null,
+    appointment,
   });
 
   return NextResponse.json(counts, {

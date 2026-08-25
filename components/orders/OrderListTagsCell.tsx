@@ -155,6 +155,9 @@ type Props = {
     periodFrom: string | null;
     periodTo: string | null;
     q?: string | null;
+    ship?: string | null;
+    shipFrom?: string | null;
+    shipTo?: string | null;
   } | null;
   financeCalculated?: boolean | null;
   /** ЭДО клиники (или ИП врача); только в ФинОтделе. */
@@ -1063,6 +1066,9 @@ export function OrderListTagsCell({
           from: financeOfficeFilterContext.periodFrom ?? undefined,
           to: financeOfficeFilterContext.periodTo ?? undefined,
           q: financeOfficeFilterContext.q ?? undefined,
+          ship: financeOfficeFilterContext.ship,
+          shipFrom: financeOfficeFilterContext.shipFrom,
+          shipTo: financeOfficeFilterContext.shipTo,
         });
       }
       if (shipmentsFilterContext) {

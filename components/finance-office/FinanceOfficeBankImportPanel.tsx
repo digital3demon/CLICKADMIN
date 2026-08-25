@@ -11,6 +11,7 @@ import {
   filterInvoiceRowsForRetry,
   financeInvoiceRowCanApply,
   financeInvoiceRowIsRecognized,
+  UPD_AMBIGUOUS_STATUS,
   findUpdDtosByNumber,
   invoiceImportSourceFileNames,
   isFinanceInvoiceImportRetryable,
@@ -268,7 +269,10 @@ export function FinanceOfficeBankImportPanel({
       JSON.stringify(
         invoiceRows.map((r) => ({
           ...r,
-          updKeys: (r.updItems ?? []).map((i) => i.key),
+          updKeys:
+            r.updMatch === "one"
+              ? (r.updItems ?? []).map((i) => i.key)
+              : [],
         })),
       ),
     );
@@ -951,7 +955,9 @@ export function FinanceOfficeBankImportPanel({
                 <Fragment key={row.key}>
                 <tr
                   className={
-                    row.errors.length || row.updMatch === "many"
+                    row.errors.length ||
+                    row.updMatch === "many" ||
+                    row.updMatch === "ambiguous"
                       ? "bg-amber-500/10"
                       : ""
                   }
@@ -1037,7 +1043,9 @@ export function FinanceOfficeBankImportPanel({
                           className={`w-full rounded border px-2 py-1 font-mono disabled:opacity-60 ${
                             row.updMatch === "one"
                               ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
-                              : "border-red-500 bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-100"
+                              : row.updMatch === "ambiguous"
+                                ? "border-amber-500 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+                                : "border-red-500 bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-100"
                           }`}
                         />
                         {row.updMatch === "one" && row.updItems?.[0] ? (
@@ -1096,6 +1104,10 @@ export function FinanceOfficeBankImportPanel({
                       <span className="font-medium text-amber-700 dark:text-amber-300">
                         {row.errors.join("; ")}
                       </span>
+                    ) : row.updMatch === "ambiguous" ? (
+                      <span className="font-medium text-amber-700 dark:text-amber-300">
+                        {UPD_AMBIGUOUS_STATUS}
+                      </span>
                     ) : row.updMatch === "many" ? (
                       <span className="font-medium text-amber-700 dark:text-amber-300">
                         Несколько УПД
@@ -1121,7 +1133,9 @@ export function FinanceOfficeBankImportPanel({
                 </tr>
                 <tr
                   className={
-                    row.errors.length || row.updMatch === "many"
+                    row.errors.length ||
+                    row.updMatch === "many" ||
+                    row.updMatch === "ambiguous"
                       ? "bg-amber-500/10"
                       : ""
                   }

@@ -172,6 +172,8 @@ type DueDatetimeComboPickerProps = {
    * `undefined` — обычные часы; иначе показанная строка ("" — скрыть время).
    */
   compactTimeLabel?: string | null;
+  /** Только календарный день: без колонки времени и второй строки в компактном виде. */
+  hideTime?: boolean;
   /**
    * Активен фильтр списка по этой дате: ободок толще (legacy).
    * Предпочтительнее `tint`.
@@ -235,6 +237,7 @@ export function DueDatetimeComboPicker({
   timeGrid = "halfHour",
   labHmSlots,
   compactTimeLabel,
+  hideTime = false,
   filterHighlight = false,
   tint,
   tone = "neutral",
@@ -392,8 +395,9 @@ export function DueDatetimeComboPicker({
   }, [minTrim, value, onChange, snapToGrid]);
 
   const onPickDay = (date: Date) => {
-    const hm = selectedHm ?? defaultHm;
+    const hm = hideTime ? "12:00" : (selectedHm ?? defaultHm);
     commit(combineDueLocalCalendarDayAndHm(date, hm));
+    if (hideTime) setOpen(false);
   };
 
   const onPickTime = (hm: string) => {
@@ -445,10 +449,14 @@ export function DueDatetimeComboPicker({
   const showPlaceholder = !snappedValue;
   const datePart = snappedValue ? compactDatePartFromLocal(snappedValue) : "";
   const clockTimePart = snappedValue ? compactTimePartFromLocal(snappedValue) : "";
-  const timePart =
-    compactTimeLabel !== undefined ? (compactTimeLabel ?? "") : clockTimePart;
+  const timePart = hideTime
+    ? ""
+    : compactTimeLabel !== undefined
+      ? (compactTimeLabel ?? "")
+      : clockTimePart;
   const showTimeRow =
-    showPlaceholder || compactTimeLabel === undefined || timePart.length > 0;
+    !hideTime &&
+    (showPlaceholder || compactTimeLabel === undefined || timePart.length > 0);
   const display = snappedValue
     ? compactTimeLabel !== undefined
       ? [datePart, timePart].filter(Boolean).join(" ")
@@ -553,6 +561,7 @@ export function DueDatetimeComboPicker({
           </div>
         ) : null}
       </div>
+      {hideTime ? null : (
       <div className="flex w-full shrink-0 flex-col border-t border-[var(--card-border)] sm:w-[7.5rem] sm:border-t-0 sm:border-l">
         <div className="border-b border-[var(--card-border)] px-2 py-1.5 text-center text-xs font-semibold text-[var(--sidebar-blue)]">
           Время
@@ -596,6 +605,7 @@ export function DueDatetimeComboPicker({
           })}
         </div>
       </div>
+      )}
     </div>
   ) : null;
 
@@ -639,7 +649,9 @@ export function DueDatetimeComboPicker({
             aria-haspopup="dialog"
             onClick={openToggle}
             className={[
-              "flex min-h-[2.35rem] min-w-0 flex-1 items-center justify-center gap-0.5 px-0.5 py-0.5 text-center text-[10px] tabular-nums sm:min-h-[2.4rem] sm:px-1 sm:text-[11px]",
+              hideTime
+                ? "flex min-h-[1.85rem] min-w-0 flex-1 items-center justify-center gap-0.5 px-0.5 py-0.5 text-center text-[10px] tabular-nums sm:min-h-[2rem] sm:px-1 sm:text-[11px]"
+                : "flex min-h-[2.35rem] min-w-0 flex-1 items-center justify-center gap-0.5 px-0.5 py-0.5 text-center text-[10px] tabular-nums sm:min-h-[2.4rem] sm:px-1 sm:text-[11px]",
               triggerSurface,
               disabled ? "cursor-not-allowed" : "cursor-pointer",
               showPlaceholder ? "text-[var(--text-placeholder)]" : "",

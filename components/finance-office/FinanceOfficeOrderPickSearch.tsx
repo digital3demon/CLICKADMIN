@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { FinanceOfficeOrderSearchHit } from "@/lib/finance-office-order-search";
+import type {
+  FinanceOfficeCompositionLine,
+  FinanceOfficeOrderSearchHit,
+} from "@/lib/finance-office-order-search";
+import { formatDocumentCopyMoneyRu } from "@/lib/order-document-copy";
 
 type Props = {
   disabled?: boolean;
@@ -11,6 +15,53 @@ type Props = {
   onPick: (hit: FinanceOfficeOrderSearchHit) => void;
   onClear: () => void;
 };
+
+function customerLine(hit: FinanceOfficeOrderSearchHit) {
+  return [hit.clinicName, hit.doctorName, hit.patientName]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function CompositionTiles({
+  lines,
+}: {
+  lines: FinanceOfficeCompositionLine[];
+}) {
+  return (
+    <div className="min-w-0 flex-[2]">
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+        Состав заказа
+        {lines.length > 0 ? ` · ${lines.length}` : ""}
+      </p>
+      {lines.length === 0 ? (
+        <p className="text-xs text-[var(--text-muted)]">Нет позиций в составе</p>
+      ) : (
+        <div className="grid max-h-40 min-w-0 grid-cols-2 gap-1.5 overflow-y-auto pb-0.5 shell-laptop:grid-cols-3">
+          {lines.map((line, idx) => (
+            <div
+              key={`${line.title}-${idx}`}
+              className="flex min-w-0 flex-col gap-1 rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-2 py-1.5"
+            >
+              <p
+                className="min-w-0 truncate text-[11px] font-semibold leading-tight text-[var(--text-strong)]"
+                title={line.title}
+              >
+                {line.title}
+              </p>
+              <p className="flex items-baseline justify-between gap-2 text-[10px] tabular-nums text-[var(--text-secondary)]">
+                <span>×{line.quantity}</span>
+                <span className="min-w-0 truncate font-medium text-[var(--text-strong)]">
+                  {formatDocumentCopyMoneyRu(line.amountRub)}
+                </span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function FinanceOfficeOrderPickSearch({
   disabled = false,
@@ -104,6 +155,8 @@ export function FinanceOfficeOrderPickSearch({
   }, [query, selectedId, disabled]);
 
   const shown = preview;
+  const summaryLabel =
+    shown?.label ?? selectedLabel ?? selectedNumber ?? "Наряд";
 
   return (
     <div className="rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-2">
@@ -112,40 +165,45 @@ export function FinanceOfficeOrderPickSearch({
       </p>
       {selectedId ? (
         <div className="mt-1.5 space-y-1.5">
-          <div className="text-sm font-medium text-[var(--text-strong)]">
-            {shown?.label ?? selectedLabel ?? selectedNumber}
-          </div>
-          {shown ? (
-            <div className="text-[11px] leading-snug text-[var(--text-body)]">
-              <div>
-                Заказчик:{" "}
-                {[shown.clinicName, shown.doctorName, shown.patientName]
-                  .map((s) => (s ?? "").trim())
-                  .filter(Boolean)
-                  .join(" · ") || "—"}
-              </div>
-              <div className="mt-1">
-                Состав:{" "}
-                {shown.compositionLines.length
-                  ? shown.compositionLines.join("; ")
-                  : "не заполнен"}
-              </div>
-              {shown.alreadyHasInvoice ? (
-                <div className="mt-1 font-medium text-amber-700 dark:text-amber-300">
-                  В наряде уже есть счёт
+          <details className="group rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 select-none hover:brightness-105 [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0 truncate text-sm font-medium text-[var(--text-strong)]">
+                {summaryLabel}
+              </span>
+              <span
+                aria-hidden
+                className="shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-180"
+              >
+                ▾
+              </span>
+            </summary>
+            <div className="space-y-2 border-t border-[var(--card-border)] px-2.5 py-2">
+              {shown ? (
+                <div className="flex min-w-0 flex-col gap-2 shell-laptop:flex-row shell-laptop:items-start">
+                  <div className="min-w-0 shrink-0 text-[11px] leading-snug text-[var(--text-body)] shell-laptop:max-w-[16rem]">
+                    <div>
+                      Заказчик: {customerLine(shown) || "—"}
+                    </div>
+                    {shown.alreadyHasInvoice ? (
+                      <div className="mt-1 font-medium text-amber-700 dark:text-amber-300">
+                        В наряде уже есть счёт
+                      </div>
+                    ) : null}
+                    {shown.alreadyHasUpd ? (
+                      <div className="font-medium text-amber-700 dark:text-amber-300">
+                        В наряде уже есть УПД
+                      </div>
+                    ) : null}
+                  </div>
+                  <CompositionTiles lines={shown.composition ?? []} />
                 </div>
-              ) : null}
-              {shown.alreadyHasUpd ? (
-                <div className="font-medium text-amber-700 dark:text-amber-300">
-                  В наряде уже есть УПД
+              ) : (
+                <div className="text-[11px] text-[var(--text-muted)]">
+                  Загружаю предпросмотр…
                 </div>
-              ) : null}
+              )}
             </div>
-          ) : (
-            <div className="text-[11px] text-[var(--text-muted)]">
-              Загружаю предпросмотр…
-            </div>
-          )}
+          </details>
           <button
             type="button"
             disabled={disabled}
@@ -201,10 +259,7 @@ export function FinanceOfficeOrderPickSearch({
                         {o.orderNumber}
                       </span>
                       <span className="text-[11px] text-[var(--text-body)]">
-                        {[o.clinicName, o.doctorName, o.patientName]
-                          .map((s) => (s ?? "").trim())
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
+                        {customerLine(o) || "—"}
                       </span>
                       <span className="text-[10px] leading-snug text-[var(--text-muted)]">
                         {o.compositionLines.length

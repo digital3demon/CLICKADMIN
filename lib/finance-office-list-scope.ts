@@ -11,7 +11,15 @@ import {
   financeOfficeActualEndExclusive,
   type FinanceOfficeMode,
 } from "@/lib/finance-office-list-filter";
+import { ordersAppointmentDateWhere } from "@/lib/orders-shipment-list-filter";
+import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { moscowDayBoundsUtc } from "@/lib/shipments-date-range";
+
+export type FinanceOfficeAppointmentFilter = {
+  mode: OrdersShipmentMode;
+  shipFrom: string | null;
+  shipTo: string | null;
+};
 
 function searchWhere(q: string): Prisma.OrderWhereInput {
   const contains = q.trim();
@@ -41,6 +49,8 @@ export function financeOfficeScopeWhere(
      * false — не добавлять financeCalculated:false (если тег сам задаёт просчёт / счётчики чипов).
      */
     actualNotCalculatedOnly?: boolean;
+    /** Фильтр по дате записи перекрывает окно лаб-срока. */
+    appointment?: FinanceOfficeAppointmentFilter | null;
   } = {},
 ): Prisma.OrderWhereInput {
   const parts: Prisma.OrderWhereInput[] = [
@@ -51,8 +61,11 @@ export function financeOfficeScopeWhere(
 
   const mode = opts.mode ?? null;
   const actualNotCalculatedOnly = opts.actualNotCalculatedOnly !== false;
+  const appointment = opts.appointment ?? null;
 
-  if (!opts.skipDueDateWindow && mode) {
+  if (appointment) {
+    parts.push(ordersAppointmentDateWhere(appointment));
+  } else if (!opts.skipDueDateWindow && mode) {
     if (mode === "actual") {
       parts.push(
         financeOfficeLabDueBeforeEndExclusive(financeOfficeActualEndExclusive()),
@@ -117,6 +130,7 @@ export function financeOfficeChipCountScopeWhere(
     fromYmd?: string | null;
     toYmd?: string | null;
     listTag?: string | null;
+    appointment?: FinanceOfficeAppointmentFilter | null;
   } = {},
 ): Prisma.OrderWhereInput {
   const parsed = opts.listTag?.trim()
@@ -131,6 +145,7 @@ export function financeOfficeChipCountScopeWhere(
       actualNotCalculatedOnly: !financeOfficeTagOverridesCalculated(
         opts.listTag,
       ),
+      appointment: opts.appointment,
     }),
   ];
   if (parsed && parsed.kind !== "edo" && parsed.kind !== "noEdo") {
@@ -151,6 +166,7 @@ export function financeOfficeChipDueWindowScopeWhere(
     mode?: FinanceOfficeMode | null;
     fromYmd?: string | null;
     toYmd?: string | null;
+    appointment?: FinanceOfficeAppointmentFilter | null;
   } = {},
 ): Prisma.OrderWhereInput {
   return financeOfficeScopeWhere(tenantId, {
@@ -159,5 +175,6 @@ export function financeOfficeChipDueWindowScopeWhere(
     fromYmd: opts.fromYmd,
     toYmd: opts.toYmd,
     actualNotCalculatedOnly: false,
+    appointment: opts.appointment,
   });
 }

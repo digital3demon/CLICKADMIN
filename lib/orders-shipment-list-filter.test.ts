@@ -9,6 +9,7 @@ import {
   orderMatchesShipmentPeriodAppointment,
   ordersShipmentActualAppointmentRange,
   ordersShipmentActualEndExclusive,
+  ordersAppointmentDateWhere,
   ordersShipmentListWhere,
 } from "./orders-shipment-list-filter";
 import {
@@ -144,6 +145,19 @@ describe("ordersShipmentActualAppointmentRange", () => {
     const w = ordersShipmentActualAppointmentRange("2026-07-31");
     expect(w.startYmd).toBe("2026-07-31");
     expect(w.endYmd).toBe("2026-08-04");
+  });
+});
+
+describe("ordersAppointmentDateWhere", () => {
+  it("окно записи без отсечки неотгруженных, кириллица не нужна в датах", () => {
+    const where = ordersAppointmentDateWhere({
+      mode: "period",
+      shipFrom: "2026-05-07",
+      shipTo: "2026-05-09",
+    });
+    const json = JSON.stringify(where);
+    expect(json).toContain("appointmentDate");
+    expect(json).not.toContain("adminShippedOtpr");
   });
 });
 

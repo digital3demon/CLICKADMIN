@@ -70,6 +70,8 @@ export function FinanceOfficeInvoiceIssuedCell({
         title="Дата выставления счёта. Ставится при загрузке файла или вручную"
         className="w-full max-w-full"
         tone="appointment"
+        hideTime
+        compactTimeLabel=""
         onChange={(raw) => {
           const snapped = raw === "" ? "" : snapDatetimeLocalToDueGrid(raw);
           setValue(snapped);

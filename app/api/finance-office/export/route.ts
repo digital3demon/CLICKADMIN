@@ -7,6 +7,7 @@ import { fetchFinanceOfficeOrders, type FinanceOfficeOrderRow } from "@/lib/fetc
 import { cleanLegalFullName } from "@/lib/format-counterparty-requisites-summary";
 import { isReconciliationPaymentStatus } from "@/lib/order-clinic-client-fields";
 import { parseFinanceOfficeMode } from "@/lib/finance-office-list-filter";
+import { parseOrdersShipmentParams } from "@/lib/orders-shipment-list-query";
 import {
   parseYmdOrNull,
 } from "@/lib/shipments-date-range";
@@ -120,9 +121,28 @@ export async function GET(req: Request) {
   const rawTag = sp.get("tag")?.trim() || null;
   const parsedTag = rawTag ? parseListTagParam(rawTag) : null;
   const q = sp.get("q")?.trim() || "";
+  const shipParsed = parseOrdersShipmentParams({
+    ship: sp.get("ship"),
+    shipFrom: sp.get("shipFrom"),
+    shipTo: sp.get("shipTo"),
+  });
+  const appointment =
+    shipParsed.mode && !shipParsed.periodError
+      ? {
+          mode: shipParsed.mode,
+          shipFrom: shipParsed.shipFrom,
+          shipTo: shipParsed.shipTo,
+        }
+      : null;
+
+  if (shipParsed.periodError) {
+    return NextResponse.json({ error: shipParsed.periodError }, { status: 400 });
+  }
 
   let periodLabel = "";
-  if (mode === "actual") {
+  if (appointment) {
+    periodLabel = `zapis_${appointment.mode}`;
+  } else if (mode === "actual") {
     periodLabel = "actual";
   } else {
     if (!toRaw) {
@@ -141,8 +161,9 @@ export async function GET(req: Request) {
     listTag: parsedTag ? rawTag : null,
     search: q,
     mode,
-    fromYmd: mode === "period" ? fromRaw : null,
-    toYmd: mode === "period" ? toRaw : null,
+    fromYmd: appointment ? null : mode === "period" ? fromRaw : null,
+    toYmd: appointment ? null : mode === "period" ? toRaw : null,
+    appointment,
   })).filter(
     (order) =>
       !isReconciliationPaymentStatus(order.payment) &&

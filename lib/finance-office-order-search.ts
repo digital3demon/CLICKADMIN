@@ -1,7 +1,16 @@
 /**
  * Поиск наряда в модалке распознавания счетов (как «добавить письмо в заказ»).
- * Состав: имя позиции прайса или типа конструкции; пустой состав — первые строки clientOrderText.
+ * Состав: позиции как в документообороте (название / кол-во / сумма);
+ * пустой состав — первые строки clientOrderText (сумма 0).
  */
+import type { ConstructionCategory, JawArch } from "@prisma/client";
+import {
+  formatConstructionDescription,
+  lineNetAfterLineDiscountRub,
+} from "@/lib/format-order-construction";
+import type { DocumentCopyCompositionLine } from "@/lib/order-document-copy";
+
+export type FinanceOfficeCompositionLine = DocumentCopyCompositionLine;
 
 export type FinanceOfficeOrderSearchHit = {
   id: string;
@@ -11,10 +20,73 @@ export type FinanceOfficeOrderSearchHit = {
   clinicName: string | null;
   label: string;
   compositionLines: string[];
+  composition: FinanceOfficeCompositionLine[];
   alreadyHasInvoice: boolean;
   alreadyHasUpd: boolean;
   invoiceAttachmentId: string | null;
 };
+
+export function compositionItemsFromClientOrderText(
+  raw: string | null | undefined,
+): FinanceOfficeCompositionLine[] {
+  return compositionLinesFromClientOrderText(raw).map((title) => ({
+    title,
+    quantity: 1,
+    amountRub: 0,
+  }));
+}
+
+export function financeOfficeCompositionFromConstructions(
+  lines: Array<{
+    category: ConstructionCategory;
+    quantity: number;
+    unitPrice: number | null;
+    lineDiscountPercent: number | null;
+    constructionTypeId: string | null;
+    priceListItemId: string | null;
+    materialId: string | null;
+    shade: string | null;
+    teethFdi: unknown;
+    bridgeFromFdi: string | null;
+    bridgeToFdi: string | null;
+    arch: JawArch | null;
+  }>,
+  lookups: {
+    typeById: Map<string, { name: string }>;
+    materialById: Map<string, { name: string }>;
+    priceById: Map<string, { code: string; name: string }>;
+  },
+): FinanceOfficeCompositionLine[] {
+  return lines.map((line) => {
+    const title = formatConstructionDescription({
+      category: line.category,
+      constructionType: line.constructionTypeId
+        ? (lookups.typeById.get(line.constructionTypeId) ?? null)
+        : null,
+      priceListItem: line.priceListItemId
+        ? (lookups.priceById.get(line.priceListItemId) ?? null)
+        : null,
+      material: line.materialId
+        ? (lookups.materialById.get(line.materialId) ?? null)
+        : null,
+      shade: line.shade,
+      teethFdi: line.teethFdi,
+      bridgeFromFdi: line.bridgeFromFdi,
+      bridgeToFdi: line.bridgeToFdi,
+      arch: line.arch,
+    });
+    return {
+      title,
+      quantity:
+        Number.isFinite(line.quantity) && line.quantity > 0 ? line.quantity : 1,
+      amountRub: lineNetAfterLineDiscountRub(
+        line.quantity,
+        line.unitPrice,
+        line.lineDiscountPercent,
+      ),
+    };
+  });
+}
 
 export function formatFinanceOfficeCompositionLine(opts: {
   quantity: number;

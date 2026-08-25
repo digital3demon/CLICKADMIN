@@ -64,7 +64,31 @@ describe("отпечаток счёт↔УПД 1643/1654", () => {
         },
       ],
     );
-    expect(map.get("inv-1643")).toEqual(["upd-1654"]);
+    expect(map.keysByInvoice.get("inv-1643")).toEqual(["upd-1654"]);
+    expect(map.ambiguousByInvoice.has("inv-1643")).toBe(false);
+  });
+
+  it("один УПД на два счёта с тем же отпечатком — не автомат", () => {
+    const fp = buildDocFingerprint(INVOICE_1643);
+    const upd = buildDocFingerprint(UPD_1654);
+    const map = assignUpdsByFingerprint(
+      new Map([
+        ["счёт-1637", fp],
+        ["счёт-1638", fp],
+      ]),
+      [
+        {
+          key: "упд-1649",
+          number: "1649",
+          fileName: "УПД_статус_1_№_1649_от_20_августа_2026_г.pdf",
+          fingerprint: upd,
+        },
+      ],
+    );
+    expect(map.keysByInvoice.get("счёт-1637")).toEqual([]);
+    expect(map.keysByInvoice.get("счёт-1638")).toEqual([]);
+    expect(map.ambiguousByInvoice.get("счёт-1637")).toEqual(["упд-1649"]);
+    expect(map.ambiguousByInvoice.get("счёт-1638")).toEqual(["упд-1649"]);
   });
 
   it("два УПД с одним отпечатком — янтарь", () => {
@@ -77,7 +101,7 @@ describe("отпечаток счёт↔УПД 1643/1654", () => {
         { key: "u2", number: "1655", fileName: "b.pdf", fingerprint: upd },
       ],
     );
-    expect(map.get("inv-1643")?.sort()).toEqual(["u1", "u2"]);
+    expect(map.keysByInvoice.get("inv-1643")?.sort()).toEqual(["u1", "u2"]);
   });
 
   it("ручной номер 1654 из имени и текста", () => {
@@ -148,6 +172,6 @@ describe("отпечаток счёт↔УПД 1645/1656 с чужими дат�
         fingerprint: upd,
       },
     ]);
-    expect(map.get("inv-1645")).toEqual(["upd-1656"]);
+    expect(map.keysByInvoice.get("inv-1645")).toEqual(["upd-1656"]);
   });
 });

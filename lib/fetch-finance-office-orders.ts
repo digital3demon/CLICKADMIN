@@ -5,6 +5,7 @@ import {
   financeOfficeChipDueWindowScopeWhere,
   financeOfficeScopeWhere,
   financeOfficeTagOverridesCalculated,
+  type FinanceOfficeAppointmentFilter,
 } from "@/lib/finance-office-list-scope";
 import {
   compareOrdersByEffectiveFinanceRecord,
@@ -246,6 +247,7 @@ export async function countFinanceOfficeQuickFilterChips(
     fromYmd?: string | null;
     toYmd?: string | null;
     listTag?: string | null;
+    appointment?: FinanceOfficeAppointmentFilter | null;
   } = {},
 ): Promise<{
   attentionCount: number;
@@ -419,6 +421,7 @@ export async function fetchFinanceOfficeOrders(
     fromYmd?: string | null;
     toYmd?: string | null;
     userId?: string | null;
+    appointment?: FinanceOfficeAppointmentFilter | null;
   } = {},
 ): Promise<FinanceOfficeOrderRow[]> {
   const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
@@ -431,6 +434,7 @@ export async function fetchFinanceOfficeOrders(
       fromYmd: opts.fromYmd,
       toYmd: opts.toYmd,
       actualNotCalculatedOnly: !tagOverridesCalculated,
+      appointment: opts.appointment,
     }),
   ];
   if (parsedTag) {

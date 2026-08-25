@@ -227,28 +227,36 @@ export function orderMatchesShipmentPeriodAppointment(
   return eff.getTime() < endExclusive.getTime();
 }
 
+/** Окно даты записи (appointmentDate ?? dueToAdminsAt), без отсечки «неотгруженные». */
+export function ordersAppointmentDateWhere(input: {
+  mode: OrdersShipmentMode;
+  shipFrom: string | null;
+  shipTo: string | null;
+}): Prisma.OrderWhereInput {
+  if (input.mode === "actual") {
+    const { start, endExclusive } = ordersShipmentActualAppointmentRange();
+    return appointmentInActualWindowOrEmpty(start, endExclusive);
+  }
+
+  const { endExclusive } = moscowDayBoundsUtc(input.shipTo!);
+  if (input.shipFrom) {
+    const { start } = moscowDayBoundsUtc(input.shipFrom);
+    return appointmentInRange(start, endExclusive);
+  }
+
+  return appointmentBeforeEndExclusive(endExclusive);
+}
+
 /** WHERE для режима записи на списке заказов (только неотгруженные). */
 export function ordersShipmentListWhere(input: {
   mode: OrdersShipmentMode;
   shipFrom: string | null;
   shipTo: string | null;
 }): Prisma.OrderWhereInput {
-  const base: Prisma.OrderWhereInput = { adminShippedOtpr: false };
-
-  if (input.mode === "actual") {
-    const { start, endExclusive } = ordersShipmentActualAppointmentRange();
-    return {
-      AND: [base, appointmentInActualWindowOrEmpty(start, endExclusive)],
-    };
-  }
-
-  const { endExclusive } = moscowDayBoundsUtc(input.shipTo!);
-  if (input.shipFrom) {
-    const { start } = moscowDayBoundsUtc(input.shipFrom);
-    return { AND: [base, appointmentInRange(start, endExclusive)] };
-  }
-
   return {
-    AND: [base, appointmentBeforeEndExclusive(endExclusive)],
+    AND: [
+      { adminShippedOtpr: false },
+      ordersAppointmentDateWhere(input),
+    ],
   };
 }

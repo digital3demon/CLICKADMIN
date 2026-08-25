@@ -47,6 +47,9 @@ export function FinanceOfficeQuickFilterChips({
   periodTo,
   q = "",
   listTag = null,
+  ship = null,
+  shipFrom = null,
+  shipTo = null,
 }: {
   activeFilter?: ParsedListTag | null;
   tab: string;
@@ -54,6 +57,9 @@ export function FinanceOfficeQuickFilterChips({
   periodTo: string | null;
   q?: string;
   listTag?: string | null;
+  ship?: string | null;
+  shipFrom?: string | null;
+  shipTo?: string | null;
 }) {
   const [counts, setCounts] = useState<FinanceOfficeChipCounts | null>(null);
   const [countsLoading, setCountsLoading] = useState(true);
@@ -66,6 +72,9 @@ export function FinanceOfficeQuickFilterChips({
     params.set("tab", tab);
     if (periodFrom) params.set("from", periodFrom);
     if (periodTo) params.set("to", periodTo);
+    if (ship) params.set("ship", ship);
+    if (shipFrom) params.set("shipFrom", shipFrom);
+    if (shipTo) params.set("shipTo", shipTo);
     const trimmedQ = q.trim();
     if (trimmedQ) params.set("q", trimmedQ);
     const trimmedTag = (listTag || "").trim();
@@ -117,7 +126,7 @@ export function FinanceOfficeQuickFilterChips({
     return () => {
       cancelled = true;
     };
-  }, [tab, periodFrom, periodTo, q, listTag]);
+  }, [tab, periodFrom, periodTo, q, listTag, ship, shipFrom, shipTo]);
 
   const {
     attentionCount,
@@ -152,6 +161,9 @@ export function FinanceOfficeQuickFilterChips({
     from: periodFrom,
     to: periodTo,
     q: q.trim() || undefined,
+    ship: ship ?? undefined,
+    shipFrom: shipFrom ?? undefined,
+    shipTo: shipTo ?? undefined,
   };
 
   const showCorrections =

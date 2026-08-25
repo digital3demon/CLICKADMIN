@@ -177,21 +177,35 @@ export async function buildFinanceInvoiceImportPreview(
 
   const attachUpdFields = (
     rowKey: string,
-    assigned: Map<string, string[]>,
+    assigned: ReturnType<typeof assignUpdsByFingerprint>,
   ): Pick<
     FinanceInvoiceImportPreviewRow,
     "updNumberRaw" | "updMatch" | "updItems"
   > => {
-    const keys = assigned.get(rowKey) ?? [];
+    const keys = assigned.keysByInvoice.get(rowKey) ?? [];
     const asg = assignmentFromKeys(keys);
-    const items = asg.keys
+    if (asg.match !== "none") {
+      const items = asg.keys
+        .map((k) => updDtoByKey.get(k))
+        .filter((x): x is FinanceUpdPoolItemDto => Boolean(x));
+      return {
+        updNumberRaw: items.length === 1 ? items[0]!.number : "",
+        updMatch: asg.match,
+        updItems: items,
+      };
+    }
+    const ambKeys = assigned.ambiguousByInvoice.get(rowKey) ?? [];
+    const ambItems = ambKeys
       .map((k) => updDtoByKey.get(k))
       .filter((x): x is FinanceUpdPoolItemDto => Boolean(x));
-    return {
-      updNumberRaw: items.length === 1 ? items[0]!.number : "",
-      updMatch: asg.match,
-      updItems: items,
-    };
+    if (ambItems.length > 0) {
+      return {
+        updNumberRaw: ambItems[0]!.number,
+        updMatch: "ambiguous",
+        updItems: ambItems,
+      };
+    }
+    return { updNumberRaw: "", updMatch: "none", updItems: [] };
   };
 
   if (invoiceParsed.length > 0) {
@@ -303,7 +317,7 @@ async function buildCrmInvoiceRowsForUpdPool(opts: {
   updPoolDto: FinanceUpdPoolItemDto[];
   attachUpdFields: (
     rowKey: string,
-    assigned: Map<string, string[]>,
+    assigned: ReturnType<typeof assignUpdsByFingerprint>,
   ) => Pick<
     FinanceInvoiceImportPreviewRow,
     "updNumberRaw" | "updMatch" | "updItems"
@@ -393,7 +407,7 @@ async function buildCrmInvoiceRowsForUpdPool(opts: {
   for (const o of orders) {
     const key = `crm::${o.id}`;
     const updPart = opts.attachUpdFields(key, assigned);
-    if (updPart.updItems?.length === 0) continue;
+    if ((updPart.updItems?.length ?? 0) === 0) continue;
     for (const it of updPart.updItems ?? []) usedUpd.add(it.key);
     rows.push(
       finishRow({
@@ -683,6 +697,15 @@ export async function applyFinanceInvoiceImport(opts: {
       continue;
     }
     if (!invoicePdf && !updPdf) {
+      if (sourceKind === "crm-invoice") {
+        await pushTracked({
+          key: row.key,
+          orderNumber,
+          ok: true,
+          message: "УПД не прикреплён",
+        });
+        continue;
+      }
       await pushTracked({
         key: row.key,
         orderNumber,

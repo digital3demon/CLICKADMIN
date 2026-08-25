@@ -7,9 +7,9 @@ import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
 import {
-  compositionLinesFromClientOrderText,
+  compositionItemsFromClientOrderText,
+  financeOfficeCompositionFromConstructions,
   financeOfficeOrderHitLabel,
-  formatFinanceOfficeCompositionLine,
   type FinanceOfficeOrderSearchHit,
 } from "@/lib/finance-office-order-search";
 import {
@@ -49,14 +49,40 @@ async function hitsForOrderIds(
       constructions: {
         orderBy: { sortOrder: "asc" },
         select: {
+          category: true,
           quantity: true,
-          shade: true,
+          unitPrice: true,
+          lineDiscountPercent: true,
+          constructionTypeId: true,
           priceListItemId: true,
-          constructionType: { select: { name: true } },
+          materialId: true,
+          shade: true,
+          teethFdi: true,
+          bridgeFromFdi: true,
+          bridgeToFdi: true,
+          arch: true,
         },
       },
     },
   });
+  const typeIds = [
+    ...new Set(
+      rows.flatMap((r) =>
+        r.constructions
+          .map((c) => c.constructionTypeId)
+          .filter((x): x is string => Boolean(x)),
+      ),
+    ),
+  ];
+  const materialIds = [
+    ...new Set(
+      rows.flatMap((r) =>
+        r.constructions
+          .map((c) => c.materialId)
+          .filter((x): x is string => Boolean(x)),
+      ),
+    ),
+  ];
   const priceIds = [
     ...new Set(
       rows.flatMap((r) =>
@@ -64,30 +90,45 @@ async function hitsForOrderIds(
       ),
     ),
   ];
-  const priceItems = priceIds.length
-    ? await pricingPrisma.priceListItem.findMany({
-        where: { id: { in: priceIds } },
-        select: { id: true, name: true },
-      })
-    : [];
-  const priceName = new Map(priceItems.map((p) => [p.id, p.name]));
+  const [types, materials, priceItems] = await Promise.all([
+    typeIds.length
+      ? pricingPrisma.constructionType.findMany({
+          where: { id: { in: typeIds } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+    materialIds.length
+      ? pricingPrisma.material.findMany({
+          where: { id: { in: materialIds } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+    priceIds.length
+      ? pricingPrisma.priceListItem.findMany({
+          where: { id: { in: priceIds } },
+          select: { id: true, code: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const lookups = {
+    typeById: new Map(types.map((t) => [t.id, t])),
+    materialById: new Map(materials.map((m) => [m.id, m])),
+    priceById: new Map(priceItems.map((p) => [p.id, p])),
+  };
   const byId = new Map(rows.map((r) => [r.id, r]));
   return meta
     .map((m) => {
       const row = byId.get(m.id);
       if (!row) return null;
-      const fromLines = row.constructions.map((c) =>
-        formatFinanceOfficeCompositionLine({
-          quantity: c.quantity,
-          name: (c.priceListItemId ? priceName.get(c.priceListItemId) : null) ||
-            c.constructionType?.name,
-          shade: c.shade,
-        }),
+      const fromConstructions = financeOfficeCompositionFromConstructions(
+        row.constructions,
+        lookups,
       );
-      const compositionLines =
-        fromLines.length > 0
-          ? fromLines.slice(0, 6)
-          : compositionLinesFromClientOrderText(row.clientOrderText);
+      const composition =
+        fromConstructions.length > 0
+          ? fromConstructions
+          : compositionItemsFromClientOrderText(row.clientOrderText);
+      const compositionLines = composition.map((c) => c.title).slice(0, 6);
       const alreadyHasInvoice = Boolean(
         row.invoiceAttachmentId ||
           row.invoiceIssued ||
@@ -101,6 +142,7 @@ async function hitsForOrderIds(
         clinicName: m.clinicName,
         label: financeOfficeOrderHitLabel(m),
         compositionLines,
+        composition,
         alreadyHasInvoice,
         alreadyHasUpd: Boolean(row.updAttachmentId),
         invoiceAttachmentId: row.invoiceAttachmentId,

@@ -902,6 +902,8 @@ export function BoardCanvas({
     startY: number;
   } | null>(null);
   const [activeDragCardId, setActiveDragCardId] = useState<string | null>(null);
+  /** Ширина исходной карточки: overlay без adjustScale, иначе dnd-kit сжимает её в узкий столбец. */
+  const [dragOverlayWidthPx, setDragOverlayWidthPx] = useState<number | null>(null);
   const [dragOverStop, setDragOverStop] = useState(false);
   const dragOverStopRef = useRef(false);
   const { onPreviewMove, onPreviewLeave, previewNode } = useKanbanCardHoverPreview(true);
@@ -1223,11 +1225,16 @@ export function BoardCanvas({
       const aid = String(event.active.id);
       if (columnIds.includes(aid)) {
         setActiveDragCardId(null);
+        setDragOverlayWidthPx(null);
         setKanbanCardDraggingFlag(false);
         clearStopDropHot();
         return;
       }
       onPreviewLeave();
+      const startW = event.active.rect.current.initial?.width;
+      setDragOverlayWidthPx(
+        typeof startW === "number" && startW > 0 ? Math.round(startW) : null,
+      );
       setActiveDragCardId(aid);
       setKanbanCardDraggingFlag(true);
       clearStopDropHot();
@@ -1259,6 +1266,7 @@ export function BoardCanvas({
   const onDragCancel = useCallback(
     (_event: DragCancelEvent) => {
       setActiveDragCardId(null);
+      setDragOverlayWidthPx(null);
       dragPointRef.current = null;
       setKanbanCardDraggingFlag(false);
       clearStopDropHot();
@@ -1269,6 +1277,7 @@ export function BoardCanvas({
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveDragCardId(null);
+      setDragOverlayWidthPx(null);
       setKanbanCardDraggingFlag(false);
       const { active, over } = event;
       const aid = String(active.id);
@@ -1662,9 +1671,14 @@ export function BoardCanvas({
           ) : null}
         </div>
       </div>
-      <DragOverlay adjustScale dropAnimation={null}>
+      <DragOverlay dropAnimation={null}>
         {activeDragCard && activeDragCardHomeBoard ? (
-          <div className={BOARD_COLUMN_WIDTH_FIXED}>
+          <div
+            className="shrink-0"
+            style={{
+              width: dragOverlayWidthPx ?? 255,
+            }}
+          >
             <KanbanCardView
               card={activeDragCard}
               homeBoard={activeDragCardHomeBoard}

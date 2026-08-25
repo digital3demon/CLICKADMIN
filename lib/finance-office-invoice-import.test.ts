@@ -4,6 +4,7 @@ import {
   classifyFinanceOfficeDropFiles,
   filterInvoiceRowsForRetry,
   financeInvoiceRowCanApply,
+  financeInvoiceRowIsRecognized,
   financeOfficeInvoiceRowKey,
   invoiceImportSourceFileNames,
   isFinanceInvoiceImportRetryable,
@@ -198,6 +199,23 @@ describe("readFinanceInvoiceImportApplyResponse", () => {
         sourceKind: "drop-invoice",
       }),
     ).toBe(true);
+  });
+
+  it("один УПД на два наряда: счёт можно, УПД нет, статус не «Распознано»", () => {
+    const drop = {
+      orderId: "o1",
+      errors: [] as string[],
+      updMatch: "ambiguous" as const,
+      sourceKind: "drop-invoice" as const,
+    };
+    expect(financeInvoiceRowCanApply(drop)).toBe(true);
+    expect(financeInvoiceRowIsRecognized(drop)).toBe(false);
+    expect(
+      financeInvoiceRowCanApply({
+        ...drop,
+        sourceKind: "crm-invoice",
+      }),
+    ).toBe(false);
   });
 });
 

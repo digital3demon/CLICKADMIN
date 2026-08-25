@@ -5,7 +5,9 @@ import { StickyListChrome } from "@/components/layout/StickyListChrome";
 import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
+import { FinanceOfficeDateFilterHeaders } from "@/components/finance-office/FinanceOfficeDateFilterHeaders";
 import { FinanceOfficeOrderRow } from "@/components/finance-office/FinanceOfficeOrderRow";
+import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { FinanceOfficePrintInvoicesButton } from "@/components/finance-office/FinanceOfficePrintInvoicesButton";
 import { useFinanceOfficeSelection } from "@/components/finance-office/finance-office-selection";
 
@@ -61,19 +63,27 @@ export type FinanceOfficeOrderTableRow = {
 export function FinanceOfficeOrdersTable({
   orders,
   activeTag = null,
+  listTag = null,
   tab,
   periodFrom,
   periodTo,
   q = "",
+  shipMode = null,
+  shipFrom = null,
+  shipTo = null,
   exportHref,
   toolbar = null,
 }: {
   orders: FinanceOfficeOrderTableRow[];
   activeTag?: string | null;
+  listTag?: string | null;
   tab: string;
   periodFrom: string | null;
   periodTo: string | null;
   q?: string | null;
+  shipMode?: OrdersShipmentMode | null;
+  shipFrom?: string | null;
+  shipTo?: string | null;
   exportHref?: string;
   toolbar?: ReactNode;
 }) {
@@ -160,24 +170,21 @@ export function FinanceOfficeOrdersTable({
     >
       <OrderListKaitenPoller orderIds={kaitenOrderIds} />
       <div className="relative">
-      <div className="w-full min-w-0 overflow-x-hidden overflow-y-visible">
+      <div className="w-full min-w-0">
         <table className="finance-office-orders-table w-full min-w-0 table-fixed border-separate border-spacing-0 text-center text-sm">
-          <thead className="hidden shell-laptop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
+          <thead className="hidden shell-laptop:table-header-group">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-              <th className="w-[7.5rem] px-2 py-2 text-center normal-case max-xl:sticky max-xl:left-0 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">
-                <div className="flex flex-col items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={toggleAllVisible}
-                    className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-[11px] font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)]"
-                  >
-                    {allVisibleSelected ? "Снять видимые" : "Выбрать все видимые"}
-                  </button>
-                  <span>Выбрать</span>
-                </div>
+              <th className="w-[7.5rem] px-2 py-1.5 text-center normal-case">
+                <button
+                  type="button"
+                  onClick={toggleAllVisible}
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-[11px] font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)]"
+                >
+                  {allVisibleSelected ? "Снять видимые" : "Выбрать видимые"}
+                </button>
               </th>
               <th className="w-10 px-2 py-2 text-center normal-case">Чат</th>
-              <th className="px-2 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
+              <th className="px-2 py-2 text-center">№ наряда</th>
               <th className="min-w-0 px-2 py-2 text-center">Клиника</th>
               <th className="min-w-0 px-2 py-2 text-center">Врач</th>
               <th className="min-w-0 px-2 py-2 text-center">Пациент</th>
@@ -187,18 +194,14 @@ export function FinanceOfficeOrdersTable({
               >
                 Счёт выставлен
               </th>
-              <th
-                className="min-w-0 px-2 py-2 text-center"
-                title="Лаб-срок: dueDate"
-              >
-                Лаб срок
-              </th>
-              <th
-                className="min-w-0 px-2 py-2 text-center"
-                title="Запись: дата и время приёма пациента"
-              >
-                Запись
-              </th>
+              <FinanceOfficeDateFilterHeaders
+                appliedFrom={periodFrom}
+                appliedTo={periodTo}
+                shipMode={shipMode}
+                appliedShipFrom={shipFrom}
+                appliedShipTo={shipTo}
+                ctx={{ tab, tag: listTag, q }}
+              />
               <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">Реквизиты</th>
               <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">Наше юрлицо</th>
               <th className="min-w-0 w-[5%] px-2 py-2 text-center normal-case">Отправка</th>
@@ -206,7 +209,7 @@ export function FinanceOfficeOrdersTable({
               <th className="w-[5rem] px-2 py-2 text-center normal-case shell-desktop:hidden">Ещё</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="[&>tr:first-child>td]:pt-2">
             {orders.map((o) => (
               <FinanceOfficeOrderRow
                 key={o.id}
@@ -217,6 +220,9 @@ export function FinanceOfficeOrdersTable({
                 periodFrom={periodFrom}
                 periodTo={periodTo}
                 q={q}
+                shipMode={shipMode}
+                shipFrom={shipFrom}
+                shipTo={shipTo}
                 canSeeAdminIndicators={canSeeAdminIndicators}
               />
             ))}
