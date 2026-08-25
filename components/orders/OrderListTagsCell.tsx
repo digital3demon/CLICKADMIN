@@ -704,9 +704,19 @@ export function OrderListTagsCell({
     const docFlags: Array<{
       id: string;
       title: string;
-      field: "invoicePaperDocs" | "invoiceSentToEdo" | "invoiceEdoSigned";
+      field:
+        | "invoicePrinted"
+        | "invoicePaperDocs"
+        | "invoiceSentToEdo"
+        | "invoiceEdoSigned";
       on: boolean;
     }> = [
+      {
+        id: "invoice-printed",
+        title: "счёт распечатан",
+        field: "invoicePrinted",
+        on: invoicePrinted,
+      },
       {
         id: "paper-docs",
         title: "бум доки",
@@ -785,6 +795,7 @@ export function OrderListTagsCell({
     currentPayment,
     clinicId,
     doctorId,
+    invoicePrinted,
     invoicePaperDocs,
     invoiceSentToEdo,
     invoiceEdoSigned,
