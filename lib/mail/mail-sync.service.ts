@@ -34,6 +34,7 @@ import { ensureOrderDigitaldemonRules } from "@/lib/mail/order-digitaldemon-rule
 import { emailDirectionForImapFolder, emailFolderListWhere } from "@/lib/mail/mail-folder-query";
 import { previewFromMailBody } from "@/lib/mail/mail-preview";
 import { sendSmtpMessage } from "@/lib/mail/smtp-client";
+import { linkInboundEmailToDocumentThread } from "@/lib/order-document-mail";
 
 const RECENT_MESSAGES_PER_FOLDER = 300;
 const RECENT_MESSAGES_CUSTOM_FOLDER = 50;
@@ -1035,6 +1036,19 @@ export async function syncEmailAccount(
           skipped += 1;
           folderSkipped += 1;
           continue;
+        }
+        if (direction === EmailDirection.INBOUND) {
+          await linkInboundEmailToDocumentThread(
+            db,
+            account.tenantId,
+            email.id,
+            headersToJson(parsed.headers),
+          ).catch((err) =>
+            logger.warn(
+              { err, emailId: email.id },
+              "document mail: inbound reply link failed",
+            ),
+          );
         }
         if (ruleResult.folderId) touchedFolderIds.add(ruleResult.folderId);
         for (const labelId of ruleResult.labelIds) touchedLabelIds.add(labelId);

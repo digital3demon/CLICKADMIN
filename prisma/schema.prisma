@@ -94,8 +94,14 @@ model Tenant {
   orderArchiveRetentionDays         Int                        @default(30)
   /// Через сколько рабочих дней МСК после выставления счёта наряд попадает в «Долги».
   financeOfficeDebtWorkingDays      Int                        @default(10)
+  /// Тема (шапка) письма-напоминания о долге.
+  financeOfficeDebtEmailSubject     String?
   /// Текстовый шаблон письма-напоминания о долге.
   financeOfficeDebtEmailTemplate    String?
+  /// Тема письма «отправить документы» (счёт / УПД).
+  financeOfficeDocumentEmailSubject String?
+  /// Текст письма «отправить документы».
+  financeOfficeDocumentEmailTemplate String?
   /// Ящик, с которого уходят уведомления о долгах.
   financeOfficeDebtEmailAccountId   String?
   financeOfficeDebtEmailAccount     EmailAccount?              @relation("TenantFinanceOfficeDebtMail", fields: [financeOfficeDebtEmailAccountId], references: [id], onDelete: SetNull)

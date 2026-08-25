@@ -8,6 +8,7 @@ export type OrderSourceEmailRow = {
   subject: string | null;
   fromName: string | null;
   fromAddress: string | null;
+  direction: "INBOUND" | "OUTBOUND";
   receivedAt: string | null;
   sentAt: string | null;
   preview: string | null;
@@ -78,6 +79,7 @@ export async function fetchOrderSourceEmails(
     subject: link.email.subject,
     fromName: link.email.fromName,
     fromAddress: link.email.fromAddress,
+    direction: link.email.direction,
     receivedAt: link.email.receivedAt?.toISOString() ?? null,
     sentAt: link.email.sentAt?.toISOString() ?? null,
     preview: link.email.preview,

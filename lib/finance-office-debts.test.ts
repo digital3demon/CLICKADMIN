@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  financeOfficeDebtPaymentLabel,
   financeOfficeDebtPaymentWhere,
   financeOfficeDebtScopeWhere,
   looksLikeDebtNotifyEmail,
@@ -13,6 +14,18 @@ describe("financeOfficeDebtPaymentWhere", () => {
     expect(json).toContain("Не оплачено");
     expect(json).toContain("Частично оплачено");
     expect(json).not.toContain("Оплачено");
+  });
+});
+
+describe("financeOfficeDebtPaymentLabel", () => {
+  it("показывает не оплачено и сумму частичной оплаты", () => {
+    expect(financeOfficeDebtPaymentLabel("", null)).toBe("Не оплачено");
+    expect(financeOfficeDebtPaymentLabel("Ожидает оплаты", null)).toBe(
+      "Не оплачено",
+    );
+    expect(financeOfficeDebtPaymentLabel("Частично оплачено", 1500)).toBe(
+      "Частично оплачено · 1500 ₽",
+    );
   });
 });
 

@@ -5,8 +5,11 @@ import { getPrisma } from "@/lib/get-prisma";
 import {
   applyFinanceOfficeDebtTemplate,
   FINANCE_OFFICE_DEBT_DEFAULT_DAYS,
+  FINANCE_OFFICE_DEBT_DEFAULT_SUBJECT,
   FINANCE_OFFICE_DEBT_DEFAULT_TEMPLATE,
   financeOfficeDebtEmailHtml,
+  financeOfficeDebtInvoiceCaption,
+  financeOfficeDebtUpdCaption,
 } from "@/lib/finance-office-debt-settings";
 import { sendSmtpMessage } from "@/lib/mail/smtp-client";
 import { readOrderAttachmentBytes } from "@/lib/order-attachment-storage";
@@ -50,6 +53,7 @@ export async function POST(req: Request) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: {
+      financeOfficeDebtEmailSubject: true,
       financeOfficeDebtEmailTemplate: true,
       financeOfficeDebtEmailAccountId: true,
       financeOfficeDebtWorkingDays: true,
@@ -78,6 +82,9 @@ export async function POST(req: Request) {
     );
   }
 
+  const subjectTemplate =
+    tenant?.financeOfficeDebtEmailSubject?.trim() ||
+    FINANCE_OFFICE_DEBT_DEFAULT_SUBJECT;
   const template =
     tenant?.financeOfficeDebtEmailTemplate?.trim() ||
     FINANCE_OFFICE_DEBT_DEFAULT_TEMPLATE;
@@ -157,15 +164,25 @@ export async function POST(req: Request) {
         warnings.push(`не удалось прочитать ${label}`);
       }
     }
-    const text = applyFinanceOfficeDebtTemplate(template, {
+    const vars = {
       номер: order.orderNumber,
       пациент: order.patientName?.trim() || "—",
       клиника: order.clinic?.name?.trim() || "—",
-    });
+      счёт: financeOfficeDebtInvoiceCaption(
+        order.invoiceNumber,
+        order.invoiceIssuedAt ?? order.invoiceAttachment?.createdAt ?? null,
+      ),
+      упд: financeOfficeDebtUpdCaption(
+        order.updNumber,
+        order.updAttachment?.createdAt ?? null,
+      ),
+    };
+    const text = applyFinanceOfficeDebtTemplate(template, vars);
+    const subject = applyFinanceOfficeDebtTemplate(subjectTemplate, vars);
     try {
       await sendSmtpMessage(account, {
         to: email,
-        subject: `Напоминание об оплате ${order.orderNumber}`,
+        subject,
         text,
         html: financeOfficeDebtEmailHtml(text),
         attachments,

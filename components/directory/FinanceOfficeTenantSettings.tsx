@@ -1,8 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  FINANCE_OFFICE_DEBT_PLACEHOLDERS,
+} from "@/lib/finance-office-debt-settings";
 
 type AccountOpt = { id: string; email: string; displayName: string | null };
+type FocusField = "subject" | "body" | "docSubject" | "docBody";
+
+function insertAtCursor(
+  el: HTMLInputElement | HTMLTextAreaElement | null,
+  value: string,
+  token: string,
+  setValue: (next: string) => void,
+) {
+  if (!el) {
+    setValue(`${value}${token}`);
+    return;
+  }
+  const start = el.selectionStart ?? value.length;
+  const end = el.selectionEnd ?? value.length;
+  const next = value.slice(0, start) + token + value.slice(end);
+  setValue(next);
+  const pos = start + token.length;
+  requestAnimationFrame(() => {
+    el.focus();
+    el.setSelectionRange(pos, pos);
+  });
+}
 
 export function FinanceOfficeTenantSettings() {
   const [loading, setLoading] = useState(true);
@@ -10,9 +35,17 @@ export function FinanceOfficeTenantSettings() {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [workingDays, setWorkingDays] = useState("10");
+  const [subject, setSubject] = useState("");
   const [template, setTemplate] = useState("");
+  const [documentSubject, setDocumentSubject] = useState("");
+  const [documentTemplate, setDocumentTemplate] = useState("");
   const [accountId, setAccountId] = useState("");
   const [accounts, setAccounts] = useState<AccountOpt[]>([]);
+  const [focusField, setFocusField] = useState<FocusField>("body");
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const docSubjectRef = useRef<HTMLInputElement>(null);
+  const docBodyRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -24,7 +57,10 @@ export function FinanceOfficeTenantSettings() {
         const j = (await res.json().catch(() => ({}))) as {
           error?: string;
           workingDays?: number;
+          subject?: string;
           template?: string;
+          documentSubject?: string;
+          documentTemplate?: string;
           accountId?: string | null;
           accounts?: AccountOpt[];
         };
@@ -34,7 +70,10 @@ export function FinanceOfficeTenantSettings() {
           return;
         }
         setWorkingDays(String(j.workingDays ?? 10));
+        setSubject(j.subject ?? "");
         setTemplate(j.template ?? "");
+        setDocumentSubject(j.documentSubject ?? "");
+        setDocumentTemplate(j.documentTemplate ?? "");
         setAccountId(j.accountId ?? "");
         setAccounts(Array.isArray(j.accounts) ? j.accounts : []);
       })
@@ -49,6 +88,32 @@ export function FinanceOfficeTenantSettings() {
     };
   }, []);
 
+  const insertPlaceholder = (token: string) => {
+    if (focusField === "subject") {
+      insertAtCursor(subjectRef.current, subject, token, setSubject);
+      return;
+    }
+    if (focusField === "docSubject") {
+      insertAtCursor(
+        docSubjectRef.current,
+        documentSubject,
+        token,
+        setDocumentSubject,
+      );
+      return;
+    }
+    if (focusField === "docBody") {
+      insertAtCursor(
+        docBodyRef.current,
+        documentTemplate,
+        token,
+        setDocumentTemplate,
+      );
+      return;
+    }
+    insertAtCursor(bodyRef.current, template, token, setTemplate);
+  };
+
   const onSave = async () => {
     setSaving(true);
     setError(null);
@@ -60,7 +125,10 @@ export function FinanceOfficeTenantSettings() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workingDays: Number(workingDays),
+          subject,
           template,
+          documentSubject,
+          documentTemplate,
           accountId: accountId || null,
         }),
       });
@@ -132,21 +200,94 @@ export function FinanceOfficeTenantSettings() {
         </select>
       </div>
       <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          Подстановки
+        </p>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
+          Кликните поле темы или текста, затем кнопку — токен вставится в курсор.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {FINANCE_OFFICE_DEBT_PLACEHOLDERS.map((p) => (
+            <button
+              key={p.token}
+              type="button"
+              className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm text-[var(--text-strong)] hover:bg-[var(--surface-muted)]"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => insertPlaceholder(p.token)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label
+          className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
+          htmlFor="fo-debt-subject"
+        >
+          Тема письма о долге
+        </label>
+        <input
+          id="fo-debt-subject"
+          ref={subjectRef}
+          type="text"
+          maxLength={500}
+          className="mt-2 w-full max-w-2xl rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm"
+          value={subject}
+          onFocus={() => setFocusField("subject")}
+          onChange={(e) => setSubject(e.target.value)}
+        />
+      </div>
+      <div>
         <label
           className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
           htmlFor="fo-debt-tpl"
         >
-          Шаблон письма
+          Текст письма о долге
         </label>
-        <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          Подстановки: {"{{номер}}"}, {"{{пациент}}"}, {"{{клиника}}"}.
-        </p>
         <textarea
           id="fo-debt-tpl"
+          ref={bodyRef}
           rows={10}
           className="mt-2 w-full max-w-2xl rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
           value={template}
+          onFocus={() => setFocusField("body")}
           onChange={(e) => setTemplate(e.target.value)}
+        />
+      </div>
+      <div>
+        <label
+          className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
+          htmlFor="fo-doc-subject"
+        >
+          Тема письма «отправить документы»
+        </label>
+        <input
+          id="fo-doc-subject"
+          ref={docSubjectRef}
+          type="text"
+          maxLength={500}
+          className="mt-2 w-full max-w-2xl rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm"
+          value={documentSubject}
+          onFocus={() => setFocusField("docSubject")}
+          onChange={(e) => setDocumentSubject(e.target.value)}
+        />
+      </div>
+      <div>
+        <label
+          className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
+          htmlFor="fo-doc-tpl"
+        >
+          Текст письма «отправить документы»
+        </label>
+        <textarea
+          id="fo-doc-tpl"
+          ref={docBodyRef}
+          rows={10}
+          className="mt-2 w-full max-w-2xl rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
+          value={documentTemplate}
+          onFocus={() => setFocusField("docBody")}
+          onChange={(e) => setDocumentTemplate(e.target.value)}
         />
       </div>
       {error ? (

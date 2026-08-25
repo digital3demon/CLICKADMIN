@@ -55,10 +55,40 @@ export async function ensureFinanceOfficeDebtColumns(
       if (!msg.includes("duplicate column")) throw e;
     }
   }
+  if (!tenantNames.has("financeOfficeDebtEmailSubject")) {
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "Tenant" ADD COLUMN "financeOfficeDebtEmailSubject" TEXT`,
+      );
+    } catch (e) {
+      const msg = String(e).toLowerCase();
+      if (!msg.includes("duplicate column")) throw e;
+    }
+  }
   if (!tenantNames.has("financeOfficeDebtEmailTemplate")) {
     try {
       await prisma.$executeRawUnsafe(
         `ALTER TABLE "Tenant" ADD COLUMN "financeOfficeDebtEmailTemplate" TEXT`,
+      );
+    } catch (e) {
+      const msg = String(e).toLowerCase();
+      if (!msg.includes("duplicate column")) throw e;
+    }
+  }
+  if (!tenantNames.has("financeOfficeDocumentEmailSubject")) {
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "Tenant" ADD COLUMN "financeOfficeDocumentEmailSubject" TEXT`,
+      );
+    } catch (e) {
+      const msg = String(e).toLowerCase();
+      if (!msg.includes("duplicate column")) throw e;
+    }
+  }
+  if (!tenantNames.has("financeOfficeDocumentEmailTemplate")) {
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "Tenant" ADD COLUMN "financeOfficeDocumentEmailTemplate" TEXT`,
       );
     } catch (e) {
       const msg = String(e).toLowerCase();

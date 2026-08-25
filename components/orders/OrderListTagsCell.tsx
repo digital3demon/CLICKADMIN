@@ -73,6 +73,7 @@ import {
 } from "@/lib/order-urgency";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderPaymentModalAccountingUpload } from "@/components/orders/OrderPaymentModalAccountingUpload";
+import { OrderDocumentMailPanel } from "@/components/orders/OrderDocumentMailPanel";
 import {
   formatDocumentCopyCompositionText,
   formatDocumentCopyMoneyRu,
@@ -1904,6 +1905,13 @@ export function OrderListTagsCell({
                 router.refresh();
               }}
             />
+            <div className="mt-3 border-t border-[var(--card-border)] pt-3">
+              <OrderDocumentMailPanel
+                orderId={orderId}
+                hasInvoice={Boolean(localInvoiceAttachmentId)}
+                compact
+              />
+            </div>
             {err ? (
               <p className="mt-2 text-sm text-red-600 dark:text-red-400">{err}</p>
             ) : null}

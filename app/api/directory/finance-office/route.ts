@@ -4,7 +4,10 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
 import {
   FINANCE_OFFICE_DEBT_DEFAULT_DAYS,
+  FINANCE_OFFICE_DEBT_DEFAULT_SUBJECT,
   FINANCE_OFFICE_DEBT_DEFAULT_TEMPLATE,
+  FINANCE_OFFICE_DOCUMENT_DEFAULT_SUBJECT,
+  FINANCE_OFFICE_DOCUMENT_DEFAULT_TEMPLATE,
 } from "@/lib/finance-office-debt-settings";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +30,10 @@ export async function GET() {
       where: { id: tenantId },
       select: {
         financeOfficeDebtWorkingDays: true,
+        financeOfficeDebtEmailSubject: true,
         financeOfficeDebtEmailTemplate: true,
+        financeOfficeDocumentEmailSubject: true,
+        financeOfficeDocumentEmailTemplate: true,
         financeOfficeDebtEmailAccountId: true,
       },
     }),
@@ -40,9 +46,18 @@ export async function GET() {
   return NextResponse.json({
     workingDays:
       tenant?.financeOfficeDebtWorkingDays ?? FINANCE_OFFICE_DEBT_DEFAULT_DAYS,
+    subject:
+      tenant?.financeOfficeDebtEmailSubject?.trim() ||
+      FINANCE_OFFICE_DEBT_DEFAULT_SUBJECT,
     template:
       tenant?.financeOfficeDebtEmailTemplate?.trim() ||
       FINANCE_OFFICE_DEBT_DEFAULT_TEMPLATE,
+    documentSubject:
+      tenant?.financeOfficeDocumentEmailSubject?.trim() ||
+      FINANCE_OFFICE_DOCUMENT_DEFAULT_SUBJECT,
+    documentTemplate:
+      tenant?.financeOfficeDocumentEmailTemplate?.trim() ||
+      FINANCE_OFFICE_DOCUMENT_DEFAULT_TEMPLATE,
     accountId: tenant?.financeOfficeDebtEmailAccountId ?? null,
     accounts,
   });
@@ -62,7 +77,10 @@ export async function PATCH(req: Request) {
   }
   const body = (await req.json().catch(() => ({}))) as {
     workingDays?: unknown;
+    subject?: unknown;
     template?: unknown;
+    documentSubject?: unknown;
+    documentTemplate?: unknown;
     accountId?: unknown;
   };
   const days = Math.trunc(Number(body.workingDays));
@@ -72,11 +90,34 @@ export async function PATCH(req: Request) {
       { status: 400 },
     );
   }
+  const subject = typeof body.subject === "string" ? body.subject : "";
+  if (subject.length > 500) {
+    return NextResponse.json(
+      { error: "Тема письма слишком длинная." },
+      { status: 400 },
+    );
+  }
   const template =
     typeof body.template === "string" ? body.template : "";
   if (template.length > 20000) {
     return NextResponse.json(
       { error: "Шаблон письма слишком длинный." },
+      { status: 400 },
+    );
+  }
+  const documentSubject =
+    typeof body.documentSubject === "string" ? body.documentSubject : "";
+  if (documentSubject.length > 500) {
+    return NextResponse.json(
+      { error: "Тема письма с документами слишком длинная." },
+      { status: 400 },
+    );
+  }
+  const documentTemplate =
+    typeof body.documentTemplate === "string" ? body.documentTemplate : "";
+  if (documentTemplate.length > 20000) {
+    return NextResponse.json(
+      { error: "Шаблон письма с документами слишком длинный." },
       { status: 400 },
     );
   }
@@ -101,7 +142,10 @@ export async function PATCH(req: Request) {
     where: { id: tenantId },
     data: {
       financeOfficeDebtWorkingDays: days,
+      financeOfficeDebtEmailSubject: subject.trim() || null,
       financeOfficeDebtEmailTemplate: template.trim() || null,
+      financeOfficeDocumentEmailSubject: documentSubject.trim() || null,
+      financeOfficeDocumentEmailTemplate: documentTemplate.trim() || null,
       financeOfficeDebtEmailAccountId: accountId,
     },
   });

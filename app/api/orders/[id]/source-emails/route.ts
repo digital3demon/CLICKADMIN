@@ -7,6 +7,10 @@ import { linkEmailsToOrder } from "@/lib/mail/link-emails-to-order.server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 
+function canReadOrderMail(access: Record<string, boolean> | null | undefined) {
+  return access?.ORDERS === true || access?.FINANCE_OFFICE === true;
+}
+
 export const dynamic = "force-dynamic";
 
 export async function GET(
@@ -20,6 +24,10 @@ export async function GET(
   const tenantId = await orderTenantIdForSession(session);
   if (!tenantId) {
     return NextResponse.json({ error: "Тенант не найден" }, { status: 403 });
+  }
+  const access = await getEffectiveModuleAccess(tenantId, session.role);
+  if (!canReadOrderMail(access)) {
+    return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
   }
   const { id: orderId } = await params;
   const prisma = await getOrdersPrisma();

@@ -66,6 +66,9 @@ export function OrderSourceEmailView({
           <h4 className="mt-1 text-sm font-semibold text-[var(--app-text)]">
             {email.subject?.trim() || "(без темы)"}
           </h4>
+          <p className="mt-0.5 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+            {email.direction === "OUTBOUND" ? "Исходящее" : "Входящее"}
+          </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           {usedByAi ? (

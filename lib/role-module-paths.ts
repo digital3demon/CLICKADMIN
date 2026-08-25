@@ -308,6 +308,15 @@ const RULES: Rule[] = [
  * null — для этого пути проверка по модулям не применяется.
  */
 /** Учитывает ветвление CLIENTS и API настроек печати по HTTP-методу. */
+/** Отправка счёта/УПД и ответ из документооборота: доступ проверяет сам роут (ORDERS или ФинОтдел). */
+export function isOrderDocumentMailApiPath(pathname: string): boolean {
+  return (
+    /\/api\/orders\/[^/]+\/send-documents\/?$/u.test(pathname) ||
+    /\/api\/orders\/[^/]+\/document-mail\/?$/u.test(pathname) ||
+    /\/api\/orders\/[^/]+\/source-emails\/?$/u.test(pathname)
+  );
+}
+
 export function requiredModuleForPath(
   pathname: string,
   base: AppModule | null,
@@ -315,6 +324,7 @@ export function requiredModuleForPath(
   search = "",
   headers?: { get(name: string): string | null },
 ): AppModule | null {
+  if (isOrderDocumentMailApiPath(pathname)) return null;
   const chatModule = orderChatApiModuleForPath(pathname, method ?? "GET");
   if (chatModule) return chatModule;
   const kaitenMirrorModule = orderKaitenMirrorApiModuleForPath(

@@ -14,7 +14,7 @@ export default async function DirectoryFinanceOfficePage() {
   return (
     <ModuleFrame
       title="ФинОтдел"
-      description="Шаблон письма о долге, срок в рабочих днях МСК и ящик для рассылки."
+      description="Тема и текст письма о долге, срок в рабочих днях МСК и ящик для рассылки."
     >
       <FinanceOfficeTenantSettings />
       <p className="mt-8 text-sm">

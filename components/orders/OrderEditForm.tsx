@@ -77,6 +77,7 @@ import {
 import { KaitenHeaderPillMenu } from "@/components/orders/KaitenHeaderPillMenu";
 import { UrgentPillMenu } from "@/components/orders/UrgentPillMenu";
 import { OrderHeadlinePills } from "@/components/orders/OrderHeadlinePills";
+import { OrderDocumentMailPanel } from "@/components/orders/OrderDocumentMailPanel";
 import {
   orderUrgentPriceMultiplier,
   parseUrgentSelection,
@@ -3770,6 +3771,11 @@ export function OrderEditForm({
                     Скачать счёт
                   </span>
                 )}
+                <OrderDocumentMailPanel
+                  orderId={initial.id}
+                  hasInvoice={Boolean(invoiceAttachmentId)}
+                  mode="actions"
+                />
                 <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs text-[var(--text-strong)] sm:text-sm">
                   <input
                     type="checkbox"
@@ -4013,6 +4019,13 @@ export function OrderEditForm({
                     onChange={(e) => setInvoicePaymentNotes(e.target.value)}
                     placeholder="Условия оплаты, напоминания, переписка с бухгалтерией…"
                   />
+                  <div className="mt-4 border-t border-[var(--card-border)] pt-4">
+                    <OrderDocumentMailPanel
+                      orderId={initial.id}
+                      hasInvoice={Boolean(invoiceAttachmentId)}
+                      mode="thread"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

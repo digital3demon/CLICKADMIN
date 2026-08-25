@@ -3,20 +3,43 @@
 import { useCallback, useEffect, useState } from "react";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import { orderPathById } from "@/lib/order-public-ref";
-import { FINANCE_OFFICE_DEBT_NOTIFY_MAX } from "@/lib/finance-office-debts";
+import {
+  FINANCE_OFFICE_DEBT_NOTIFY_MAX,
+  financeOfficeDebtPaymentLabel,
+} from "@/lib/finance-office-debts";
+import {
+  canonicalOrderPayment,
+  ORDER_PAYMENT_PARTIAL,
+} from "@/lib/order-clinic-client-fields";
+import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
+import {
+  paymentValueToHarmonyTone,
+  resolveListPillClass,
+} from "@/lib/harmony-list-pill";
 
 type DebtRow = {
   orderId: string;
   orderNumber: string;
   patientName: string | null;
+  doctorName: string | null;
   clinicName: string | null;
   ourLegalEntity: string | null;
   theirLegalName: string | null;
   theirInn: string | null;
   email: string;
+  payment: string;
+  paymentPartialRub: number | null;
   hasInvoice: boolean;
   hasUpd: boolean;
 };
+
+function debtPaymentClassicClass(payment: string): string {
+  const p = canonicalOrderPayment(payment);
+  if (p === ORDER_PAYMENT_PARTIAL) {
+    return "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-100";
+  }
+  return "border-rose-300 bg-rose-50 text-rose-950 dark:border-rose-700/70 dark:bg-rose-950/40 dark:text-rose-100";
+}
 
 function cardShell(isHarmony: boolean): string {
   return isHarmony
@@ -93,6 +116,13 @@ export function FinanceOfficeDebtsCard({
 
   const markPaid = async (ids: string[]) => {
     if (ids.length === 0) return;
+    const firstNum = items.find((r) => r.orderId === ids[0])?.orderNumber ?? "";
+    const ok = window.confirm(
+      ids.length === 1
+        ? `Пометить наряд ${firstNum} как «Оплачено»?`
+        : `Пометить выбранные наряды (${ids.length}) как «Оплачено»?`,
+    );
+    if (!ok) return;
     setBusy(true);
     setErr(null);
     setInfo(null);
@@ -166,6 +196,7 @@ export function FinanceOfficeDebtsCard({
   };
 
   const selectedIds = items.filter((r) => selected.has(r.orderId)).map((r) => r.orderId);
+  const allSelected = items.length > 0 && selectedIds.length === items.length;
 
   return (
     <>
@@ -199,7 +230,7 @@ export function FinanceOfficeDebtsCard({
           onClick={() => setOpen(false)}
         >
           <div
-            className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl"
+            className="flex max-h-[90vh] w-full max-w-[86rem] flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
@@ -236,13 +267,13 @@ export function FinanceOfficeDebtsCard({
                   Просроченных неоплаченных счетов нет.
                 </p>
               ) : (
-                <table className="w-full min-w-[56rem] border-separate border-spacing-0 text-left text-xs">
+                <table className="w-full min-w-[72rem] border-separate border-spacing-0 text-left text-xs">
                   <thead>
                     <tr className="bg-[var(--surface-subtle)] text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                       <th className="px-2 py-1.5">
                         <input
                           type="checkbox"
-                          checked={selected.size === items.length}
+                          checked={allSelected}
                           onChange={(e) =>
                             setSelected(
                               e.target.checked
@@ -253,8 +284,10 @@ export function FinanceOfficeDebtsCard({
                           aria-label="Выбрать все"
                         />
                       </th>
-                      <th className="px-2 py-1.5">Наряд</th>
-                      <th className="px-2 py-1.5">Клиника / пациент</th>
+                      <th className="whitespace-nowrap px-2 py-1.5">Наряд</th>
+                      <th className="px-2 py-1.5">Клиника</th>
+                      <th className="px-2 py-1.5">Доктор</th>
+                      <th className="px-2 py-1.5">Пациент</th>
                       <th className="px-2 py-1.5">Наше юрлицо</th>
                       <th className="px-2 py-1.5">Их юрлицо</th>
                       <th className="px-2 py-1.5">ИНН</th>
@@ -277,7 +310,7 @@ export function FinanceOfficeDebtsCard({
                             aria-label={`Выбрать ${r.orderNumber}`}
                           />
                         </td>
-                        <td className="px-2 py-1.5 font-mono">
+                        <td className="whitespace-nowrap px-2 py-1.5 font-mono">
                           <a
                             href={orderPathById(r.orderId)}
                             className="text-[var(--sidebar-blue)] hover:underline"
@@ -286,10 +319,13 @@ export function FinanceOfficeDebtsCard({
                           </a>
                         </td>
                         <td className="px-2 py-1.5">
-                          <div>{r.clinicName || "Частное лицо"}</div>
-                          <div className="text-[var(--text-muted)]">
-                            {r.patientName || "—"}
-                          </div>
+                          {r.clinicName || "Частное лицо"}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-1.5">
+                          {personNameSurnameInitials(r.doctorName) || "—"}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {r.patientName?.trim() || "—"}
                         </td>
                         <td className="px-2 py-1.5">{r.ourLegalEntity || "—"}</td>
                         <td className="px-2 py-1.5">{r.theirLegalName || "—"}</td>
@@ -316,10 +352,18 @@ export function FinanceOfficeDebtsCard({
                           <button
                             type="button"
                             disabled={busy}
-                            className="rounded border border-emerald-600/50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-200 dark:hover:bg-emerald-950/40"
+                            title="Сменить на «Оплачено»"
+                            className={resolveListPillClass(
+                              isHarmony,
+                              `rounded border px-1.5 py-0.5 text-[11px] font-medium disabled:opacity-50 ${debtPaymentClassicClass(r.payment)}`,
+                              paymentValueToHarmonyTone(r.payment),
+                            )}
                             onClick={() => void markPaid([r.orderId])}
                           >
-                            Оплачено
+                            {financeOfficeDebtPaymentLabel(
+                              r.payment,
+                              r.paymentPartialRub,
+                            )}
                           </button>
                         </td>
                       </tr>
@@ -330,6 +374,16 @@ export function FinanceOfficeDebtsCard({
             </div>
             {items.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-[var(--card-border)] px-4 py-3">
+                <button
+                  type="button"
+                  disabled={busy || items.length === 0}
+                  className="rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
+                  onClick={() =>
+                    setSelected(new Set(items.map((r) => r.orderId)))
+                  }
+                >
+                  Выбрать все
+                </button>
                 <button
                   type="button"
                   disabled={busy || selectedIds.length === 0}

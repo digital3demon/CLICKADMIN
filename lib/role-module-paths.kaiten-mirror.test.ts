@@ -18,6 +18,26 @@ describe("orderKaitenMirrorApiModuleForPath", () => {
     ).toBe("KANBAN_MOVE_COLUMNS");
   });
 
+  it("send-documents и document-mail не требуют пакет ORDERS в middleware", () => {
+    expect(
+      requiredModuleForPath(
+        "/api/orders/ord-1/send-documents",
+        "ORDERS",
+        "POST",
+      ),
+    ).toBeNull();
+    expect(
+      requiredModuleForPath("/api/orders/ord-1/document-mail", "ORDERS", "POST"),
+    ).toBeNull();
+    expect(
+      requiredModuleForPath(
+        "/api/orders/ord-1/source-emails",
+        "ORDERS",
+        "GET",
+      ),
+    ).toBeNull();
+  });
+
   it("GET /api/orders/:id/kaiten остаётся на ORDERS", () => {
     expect(
       orderKaitenMirrorApiModuleForPath("/api/orders/ord-1/kaiten", "GET"),
