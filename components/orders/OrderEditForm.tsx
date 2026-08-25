@@ -65,8 +65,10 @@ import {
   resolvedOrderPriceListKindFromContractors,
 } from "@/lib/order-price-list-from-contractors";
 import {
+  lineNetAfterLineDiscountRub,
   orderCompositionSubtotalAfterDiscountsRub,
   orderPayableAfterDepositRub,
+  parseDraftDiscountPercentString,
 } from "@/lib/format-order-construction";
 import {
   normalizeLegacyLabWorkStatus,
@@ -190,6 +192,92 @@ function MobileCollapsibleSection({
         </span>
       </summary>
       {children}
+    </details>
+  );
+}
+
+function formatDocumentFlowCompositionLineText(line: {
+  title: string;
+  quantity: number;
+  amountRub: number;
+}): string {
+  return `${line.title}\nкол-во ${line.quantity}\nсумма ${moneyRu(line.amountRub)}`;
+}
+
+function formatDocumentFlowCompositionAllText(
+  lines: Array<{ title: string; quantity: number; amountRub: number }>,
+): string {
+  return lines.map(formatDocumentFlowCompositionLineText).join("\n");
+}
+
+/** Состав наряда на вкладке «Документооборот»: свёрнут; длинный список скроллится в своей колонке. */
+function DocumentFlowCompositionSpoiler({
+  lines,
+  onCopy,
+}: {
+  lines: Array<{ title: string; quantity: number; amountRub: number }>;
+  onCopy: (text: string) => void;
+}) {
+  const allText = formatDocumentFlowCompositionAllText(lines);
+  return (
+    <details className="group min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 select-none hover:brightness-105 [&::-webkit-details-marker]:hidden">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+          Состав заказа
+          {lines.length > 0 ? ` · ${lines.length}` : ""}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            disabled={lines.length === 0}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (allText) onCopy(allText);
+            }}
+            title="Скопировать весь состав построчно"
+            className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] disabled:cursor-default disabled:opacity-50"
+          >
+            Скопировать все
+          </button>
+          <span
+            aria-hidden
+            className="text-[var(--text-muted)] transition-transform group-open:rotate-180"
+          >
+            ▾
+          </span>
+        </span>
+      </summary>
+      <div className="max-h-40 overflow-y-auto border-t border-[var(--card-border)] px-2.5 py-2">
+        {lines.length === 0 ? (
+          <p className="text-xs text-[var(--text-muted)]">Нет позиций в составе</p>
+        ) : (
+          <ul className="space-y-2">
+            {lines.map((line, idx) => (
+              <li key={`${line.title}-${idx}`}>
+                <button
+                  type="button"
+                  title="Нажмите — скопировать в буфер обмена"
+                  onClick={() =>
+                    onCopy(formatDocumentFlowCompositionLineText(line))
+                  }
+                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-left shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
+                >
+                  <p className="text-xs font-medium leading-snug text-[var(--text-strong)]">
+                    {line.title}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-body)]">
+                    кол-во {line.quantity}
+                  </p>
+                  <p className="text-[11px] leading-snug text-[var(--text-body)]">
+                    сумма {moneyRu(line.amountRub)}
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </details>
   );
 }
@@ -1809,6 +1897,30 @@ export function OrderEditForm({
     urgentPriceMult,
     depositAppliedRub,
   ]);
+
+  const documentFlowCompositionRows = useMemo(() => {
+    return draftLines
+      .filter((row) =>
+        row.kind === "priceList" ? Boolean(row.priceListItemId.trim()) : true,
+      )
+      .map((row) => {
+        const priceRaw = row.unitPrice.trim();
+        const unitPrice =
+          priceRaw === "" ? null : Number(priceRaw.replace(",", "."));
+        const amountRub = lineNetAfterLineDiscountRub(
+          row.quantity,
+          unitPrice != null && !Number.isNaN(unitPrice) ? unitPrice : null,
+          parseDraftDiscountPercentString(row.lineDiscountPercent ?? "0"),
+        );
+        const code = row.priceListCode.trim();
+        const name = row.priceListName.trim();
+        const title =
+          code && name ? `${code} · ${name}` : name || code || "Позиция";
+        const quantity =
+          Number.isFinite(row.quantity) && row.quantity > 0 ? row.quantity : 1;
+        return { title, quantity, amountRub };
+      });
+  }, [draftLines]);
 
   const financePreviewBeforeDeposit = useMemo(() => {
     const payload = draftToConstructionPayload(draftLines) as Array<{
@@ -3539,9 +3651,13 @@ export function OrderEditForm({
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
           >
           <div
-            className="mt-2 grid grid-cols-1 gap-4 crm-t2:grid-cols-2 crm-t2:gap-6"
+            className="mt-2 grid grid-cols-1 items-start gap-4 crm-t2:grid-cols-2 crm-t2:gap-6"
           >
             <div className="min-w-0 space-y-3">
+              <DocumentFlowCompositionSpoiler
+                lines={documentFlowCompositionRows}
+                onCopy={(t) => void copyInvoiceBlockText(t)}
+              />
               <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
                 <button
                   type="button"
