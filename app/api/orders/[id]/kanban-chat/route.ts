@@ -7,7 +7,8 @@
  * Kaiten при пустом store — только `after()`, ответ не ждёт.
  * Без local: после ответа ещё тянем файлы Kaiten и JSON доски (чат из списка нарядов).
  * POST: пишем CRM-ленту, inbox и TG-упоминания в запросе; выгрузка в Kaiten — `after()`.
- * PATCH/DELETE: автор правит или удаляет своё сообщение в течение 12 часов.
+ * PATCH/DELETE: автор правит или удаляет своё сообщение в течение 12 часов,
+ * кроме закрытой заявки (внесена корректировка / заказана протетика).
  */
 import { after, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
@@ -51,6 +52,11 @@ import {
   canAuthorMutateKanbanChatMessage,
   isKanbanChatCommentDeleted,
 } from "@/lib/kanban/chat-message-edit";
+import { annotateKanbanCommentsRequestClosed } from "@/lib/kanban/chat-message-request-closed";
+import {
+  isStoredKanbanChatCommentRequestClosed,
+  loadKanbanChatRequestClosedRows,
+} from "@/lib/kanban/chat-message-request-closed.server";
 import {
   applyKanbanChatTriggerSideEffects,
   persistKanbanButtonTriggers,
@@ -412,15 +418,21 @@ export async function GET(
    */
   const localOnly = isKanbanChatLocalOnlyRequest(new URL(req.url));
   const t0 = Date.now();
-  const [{ orderHeader, workImages: bundleImages }, storedComments] =
+  const [{ orderHeader, workImages: bundleImages }, storedComments, requestClosedRows] =
     await Promise.all([
       loadOrderChatBundle(orderId, tenantId),
       loadKanbanOrderComments(tenantId, orderId),
+      loadKanbanChatRequestClosedRows(orderId),
     ]);
   let workImages = bundleImages;
+  const commentsForApi = (list: CardComment[]) =>
+    annotateKanbanCommentsRequestClosed(
+      normalizeCardCommentsForApi(list),
+      requestClosedRows,
+    );
 
   if (localOnly) {
-    const comments = normalizeCardCommentsForApi(storedComments);
+    const comments = commentsForApi(storedComments);
     const kaitenCardId = orderHeader?.kaitenCardId;
     if (
       comments.length === 0 &&
@@ -471,7 +483,7 @@ export async function GET(
       ok: true,
       mode: "kanban",
       hasCard: false,
-      comments: normalizeCardCommentsForApi(storedComments),
+      comments: commentsForApi(storedComments),
       cardImages: workImages,
       orderHeader,
       description: orderHeader?.description ?? "",
@@ -483,7 +495,7 @@ export async function GET(
       ok: true,
       mode: "kanban",
       hasCard: false,
-      comments: normalizeCardCommentsForApi(storedComments),
+      comments: commentsForApi(storedComments),
       cardImages: workImages,
       orderHeader,
       description: orderHeader?.description ?? "",
@@ -497,7 +509,7 @@ export async function GET(
     (orderHeader?.kaitenCardId != null &&
       Number.isFinite(orderHeader.kaitenCardId));
 
-  const comments = normalizeCardCommentsForApi(
+  const comments = commentsForApi(
     mergeKanbanOrderComments(card.comments || [], storedComments),
   );
   const cardImages = mergeCardImagesWithOrderWork(card.files || [], workImages);
@@ -973,18 +985,25 @@ async function loadOwnedMutableComment(
     return { ok: false, status: 404, error: "Сообщение не найдено" };
   }
   const row = stored[index]!;
+  const requestClosed = await isStoredKanbanChatCommentRequestClosed(
+    orderId,
+    row,
+  );
   if (
     !canAuthorMutateKanbanChatMessage({
       userId: row.userId,
       currentUserId: sessionSub,
       createdAt: row.createdAt,
       deletedAt: row.deletedAt,
+      requestClosed,
     })
   ) {
     return {
       ok: false,
       status: 403,
-      error: "Изменить или удалить можно только своё сообщение в течение 12 часов",
+      error: requestClosed
+        ? "Заявку нельзя изменить или удалить: корректировка внесена или протетика заказана"
+        : "Изменить или удалить можно только своё сообщение в течение 12 часов",
     };
   }
   return { ok: true, stored, index, row };

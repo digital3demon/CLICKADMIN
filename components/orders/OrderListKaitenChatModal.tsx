@@ -55,6 +55,7 @@ type CommentRow = {
   syncStatus?: "local" | "pending" | "synced" | "failed" | "retried";
   syncedAt?: string | null;
   editedAt?: string | null;
+  requestClosed?: boolean;
 };
 
 type ChatImage = {
@@ -123,6 +124,7 @@ type KanbanChatCommentPayload = {
   syncedAt?: string | null;
   userId?: string;
   editedAt?: string | null;
+  requestClosed?: boolean;
 };
 
 /** GET /kanban-chat отдаёт CardComment (createdAt, authorLabel), модалке нужен CommentRow. */
@@ -139,6 +141,7 @@ function normalizeKanbanChatComment(raw: KanbanChatCommentPayload): CommentRow {
     syncedAt: raw.syncedAt,
     userId: raw.userId,
     editedAt: raw.editedAt,
+    requestClosed: raw.requestClosed,
   };
 }
 
@@ -872,6 +875,7 @@ export function OrderListKaitenChatModal({
                           userId: c.userId,
                           currentUserId: user?.id,
                           createdAt: c.created,
+                          requestClosed: c.requestClosed,
                         }) ? (
                           <>
                             <button
@@ -979,6 +983,7 @@ export function OrderListKaitenChatModal({
                                   userId: ch.userId,
                                   currentUserId: user?.id,
                                   createdAt: ch.created,
+                                  requestClosed: ch.requestClosed,
                                 }) ? (
                                   <>
                                     <button

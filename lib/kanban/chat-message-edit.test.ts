@@ -34,6 +34,15 @@ describe("canAuthorMutateKanbanChatMessage", () => {
         nowMs: t0 + KANBAN_CHAT_AUTHOR_EDIT_WINDOW_MS + 1,
       }),
     ).toBe(false);
+    expect(
+      canAuthorMutateKanbanChatMessage({
+        userId: "u1",
+        currentUserId: "u1",
+        createdAt,
+        nowMs: t0 + 60 * 60 * 1000,
+        requestClosed: true,
+      }),
+    ).toBe(false);
   });
 });
 

@@ -80,6 +80,8 @@ export type CardComment = {
   editedAt?: string | null;
   /** Мягкое удаление автором; ingest из Kaiten не воскрешает строку. */
   deletedAt?: string | null;
+  /** GET /kanban-chat: заявка закрыта (внесена / заказана) — кнопки правки скрыты. */
+  requestClosed?: boolean;
 };
 
 export type CardActivity = {

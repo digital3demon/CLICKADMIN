@@ -16,12 +16,15 @@ export function canAuthorMutateKanbanChatMessage(opts: {
   currentUserId: string | null | undefined;
   createdAt: string | null | undefined;
   deletedAt?: string | null;
+  /** Закрытая !!! / ??? заявка — править нельзя даже в окне 12 часов. */
+  requestClosed?: boolean;
   nowMs?: number;
 }): boolean {
   const author = String(opts.userId || "").trim();
   const me = String(opts.currentUserId || "").trim();
   if (!author || !me || author !== me) return false;
   if (isKanbanChatCommentDeleted({ deletedAt: opts.deletedAt })) return false;
+  if (opts.requestClosed) return false;
   const created = Date.parse(String(opts.createdAt || ""));
   if (!Number.isFinite(created)) return false;
   const now = opts.nowMs ?? Date.now();

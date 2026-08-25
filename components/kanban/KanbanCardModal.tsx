@@ -46,6 +46,7 @@ import {
   isChatComposerSendEnter,
   visibleKanbanChatComments,
 } from "@/lib/kanban/chat-message-edit";
+import { mergeRequestClosedFlags } from "@/lib/kanban/chat-message-request-closed";
 import { isOrderChatCorrectionTrigger } from "@/lib/order-chat-correction";
 import { isOrderProstheticsRequestTrigger } from "@/lib/order-prosthetics-request";
 import {
@@ -762,6 +763,7 @@ export function KanbanCardModal({
     void (async () => {
       const snap = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
       if (cancelled) return;
+      const closedFlags = snap.ok ? snap.comments : [];
       if (snap.ok) {
         onApply((b) => {
           const fc = findCard(b, cardId);
@@ -772,7 +774,7 @@ export function KanbanCardModal({
             fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
           } else {
             fc.card.comments = withImagePlaceholders(
-              fc.card.comments || [],
+              mergeRequestClosedFlags(fc.card.comments || [], closedFlags),
               fc.card,
             );
           }
@@ -809,9 +811,12 @@ export function KanbanCardModal({
           const fc = findCard(b, cardId);
           if (!fc) return;
           fc.card.comments = withImagePlaceholders(
-            mergeKaitenSnapshotIntoCardComments(
-              fc.card.comments || [],
-              kaiten.comments,
+            mergeRequestClosedFlags(
+              mergeKaitenSnapshotIntoCardComments(
+                fc.card.comments || [],
+                kaiten.comments,
+              ),
+              closedFlags,
             ),
             fc.card,
           );
@@ -3601,6 +3606,7 @@ function ChatPanel({
                     currentUserId: sessionUserId,
                     createdAt: cm.createdAt,
                     deletedAt: cm.deletedAt,
+                    requestClosed: cm.requestClosed,
                   }) ? (
                     <>
                       <button
