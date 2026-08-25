@@ -372,6 +372,8 @@ body {
  * Сплошной фон на tr/td — иначе колёсико на длинном списке замирает.
  */
 .finance-office-orders-table {
+  table-layout: fixed;
+  width: 100%;
   border-collapse: separate;
   border-spacing: 0;
 }

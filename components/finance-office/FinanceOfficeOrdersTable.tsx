@@ -160,8 +160,8 @@ export function FinanceOfficeOrdersTable({
     >
       <OrderListKaitenPoller orderIds={kaitenOrderIds} />
       <div className="relative">
-      <div className="scrollbar-none w-full min-w-0 overflow-x-auto overflow-y-visible shell-laptop:overflow-x-visible [-webkit-overflow-scrolling:touch]">
-        <table className="finance-office-orders-table w-full min-w-0 border-separate border-spacing-0 text-center text-sm">
+      <div className="w-full min-w-0 overflow-x-hidden overflow-y-visible">
+        <table className="finance-office-orders-table w-full min-w-0 table-fixed border-separate border-spacing-0 text-center text-sm">
           <thead className="hidden shell-laptop:table-header-group xl:sticky xl:top-[var(--sticky-list-toolbar-height,0px)] xl:z-30">
             <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <th className="w-[7.5rem] px-2 py-2 text-center normal-case max-xl:sticky max-xl:left-0 max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">
@@ -176,34 +176,34 @@ export function FinanceOfficeOrdersTable({
                   <span>Выбрать</span>
                 </div>
               </th>
-              <th className="w-10 px-1 py-2 text-center normal-case">Чат</th>
-              <th className="px-1 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
-              <th className="w-[7.5rem] px-1 py-2 text-center">Клиника</th>
-              <th className="w-[6.5rem] px-1 py-2 text-center">Врач</th>
-              <th className="w-[6.5rem] px-1 py-2 text-center">Пациент</th>
+              <th className="w-10 px-2 py-2 text-center normal-case">Чат</th>
+              <th className="px-2 py-2 text-center max-xl:sticky max-xl:left-[7.5rem] max-xl:z-30 max-xl:bg-[var(--surface-subtle)] max-xl:shadow-[1px_0_0_var(--card-border)]">№ наряда</th>
+              <th className="min-w-0 px-2 py-2 text-center">Клиника</th>
+              <th className="min-w-0 px-2 py-2 text-center">Врач</th>
+              <th className="min-w-0 px-2 py-2 text-center">Пациент</th>
               <th
-                className="w-[5.75rem] px-1 py-2 text-center"
+                className="min-w-0 w-[8%] px-2 py-2 text-center normal-case"
+                title="Дата выставления / отправки счёта"
+              >
+                Счёт выставлен
+              </th>
+              <th
+                className="min-w-0 px-2 py-2 text-center"
                 title="Лаб-срок: dueDate"
               >
                 Лаб срок
               </th>
               <th
-                className="w-[5.75rem] px-1 py-2 text-center"
+                className="min-w-0 px-2 py-2 text-center"
                 title="Запись: дата и время приёма пациента"
               >
                 Запись
               </th>
-              <th className="hidden w-[8rem] px-1 py-2 text-center normal-case shell-desktop:table-cell">Реквизиты</th>
-              <th className="hidden w-[4.5rem] px-1 py-2 text-center normal-case shell-desktop:table-cell">Наше юрлицо</th>
-              <th className="w-[4.5rem] px-1 py-2 text-center normal-case">Отправка</th>
-              <th
-                className="w-[5.75rem] px-1 py-2 text-center normal-case"
-                title="Дата выставления / отправки счёта"
-              >
-                Счёт выставлен
-              </th>
-              <th className="min-w-[18rem] px-1 py-2 text-center normal-case">Отметки</th>
-              <th className="w-[4.5rem] px-1 py-2 text-center normal-case shell-desktop:hidden">Ещё</th>
+              <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">Реквизиты</th>
+              <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">Наше юрлицо</th>
+              <th className="min-w-0 w-[5%] px-2 py-2 text-center normal-case">Отправка</th>
+              <th className="min-w-0 px-2 py-2 text-center normal-case">Отметки</th>
+              <th className="w-[5rem] px-2 py-2 text-center normal-case shell-desktop:hidden">Ещё</th>
             </tr>
           </thead>
           <tbody>

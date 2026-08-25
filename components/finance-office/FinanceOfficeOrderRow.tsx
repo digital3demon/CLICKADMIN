@@ -198,7 +198,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
         }
       />
       <td
-        className={`whitespace-nowrap px-1 py-2 text-center font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
+        className={`whitespace-nowrap px-2 py-2 text-center font-mono font-semibold max-xl:sticky max-xl:left-[7.5rem] max-xl:z-10 ${d.stickyCellBg} max-xl:shadow-[1px_0_0_var(--card-border)]`}
       >
         <div className="flex items-center justify-center">
           <Link
@@ -210,7 +210,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           </Link>
         </div>
       </td>
-      <td className="w-[7.5rem] max-w-[7.5rem] px-1 py-2 text-center align-middle">
+      <td className="min-w-0 px-2 py-2 text-center align-middle">
         {o.clinic ? (
           <Link
             href={`/clients/${o.clinic.id}`}
@@ -224,7 +224,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           </span>
         )}
       </td>
-      <td className="w-[6.5rem] max-w-[6.5rem] px-1 py-2 text-center align-middle">
+      <td className="min-w-0 px-2 py-2 text-center align-middle">
         <Link
           href={`/clients/doctors/${o.doctor.id}`}
           className="block break-words text-center text-[var(--sidebar-blue)] hover:underline"
@@ -232,26 +232,32 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           {personNameSurnameInitials(o.doctor.fullName)}
         </Link>
       </td>
-      <td className="w-[6.5rem] max-w-[6.5rem] px-1 py-2 text-center align-middle">
+      <td className="min-w-0 px-2 py-2 text-center align-middle">
         <span className="block hyphens-auto break-words text-center">
           {o.patientName ? personNameSurnameInitials(o.patientName) : "—"}
         </span>
       </td>
-      <td className="w-[5.75rem] whitespace-nowrap px-1 py-2 text-center align-middle text-[var(--text-secondary)]">
+      <td className="min-w-0 w-[8%] px-2 py-2 text-center align-middle">
+        <FinanceOfficeInvoiceIssuedCell
+          orderId={o.id}
+          issuedAtIso={o.invoiceIssuedAt}
+        />
+      </td>
+      <td className="min-w-0 break-words px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
         {formatFinanceDateTime(o.dueDate)}
       </td>
-      <td className="w-[5.75rem] whitespace-nowrap px-1 py-2 text-center align-middle text-[var(--text-secondary)]">
+      <td className="min-w-0 break-words px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
         {formatFinanceDateTime(o.appointmentDate ?? o.dueToAdminsAt)}
       </td>
-      <td className="hidden w-[8rem] max-w-[8rem] whitespace-pre-line break-words px-1 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
+      <td className="hidden min-w-0 whitespace-pre-line break-words px-2 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
         {o.counterpartyRequisitesText || "—"}
       </td>
-      <td className="hidden w-[4.5rem] max-w-[4.5rem] break-words px-1 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
+      <td className="hidden min-w-0 break-words px-2 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
         {o.legalEntity || "—"}
       </td>
       <td
         data-shipped-cell
-        className="w-[4.5rem] px-1 py-2 text-center align-middle"
+        className="min-w-0 w-[5%] px-2 py-2 text-center align-middle"
       >
         <OrderShippedToggle
           orderId={o.id}
@@ -260,13 +266,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           readOnly
         />
       </td>
-      <td className="w-[5.75rem] px-1 py-2 text-center align-middle">
-        <FinanceOfficeInvoiceIssuedCell
-          orderId={o.id}
-          issuedAtIso={o.invoiceIssuedAt}
-        />
-      </td>
-      <td className="min-w-0 px-1 py-2 text-left align-top">
+      <td className="min-w-0 px-2 py-2 text-left align-top">
         <TagsCell
           o={o}
           tab={d.tab}

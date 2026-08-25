@@ -59,7 +59,7 @@ export function FinanceOfficeInvoiceIssuedCell({
   );
 
   return (
-    <div className="mx-auto w-full max-w-[5.5rem] leading-none">
+    <div className="mx-auto w-full min-w-0 max-w-full leading-none">
       <DueDatetimeComboPicker
         variant="compact"
         value={value}

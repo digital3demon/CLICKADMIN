@@ -75,6 +75,7 @@ import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenCol
 import { OrderPaymentModalAccountingUpload } from "@/components/orders/OrderPaymentModalAccountingUpload";
 import {
   formatDocumentCopyCompositionText,
+  formatDocumentCopyMoneyRu,
   formatDocumentCopyOrderLegalText,
   type DocumentCopyPayload,
 } from "@/lib/order-document-copy";
@@ -299,7 +300,11 @@ type MissingTagAction =
       kind: "deposit";
     };
 
-function buildTagRows(items: TagCloudItem[]): TagCloudItem[][] {
+function buildTagRows(
+  items: TagCloudItem[],
+  perRow: number,
+): TagCloudItem[][] {
+  const cap = Number.isFinite(perRow) && perRow > 0 ? Math.floor(perRow) : 2;
   const rows: TagCloudItem[][] = [];
   let current: TagCloudItem[] = [];
 
@@ -321,9 +326,9 @@ function buildTagRows(items: TagCloudItem[]): TagCloudItem[][] {
       rows.push([it]);
       continue;
     }
-    if (current.length >= 2) flushCurrent();
+    if (current.length >= cap) flushCurrent();
     current.push(it);
-    if (current.length >= 2) flushCurrent();
+    if (current.length >= cap) flushCurrent();
   }
   flushCurrent();
   return rows;
@@ -1492,7 +1497,10 @@ export function OrderListTagsCell({
     </button>
   );
 
-  const tagRows = buildTagRows(tagCloudItems);
+  const tagRows = buildTagRows(
+    tagCloudItems,
+    financeOfficeFilterContext ? 3 : 2,
+  );
   const lastRowIdx = tagRows.length - 1;
 
   // «+» в последней строке облака — иначе при huge «Заблокировано» (w-full)
@@ -1760,31 +1768,101 @@ export function OrderListTagsCell({
                       ) : null}
                     </div>
                   </div>
-                  <div className="min-w-0 space-y-1.5">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                  <details
+                    open
+                    className="group min-w-0 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]"
+                  >
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 select-none hover:brightness-105 [&::-webkit-details-marker]:hidden">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
                         Состав заказа
                         {docCopy.composition.length > 0
                           ? ` · ${docCopy.composition.length}`
                           : ""}
-                      </p>
-                      <button
-                        type="button"
-                        disabled={docCopy.composition.length === 0}
-                        title="Только значения, построчно"
-                        onClick={() =>
-                          void copyDocText(
-                            formatDocumentCopyCompositionText(
-                              docCopy.composition,
-                            ),
-                          )
-                        }
-                        className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] disabled:opacity-40"
-                      >
-                        Скопировать все
-                      </button>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={docCopy.composition.length === 0}
+                          title="Только значения, построчно"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void copyDocText(
+                              formatDocumentCopyCompositionText(
+                                docCopy.composition,
+                              ),
+                            );
+                          }}
+                          className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] disabled:opacity-40"
+                        >
+                          Скопировать все
+                        </button>
+                        <span
+                          aria-hidden
+                          className="text-[var(--text-muted)] transition-transform group-open:rotate-180"
+                        >
+                          ▾
+                        </span>
+                      </span>
+                    </summary>
+                    <div className="max-h-44 overflow-y-auto border-t border-[var(--card-border)] px-2.5 py-2">
+                      {docCopy.composition.length === 0 ? (
+                        <p className="text-xs text-[var(--text-muted)]">
+                          Нет позиций в составе
+                        </p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {docCopy.composition.map((line, idx) => (
+                            <li
+                              key={`${line.title}-${idx}`}
+                              className="flex w-fit max-w-full flex-wrap items-center gap-2"
+                            >
+                              <button
+                                type="button"
+                                title="Нажмите — скопировать в буфер обмена"
+                                onClick={() => void copyDocText(line.title)}
+                                className="w-fit max-w-[18rem] truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+                              >
+                                {line.title}
+                              </button>
+                              <button
+                                type="button"
+                                title="Нажмите — скопировать в буфер обмена"
+                                onClick={() =>
+                                  void copyDocText(String(line.quantity))
+                                }
+                                className="inline-flex w-fit items-center gap-1.5 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+                              >
+                                <span className="text-[8px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                                  Кол-во
+                                </span>
+                                <span className="font-mono text-xs font-semibold text-[var(--text-strong)]">
+                                  {line.quantity}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                title="Нажмите — скопировать в буфер обмена"
+                                onClick={() =>
+                                  void copyDocText(
+                                    formatDocumentCopyMoneyRu(line.amountRub),
+                                  )
+                                }
+                                className="inline-flex w-fit items-center gap-1.5 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
+                              >
+                                <span className="text-[8px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                                  Сумма
+                                </span>
+                                <span className="font-mono text-xs font-semibold text-[var(--text-strong)]">
+                                  {formatDocumentCopyMoneyRu(line.amountRub)}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
-                  </div>
+                  </details>
                 </>
               ) : (
                 <p className="text-xs text-[var(--text-muted)]">
