@@ -91,6 +91,7 @@ import {
 } from "@/lib/kanban/model";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 import {
   KANBAN_CARD_MODAL_NARROW_MAX_PX,
   kanbanCardDescriptionAvailableHeight,
@@ -3306,10 +3307,10 @@ function ChatPanel({
   onOpenAttachment: (f: CardFile) => void;
 }) {
   const { byId: crmChatById, list: crmChatList } = useKanbanCrmUsers();
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [inp, setInp] = useState("");
+  const inputRef = useAutosizeTextarea(inp, { maxHeight: 240 });
   const [caretPos, setCaretPos] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -3750,8 +3751,8 @@ function ChatPanel({
         ) : null}
         <textarea
           ref={inputRef}
-          rows={2}
-          className="min-h-11 w-full min-w-0 resize-y rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-3 py-2 text-left text-[0.8125rem] font-medium text-[var(--kaiten-modal-text)] placeholder:text-center placeholder:text-[var(--kaiten-modal-muted)]"
+          rows={1}
+          className="min-h-11 w-full min-w-0 resize-none overflow-hidden rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-3 py-2 text-left text-[0.8125rem] font-medium text-[var(--kaiten-modal-text)] placeholder:text-center placeholder:text-[var(--kaiten-modal-muted)]"
           placeholder="Комментарий"
           value={inp}
           onChange={(e) => {

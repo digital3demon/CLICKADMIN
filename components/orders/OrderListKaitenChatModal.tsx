@@ -5,7 +5,6 @@ import {
   useEffect,
   useId,
   useMemo,
-  useRef,
   useState,
   type ClipboardEvent,
 } from "react";
@@ -36,6 +35,7 @@ import {
   orderListChatMessageShellClass,
   shouldShowKanbanChatSyncStatus,
 } from "@/lib/kanban/chat-message-display";
+import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 import {
   canAuthorMutateKanbanChatMessage,
   isChatComposerSendEnter,
@@ -209,7 +209,7 @@ export function OrderListKaitenChatModal({
   const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [commentCaretPos, setCommentCaretPos] = useState(0);
-  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const commentTextareaRef = useAutosizeTextarea(newText, { maxHeight: 240 });
   const adminMentionTag = useKanbanAdminMentionTag();
 
   useEffect(() => {
@@ -1071,7 +1071,8 @@ export function OrderListKaitenChatModal({
             ) : null}
             <textarea
               ref={commentTextareaRef}
-              className="min-h-[72px] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
+              rows={1}
+              className="min-h-[72px] w-full resize-none overflow-hidden rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
               placeholder="Новое сообщение… @имя"
               value={newText}
               onChange={(e) => {
