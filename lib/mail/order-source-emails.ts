@@ -55,6 +55,7 @@ export async function fetchOrderSourceEmails(
           subject: true,
           fromName: true,
           fromAddress: true,
+          direction: true,
           receivedAt: true,
           sentAt: true,
           preview: true,

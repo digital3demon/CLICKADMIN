@@ -122,12 +122,27 @@ export async function POST(req: Request) {
         id: true,
         orderNumber: true,
         patientName: true,
+        invoiceNumber: true,
+        invoiceIssuedAt: true,
+        updNumber: true,
         clinic: { select: { name: true } },
         invoiceAttachment: {
-          select: { fileName: true, mimeType: true, data: true, diskRelPath: true },
+          select: {
+            fileName: true,
+            mimeType: true,
+            data: true,
+            diskRelPath: true,
+            createdAt: true,
+          },
         },
         updAttachment: {
-          select: { fileName: true, mimeType: true, data: true, diskRelPath: true },
+          select: {
+            fileName: true,
+            mimeType: true,
+            data: true,
+            diskRelPath: true,
+            createdAt: true,
+          },
         },
       },
     });
